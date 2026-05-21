@@ -14,6 +14,22 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { AuditStatusBanner } from '../components/audit/AuditStatusBanner'
 import { EMPTY_AUDIT_STATS, type AuditStats, type AuditTabId } from '../components/audit/types'
+import {
+  actorMixDetail,
+  actorMixTooltip,
+  agentActorsDetail,
+  agentActorsTooltip,
+  events24hDetail,
+  events24hTooltip,
+  failCount24hDetail,
+  failCount24hTooltip,
+  humanActorsDetail,
+  humanActorsTooltip,
+  systemActorsDetail,
+  systemActorsTooltip,
+  totalEventsDetail,
+  totalEventsTooltip,
+} from '../lib/statTooltips/audit'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -681,25 +697,29 @@ export function AuditPage() {
             label="24h events"
             value={stats.events24h}
             accent={stats.events24h > 0 ? 'text-brand' : undefined}
-            hint={`${stats.activeProjectEvents24h} on ${stats.projectName ?? 'project'}`}
+            tooltip={events24hTooltip(stats)}
+            detail={events24hDetail(stats)}
           />
           <StatCard
             label="Failures"
             value={stats.failCount24h}
             accent={stats.failCount24h > 0 ? 'text-danger' : 'text-ok'}
-            hint="fix.failed · integration.disconnected"
+            tooltip={failCount24hTooltip(stats)}
+            detail={failCount24hDetail()}
           />
           <StatCard
             label="Actor mix"
             value={`${stats.humanCount24h}/${stats.agentCount24h}/${stats.systemCount24h}`}
             accent={stats.agentCount24h > 0 ? 'text-info' : undefined}
-            hint="Human / agent / system (24h)"
+            tooltip={actorMixTooltip(stats)}
+            detail={actorMixDetail()}
           />
           <StatCard
             label="All-time"
             value={stats.totalEvents.toLocaleString()}
             accent="text-brand"
-            hint={stats.topAction7d ? `Top 7d: ${stats.topAction7d}` : 'No 7d activity'}
+            tooltip={totalEventsTooltip(stats)}
+            detail={totalEventsDetail(stats)}
           />
         </div>
       </Section>
@@ -829,19 +849,22 @@ export function AuditPage() {
               label="Human actors"
               value={stats.humanCount24h}
               accent="text-ok"
-              hint="Email + uuid in last 24h sample"
+              tooltip={humanActorsTooltip(stats)}
+              detail={humanActorsDetail()}
             />
             <StatCard
               label="Agent actors"
               value={stats.agentCount24h}
               accent={stats.agentCount24h > 0 ? 'text-info' : undefined}
-              hint="LLM / agent_* ids in last 24h"
+              tooltip={agentActorsTooltip(stats)}
+              detail={agentActorsDetail()}
             />
             <StatCard
               label="System actors"
               value={stats.systemCount24h}
               accent={stats.systemCount24h > 0 ? 'text-warn' : undefined}
-              hint="Cron / webhook / null actor"
+              tooltip={systemActorsTooltip(stats)}
+              detail={systemActorsDetail()}
             />
           </div>
           {stats.topAction7d ? (

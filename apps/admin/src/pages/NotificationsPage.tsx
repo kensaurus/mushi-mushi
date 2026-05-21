@@ -3,7 +3,7 @@
  * PURPOSE: Reporter notification inbox — outbound messages the SDK widget polls.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
@@ -13,6 +13,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
+import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
 import {
   PageHeader,
   PageHelp,
@@ -72,6 +73,7 @@ export function NotificationsPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const copy = usePageCopy('/notifications')
+  const ux = useNotificationsUx()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -139,6 +141,12 @@ export function NotificationsPage() {
     [searchParams, setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId) return
+    const quickTab = resolveQuickNotificationsTab(stats)
+    if (activeTab !== quickTab) setTab(quickTab)
+  }, [ux.isQuickstart, activeProjectId, stats, activeTab, setTab])
+
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
     if (value && value !== 'all') next.set(key, value)
@@ -159,11 +167,11 @@ export function NotificationsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
-      { id: 'inbox' as const, label: 'Inbox', count: stats.unread > 0 ? stats.unread : undefined },
-      { id: 'setup' as const, label: 'Setup' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
+      { id: 'inbox' as const, label: copy?.tabLabels?.inbox ?? 'Inbox', count: stats.unread > 0 ? stats.unread : undefined },
+      { id: 'setup' as const, label: copy?.tabLabels?.setup ?? 'Setup' },
     ],
-    [stats.unread],
+    [copy?.tabLabels, stats.unread],
   )
 
   const markRead = async (id: string) => {
@@ -243,6 +251,25 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-notifications">
+      <PageHelp
+        title={copy?.help?.title ?? 'About reporter notifications'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
+            'Audit which reporter tokens received messages for a given report',
+            'Spot stale unread rows that suggest client polling stopped working',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Notifications'}
         description={
@@ -251,51 +278,55 @@ export function NotificationsPage() {
         }
         projectScope={stats.projectName ?? projectName ?? undefined}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'warn'
-                ? 'bg-warn/10 text-warn'
-                : bannerSeverity === 'brand'
-                  ? 'bg-brand/15 text-brand'
-                  : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {headerBadge}
-        </Badge>
-        <FreshnessPill at={fetchedAt} isValidating={validating} />
-        <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
-          Refresh
-        </Btn>
-        {activeTab === 'inbox' && (
+        {!ux.hideOverviewChrome && (
           <>
-            <SelectField
-              label="Show"
-              helpId="notifications.show_filter"
-              value={filter}
-              onChange={(e) => updateParam('show', e.currentTarget.value)}
-              className="w-32"
+            <Badge
+              className={
+                bannerSeverity === 'ok'
+                  ? 'bg-ok-muted text-ok'
+                  : bannerSeverity === 'warn'
+                    ? 'bg-warn/10 text-warn'
+                    : bannerSeverity === 'brand'
+                      ? 'bg-brand/15 text-brand'
+                      : 'bg-surface-overlay text-fg-muted'
+              }
             >
-              <option value="all">All</option>
-              <option value="unread">Unread{unreadCount > 0 ? ` (${unreadCount})` : ''}</option>
-            </SelectField>
-            <FilterSelect
-              label="Type"
-              value={type}
-              options={TYPE_OPTIONS}
-              onChange={(e) => updateParam('type', e.currentTarget.value)}
-            />
-            <ConfigHelp helpId="notifications.type_filter" />
-            <Btn
-              variant="ghost"
-              size="sm"
-              onClick={markAllRead}
-              disabled={bulking || unreadCount === 0}
-              loading={bulking}
-            >
-              {`Mark all read${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
+              {headerBadge}
+            </Badge>
+            <FreshnessPill at={fetchedAt} isValidating={validating} />
+            <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
+              Refresh
             </Btn>
+            {activeTab === 'inbox' && (
+              <>
+                <SelectField
+                  label="Show"
+                  helpId="notifications.show_filter"
+                  value={filter}
+                  onChange={(e) => updateParam('show', e.currentTarget.value)}
+                  className="w-32"
+                >
+                  <option value="all">All</option>
+                  <option value="unread">Unread{unreadCount > 0 ? ` (${unreadCount})` : ''}</option>
+                </SelectField>
+                <FilterSelect
+                  label="Type"
+                  value={type}
+                  options={TYPE_OPTIONS}
+                  onChange={(e) => updateParam('type', e.currentTarget.value)}
+                />
+                <ConfigHelp helpId="notifications.type_filter" />
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={markAllRead}
+                  disabled={bulking || unreadCount === 0}
+                  loading={bulking}
+                >
+                  {`Mark all read${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
+                </Btn>
+              </>
+            )}
           </>
         )}
       </PageHeader>
@@ -305,8 +336,10 @@ export function NotificationsPage() {
         onTab={setTab}
         onRefresh={reloadAll}
         refreshing={validating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl
         value={activeTab}
         onChange={setTab}
@@ -314,42 +347,44 @@ export function NotificationsPage() {
         ariaLabel="Notification sections"
         size="sm"
       />
+      )}
 
-      <Section title="NOTIFICATIONS SNAPSHOT" freshness={{ at: fetchedAt, isValidating: validating }}>
+      {!ux.hideNotificationsSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'} freshness={{ at: fetchedAt, isValidating: validating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
-            label="Total"
+            label={copy?.statLabels?.total ?? 'Total'}
             value={stats.total}
             accent={stats.total > 0 ? 'text-brand' : undefined}
             hint="Messages for this project"
           />
           <StatCard
-            label="Unread"
+            label={copy?.statLabels?.unread ?? 'Unread'}
             value={stats.unread}
             accent={stats.unread > 0 ? 'text-warn' : undefined}
             hint="Not yet marked read in admin"
           />
           <StatCard
-            label="Last 24h"
+            label={copy?.statLabels?.last24h ?? 'Last 24h'}
             value={stats.last24h}
             accent={stats.last24h > 0 ? 'text-info' : undefined}
             hint="Recent outbound volume"
           />
           <StatCard
-            label="Enabled"
+            label={copy?.statLabels?.enabled ?? 'Enabled'}
             value={stats.notificationsEnabled ? 'Yes' : 'No'}
             accent={stats.notificationsEnabled ? 'text-ok' : 'text-warn'}
             hint={stats.notificationsEnabled ? 'SDK polling allowed' : 'Turn on in Settings'}
           />
           <StatCard
-            label="Fix failed"
+            label={copy?.statLabels?.fixFailed ?? 'Fix failed'}
             value={stats.fixFailedCount}
             accent={stats.fixFailedCount > 0 ? 'text-danger' : undefined}
             hint="fix_failed type messages"
           />
           <StatCard
-            label="Last message"
+            label={copy?.statLabels?.lastMessage ?? 'Last message'}
             value={stats.lastNotificationAt ? 'Recent' : 'Never'}
             accent={stats.lastNotificationAt ? 'text-ok' : undefined}
             hint={
@@ -362,8 +397,9 @@ export function NotificationsPage() {
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'disabled' || stats.topPriority === 'unread_backlog'
@@ -382,25 +418,7 @@ export function NotificationsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <PageHelp
-            title={copy?.help?.title ?? 'About reporter notifications'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
-                'Audit which reporter tokens received messages for a given report',
-                'Spot stale unread rows that suggest client polling stopped working',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
-            }
-          />
-          {stats.topPriority === 'healthy' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Reporter loop active"
@@ -408,7 +426,7 @@ export function NotificationsPage() {
               cta={{ label: 'View inbox', to: '/notifications?tab=inbox' }}
             />
           )}
-          {stats.topPriority === 'disabled' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'disabled' && (
             <RecommendedAction
               tone="info"
               title="Enable reporter notifications"
@@ -416,7 +434,7 @@ export function NotificationsPage() {
               cta={{ label: 'Open Settings', to: '/settings' }}
             />
           )}
-          {stats.topPriority === 'unread_backlog' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'unread_backlog' && (
             <RecommendedAction
               tone="urgent"
               title="Review unread messages"
@@ -424,7 +442,7 @@ export function NotificationsPage() {
               cta={{ label: 'Filter unread', to: '/notifications?tab=inbox&show=unread' }}
             />
           )}
-          {stats.topPriority === 'no_messages' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'no_messages' && (
             <RecommendedAction
               tone="info"
               title="Send your first reporter message"
@@ -432,6 +450,7 @@ export function NotificationsPage() {
               cta={{ label: 'Open Setup', to: '/notifications?tab=setup' }}
             />
           )}
+          {!ux.hideOverviewChrome && (
           <div className="grid gap-3 sm:grid-cols-3">
             <Card className="p-3 border-edge">
               <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Classified</p>
@@ -453,6 +472,7 @@ export function NotificationsPage() {
               </p>
             </Card>
           </div>
+          )}
         </div>
       )}
 

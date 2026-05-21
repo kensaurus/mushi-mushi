@@ -4,7 +4,7 @@
  *          Overview | Experiments | New.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -12,6 +12,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useExperimentsUx, resolveQuickExperimentsTab } from '../lib/experimentsModeUx'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -37,6 +38,20 @@ import {
 } from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import {
+  conversionRateDetail,
+  conversionRateTooltip,
+  draftsReadyToLaunchDetail,
+  draftsReadyToLaunchTooltip,
+  runningCountDetail,
+  runningCountTooltip,
+  totalAssignmentsDetail,
+  totalAssignmentsTooltip,
+  totalExperimentsDetail,
+  totalExperimentsTooltip,
+  winnersFoundDetail,
+  winnersFoundTooltip,
+} from '../lib/statTooltips/experiments'
 
 interface ExperimentVariant {
   id: string
@@ -109,6 +124,7 @@ function resolveExperimentsTab(value: string | null): ExperimentsTabId {
 
 export function ExperimentsPage() {
   const copy = usePageCopy('/experiments')
+  const ux = useExperimentsUx()
   const toast = useToast()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
@@ -160,11 +176,17 @@ export function ExperimentsPage() {
     reloadExperiments()
   }, [reloadStats, reloadExperiments])
 
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickExperimentsTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+
   const tabOptions = useMemo(
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'experiments' && stats.runningCount > 0
             ? stats.runningCount
@@ -172,7 +194,7 @@ export function ExperimentsPage() {
               ? stats.draftsReadyToLaunch
               : undefined,
       })),
-    [stats.runningCount, stats.draftsReadyToLaunch],
+    [copy?.tabLabels, stats.runningCount, stats.draftsReadyToLaunch],
   )
 
   usePublishPageContext({
@@ -237,6 +259,17 @@ export function ExperimentsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-experiments">
+      <PageHelp
+        title={copy?.help?.title ?? 'A/B experiments'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
+        useCases={copy?.help?.useCases ?? [
+          'Test button copy, colour, or layout variants',
+          'Measure impact of a new feature on report rate',
+          'Use bandit mode for fast exploration with small samples',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Experiments'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -245,6 +278,8 @@ export function ExperimentsPage() {
           'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'
         }
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -271,6 +306,8 @@ export function ExperimentsPage() {
           Refresh
         </Btn>
         <Btn size="sm" variant="primary" onClick={() => setActiveTab('new')}>+ New</Btn>
+          </>
+        )}
       </PageHeader>
 
       <ExperimentsStatusBanner
@@ -278,8 +315,10 @@ export function ExperimentsPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<ExperimentsTabId>
         size="sm"
         ariaLabel="Experiments sections"
@@ -287,20 +326,26 @@ export function ExperimentsPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="EXPERIMENTS SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideExperimentsSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Total" value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} hint={`${stats.draftCount} draft`} />
-          <StatCard label="Running" value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} hint="Live assignment" />
-          <StatCard label="Ready to launch" value={stats.draftsReadyToLaunch} accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined} hint="≥2 variants" />
-          <StatCard label="Winners" value={stats.winnersFound} accent={stats.winnersFound > 0 ? 'text-ok' : undefined} hint="Declared" />
-          <StatCard label="Assignments" value={stats.totalAssignments} accent={stats.totalAssignments > 0 ? 'text-brand' : undefined} hint={`${stats.totalConversions} converted`} />
-          <StatCard label="Conversion" value={`${stats.conversionRatePct}%`} accent={stats.conversionRatePct > 0 ? 'text-ok' : undefined} hint={`${stats.banditEnabledCount} bandit`} />
+          <StatCard label={copy?.statLabels?.total ?? 'Total'} value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} tooltip={totalExperimentsTooltip(stats)} detail={totalExperimentsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.running ?? 'Running'} value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} tooltip={runningCountTooltip(stats)} detail={runningCountDetail()} />
+          <StatCard label={copy?.statLabels?.readyToLaunch ?? 'Ready to launch'} value={stats.draftsReadyToLaunch} accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined} tooltip={draftsReadyToLaunchTooltip(stats)} detail={draftsReadyToLaunchDetail()} />
+          <StatCard label={copy?.statLabels?.winners ?? 'Winners'} value={stats.winnersFound} accent={stats.winnersFound > 0 ? 'text-ok' : undefined} tooltip={winnersFoundTooltip(stats)} detail={winnersFoundDetail()} />
+          <StatCard label={copy?.statLabels?.assignments ?? 'Assignments'} value={stats.totalAssignments} accent={stats.totalAssignments > 0 ? 'text-brand' : undefined} tooltip={totalAssignmentsTooltip(stats)} detail={totalAssignmentsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.conversion ?? 'Conversion'} value={`${stats.conversionRatePct}%`} accent={stats.conversionRatePct > 0 ? 'text-ok' : undefined} tooltip={conversionRateTooltip(stats)} detail={conversionRateDetail(stats)} />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'running'
@@ -320,25 +365,15 @@ export function ExperimentsPage() {
       ) : null}
 
       {activeTab === 'overview' && (
-        <>
-          <PageHelp
-            title={copy?.help?.title ?? 'A/B experiments'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
-            useCases={copy?.help?.useCases ?? [
-              'Test button copy, colour, or layout variants',
-              'Measure impact of a new feature on report rate',
-              'Use bandit mode for fast exploration with small samples',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
-          />
-          {stats.topPriority === 'healthy' && (
+        <div className="space-y-4">
+          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Experiment library is idle"
               description={`${stats.totalExperiments} experiment${stats.totalExperiments === 1 ? '' : 's'} · none running · launch a draft or create a new test.`}
             />
           )}
-          {stats.topPriority === 'no_experiments' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'no_experiments' && (
             <RecommendedAction
               tone="info"
               title="Start your first A/B test"
@@ -346,7 +381,7 @@ export function ExperimentsPage() {
               cta={{ label: 'Create experiment', to: '/experiments?tab=new' }}
             />
           )}
-          {stats.topPriority === 'draft_ready' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'draft_ready' && (
             <RecommendedAction
               tone="info"
               title="Launch a ready draft"
@@ -354,7 +389,7 @@ export function ExperimentsPage() {
               cta={{ label: 'Open Experiments', to: '/experiments?tab=experiments' }}
             />
           )}
-        </>
+        </div>
       )}
 
       {activeTab === 'experiments' && (

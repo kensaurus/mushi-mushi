@@ -25,6 +25,7 @@ import {
   keySourceDetail,
   keySourceTooltip,
 } from '../lib/costStatTooltips'
+import { costLinks } from '../lib/statCardLinks'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
@@ -310,6 +311,7 @@ export function CostPage() {
               accent={stats.totalSpendUsd > 0 ? 'text-brand' : undefined}
               tooltip={totalLoggedTooltip(stats)}
               detail={totalLoggedDetail(stats)}
+              to={costLinks.totalLogged}
             />
             <StatCard
               label={copy?.statLabels?.day24h ?? '24h spend'}
@@ -317,6 +319,7 @@ export function CostPage() {
               accent={stats.spendSpike24h ? 'text-warn' : stats.spend24hUsd > 0 ? 'text-ok' : undefined}
               tooltip={spend24hTooltip(stats)}
               detail={spend24hDetail(stats)}
+              to={costLinks.spend24h}
             />
             <StatCard
               label={copy?.statLabels?.month ?? 'This month'}
@@ -324,6 +327,7 @@ export function CostPage() {
               accent="text-brand"
               tooltip={spendMonthTooltip(stats)}
               detail={spendMonthDetail(stats)}
+              to={costLinks.spendMonth}
             />
             <StatCard
               label={copy?.statLabels?.topDriver ?? 'Top driver'}
@@ -331,6 +335,7 @@ export function CostPage() {
               accent={stats.topOperation ? 'text-info' : undefined}
               tooltip={topDriverTooltip(stats)}
               detail={topDriverDetail(stats)}
+              to={costLinks.topDriver}
             />
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -339,12 +344,14 @@ export function CostPage() {
               value={stats.operationsCount}
               tooltip={operationsTooltip(stats)}
               detail={operationsDetail()}
+              to={costLinks.operations}
             />
             <StatCard
               label={copy?.statLabels?.models ?? 'Models'}
               value={stats.modelsCount}
               tooltip={modelsTooltip(stats)}
               detail={modelsDetail(stats)}
+              to={costLinks.models}
             />
             <StatCard
               label={copy?.statLabels?.keySource ?? 'Key source · 24h'}
@@ -352,6 +359,7 @@ export function CostPage() {
               accent={stats.byokAnthropicConfigured ? 'text-ok' : 'text-warn'}
               tooltip={keySourceTooltip(stats)}
               detail={keySourceDetail(stats)}
+              to={costLinks.keySource}
             />
           </div>
         </div>

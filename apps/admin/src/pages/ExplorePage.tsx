@@ -5,7 +5,7 @@
  * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -46,6 +46,16 @@ import {
   type ExploreTabId,
 } from '../components/explore/ExploreStatsTypes'
 import type { ExploreEdge, ExploreLayer, ExploreNode, ExplorePayload, ExploreSearchHit } from '../components/explore/exploreTypes'
+import {
+  backendLayerDetail,
+  backendLayerTooltip,
+  embeddingsDetail,
+  embeddingsTooltip,
+  indexedFilesDetail,
+  indexedFilesTooltip,
+  uiLayerDetail,
+  uiLayerTooltip,
+} from '../lib/statTooltips/explore'
 
 type DensityMode = 'files' | 'symbols'
 
@@ -682,25 +692,29 @@ export function ExplorePage() {
             label={copy?.statLabels?.files ?? 'Files'}
             value={stats.indexedFiles}
             accent={stats.indexedFiles > 0 ? 'text-fg' : undefined}
-            hint={stats.repoUrl ? 'Indexed file rows' : 'Connect a repo'}
+            tooltip={indexedFilesTooltip(stats)}
+            detail={indexedFilesDetail(stats)}
           />
           <StatCard
             label={copy?.statLabels?.uiLayer ?? 'UI layer'}
             value={stats.layers?.ui ?? 0}
             accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
-            hint="Components, pages, screens"
+            tooltip={uiLayerTooltip(stats)}
+            detail={uiLayerDetail()}
           />
           <StatCard
             label={copy?.statLabels?.backend ?? 'Backend'}
             value={stats.layers?.backend ?? 0}
             accent={stats.layers.backend > 0 ? 'text-info' : undefined}
-            hint="API routes, edge functions"
+            tooltip={backendLayerTooltip(stats)}
+            detail={backendLayerDetail()}
           />
           <StatCard
             label={copy?.statLabels?.embedded ?? 'Embedded'}
             value={stats.withEmbeddings}
             accent={stats.withEmbeddings > 0 ? 'text-ok' : 'text-warn'}
-            hint="Vectors for semantic search"
+            tooltip={embeddingsTooltip(stats)}
+            detail={embeddingsDetail()}
           />
         </div>
       </Section>

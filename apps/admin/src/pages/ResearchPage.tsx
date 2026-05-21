@@ -3,7 +3,7 @@
  * PURPOSE: Banner + RESEARCH SNAPSHOT + tabs: Overview | Search | History.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -12,6 +12,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
@@ -40,6 +41,20 @@ import {
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
+import {
+  attachedDetail,
+  attachedTooltip,
+  domainsDetail,
+  domainsTooltip,
+  firecrawlDetail,
+  firecrawlTooltip,
+  sessionsDetail,
+  sessionsTooltip,
+  snippetsDetail,
+  snippetsTooltip,
+  unattachedSnippetsDetail,
+  unattachedSnippetsTooltip,
+} from '../lib/statTooltips/research'
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -77,6 +92,7 @@ function resolveResearchTab(value: string | null): ResearchTabId {
 
 export function ResearchPage() {
   const copy = usePageCopy('/research')
+  const ux = useResearchUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveResearchTab(searchParams.get('tab'))
   const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
@@ -149,7 +165,7 @@ export function ResearchPage() {
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'history' && stats.sessions > 0
             ? stats.sessions
@@ -157,8 +173,14 @@ export function ResearchPage() {
               ? stats.unattachedSnippets
               : undefined,
       })),
-    [stats.sessions, stats.unattachedSnippets],
+    [copy?.tabLabels, stats.sessions, stats.unattachedSnippets],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickResearchTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const runSearch = useCallback(async (q: string) => {
     if (!activeProjectId) {
@@ -274,6 +296,17 @@ export function ResearchPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-research">
+      <PageHelp
+        title={copy?.help?.title ?? 'About web research'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'BYOK Firecrawl-powered web search you run while triaging a report.'}
+        useCases={copy?.help?.useCases ?? [
+          'Cross-reference an error signature against current upstream docs',
+          'Find a Stack Overflow thread to attach as triage evidence',
+          'Check if a third-party library shipped a fix in the last 24 hours',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Research'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -282,6 +315,8 @@ export function ResearchPage() {
           'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'
         }
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -327,6 +362,8 @@ export function ResearchPage() {
             Search web
           </Btn>
         )}
+          </>
+        )}
       </PageHeader>
 
       <ResearchStatusBanner
@@ -334,8 +371,10 @@ export function ResearchPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<ResearchTabId>
         size="sm"
         ariaLabel="Research sections"
@@ -343,30 +382,38 @@ export function ResearchPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="RESEARCH SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideResearchSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Sessions" value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} hint="Saved queries" />
-          <StatCard label="Snippets" value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} hint="Web results" />
-          <StatCard label="Attached" value={stats.attached} accent={stats.attached > 0 ? 'text-ok' : undefined} hint="Report evidence" />
-          <StatCard label="Unattached" value={stats.unattachedSnippets} accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined} hint="Need report UUID" />
+          <StatCard label={copy?.statLabels?.sessions ?? 'Sessions'} value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} tooltip={sessionsTooltip(stats)} detail={sessionsDetail()} />
+          <StatCard label={copy?.statLabels?.snippets ?? 'Snippets'} value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} tooltip={snippetsTooltip(stats)} detail={snippetsDetail()} />
+          <StatCard label={copy?.statLabels?.attached ?? 'Attached'} value={stats.attached} accent={stats.attached > 0 ? 'text-ok' : undefined} tooltip={attachedTooltip(stats)} detail={attachedDetail()} />
+          <StatCard label={copy?.statLabels?.unattached ?? 'Unattached'} value={stats.unattachedSnippets} accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined} tooltip={unattachedSnippetsTooltip(stats)} detail={unattachedSnippetsDetail()} />
           <StatCard
-            label="Firecrawl"
+            label={copy?.statLabels?.firecrawl ?? 'Firecrawl'}
             value={stats.firecrawlReady ? 'Ready' : stats.firecrawlConfigured ? 'Test' : 'Setup'}
             accent={stats.firecrawlReady ? 'text-ok' : stats.firecrawlConfigured ? 'text-warn' : undefined}
-            hint={stats.firecrawlKeyHint ?? 'BYOK in Settings'}
+            tooltip={firecrawlTooltip(stats)}
+            detail={firecrawlDetail(stats)}
           />
           <StatCard
-            label="Domains"
+            label={copy?.statLabels?.domains ?? 'Domains'}
             value={stats.allowedDomainsCount}
             accent={stats.allowedDomainsCount > 0 ? 'text-info' : undefined}
-            hint={`${stats.maxPagesPerCall} pages/call`}
+            tooltip={domainsTooltip(stats)}
+            detail={domainsDetail(stats)}
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
@@ -395,24 +442,14 @@ export function ResearchPage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              <PageHelp
-                title={copy?.help?.title ?? 'About web research'}
-                whatIsIt={copy?.help?.whatIsIt ?? 'BYOK Firecrawl-powered web search you run while triaging a report.'}
-                useCases={copy?.help?.useCases ?? [
-                  'Cross-reference an error signature against current upstream docs',
-                  'Find a Stack Overflow thread to attach as triage evidence',
-                  'Check if a third-party library shipped a fix in the last 24 hours',
-                ]}
-                howToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}
-              />
-              {stats.topPriority === 'healthy' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"
                   title="Research pipeline healthy"
                   description={stats.topPriorityLabel ?? `${stats.sessions} sessions with Firecrawl ready.`}
                 />
               )}
-              {(stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'firecrawl_untested') && (
+              {!ux.hideOverviewChrome && (stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'firecrawl_untested') && (
                 <RecommendedAction
                   tone="info"
                   title="Configure Firecrawl first"
@@ -420,7 +457,7 @@ export function ResearchPage() {
                   cta={{ label: 'Open Firecrawl settings', to: '/settings?tab=firecrawl' }}
                 />
               )}
-              {(stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
+              {!ux.hideOverviewChrome && (stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
                 <RecommendedAction
                   tone="urgent"
                   title="Fix Firecrawl before searching"
@@ -428,7 +465,7 @@ export function ResearchPage() {
                   cta={{ label: 'Fix in Settings', to: '/settings?tab=firecrawl' }}
                 />
               )}
-              {stats.topPriority === 'ready_no_sessions' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'ready_no_sessions' && (
                 <RecommendedAction
                   tone="info"
                   title="Run your first search"

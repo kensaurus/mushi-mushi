@@ -18,6 +18,21 @@ import { usePageCopy } from '../lib/copy'
 import { useReleasesUx, resolveQuickReleasesTab } from '../lib/releasesModeUx'
 import { pluralizeWithCount } from '../lib/format'
 import {
+  contributorsDetail,
+  contributorsTooltip,
+  draftsDetail,
+  draftsTooltip,
+  feedbackDetail,
+  feedbackTooltip,
+  fixedReportsDetail,
+  fixedReportsTooltip,
+  fixesLinkedDetail,
+  fixesLinkedTooltip,
+  publishedDetail,
+  publishedTooltip,
+} from '../lib/statTooltips/releases'
+import { releasesLinks } from '../lib/statCardLinks'
+import {
   PageHeader,
   PageHelp,
   Card,
@@ -617,12 +632,12 @@ export function ReleasesPage() {
       <Section title={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.drafts ?? 'Drafts'} value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} hint="Awaiting publish" />
-          <StatCard label={copy?.statLabels?.published ?? 'Published'} value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} hint="Shipped changelogs" />
-          <StatCard label={copy?.statLabels?.fixesLinked ?? 'Fixes linked'} value={stats.totalFixesLinked} accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined} hint="Across all releases" />
-          <StatCard label={copy?.statLabels?.contributors ?? 'Contributors'} value={stats.totalContributors} accent={stats.totalContributors > 0 ? 'text-brand' : undefined} hint={`${stats.totalCredits} credit rows`} />
-          <StatCard label={copy?.statLabels?.fixedReports ?? 'Fixed reports'} value={stats.fixedReportsCount} accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined} hint="Ready to draft" />
-          <StatCard label={copy?.statLabels?.feedback ?? 'Feedback shipped'} value={stats.fulfilledTicketsShipped} accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined} hint={`${stats.openFeedbackTickets} open tickets`} />
+          <StatCard label={copy?.statLabels?.drafts ?? 'Drafts'} value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} tooltip={draftsTooltip(stats)} detail={draftsDetail()} to={releasesLinks.drafts} />
+          <StatCard label={copy?.statLabels?.published ?? 'Published'} value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} tooltip={publishedTooltip(stats)} detail={publishedDetail()} to={releasesLinks.published} />
+          <StatCard label={copy?.statLabels?.fixesLinked ?? 'Fixes linked'} value={stats.totalFixesLinked} accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined} tooltip={fixesLinkedTooltip(stats)} detail={fixesLinkedDetail()} to={releasesLinks.fixesLinked} />
+          <StatCard label={copy?.statLabels?.contributors ?? 'Contributors'} value={stats.totalContributors} accent={stats.totalContributors > 0 ? 'text-brand' : undefined} tooltip={contributorsTooltip(stats)} detail={contributorsDetail(stats)} to={releasesLinks.contributors} />
+          <StatCard label={copy?.statLabels?.fixedReports ?? 'Fixed reports'} value={stats.fixedReportsCount} accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined} tooltip={fixedReportsTooltip(stats)} detail={fixedReportsDetail()} to={releasesLinks.fixedReports} />
+          <StatCard label={copy?.statLabels?.feedback ?? 'Feedback shipped'} value={stats.fulfilledTicketsShipped} accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined} tooltip={feedbackTooltip(stats)} detail={feedbackDetail(stats)} to={releasesLinks.feedback} />
         </div>
       </Section>
       )}

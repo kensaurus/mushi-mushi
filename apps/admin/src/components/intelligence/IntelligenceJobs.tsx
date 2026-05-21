@@ -75,8 +75,11 @@ function failureHint(error: string | null | undefined): string {
 }
 
 export function LastFailureNote({ jobs, onRetry, retrying }: FailureNoteProps) {
-  const lastFailed = jobs.find((j) => j.status === 'failed')
-  if (!lastFailed) return null
+  // Jobs are newest-first — only nag when the *latest* run failed, not a stale row
+  // from before a successful retry (e.g. gateway JWT issue fixed by redeploy).
+  const latest = jobs[0]
+  if (!latest || latest.status !== 'failed') return null
+  const lastFailed = latest
   const hint = failureHint(lastFailed.error)
   return (
     <Card className="border border-danger/30 bg-danger/5 p-4">

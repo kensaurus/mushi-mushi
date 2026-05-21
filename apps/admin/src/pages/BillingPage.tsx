@@ -24,9 +24,21 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
 import { formatLlmCost } from '../lib/format'
+import {
+  fixesPeriodDetail,
+  fixesPeriodTooltip,
+  llmCogsDetail,
+  llmCogsTooltip,
+  planDetail,
+  planTooltip,
+  reportsPeriodDetail,
+  reportsPeriodTooltip,
+} from '../lib/statTooltips/billing'
+import { billingLinks } from '../lib/statCardLinks'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useBillingUx, resolveQuickBillingTab } from '../lib/billingModeUx'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
@@ -209,6 +221,7 @@ function isBillingTabId(value: string | null): value is BillingTabId {
 
 export function BillingPage() {
   const copy = usePageCopy('/billing')
+  const ux = useBillingUx()
   const toast = useToast()
   const { user } = useAuth()
   const activeProjectId = useActiveProjectId()
@@ -251,6 +264,12 @@ export function BillingPage() {
     [searchParams, setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || statsQuery.loading) return
+    const quickTab = resolveQuickBillingTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsQuery.loading, stats, activeTab, setActiveTab])
+
   const criticalCount =
     (stats.projectCount === 0 ? 1 : 0) +
     stats.pastDueProjects +
@@ -270,14 +289,14 @@ export function BillingPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
-      { id: 'plans' as const, label: 'Plans' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
+      { id: 'plans' as const, label: copy?.tabLabels?.plans ?? 'Plans' },
       {
         id: 'support' as const,
-        label: 'Support',
+        label: copy?.tabLabels?.support ?? 'Support',
       },
     ],
-    [],
+    [copy?.tabLabels],
   )
 
   const [actioning, setActioning] = useState<string | null>(null)
@@ -355,77 +374,7 @@ export function BillingPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={copy?.title ?? 'Billing'}
-        description={
-          copy?.description ??
-          'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'
-        }
-        projectScope={stats.projectName ?? activeProject?.project_name}
-      >
-        <span className="text-2xs text-fg-faint font-mono">
-          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} reports / mo
-        </span>
-      </PageHeader>
-
-      <BillingStatusBanner
-        stats={stats}
-        onManage={activeProject?.customer?.stripe_customer_id ? triggerManage : undefined}
-        onUpgrade={activeProject && activeProject.billing_mode !== 'complimentary' ? triggerUpgrade : undefined}
-        onTab={setActiveTab}
-      />
-
-      <SegmentedControl
-        value={activeTab}
-        onChange={setActiveTab}
-        options={tabOptions}
-        ariaLabel="Billing sections"
-        size="sm"
-      />
-
-      <Section title="Billing snapshot" freshness={{ at: statsQuery.lastFetchedAt, isValidating: statsQuery.isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Plan"
-            value={stats.planDisplayName}
-            accent={stats.isComplimentary ? 'text-brand' : stats.planId === 'hobby' ? undefined : 'text-ok'}
-            hint={
-              stats.isComplimentary
-                ? 'Complimentary admin account'
-                : stats.subscriptionStatus ?? 'No subscription'
-            }
-          />
-          <StatCard
-            label="Reports · period"
-            value={
-              stats.reportsLimit != null
-                ? `${stats.reportsUsed.toLocaleString()} / ${stats.reportsLimit.toLocaleString()}`
-                : stats.reportsUsed.toLocaleString()
-            }
-            accent={stats.overQuota ? 'text-danger' : stats.approachingQuota ? 'text-warn' : 'text-ok'}
-            hint={stats.usagePct != null ? `${stats.usagePct}% of monthly quota` : 'Unlimited on this tier'}
-          />
-          <StatCard
-            label="Fixes · period"
-            value={`${stats.fixesSucceeded}/${stats.fixesAttempted}`}
-            accent={stats.fixesAttempted > 0 ? 'text-info' : undefined}
-            hint="Succeeded / attempted autofix runs"
-          />
-          <StatCard
-            label="LLM COGS · month"
-            value={stats.llmCostUsdMonth > 0 ? formatLlmCost(stats.llmCostUsdMonth) : '$0'}
-            accent={stats.llmCostUsdMonth > 0 ? 'text-brand' : undefined}
-            hint={
-              stats.periodEnd
-                ? `Period ends soon — see LLM Cost for detail`
-                : 'Summed from llm_invocations.cost_usd'
-            }
-          />
-        </div>
-      </Section>
-
+    <div className="space-y-4" data-testid="mushi-page-billing">
       <PageHelp
         title={copy?.help?.title ?? 'About Billing'}
         whatIsIt={
@@ -444,6 +393,86 @@ export function BillingPage() {
           'Overview shows your project card with usage + invoices. Plans compares tiers. Support opens a ticket. Upgrade starts Stripe Checkout; Manage opens the customer portal.'
         }
       />
+
+      <PageHeader
+        title={copy?.title ?? 'Billing'}
+        description={
+          copy?.description ??
+          'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'
+        }
+        projectScope={stats.projectName ?? activeProject?.project_name}
+      >
+        {!ux.hideOverviewChrome && (
+        <span className="text-2xs text-fg-faint font-mono">
+          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} reports / mo
+        </span>
+        )}
+      </PageHeader>
+
+      <BillingStatusBanner
+        stats={stats}
+        onManage={activeProject?.customer?.stripe_customer_id ? triggerManage : undefined}
+        onUpgrade={activeProject && activeProject.billing_mode !== 'complimentary' ? triggerUpgrade : undefined}
+        onTab={setActiveTab}
+        plainBanner={ux.plainBanner}
+      />
+
+      {!ux.hideTabs && (
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Billing sections"
+        size="sm"
+      />
+      )}
+
+      {!ux.hideBillingSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'Billing snapshot'}
+        freshness={{ at: statsQuery.lastFetchedAt, isValidating: statsQuery.isValidating }}
+      >
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label={copy?.statLabels?.plan ?? 'Plan'}
+            value={stats.planDisplayName}
+            accent={stats.isComplimentary ? 'text-brand' : stats.planId === 'hobby' ? undefined : 'text-ok'}
+            tooltip={planTooltip(stats)}
+            detail={planDetail(stats)}
+            to={billingLinks.plan}
+          />
+          <StatCard
+            label={copy?.statLabels?.reports ?? 'Reports · period'}
+            value={
+              stats.reportsLimit != null
+                ? `${stats.reportsUsed.toLocaleString()} / ${stats.reportsLimit.toLocaleString()}`
+                : stats.reportsUsed.toLocaleString()
+            }
+            accent={stats.overQuota ? 'text-danger' : stats.approachingQuota ? 'text-warn' : 'text-ok'}
+            tooltip={reportsPeriodTooltip(stats)}
+            detail={reportsPeriodDetail(stats)}
+            to={billingLinks.reportsPeriod}
+          />
+          <StatCard
+            label={copy?.statLabels?.fixes ?? 'Fixes · period'}
+            value={`${stats.fixesSucceeded}/${stats.fixesAttempted}`}
+            accent={stats.fixesAttempted > 0 ? 'text-info' : undefined}
+            tooltip={fixesPeriodTooltip(stats)}
+            detail={fixesPeriodDetail()}
+            to={billingLinks.fixesPeriod}
+          />
+          <StatCard
+            label={copy?.statLabels?.llmCogs ?? 'LLM COGS · month'}
+            value={stats.llmCostUsdMonth > 0 ? formatLlmCost(stats.llmCostUsdMonth) : '$0'}
+            accent={stats.llmCostUsdMonth > 0 ? 'text-brand' : undefined}
+            tooltip={llmCogsTooltip(stats)}
+            detail={llmCogsDetail(stats)}
+            to={billingLinks.llmCogs}
+          />
+        </div>
+      </Section>
+      )}
 
       <div
         role="tabpanel"

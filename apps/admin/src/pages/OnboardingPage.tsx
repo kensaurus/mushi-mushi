@@ -32,6 +32,17 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
+import {
+  optionalDetail,
+  optionalTooltip,
+  reportsDetail,
+  reportsTooltip,
+  requiredDetail,
+  requiredTooltip,
+  sdkDetail,
+  sdkTooltip,
+} from '../lib/statTooltips/onboarding'
+import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
@@ -367,26 +378,34 @@ export function OnboardingPage() {
             label={copy?.statLabels?.required ?? 'Required'}
             value={`${stats.requiredComplete}/${stats.requiredTotal}`}
             accent={stats.setupDone ? 'text-ok' : 'text-warn'}
-            hint={stats.nextStepLabel ?? 'All required steps done'}
+            tooltip={requiredTooltip(stats)}
+            detail={requiredDetail(stats)}
+            to={onboardingLinks.required}
           />
           <StatCard
             label={copy?.statLabels?.sdk ?? 'SDK'}
             value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
             accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
-            hint={stats.sdkHostMismatch ? 'Backend mismatch' : stats.sdkInstalled ? 'Heartbeat seen' : 'Install snippet'}
+            tooltip={sdkTooltip(stats)}
+            detail={sdkDetail(stats)}
+            to={onboardingLinks.sdk}
           />
           <StatCard
             label={copy?.statLabels?.reports ?? 'Reports'}
             value={stats.reportCount}
             accent={stats.reportCount > 0 ? 'text-brand' : undefined}
-            hint={stats.reportCount > 0 ? 'Pipeline proven' : 'Send test report'}
+            tooltip={reportsTooltip(stats)}
+            detail={reportsDetail(stats)}
+            to={onboardingLinks.reports}
           />
           {!ux.hideOptionalStat ? (
             <StatCard
               label={copy?.statLabels?.optional ?? 'Optional'}
               value={`${stats.optionalComplete}/${stats.optionalTotal}`}
               accent="text-fg-secondary"
-              hint={`${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched`}
+              tooltip={optionalTooltip(stats)}
+              detail={optionalDetail(stats)}
+              to={onboardingLinks.optional}
             />
           ) : null}
         </div>

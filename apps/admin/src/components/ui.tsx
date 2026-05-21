@@ -1406,9 +1406,15 @@ interface StatCardProps {
   hint?: string
   /** Long-form explanation for the (i) icon — structured sections or plain text. */
   tooltip?: string | MetricTooltipData
+  /** When set, the whole card links to this route (info icon still opens tooltip). */
+  to?: string
 }
 
 function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData; hint?: string }) {
+  const stopNav = (e: React.MouseEvent | React.FocusEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
   if (tooltip) {
     const content =
       typeof tooltip === 'string' ? (
@@ -1421,6 +1427,8 @@ function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData;
         <button
           type="button"
           aria-label="About this metric"
+          onClick={stopNav}
+          onMouseDown={stopNav}
           className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-3xs text-fg-faint hover:text-fg-muted hover:border-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 cursor-help"
         >
           <span aria-hidden="true" className="leading-none italic font-serif">i</span>
@@ -1432,13 +1440,18 @@ function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData;
   return null
 }
 
-export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip }: StatCardProps) {
+export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip, to }: StatCardProps) {
   const help = tooltip ?? hint
-  return (
-    <Card elevated className="px-3 py-2.5">
-      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1" title={tooltip ? undefined : hint}>
-        <span>{label}</span>
+  const inner = (
+    <>
+      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0" title={tooltip ? undefined : hint}>
+        <span className="truncate">{label}</span>
         {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
+        {to ? (
+          <span className="ml-auto shrink-0 text-fg-faint opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden>
+            →
+          </span>
+        ) : null}
       </div>
       <div className="flex items-baseline gap-2">
         <div className={`text-xl font-semibold font-mono stat-value ${accent ?? 'text-fg'}`}>
@@ -1458,6 +1471,26 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
       {detail ? (
         <p className="mt-1 text-3xs text-fg-faint leading-snug">{detail}</p>
       ) : null}
+    </>
+  )
+
+  if (to) {
+    return (
+      <Card elevated interactive className="group px-3 py-2.5">
+        <Link
+          to={to}
+          aria-label={`${label} — open details`}
+          className="block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+        >
+          {inner}
+        </Link>
+      </Card>
+    )
+  }
+
+  return (
+    <Card elevated className="px-3 py-2.5">
+      {inner}
     </Card>
   )
 }

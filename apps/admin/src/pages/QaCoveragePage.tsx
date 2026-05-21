@@ -52,6 +52,20 @@ import {
 } from '../components/qa-coverage/QaCoverageStatsTypes'
 import { usePageCopy } from '../lib/copy'
 import { useQaCoverageUx, resolveQuickQaCoverageTab } from '../lib/qaCoverageModeUx'
+import {
+  avgPassRateDetail,
+  avgPassRateTooltip,
+  failingStoriesDetail,
+  failingStoriesTooltip,
+  noDataStoriesDetail,
+  noDataStoriesTooltip,
+  passingStoriesDetail,
+  passingStoriesTooltip,
+  runs24hDetail,
+  runs24hTooltip,
+  totalStoriesDetail,
+  totalStoriesTooltip,
+} from '../lib/statTooltips/qa-coverage'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
@@ -1128,19 +1142,22 @@ export function QaCoveragePage() {
             label={copy?.statLabels?.stories ?? 'Stories'}
             value={stats.totalStories}
             accent={stats.totalStories > 0 ? 'text-brand' : undefined}
-            hint={`${stats.enabledStories} enabled`}
+            tooltip={totalStoriesTooltip(stats)}
+            detail={totalStoriesDetail(stats)}
           />
           <StatCard
             label={copy?.statLabels?.passing ?? 'Passing'}
             value={stats.passingStories}
             accent="text-ok"
-            hint="≥80% in 24h"
+            tooltip={passingStoriesTooltip(stats)}
+            detail={passingStoriesDetail()}
           />
           <StatCard
             label={copy?.statLabels?.failing ?? 'Failing'}
             value={stats.failingStories}
             accent={stats.failingStories > 0 ? 'text-danger' : 'text-ok'}
-            hint="<80% in 24h"
+            tooltip={failingStoriesTooltip(stats)}
+            detail={failingStoriesDetail()}
           />
           <StatCard
             label={copy?.statLabels?.avgPassRate ?? 'Avg pass rate'}
@@ -1152,19 +1169,22 @@ export function QaCoveragePage() {
                   ? 'text-warn'
                   : undefined
             }
-            hint="24h window"
+            tooltip={avgPassRateTooltip(stats)}
+            detail={avgPassRateDetail()}
           />
           <StatCard
             label={copy?.statLabels?.runs24h ?? 'Runs (24h)'}
             value={stats.totalRuns24h}
             accent={stats.totalRuns24h > 0 ? 'text-brand' : undefined}
-            hint={`${stats.pendingRuns} in flight`}
+            tooltip={runs24hTooltip(stats)}
+            detail={runs24hDetail(stats)}
           />
           <StatCard
             label={copy?.statLabels?.noData ?? 'No data'}
             value={stats.noDataStories}
             accent={stats.noDataStories > 0 ? 'text-warn' : undefined}
-            hint="Never run / 24h"
+            tooltip={noDataStoriesTooltip(stats)}
+            detail={noDataStoriesDetail()}
           />
         </div>
       </Section>

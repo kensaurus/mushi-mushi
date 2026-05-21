@@ -12,6 +12,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useIterateUx, resolveQuickIterateTab } from '../lib/iterateModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import {
@@ -40,6 +41,20 @@ import {
   type IterateStats,
   type IterateTabId,
 } from '../components/iterate/IterateStatsTypes'
+import {
+  activeRunsDetail,
+  activeRunsTooltip,
+  avgScoreDetail,
+  avgScoreTooltip,
+  failedRunsDetail,
+  failedRunsTooltip,
+  iterationsDetail,
+  iterationsTooltip,
+  succeededRunsDetail,
+  succeededRunsTooltip,
+  totalRunsDetail,
+  totalRunsTooltip,
+} from '../lib/statTooltips/iterate'
 
 const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
   {
@@ -66,6 +81,7 @@ function resolveIterateTab(value: string | null): IterateTabId {
 
 export function IteratePage() {
   const copy = usePageCopy('/iterate')
+  const ux = useIterateUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveIterateTab(searchParams.get('tab'))
   const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
@@ -156,7 +172,7 @@ export function IteratePage() {
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'runs' && stats.total > 0
             ? stats.total
@@ -164,8 +180,14 @@ export function IteratePage() {
               ? stats.queued + stats.running
               : undefined,
       })),
-    [stats.total, stats.queued, stats.running],
+    [copy?.tabLabels, stats.total, stats.queued, stats.running],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickIterateTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const openDetail = useCallback(
     async (run: PdcaRun) => {
@@ -256,6 +278,25 @@ export function IteratePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-iterate">
+      <PageHelp
+        title={copy?.help?.title ?? 'About PDCA iteration'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona until target score or max iterations.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            "Improve a dashboard page's visual hierarchy automatically",
+            'Run a WCAG accessibility critique cycle on a live URL',
+            'Use a conversion persona to suggest CTA and copy improvements',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Queue a run on New Run. Click Trigger on queued rows (Runs tab). Open a run for score timeline and critique export.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Iterate'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -265,6 +306,8 @@ export function IteratePage() {
         }
         contextChip={<PdcaContextHint stage="act" />}
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -293,6 +336,8 @@ export function IteratePage() {
         >
           + New Run
         </Btn>
+          </>
+        )}
       </PageHeader>
 
       <IterateStatusBanner
@@ -300,8 +345,10 @@ export function IteratePage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<IterateTabId>
         size="sm"
         ariaLabel="Iterate sections"
@@ -309,35 +356,44 @@ export function IteratePage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="PDCA SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideIterateSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'PDCA SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Total runs" value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} hint="All PDCA runs" />
+          <StatCard label={copy?.statLabels?.total ?? 'Total runs'} value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} tooltip={totalRunsTooltip(stats)} detail={totalRunsDetail()} />
           <StatCard
-            label="Active"
+            label={copy?.statLabels?.active ?? 'Active'}
             value={stats.running + stats.queued}
             accent={stats.running + stats.queued > 0 ? 'text-warn' : undefined}
-            hint={`${stats.running} running · ${stats.queued} queued`}
+            tooltip={activeRunsTooltip(stats)}
+            detail={activeRunsDetail(stats)}
           />
-          <StatCard label="Succeeded" value={stats.succeeded} accent={stats.succeeded > 0 ? 'text-ok' : undefined} hint="Met exit criteria" />
-          <StatCard label="Failed" value={stats.failed} accent={stats.failed > 0 ? 'text-danger' : undefined} hint="Need inspection" />
+          <StatCard label={copy?.statLabels?.succeeded ?? 'Succeeded'} value={stats.succeeded} accent={stats.succeeded > 0 ? 'text-ok' : undefined} tooltip={succeededRunsTooltip(stats)} detail={succeededRunsDetail()} />
+          <StatCard label={copy?.statLabels?.failed ?? 'Failed'} value={stats.failed} accent={stats.failed > 0 ? 'text-danger' : undefined} tooltip={failedRunsTooltip(stats)} detail={failedRunsDetail()} />
           <StatCard
-            label="Avg score"
+            label={copy?.statLabels?.avgScore ?? 'Avg score'}
             value={stats.avgFinalScorePct != null ? `${stats.avgFinalScorePct}%` : '—'}
             accent={stats.avgFinalScorePct != null && stats.avgFinalScorePct >= 70 ? 'text-ok' : stats.avgFinalScorePct != null ? 'text-warn' : undefined}
-            hint={`${stats.runsMeetingTarget} met target`}
+            tooltip={avgScoreTooltip(stats)}
+            detail={avgScoreDetail(stats)}
           />
           <StatCard
-            label="Iterations"
+            label={copy?.statLabels?.iterations ?? 'Iterations'}
             value={stats.totalIterations}
             accent={stats.totalIterations > 0 ? 'text-info' : undefined}
-            hint="Producer → critic steps"
+            tooltip={iterationsTooltip(stats)}
+            detail={iterationsDetail()}
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'last_failed'
@@ -366,26 +422,7 @@ export function IteratePage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              <PageHelp
-                title={copy?.help?.title ?? 'About PDCA iteration'}
-                whatIsIt={
-                  copy?.help?.whatIsIt ??
-                  'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona until target score or max iterations.'
-                }
-                useCases={
-                  copy?.help?.useCases ?? [
-                    "Improve a dashboard page's visual hierarchy automatically",
-                    'Run a WCAG accessibility critique cycle on a live URL',
-                    'Use a conversion persona to suggest CTA and copy improvements',
-                  ]
-                }
-                howToUse={
-                  copy?.help?.howToUse ??
-                  'Queue a run on New Run. Click Trigger on queued rows (Runs tab). Open a run for score timeline and critique export.'
-                }
-              />
-
-              {stats.topPriority === 'healthy' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"
                   title="PDCA pipeline idle"
@@ -393,7 +430,7 @@ export function IteratePage() {
                   cta={{ label: 'View runs', to: '/iterate?tab=runs' }}
                 />
               )}
-              {stats.topPriority === 'no_runs' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'no_runs' && (
                 <RecommendedAction
                   tone="info"
                   title="Queue your first PDCA run"
@@ -401,7 +438,7 @@ export function IteratePage() {
                   cta={{ label: 'New Run', to: '/iterate?tab=new' }}
                 />
               )}
-              {stats.topPriority === 'queued_waiting' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'queued_waiting' && (
                 <RecommendedAction
                   tone="info"
                   title="Queued runs need Trigger"
@@ -409,7 +446,7 @@ export function IteratePage() {
                   cta={{ label: 'Open Runs', to: '/iterate?tab=runs' }}
                 />
               )}
-              {stats.topPriority === 'active_runs' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'active_runs' && (
                 <RecommendedAction
                   tone="info"
                   title="Runs in progress"
@@ -417,7 +454,7 @@ export function IteratePage() {
                   cta={{ label: 'View progress', to: '/iterate?tab=runs' }}
                 />
               )}
-              {stats.topPriority === 'last_failed' && (
+              {!ux.hideOverviewChrome && stats.topPriority === 'last_failed' && (
                 <RecommendedAction
                   tone="urgent"
                   title="Inspect the failed run"

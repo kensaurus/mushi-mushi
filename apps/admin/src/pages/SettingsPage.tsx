@@ -26,6 +26,17 @@ import { usePageCopy } from '../lib/copy'
 import { useSettingsUx, resolveQuickSettingsTab } from '../lib/settingsModeUx'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageData } from '../lib/usePageData'
+import {
+  byokDetail,
+  byokTooltip,
+  classifierDetail,
+  classifierTooltip,
+  routingDetail,
+  routingTooltip,
+  sdkDetail,
+  sdkTooltip,
+} from '../lib/statTooltips/settings'
+import { settingsLinks } from '../lib/statCardLinks'
 import { useRealtimeReload } from '../lib/realtime'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
@@ -209,17 +220,17 @@ export function SettingsPage() {
                   ? 'text-ok'
                   : undefined
             }
-            hint={`${stats.byokKeysPassing} passing · ${stats.byokKeysFailing} failing · ${stats.byokKeysUntested} untested`}
+            tooltip={byokTooltip(stats)}
+            detail={byokDetail(stats)}
+            to={settingsLinks.byok}
           />
           <StatCard
             label={copy?.statLabels?.sdk ?? 'SDK widget'}
             value={stats.sdkConfigEnabled ? 'On' : 'Off'}
             accent={stats.sdkConfigEnabled ? 'text-ok' : 'text-warn'}
-            hint={
-              stats.sdkConfigUpdatedAt
-                ? `Updated ${new Date(stats.sdkConfigUpdatedAt).toLocaleString()}`
-                : 'Reporter capture + widget config'
-            }
+            tooltip={sdkTooltip(stats)}
+            detail={sdkDetail(stats)}
+            to={settingsLinks.sdk}
           />
           <StatCard
             label={copy?.statLabels?.routing ?? 'Routing'}
@@ -227,12 +238,16 @@ export function SettingsPage() {
               .filter(Boolean)
               .join(' · ') || 'None'}
             accent={stats.slackConfigured || stats.sentryConfigured ? 'text-brand' : undefined}
-            hint="General tab — full integrations live under Act → Integrations"
+            tooltip={routingTooltip(stats)}
+            detail={routingDetail()}
+            to={settingsLinks.routing}
           />
           <StatCard
             label={copy?.statLabels?.classifier ?? 'Classifier'}
             value={stats.stage2Model?.replace('claude-', '') ?? 'default'}
-            hint={stats.autofixEnabled ? 'Autofix enabled' : 'Autofix off · repo optional'}
+            tooltip={classifierTooltip(stats)}
+            detail={classifierDetail(stats)}
+            to={settingsLinks.classifier}
           />
         </div>
       </Section>

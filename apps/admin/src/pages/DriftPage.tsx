@@ -4,7 +4,7 @@
  *          Overview | Findings | Snapshots | Scanner.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -12,6 +12,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useDriftUx, resolveQuickDriftTab } from '../lib/driftModeUx'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -37,6 +38,20 @@ import {
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
+import {
+  contractEdgesDetail,
+  contractEdgesTooltip,
+  criticalOpenDetail,
+  criticalOpenTooltip,
+  openFindingsDetail,
+  openFindingsTooltip,
+  snapshotsDetail,
+  snapshotsTooltip,
+  surfacesWithFindingsDetail,
+  surfacesWithFindingsTooltip,
+  warnOpenDetail,
+  warnOpenTooltip,
+} from '../lib/statTooltips/drift'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +116,7 @@ function resolveDriftTab(value: string | null): DriftTabId {
 
 export function DriftPage() {
   const copy = usePageCopy('/drift')
+  const ux = useDriftUx()
   const toast = useToast()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
@@ -165,11 +181,17 @@ export function DriftPage() {
     reloadSnapshots()
   }, [reloadStats, reloadFindings, reloadSnapshots])
 
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickDriftTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+
   const tabOptions = useMemo(
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'findings' && stats.openFindings > 0
             ? stats.openFindings
@@ -177,7 +199,7 @@ export function DriftPage() {
               ? stats.criticalOpen
               : undefined,
       })),
-    [stats.openFindings, stats.criticalOpen],
+    [copy?.tabLabels, stats.openFindings, stats.criticalOpen],
   )
 
   usePublishPageContext({
@@ -248,6 +270,17 @@ export function DriftPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-drift">
+      <PageHelp
+        title={copy?.help?.title ?? 'Contract drift detection'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
+        useCases={copy?.help?.useCases ?? [
+          'Find API endpoints present in inventory but missing in OpenAPI spec',
+          'Detect DB columns expected by the FE but removed from the schema',
+          'Promote high-severity findings to candidate lessons',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Drift'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -257,6 +290,8 @@ export function DriftPage() {
         }
         contextChip={<PdcaContextHint stage="check" />}
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -287,6 +322,8 @@ export function DriftPage() {
         <Btn size="sm" variant="ghost" onClick={() => setActiveTab('scanner')}>
           Run scan
         </Btn>
+          </>
+        )}
       </PageHeader>
 
       <DriftStatusBanner
@@ -294,8 +331,10 @@ export function DriftPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<DriftTabId>
         size="sm"
         ariaLabel="Drift sections"
@@ -303,20 +342,26 @@ export function DriftPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="DRIFT SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideDriftSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Open findings" value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} hint={`${stats.dismissedFindings} dismissed`} />
-          <StatCard label="Critical" value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} hint="Needs triage" />
-          <StatCard label="Warnings" value={stats.warnOpen} accent={stats.warnOpen > 0 ? 'text-warn' : undefined} hint={`${stats.infoOpen} info`} />
-          <StatCard label="Snapshots" value={stats.snapshotCount} accent={stats.snapshotCount > 0 ? 'text-brand' : undefined} hint={stats.lastSnapshotAt ? 'Latest captured' : 'None yet'} />
-          <StatCard label="Contract edges" value={stats.lastSnapshotEdges} accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined} hint={stats.edgeCountDelta != null ? `${stats.edgeCountDelta >= 0 ? '+' : ''}${stats.edgeCountDelta} vs prior` : '—'} />
-          <StatCard label="Surfaces" value={stats.surfacesWithFindings} accent={stats.surfacesWithFindings > 0 ? 'text-warn' : undefined} hint="With open gaps" />
+          <StatCard label={copy?.statLabels?.openFindings ?? 'Open findings'} value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} tooltip={openFindingsTooltip(stats)} detail={openFindingsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalOpenTooltip(stats)} detail={criticalOpenDetail()} />
+          <StatCard label={copy?.statLabels?.warnings ?? 'Warnings'} value={stats.warnOpen} accent={stats.warnOpen > 0 ? 'text-warn' : undefined} tooltip={warnOpenTooltip(stats)} detail={warnOpenDetail(stats)} />
+          <StatCard label={copy?.statLabels?.snapshots ?? 'Snapshots'} value={stats.snapshotCount} accent={stats.snapshotCount > 0 ? 'text-brand' : undefined} tooltip={snapshotsTooltip(stats)} detail={snapshotsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.contractEdges ?? 'Contract edges'} value={stats.lastSnapshotEdges} accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined} tooltip={contractEdgesTooltip(stats)} detail={contractEdgesDetail(stats)} />
+          <StatCard label={copy?.statLabels?.surfaces ?? 'Surfaces'} value={stats.surfacesWithFindings} accent={stats.surfacesWithFindings > 0 ? 'text-warn' : undefined} tooltip={surfacesWithFindingsTooltip(stats)} detail={surfacesWithFindingsDetail()} />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'critical_findings'
@@ -336,25 +381,15 @@ export function DriftPage() {
       ) : null}
 
       {activeTab === 'overview' && (
-        <>
-          <PageHelp
-            title={copy?.help?.title ?? 'Contract drift detection'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
-            useCases={copy?.help?.useCases ?? [
-              'Find API endpoints present in inventory but missing in OpenAPI spec',
-              'Detect DB columns expected by the FE but removed from the schema',
-              'Promote high-severity findings to candidate lessons',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.'}
-          />
-          {stats.topPriority === 'healthy' && (
+        <div className="space-y-4">
+          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Contracts are in sync"
               description={`${stats.snapshotCount} snapshot${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} edges tracked · 0 open findings.`}
             />
           )}
-          {stats.topPriority === 'never_scanned' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'never_scanned' && (
             <RecommendedAction
               tone="info"
               title="Build your first contract baseline"
@@ -362,7 +397,7 @@ export function DriftPage() {
               cta={{ label: 'Open Scanner', to: '/drift?tab=scanner' }}
             />
           )}
-          {(stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
+          {!ux.hideOverviewChrome && (stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
             <RecommendedAction
               tone="info"
               title="Triage open drift findings"
@@ -370,7 +405,7 @@ export function DriftPage() {
               cta={{ label: 'Open Findings', to: '/drift?tab=findings' }}
             />
           )}
-        </>
+        </div>
       )}
 
       {activeTab === 'findings' && (

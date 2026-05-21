@@ -31,6 +31,17 @@ import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
+import {
+  backlogDetail,
+  backlogTooltip,
+  clearDetail,
+  clearTooltip,
+  criticalDetail,
+  criticalTooltip,
+  openDetail,
+  openTooltip,
+} from '../lib/statTooltips/inbox'
+import { inboxLinks, statLink } from '../lib/statCardLinks'
 
 type Group = InboxCardGroup
 
@@ -321,25 +332,33 @@ export function InboxPage() {
             label={copy?.statLabels?.open ?? 'Open'}
             value={stats.openActions}
             accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
-            hint={stats.openActions > 0 ? 'Needs your decision' : 'Inbox zero'}
+            tooltip={openTooltip(stats)}
+            detail={openDetail(stats)}
+            to={statLink(inboxLinks.open, stats)}
           />
           <StatCard
             label={copy?.statLabels?.clear ?? 'Clear'}
             value={stats.clearStages}
             accent="text-ok"
-            hint={ux.plainStageLabels ? `of ${stats.totalSurfaces} areas` : `of ${stats.totalSurfaces} PDCA surfaces`}
+            tooltip={clearTooltip(stats, ux.plainStageLabels)}
+            detail={clearDetail(stats, ux.plainStageLabels)}
+            to={inboxLinks.clear}
           />
           <StatCard
             label={copy?.statLabels?.backlog ?? 'Backlog'}
             value={stats.openBacklog}
             accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
-            hint={stats.openBacklog > 0 ? 'Reports > 1h untriaged' : 'Queue current'}
+            tooltip={backlogTooltip(stats)}
+            detail={backlogDetail(stats)}
+            to={inboxLinks.backlog}
           />
           <StatCard
             label={copy?.statLabels?.critical ?? 'Critical 14d'}
             value={stats.criticalReports14d}
             accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
-            hint={stats.failedFixes14d > 0 ? `${stats.failedFixes14d} failed fixes` : 'Severity rollup'}
+            tooltip={criticalTooltip(stats)}
+            detail={criticalDetail(stats)}
+            to={inboxLinks.critical}
           />
         </div>
       </Section>

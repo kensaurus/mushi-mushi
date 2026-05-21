@@ -4,6 +4,21 @@
 
 import { Section, StatCard } from '../ui'
 import type { RepoStats } from './RepoStatsTypes'
+import {
+  branchesDetail,
+  branchesTooltip,
+  ciFailedDetail,
+  ciFailedTooltip,
+  ciPassingDetail,
+  ciPassingTooltip,
+  mergedDetail,
+  mergedTooltip,
+  prOpenDetail,
+  prOpenTooltip,
+  stuckDetail,
+  stuckTooltip,
+} from '../../lib/statTooltips/repo'
+import { repoLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: RepoStats
@@ -36,33 +51,43 @@ export function RepoSnapshotStrip({
             label={statLabels?.branches ?? 'Branches'}
             value={stats.totalBranches}
             accent={stats.totalBranches > 0 ? 'text-brand' : undefined}
-            hint="fix attempts with PRs"
+            tooltip={branchesTooltip(stats)}
+            detail={branchesDetail(stats)}
+            to={repoLinks.branches}
           />
         ) : null}
         <StatCard
           label={statLabels?.prOpen ?? 'PRs open'}
           value={stats.prOpen}
           accent={stats.prOpen > 0 ? 'text-brand' : undefined}
-          hint="awaiting review"
+          tooltip={prOpenTooltip(stats)}
+          detail={prOpenDetail()}
+          to={repoLinks.prOpen}
         />
         <StatCard
           label={statLabels?.ciPassing ?? 'CI passing'}
           value={stats.ciPassing}
           accent={stats.ciPassing > 0 ? 'text-ok' : undefined}
-          hint="check-run success"
+          tooltip={ciPassingTooltip(stats)}
+          detail={ciPassingDetail()}
+          to={repoLinks.ciPassing}
         />
         <StatCard
           label={statLabels?.ciFailed ?? 'CI failing'}
           value={stats.ciFailed}
           accent={stats.ciFailed > 0 ? 'text-danger' : undefined}
-          hint="needs attention"
+          tooltip={ciFailedTooltip(stats)}
+          detail={ciFailedDetail()}
+          to={repoLinks.ciFailed}
         />
         {compact ? (
           <StatCard
             label={statLabels?.branches ?? 'Branches'}
             value={stats.totalBranches}
             accent={stats.totalBranches > 0 ? 'text-fg' : undefined}
-            hint={stats.failedToOpen > 0 ? `${stats.failedToOpen} stuck` : 'total with PRs'}
+            tooltip={branchesTooltip(stats)}
+            detail={branchesDetail(stats, true)}
+            to={repoLinks.branches}
           />
         ) : (
           <>
@@ -70,13 +95,17 @@ export function RepoSnapshotStrip({
               label={statLabels?.merged ?? 'Merged'}
               value={stats.merged}
               accent={stats.merged > 0 ? 'text-ok' : undefined}
-              hint="landed on main"
+              tooltip={mergedTooltip(stats)}
+              detail={mergedDetail()}
+              to={repoLinks.merged}
             />
             <StatCard
               label={statLabels?.stuck ?? 'Stuck'}
               value={stats.failedToOpen}
               accent={stats.failedToOpen > 0 ? 'text-danger' : 'text-ok'}
-              hint="failed to open PR"
+              tooltip={stuckTooltip(stats)}
+              detail={stuckDetail()}
+              to={repoLinks.stuck}
             />
           </>
         )}

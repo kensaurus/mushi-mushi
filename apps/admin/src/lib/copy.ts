@@ -355,8 +355,33 @@ export const COPY: CopyRegistry = {
       },
     },
     '/research': {
-      title: 'Web research',
-      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
+      title: 'Look up fixes online',
+      description:
+        'Banner + RESEARCH SNAPSHOT first — Summary for posture, Search to query Firecrawl, History for sessions.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        sessions: 'Sessions',
+        snippets: 'Snippets',
+        attached: 'Attached',
+        unattached: 'Unattached',
+        firecrawl: 'Firecrawl',
+        domains: 'Domains',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        configure: 'Configure Firecrawl',
+        fix: 'Fix in Settings',
+        test: 'Test connection',
+        search: 'Run first search',
+        attach: 'Attach evidence',
+        history: 'View history',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        search: 'Search',
+        history: 'History',
+      },
       help: {
         title: 'About web research',
         whatIsIt: 'BYOK Firecrawl-powered search you run while triaging a report. Look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.',
@@ -519,8 +544,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/marketplace': {
-      title: 'Marketplace',
-      description: 'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.',
+      title: 'Add webhook plugins',
+      description:
+        'Banner + MARKETPLACE SNAPSHOT first — Summary for posture, Browse to install, Deliveries to debug webhooks.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        catalog: 'Catalog',
+        installed: 'Installed',
+        deliveries7d: 'Deliveries · 7d',
+        successRate: 'Success rate',
+        failing: 'Failing',
+        neverDelivered: 'Never delivered',
+      },
+      actionLabels: {
+        browse: 'Browse catalog',
+        installed: 'Open Installed',
+        deliveries: 'View deliveries',
+        resume: 'Resume plugins',
+        refresh: 'Refresh',
+        plans: 'View plans',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        browse: 'Browse',
+        installed: 'Installed',
+        deliveries: 'Deliveries',
+      },
       help: {
         title: 'About the marketplace',
         whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
@@ -637,8 +686,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/lessons': {
-      title: 'Learned rules',
-      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
+      title: 'Learn from past bugs',
+      description:
+        'Banner + LESSONS SNAPSHOT first — Summary for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        activeLessons: 'Active lessons',
+        critical: 'Critical',
+        candidates: 'Candidates',
+        promoted: 'Promoted clusters',
+        reportsClustered: 'Reports clustered',
+        highCoherence: 'High coherence',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        reports: 'Open Reports',
+        clusters: 'Review clusters',
+        lessons: 'Review lessons',
+        query: 'Try query sim',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        lessons: 'Lessons',
+        clusters: 'Clusters',
+        query: 'Query Sim',
+      },
       help: {
         title: 'About lessons',
         whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi names it and uses it to catch the next one early.',
@@ -690,8 +763,31 @@ export const COPY: CopyRegistry = {
       },
     },
     '/iterate': {
-      title: 'PDCA iteration',
-      description: 'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger loops, New Run to queue.',
+      title: 'Auto-improve pages',
+      description:
+        'Banner + PDCA SNAPSHOT first — Summary for posture, Runs to trigger loops, New Run to queue.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total: 'Total runs',
+        active: 'Active',
+        succeeded: 'Succeeded',
+        failed: 'Failed',
+        avgScore: 'Avg score',
+        iterations: 'Iterations',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        runs: 'View runs',
+        openRuns: 'Open runs',
+        newRun: 'New run',
+        queue: 'Queue new run',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        runs: 'Runs',
+        new: 'New Run',
+      },
       help: {
         title: 'About PDCA iteration',
         whatIsIt: 'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona. The loop repeats until the target score or max iterations.',
@@ -704,8 +800,33 @@ export const COPY: CopyRegistry = {
       },
     },
     '/drift': {
-      title: 'Contract drift',
-      description: 'Banner + DRIFT SNAPSHOT — compare OpenAPI, inventory, and DB schema to catch gaps before users do.',
+      title: 'Catch contract drift',
+      description:
+        'Banner + DRIFT SNAPSHOT first — Summary for posture, Findings to triage, Snapshots for history, Scanner to run walker.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        openFindings: 'Open findings',
+        critical: 'Critical',
+        warnings: 'Warnings',
+        snapshots: 'Snapshots',
+        contractEdges: 'Contract edges',
+        surfaces: 'Surfaces',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        findings: 'Triage findings',
+        review: 'Review findings',
+        scan: 'Run scan',
+        firstScan: 'Run first scan',
+        snapshots: 'View snapshots',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        findings: 'Findings',
+        snapshots: 'Snapshots',
+        scanner: 'Scanner',
+      },
       help: {
         title: 'About contract drift',
         whatIsIt: 'The drift-walker builds a contract snapshot then walks every route — finding API endpoints, inventory nodes, or DB columns that diverged from each other.',
@@ -718,8 +839,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/experiments': {
-      title: 'A/B experiments',
-      description: 'Banner + EXPERIMENTS SNAPSHOT — create variants, launch tests, analyze with mSPRT significance.',
+      title: 'Run A/B tests',
+      description:
+        'Banner + EXPERIMENTS SNAPSHOT first — Summary for posture, Experiments to launch/monitor, New to create variants.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total: 'Total',
+        running: 'Running',
+        readyToLaunch: 'Ready to launch',
+        winners: 'Winners',
+        assignments: 'Assignments',
+        conversion: 'Conversion',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        monitor: 'Monitor runs',
+        drafts: 'Review drafts',
+        create: 'Create experiment',
+        winners: 'Review winners',
+        finish: 'Finish setup',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        experiments: 'Experiments',
+        new: 'New',
+      },
       help: {
         title: 'About experiments',
         whatIsIt: 'A/B testing with SDK assignment — compare UI variants with CUPED variance reduction, mSPRT always-valid p-values, and SRM checks.',
@@ -732,8 +877,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/anomalies': {
-      title: 'Metric anomalies',
-      description: 'Banner + ANOMALIES SNAPSHOT — ingest metrics, run detection, triage Page-Hinkley and release regressions.',
+      title: 'Catch metric spikes',
+      description:
+        'Banner + ANOMALIES SNAPSHOT first — Summary for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        open: 'Open',
+        releaseRegressions: 'Release regressions',
+        highScore: 'High score',
+        autoReported: 'Auto-reported',
+        metricPoints: 'Metric points',
+        dismissed: 'Dismissed',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        triage: 'Triage anomalies',
+        review: 'Review anomalies',
+        ingest: 'Ingest metrics',
+        detect: 'Run detection',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        anomalies: 'Anomalies',
+        metrics: 'Metrics',
+        detect: 'Detect',
+      },
       help: {
         title: 'About anomaly detection',
         whatIsIt: 'Ingest any numeric metric (error rate, latency, conversion) and run Page-Hinkley, Z-score, or release-regression detectors. Confirmed regressions can auto-open bug reports.',
@@ -820,8 +989,30 @@ export const COPY: CopyRegistry = {
       },
     },
     '/billing': {
-      title: 'Plan & billing',
-      description: 'Current plan, quota usage, Stripe invoices, and upgrade paths — scoped to the active project.',
+      title: 'Your plan & usage',
+      description:
+        'Banner + BILLING SNAPSHOT first — Summary for usage + invoices, Plans to compare tiers, Support for billing tickets.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        plan: 'Plan',
+        reports: 'Reports · period',
+        fixes: 'Fixes · period',
+        llmCogs: 'LLM COGS · month',
+      },
+      actionLabels: {
+        upgrade: 'Upgrade plan',
+        manage: 'Manage in Stripe',
+        plans: 'Compare plans',
+        payment: 'Update payment',
+        projects: 'Create project',
+        cost: 'View LLM cost',
+        health: 'Run Health test',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        plans: 'Plans',
+        support: 'Support',
+      },
       help: {
         title: 'About billing',
         whatIsIt: 'Per-project subscription and usage meters. Hobby includes a monthly report quota; paid plans unlock higher limits, BYOK, and Stripe-managed billing.',

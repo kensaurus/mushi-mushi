@@ -42,6 +42,21 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useJudgeUx, resolveQuickJudgeTab } from '../lib/judgeModeUx'
+import {
+  classifiedDetail,
+  classifiedTooltip,
+  disagreeDetail,
+  disagreeTooltip,
+  driftDetail,
+  driftTooltip,
+  promptsDetail,
+  promptsTooltip,
+  totalDetail,
+  totalTooltip,
+  weekDetail,
+  weekTooltip,
+} from '../lib/statTooltips/judge'
+import { judgeLinks } from '../lib/statCardLinks'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
@@ -745,19 +760,25 @@ export function JudgePage() {
                     ? 'text-danger'
                     : undefined
             }
-            hint={`${stats.latestWeekEvalCount} evals`}
+            tooltip={weekTooltip(stats)}
+            detail={weekDetail(stats)}
+            to={judgeLinks.week}
           />
           <StatCard
             label={copy?.statLabels?.total ?? 'Total evals'}
             value={stats.totalEvaluations}
             accent={stats.totalEvaluations > 0 ? 'text-brand' : undefined}
-            hint="All time on project"
+            tooltip={totalTooltip(stats)}
+            detail={totalDetail()}
+            to={judgeLinks.total}
           />
           <StatCard
             label={copy?.statLabels?.disagree ?? 'Disagreements'}
             value={stats.disagreementCount}
             accent={stats.disagreementCount > 0 ? 'text-warn' : 'text-ok'}
-            hint={stats.disagreementRatePct != null ? `${stats.disagreementRatePct}% rate` : 'classifier vs user'}
+            tooltip={disagreeTooltip(stats)}
+            detail={disagreeDetail(stats)}
+            to={judgeLinks.disagree}
           />
           <StatCard
             label={copy?.statLabels?.drift ?? 'WoW drift'}
@@ -767,19 +788,25 @@ export function JudgePage() {
                 ? 'text-danger'
                 : undefined
             }
-            hint="Week-over-week score change"
+            tooltip={driftTooltip(stats)}
+            detail={driftDetail()}
+            to={judgeLinks.drift}
           />
           <StatCard
             label={copy?.statLabels?.classified ?? 'Classified'}
             value={stats.classifiedReports}
             accent={stats.classifiedReports > 0 && stats.totalEvaluations === 0 ? 'text-brand' : undefined}
-            hint="Ready for judge"
+            tooltip={classifiedTooltip(stats)}
+            detail={classifiedDetail()}
+            to={judgeLinks.classified}
           />
           <StatCard
             label={copy?.statLabels?.prompts ?? 'Prompts'}
             value={stats.promptVersionCount}
             accent={stats.activePromptCount > 0 ? 'text-ok' : undefined}
-            hint={`${stats.activePromptCount} active`}
+            tooltip={promptsTooltip(stats)}
+            detail={promptsDetail(stats)}
+            to={judgeLinks.prompts}
           />
         </div>
       </Section>

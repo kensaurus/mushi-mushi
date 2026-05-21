@@ -21,6 +21,16 @@ import {
   type SsoTabId,
 } from '../components/sso/types'
 import {
+  domainCountDetail,
+  domainCountTooltip,
+  pendingFailedDetail,
+  pendingFailedTooltip,
+  planGateDetail,
+  planGateTooltip,
+  registeredCountDetail,
+  registeredCountTooltip,
+} from '../lib/statTooltips/sso'
+import {
   PageHeader,
   PageHelp,
   Card,
@@ -290,25 +300,29 @@ export function SsoPage() {
             label="Registered"
             value={stats.registeredCount}
             accent={stats.registeredCount > 0 ? 'text-ok' : undefined}
-            hint={`${stats.activeCount} active · ${stats.totalConfigs} total configs`}
+            tooltip={registeredCountTooltip(stats)}
+            detail={registeredCountDetail(stats)}
           />
           <StatCard
             label="Pending / failed"
             value={`${stats.pendingCount} / ${stats.failedCount}`}
             accent={stats.failedCount > 0 ? 'text-danger' : stats.pendingCount > 0 ? 'text-warn' : undefined}
-            hint={stats.manualRequiredCount > 0 ? `${stats.manualRequiredCount} OIDC manual` : 'GoTrue registration state'}
+            tooltip={pendingFailedTooltip(stats)}
+            detail={pendingFailedDetail(stats)}
           />
           <StatCard
             label="Email domains"
             value={stats.domainCount}
             accent={stats.domainCount > 0 ? 'text-info' : undefined}
-            hint="Domains routed to SSO on login"
+            tooltip={domainCountTooltip(stats)}
+            detail={domainCountDetail()}
           />
           <StatCard
             label="Plan gate"
             value={stats.ssoEntitlement ? 'Unlocked' : 'Locked'}
             accent={stats.ssoEntitlement ? 'text-ok' : 'text-warn'}
-            hint={`${stats.planDisplayName} · Pro+ required`}
+            tooltip={planGateTooltip(stats)}
+            detail={planGateDetail(stats)}
           />
         </div>
       </Section>

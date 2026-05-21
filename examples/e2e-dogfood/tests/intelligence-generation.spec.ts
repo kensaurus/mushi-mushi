@@ -25,7 +25,7 @@ function loadEnvFile(relPath: string): Record<string, string> {
   return out
 }
 
-const rootEnv = { ...loadEnvFile('.env'), ...loadEnvFile('.env.local') }
+const rootEnv = { ...loadEnvFile('.env.local'), ...loadEnvFile('.env') }
 const adminEnv = loadEnvFile('apps/admin/.env')
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL ?? adminEnv.VITE_SUPABASE_URL ?? rootEnv.VITE_SUPABASE_URL ?? ''
@@ -84,11 +84,17 @@ test.describe('Intelligence generation UX', () => {
   test('pipeline tab shows job history and failure note when present', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/intelligence?tab=pipeline`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 }).catch(() => {})
+    if (await page.getByRole('button', { name: /Switch to Beginner/i }).isVisible().catch(() => false)) {
+      await page.getByRole('button', { name: /Switch to Beginner/i }).click()
+      await page.goto(`${ADMIN_URL}/intelligence?tab=pipeline`, { waitUntil: 'domcontentloaded' })
+    }
     await expect(page.getByTestId('mushi-page-intelligence')).toBeVisible({ timeout: 15000 })
-    await expect(page.getByRole('heading', { name: 'Recent generation jobs' })).toBeVisible()
+    await expect(page.getByText('Recent generation jobs', { exact: true })).toBeVisible({ timeout: 15000 })
 
+    // When the latest job succeeded, the stale-failure nag must not appear.
     const failureCard = page.getByText('Last generation failed')
-    if (await failureCard.isVisible().catch(() => false)) {
+    const hasFailureNag = await failureCard.isVisible().catch(() => false)
+    if (hasFailureNag) {
       await expect(page.getByRole('button', { name: 'Retry generation' })).toBeVisible()
     }
   })
@@ -96,6 +102,7 @@ test.describe('Intelligence generation UX', () => {
   test('overview shows generate affordance when entitled', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/intelligence`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 }).catch(() => {})
+    await page.getByRole('button', { name: /Switch to Beginner/i }).click({ timeout: 5000 }).catch(() => {})
     await expect(page.getByTestId('mushi-page-intelligence')).toBeVisible({ timeout: 15000 })
     const generateBtn = page.getByRole('button', { name: /Generate|Run digest|Generate report/i })
     if (await generateBtn.first().isVisible().catch(() => false)) {

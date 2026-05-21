@@ -46,6 +46,17 @@ import {
 } from '../components/integrations/types'
 import { usePageCopy } from '../lib/copy'
 import { useIntegrationsUx, resolveQuickIntegrationsTab } from '../lib/integrationsModeUx'
+import {
+  failingDetail,
+  failingTooltip,
+  healthyDetail,
+  healthyTooltip,
+  platformDetail,
+  platformTooltip,
+  routingDetail,
+  routingTooltip,
+} from '../lib/statTooltips/integrations'
+import { integrationsLinks } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
@@ -528,28 +539,32 @@ export function IntegrationsPage() {
           <StatCard
             label={copy?.statLabels?.platform ?? 'Platform'}
             value={`${stats.platformConnected}/${stats.platformTotal}`}
-            hint="Required credentials set"
+            tooltip={platformTooltip(stats)}
+            detail={platformDetail()}
+            to={integrationsLinks.platform}
           />
           <StatCard
             label={copy?.statLabels?.healthy ?? 'Healthy probes'}
             value={stats.platformHealthy}
             accent={stats.platformHealthy > 0 ? 'text-ok' : undefined}
-            hint="Latest probe status ok"
+            tooltip={healthyTooltip(stats)}
+            detail={healthyDetail()}
+            to={integrationsLinks.healthy}
           />
           <StatCard
             label={copy?.statLabels?.routing ?? 'Routing'}
             value={stats.routingActive}
-            hint={
-              stats.routingPaused > 0
-                ? `${stats.routingPaused} paused`
-                : 'Active destinations'
-            }
+            tooltip={routingTooltip(stats)}
+            detail={routingDetail(stats)}
+            to={integrationsLinks.routing}
           />
           <StatCard
             label={copy?.statLabels?.failing ?? 'Failing'}
             value={stats.platformDown}
             accent={stats.platformDown > 0 ? 'text-danger' : undefined}
-            hint={stats.platformDown > 0 ? 'Fix credentials or re-test' : 'No down probes'}
+            tooltip={failingTooltip(stats)}
+            detail={failingDetail(stats)}
+            to={integrationsLinks.failing}
           />
         </div>
       </Section>

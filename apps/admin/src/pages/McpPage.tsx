@@ -45,6 +45,21 @@ import {
   type McpScope,
 } from '../lib/mcpCatalog'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import {
+  activeKeysDetail,
+  activeKeysTooltip,
+  connectedDetail,
+  connectedTooltip,
+  endpointDetail,
+  endpointTooltip,
+  mcpReadDetail,
+  mcpReadTooltip,
+  sdkOnlyDetail,
+  sdkOnlyTooltip,
+  toolsDetail,
+  toolsTooltip,
+} from '../lib/statTooltips/mcp'
+import { mcpLinks } from '../lib/statCardLinks'
 
 const TABS: Array<{ id: McpTabId; label: string; description: string }> = [
   {
@@ -518,31 +533,39 @@ export function McpPage() {
       <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} hint="All scopes on this project" />
+          <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} tooltip={activeKeysTooltip(stats)} detail={activeKeysDetail()} to={mcpLinks.activeKeys} />
           <StatCard
             label={copy?.statLabels?.mcpRead ?? 'mcp:read'}
             value={stats.mcpReadKeyCount}
             accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
-            hint={stats.mcpWriteKeyCount > 0 ? `${stats.mcpWriteKeyCount} write` : 'Mint on /projects'}
+            tooltip={mcpReadTooltip(stats)}
+            detail={mcpReadDetail(stats)}
+            to={mcpLinks.mcpRead}
           />
           <StatCard
             label={copy?.statLabels?.connected ?? 'Connected'}
             value={stats.connectedKeyCount}
             accent={stats.connectedKeyCount > 0 ? 'text-ok' : stats.mcpReadKeyCount > 0 ? 'text-warn' : undefined}
-            hint={stats.neverConnectedCount > 0 ? `${stats.neverConnectedCount} never used` : 'Keys with heartbeat'}
+            tooltip={connectedTooltip(stats)}
+            detail={connectedDetail(stats)}
+            to={mcpLinks.connected}
           />
           <StatCard
             label={copy?.statLabels?.sdkOnly ?? 'SDK-only keys'}
             value={stats.reportOnlyKeyCount}
             accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
-            hint="report:write without MCP scope"
+            tooltip={sdkOnlyTooltip(stats)}
+            detail={sdkOnlyDetail()}
+            to={mcpLinks.sdkOnly}
           />
-          <StatCard label={copy?.statLabels?.tools ?? 'Tools'} value={stats.toolCount} accent="text-info" hint={`${stats.resourceCount} resources · ${stats.promptCount} prompts`} />
+          <StatCard label={copy?.statLabels?.tools ?? 'Tools'} value={stats.toolCount} accent="text-info" tooltip={toolsTooltip(stats)} detail={toolsDetail(stats)} to={mcpLinks.tools} />
           <StatCard
             label={copy?.statLabels?.endpoint ?? 'Endpoint'}
             value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
             accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
-            hint={stats.expectedEndpointHost ?? 'Cloud API host'}
+            tooltip={endpointTooltip(stats)}
+            detail={endpointDetail(stats)}
+            to={mcpLinks.endpoint}
           />
         </div>
       </Section>

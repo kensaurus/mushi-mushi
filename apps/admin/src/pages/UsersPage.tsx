@@ -40,6 +40,20 @@ import {
 import { usePageCopy } from '../lib/copy'
 import { EditorialErrorState } from '../components/EditorialErrorState'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import {
+  churn30dDetail,
+  churn30dTooltip,
+  mrrDetail,
+  mrrTooltip,
+  paidUsersDetail,
+  paidUsersTooltip,
+  signups30dDetail,
+  signups30dTooltip,
+  signups7dDetail,
+  signups7dTooltip,
+  totalSignupsDetail,
+  totalSignupsTooltip,
+} from '../lib/statTooltips/users'
 
 interface SuperAdminUser {
   user_id: string
@@ -201,12 +215,12 @@ export function UsersPage() {
 
       {/* Top metrics row */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Total signups" value={metrics?.total_users ?? '—'} />
-        <StatCard label="Paid users" value={metrics?.paid_users ?? '—'} accent="text-brand" />
-        <StatCard label="MRR (USD)" value={metrics ? `$${metrics.mrr_usd.toLocaleString()}` : '—'} accent="text-brand" />
-        <StatCard label="Signups · 7d" value={metrics?.signups_last_7d ?? '—'} />
-        <StatCard label="Signups · 30d" value={metrics?.signups_last_30d ?? '—'} />
-        <StatCard label="Churn · 30d" value={metrics?.churn_last_30d ?? '—'} accent={metrics && metrics.churn_last_30d > 0 ? 'text-warn' : undefined} />
+        <StatCard label="Total signups" value={metrics?.total_users ?? '—'} tooltip={totalSignupsTooltip(metrics)} detail={totalSignupsDetail()} />
+        <StatCard label="Paid users" value={metrics?.paid_users ?? '—'} accent="text-brand" tooltip={paidUsersTooltip(metrics)} detail={paidUsersDetail(metrics)} />
+        <StatCard label="MRR (USD)" value={metrics ? `$${metrics.mrr_usd.toLocaleString()}` : '—'} accent="text-brand" tooltip={mrrTooltip(metrics)} detail={mrrDetail()} />
+        <StatCard label="Signups · 7d" value={metrics?.signups_last_7d ?? '—'} tooltip={signups7dTooltip(metrics)} detail={signups7dDetail()} />
+        <StatCard label="Signups · 30d" value={metrics?.signups_last_30d ?? '—'} tooltip={signups30dTooltip(metrics)} detail={signups30dDetail(metrics)} />
+        <StatCard label="Churn · 30d" value={metrics?.churn_last_30d ?? '—'} accent={metrics && metrics.churn_last_30d > 0 ? 'text-warn' : undefined} tooltip={churn30dTooltip(metrics)} detail={churn30dDetail()} />
       </div>
 
       <Section

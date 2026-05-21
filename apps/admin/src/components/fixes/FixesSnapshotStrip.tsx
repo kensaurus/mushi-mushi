@@ -5,6 +5,21 @@
 import { Link } from 'react-router-dom'
 import { Section, StatCard } from '../ui'
 import type { FixesStats } from './FixesStatsTypes'
+import {
+  completedDetail,
+  completedTooltip,
+  failedDetail,
+  failedTooltip,
+  inProgressDetail,
+  inProgressTooltip,
+  prsCiPassingDetail,
+  prsCiPassingTooltip,
+  prsOpenDetail,
+  prsOpenTooltip,
+  totalAttemptsDetail,
+  totalAttemptsTooltip,
+} from '../../lib/statTooltips/fixes'
+import { fixesLinks } from '../../lib/statCardLinks'
 
 interface Props {
   stats: FixesStats
@@ -42,7 +57,9 @@ export function FixesSnapshotStrip({
             label={statLabels?.totalAttempts ?? 'Attempts (30d)'}
             value={stats.totalAttempts}
             accent={stats.totalAttempts > 0 ? 'text-brand' : undefined}
-            hint="dispatched"
+            tooltip={totalAttemptsTooltip(stats)}
+            detail={totalAttemptsDetail(stats)}
+            to={fixesLinks.totalAttempts}
           />
         ) : null}
         {!compact ? (
@@ -50,48 +67,52 @@ export function FixesSnapshotStrip({
             label={statLabels?.completed ?? 'Completed'}
             value={stats.completed}
             accent="text-ok"
-            hint={
-              stats.successRatePct != null ? `${stats.successRatePct}% success` : 'no finished runs'
-            }
+            tooltip={completedTooltip(stats)}
+            detail={completedDetail(stats)}
+            to={fixesLinks.completed}
           />
         ) : null}
         <StatCard
           label={statLabels?.failed ?? 'Failed'}
           value={stats.failed}
           accent={stats.failed > 0 ? 'text-danger' : 'text-ok'}
-          hint={
-            stats.topFailureCategory
-              ? `top: ${stats.topFailureCategory}`
-              : 'needs attention'
-          }
+          tooltip={failedTooltip(stats)}
+          detail={failedDetail(stats)}
+          to={fixesLinks.failed}
         />
         <StatCard
           label={statLabels?.inProgress ?? 'In flight'}
           value={inFlight}
           accent={inFlight > 0 ? 'text-info' : undefined}
-          hint="queued or running"
+          tooltip={inProgressTooltip(stats)}
+          detail={inProgressDetail()}
+          to={fixesLinks.inProgress}
         />
         <StatCard
           label={statLabels?.prsOpen ?? 'PRs open'}
           value={stats.prsOpen}
           accent={stats.prsOpen > 0 ? 'text-brand' : undefined}
-          hint="awaiting review"
+          tooltip={prsOpenTooltip(stats)}
+          detail={prsOpenDetail()}
+          to={fixesLinks.prsOpen}
         />
         {compact ? (
           <StatCard
             label={statLabels?.totalAttempts ?? 'Fixes (30 days)'}
             value={stats.totalAttempts}
             accent={stats.totalAttempts > 0 ? 'text-fg' : undefined}
-            hint={
-              stats.successRatePct != null ? `${stats.successRatePct}% success` : 'total dispatched'
-            }
+            tooltip={totalAttemptsTooltip(stats)}
+            detail={totalAttemptsDetail(stats)}
+            to={fixesLinks.totalAttempts}
           />
         ) : (
           <StatCard
             label={statLabels?.prsCiPassing ?? 'CI passing'}
             value={stats.prsCiPassing}
             accent={stats.prsCiPassing > 0 ? 'text-ok' : undefined}
-            hint="check-run success"
+            tooltip={prsCiPassingTooltip(stats)}
+            detail={prsCiPassingDetail()}
+            to={fixesLinks.prsCiPassing}
           />
         )}
       </div>

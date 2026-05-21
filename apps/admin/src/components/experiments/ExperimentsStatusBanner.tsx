@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { ExperimentsStats, ExperimentsTabId } from './ExperimentsStatsTypes'
 
 interface Props {
@@ -12,9 +13,12 @@ interface Props {
   onTab?: (tab: ExperimentsTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
-export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+  const copy = usePageCopy('/experiments')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -23,12 +27,18 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No project selected</p>
-            <p className="text-2xs text-fg-muted">Pick a project to create and monitor A/B experiments.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Pick a project first' : 'No project selected'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'A/B tests are per app — choose one in the header.'
+                : 'Pick a project to create and monitor A/B experiments.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -41,17 +51,19 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.runningCount} experiment{stats.runningCount === 1 ? '' : 's'} live on {projectLabel}
+              {plainBanner
+                ? `${stats.runningCount} experiment${stats.runningCount === 1 ? '' : 's'} live`
+                : `${stats.runningCount} experiment${stats.runningCount === 1 ? '' : 's'} live on ${projectLabel}`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Monitor runs</Btn>
+            <Btn size="sm" variant="ghost">{actions.monitor ?? 'Monitor runs'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>Monitor runs</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>{actions.monitor ?? 'Monitor runs'}</Btn>
         ) : null}
       </div>
     )
@@ -71,10 +83,10 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Review drafts</Btn>
+            <Btn size="sm" variant="ghost">{actions.drafts ?? 'Review drafts'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>Review drafts</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>{actions.drafts ?? 'Review drafts'}</Btn>
         ) : null}
       </div>
     )
@@ -86,16 +98,18 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No experiments on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No experiments yet' : `No experiments on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Create experiment</Btn>
+            <Btn size="sm" variant="ghost">{actions.create ?? 'Create experiment'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('new')}>Create experiment</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('new')}>{actions.create ?? 'Create experiment'}</Btn>
         ) : null}
       </div>
     )
@@ -115,10 +129,10 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Review winners</Btn>
+            <Btn size="sm" variant="ghost">{actions.winners ?? 'Review winners'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>Review winners</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>{actions.winners ?? 'Review winners'}</Btn>
         ) : null}
       </div>
     )
@@ -135,7 +149,7 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>Finish setup</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('experiments')}>{actions.finish ?? 'Finish setup'}</Btn>
         ) : null}
       </div>
     )
@@ -146,17 +160,19 @@ export function ExperimentsStatusBanner({ stats, onTab, onRefresh, refreshing }:
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Experiment library idle on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Experiment library idle' : `Experiment library idle on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : stats.topPriorityTo ? (
         <Link to={stats.topPriorityTo}>
-          <Btn size="sm" variant="ghost">View experiments</Btn>
+          <Btn size="sm" variant="ghost">{actions.monitor ?? 'View experiments'}</Btn>
         </Link>
       ) : null}
     </div>

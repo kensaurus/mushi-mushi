@@ -9,7 +9,7 @@
  *     Query Sim    — paste a diff, see what rules would be injected (lessons.query)
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -18,6 +18,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
 import {
   PageHeader,
   PageHelp,
@@ -42,6 +43,20 @@ import {
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import {
+  activeLessonsDetail,
+  activeLessonsTooltip,
+  candidatesDetail,
+  candidatesTooltip,
+  criticalLessonsDetail,
+  criticalLessonsTooltip,
+  highCoherenceDetail,
+  highCoherenceTooltip,
+  promotedClustersDetail,
+  promotedClustersTooltip,
+  reportsClusteredDetail,
+  reportsClusteredTooltip,
+} from '../lib/statTooltips/lessons'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -521,6 +536,7 @@ function QuerySimTab() {
 
 export function LessonsPage() {
   const copy = usePageCopy('/lessons')
+  const ux = useLessonsUx()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -551,11 +567,17 @@ export function LessonsPage() {
     [setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickLessonsTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+
   const tabOptions = useMemo(
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'clusters' && stats.readyToPromote > 0
             ? stats.readyToPromote
@@ -563,7 +585,7 @@ export function LessonsPage() {
               ? stats.criticalLessons
               : undefined,
       })),
-    [stats.readyToPromote, stats.criticalLessons],
+    [copy?.tabLabels, stats.readyToPromote, stats.criticalLessons],
   )
 
   usePublishPageContext({
@@ -616,6 +638,17 @@ export function LessonsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-lessons">
+      <PageHelp
+        title={copy?.help?.title ?? 'About Lessons'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
+        useCases={copy?.help?.useCases ?? [
+          'Inject relevant lessons into PR review context via the lessons.query MCP tool',
+          'Test what rules a diff would trigger using the Query Sim tab',
+          'Export active lessons to .mushi/lessons.json for offline CI use',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Lessons'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -624,6 +657,8 @@ export function LessonsPage() {
           'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'
         }
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -651,6 +686,8 @@ export function LessonsPage() {
         <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
           Refresh
         </Btn>
+          </>
+        )}
       </PageHeader>
 
       <LessonsStatusBanner
@@ -658,8 +695,10 @@ export function LessonsPage() {
         onTab={setActiveTab}
         onRefresh={reloadStats}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<LessonsTabId>
         size="sm"
         ariaLabel="Lessons sections"
@@ -667,20 +706,26 @@ export function LessonsPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="LESSONS SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideLessonsSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Active lessons" value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} hint={`${stats.retiredLessons} retired`} />
-          <StatCard label="Critical" value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} hint="PR review rules" />
-          <StatCard label="Candidates" value={stats.candidateClusters} accent={stats.candidateClusters > 0 ? 'text-warn' : undefined} hint={`${stats.readyToPromote} ready`} />
-          <StatCard label="Promoted clusters" value={stats.promotedClusters} accent={stats.promotedClusters > 0 ? 'text-brand' : undefined} hint="Already in library" />
-          <StatCard label="Reports clustered" value={stats.totalClusterReports} accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined} hint="Across all clusters" />
-          <StatCard label="High coherence" value={stats.highCoherenceCandidates} accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined} hint="≥75% · ≥3 reports" />
+          <StatCard label={copy?.statLabels?.activeLessons ?? 'Active lessons'} value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} tooltip={activeLessonsTooltip(stats)} detail={activeLessonsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalLessonsTooltip(stats)} detail={criticalLessonsDetail()} />
+          <StatCard label={copy?.statLabels?.candidates ?? 'Candidates'} value={stats.candidateClusters} accent={stats.candidateClusters > 0 ? 'text-warn' : undefined} tooltip={candidatesTooltip(stats)} detail={candidatesDetail(stats)} />
+          <StatCard label={copy?.statLabels?.promoted ?? 'Promoted clusters'} value={stats.promotedClusters} accent={stats.promotedClusters > 0 ? 'text-brand' : undefined} tooltip={promotedClustersTooltip(stats)} detail={promotedClustersDetail()} />
+          <StatCard label={copy?.statLabels?.reportsClustered ?? 'Reports clustered'} value={stats.totalClusterReports} accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined} tooltip={reportsClusteredTooltip(stats)} detail={reportsClusteredDetail()} />
+          <StatCard label={copy?.statLabels?.highCoherence ?? 'High coherence'} value={stats.highCoherenceCandidates} accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined} tooltip={highCoherenceTooltip(stats)} detail={highCoherenceDetail()} />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'critical_lessons'
@@ -700,25 +745,15 @@ export function LessonsPage() {
       ) : null}
 
       {activeTab === 'overview' && (
-        <>
-          <PageHelp
-            title={copy?.help?.title ?? 'About Lessons'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
-            useCases={copy?.help?.useCases ?? [
-              'Inject relevant lessons into PR review context via the lessons.query MCP tool',
-              'Test what rules a diff would trigger using the Query Sim tab',
-              'Export active lessons to .mushi/lessons.json for offline CI use',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
-          />
-          {stats.topPriority === 'healthy' && (
+        <div className="space-y-4">
+          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Lesson library is active"
               description={`${stats.activeLessons} promoted rules feeding PR context · ${stats.candidateClusters} clusters still forming.`}
             />
           )}
-          {stats.topPriority === 'no_data' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'no_data' && (
             <RecommendedAction
               tone="info"
               title="Seed mistake memory with reports"
@@ -726,14 +761,14 @@ export function LessonsPage() {
               cta={{ label: 'Open Reports', to: '/reports' }}
             />
           )}
-          {(stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
+          {!ux.hideOverviewChrome && (stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
             <RecommendedAction
               tone="info"
               title="Promote a cluster to a lesson"
               description={stats.topPriorityLabel ?? 'Review candidate clusters and promote when coherence ≥ 75%.'}
             />
           )}
-        </>
+        </div>
       )}
 
       {activeTab === 'lessons' && <LessonsTab />}

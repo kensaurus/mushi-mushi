@@ -71,6 +71,17 @@ import {
   type GraphTabId,
 } from '../components/graph/GraphStatsTypes'
 import { useGraphUx, resolveQuickGraphTab } from '../lib/graphModeUx'
+import {
+  edgesDetail,
+  edgesTooltip,
+  fragileDetail,
+  fragileTooltip,
+  inventoryDetail,
+  inventoryTooltip,
+  nodesDetail,
+  nodesTooltip,
+} from '../lib/statTooltips/graph'
+import { graphLinks } from '../lib/statCardLinks'
 
 const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> = [
   {
@@ -720,25 +731,33 @@ export function GraphPage() {
             label={copy?.statLabels?.nodes ?? 'Nodes'}
             value={stats.nodeCount}
             accent={stats.nodeCount > 0 ? 'text-fg' : undefined}
-            hint={stats.reportNodes > 0 ? `${stats.reportNodes} report groups` : 'Seeds from reports'}
+            tooltip={nodesTooltip(stats)}
+            detail={nodesDetail(stats)}
+            to={graphLinks.nodes}
           />
           <StatCard
             label={copy?.statLabels?.edges ?? 'Edges'}
             value={stats.edgeCount}
             accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
-            hint={stats.duplicateEdges > 0 ? `${stats.duplicateEdges} duplicates` : 'Relationship count'}
+            tooltip={edgesTooltip(stats)}
+            detail={edgesDetail(stats)}
+            to={graphLinks.edges}
           />
           <StatCard
             label={copy?.statLabels?.fragile ?? 'Fragile'}
             value={stats.fragileComponents}
             accent={stats.fragileComponents > 0 ? 'text-danger' : 'text-ok'}
-            hint={ux.plainBanner ? 'Many bugs land here' : 'Components with ≥3 affects'}
+            tooltip={fragileTooltip(stats)}
+            detail={fragileDetail(ux.plainBanner)}
+            to={graphLinks.fragile}
           />
           <StatCard
             label={copy?.statLabels?.inventory ?? 'Inventory'}
             value={stats.inventoryNodes}
             accent={stats.inventoryNodes > 0 ? 'text-info' : undefined}
-            hint={stats.inventoryNodes > 0 ? 'Surface overlay nodes' : 'Enable via User stories'}
+            tooltip={inventoryTooltip(stats)}
+            detail={inventoryDetail(stats)}
+            to={graphLinks.inventory}
           />
         </div>
       </Section>

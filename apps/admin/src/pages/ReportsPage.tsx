@@ -46,6 +46,17 @@ import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { EMPTY_REPORTS_STATS, type ReportsStats, type ReportsTabId } from '../components/reports/ReportsStatsTypes'
+import {
+  critical14dDetail,
+  critical14dTooltip,
+  dismissed14dDetail,
+  dismissed14dTooltip,
+  total14dDetail,
+  total14dTooltip,
+  untriagedDetail,
+  untriagedTooltip,
+} from '../lib/statTooltips/reports'
+import { reportsLinks } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
 import type { PlatformResponse } from '../components/integrations/types'
 
@@ -1031,25 +1042,33 @@ export function ReportsPage() {
             label={copy?.statLabels?.total14d ?? '14d total'}
             value={stats.total14d}
             accent={stats.total14d > 0 ? 'text-fg' : undefined}
-            hint={stats.totalAllTime > 0 ? `${stats.totalAllTime} all-time` : 'No ingest yet'}
+            tooltip={total14dTooltip(stats)}
+            detail={total14dDetail(stats)}
+            to={reportsLinks.total14d}
           />
           <StatCard
             label={copy?.statLabels?.untriaged ?? 'Untriaged'}
             value={stats.newUntriaged}
             accent={stats.newUntriaged > 0 ? 'text-info' : 'text-ok'}
-            hint={stats.openBacklog > 0 ? `${stats.openBacklog} stale > 1h` : 'Queue current'}
+            tooltip={untriagedTooltip(stats)}
+            detail={untriagedDetail(stats)}
+            to={reportsLinks.untriaged}
           />
           <StatCard
             label={copy?.statLabels?.critical ?? 'Critical 14d'}
             value={stats.critical14d}
             accent={stats.critical14d > 0 ? 'text-danger' : undefined}
-            hint={stats.high14d > 0 ? `${stats.high14d} high severity` : 'Severity rollup'}
+            tooltip={critical14dTooltip(stats)}
+            detail={critical14dDetail(stats)}
+            to={reportsLinks.critical14d}
           />
           <StatCard
             label={copy?.statLabels?.dismissed ?? 'Dismissed 14d'}
             value={stats.dismissed14d}
             accent={stats.dismissed14d > 0 ? 'text-fg-muted' : undefined}
-            hint="Noise filtered out"
+            tooltip={dismissed14dTooltip(stats)}
+            detail={dismissed14dDetail()}
+            to={reportsLinks.dismissed14d}
           />
         </div>
       </Section>

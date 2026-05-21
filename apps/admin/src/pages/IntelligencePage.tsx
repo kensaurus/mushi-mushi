@@ -54,6 +54,20 @@ import type {
   IntelligenceReport,
   ModernizationFinding,
 } from '../components/intelligence/types'
+import {
+  activeJobsDetail,
+  activeJobsTooltip,
+  benchmarkingDetail,
+  benchmarkingTooltip,
+  digestsDetail,
+  digestsTooltip,
+  failedJobsDetail,
+  failedJobsTooltip,
+  findingsDetail,
+  findingsTooltip,
+  fixAttemptsDetail,
+  fixAttemptsTooltip,
+} from '../lib/statTooltips/intelligence'
 
 const TABS: Array<{ id: IntelligenceTabId; label: string; description: string }> = [
   {
@@ -469,12 +483,12 @@ export function IntelligencePage() {
       <Section title={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.digests ?? 'Digests'} value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} hint={stats.latestWeekStart ? `Week ${stats.latestWeekStart}` : 'None archived'} />
-          <StatCard label={copy?.statLabels?.activeJobs ?? 'Active jobs'} value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} hint={`${stats.completedJobCount} completed`} />
-          <StatCard label={copy?.statLabels?.failedJobs ?? 'Failed jobs'} value={stats.failedJobCount} accent={stats.failedJobCount > 0 ? 'text-danger' : undefined} hint={stats.lastJobStatus ?? 'No runs'} />
-          <StatCard label={copy?.statLabels?.findings ?? 'Findings'} value={stats.pendingFindings} accent={stats.pendingFindings > 0 ? 'text-warn' : undefined} hint={`${stats.securityFindings} security`} />
-          <StatCard label={copy?.statLabels?.fixAttempts ?? 'Fix attempts'} value={stats.totalFixAttempts} accent={stats.totalFixAttempts > 0 ? 'text-brand' : undefined} hint={`${stats.fixCompletionRatePct}% completion`} />
-          <StatCard label={copy?.statLabels?.benchmarking ?? 'Benchmarking'} value={stats.benchmarkOptIn ? 'On' : 'Off'} accent={stats.benchmarkOptIn ? 'text-ok' : undefined} hint={stats.featureUnlocked ? 'Cross-customer compare' : 'Plan locked'} />
+          <StatCard label={copy?.statLabels?.digests ?? 'Digests'} value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} tooltip={digestsTooltip(stats)} detail={digestsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.activeJobs ?? 'Active jobs'} value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} tooltip={activeJobsTooltip(stats)} detail={activeJobsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.failedJobs ?? 'Failed jobs'} value={stats.failedJobCount} accent={stats.failedJobCount > 0 ? 'text-danger' : undefined} tooltip={failedJobsTooltip(stats)} detail={failedJobsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.findings ?? 'Findings'} value={stats.pendingFindings} accent={stats.pendingFindings > 0 ? 'text-warn' : undefined} tooltip={findingsTooltip(stats)} detail={findingsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.fixAttempts ?? 'Fix attempts'} value={stats.totalFixAttempts} accent={stats.totalFixAttempts > 0 ? 'text-brand' : undefined} tooltip={fixAttemptsTooltip(stats)} detail={fixAttemptsDetail(stats)} />
+          <StatCard label={copy?.statLabels?.benchmarking ?? 'Benchmarking'} value={stats.benchmarkOptIn ? 'On' : 'Off'} accent={stats.benchmarkOptIn ? 'text-ok' : undefined} tooltip={benchmarkingTooltip(stats)} detail={benchmarkingDetail(stats)} />
         </div>
       </Section>
       )}

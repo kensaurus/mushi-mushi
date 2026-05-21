@@ -53,6 +53,17 @@ import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
 import { useDashboardUx, resolveQuickDashboardTab } from '../lib/dashboardModeUx'
+import {
+  backlogDetail,
+  backlogTooltip,
+  fixesDetail,
+  fixesTooltip,
+  focusDetail,
+  focusTooltip,
+  reports14dDetail,
+  reports14dTooltip,
+} from '../lib/statTooltips/dashboard'
+import { dashboardLinks, statLink } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
 
 const DASHBOARD_TABS: Array<{ id: DashboardTabId; label: string; description: string }> = [
@@ -371,31 +382,33 @@ export function DashboardPage() {
             label={copy?.statLabels?.backlog ?? 'Backlog'}
             value={stats.openBacklog}
             accent={stats.openBacklog > 0 ? 'text-danger' : 'text-ok'}
-            hint={stats.openBacklog > 0 ? 'Needs triage > 1h' : 'Queue clear'}
+            tooltip={backlogTooltip(stats)}
+            detail={backlogDetail(stats)}
+            to={dashboardLinks.backlog}
           />
           <StatCard
             label={copy?.statLabels?.reports ?? 'Reports 14d'}
             value={stats.reports14d}
             accent={stats.reports14d > 0 ? 'text-brand' : undefined}
-            hint={stats.hasData ? 'Intake active' : 'Waiting for ingest'}
+            tooltip={reports14dTooltip(stats)}
+            detail={reports14dDetail(stats)}
+            to={dashboardLinks.reports14d}
           />
           <StatCard
             label={copy?.statLabels?.fixes ?? 'Fixes'}
             value={stats.fixesInProgress}
             accent={stats.fixesFailed > 0 ? 'text-danger' : stats.fixesInProgress > 0 ? 'text-warn' : undefined}
-            hint={
-              stats.fixesFailed > 0
-                ? `${stats.fixesFailed} failed`
-                : stats.openPrs > 0
-                  ? `${stats.openPrs} PR${stats.openPrs === 1 ? '' : 's'} open`
-                  : 'None in flight'
-            }
+            tooltip={fixesTooltip(stats)}
+            detail={fixesDetail(stats)}
+            to={dashboardLinks.fixes}
           />
           <StatCard
             label={copy?.statLabels?.focus ?? 'Focus'}
             value={stats.focusLabel ?? '—'}
             accent={focusAccent(stats.focusStage)}
-            hint={stats.bottleneck ?? (stats.setupDone ? 'Loop balanced' : `${stats.requiredComplete}/${stats.requiredTotal} setup`)}
+            tooltip={focusTooltip(stats)}
+            detail={focusDetail(stats)}
+            to={statLink(dashboardLinks.focus, stats)}
           />
         </div>
       </Section>

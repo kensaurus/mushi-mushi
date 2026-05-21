@@ -8,6 +8,16 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
 import { EMPTY_QUERY_STATS, type QueryStats, type QueryTabId } from '../components/query/types'
+import {
+  errors24hDetail,
+  errors24hTooltip,
+  latencyDetail,
+  latencyTooltip,
+  runs24hDetail,
+  runs24hTooltip,
+  savedCountDetail,
+  savedCountTooltip,
+} from '../lib/statTooltips/query'
 import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
@@ -1025,25 +1035,29 @@ export function QueryPage() {
             label="Runs 24h"
             value={stats.runs24h}
             accent={stats.runs24h > 0 ? 'text-brand' : undefined}
-            hint={`${stats.nlRuns24h} NL · ${stats.rawRuns24h} raw`}
+            tooltip={runs24hTooltip(stats)}
+            detail={runs24hDetail(stats)}
           />
           <StatCard
             label="Errors 24h"
             value={stats.errors24h}
             accent={stats.errors24h > 0 ? 'text-danger' : 'text-ok'}
-            hint={stats.lastRunError ? 'Latest run failed' : 'All recent runs OK'}
+            tooltip={errors24hTooltip(stats)}
+            detail={errors24hDetail(stats)}
           />
           <StatCard
             label="Saved"
             value={stats.savedCount}
             accent={stats.savedCount > 0 ? 'text-ok' : 'text-warn'}
-            hint={`${stats.teamSavedCount} from team`}
+            tooltip={savedCountTooltip(stats)}
+            detail={savedCountDetail(stats)}
           />
           <StatCard
             label="Latency"
             value={stats.avgLatencyMs != null ? `${stats.avgLatencyMs}ms` : '—'}
             accent="text-info"
-            hint={stats.recentCount > 0 ? `${stats.recentCount} recent unpinned` : 'No recent runs'}
+            tooltip={latencyTooltip(stats)}
+            detail={latencyDetail(stats)}
           />
         </div>
       </Section>

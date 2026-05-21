@@ -43,6 +43,21 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useHealthUx, resolveQuickHealthTab } from '../lib/healthModeUx'
+import {
+  cronDetail,
+  cronTooltip,
+  errorRateDetail,
+  errorRateTooltip,
+  fallbackRateDetail,
+  fallbackRateTooltip,
+  lastCallDetail,
+  lastCallTooltip,
+  latencyDetail,
+  latencyTooltip,
+  totalCallsDetail,
+  totalCallsTooltip,
+} from '../lib/statTooltips/health'
+import { healthLinks } from '../lib/statCardLinks'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
@@ -371,6 +386,16 @@ export function HealthPage() {
 
   const fallbackPct = ((llm.fallbackRate ?? 0) * 100).toFixed(1)
   const errorPct = ((llm.errorRate ?? 0) * 100).toFixed(1)
+  const llmTabStats: HealthStats = {
+    ...EMPTY_HEALTH_STATS,
+    hasAnyProject: stats.hasAnyProject,
+    window,
+    totalCalls: llm.totalCalls,
+    errorRatePct: Math.round((llm.errorRate ?? 0) * 1000) / 10,
+    fallbackRatePct: Math.round((llm.fallbackRate ?? 0) * 1000) / 10,
+    avgLatencyMs: llm.avgLatencyMs ?? 0,
+    p95LatencyMs: llm.p95LatencyMs ?? 0,
+  }
   const byFunction = llm.byFunction ?? {}
   const byModel = llm.byModel ?? {}
   const fnNames = Object.keys(byFunction).sort()
@@ -544,36 +569,48 @@ export function HealthPage() {
             label={copy?.statLabels?.calls ?? 'LLM calls'}
             value={stats.totalCalls}
             accent={stats.totalCalls > 0 ? 'text-brand' : undefined}
-            hint={`Last ${stats.window}`}
+            tooltip={totalCallsTooltip(stats)}
+            detail={totalCallsDetail(stats)}
+            to={healthLinks.totalCalls}
           />
           <StatCard
             label={copy?.statLabels?.errors ?? 'Error rate'}
             value={`${stats.errorRatePct}%`}
             accent={stats.errorRatePct > 5 ? 'text-danger' : stats.errorRatePct > 0 ? 'text-warn' : 'text-ok'}
-            hint="Above 5% is critical"
+            tooltip={errorRateTooltip(stats)}
+            detail={errorRateDetail()}
+            to={healthLinks.errorRate}
           />
           <StatCard
             label={copy?.statLabels?.fallbacks ?? 'Fallback rate'}
             value={`${stats.fallbackRatePct}%`}
             accent={stats.fallbackRatePct > 10 ? 'text-danger' : stats.fallbackRatePct > 0 ? 'text-warn' : 'text-ok'}
-            hint="Above 10% is degraded"
+            tooltip={fallbackRateTooltip(stats)}
+            detail={fallbackRateDetail()}
+            to={healthLinks.fallbackRate}
           />
           <StatCard
             label={copy?.statLabels?.latency ?? 'Latency p50 / p95'}
             value={`${stats.avgLatencyMs} / ${stats.p95LatencyMs}ms`}
-            hint="Median / 95th percentile"
+            tooltip={latencyTooltip(stats)}
+            detail={latencyDetail()}
+            to={healthLinks.latency}
           />
           <StatCard
             label={copy?.statLabels?.cron ?? 'Cron OK'}
             value={`${stats.cronHealthyCount}/${stats.cronJobCount}`}
             accent={stats.cronErrorCount > 0 ? 'text-danger' : stats.cronStaleCount > 0 ? 'text-warn' : 'text-ok'}
-            hint={`${stats.cronErrorCount} failing · ${stats.cronStaleCount} stale`}
+            tooltip={cronTooltip(stats)}
+            detail={cronDetail(stats)}
+            to={healthLinks.cron}
           />
           <StatCard
             label={copy?.statLabels?.lastCall ?? 'Last LLM call'}
             value={stats.lastLlmCallAt ? 'Recent' : '—'}
             accent={stats.lastLlmCallAt ? 'text-ok' : stats.hasAnyProject ? 'text-brand' : undefined}
-            hint={stats.lastLlmCallAt ? undefined : 'No activity yet'}
+            tooltip={lastCallTooltip(stats)}
+            detail={lastCallDetail(stats)}
+            to={healthLinks.lastCall}
           />
         </div>
       </Section>
@@ -667,20 +704,29 @@ export function HealthPage() {
             freshness={{ at: llmQuery.lastFetchedAt, isValidating: llmQuery.isValidating }}
           >
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" data-dav-anchor="health:decide">
-              <StatCard label="Total calls" value={llm.totalCalls.toString()} hint={`Last ${window}`} />
+              <StatCard label="Total calls" value={llm.totalCalls.toString()} tooltip={totalCallsTooltip(llmTabStats)} detail={totalCallsDetail(llmTabStats)} to={healthLinks.totalCalls} />
               <StatCard
                 label="Fallback rate"
                 value={`${fallbackPct}%`}
                 accent={llm.fallbackRate > 0.1 ? 'text-danger' : llm.fallbackRate > 0 ? 'text-warn' : 'text-ok'}
+                tooltip={fallbackRateTooltip(llmTabStats)}
+                detail={fallbackRateDetail()}
+                to={healthLinks.fallbackRate}
               />
               <StatCard
                 label="Error rate"
                 value={`${errorPct}%`}
                 accent={llm.errorRate > 0.05 ? 'text-danger' : llm.errorRate > 0 ? 'text-warn' : 'text-ok'}
+                tooltip={errorRateTooltip(llmTabStats)}
+                detail={errorRateDetail()}
+                to={healthLinks.errorRate}
               />
               <StatCard
                 label="Latency p50 / p95"
                 value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
+                tooltip={latencyTooltip(llmTabStats)}
+                detail={latencyDetail()}
+                to={healthLinks.latency}
               />
             </div>
           </Section>

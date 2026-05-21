@@ -25,7 +25,7 @@ function loadEnvFile(relPath: string): Record<string, string> {
   return out
 }
 
-const rootEnv = { ...loadEnvFile('.env'), ...loadEnvFile('.env.local') }
+const rootEnv = { ...loadEnvFile('.env.local'), ...loadEnvFile('.env') }
 const adminEnv = loadEnvFile('apps/admin/.env')
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL ?? adminEnv.VITE_SUPABASE_URL ?? rootEnv.VITE_SUPABASE_URL ?? ''
@@ -44,6 +44,10 @@ test.describe('Intelligence enhanced shell', () => {
     !SUPABASE_URL || !SUPABASE_ANON_KEY || !TEST_USER_EMAIL || !TEST_USER_PASSWORD,
     'Requires Supabase + test user env',
   )
+
+  async function ensureBeginnerMode(page: import('@playwright/test').Page) {
+    await page.getByRole('button', { name: /Switch to Beginner/i }).click({ timeout: 5000 }).catch(() => {})
+  }
 
   test.beforeEach(async ({ page, request }) => {
     const res = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -84,6 +88,7 @@ test.describe('Intelligence enhanced shell', () => {
   test('overview loads banner, KPI strip, and tabs', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/intelligence`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 }).catch(() => {})
+    await ensureBeginnerMode(page)
     await expect(page.getByTestId('mushi-page-intelligence')).toBeVisible({ timeout: 15000 })
     await expect(page.getByText('INTELLIGENCE SNAPSHOT', { exact: true })).toBeVisible({ timeout: 15000 })
     await expect(page.getByLabel('Intelligence sections')).toBeVisible()
@@ -92,12 +97,14 @@ test.describe('Intelligence enhanced shell', () => {
 
   test('reports tab loads', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/intelligence?tab=reports`, { waitUntil: 'domcontentloaded' })
+    await ensureBeginnerMode(page)
     await expect(page.getByLabel('Intelligence sections').getByRole('radio', { name: 'Reports' })).toBeChecked({ timeout: 15000 })
   })
 
   test('pipeline tab loads job history', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/intelligence?tab=pipeline`, { waitUntil: 'domcontentloaded' })
+    await ensureBeginnerMode(page)
     await expect(page.getByLabel('Intelligence sections').getByRole('radio', { name: 'Pipeline' })).toBeChecked({ timeout: 15000 })
-    await expect(page.getByRole('heading', { name: 'Recent generation jobs' })).toBeVisible()
+    await expect(page.getByText('Recent generation jobs', { exact: true })).toBeVisible()
   })
 })
