@@ -75,10 +75,19 @@ app.get(
     const userId = c.get('userId') as string
     const pid = c.req.param('id')
 
-    // Authz: pid must be in the caller's accessible set.
-    const projectIds = await accessibleProjectIds(db(), userId)
-    if (!projectIds.includes(pid)) {
-      return c.json({ ok: false, error: 'forbidden' }, 403)
+    // Authz: API key callers are pinned to the key's own project — they
+    // cannot be elevated to another project even if the owner has access.
+    // JWT callers fall back to the full accessible-project lookup.
+    const apiKeyProjectId = c.get('projectId') as string | undefined
+    if (apiKeyProjectId) {
+      if (pid !== apiKeyProjectId) {
+        return c.json({ ok: false, error: 'forbidden' }, 403)
+      }
+    } else {
+      const projectIds = await accessibleProjectIds(db(), userId)
+      if (!projectIds.includes(pid)) {
+        return c.json({ ok: false, error: 'forbidden' }, 403)
+      }
     }
 
     return buildPrivacyStatus(c, pid)
@@ -94,7 +103,14 @@ app.get(
 app.get('/v1/admin/privacy-status', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
   const userId = c.get('userId') as string
 
-  // Resolve a project to inspect — check all header/query variants.
+  // API key callers: the project is already pinned by the key — do not let
+  // query params or headers redirect to a different project.
+  const apiKeyProjectId = c.get('projectId') as string | undefined
+  if (apiKeyProjectId) {
+    return buildPrivacyStatus(c, apiKeyProjectId)
+  }
+
+  // JWT callers: resolve a project from query/headers, fall back to first.
   const queryPid =
     c.req.query('project_id') ??
     c.req.header('X-Mushi-Project') ??
@@ -123,10 +139,18 @@ app.get(
     const userId = c.get('userId') as string
     const pid = c.req.param('id')
 
-    // Authz: pid must be in the caller's accessible set.
-    const projectIds = await accessibleProjectIds(db(), userId)
-    if (!projectIds.includes(pid)) {
-      return c.json({ ok: false, error: 'forbidden' }, 403)
+    // Authz: API key callers are pinned to their key's project; JWT callers
+    // use the full accessible-project set.
+    const apiKeyProjectId = c.get('projectId') as string | undefined
+    if (apiKeyProjectId) {
+      if (pid !== apiKeyProjectId) {
+        return c.json({ ok: false, error: 'forbidden' }, 403)
+      }
+    } else {
+      const projectIds = await accessibleProjectIds(db(), userId)
+      if (!projectIds.includes(pid)) {
+        return c.json({ ok: false, error: 'forbidden' }, 403)
+      }
     }
 
     const [weekRes, lessonRes, promotionRes] = await Promise.all([
