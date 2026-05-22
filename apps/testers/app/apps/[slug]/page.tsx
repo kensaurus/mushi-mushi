@@ -65,6 +65,14 @@ async function getApp(slug: string): Promise<AppDetail | null> {
   }
 }
 
+// Static export requires this; returns [] so no slugs are pre-rendered at build
+// time — the hosting layer handles unknown paths (404 or SPA fallback).
+export async function generateStaticParams() {
+  return []
+}
+
+export const dynamicParams = false
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
   const app = await getApp(slug)

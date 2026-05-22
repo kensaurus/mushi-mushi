@@ -101,9 +101,9 @@ export default async function MarketplacePage() {
         {/* Value props */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-16 text-left">
           {[
-            { icon: '🐛', title: 'Find bugs', body: 'Use apps as a real user — then report what's broken. We route your report directly to the dev's Sentry inbox.' },
+            { icon: '🐛', title: 'Find bugs', body: "Use apps as a real user — then report what's broken. We route your report directly to the dev's Sentry inbox." },
             { icon: '💰', title: 'Earn points', body: 'Every accepted bug earns mushi-points. The more critical, the more points. No spam, no filler.' },
-            { icon: '🎁', title: 'Redeem rewards', body: 'Spend points on Mushi Pro credit (30% bonus) or cash out via 100+ gift cards including Amazon, Starbucks, and App Store.' },
+            { icon: '🎁', title: 'Redeem rewards', body: "Spend points on Mushi Pro credit (30% bonus) or cash out via 100+ gift cards including Amazon, Starbucks, and App Store." },
           ].map(({ icon, title, body }) => (
             <div key={title} className="rounded-xl border border-white/10 bg-white/5 p-5">
               <p className="text-2xl mb-2">{icon}</p>
