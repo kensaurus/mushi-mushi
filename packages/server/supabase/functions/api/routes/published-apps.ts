@@ -78,7 +78,7 @@ async function requireMarketplacePublish(
 export function registerPublishedAppsRoutes(app: Hono) {
   // GET /v1/admin/published-apps/:projectId
   app.get('/v1/admin/published-apps/:projectId', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)
@@ -102,7 +102,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // PUT /v1/admin/published-apps/:projectId
   app.put('/v1/admin/published-apps/:projectId', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
@@ -165,7 +165,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // POST /v1/admin/published-apps/:projectId/publish
   app.post('/v1/admin/published-apps/:projectId/publish', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)
@@ -184,7 +184,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // POST /v1/admin/published-apps/:projectId/pause
   app.post('/v1/admin/published-apps/:projectId/pause', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)
@@ -203,7 +203,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // GET /v1/admin/published-apps/:projectId/targeting
   app.get('/v1/admin/published-apps/:projectId/targeting', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)
@@ -228,7 +228,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // PUT /v1/admin/published-apps/:projectId/targeting
   app.put('/v1/admin/published-apps/:projectId/targeting', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)
@@ -258,7 +258,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // GET /v1/admin/published-apps/:projectId/bounties
   app.get('/v1/admin/published-apps/:projectId/bounties', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)
@@ -283,7 +283,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
   // GET /v1/admin/published-apps/:projectId/stats
   app.get('/v1/admin/published-apps/:projectId/stats', jwtAuth, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const supabase = getServiceClient()
 
     const gate = await requireMarketplacePublish(supabase, projectId)

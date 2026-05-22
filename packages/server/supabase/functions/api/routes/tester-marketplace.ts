@@ -130,7 +130,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // GET /v1/public/marketplace/apps/:slug
   app.get('/v1/public/marketplace/apps/:slug', async (c) => {
-    const slug = c.req.param('slug')
+    const slug = c.req.param('slug')!
     const supabase = getServiceClient()
     const { data } = await supabase
       .from('published_apps')
@@ -419,7 +419,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // GET /v1/tester/apps/:slug
   app.get('/v1/tester/apps/:slug', jwtAuth, async (c) => {
-    const slug = c.req.param('slug')
+    const slug = c.req.param('slug')!
     const authUserId = c.get('userId') as string
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
@@ -474,7 +474,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // POST /v1/tester/apps/:idOrSlug/join — accepts app UUID or slug
   app.post('/v1/tester/apps/:idOrSlug/join', jwtAuth, async (c) => {
-    const slug = c.req.param('idOrSlug')
+    const slug = c.req.param('idOrSlug')!
     const authUserId = c.get('userId') as string
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
@@ -524,7 +524,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // POST /v1/tester/apps/:slug/leave
   app.post('/v1/tester/apps/:slug/leave', jwtAuth, async (c) => {
-    const slug = c.req.param('slug')
+    const slug = c.req.param('slug')!
     const authUserId = c.get('userId') as string
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
@@ -930,7 +930,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     c: Context<any>,
     action: 'accepted' | 'informative' | 'duplicate' | 'spam',
   ) {
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const userId = c.get('userId') as string
     const supabase = getServiceClient()
     const body = await c.req.json().catch(() => ({}))
@@ -1030,7 +1030,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // POST /v1/admin/tester-redemptions/:id/approve — approve a withheld redemption
   app.post('/v1/admin/tester-redemptions/:id/approve', jwtAuth, async (c) => {
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const supabase = getServiceClient()
 
     const { data: redemption } = await supabase
@@ -1068,7 +1068,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // POST /v1/admin/tester-redemptions/:id/deny — deny + refund a withheld redemption
   app.post('/v1/admin/tester-redemptions/:id/deny', jwtAuth, async (c) => {
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const supabase = getServiceClient()
 
     const { data: redemption } = await supabase
