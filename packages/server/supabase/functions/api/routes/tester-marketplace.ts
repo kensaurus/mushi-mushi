@@ -111,7 +111,7 @@ async function resolveTester(
 
 // ─── Route registration ───────────────────────────────────────
 
-export function registerTesterMarketplaceRoutes(app: Hono<any>) {
+export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // ── Public routes ────────────────────────────────────────────
 

@@ -42,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerReportsDashboardRoutes(app: Hono<any>): void {
+export function registerReportsDashboardRoutes(app: Hono): void {
   // ============================================================
   // ADMIN ROUTES (JWT auth)
   // ============================================================

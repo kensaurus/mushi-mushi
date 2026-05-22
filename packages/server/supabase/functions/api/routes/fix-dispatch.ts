@@ -44,7 +44,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerFixDispatchRoutes(app: Hono<any>): void {
+export function registerFixDispatchRoutes(app: Hono): void {
   // ============================================================
   // FIX DISPATCH (V5.3 §2.10) — admin-triggered, queue-based
   // ============================================================

@@ -300,7 +300,7 @@ async function loadAskMushiContextData(
   return { activeProject, userProjectIds, recentReportsBlock };
 }
 
-export function registerAskMushiRoutes(app: Hono<any>): void {
+export function registerAskMushiRoutes(app: Hono): void {
   // ── Endpoint: POST messages ──────────────────────────────────────────────
 
   // Per-user hourly throttle for Ask Mushi LLM calls. Returns either a

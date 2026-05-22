@@ -75,7 +75,7 @@ async function requireMarketplacePublish(
 
 // ─── Route registration ───────────────────────────────────────
 
-export function registerPublishedAppsRoutes(app: Hono<any>) {
+export function registerPublishedAppsRoutes(app: Hono) {
   // GET /v1/admin/published-apps/:projectId
   app.get('/v1/admin/published-apps/:projectId', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')

@@ -63,7 +63,7 @@ async function assertRunAccess(
   return { ok: true, projectId: run.project_id as string }
 }
 
-export function registerPdcaRoutes(parent: Hono<any>) {
+export function registerPdcaRoutes(parent: Hono<{ Variables: Variables }>) {
   parent.route('/v1/admin/pdca', pdcaRoutes())
 }
 

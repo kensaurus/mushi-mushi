@@ -48,7 +48,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerModernizationHealthSuperRoutes(app: Hono<any>): void {
+export function registerModernizationHealthSuperRoutes(app: Hono): void {
   // ============================================================
   // LIBRARY MODERNIZATION
   // ============================================================

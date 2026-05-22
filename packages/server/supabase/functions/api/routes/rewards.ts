@@ -129,7 +129,7 @@ function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefin
 }
 
 // ─────────────────────────────────────────────────────────────
-export function registerRewardsRoutes(app: Hono<any>): void {
+export function registerRewardsRoutes(app: Hono): void {
 
   // ===========================================================
   // SDK: POST /v1/sdk/activity

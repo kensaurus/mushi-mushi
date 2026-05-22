@@ -18,7 +18,7 @@ import { resolveSupabasePat, getSupabaseAdvisors } from '../../_shared/supabase-
 import { resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
-export function registerDbAdvisorsRoutes(parent: Hono<any>) {
+export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>) {
   parent.get('/v1/admin/projects/:id/db-advisors', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
     const projectId = c.req.param('id')
