@@ -30,6 +30,13 @@ import {
   FreshnessPill,
   RecommendedAction,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { ResearchStatusBanner } from '../components/research/ResearchStatusBanner'
@@ -311,10 +318,6 @@ export function ResearchPage() {
       <PageHeader
         title={copy?.title ?? 'Research'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -367,6 +370,13 @@ export function ResearchPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'}
+        </p>
+      </ContainedBlock>
+
       <ResearchStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -390,7 +400,9 @@ export function ResearchPage() {
         title={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.sessions ?? 'Sessions'} value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} tooltip={sessionsTooltip(stats)} detail={sessionsDetail()} to={researchLinks.sessions} />
           <StatCard label={copy?.statLabels?.snippets ?? 'Snippets'} value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} tooltip={snippetsTooltip(stats)} detail={snippetsDetail()} to={researchLinks.snippets} />
@@ -418,7 +430,7 @@ export function ResearchPage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'unattached_snippets'
@@ -426,12 +438,25 @@ export function ResearchPage() {
                 : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
+                ? 'danger'
+                : stats.topPriority === 'unattached_snippets'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -485,13 +510,13 @@ export function ResearchPage() {
                 />
               )}
               {stats.lastSessionAt && (
-                <p className="text-2xs text-fg-muted">
+                <InlineProof>
                   Last search <RelativeTime value={stats.lastSessionAt} />
                   {' · '}
                   <button type="button" className="text-brand hover:underline" onClick={() => setActiveTab('history')}>
                     View history
                   </button>
-                </p>
+                </InlineProof>
               )}
             </div>
           )}
@@ -525,24 +550,23 @@ export function ResearchPage() {
                 </Btn>
               </form>
 
-              <div className="flex flex-wrap gap-1.5">
-                <span className="self-center text-3xs text-fg-faint">Try:</span>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      setQuery(s)
-                      void runSearch(s)
-                    }}
-                    disabled={searching || !stats.firecrawlReady}
-                    className="rounded-sm border border-edge bg-surface-raised px-1.5 py-0.5 font-mono text-2xs text-fg-muted hover:text-fg-secondary disabled:opacity-50"
-                    title="Run this example query"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              <ContainedBlock tone="muted" label="Example queries">
+                <ActionPillRow>
+                  {SUGGESTIONS.map((s) => (
+                    <ActionPill
+                      key={s}
+                      onClick={() => {
+                        setQuery(s)
+                        void runSearch(s)
+                      }}
+                      tone="neutral"
+                      className={`font-mono ${searching || !stats.firecrawlReady ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      {s}
+                    </ActionPill>
+                  ))}
+                </ActionPillRow>
+              </ContainedBlock>
 
               {!stats.firecrawlReady && (
                 <EmptyState
@@ -567,10 +591,10 @@ export function ResearchPage() {
                       <h3 className="text-sm font-medium text-fg">
                         Results — &ldquo;{active.query}&rdquo;
                       </h3>
-                      <p className="text-2xs text-fg-muted">
+                      <InlineProof className="mt-1">
                         Session {active.sessionId.slice(0, 8)}… ·{' '}
                         <RelativeTime value={active.createdAt} />
-                      </p>
+                      </InlineProof>
                     </div>
                     <Btn size="sm" variant="ghost" onClick={() => setActive(null)}>
                       Clear results

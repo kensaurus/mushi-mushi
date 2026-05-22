@@ -26,7 +26,6 @@ import {
   StatCard,
   SegmentedControl,
   Badge,
-  Card,
 } from '../components/ui'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
@@ -39,6 +38,7 @@ import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
+import { EvolutionHistoryWidget } from '../components/dashboard/EvolutionHistoryWidget'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
@@ -65,6 +65,8 @@ import {
 } from '../lib/statTooltips/dashboard'
 import { dashboardLinks, statLink } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
+import { ActionPill, ActionPillRow, ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 
 const DASHBOARD_TABS: Array<{ id: DashboardTabId; label: string; description: string }> = [
   {
@@ -130,12 +132,12 @@ export function DashboardPage() {
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [showFullDashboard, setShowFullDashboard] = useState(
     () => searchParams.get('tab') === 'metrics',
   )
   const copy = usePageCopy('/dashboard')
   const ux = useDashboardUx()
-  const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
   const activeTab: DashboardTabId = isDashboardTab(tabParam) ? tabParam : 'overview'
@@ -346,7 +348,7 @@ export function DashboardPage() {
         }
       />
 
-      <PageHeader title={copy?.title ?? 'Dashboard'} projectScope={projectName ?? undefined} description={dashDescription}>
+      <PageHeader title={copy?.title ?? 'Dashboard'} projectScope={projectName ?? undefined}>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -376,10 +378,16 @@ export function DashboardPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
           Refresh
         </Btn>
-        <Link to="/reports" className="text-xs text-brand hover:text-brand-hover">
+        <ActionPill to="/reports" tone="brand">
           View all reports →
-        </Link>
+        </ActionPill>
       </PageHeader>
+
+      {dashDescription ? (
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">{dashDescription}</p>
+        </ContainedBlock>
+      ) : null}
 
       <DashboardStatusBanner
         stats={stats}
@@ -401,7 +409,9 @@ export function DashboardPage() {
 
       {!ux.hideLoopSnapshot && (
         <Section title={copy?.sections?.snapshot ?? 'LOOP SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.backlog ?? 'Backlog'}
@@ -502,14 +512,14 @@ export function DashboardPage() {
           )}
 
           {!isEmpty && setupIncomplete && !showFullDashboard && (
-            <div className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
-              <p className="text-xs text-fg-muted">
+            <ContainedBlock tone="warn" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs">
                 Finish setup above to unlock Metrics tab. You can peek now if you like.
-              </p>
+              </InlineProof>
               <Btn size="sm" variant="ghost" onClick={peekMetrics}>
                 Show full metrics
               </Btn>
-            </div>
+            </ContainedBlock>
           )}
 
         </>
@@ -518,23 +528,27 @@ export function DashboardPage() {
       {activeTab === 'loop' && (
         <>
           {isEmpty || !data!.pdcaStages?.length ? (
-            <Card className="p-4">
-              <p className="text-xs font-medium text-fg">Loop canvas unlocks after first report</p>
-              <p className="mt-1 text-2xs text-fg-muted">
-                Send a test report from Setup — the Plan → Do → Check → Act canvas needs live stage counts.
-              </p>
-              <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
-                <Btn size="sm" variant="ghost">Send test report</Btn>
-              </Link>
-            </Card>
+            <div className="space-y-3">
+              <EmptySectionMessage
+                text="Loop canvas unlocks after first report"
+                hint="Send a test report from Setup — the Plan → Do → Check → Act canvas needs live stage counts."
+              />
+              <ActionPillRow>
+                <ActionPill to="/onboarding?tab=verify" tone="brand">
+                  Send test report
+                </ActionPill>
+              </ActionPillRow>
+            </div>
           ) : (
             <>
               <div className="hidden sm:block">
-                <div className="mb-2 flex items-baseline justify-between">
-                  <h2 className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">
+                <div className="mb-2 flex items-baseline justify-between gap-2 flex-wrap">
+                  <SignalChip tone="neutral" className="uppercase tracking-wider font-semibold">
                     Loop status — Plan, Do, Check, Act
-                  </h2>
-                  <span className="text-2xs text-fg-faint">Plan → Do → Check → Act (loops back)</span>
+                  </SignalChip>
+                  <InlineProof className="border-0 bg-transparent px-0 py-0">
+                    Plan → Do → Check → Act (loops back)
+                  </InlineProof>
                 </div>
                 <PdcaFlow
                   variant="live"
@@ -562,62 +576,68 @@ export function DashboardPage() {
       {activeTab === 'metrics' && (
         <>
           {!renderFullDashboard ? (
-            <Card className="p-4">
-              <p className="text-xs font-medium text-warn">Setup incomplete — metrics gated</p>
-              <p className="mt-1 text-2xs text-fg-muted">
-                Finish required setup steps on Overview, or peek metrics now.
-              </p>
-              <Btn size="sm" variant="ghost" className="mt-3" onClick={peekMetrics}>
-                Show metrics anyway
-              </Btn>
-            </Card>
+            <div className="space-y-3">
+              <ContainedBlock tone="warn">
+                <p className="text-xs font-medium text-warn">Setup incomplete — metrics gated</p>
+                <InlineProof className="mt-2">
+                  Finish required setup steps on Overview, or peek metrics now.
+                </InlineProof>
+              </ContainedBlock>
+              <ActionPillRow>
+                <ActionPill tone="neutral" onClick={peekMetrics}>
+                  Show metrics anyway
+                </ActionPill>
+              </ActionPillRow>
+            </div>
           ) : (
             <>
               {ux.hideTabs && (
-                <div className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+                <ContainedBlock tone="muted" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs font-medium text-fg">Metrics preview</p>
-                    <p className="text-2xs text-fg-muted">
+                    <InlineProof className="mt-2">
                       {setupIncomplete
                         ? 'Preview while setup finishes — charts fill in after first ingest.'
                         : stats.hasData
                           ? '14-day intake, auto-fix throughput, and LLM activity.'
                           : 'Waiting for first report — tiles update as soon as ingest is live.'}
-                    </p>
+                    </InlineProof>
                   </div>
-                  <Btn size="sm" variant="ghost" onClick={() => setActiveTab('overview')}>
+                  <ActionPill tone="neutral" onClick={() => setActiveTab('overview')}>
                     Back to overview
-                  </Btn>
-                </div>
+                  </ActionPill>
+                </ContainedBlock>
               )}
 
               {setupIncomplete && (
-                <Card className="p-4 border-warn/30 bg-warn/5">
+                <ContainedBlock tone="warn" className="p-4">
                   <p className="text-xs font-medium text-warn">
                     Setup {stats.requiredComplete}/{stats.requiredTotal} — metrics preview
                   </p>
-                  <p className="mt-1 text-2xs text-fg-muted">
+                  <InlineProof className="mt-2">
                     Finish the checklist on Overview to unlock live charts. These tiles use workspace stats until ingest lands.
-                  </p>
+                  </InlineProof>
                   <Link to="/onboarding?tab=steps" className="mt-3 inline-block">
                     <Btn size="sm" variant="ghost">Continue setup</Btn>
                   </Link>
-                </Card>
+                </ContainedBlock>
               )}
 
               {!stats.hasData && isEmpty && !setupIncomplete && (
-                <Card className="p-4">
+                <ContainedBlock tone="info" className="p-4">
                   <p className="text-xs font-medium text-info">No metrics yet</p>
-                  <p className="mt-1 text-2xs text-fg-muted">
+                  <InlineProof className="mt-2">
                     Charts populate after the first report lands — usually within seconds of SDK ingest.
-                  </p>
+                  </InlineProof>
                   <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
                     <Btn size="sm" variant="ghost">Send test report</Btn>
                   </Link>
-                </Card>
+                </ContainedBlock>
               )}
 
               <QuotaBanner />
+              {/* Evolution history widget — judge score sparkline + convergence badge */}
+              <EvolutionHistoryWidget projectId={activeProjectId ?? null} />
               <KpiRow
                 counts={metricsCounts}
                 fixSummary={metricsFixSummary}
@@ -648,15 +668,15 @@ export function DashboardPage() {
       {activeTab === 'health' && (
         <>
           {!activeProjectId ? (
-            <Card className="p-4">
+            <ContainedBlock tone="info" className="p-4">
               <p className="text-xs font-medium text-info">Select a project</p>
-              <p className="mt-1 text-2xs text-fg-muted">
+              <InlineProof className="mt-2">
                 Health probes and QA coverage are scoped to the active project in the header switcher.
-              </p>
+              </InlineProof>
               <Link to="/projects" className="mt-3 inline-block">
                 <Btn size="sm" variant="ghost">Open projects</Btn>
               </Link>
-            </Card>
+            </ContainedBlock>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               <PlatformHealthTile projectId={activeProjectId} />

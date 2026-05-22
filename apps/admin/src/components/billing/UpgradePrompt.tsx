@@ -23,8 +23,8 @@
  *          editorial cloud surface — this is the operator console.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
+import { ActionPill, ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullets: string[] }> = {
   sso: {
@@ -134,35 +134,36 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
   return (
     <div className="rounded-xl border border-amber-300/40 bg-gradient-to-br from-amber-50/60 via-white to-violet-50/40 dark:from-amber-950/40 dark:via-surface dark:to-violet-950/30 dark:border-amber-700/30 p-6 shadow-sm">
       <div className="flex flex-col gap-1">
-        <p className="text-2xs uppercase tracking-[0.18em] text-amber-700 dark:text-amber-400 font-semibold">
+        <SignalChip tone="warn" className="uppercase tracking-wider text-3xs w-fit">
           Locked on your current plan
-        </p>
+        </SignalChip>
         <h2 className="text-xl font-semibold text-fg">{copy.title}</h2>
-        <p className="text-sm text-fg-muted">{copy.tagline}</p>
+        <ContainedBlock tone="muted">
+          <p className="text-sm text-fg-muted">{copy.tagline}</p>
+        </ContainedBlock>
       </div>
 
-      <ul className="mt-4 grid gap-2 text-sm text-fg">
-        {copy.bullets.map((b) => (
-          <li key={b} className="flex items-start gap-2">
-            <span aria-hidden className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
+      <ContainedBlock tone="info" className="mt-4">
+        <ul className="grid gap-2 text-sm text-fg">
+          {copy.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-2">
+              <span aria-hidden className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      </ContainedBlock>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <Link
-          to="/billing"
-          className="inline-flex items-center gap-1.5 rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg shadow-sm hover:opacity-90 transition-opacity"
-        >
+        <ActionPill to="/billing" tone="brand">
           {upgradeTo
             ? `Upgrade to ${upgradeTo.display_name} — $${upgradeTo.monthly_price_usd}/mo`
             : 'View plans'}
-        </Link>
+        </ActionPill>
         {currentPlan && (
-          <span className="text-xs text-fg-muted">
+          <InlineProof className="border-0 bg-transparent px-0 py-0">
             You're on <span className="font-medium text-fg">{currentPlan}</span>.
-          </span>
+          </InlineProof>
         )}
       </div>
     </div>
@@ -218,19 +219,17 @@ export function UpgradePromptHost() {
           <p className="text-sm font-semibold text-fg">
             {copy?.title ?? blocked.flag} requires a plan upgrade
           </p>
-          <p className="mt-1 text-xs text-fg-muted">
-            {blocked.upgradeTo
-              ? `${blocked.upgradeTo.display_name} ($${blocked.upgradeTo.monthly_price_usd}/mo) unlocks this.`
-              : 'Pick a plan that includes this feature.'}
-          </p>
+          <ContainedBlock tone="muted" className="mt-1">
+            <p className="text-xs text-fg-muted">
+              {blocked.upgradeTo
+                ? `${blocked.upgradeTo.display_name} ($${blocked.upgradeTo.monthly_price_usd}/mo) unlocks this.`
+                : 'Pick a plan that includes this feature.'}
+            </p>
+          </ContainedBlock>
           <div className="mt-3 flex items-center gap-2">
-            <Link
-              to="/billing"
-              onClick={dismiss}
-              className="rounded-full bg-fg px-3 py-1 text-xs font-semibold text-bg hover:opacity-90"
-            >
+            <ActionPill to="/billing" tone="brand">
               View plans
-            </Link>
+            </ActionPill>
             <button
               type="button"
               onClick={dismiss}

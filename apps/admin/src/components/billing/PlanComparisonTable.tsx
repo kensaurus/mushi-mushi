@@ -13,6 +13,7 @@
  */
 
 import { Badge, Btn } from '../ui'
+import { ContainedBlock } from '../report-detail/ReportSurface'
 
 interface PlanCatalogEntry {
   id: string
@@ -224,21 +225,23 @@ export function PlanComparisonTable({
           <h3 id="plans-heading" className="text-sm font-semibold text-fg">
             Plans at a glance
           </h3>
-          <p className="text-2xs text-fg-faint mt-0.5">
-            Billed monthly · cancel any time · prices in USD
-            {currentUsage && (
-              <>
-                {' · '}
-                <span className="text-fg-secondary">
-                  Each column shows whether{' '}
-                  <span className="font-mono text-fg">
-                    {currentUsage.reports.toLocaleString()}
-                  </span>{' '}
-                  report{currentUsage.reports === 1 ? '' : 's'} this period would fit
-                </span>
-              </>
-            )}
-          </p>
+          <ContainedBlock tone="muted" className="mt-1">
+            <p className="text-2xs text-fg-muted">
+              Billed monthly · cancel any time · prices in USD
+              {currentUsage && (
+                <>
+                  {' · '}
+                  <span className="text-fg-secondary">
+                    Each column shows whether{' '}
+                    <span className="font-mono text-fg">
+                      {currentUsage.reports.toLocaleString()}
+                    </span>{' '}
+                    report{currentUsage.reports === 1 ? '' : 's'} this period would fit
+                  </span>
+                </>
+              )}
+            </p>
+          </ContainedBlock>
         </div>
         <span className="text-3xs text-fg-faint font-mono uppercase tracking-wider">
           Your plan is highlighted

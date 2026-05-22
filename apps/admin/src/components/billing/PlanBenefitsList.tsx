@@ -7,6 +7,8 @@
  *          without opening the plan comparison.
  */
 
+import { InlineProof, SignalChip } from '../report-detail/ReportSurface'
+
 interface FeatureFlags {
   sso?: boolean
   byok?: boolean
@@ -85,9 +87,9 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
       aria-label={`Entitlements on ${planName}`}
       className="border-t border-edge-subtle pt-2"
     >
-      <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">
+      <SignalChip tone="neutral" className="mb-1.5 uppercase tracking-wider text-3xs">
         What you get on {planName}
-      </h4>
+      </SignalChip>
       <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
         {entitlements.map(e => (
           <li
@@ -104,16 +106,16 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
               {e.label}
             </span>
             {e.meta && (
-              <span className="text-fg-faint font-mono">· {e.meta}</span>
+              <SignalChip tone="neutral" className="font-mono text-3xs">{e.meta}</SignalChip>
             )}
           </li>
         ))}
       </ul>
       {planId === 'hobby' && (
-        <p className="text-2xs text-fg-faint mt-2">
+        <InlineProof className="mt-2">
           Unlock BYOK, plugins, and an audit log by upgrading to{' '}
           <span className="text-brand">Starter · $19/mo</span>.
-        </p>
+        </InlineProof>
       )}
     </section>
   )

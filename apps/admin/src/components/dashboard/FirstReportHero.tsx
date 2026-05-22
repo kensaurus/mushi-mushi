@@ -11,10 +11,10 @@
  */
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Btn, ResultChip, type ResultChipTone } from '../ui'
+import { ActionPill, ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 
 interface Props {
   projectId: string
@@ -67,17 +67,19 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
           P
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-2xs uppercase tracking-wider text-brand/80 font-semibold">
+          <SignalChip tone="brand" className="uppercase tracking-wider text-3xs">
             Plan · Your next step
-          </p>
-          <h2 id="first-report-hero-title" className="text-sm font-semibold text-fg mt-0.5">
+          </SignalChip>
+          <h2 id="first-report-hero-title" className="text-sm font-semibold text-fg mt-1.5">
             Send a test report from{' '}
             <span className="font-mono text-fg">{projectName}</span>
           </h2>
-          <p className="text-2xs text-fg-secondary mt-1 leading-snug max-w-prose">
-            Your SDK is wired up, but no real users have flagged a bug yet. Fire a synthetic
-            report so you can watch one full Plan → Do → Check loop without waiting on traffic.
-          </p>
+          <ContainedBlock tone="muted" className="mt-2">
+            <p className="text-2xs text-fg-secondary leading-snug max-w-prose">
+              Your SDK is wired up, but no real users have flagged a bug yet. Fire a synthetic
+              report so you can watch one full Plan → Do → Check loop without waiting on traffic.
+            </p>
+          </ContainedBlock>
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             <Btn
               size="sm"
@@ -96,16 +98,13 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
               </ResultChip>
             )}
             {status === 'pass' && (
-              <Link to="/reports" className="text-2xs text-brand hover:underline">
+              <ActionPill to="/reports" tone="brand">
                 Open /reports →
-              </Link>
+              </ActionPill>
             )}
-            <Link
-              to="/onboarding"
-              className="text-2xs text-fg-faint hover:text-fg-muted"
-            >
+            <ActionPill to="/onboarding" tone="neutral">
               Open the full setup guide →
-            </Link>
+            </ActionPill>
           </div>
         </div>
       </div>

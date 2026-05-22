@@ -33,6 +33,13 @@ import {
   RecommendedAction,
   RelativeTime,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+  InlineProof,
+} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
@@ -205,13 +212,13 @@ export function NotificationsPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Notifications'}
-          description={
-            copy?.description ??
-            'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'Notifications'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -273,10 +280,6 @@ export function NotificationsPage() {
 
       <PageHeader
         title={copy?.title ?? 'Notifications'}
-        description={
-          copy?.description ??
-          'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.'
-        }
         projectScope={stats.projectName ?? projectName ?? undefined}
       >
         {!ux.hideOverviewChrome && (
@@ -332,6 +335,13 @@ export function NotificationsPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.'}
+        </p>
+      </ContainedBlock>
+
       <NotificationsStatusBanner
         stats={stats}
         onTab={setTab}
@@ -352,7 +362,9 @@ export function NotificationsPage() {
 
       {!ux.hideNotificationsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'} freshness={{ at: fetchedAt, isValidating: validating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.total ?? 'Total'}
@@ -408,18 +420,23 @@ export function NotificationsPage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'disabled' || stats.topPriority === 'unread_backlog'
               ? 'border-warn/30 bg-warn/5'
               : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip tone={stats.topPriority === 'unread_backlog' ? 'warn' : stats.topPriority === 'disabled' ? 'warn' : 'brand'}>
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="info">
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -462,21 +479,21 @@ export function NotificationsPage() {
             <Card className="p-3 border-edge">
               <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Classified</p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.byType.classified ?? 0}</p>
-              <p className="text-2xs text-fg-muted">Triage updates to reporters</p>
+              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">Triage updates to reporters</InlineProof>
             </Card>
             <Card className="p-3 border-edge">
               <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Fixed</p>
               <p className="mt-1 text-lg font-semibold tabular-nums text-ok">{stats.byType.fixed ?? 0}</p>
-              <p className="text-2xs text-fg-muted">Shipped fix notifications</p>
+              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">Shipped fix notifications</InlineProof>
             </Card>
             <Card className="p-3 border-edge">
               <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last activity</p>
               <p className="mt-1 text-sm font-semibold text-fg-primary">
                 {stats.lastNotificationAt ? <RelativeTime value={stats.lastNotificationAt} /> : 'Never'}
               </p>
-              <p className="text-2xs text-fg-muted">
+              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
                 {stats.notificationsEnabled ? 'SDK polling enabled' : 'Notifications disabled'}
-              </p>
+              </InlineProof>
             </Card>
           </div>
           )}
@@ -538,22 +555,20 @@ export function NotificationsPage() {
                         </Badge>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs text-fg">{n.message ?? '—'}</p>
-                          <p className="mt-1 text-2xs text-fg-faint font-mono">
-                            {new Date(n.created_at).toLocaleString()}
-                            {n.read_at
-                              ? ` · read ${new Date(n.read_at).toLocaleString()}`
-                              : ' · unread'}
-                            {' · tok:'}
-                            {n.reporter_token_hash.slice(0, 8)}…
+                          <InlineProof className="mt-1 flex flex-wrap gap-1 font-mono text-3xs border-0 bg-transparent px-0 py-0">
+                            <SignalChip tone="neutral">{new Date(n.created_at).toLocaleString()}</SignalChip>
+                            <SignalChip tone={n.read_at ? 'neutral' : 'brand'}>
+                              {n.read_at
+                                ? `read ${new Date(n.read_at).toLocaleString()}`
+                                : 'unread'}
+                            </SignalChip>
+                            <SignalChip tone="neutral">tok:{n.reporter_token_hash.slice(0, 8)}…</SignalChip>
                             {n.report_id ? (
-                              <>
-                                {' · '}
-                                <Link to={`/reports/${n.report_id}`} className="text-brand hover:underline">
-                                  report:{n.report_id.slice(0, 8)}…
-                                </Link>
-                              </>
+                              <ActionPill to={`/reports/${n.report_id}`} tone="brand">
+                                report:{n.report_id.slice(0, 8)}…
+                              </ActionPill>
                             ) : null}
-                          </p>
+                          </InlineProof>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {hasPayload && (

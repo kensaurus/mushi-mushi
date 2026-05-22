@@ -39,6 +39,12 @@ const FALLBACK_EMAIL = 'kensaurus@gmail.com'
 const MAX_BODY = 5000
 const MAX_SUBJECT = 200
 
+/** Page path + query for support triage. Excludes fragment (#…) which may carry sensitive tokens. */
+function feedbackPageContext(): string {
+  if (typeof window === 'undefined') return 'Page: (unknown)'
+  return `Page: ${window.location.pathname}${window.location.search}`
+}
+
 const TYPE_CONFIG: Record<FeedbackType, {
   label: string
   emoji: string
@@ -124,7 +130,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
     setError(null)
     setSubmitting(true)
 
-    const pageCtx = `Page: ${window.location.pathname}${window.location.search}`
+    const pageCtx = feedbackPageContext()
     const bodyWithContext = cleanBody
       ? `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n${cleanBody}\n\n---\n${pageCtx}`
       : `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n(no description provided)\n\n---\n${pageCtx}`
@@ -163,7 +169,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
 
   function openFallbackMailto() {
     const mailSubject = `[mushi-mushi ${type}] ${subject}`
-    const mailBody = `${body}\n\nPage: ${window.location.pathname}${window.location.search}`
+    const mailBody = `${body}\n\n${feedbackPageContext()}`
     const href = `mailto:${FALLBACK_EMAIL}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`
     window.open(href, '_blank')
   }
@@ -275,7 +281,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                     <span className="ml-1 text-2xs font-normal text-fg-faint">(optional)</span>
                   </label>
                   <span className="text-2xs text-fg-faint tabular-nums shrink-0">
-                    Page: {typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '—'} ↗ captured
+                    {feedbackPageContext()} ↗ captured
                   </span>
                 </div>
                 <textarea

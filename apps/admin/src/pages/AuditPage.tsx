@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -49,6 +49,14 @@ import {
   StatCard,
   SegmentedControl,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -336,9 +344,9 @@ export function AuditPage() {
         accessorFn: (e) => e.created_at,
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="text-2xs text-fg-faint tabular-nums font-mono whitespace-nowrap">
+          <SignalChip tone="neutral" className="font-mono tabular-nums whitespace-nowrap">
             {new Date(row.original.created_at).toLocaleString()}
-          </span>
+          </SignalChip>
         ),
       },
       {
@@ -367,10 +375,10 @@ export function AuditPage() {
         accessorFn: (e) => `${e.resource_type}${e.resource_id ? `:${e.resource_id}` : ''}`,
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="text-2xs text-fg-faint font-mono whitespace-nowrap">
+          <SignalChip tone="neutral" className="font-mono whitespace-nowrap">
             {row.original.resource_type}
             {row.original.resource_id ? `:${row.original.resource_id.slice(0, 8)}` : ''}
-          </span>
+          </SignalChip>
         ),
       },
       {
@@ -555,7 +563,7 @@ export function AuditPage() {
             ariaLabel="Active audit filters"
             className="flex-1"
           />
-          <span className="text-2xs text-fg-muted whitespace-nowrap pt-0.5">{total.toLocaleString()} matching</span>
+          <SignalChip tone="neutral">{total.toLocaleString()} matching</SignalChip>
         </div>
       )}
     </Card>
@@ -594,36 +602,39 @@ export function AuditPage() {
             <div className="space-y-2">
               <LogBlock value={JSON.stringify(entry.metadata ?? {}, null, 2)} label="Metadata" />
               {entry.resource_id && (
-                <div className="text-2xs text-fg-faint space-y-1">
-                  <span>Full resource ID</span>
+                <ContainedBlock tone="muted" className="space-y-1">
+                  <InlineProof className="border-0 bg-transparent px-0 py-0">Full resource ID</InlineProof>
                   <CodeValue value={entry.resource_id} tone="id" />
-                </div>
+                </ContainedBlock>
               )}
             </div>
           )}
         />
       </div>
-      <div className="flex items-center justify-between text-2xs text-fg-muted pt-1">
-        <span>
+      <ContainedBlock tone="muted" className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+        <InlineProof>
           Showing {offset + 1}–{Math.min(offset + logs.length, total)} of {total.toLocaleString()}
-        </span>
-        <div className="flex items-center gap-1">
-          <Btn variant="ghost" size="sm" disabled={page <= 1} onClick={() => updateParam('page', String(page - 1))}>
+        </InlineProof>
+        <ActionPillRow>
+          <ActionPill
+            tone="neutral"
+            {...(page > 1 ? { onClick: () => updateParam('page', String(page - 1)) } : {})}
+            className={page <= 1 ? 'opacity-40' : undefined}
+          >
             ← Prev
-          </Btn>
-          <span className="px-2 tabular-nums">
+          </ActionPill>
+          <SignalChip tone="neutral">
             Page {page} / {totalPages}
-          </span>
-          <Btn
-            variant="ghost"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => updateParam('page', String(page + 1))}
+          </SignalChip>
+          <ActionPill
+            tone="neutral"
+            {...(page < totalPages ? { onClick: () => updateParam('page', String(page + 1)) } : {})}
+            className={page >= totalPages ? 'opacity-40' : undefined}
           >
             Next →
-          </Btn>
-        </div>
-      </div>
+          </ActionPill>
+        </ActionPillRow>
+      </ContainedBlock>
     </>
   )
 
@@ -632,11 +643,13 @@ export function AuditPage() {
       <div className="space-y-4">
         <PageHeader
           title={copy?.title ?? 'Audit log'}
-          description={
-            copy?.description ??
-            'Append-only history of every mutation — filter by actor, action, or resource.'
-          }
         />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Append-only history of every mutation — filter by actor, action, or resource.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -658,10 +671,6 @@ export function AuditPage() {
       <PageHeader
         title={copy?.title ?? 'Audit log'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Append-only history of every mutation — filter by actor, action, or resource.'
-        }
       >
         {stats.auditLogEntitlement ? (
           <Badge className="bg-ok-muted text-ok">Audit enabled</Badge>
@@ -672,6 +681,13 @@ export function AuditPage() {
           Export CSV ({logs.length})
         </Btn>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Append-only history of every mutation — filter by actor, action, or resource.'}
+        </p>
+      </ContainedBlock>
 
       <AuditStatusBanner
         stats={stats}
@@ -692,7 +708,9 @@ export function AuditPage() {
         title="Audit snapshot"
         freshness={{ at: statsFetchedAt ?? lastFetchedAt, isValidating: statsValidating || isValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="24h events"
@@ -876,35 +894,39 @@ export function AuditPage() {
             />
           </div>
           {stats.topAction7d ? (
-            <div className="rounded border border-edge-subtle p-3 space-y-1">
-              <p className="text-2xs text-fg-muted uppercase tracking-wider">Most frequent action (7d)</p>
-              <Badge className={`${actionTone(stats.topAction7d)} font-mono`}>{stats.topAction7d}</Badge>
-              <p className="text-2xs text-fg-muted">{stats.topAction7dCount} occurrences across owned projects</p>
-              <Btn
-                size="sm"
-                variant="ghost"
+            <ContainedBlock tone="muted" className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SignalChip tone="brand">Most frequent (7d)</SignalChip>
+                <Badge className={`${actionTone(stats.topAction7d)} font-mono`}>{stats.topAction7d}</Badge>
+              </div>
+              <InlineProof>{stats.topAction7dCount} occurrences across owned projects</InlineProof>
+              <ActionPill
+                tone="neutral"
                 onClick={() => applyPreset({ tab: 'log', action: stats.topAction7d ?? '', since: '7d' })}
               >
                 Filter log to this action
-              </Btn>
-            </div>
+              </ActionPill>
+            </ContainedBlock>
           ) : (
-            <EmptyState title="No 7-day activity" description="Broaden the window on the Log tab or wait for the next mutation." />
+            <EmptySectionMessage
+              text="No 7-day activity"
+              hint="Broaden the window on the Log tab or wait for the next mutation."
+            />
           )}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Btn size="sm" variant="ghost" onClick={() => applyPreset({ tab: 'log', since: '24h', action: 'fix.failed' })}>
+          <ActionPillRow className="pt-1">
+            <ActionPill tone="danger" onClick={() => applyPreset({ tab: 'log', since: '24h', action: 'fix.failed' })}>
               Failures (24h)
-            </Btn>
-            <Btn size="sm" variant="ghost" onClick={() => applyPreset({ tab: 'log', since: '24h', action: 'api_key.revoked' })}>
+            </ActionPill>
+            <ActionPill tone="warn" onClick={() => applyPreset({ tab: 'log', since: '24h', action: 'api_key.revoked' })}>
               Revoked keys (24h)
-            </Btn>
-            <Btn size="sm" variant="ghost" onClick={() => applyPreset({ tab: 'log', actor_type: 'system', since: '24h' })}>
+            </ActionPill>
+            <ActionPill tone="neutral" onClick={() => applyPreset({ tab: 'log', actor_type: 'system', since: '24h' })}>
               System events (24h)
-            </Btn>
-            <Link to="/compliance">
-              <Btn size="sm" variant="ghost">Open compliance</Btn>
-            </Link>
-          </div>
+            </ActionPill>
+            <ActionPill to="/compliance" tone="neutral">
+              Open compliance
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       )}
     </div>

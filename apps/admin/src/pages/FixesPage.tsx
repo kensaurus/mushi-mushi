@@ -15,6 +15,8 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { PageHeader, PageHelp, SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -520,10 +522,11 @@ export function FixesPage() {
       <PageHeader
         title={copy?.title ?? 'Auto-Fix Pipeline'}
         projectScope={projectName}
-        description={copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
-        <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>
+        <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
+          {pluralizeWithCount(fixes.length, 'attempt')}
+        </span>
         {failedFixes.length > 0 && (
           <button
             type="button"
@@ -536,6 +539,12 @@ export function FixesPage() {
           </button>
         )}
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
+        </p>
+      </ContainedBlock>
 
       <FixesStatusBanner
         stats={fixesStats}
@@ -646,16 +655,10 @@ export function FixesPage() {
             )
           })()}
           {visibleFixes.length === 0 ? (
-            <p className="text-2xs text-fg-muted px-2 py-3">
-              No fixes in this state right now.{' '}
-              <button
-                type="button"
-                onClick={() => setStatusBucket('all')}
-                className="text-brand hover:underline"
-              >
-                Show all
-              </button>
-            </p>
+            <EmptySectionMessage
+              text="No fixes in this state right now."
+              hint="Try another filter or dispatch a fix from Reports."
+            />
           ) : (
             <div className="space-y-1.5">
               {visibleFixes.map((fix, idx) => (

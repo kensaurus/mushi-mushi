@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -30,6 +30,13 @@ import {
   FreshnessPill,
   RecommendedAction,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { ExperimentsStatusBanner } from '../components/experiments/ExperimentsStatusBanner'
 import {
   EMPTY_EXPERIMENTS_STATS,
@@ -274,10 +281,6 @@ export function ExperimentsPage() {
       <PageHeader
         title={copy?.title ?? 'Experiments'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -311,6 +314,13 @@ export function ExperimentsPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'}
+        </p>
+      </ContainedBlock>
+
       <ExperimentsStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -334,7 +344,9 @@ export function ExperimentsPage() {
         title={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.total ?? 'Total'} value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} tooltip={totalExperimentsTooltip(stats)} detail={totalExperimentsDetail(stats)} to={experimentsLinks.total} />
           <StatCard label={copy?.statLabels?.running ?? 'Running'} value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} tooltip={runningCountTooltip(stats)} detail={runningCountDetail()} to={experimentsLinks.running} />
@@ -348,7 +360,7 @@ export function ExperimentsPage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'running'
               ? 'border-warn/30 bg-warn/5'
               : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
@@ -356,12 +368,25 @@ export function ExperimentsPage() {
                 : 'border-ok/30 bg-ok/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'running'
+                ? 'warn'
+                : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
+                  ? 'brand'
+                  : 'ok'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="info">
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -692,10 +717,18 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
           </div>
         )}
 
-        <div className="rounded-md border border-edge-subtle bg-surface-overlay/50 px-4 py-3 space-y-1 text-xs text-fg-muted">
-          {experiment.start_at && <div className="flex gap-2"><span className="w-20">Started</span><RelativeTime value={experiment.start_at} /></div>}
-          {experiment.end_at && <div className="flex gap-2"><span className="w-20">Stopped</span><RelativeTime value={experiment.end_at} /></div>}
-        </div>
+        <ContainedBlock tone="muted" label="Timeline">
+          {experiment.start_at && (
+            <InlineProof>
+              Started <RelativeTime value={experiment.start_at} />
+            </InlineProof>
+          )}
+          {experiment.end_at && (
+            <InlineProof className={experiment.start_at ? 'mt-1.5' : ''}>
+              Stopped <RelativeTime value={experiment.end_at} />
+            </InlineProof>
+          )}
+        </ContainedBlock>
       </div>
     </Drawer>
   )

@@ -15,6 +15,7 @@ import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
 import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle } from '../icons'
 import { ServiceFavicon } from './ServiceFavicon'
+import { InlineProof } from '../report-detail/ReportSurface'
 import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { PLATFORM_STATUS_MAP, type HealthRow, type PlatformDef } from './types'
@@ -87,6 +88,16 @@ interface Props {
   onChangeField: (name: string, value: string) => void
   onSave: () => void
   onTest: () => void
+  /**
+   * When `def.dependsOn` is set, pass `true` here if the dependency is already
+   * configured. The card renders a blocking banner with a scroll-to anchor
+   * when the dependency is missing.
+   */
+  dependencyOk?: boolean
+  /** Human-readable label of the dependency (e.g. "GitHub (code repo)"). */
+  dependencyLabel?: string
+  /** Scroll-target ID to jump to the dependency card on the same page. */
+  dependencyAnchorId?: string
 }
 
 export function PlatformIntegrationCard({
@@ -103,16 +114,43 @@ export function PlatformIntegrationCard({
   onChangeField,
   onSave,
   onTest,
+  dependencyOk = true,
+  dependencyLabel,
+  dependencyAnchorId,
 }: Props) {
   const requiredOk = def.fields.filter((f) => f.required).every((f) => config[f.name] != null)
   const status: HealthRow['status'] = !requiredOk ? 'unknown' : (latestProbe?.status ?? 'unknown')
   const pulseClass = useSuccessPulse(latestProbe)
   const isDown = requiredOk && (latestProbe?.status === 'down')
   const isDegraded = requiredOk && (latestProbe?.status === 'degraded')
+  // A fix-agent card (Cursor Cloud, Claude Code) depends on GitHub being connected first.
+  const hasDependencyBlock = def.dependsOn != null && !dependencyOk
 
   return (
     <Card className={`p-0 overflow-hidden ${pulseClass} ${statusBorderClass(status, requiredOk)}`}>
       <div className="px-3 pt-3 pb-2">
+        {/* Blocking banner — GitHub must be connected before fix agents work */}
+        {hasDependencyBlock && (
+          <div className="mb-2 flex items-start gap-2 rounded-sm border border-warn/30 bg-warn/8 px-3 py-2 text-2xs text-warn">
+            <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
+            <span className="leading-snug">
+              <strong>{dependencyLabel ?? 'GitHub'} must be connected first</strong> — this fix agent needs a repo URL and token to open pull requests.{' '}
+              {dependencyAnchorId ? (
+                <a
+                  href={`#${dependencyAnchorId}`}
+                  className="font-semibold underline hover:no-underline"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    document.getElementById(dependencyAnchorId)?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                >
+                  Go to {dependencyLabel ?? 'GitHub'} card ↑
+                </a>
+              ) : null}
+            </span>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-start justify-between gap-2">
           {/* Left: icon + label + status chips */}
           <div className="min-w-0 flex-1">
@@ -287,7 +325,7 @@ export function PlatformIntegrationCard({
                 validate={resolveValidator(field.validator)}
                 autoComplete={field.type === 'password' ? 'new-password' : 'off'}
               />
-              <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
+              {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
             </div>
           ))}
           <div className="flex items-center gap-2 pt-1">

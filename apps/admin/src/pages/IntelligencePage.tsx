@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -36,6 +36,14 @@ import {
   RecentJobsList,
 } from '../components/intelligence/IntelligenceJobs'
 import { IntelligenceStatusBanner } from '../components/intelligence/IntelligenceStatusBanner'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import {
   EMPTY_INTELLIGENCE_STATS,
   type IntelligenceStats,
@@ -396,10 +404,6 @@ export function IntelligencePage() {
       <PageHeader
         title={copy?.title ?? 'Bug Intelligence'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.'
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -456,6 +460,13 @@ export function IntelligencePage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.'}
+        </p>
+      </ContainedBlock>
+
       <IntelligenceStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -482,7 +493,9 @@ export function IntelligencePage() {
 
       {!ux.hideIntelligenceSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.digests ?? 'Digests'} value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} tooltip={digestsTooltip(stats)} detail={digestsDetail(stats)} to={intelligenceLinks.digests} />
           <StatCard label={copy?.statLabels?.activeJobs ?? 'Active jobs'} value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} tooltip={activeJobsTooltip(stats)} detail={activeJobsDetail(stats)} to={intelligenceLinks.activeJobs} />
@@ -496,7 +509,7 @@ export function IntelligencePage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'job_failed'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'pending_findings' || stats.topPriority === 'stale_digest'
@@ -504,17 +517,30 @@ export function IntelligencePage() {
                 : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
+          <SignalChip
+            tone={
+              stats.topPriority === 'job_failed'
+                ? 'danger'
+                : stats.topPriority === 'pending_findings' || stats.topPriority === 'stale_digest'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'job_failed' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
             {stats.topPriority === 'job_failed' && (
-              <Link to="/settings">
-                <Btn size="sm" variant="ghost">Check LLM keys</Btn>
-              </Link>
+              <ActionPill to="/settings?tab=byok" tone="neutral">
+                Check LLM keys
+              </ActionPill>
             )}
-          </div>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -659,17 +685,20 @@ interface ThisWeekNarrativeProps {
 function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProps) {
   if (!latest && stats.reportCount === 0) {
     return (
-      <Card className="p-4">
-        <h3 className="text-sm font-semibold text-fg">This week</h3>
-        <p className="mt-1 max-w-prose text-xs text-fg-muted">
-          {projectName
-            ? `No intelligence digest for ${projectName} yet. Monday cron writes automatically, or use Generate this week for an immediate run.`
-            : 'No intelligence digest yet. Generate one to see hotspots, fix velocity, and severity drift in narrative form.'}
-        </p>
+      <Card className="space-y-3 p-4">
+        <SignalChip tone="brand">This week</SignalChip>
+        <EmptySectionMessage
+          text={
+            projectName
+              ? `No intelligence digest for ${projectName} yet.`
+              : 'No intelligence digest yet.'
+          }
+          hint="Monday cron writes automatically, or use Generate this week for an immediate run."
+        />
         {stats.lastJobStatus === 'failed' && stats.lastJobError && (
-          <p className="mt-2 text-2xs text-danger">
-            Last job failed: {stats.lastJobError}
-          </p>
+          <ContainedBlock tone="warn">
+            <p className="text-2xs text-danger">Last job failed: {stats.lastJobError}</p>
+          </ContainedBlock>
         )}
       </Card>
     )
@@ -677,13 +706,11 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
 
   if (!latest?.summary_md) {
     return (
-      <Card className="border-brand/20 bg-brand/5 p-4">
-        <h3 className="text-sm font-semibold text-brand">
+      <Card className="space-y-3 border-brand/20 bg-brand/5 p-4">
+        <SignalChip tone="brand">
           {latest?.week_start ? `Week of ${latest.week_start}` : 'Latest digest'}
-        </h3>
-        <p className="mt-1 text-xs text-fg-muted">
-          Digest archived — open Reports tab for full narrative and export.
-        </p>
+        </SignalChip>
+        <InlineProof>Digest archived — open Reports tab for full narrative and export.</InlineProof>
       </Card>
     )
   }
@@ -694,12 +721,16 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-brand">Week of {latest.week_start}</h3>
         {latest.llm_model && (
-          <span className="font-mono text-3xs text-fg-faint">{latest.llm_model}</span>
+          <SignalChip tone="brand" className="font-mono">
+            {latest.llm_model}
+          </SignalChip>
         )}
       </div>
-      <p className="max-w-prose text-xs leading-relaxed whitespace-pre-line text-fg-secondary">
-        {headline}
-      </p>
+      <ContainedBlock tone="muted" className="mt-2">
+        <p className="max-w-prose text-xs leading-relaxed whitespace-pre-line text-fg-secondary">
+          {headline}
+        </p>
+      </ContainedBlock>
     </Card>
   )
 }

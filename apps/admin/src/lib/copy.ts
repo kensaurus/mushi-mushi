@@ -1694,7 +1694,7 @@ export const JARGON: Record<string, string> = {
   dispatch:
     'Sending a bug report to the auto-fix agent. The agent drafts a pull request for you to review.',
   BYOK:
-    'Bring Your Own Keys. Plug in your Anthropic / OpenAI keys so LLM cost stays on your bill, not ours.',
+    'Bring Your Own Key — give Mushi your Anthropic/OpenAI key and we run the loop against your account. Your prompts never flow through our LLM account.',
   Vault: 'Encrypted store for your provider keys. Mushi can decrypt them only at request time.',
   pipeline:
     'The chain of LLM calls that turns a raw bug report into a classified, prioritised, auto-fixed PR.',

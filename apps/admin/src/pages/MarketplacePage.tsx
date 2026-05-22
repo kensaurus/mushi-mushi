@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -36,6 +36,13 @@ import {
   RecommendedAction,
   RelativeTime,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { DispatchTable } from '../components/marketplace/DispatchTable'
@@ -435,13 +442,13 @@ export function MarketplacePage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Marketplace'}
-          description={
-            copy?.description ??
-            'Install signed webhook plugins that react when reports classify or fixes land.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'Marketplace'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Install signed webhook plugins that react when reports classify or fixes land.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -501,10 +508,6 @@ export function MarketplacePage() {
 
       <PageHeader
         title={copy?.title ?? 'Marketplace'}
-        description={
-          copy?.description ??
-          'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.'
-        }
         projectScope={stats.projectName ?? projectName ?? undefined}
       >
         {!ux.hideOverviewChrome && (
@@ -532,6 +535,13 @@ export function MarketplacePage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.'}
+        </p>
+      </ContainedBlock>
+
       <MarketplaceStatusBanner
         stats={stats}
         pluginsUnlocked={pluginsUnlocked}
@@ -556,7 +566,9 @@ export function MarketplacePage() {
         title={copy?.sections?.snapshot ?? 'MARKETPLACE SNAPSHOT'}
         freshness={{ at: lastFetchedAt, isValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.catalog ?? 'Catalog'}
@@ -606,7 +618,7 @@ export function MarketplacePage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'delivery_failures'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'plugins_paused'
@@ -614,12 +626,25 @@ export function MarketplacePage() {
                 : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'delivery_failures'
+                ? 'danger'
+                : stats.topPriority === 'plugins_paused'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'delivery_failures' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -678,28 +703,43 @@ export function MarketplacePage() {
           )}
           {!ux.hideOverviewChrome && (
           <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Active</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-ok">{stats.installedActive}</p>
-              <p className="text-2xs text-fg-muted">Receiving lifecycle events</p>
+            <Card className="space-y-2 border-edge p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Active</p>
+                <SignalChip tone={stats.installedActive > 0 ? 'ok' : 'neutral'}>
+                  {stats.installedActive > 0 ? 'Delivering' : 'None'}
+                </SignalChip>
+              </div>
+              <p className="text-lg font-semibold tabular-nums text-ok">{stats.installedActive}</p>
+              <InlineProof>Receiving lifecycle events</InlineProof>
             </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Paused</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-warn">{stats.installedPaused}</p>
-              <p className="text-2xs text-fg-muted">Events suppressed until resumed</p>
+            <Card className="space-y-2 border-edge p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Paused</p>
+                <SignalChip tone={stats.installedPaused > 0 ? 'warn' : 'neutral'}>
+                  {stats.installedPaused > 0 ? 'Suppressed' : 'None'}
+                </SignalChip>
+              </div>
+              <p className="text-lg font-semibold tabular-nums text-warn">{stats.installedPaused}</p>
+              <InlineProof>Events suppressed until resumed</InlineProof>
             </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last delivery</p>
-              <p className="mt-1 text-sm font-semibold text-fg-primary">
+            <Card className="space-y-2 border-edge p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last delivery</p>
+                <SignalChip tone={stats.lastDeliveryAt ? 'brand' : 'neutral'}>
+                  {stats.lastDeliveryAt ? 'Recent' : 'Never'}
+                </SignalChip>
+              </div>
+              <p className="text-sm font-semibold text-fg-primary">
                 {stats.lastDeliveryAt ? <RelativeTime value={stats.lastDeliveryAt} /> : 'Never'}
               </p>
-              <p className="text-2xs text-fg-muted">
+              <InlineProof>
                 {stats.daysSinceLastDelivery != null && stats.daysSinceLastDelivery > 0
                   ? `${stats.daysSinceLastDelivery}d ago`
                   : stats.deliveries7d > 0
                     ? `${stats.deliverySuccessRatePct}% success (7d)`
                     : 'Send a test from Installed'}
-              </p>
+              </InlineProof>
             </Card>
           </div>
           )}
@@ -708,7 +748,9 @@ export function MarketplacePage() {
 
       {activeTab !== 'overview' && (
         <Section title={activeTab === 'browse' ? 'Plugin catalog' : activeTab === 'installed' ? 'Installed plugins' : 'Delivery log'}>
-          <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+          <ContainedBlock tone="muted" className="mb-4">
+            <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+          </ContainedBlock>
 
           {activeTab === 'browse' && (
             <div data-dav-anchor="marketplace:decide">

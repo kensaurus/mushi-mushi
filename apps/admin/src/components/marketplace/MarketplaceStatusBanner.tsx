@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { StatusBannerShell } from '../StatusBannerShell'
 import type { MarketplaceStats, MarketplaceTabId } from './types'
 
 interface Props {
@@ -38,36 +39,26 @@ export function MarketplaceStatusBanner({
 
   if (!stats.hasAnyProject) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-info">
-              {plainBanner ? 'Pick a project first' : 'No project selected'}
-            </p>
-            <p className="text-2xs text-fg-muted">Plugin installs and delivery logs are scoped to the active project.</p>
-          </div>
-        </div>
-      </div>
+      <StatusBannerShell
+        tone="info"
+        title={plainBanner ? 'Pick a project first' : 'No project selected'}
+        subtitle="Plugin installs and delivery logs are scoped to the active project."
+      />
     )
   }
 
   if (!pluginsUnlocked) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">
-              {plainBanner ? 'Plugins need a Pro plan' : 'Plugins require a Pro plan or higher'}
-            </p>
-            <p className="text-2xs text-fg-muted">Browse the catalog read-only — installing webhook plugins needs the plugins entitlement.</p>
-          </div>
-        </div>
-        <Link to="/billing">
-          <Btn size="sm" variant="ghost">{actions.plans ?? 'View plans'}</Btn>
-        </Link>
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={plainBanner ? 'Plugins need a Pro plan' : 'Plugins require a Pro plan or higher'}
+        subtitle="Browse the catalog read-only — installing webhook plugins needs the plugins entitlement."
+        action={
+          <Link to="/billing">
+            <Btn size="sm" variant="ghost">{actions.plans ?? 'View plans'}</Btn>
+          </Link>
+        }
+      />
     )
   }
 
@@ -77,89 +68,75 @@ export function MarketplaceStatusBanner({
 
   if (priority === 'delivery_failures') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-danger">
-              {plainBanner
-                ? `${stats.deliveriesFailed} webhook failure${stats.deliveriesFailed === 1 ? '' : 's'} (7d)`
-                : `${stats.deliveriesFailed} failed deliver${stats.deliveriesFailed === 1 ? 'y' : 'ies'} (7d)`}
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab && actionTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>{actions.deliveries ?? 'View deliveries'}</Btn>
-        ) : (
-          <Link to="/marketplace?tab=deliveries">
-            <Btn size="sm" variant="ghost">{actions.deliveries ?? 'View deliveries'}</Btn>
-          </Link>
-        )}
-      </div>
+      <StatusBannerShell
+        tone="danger"
+        title={
+          plainBanner
+            ? `${stats.deliveriesFailed} webhook failure${stats.deliveriesFailed === 1 ? '' : 's'} (7d)`
+            : `${stats.deliveriesFailed} failed deliver${stats.deliveriesFailed === 1 ? 'y' : 'ies'} (7d)`
+        }
+        subtitle={label}
+        action={
+          onTab && actionTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>{actions.deliveries ?? 'View deliveries'}</Btn>
+          ) : (
+            <Link to="/marketplace?tab=deliveries">
+              <Btn size="sm" variant="ghost">{actions.deliveries ?? 'View deliveries'}</Btn>
+            </Link>
+          )
+        }
+      />
     )
   }
 
   if (priority === 'plugins_paused') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">
-              {stats.installedPaused} plugin{stats.installedPaused === 1 ? '' : 's'} paused
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('installed')}>{actions.resume ?? 'Resume plugins'}</Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={`${stats.installedPaused} plugin${stats.installedPaused === 1 ? '' : 's'} paused`}
+        subtitle={label}
+        action={
+          onTab ? (
+            <Btn size="sm" variant="primary" onClick={() => onTab('installed')}>{actions.resume ?? 'Resume plugins'}</Btn>
+          ) : null
+        }
+      />
     )
   }
 
   if (priority === 'no_plugins_installed') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-brand">
-              {plainBanner ? 'No plugins installed yet' : `No plugins installed on ${projectLabel}`}
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('browse')}>{actions.browse ?? 'Browse catalog'}</Btn>
-        ) : (
-          <Link to="/marketplace?tab=browse">
-            <Btn size="sm" variant="primary">{actions.browse ?? 'Browse catalog'}</Btn>
-          </Link>
-        )}
-      </div>
+      <StatusBannerShell
+        tone="brand"
+        title={plainBanner ? 'No plugins installed yet' : `No plugins installed on ${projectLabel}`}
+        subtitle={label}
+        action={
+          onTab ? (
+            <Btn size="sm" variant="primary" onClick={() => onTab('browse')}>{actions.browse ?? 'Browse catalog'}</Btn>
+          ) : (
+            <Link to="/marketplace?tab=browse">
+              <Btn size="sm" variant="primary">{actions.browse ?? 'Browse catalog'}</Btn>
+            </Link>
+          )
+        }
+      />
     )
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-ok/30 bg-ok/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-2 min-w-0">
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
-        <div>
-          <p className="text-xs font-medium text-ok">
-            {plainBanner ? 'Plugins delivering' : `Plugins delivering on ${projectLabel}`}
-          </p>
-          <p className="text-2xs text-fg-muted">{label}</p>
-        </div>
-      </div>
-      {onRefresh ? (
-        <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          {actions.refresh ?? 'Refresh'}
-        </Btn>
-      ) : onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('deliveries')}>{actions.deliveries ?? 'View log'}</Btn>
-      ) : null}
-    </div>
+    <StatusBannerShell
+      tone="ok"
+      title={plainBanner ? 'Plugins delivering' : `Plugins delivering on ${projectLabel}`}
+      subtitle={label}
+      action={
+        onRefresh ? (
+          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
+            {actions.refresh ?? 'Refresh'}
+          </Btn>
+        ) : onTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab('deliveries')}>{actions.deliveries ?? 'View log'}</Btn>
+        ) : null
+      }
+    />
   )
 }

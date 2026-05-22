@@ -29,7 +29,8 @@ export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>)
         c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404),
       overrideProjectId: projectId,
     })
-    if (!resolvedProject) return
+    // OwnedProjectResolution is always a truthy object — check the union discriminant.
+    if ('response' in resolvedProject) return resolvedProject.response
 
     const { project } = resolvedProject
 

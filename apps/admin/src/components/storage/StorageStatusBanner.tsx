@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
+import { StatusBannerShell } from '../StatusBannerShell'
 import type { StorageStats, StorageTabId } from './types'
 
 interface Props {
@@ -19,156 +20,131 @@ export function StorageStatusBanner({ stats, onTab, onHealthCheck, checking }: P
 
   if (!stats.projectId) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">No project selected</p>
-            <p className="text-2xs text-fg-muted">
-              Storage backends are per-project — pick an app in the header switcher before configuring a bucket.
-            </p>
-          </div>
-        </div>
-        <Link to="/projects">
-          <Btn size="sm" variant="ghost">Go to Projects</Btn>
-        </Link>
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title="No project selected"
+        subtitle="Storage backends are per-project — pick an app in the header switcher before configuring a bucket."
+        action={
+          <Link to="/projects">
+            <Btn size="sm" variant="ghost">Go to Projects</Btn>
+          </Link>
+        }
+      />
     )
   }
 
   if (stats.activeProjectHealthStatus === 'failing') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-danger">Bucket probe failing for {projectLabel}</p>
-            <p className="text-2xs text-fg-muted break-words">
-              {stats.latestFailureError?.slice(0, 160) ?? 'Screenshot uploads may fail silently — rotate Vault credentials or fix the bucket path.'}
-            </p>
-          </div>
-        </div>
-        {onHealthCheck ? (
-          <Btn size="sm" variant="ghost" onClick={onHealthCheck} loading={checking} disabled={checking}>
-            Re-run probe
-          </Btn>
-        ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
-            Fix config
-          </Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="danger"
+        title={`Bucket probe failing for ${projectLabel}`}
+        subtitle={
+          <span className="break-words">
+            {stats.latestFailureError?.slice(0, 160) ?? 'Screenshot uploads may fail silently — rotate Vault credentials or fix the bucket path.'}
+          </span>
+        }
+        action={
+          onHealthCheck ? (
+            <Btn size="sm" variant="ghost" onClick={onHealthCheck} loading={checking} disabled={checking}>
+              Re-run probe
+            </Btn>
+          ) : onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
+              Fix config
+            </Btn>
+          ) : null
+        }
+      />
     )
   }
 
   if (stats.activeProjectHealthStatus === 'degraded') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">Bucket health degraded on {projectLabel}</p>
-            <p className="text-2xs text-fg-muted">
-              Uploads still work but recent probes reported errors — run a health check before the next report spike.
-            </p>
-          </div>
-        </div>
-        {onHealthCheck ? (
-          <Btn size="sm" variant="ghost" onClick={onHealthCheck} loading={checking} disabled={checking}>
-            Health check
-          </Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={`Bucket health degraded on ${projectLabel}`}
+        subtitle="Uploads still work but recent probes reported errors — run a health check before the next report spike."
+        action={
+          onHealthCheck ? (
+            <Btn size="sm" variant="ghost" onClick={onHealthCheck} loading={checking} disabled={checking}>
+              Health check
+            </Btn>
+          ) : null
+        }
+      />
     )
   }
 
   if (!stats.activeProjectConfigured) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-info">Using cluster default storage</p>
-            <p className="text-2xs text-fg-muted">
-              {projectLabel} uploads to Supabase Storage until you save a BYO bucket override on Configure.
-            </p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
-            Configure bucket
-          </Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="info"
+        title="Using cluster default storage"
+        subtitle={`${projectLabel} uploads to Supabase Storage until you save a BYO bucket override on Configure.`}
+        action={
+          onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
+              Configure bucket
+            </Btn>
+          ) : null
+        }
+      />
     )
   }
 
   if (!stats.lastHealthCheckAt) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-info">Bucket saved — never probed</p>
-            <p className="text-2xs text-fg-muted">
-              Run a health check on {projectLabel} ({stats.activeProjectProvider}) before routing production uploads.
-            </p>
-          </div>
-        </div>
-        {onHealthCheck ? (
-          <Btn size="sm" variant="ghost" onClick={onHealthCheck} loading={checking} disabled={checking}>
-            Run probe
-          </Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="info"
+        title="Bucket saved — never probed"
+        subtitle={`Run a health check on ${projectLabel} (${stats.activeProjectProvider}) before routing production uploads.`}
+        action={
+          onHealthCheck ? (
+            <Btn size="sm" variant="ghost" onClick={onHealthCheck} loading={checking} disabled={checking}>
+              Run probe
+            </Btn>
+          ) : null
+        }
+      />
     )
   }
 
   if (stats.failingCount > 0 && stats.activeProjectHealthStatus === 'healthy') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">
-              {stats.failingCount} other project bucket{stats.failingCount === 1 ? '' : 's'} failing
-            </p>
-            <p className="text-2xs text-fg-muted">
-              {projectLabel} is healthy — switch projects in the header to fix sibling buckets.
-            </p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
-            View all buckets
-          </Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={`${stats.failingCount} other project bucket${stats.failingCount === 1 ? '' : 's'} failing`}
+        subtitle={`${projectLabel} is healthy — switch projects in the header to fix sibling buckets.`}
+        action={
+          onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('configure')}>
+              View all buckets
+            </Btn>
+          ) : null
+        }
+      />
     )
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-ok/30 bg-ok/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-2 min-w-0">
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
-        <div>
-          <p className="text-xs font-medium text-ok">
-            {stats.activeProjectProvider} bucket healthy for {projectLabel}
-          </p>
-          <p className="text-2xs text-fg-muted">
-            {stats.activeProjectObjects.toLocaleString()} screenshot{stats.activeProjectObjects === 1 ? '' : 's'}
-            {stats.lastHealthCheckAt ? (
-              <> · probed <RelativeTime value={stats.lastHealthCheckAt} /></>
-            ) : null}
-          </p>
-        </div>
-      </div>
-      {onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('usage')}>
-          View usage
-        </Btn>
-      ) : null}
-    </div>
+    <StatusBannerShell
+      tone="ok"
+      title={`${stats.activeProjectProvider} bucket healthy for ${projectLabel}`}
+      subtitle={
+        <>
+          {stats.activeProjectObjects.toLocaleString()} screenshot{stats.activeProjectObjects === 1 ? '' : 's'}
+          {stats.lastHealthCheckAt ? (
+            <> · probed <RelativeTime value={stats.lastHealthCheckAt} /></>
+          ) : null}
+        </>
+      }
+      action={
+        onTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab('usage')}>
+            View usage
+          </Btn>
+        ) : null
+      }
+    />
   )
 }
-

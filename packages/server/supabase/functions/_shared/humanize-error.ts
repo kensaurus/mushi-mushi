@@ -47,7 +47,7 @@ export function humanizeFixError(
 
   // ── Cursor Cloud: model slug rejected ──────────────────────────────────────
   const invalidModelMatch = raw.match(/Cursor API error 400.*invalid_model.*'([^']+)'/i);
-  if (invalidModelMatch ?? category === 'cursor_invalid_model') {
+  if (invalidModelMatch || category === 'cursor_invalid_model') {
     const slug = invalidModelMatch?.[1] ?? 'the selected model';
     return {
       title: `Cursor doesn't recognise the model \`${slug}\`.`,
@@ -347,6 +347,53 @@ export function humanizeFixError(
         'The agent's changes didn't satisfy the inventory contract for this action. Expand the fix card to see the validation warnings.',
       severity: 'soft',
       action: { label: 'Retry', target: { kind: 'retry' } },
+      raw,
+    };
+  }
+
+  // ── Claude Code Agent ──────────────────────────────────────────────────────
+  // SYNC NOTE: Keep in sync with apps/admin/src/lib/humanizeFixError.ts
+
+  // Claude: no changes (agent ran but found nothing to fix)
+  if ((m.includes('no changes') && m.includes('claude')) || (category === 'claude_api_error' && m.includes('no changes'))) {
+    return {
+      title: 'Claude Code analyzed the codebase but made no changes.',
+      hint: 'The bug may need a more specific prompt or manual investigation. Try again with a more detailed description.',
+      severity: 'soft',
+      action: { label: 'Retry with more detail', target: { kind: 'retry' } },
+      raw,
+    };
+  }
+
+  // Claude: key not configured
+  if (m.includes('claude_code_agent requires an anthropic api key') || m.includes('claude api key vault lookup failed') || category === 'claude_api_error') {
+    return {
+      title: 'Claude Code Agent needs an Anthropic API key.',
+      hint: 'Add your Anthropic API key in Integrations → Claude Code Agent.',
+      severity: 'hard',
+      action: { label: 'Connect Claude Code Agent', target: { kind: 'route', to: '/integrations/config', hash: 'claude_code_agent' } },
+      raw,
+    };
+  }
+
+  // Claude: workflow not found
+  if (category === 'claude_workflow_missing' || m.includes('mushi-claude-fix workflow not found')) {
+    return {
+      title: 'The mushi-claude-fix GitHub Actions workflow is missing.',
+      hint: 'Add the workflow YAML from Integrations → Claude Code Agent → Workflow YAML to .github/workflows/mushi-claude-fix.yml in your repo.',
+      severity: 'hard',
+      action: { label: 'View setup docs', target: { kind: 'route', to: '/integrations/config', hash: 'claude_code_agent' } },
+      raw,
+    };
+  }
+
+  // Claude: dispatch failed
+  if (category === 'claude_repo_dispatch_failed' || m.includes('github dispatch error')) {
+    return {
+      title: 'Mushi could not trigger the GitHub Actions workflow.',
+      hint: 'Check that your GitHub token has `actions:write` (or `contents:write`) permission on the repo.',
+      severity: 'hard',
+      action: { label: 'Re-save GitHub token', target: { kind: 'route', to: '/integrations/config', hash: 'github' } },
       raw,
     };
   }

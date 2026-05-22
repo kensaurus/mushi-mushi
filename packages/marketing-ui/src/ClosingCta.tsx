@@ -23,10 +23,10 @@ export function ClosingCta() {
           <span className="mx-2 opacity-40">·</span>
           <span className="text-[var(--mushi-ink)]">one quiet widget</span>
           <span className="mx-2 opacity-40">·</span>
-          the rest is up to you
+          the loop closes itself
         </p>
         <h2 className="mx-auto mt-2 max-w-2xl font-serif text-3xl leading-[1] tracking-[-0.04em] text-[var(--mushi-ink)] sm:text-4xl">
-          Try it on a project that already has bugs.
+          Stop forcing your friends to file bugs. Let the loop close itself.
         </h2>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {/* Primary CTA label matches the Hero's "Start free, no card" so

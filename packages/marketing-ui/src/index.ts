@@ -27,6 +27,9 @@ export { MarketingFooter } from './MarketingFooter'
 export { StatusPill } from './StatusPill'
 export type { StatusPillProps } from './StatusPill'
 export { SwitchingFromStrip } from './SwitchingFromStrip'
+export { PersonaTrack } from './PersonaTrack'
+export type { PersonaCard } from './PersonaTrack'
+export { PrivacyPosture } from './PrivacyPosture'
 
 export { MushiCanvas } from './canvas/MushiCanvas'
 export {

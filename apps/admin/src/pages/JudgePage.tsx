@@ -23,6 +23,14 @@ import {
 } from '../components/ui'
 import { JudgeStatusBanner } from '../components/judge/JudgeStatusBanner'
 import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
+import {
   EMPTY_JUDGE_STATS,
   type JudgeStats,
   type JudgeTabId,
@@ -194,18 +202,22 @@ function ScoreBar({
   description?: string
 }) {
   const inner = (
-    <div className="flex items-center gap-2">
-      <span className="text-2xs text-fg-muted w-20 cursor-help">{label}</span>
-      <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full motion-safe:transition-all motion-safe:duration-500"
-          style={{ width: `${(value * 100).toFixed(0)}%`, backgroundColor: color }}
-        />
+    <ContainedBlock tone="muted" className="py-1.5">
+      <div className="flex items-center gap-2">
+        <SignalChip tone="neutral" className="w-20 justify-center cursor-help">
+          {label}
+        </SignalChip>
+        <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full motion-safe:transition-all motion-safe:duration-500"
+            style={{ width: `${(value * 100).toFixed(0)}%`, backgroundColor: color }}
+          />
+        </div>
+        <SignalChip tone="brand" className="w-9 justify-center font-mono tabular-nums">
+          {(value * 100).toFixed(0)}%
+        </SignalChip>
       </div>
-      <span className="text-2xs text-fg-secondary w-9 text-right font-mono tabular-nums">
-        {(value * 100).toFixed(0)}%
-      </span>
-    </div>
+    </ContainedBlock>
   )
   if (!description) return inner
   return <Tooltip content={description}>{inner}</Tooltip>
@@ -219,16 +231,18 @@ function ScoreBar({
  */
 function ScoreTrendLegend() {
   return (
-    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-3xs text-fg-faint">
+    <div className="mt-3 flex flex-wrap gap-1.5">
       {SCORE_DIMENSIONS.map((d) => (
         <Tooltip key={d.key} content={d.description}>
-          <span className="inline-flex items-center gap-1 cursor-help">
-            <span
-              className="inline-block w-2 h-2 rounded-full"
-              style={{ backgroundColor: SCORE_COLORS[d.key] }}
-              aria-hidden="true"
-            />
-            {d.label}
+          <span className="inline-flex cursor-help">
+            <SignalChip tone="neutral" className="gap-1.5">
+              <span
+                className="inline-block w-2 h-2 rounded-full"
+                style={{ backgroundColor: SCORE_COLORS[d.key] }}
+                aria-hidden="true"
+              />
+              {d.label}
+            </SignalChip>
           </span>
         </Tooltip>
       ))}
@@ -608,12 +622,15 @@ export function JudgePage() {
                 yAxisCaption="Evals"
                 xAxisCaption="Score (0–10)"
               />
-              <p className="text-2xs text-fg-faint mt-2">
+              <InlineProof className="mt-2">
                 {dist.total} evals · 0–100 scale, deciles
-              </p>
+              </InlineProof>
             </>
           ) : (
-            <p className="text-xs text-fg-muted">No scored evaluations yet.</p>
+            <EmptySectionMessage
+              text="No scored evaluations yet."
+              hint="Run judge now or wait for the nightly cron — distribution bars appear after the first batch."
+            />
           )}
         </Section>
       </div>
@@ -669,10 +686,6 @@ export function JudgePage() {
       <PageHeader
         title={copy?.title ?? 'Judge'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'
-        }
       >
         <Badge
           className={
@@ -724,6 +737,13 @@ export function JudgePage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'}
+        </p>
+      </ContainedBlock>
+
       <JudgeStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -746,7 +766,9 @@ export function JudgePage() {
 
       {!ux.hideJudgeSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.week ?? 'This week'}
@@ -814,7 +836,7 @@ export function JudgePage() {
 
       {stats.topPriorityTo && stats.topPriority !== 'healthy' && activeTab === 'overview' && !ux.hideOverviewChrome ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'no_evals'
@@ -822,18 +844,35 @@ export function JudgePage() {
                 : 'border-warn/30 bg-warn/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <SignalChip
+            tone={
+              stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
+                ? 'danger'
+                : stats.topPriority === 'no_evals'
+                  ? 'brand'
+                  : 'warn'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock
+            tone={
+              stats.topPriority === 'low_score' || stats.topPriority === 'drifting' ? 'warn' : 'info'
+            }
+          >
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
             {stats.topPriority === 'no_evals' || stats.topPriority === 'stale' ? (
-              <Btn size="sm" variant="ghost" onClick={runNow} loading={running} disabled={running}>
-                Run judge now
-              </Btn>
+              <ActionPill onClick={runNow} tone="brand" className={running ? 'opacity-60 pointer-events-none' : ''}>
+                {running ? 'Running…' : 'Run judge now'}
+              </ActionPill>
             ) : (
-              <Link to={stats.topPriorityTo}>
-                <Btn size="sm" variant="ghost">Take action →</Btn>
-              </Link>
+              <ActionPill to={stats.topPriorityTo} tone="brand">
+                Take action →
+              </ActionPill>
             )}
-          </div>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -939,12 +978,12 @@ export function JudgePage() {
       </div>
 
       {weeks.length === 0 && evals.length === 0 && prompts.length === 0 && (
-        <Card className="p-3 border-info/20 bg-info-muted/10">
-          <p className="text-xs text-fg-muted">
+        <ContainedBlock tone="info">
+          <InlineProof>
             Tip: judge runs nightly via cron. Use <strong>Run judge now</strong> to seed
             evaluations immediately on a fresh project.
-          </p>
-        </Card>
+          </InlineProof>
+        </ContainedBlock>
       )}
         </>
       )}
@@ -954,9 +993,17 @@ export function JudgePage() {
       {activeTab === 'prompts' && (
       <Section title="Prompt leaderboard">
         {prompts.length === 0 ? (
-          <p className="text-xs text-fg-muted">
-            No prompt versions registered yet. The Prompt Lab can create candidates.
-          </p>
+          <div className="space-y-2">
+            <EmptySectionMessage
+              text="No prompt versions registered yet."
+              hint="The Prompt Lab can create candidates to A/B against the active classifier prompt."
+            />
+            <ActionPillRow>
+              <ActionPill to="/prompt-lab" tone="brand">
+                Open Prompt Lab →
+              </ActionPill>
+            </ActionPillRow>
+          </div>
         ) : (
           <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs">
@@ -1081,7 +1128,14 @@ export function JudgePage() {
         }
       >
         {evals.length === 0 ? (
-          <p className="text-xs text-fg-muted">No evaluations match.</p>
+          <EmptySectionMessage
+            text="No evaluations match."
+            hint={
+              disagreementOnly || promptFilter
+                ? 'Clear the active filter or run judge now to seed fresh evaluations.'
+                : 'Run judge now or wait for the nightly cron to score classified reports.'
+            }
+          />
         ) : (
           <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs" data-dav-anchor="judge:verify">
@@ -1135,12 +1189,17 @@ export function JudgePage() {
                         >
                           {display}
                         </Link>
-                        <div className="text-3xs text-fg-faint font-mono mt-0.5">
+                        <InlineProof className="mt-0.5 border-0 bg-transparent px-0 py-0 font-mono text-3xs">
                           {e.report_id.slice(0, 8)}
                           {e.report_severity && (
-                            <span className="ml-1.5 normal-case">· {e.report_severity}</span>
+                            <>
+                              {' '}
+                              <SignalChip tone="warn" className="ml-1 normal-case font-sans">
+                                {e.report_severity}
+                              </SignalChip>
+                            </>
                           )}
-                        </div>
+                        </InlineProof>
                         {disagreementReason && (
                           <Tooltip content={disagreementReason}>
                             <p className="mt-1 text-3xs text-warn line-clamp-1 cursor-help italic">
@@ -1152,15 +1211,23 @@ export function JudgePage() {
                       <td className="py-1.5 px-3 text-fg-faint text-2xs">
                         <RelativeTime value={e.created_at} />
                       </td>
-                      <td className="py-1.5 px-3 font-mono text-2xs text-fg-faint truncate max-w-[12rem]">
-                        {e.judge_model ?? '—'}
+                      <td className="py-1.5 px-3 truncate max-w-[12rem]">
+                        <SignalChip tone="neutral" className="font-mono">
+                          {e.judge_model ?? '—'}
+                        </SignalChip>
                         {e.judge_fallback_used && (
                           <Tooltip content="Primary judge model failed; fallback model graded this report.">
-                            <span className="ml-1 text-warn cursor-help">⚠</span>
+                            <SignalChip tone="warn" className="ml-1 cursor-help">
+                              fallback
+                            </SignalChip>
                           </Tooltip>
                         )}
                       </td>
-                      <td className="py-1.5 px-3 font-mono text-2xs text-fg-faint">{e.prompt_version ?? '—'}</td>
+                      <td className="py-1.5 px-3">
+                        <SignalChip tone="neutral" className="font-mono">
+                          {e.prompt_version ?? '—'}
+                        </SignalChip>
+                      </td>
                       <td className="py-1.5 px-3 text-right"><ScorePill value={e.judge_score} /></td>
                       <td className="py-1.5 px-3 text-right"><ScorePill value={e.accuracy_score} /></td>
                       <td className="py-1.5 px-3 text-right"><ScorePill value={e.severity_score} /></td>

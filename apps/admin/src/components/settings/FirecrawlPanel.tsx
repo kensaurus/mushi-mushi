@@ -17,6 +17,7 @@ import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
 import { countChangedFields, valuesEqual } from './settingsDiff'
 import { ConfiguredSecretField } from './ConfiguredSecretField'
+import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface FirecrawlConfig {
   configured: boolean
@@ -138,6 +139,16 @@ export function FirecrawlPanel() {
 
   return (
     <SettingsPanelLayout
+      fullWidth={
+        <ContainedBlock tone="muted">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            <strong className="text-fg-secondary">Optional integration.</strong> Brings{' '}
+            <span className="font-mono">firecrawl.dev</span> under your own key for Research search,
+            fix-worker web augmentation, and the library modernizer cron. Keys live in Supabase Vault;
+            calls are cached 24h and bounded by the per-call page cap.
+          </p>
+        </ContainedBlock>
+      }
       footer={
         <SettingsFormFooter
           dirty={dirty}
@@ -150,46 +161,33 @@ export function FirecrawlPanel() {
       }
     >
       <Section title="Firecrawl (BYOK — Web Research)" className="lg:col-span-2 space-y-3">
-        <div className="text-2xs text-fg-muted space-y-1">
-          <p>
-            <strong className="text-fg-secondary">Optional integration.</strong> Brings <span className="font-mono">firecrawl.dev</span> under your own key for three flows:
-          </p>
-          <ul className="ml-4 list-disc space-y-0.5">
-            <li><strong>Research page</strong> — manually search the web from the admin during triage.</li>
-            <li><strong>Auto-augment fix-worker</strong> — when local RAG is sparse or the judge flags a &quot;stubborn&quot; report, the fix agent pulls top-3 web snippets into the Sonnet prompt.</li>
-            <li><strong>Library modernizer</strong> — weekly cron scrapes release-notes for outdated dependencies and files them as enhancement reports.</li>
-          </ul>
-          <p className="text-fg-faint">
-            Get a key at <a href="https://www.firecrawl.dev/" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">firecrawl.dev</a>. Stored in Supabase Vault. Calls are cached 24h, audit-logged, and bounded by the per-call page cap below.
-          </p>
-        </div>
 
         {cfg && (
           <SettingsCard>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium text-fg-primary">Firecrawl</span>
-              <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${cfg.configured ? 'bg-ok/10 text-ok' : 'bg-surface-raised text-fg-muted'}`}>
+              <SignalChip tone="brand">Firecrawl</SignalChip>
+              <SignalChip tone={cfg.configured ? 'ok' : 'neutral'}>
                 {cfg.configured ? 'BYOK' : 'not configured'}
-              </span>
+              </SignalChip>
               {statusMeta && (
-                <span
-                  className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${
-                    statusMeta.tone === 'ok' ? 'bg-ok/10 text-ok' :
-                    statusMeta.tone === 'warn' ? 'bg-warn/10 text-warn' :
-                    'bg-danger/10 text-danger'
-                  }`}
+                <SignalChip
+                  tone={
+                    statusMeta.tone === 'ok' ? 'ok' :
+                    statusMeta.tone === 'warn' ? 'warn' :
+                    'danger'
+                  }
                 >
                   {statusMeta.label}
-                </span>
+                </SignalChip>
               )}
             </div>
 
             {cfg.configured && (
-              <div className="text-2xs text-fg-muted">
+              <InlineProof>
                 Added {cfg.addedAt ? new Date(cfg.addedAt).toLocaleString() : 'unknown'}
                 {cfg.lastUsedAt && <> · last used {new Date(cfg.lastUsedAt).toLocaleString()}</>}
                 {cfg.testedAt && <> · tested {new Date(cfg.testedAt).toLocaleString()}</>}
-              </div>
+              </InlineProof>
             )}
 
             <ConfiguredSecretField
@@ -213,10 +211,12 @@ export function FirecrawlPanel() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <label className="block">
-                <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
-                  <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
-                  <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
-                </span>
+                <ContainedBlock tone="muted" className="mb-1">
+                  <span className="text-2xs text-fg-muted flex items-center gap-1">
+                    <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
+                    <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
+                  </span>
+                </ContainedBlock>
                 <textarea
                   className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
                   value={domains}
@@ -227,10 +227,12 @@ export function FirecrawlPanel() {
               </label>
 
               <label className="block">
-                <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
-                  <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
-                  <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
-                </span>
+                <ContainedBlock tone="muted" className="mb-1">
+                  <span className="text-2xs text-fg-muted flex items-center gap-1">
+                    <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
+                    <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
+                  </span>
+                </ContainedBlock>
                 <input
                   type="range"
                   min="1"

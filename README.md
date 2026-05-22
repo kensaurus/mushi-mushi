@@ -2,7 +2,7 @@
 
 # Mushi Mushi
 
-**Sentry sees what code throws. Mushi sees what users feel — and remembers what fixed it last time.**
+**Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
 
 Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android. And then it _learns_: every report is embedded, clustered with similar ones, and promoted to a named learning rule that is injected into your next PR review and your next AI agent run.
 
@@ -13,7 +13,7 @@ Mushi is the **antifragile closed-loop layer**: every bug report makes the next 
 [![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
 [![Server](https://img.shields.io/badge/server-BSL%201.1-orange.svg)](./packages/server/LICENSE)
 
-[Quick start](#try-it) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
+[Quick start](#try-it) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Evolution loop manifesto](./docs/EVOLUTION-LOOP.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
 
 <a href="https://kensaur.us/mushi-mushi/admin/" title="Open the live admin demo — animated guided tour">
   <img src="./docs/screenshots/tour-pdca-loop.gif" alt="Animated guided tour through the logged-in admin console, walking the full Plan → Do → Check → Act loop." width="100%" />

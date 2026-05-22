@@ -9,6 +9,8 @@ import { Card, Badge } from '../ui'
 import { StatusPill } from '../charts'
 import { SEVERITY } from '../../lib/tokens'
 import { relTime, type FixSummary, type TriageItem } from './types'
+import { ActionPill, ActionPillRow, ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
 
 interface Props {
   triageQueue: TriageItem[]
@@ -19,30 +21,37 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
       <Card className="p-3 lg:col-span-2">
-        <div className="flex items-center justify-between mb-2.5">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
           <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Triage queue</h3>
-          <Link to="/reports?status=new" className="text-2xs text-brand hover:text-brand-hover">
+          <ActionPill to="/reports?status=new" tone="brand">
             View backlog →
-          </Link>
+          </ActionPill>
         </div>
         {triageQueue.length === 0 ? (
-          <p className="text-2xs text-fg-faint py-4 text-center">All caught up — no untriaged reports.</p>
+          <EmptySectionMessage
+            text="All caught up — no untriaged reports."
+            hint="New bugs land here within seconds of SDK ingest."
+          />
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {triageQueue.map((r) => (
               <Link
                 key={r.id}
                 to={`/reports/${r.id}`}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-surface-overlay/50 transition-colors group"
+                className="block rounded-md border border-edge-subtle/70 bg-surface-overlay/25 px-2 py-1.5 motion-safe:transition-colors hover:border-edge hover:bg-surface-overlay/45 group"
               >
-                <StatusPill status={r.status} />
-                {r.severity && (
-                  <Badge className={SEVERITY[r.severity] ?? 'bg-fg-faint/15 text-fg-muted'}>
-                    {r.severity}
-                  </Badge>
-                )}
-                <span className="text-xs text-fg-secondary group-hover:text-fg flex-1 truncate">{r.summary}</span>
-                <span className="text-3xs font-mono text-fg-faint shrink-0">{relTime(r.created_at)}</span>
+                <div className="flex items-center gap-2">
+                  <StatusPill status={r.status} />
+                  {r.severity ? (
+                    <Badge className={SEVERITY[r.severity] ?? 'bg-fg-faint/15 text-fg-muted'}>
+                      {r.severity}
+                    </Badge>
+                  ) : null}
+                  <span className="min-w-0 flex-1 truncate text-xs text-fg-secondary group-hover:text-fg">
+                    {r.summary}
+                  </span>
+                  <SignalChip tone="neutral">{relTime(r.created_at)}</SignalChip>
+                </div>
               </Link>
             ))}
           </div>
@@ -50,11 +59,11 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
       </Card>
 
       <Card className="p-3">
-        <div className="flex items-center justify-between mb-2.5">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
           <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Auto-fix</h3>
-          <Link to="/fixes" className="text-2xs text-brand hover:text-brand-hover">
+          <ActionPill to="/fixes" tone="brand">
             All →
-          </Link>
+          </ActionPill>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <FixStat label="Total" value={fixSummary.total} />
@@ -64,25 +73,41 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
             label="Failed"
             value={fixSummary.failed}
             accent={fixSummary.failed > 0 ? 'text-danger' : undefined}
+            highlight={fixSummary.failed > 0}
           />
         </div>
-        <div className="mt-3 pt-3 border-t border-edge-subtle">
-          <Link to="/fixes" className="text-2xs text-fg-muted hover:text-fg">
-            {fixSummary.openPrs > 0
-              ? `${fixSummary.openPrs} draft PR${fixSummary.openPrs === 1 ? '' : 's'} ready for review →`
-              : 'Dispatch a fix from a report →'}
-          </Link>
-        </div>
+        <ContainedBlock tone="muted" className="mt-3">
+          <ActionPillRow>
+            <ActionPill to="/fixes" tone={fixSummary.openPrs > 0 ? 'ok' : 'neutral'}>
+              {fixSummary.openPrs > 0
+                ? `${fixSummary.openPrs} draft PR${fixSummary.openPrs === 1 ? '' : 's'} ready for review →`
+                : 'Dispatch a fix from a report →'}
+            </ActionPill>
+          </ActionPillRow>
+        </ContainedBlock>
       </Card>
     </div>
   )
 }
 
-function FixStat({ label, value, accent }: { label: string; value: number; accent?: string }) {
+function FixStat({
+  label,
+  value,
+  accent,
+  highlight,
+}: {
+  label: string
+  value: number
+  accent?: string
+  highlight?: boolean
+}) {
   return (
-    <div className="bg-surface-overlay/40 rounded-sm px-2 py-1.5 border border-edge-subtle">
+    <ContainedBlock
+      tone={highlight ? 'warn' : 'neutral'}
+      className="px-2 py-1.5"
+    >
       <div className="text-3xs text-fg-muted uppercase tracking-wider">{label}</div>
-      <div className={`text-base font-semibold font-mono ${accent ?? 'text-fg'}`}>{value}</div>
-    </div>
+      <div className={`text-base font-semibold font-mono tabular-nums ${accent ?? 'text-fg'}`}>{value}</div>
+    </ContainedBlock>
   )
 }

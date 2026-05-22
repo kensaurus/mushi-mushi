@@ -103,6 +103,17 @@ export interface PlatformDef {
   consoleLabel?: string
   /** Numbered steps shown before / during configuration. */
   setupSteps?: string[]
+  /**
+   * Grouping hint for the Integrations page UI.
+   *  - 'required' — infra integrations the loop needs to function (Sentry, GitHub, Langfuse)
+   *  - 'fix-agent' — pick one AI agent to run the fix step (Cursor Cloud, Claude Code)
+   */
+  group?: 'required' | 'fix-agent'
+  /**
+   * Another integration kind that must be configured before this one works.
+   * When set, the card renders a blocking banner with a link to the dependency.
+   */
+  dependsOn?: Kind
 }
 
 export interface RoutingProviderDef {
@@ -124,6 +135,8 @@ export interface RoutingProviderDef {
   domain: string
   /** URL to open when the user clicks the external link icon. */
   externalUrl: string
+  /** Numbered guide steps shown when not yet configured. */
+  setupSteps?: string[]
 }
 
 export interface RoutingIntegration {
@@ -179,10 +192,19 @@ export const PLATFORM_STATUS_MAP: Record<HealthRow['status'], string | null | un
   unknown: undefined,
 }
 
+/**
+ * Platform def groups:
+ *   group 'required' — infra the loop needs to run (wire these first)
+ *   group 'fix-agent' — pick exactly one AI agent for the fix step
+ *
+ * The IntegrationsPage uses this to render two sections:
+ *   "Required — connect all three" / "Pick a fix agent — connect one"
+ */
 export const PLATFORM_DEFS: PlatformDef[] = [
   {
     kind: 'sentry',
     label: 'Sentry',
+    group: 'required',
     Icon: IconSentry,
     color: 'text-[#7B5EA7]',
     domain: 'sentry.io',
@@ -213,6 +235,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
   {
     kind: 'langfuse',
     label: 'Langfuse',
+    group: 'required',
     Icon: IconLangfuse,
     color: 'text-[#00A67E]',
     domain: 'langfuse.com',
@@ -241,6 +264,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
   {
     kind: 'github',
     label: 'GitHub (code repo)',
+    group: 'required',
     Icon: IconGithub,
     color: 'text-fg',
     domain: 'github.com',
@@ -270,6 +294,8 @@ export const PLATFORM_DEFS: PlatformDef[] = [
   {
     kind: 'cursor_cloud',
     label: 'Cursor Cloud',
+    group: 'fix-agent',
+    dependsOn: 'github',
     Icon: IconCursorCloud,
     color: 'text-[#0066FF]',
     domain: 'cursor.com',
@@ -300,6 +326,8 @@ export const PLATFORM_DEFS: PlatformDef[] = [
   {
     kind: 'claude_code_agent',
     label: 'Claude Code Agent',
+    group: 'fix-agent',
+    dependsOn: 'github',
     Icon: IconClaudeCode,
     color: 'text-[#d97706]',
     domain: 'anthropic.com',
@@ -367,6 +395,13 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     color: 'text-[#2684FF]',
     domain: 'atlassian.com',
     externalUrl: 'https://id.atlassian.com',
+    setupSteps: [
+      'Go to id.atlassian.com → Security → API tokens → Create API token.',
+      'Copy your Atlassian email + the API token.',
+      'Paste your Jira Base URL (e.g. https://acme.atlassian.net).',
+      'Enter the Project Key (e.g. BUG) for the project that should receive issues.',
+      'Click Save → Test connection. High-severity reports will now open Jira tickets automatically.',
+    ],
     whyItMatters: 'Triaged reports become Jira tickets in the project of your choice. Severity maps to Jira priority.',
     capabilitiesOnceConnected: [
       'Auto-create Jira issues for high-severity reports',
@@ -388,6 +423,12 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     color: 'text-[#5C6BC0]',
     domain: 'linear.app',
     externalUrl: 'https://linear.app',
+    setupSteps: [
+      'Open Linear → Settings → API → Personal API keys → Create key.',
+      'Copy the lin_api_… token.',
+      'Find your Team ID: Linear → Settings → Teams → click the team → copy the ID from the URL.',
+      'Paste token + Team ID below, then Save → Test connection.',
+    ],
     whyItMatters: 'Mirror reports into Linear with proper labels and priorities. Classification metadata maps to Linear labels.',
     capabilitiesOnceConnected: [
       'Mirror reports as Linear issues with severity-mapped priority',
@@ -407,6 +448,12 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     color: 'text-fg',
     domain: 'github.com',
     externalUrl: 'https://github.com',
+    setupSteps: [
+      'Create a fine-grained PAT at github.com/settings/tokens?type=beta.',
+      'Grant Issues: Read and write on the target public tracker repo.',
+      'Paste the owner (org or username), repo name, and PAT below.',
+      'Click Save → Test connection. Issues will appear when reports reach high/critical severity.',
+    ],
     whyItMatters: 'Open GitHub Issues directly in your repo. Different repo than the auto-fix code repo — this is for tracking, not patching.',
     capabilitiesOnceConnected: [
       'Open GitHub Issues with severity + category as labels',
@@ -427,6 +474,12 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     color: 'text-[#06AC38]',
     domain: 'pagerduty.com',
     externalUrl: 'https://app.pagerduty.com',
+    setupSteps: [
+      'In PagerDuty: Services → (your service) → Integrations → Add integration → Events API v2.',
+      'Copy the 32-character Integration key.',
+      'Paste it in the Routing key field below.',
+      'Click Save → Test connection. Mushi will page on-call when severity reaches critical.',
+    ],
     whyItMatters: 'Page on-call when severity ≥ critical. Routes through Events API v2.',
     capabilitiesOnceConnected: [
       'Page the on-call when severity = critical',

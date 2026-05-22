@@ -17,6 +17,8 @@
 import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { Card } from '../ui'
+import { ActionPill, ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
 
 interface CoverageSummary {
   total: number
@@ -67,16 +69,16 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
       )}
 
       {error && (
-        <p className="text-2xs text-fg-faint italic">QA Coverage not available.</p>
+        <EmptySectionMessage text="QA Coverage not available." />
       )}
 
       {!loading && !error && !data?.total && (
-        <div className="text-2xs text-fg-faint space-y-1">
-          <p>No QA stories yet.</p>
-          <Link to="/qa-coverage" className="text-brand hover:underline">
+        <ContainedBlock tone="muted" className="space-y-2">
+          <p className="text-2xs text-fg-muted">No QA stories yet.</p>
+          <ActionPill to="/qa-coverage" tone="brand">
             Create your first user story test →
-          </Link>
-        </div>
+          </ActionPill>
+        </ContainedBlock>
       )}
 
       {!loading && !error && data && data.total > 0 && (
@@ -102,7 +104,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
           {/* Top failing */}
           {data.top_failing.length > 0 && (
             <div className="space-y-1 pt-1 border-t border-edge-subtle/60">
-              <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Failing</span>
+              <SignalChip tone="danger" className="uppercase tracking-wider text-3xs">Failing</SignalChip>
               {data.top_failing.slice(0, 3).map((f) => (
                 <Link
                   key={f.story_id}

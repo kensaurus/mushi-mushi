@@ -1,38 +1,82 @@
 'use client'
 
+import { useState } from 'react'
 import { useMarketing } from './context'
 import { reportSample } from './canvas/data'
 
+// Three-persona content — each chip swaps the lead paragraph in place.
+// See docs/marketing/VOICE.md for the phrasebook that backs each persona.
+const PERSONAS = [
+  {
+    id: 'vibe' as const,
+    label: 'Vibe coder',
+    lead: 'You build and ship fast with AI. The choke point is testing and observability. Mushi captures what users feel, AI triages it, and opens a draft PR — no QA team, no Jira, no PM bottleneck.',
+  },
+  {
+    id: 'team' as const,
+    label: 'AI-native team',
+    lead: 'Your agents already write the code. Mushi closes the loop so they also know which bugs to fix next — and never repeat the same class of mistake twice.',
+  },
+  {
+    id: 'pm' as const,
+    label: 'PM / founder',
+    lead: 'Get bug and feature signal direct from users, not through a support queue. The loop fixes the cheap ones automatically. You stay focused on what only you can decide.',
+  },
+] as const
+
+type PersonaId = (typeof PERSONAS)[number]['id']
+
 export function Hero() {
   const { Link, urls } = useMarketing()
+  const [persona, setPersona] = useState<PersonaId>('vibe')
+
+  const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
 
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-6 py-8 shadow-[0_24px_80px_-48px_rgba(14,13,11,0.45)] sm:px-10 sm:py-10 lg:px-14">
       <div className="absolute inset-0 opacity-60 [background-image:radial-gradient(circle_at_18%_12%,var(--mushi-vermillion-wash),transparent_32%),radial-gradient(circle_at_84%_18%,rgba(14,13,11,0.05),transparent_34%)]" />
       <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.95fr] lg:items-center lg:gap-8">
         <div className="max-w-4xl">
-          {/* Editorial brand kicker. Plain English — the inline `虫々`
-              loan-text was dropped per the brand voice rule (one Japanese
-              phrase per page max, body copy only; see docs/marketing/VOICE.md).
-              The 虫 glyph in the sticky-nav badge above is enough brand
-              identity for fold 1; the eyebrow now reads as quiet metadata. */}
+          {/* Eyebrow uses the spine sub-tagline from @mushi-mushi/brand MUSHI_TAGLINE.spine */}
           <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
             <span className="text-[var(--mushi-ink)]">Mushi</span>
             <span className="mx-2 opacity-40">/</span>
-            little bug helper
+            the evolution loop for AI-assisted software
           </p>
+
+          {/* H1 uses MUSHI_TAGLINE.full — canonical, word-for-word. See packages/brand/src/index.js. */}
           <h1 className="mt-3 max-w-3xl font-serif text-5xl font-semibold leading-[0.95] tracking-[-0.06em] text-[var(--mushi-ink)] sm:text-6xl lg:text-7xl">
-            Your users feel a bug.{' '}
+            Sentry sees what code throws.{' '}
             <br className="hidden sm:block" />
-            <span className="text-[var(--mushi-vermillion)]">You see a fix.</span>
+            <span className="text-[var(--mushi-vermillion)]">Mushi closes the loop with AI.</span>
           </h1>
-          <p className="mt-4 max-w-xl text-base leading-7 text-[var(--mushi-ink-muted)] sm:text-lg sm:leading-7">
-            When the checkout button slips under the keyboard or a page
-            just sits there spinning, your user shakes their phone. Mushi
-            writes down what they were doing, what they saw, and what
-            broke &mdash; so the bug your monitoring missed lands in your
-            queue with a draft fix.
+
+          {/* Three-persona switcher chips — vibe coder / AI-native team / PM+founder.
+              Swaps the lead paragraph without a page navigation. */}
+          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="I am a…">
+            {PERSONAS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPersona(p.id)}
+                className={[
+                  'rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition',
+                  persona === p.id
+                    ? 'border-[var(--mushi-ink)] bg-[var(--mushi-ink)] text-[var(--mushi-paper)]'
+                    : 'border-[var(--mushi-rule)] bg-transparent text-[var(--mushi-ink-muted)] hover:border-[var(--mushi-ink)] hover:text-[var(--mushi-ink)]',
+                ].join(' ')}
+                aria-pressed={persona === p.id}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Lead paragraph — swaps when persona chip is pressed. */}
+          <p key={activePersona.id} className="mt-3 max-w-xl text-base leading-7 text-[var(--mushi-ink-muted)] sm:text-lg sm:leading-7">
+            {activePersona.lead}
           </p>
+
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link
               href={urls.signup}
@@ -40,11 +84,6 @@ export function Hero() {
             >
               Start free, no card
             </Link>
-            {/* Secondary CTA needs enough chrome to read as a real button on
-                the warm paper background. The previous bg-white/25 dropped into
-                the paper wash and looked like ghost text. Paper-wash + ink
-                border gives it a calm but visible affordance without competing
-                with the solid vermillion primary. */}
             <Link
               href={urls.loopAnchor}
               className="group inline-flex items-center gap-2 rounded-sm border border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]"
@@ -53,10 +92,7 @@ export function Hero() {
               <span aria-hidden="true" className="transition-transform group-hover:translate-y-0.5 motion-reduce:transition-none">↓</span>
             </Link>
           </div>
-          {/* Trust facts. Bullet glyph swapped from vermillion dots → ink hairline
-              dividers ("／"). Dots were decoration, not status, so paying brand
-              spend on them was wasted ink. The hairline preserves rhythm without
-              adding three more red surfaces to fold 1. */}
+
           <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
             <li>1,000 reports / mo free</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
@@ -78,17 +114,7 @@ function ReportPreview() {
       aria-label="Preview of a Mushi report"
       className="relative overflow-hidden rounded-2xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] p-5 shadow-[0_22px_60px_-40px_rgba(14,13,11,0.55)]"
     >
-      {/* Top vermillion stripe REMOVED. The card already has its own elevation
-          (border + shadow) on a paper-tinted hero card, and the severity/judge
-          pills below carry the semantic colour. The stripe was decoration, and
-          decoration in the brand colour competes with the H1 accent word for
-          the eye's first stop (enhance-page-ui H4). */}
-
       <header className="flex items-center justify-between gap-3">
-        {/* "live · /reports" demoted from full-vermillion mono caps to neutral
-            ink-muted; only the pulsing dot keeps the brand colour because it
-            *carries* the live-status meaning (a real semantic accent, not a
-            decorative one). */}
         <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
           <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]" />
           <span className="text-[var(--mushi-ink)]">live</span>
@@ -109,12 +135,6 @@ function ReportPreview() {
         {reportSample.browser}
       </p>
 
-      {/* Blockquote softened: the previous treatment used the brand wash as
-          background AND the brand accent as the left rail, AND brand colour
-          dominates the whole hero — three vermillion surfaces stacked on the
-          one quotation block. Switched to an ink left rail + paper-wash bg so
-          the quote reads as a recess, not a third red panel. The italic serif
-          carries the "user voice" tone already; colour was redundant. */}
       <blockquote className="mt-3 rounded-md border-l-[3px] border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] py-2.5 pl-3 pr-3 font-serif text-[13.5px] italic leading-[1.55] text-[var(--mushi-ink)]">
         &ldquo;{reportSample.userNote}&rdquo;
       </blockquote>
@@ -143,13 +163,6 @@ function DataPill({ label, value, tone, suffix }: { label: string; value: string
       <dt className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
         {label}
       </dt>
-      {/* Value pill: dropped the `truncate` clamp because a "Class" pill
-          previously rendered as "UX REGRESSI…" — silent loss of meaning on the
-          hero card that's literally previewing the product (see
-          enhance-page-ui H6: column allocation). Width comes from the parent
-          grid (3 equal cells); we now let the long mid-pill ride two lines
-          rather than ellipsis its own label. The shrunken type at 11px keeps
-          the wrap rare while preserving readability when it does happen. */}
       <dd
         className="mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[11px] font-semibold uppercase leading-tight tracking-[0.06em] shadow-[inset_0_-2px_0_rgba(0,0,0,0.18)]"
         style={{ background: colors.bg, color: colors.fg, border: `1px solid ${colors.border}` }}

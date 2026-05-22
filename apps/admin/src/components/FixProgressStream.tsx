@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { Skeleton } from './ui'
+import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/ReportSurface'
 import type { DispatchState } from '../lib/dispatchFix'
 
 interface FixAttempt {
@@ -146,71 +147,86 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
       </div>
 
       {dispatchState.error && (
-        <p className="text-2xs text-danger wrap-break-word text-pretty">{dispatchState.error}</p>
+        <ContainedBlock tone="warn" label="Dispatch error">
+          <p className="text-2xs text-danger wrap-break-word text-pretty">{dispatchState.error}</p>
+        </ContainedBlock>
       )}
 
       {isInFlight && (
-        <p className="text-xs text-fg-secondary">
-          The fix-worker is generating a structured patch with your BYOK key. Status updates stream in live; you can close this page without losing progress — the work continues server-side.
-        </p>
+        <ContainedBlock tone="info">
+          <p className="text-xs text-fg-secondary leading-relaxed">
+            The fix-worker is generating a structured patch with your BYOK key. Status updates stream in live; you can close this page without losing progress — the work continues server-side.
+          </p>
+        </ContainedBlock>
       )}
 
       {latest?.summary && stage !== 'queueing' && (
-        <p className="text-xs text-fg-secondary mt-1.5"><span className="font-medium">Proposed:</span> {latest.summary}</p>
+        <ContainedBlock label="Proposed fix" tone="neutral" className="mt-1.5">
+          <p className="text-xs leading-relaxed text-fg-secondary text-pretty">{latest.summary}</p>
+        </ContainedBlock>
       )}
 
       {latest?.rationale && (stage === 'completed' || latest.status === 'completed' || latest.status === 'failed') && (
-        <details className="mt-1.5 text-xs text-fg-muted">
-          <summary className="cursor-pointer hover:text-fg-secondary">Agent rationale</summary>
-          <p className="mt-1 whitespace-pre-wrap text-fg-secondary">{latest.rationale}</p>
+        <details className="mt-1.5 rounded-md border border-edge-subtle/60 bg-surface-overlay/20 px-2.5 py-2 text-xs text-fg-muted">
+          <summary className="cursor-pointer text-3xs font-medium uppercase tracking-wider text-fg-faint hover:text-fg-secondary">
+            Agent rationale
+          </summary>
+          <p className="mt-1.5 whitespace-pre-wrap text-fg-secondary leading-relaxed">{latest.rationale}</p>
         </details>
       )}
 
       {latest?.files_changed && latest.files_changed.length > 0 && (
-        <div className="mt-1.5 text-2xs text-fg-muted">
-          <span className="text-fg-faint">Files:</span>{' '}
-          <span className="font-mono">
-            {latest.files_changed.slice(0, 3).join(', ')}
-            {latest.files_changed.length > 3 && ` +${latest.files_changed.length - 3} more`}
-          </span>
-          {latest.lines_changed != null && <span className="text-fg-faint"> · {latest.lines_changed} lines</span>}
+        <div className="mt-1.5">
+          <div className="mb-1 text-3xs font-medium uppercase tracking-wider text-fg-faint">Files touched</div>
+          <div className="flex flex-wrap gap-1">
+            {latest.files_changed.slice(0, 6).map((file) => (
+              <code
+                key={file}
+                className="inline-flex max-w-full truncate rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-3xs text-fg-secondary"
+                title={file}
+              >
+                {file}
+              </code>
+            ))}
+            {latest.files_changed.length > 6 && (
+              <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/30 px-1.5 py-0.5 text-3xs text-fg-faint">
+                +{latest.files_changed.length - 6} more
+              </span>
+            )}
+            {latest.lines_changed != null && (
+              <span className="inline-flex items-center rounded-sm border border-brand/20 bg-brand/8 px-1.5 py-0.5 text-3xs font-mono tabular-nums text-brand">
+                {latest.lines_changed} lines
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+      <ActionPillRow className="mt-2">
         {(dispatchState.prUrl ?? latest?.pr_url) && (
-          <a
-            href={dispatchState.prUrl ?? latest?.pr_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-accent hover:text-accent-hover underline"
-          >
-            View PR{latest?.pr_number ? ` #${latest.pr_number}` : ''}
-          </a>
+          <ActionPill href={dispatchState.prUrl ?? latest?.pr_url} tone="brand">
+            View PR{latest?.pr_number ? ` #${latest.pr_number}` : ''} ↗
+          </ActionPill>
         )}
         {traceUrl && (
-          <a
-            href={traceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-fg-muted hover:text-accent underline-offset-2 hover:underline"
-            title="Inspect this fix's LLM call in Langfuse"
-          >
-            Langfuse trace
-          </a>
+          <ActionPill href={traceUrl} tone="neutral">
+            Langfuse trace ↗
+          </ActionPill>
         )}
         {latest?.check_run_conclusion && (
-          <span className={`text-2xs font-mono ${latest.check_run_conclusion === 'success' ? 'text-ok' : 'text-danger'}`}>
+          <ActionPill tone={latest.check_run_conclusion === 'success' ? 'ok' : 'danger'}>
             CI: {latest.check_run_conclusion}
-          </span>
+          </ActionPill>
         )}
         {latest?.review_passed === false && (
-          <span className="text-2xs text-warning">⚠ Agent flagged for extra review</span>
+          <ActionPill tone="warn">Extra review flagged</ActionPill>
         )}
-      </div>
+      </ActionPillRow>
 
       {latest?.error && stage !== 'failed' && (
-        <p className="text-2xs text-danger mt-1 font-mono">{latest.error}</p>
+        <ContainedBlock tone="warn" label="Attempt error" className="mt-1.5">
+          <p className="font-mono text-2xs text-danger">{latest.error}</p>
+        </ContainedBlock>
       )}
     </div>
   )

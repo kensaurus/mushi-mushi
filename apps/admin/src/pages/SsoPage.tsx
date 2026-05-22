@@ -32,6 +32,12 @@ import {
 } from '../lib/statTooltips/sso'
 import { ssoLinks } from '../lib/statCardLinks'
 import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import {
   PageHeader,
   PageHelp,
   Card,
@@ -244,13 +250,13 @@ export function SsoPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Single sign-on'}
-          description={
-            copy?.description ??
-            'Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'Single sign-on'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -271,10 +277,6 @@ export function SsoPage() {
     <div className="space-y-4">
       <PageHeader
         title={copy?.title ?? 'Single sign-on'}
-        description={
-          copy?.description ??
-          'Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default.'
-        }
         projectScope={stats.projectName ?? undefined}
       >
         {stats.ssoEntitlement ? (
@@ -283,6 +285,13 @@ export function SsoPage() {
           <Badge className="bg-warn/10 text-warn">{stats.planDisplayName} — upgrade for SSO</Badge>
         )}
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default.'}
+        </p>
+      </ContainedBlock>
 
       <SsoStatusBanner stats={stats} onTab={setActiveTab} />
 
@@ -295,7 +304,9 @@ export function SsoPage() {
       />
 
       <Section title="Identity snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Registered"
@@ -332,6 +343,35 @@ export function SsoPage() {
         </div>
       </Section>
 
+      {stats.ssoEntitlement && (stats.failedCount > 0 || stats.pendingCount > 0 || stats.manualRequiredCount > 0) && activeTab === 'overview' && (
+        <Card
+          className={`space-y-3 p-4 ${
+            stats.failedCount > 0 ? 'border-danger/30 bg-danger/5' : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <SignalChip tone={stats.failedCount > 0 ? 'danger' : 'warn'}>
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="warn">
+            <p className="text-xs font-medium leading-snug text-fg">
+              {stats.failedCount > 0
+                ? `${stats.failedCount} provider registration${stats.failedCount === 1 ? '' : 's'} failed${stats.latestFailure ? ` — ${stats.latestFailure}` : ''}.`
+                : stats.manualRequiredCount > 0
+                  ? `${stats.manualRequiredCount} provider${stats.manualRequiredCount === 1 ? '' : 's'} need manual IdP steps.`
+                  : `${stats.pendingCount} registration${stats.pendingCount === 1 ? '' : 's'} still pending.`}
+            </p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill onClick={() => setActiveTab('providers')} tone="brand">
+              Review providers →
+            </ActionPill>
+            <ActionPill onClick={() => setActiveTab('setup')} tone="neutral">
+              Open setup
+            </ActionPill>
+          </ActionPillRow>
+        </Card>
+      )}
+
       <PageHelp
         title={copy?.help?.title ?? 'About SSO'}
         whatIsIt={
@@ -363,13 +403,13 @@ export function SsoPage() {
         {activeTab === 'overview' && (
           <div className="space-y-3">
             {stats.defaultAcsUrl && stats.ssoEntitlement && (
-              <Card className="p-3 space-y-2 border border-brand/20 bg-brand/5">
-                <h3 className="text-xs font-medium text-brand uppercase tracking-wider">
-                  Default SAML ACS URL
-                </h3>
-                <p className="text-2xs text-fg-muted">
-                  Paste this Reply URL into your IdP (Okta, Azure AD, etc.) when configuring the SAML app for {stats.projectName}.
-                </p>
+              <Card className="space-y-3 p-3 border border-brand/20 bg-brand/5">
+                <SignalChip tone="brand">Default SAML ACS URL</SignalChip>
+                <ContainedBlock tone="muted">
+                  <p className="text-2xs leading-relaxed text-fg-muted">
+                    Paste this Reply URL into your IdP (Okta, Azure AD, etc.) when configuring the SAML app for {stats.projectName}.
+                  </p>
+                </ContainedBlock>
                 <CodeValue value={stats.defaultAcsUrl} tone="url" />
               </Card>
             )}
@@ -385,19 +425,21 @@ export function SsoPage() {
               />
             )}
             {stats.registeredCount > 0 && (
-              <Card className="p-3 space-y-2">
-                <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">
-                  Quick checklist
-                </h3>
-                <ul className="text-2xs text-fg-secondary space-y-1 list-disc pl-4">
-                  <li>ACS URL pasted into your IdP app configuration</li>
-                  <li>Email domains listed on the provider match your team&apos;s addresses</li>
-                  <li>Test login with a non-admin user before enforcing SSO-only</li>
-                  <li>Keep a break-glass admin password until SSO is verified</li>
-                </ul>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('providers')}>
-                  View all providers
-                </Btn>
+              <Card className="space-y-3 p-3">
+                <SignalChip tone="ok">Quick checklist</SignalChip>
+                <ContainedBlock tone="muted">
+                  <ul className="text-2xs text-fg-secondary space-y-1 list-disc pl-4">
+                    <li>ACS URL pasted into your IdP app configuration</li>
+                    <li>Email domains listed on the provider match your team&apos;s addresses</li>
+                    <li>Test login with a non-admin user before enforcing SSO-only</li>
+                    <li>Keep a break-glass admin password until SSO is verified</li>
+                  </ul>
+                </ContainedBlock>
+                <ActionPillRow>
+                  <ActionPill onClick={() => setActiveTab('providers')} tone="brand">
+                    View all providers →
+                  </ActionPill>
+                </ActionPillRow>
               </Card>
             )}
           </div>
@@ -440,12 +482,9 @@ export function SsoPage() {
                         <td className="py-1.5 px-3 text-fg-secondary">
                           <div>{c.provider_name}</div>
                           {c.registration_error && (
-                            <div
-                              className="text-2xs text-danger mt-0.5 break-words max-w-xs"
-                              title={c.registration_error}
-                            >
-                              {c.registration_error}
-                            </div>
+                            <ContainedBlock tone="warn" className="mt-1 max-w-xs">
+                              <p className="text-2xs text-danger break-words">{c.registration_error}</p>
+                            </ContainedBlock>
                           )}
                           {c.acs_url && c.registration_status === 'registered' && (
                             <div className="mt-1">
@@ -456,8 +495,18 @@ export function SsoPage() {
                         <td className="py-1.5 px-3 text-fg-muted uppercase font-mono">
                           {c.provider_type}
                         </td>
-                        <td className="py-1.5 px-3 text-fg-muted font-mono text-2xs">
-                          {c.domains && c.domains.length > 0 ? c.domains.join(', ') : '—'}
+                        <td className="py-1.5 px-3">
+                          {c.domains && c.domains.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {c.domains.map((d) => (
+                                <SignalChip key={d} tone="info" className="font-mono">
+                                  {d}
+                                </SignalChip>
+                              ))}
+                            </div>
+                          ) : (
+                            <SignalChip tone="neutral">—</SignalChip>
+                          )}
                         </td>
                         <td className="py-1.5 px-3">
                           <Badge className={REGISTRATION_TONE[c.registration_status]}>
@@ -537,11 +586,13 @@ export function SsoPage() {
               <Btn onClick={() => void addProvider()} disabled={submitting} loading={submitting}>
                 Add Provider
               </Btn>
-              <p className="text-2xs text-fg-faint">
-                {form.providerType === 'saml'
-                  ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID on Overview for you to paste into your IdP.'
-                  : 'OIDC providers are stored for audit but Mushi cannot auto-register them — Supabase GoTrue does not yet expose an OIDC admin endpoint. For self-service today, use SAML 2.0.'}
-              </p>
+              <ContainedBlock tone="muted">
+                <p className="text-2xs leading-relaxed text-fg-muted">
+                  {form.providerType === 'saml'
+                    ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID on Overview for you to paste into your IdP.'
+                    : 'OIDC providers are stored for audit but Mushi cannot auto-register them — Supabase GoTrue does not yet expose an OIDC admin endpoint. For self-service today, use SAML 2.0.'}
+                </p>
+              </ContainedBlock>
             </Card>
 
             {lastRegister?.status === 'registered' && (
