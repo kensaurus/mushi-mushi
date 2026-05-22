@@ -94,10 +94,13 @@ playwright-report/
 session-artifacts/
 screenshots/
 !docs/screenshots/
+!apps/admin/public/screenshots/
+!apps/docs/public/screenshots/
 *.png
 !docs/**/*.png
 !apps/docs/public/**/*.png
 !apps/admin/public/**/*.png
+!apps/admin/public/**/*.gif
 !packages/**/assets/**/*.png
 
 # --- Windows shell artefacts -------------------------------------------------
