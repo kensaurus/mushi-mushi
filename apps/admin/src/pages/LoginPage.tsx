@@ -9,6 +9,7 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Input, Btn, Tooltip } from '../components/ui'
+import { ContainedBlock, InlineProof, SignalChip, ActionPill } from '../components/report-detail/ReportSurface'
 import { isCloudMode } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import {
@@ -193,7 +194,7 @@ export function LoginPage() {
           <h1 className="text-xl font-bold">
             <span className="text-brand">mushi</span>mushi
           </h1>
-          <p className="text-2xs text-fg-faint mt-0.5">admin console</p>
+          <SignalChip tone="neutral" className="mt-1.5">admin console</SignalChip>
         </div>
 
         {/* Success: signup confirmation */}
@@ -207,11 +208,13 @@ export function LoginPage() {
               </span>
             </div>
             <h2 className="text-sm font-semibold text-center">Check your email</h2>
-            <p className="text-xs text-fg-muted text-center">
-              We sent a confirmation link to <strong className="text-fg">{email}</strong>.
-              Click the link to activate your account, then come back here to sign in.
-            </p>
-            <p className="text-2xs text-fg-faint text-center">
+            <ContainedBlock tone="muted">
+              <p className="text-xs text-center text-fg-muted">
+                We sent a confirmation link to <strong className="text-fg">{email}</strong>.
+                Click the link to activate your account, then come back here to sign in.
+              </p>
+            </ContainedBlock>
+            <InlineProof className="text-center">
               Didn't receive it? Check your spam folder or{' '}
               <button
                 type="button"
@@ -220,7 +223,7 @@ export function LoginPage() {
               >
                 try again
               </button>.
-            </p>
+            </InlineProof>
             <div className="pt-1">
               <Btn
                 type="button"
@@ -244,10 +247,12 @@ export function LoginPage() {
               </span>
             </div>
             <h2 className="text-sm font-semibold text-center">Reset link sent</h2>
-            <p className="text-xs text-fg-muted text-center">
-              If an account exists for <strong className="text-fg">{email}</strong>,
-              you'll receive a password reset link shortly.
-            </p>
+            <ContainedBlock tone="muted">
+              <p className="text-xs text-center text-fg-muted">
+                If an account exists for <strong className="text-fg">{email}</strong>,
+                you'll receive a password reset link shortly.
+              </p>
+            </ContainedBlock>
             <div className="pt-1">
               <Btn
                 type="button"
@@ -268,19 +273,19 @@ export function LoginPage() {
                 @
               </span>
             </div>
-            <div className="space-y-1 text-center">
-              <h2 className="text-sm font-semibold">Check your inbox</h2>
-              <p className="text-xs text-fg-muted">
+            <h2 className="text-sm font-semibold text-center">Check your inbox</h2>
+            <ContainedBlock tone="info">
+              <p className="text-2xs leading-relaxed text-fg-muted">
                 We sent a sign-in link to <strong className="text-fg">{email}</strong>. Keep this tab open, then follow
                 the email link to land in your dashboard.
               </p>
-            </div>
-            <div className="rounded-sm border border-edge-subtle bg-surface-raised/50 px-3 py-2">
-              <p className="text-2xs text-fg-faint">
+            </ContainedBlock>
+            <ContainedBlock tone="muted">
+              <p className="text-2xs leading-relaxed text-fg-muted">
                 Tip: if the link opens a new tab, every other signed-out tab will sync automatically once the session is
                 active.
               </p>
-            </div>
+            </ContainedBlock>
             <div className="flex gap-2">
               <Btn
                 type="button"
@@ -304,20 +309,37 @@ export function LoginPage() {
         {!success && (
           <form onSubmit={handleSubmit} className="space-y-3 bg-surface border border-edge rounded-md p-5">
             {!cloud && (
-              <div className="flex items-center justify-between pb-2 border-b border-edge-subtle">
+              <ContainedBlock tone="muted" className="flex items-center justify-between gap-2">
                 <Tooltip content={`Supabase: ${supabaseHost}`} side="bottom">
-                  <span className="text-2xs text-fg-faint truncate max-w-[200px] cursor-default">
+                  <InlineProof className="truncate max-w-[200px] cursor-default border-0 bg-transparent px-0 py-0">
                     {supabaseHost}
-                  </span>
+                  </InlineProof>
                 </Tooltip>
                 <Tooltip content={healthLabel} side="bottom">
-                  <span className="flex items-center gap-1.5 text-2xs text-fg-faint cursor-default">
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${healthDot}`} />
+                  <SignalChip
+                    tone={health === 'ok' ? 'ok' : health === 'error' ? 'danger' : health === 'unknown' ? 'warn' : 'neutral'}
+                    className="cursor-default"
+                  >
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${healthDot}`} />
                     {healthLabel}
-                  </span>
+                  </SignalChip>
                 </Tooltip>
-              </div>
+              </ContainedBlock>
             )}
+
+            <ContainedBlock tone="muted">
+              <p className="text-xs text-center text-fg-muted">
+                {mode === 'forgot'
+                  ? 'Enter your email to receive a password reset link'
+                  : mode === 'magic'
+                    ? 'Email yourself a secure one-click sign-in link'
+                  : mode === 'signup'
+                    ? 'Create your account'
+                    : cloud
+                      ? 'Sign in to your account'
+                      : 'Sign in with your Supabase project account'}
+              </p>
+            </ContainedBlock>
 
             {mode === 'login' || mode === 'magic' ? (
               <div className="grid grid-cols-2 rounded-md border border-edge-subtle bg-surface-root/40 p-1">
@@ -347,9 +369,9 @@ export function LoginPage() {
               >
                 <span>
                   <span className="block font-semibold">Continue with passkey</span>
-                  <span className="block text-2xs text-fg-muted">
+                  <InlineProof className="mt-0.5 border-0 bg-transparent px-0 py-0 text-2xs">
                     {passkeyAvailable ? 'Touch ID, Windows Hello, or security key' : 'Use email link or password on this browser'}
-                  </span>
+                  </InlineProof>
                 </span>
                 <span className="text-brand motion-safe:transition-transform group-hover:translate-x-0.5" aria-hidden="true">
                   -&gt;
@@ -357,23 +379,11 @@ export function LoginPage() {
               </button>
             )}
 
-            <p className="text-xs text-fg-muted text-center">
-              {mode === 'forgot'
-                ? 'Enter your email to receive a password reset link'
-                : mode === 'magic'
-                  ? 'Email yourself a secure one-click sign-in link'
-                : mode === 'signup'
-                  ? 'Create your account'
-                  : cloud
-                    ? 'Sign in to your account'
-                    : 'Sign in with your Supabase project account'}
-            </p>
-
             {mode === 'login' && rememberedEmail && (
-              <div className="rounded-sm border border-edge-subtle bg-surface-raised/40 px-3 py-2">
+              <ContainedBlock tone="muted">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-2xs uppercase tracking-wider text-fg-faint">Last used email</p>
+                    <SignalChip tone="neutral" className="mb-1.5">Last used email</SignalChip>
                     <p className="truncate text-xs font-medium text-fg-secondary">{rememberedEmail}</p>
                   </div>
                   <button
@@ -384,7 +394,7 @@ export function LoginPage() {
                     Not you?
                   </button>
                 </div>
-              </div>
+              </ContainedBlock>
             )}
 
             <Input
@@ -415,31 +425,33 @@ export function LoginPage() {
             )}
 
             {mode !== 'signup' && (
-              <label className="inline-flex items-center gap-2 text-2xs text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={rememberEmail}
-                  onChange={(e) => setRememberEmail(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-                />
-                Remember this email on this device
-              </label>
+              <ContainedBlock tone="muted" className="py-2">
+                <label className="inline-flex items-center gap-2 text-2xs text-fg-secondary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberEmail}
+                    onChange={(e) => setRememberEmail(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                  />
+                  Remember this email on this device
+                </label>
+              </ContainedBlock>
             )}
 
             {error && (
-              <div className="rounded-sm border border-danger/30 bg-danger-muted/10 px-3 py-2">
+              <ContainedBlock tone="warn">
                 <p className="text-xs text-danger">{error}</p>
-              </div>
+              </ContainedBlock>
             )}
 
             {!cloud && health === 'error' && !error && (
-              <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
+              <ContainedBlock tone="warn">
                 <p className="text-xs text-warn">
                   Cannot connect to <code className="text-2xs bg-surface-raised px-1 rounded">{supabaseHost}</code>.
                   Verify your <code className="text-2xs bg-surface-raised px-1 rounded">VITE_SUPABASE_URL</code> and
                   make sure the Supabase project is running.
                 </p>
-              </div>
+              </ContainedBlock>
             )}
 
             <Btn type="submit" disabled={loading} className="w-full justify-center">
@@ -455,66 +467,66 @@ export function LoginPage() {
             </Btn>
 
             {mode === 'login' && (
-              <button
-                type="button"
-                onClick={() => switchMode('forgot')}
-                className="block w-full text-center text-2xs text-fg-faint hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
-              >
-                Forgot your password?
-              </button>
+              <div className="flex justify-center">
+                <ActionPill onClick={() => switchMode('forgot')}>Forgot your password?</ActionPill>
+              </div>
             )}
 
-            <p className="text-center text-2xs text-fg-faint">
-              {mode === 'forgot' ? (
-                <>
-                  Remember your password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                    Sign in
-                  </button>
-                </>
-              ) : mode === 'magic' ? (
-                <>
-                  Prefer a password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                    Use password
-                  </button>
-                </>
-              ) : mode === 'login' ? (
-                <>
-                  Don't have an account?{' '}
-                  <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                    Sign up
-                  </button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                    Sign in
-                  </button>
-                </>
-              )}
-            </p>
+            <ContainedBlock tone="muted" className="text-center">
+              <p className="text-2xs text-fg-secondary">
+                {mode === 'forgot' ? (
+                  <>
+                    Remember your password?{' '}
+                    <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                      Sign in
+                    </button>
+                  </>
+                ) : mode === 'magic' ? (
+                  <>
+                    Prefer a password?{' '}
+                    <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                      Use password
+                    </button>
+                  </>
+                ) : mode === 'login' ? (
+                  <>
+                    Don't have an account?{' '}
+                    <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                      Sign up
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{' '}
+                    <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                      Sign in
+                    </button>
+                  </>
+                )}
+              </p>
+            </ContainedBlock>
 
             {mode === 'signup' && (
-              <p className="text-center text-2xs text-fg-faint">
-                {cloud
-                  ? 'Create a free account to get started with Mushi Mushi.'
-                  : (
-                    <>
-                      This creates an account on your Supabase project.
-                      You can also create users from the{' '}
-                      <a
-                        href="https://supabase.com/dashboard"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-brand hover:text-brand-hover underline"
-                      >
-                        Supabase dashboard
-                      </a>.
-                    </>
-                  )}
-              </p>
+              <ContainedBlock tone="muted" className="text-center">
+                <p className="text-2xs text-fg-secondary">
+                  {cloud
+                    ? 'Create a free account to get started with Mushi Mushi.'
+                    : (
+                      <>
+                        This creates an account on your Supabase project.
+                        You can also create users from the{' '}
+                        <a
+                          href="https://supabase.com/dashboard"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand hover:text-brand-hover underline"
+                        >
+                          Supabase dashboard
+                        </a>.
+                      </>
+                    )}
+                </p>
+              </ContainedBlock>
             )}
           </form>
         )}

@@ -13,6 +13,12 @@ import { createNotification, buildNotificationMessage } from '../_shared/notific
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { dbError } from './shared.ts';
 import { childTraceparent } from '../_shared/trace.ts';
+// SEC (Wave 5 Gap-A): PII is now scrubbed at ingest so the at-rest copy in
+// Postgres is already redacted. Previously scrubReport() only ran in
+// classify-report before the LLM call — meaning raw emails, IPs, JWTs, and
+// API keys were stored unmasked and visible to MCP mcp:read clients and any
+// future data export. Scrubbing at insert time closes that gap.
+import { scrubPii } from '../_shared/pii-scrubber.ts';
 
 const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
 const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
@@ -306,17 +312,75 @@ export async function ingestReport(
   const reportTraceparent = childTraceparent(inboundTraceparent)
   enrichedMetadata.traceparent = reportTraceparent
 
+  // SEC (Wave 5 Gap-G): validate screenshot_url at ingest so hostile URLs never
+  // reach the DB. The allowlist mirrors the same logic in classify-report
+  // (isAllowedScreenshotUrl) — both gates must agree; the ingest gate is the
+  // primary defence, classify-report is defence-in-depth.
+  const safeScreenshotUrl = screenshotUrl ? validateScreenshotUrlIngest(screenshotUrl) : null;
+
+  // SEC (Wave 5 Gap-A): scrub PII from text fields before writing to Postgres.
+  // This ensures the at-rest copy is already redacted — not just the pre-LLM copy.
+  const safeDescription = scrubPii(sanitizeText(report.description) ?? '');
+  const safeUserIntent = scrubPii(sanitizeText(report.userIntent) ?? '') || null;
+  const safeConsoleLogs = Array.isArray(report.consoleLogs)
+    ? report.consoleLogs.map((entry: Record<string, unknown>) => ({
+        ...entry,
+        message: typeof entry.message === 'string' ? scrubPii(entry.message) : entry.message,
+      }))
+    : report.consoleLogs;
+  const safeNetworkLogs = Array.isArray(report.networkLogs)
+    ? report.networkLogs.map((entry: Record<string, unknown>) => {
+        const scrubHeaders = (raw: unknown): unknown => {
+          if (!raw || typeof raw !== 'object') return raw;
+          const out: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+            // Always redact Authorization / Cookie headers — they carry bearer tokens.
+            const lower = k.toLowerCase();
+            if (lower === 'authorization' || lower === 'cookie' || lower === 'set-cookie') {
+              out[k] = '[redacted]';
+            } else {
+              out[k] = typeof v === 'string' ? scrubPii(v) : v;
+            }
+          }
+          return out;
+        };
+        if (typeof entry.url !== 'string') return {
+          ...entry,
+          requestHeaders: scrubHeaders(entry.requestHeaders),
+          responseHeaders: scrubHeaders(entry.responseHeaders),
+        };
+        try {
+          const u = new URL(entry.url);
+          u.searchParams.forEach((_v: string, k: string) => {
+            u.searchParams.set(k, scrubPii(u.searchParams.get(k)!));
+          });
+          return {
+            ...entry,
+            url: scrubPii(u.toString()),
+            requestHeaders: scrubHeaders(entry.requestHeaders),
+            responseHeaders: scrubHeaders(entry.responseHeaders),
+          };
+        } catch {
+          return {
+            ...entry,
+            requestHeaders: scrubHeaders(entry.requestHeaders),
+            responseHeaders: scrubHeaders(entry.responseHeaders),
+          };
+        }
+      })
+    : report.networkLogs;
+
   const { error: insertError } = await db.from('reports').insert({
     id: reportId,
     project_id: projectId,
-    description: sanitizeText(report.description) ?? '',
+    description: safeDescription,
     user_category: report.category,
-    user_intent: sanitizeText(report.userIntent),
-    screenshot_url: screenshotUrl,
+    user_intent: safeUserIntent,
+    screenshot_url: safeScreenshotUrl,
     screenshot_path: screenshotPath,
     environment: report.environment ?? {},
-    console_logs: report.consoleLogs,
-    network_logs: report.networkLogs,
+    console_logs: safeConsoleLogs,
+    network_logs: safeNetworkLogs,
     performance_metrics: report.performanceMetrics,
     repro_timeline: report.timeline,
     selected_element: report.selectedElement,
@@ -568,4 +632,66 @@ export async function invokeFixWorker(dispatchId: string): Promise<void> {
   }).catch(() => {
     /* worker is fire-and-forget */
   });
+}
+
+/**
+ * SEC (Wave 5 Gap-G): validate a screenshot URL at ingest time so hostile URLs
+ * never reach Postgres. Returns null when the URL is invalid or blocked.
+ *
+ * This mirrors the isAllowedScreenshotUrl() check in classify-report (which
+ * guards the Anthropic vision call). Both gates must agree; this one is the
+ * primary defence — classify-report is defence-in-depth.
+ *
+ * Allowlist defaults to *.supabase.co / *.supabase.in / *.supabase.red.
+ * Extendable via MUSHI_SCREENSHOT_HOST_ALLOWLIST (comma-separated suffixes).
+ */
+function validateScreenshotUrlIngest(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    log.warn('screenshot_url rejected at ingest: invalid URL', { raw: raw.slice(0, 80) });
+    return null;
+  }
+
+  if (url.protocol !== 'https:') {
+    log.warn('screenshot_url rejected at ingest: non-https scheme', { protocol: url.protocol });
+    return null;
+  }
+
+  const host = url.hostname.toLowerCase();
+  // Block SSRF targets / private ranges (IPv4 + IPv6).
+  if (
+    host === 'localhost' ||
+    /^127\./.test(host) ||          // 127.0.0.0/8 loopback
+    host === '::1' ||               // IPv6 loopback
+    host.startsWith('::ffff:') ||   // IPv4-mapped IPv6
+    host === '0.0.0.0' ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host.startsWith('169.254.') ||  // link-local IPv4
+    /^fe80:/i.test(host) ||         // link-local IPv6
+    /^f[cd]/i.test(host) ||         // ULA fc00::/7 (fd00::, fc00::)
+    host.startsWith('10.') ||
+    host.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  ) {
+    log.warn('screenshot_url rejected at ingest: private/metadata host', { host });
+    return null;
+  }
+
+  const defaultAllow = ['.supabase.co', '.supabase.in', '.supabase.red'];
+  const envExtras = (Deno.env.get('MUSHI_SCREENSHOT_HOST_ALLOWLIST') ?? '')
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+  const allowlist = [...defaultAllow, ...envExtras];
+
+  const allowed = allowlist.some((suffix: string) => host === suffix.replace(/^\./, '') || host.endsWith(suffix));
+  if (!allowed) {
+    log.warn('screenshot_url rejected at ingest: host not in allowlist', { host });
+    return null;
+  }
+
+  return raw;
 }

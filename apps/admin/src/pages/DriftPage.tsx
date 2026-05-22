@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -29,6 +29,13 @@ import {
   FreshnessPill,
   RecommendedAction,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { DriftStatusBanner } from '../components/drift/DriftStatusBanner'
 import {
   EMPTY_DRIFT_STATS,
@@ -285,10 +292,6 @@ export function DriftPage() {
       <PageHeader
         title={copy?.title ?? 'Drift'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'
-        }
         contextChip={<PdcaContextHint stage="check" />}
       >
         {!ux.hideOverviewChrome && (
@@ -327,6 +330,13 @@ export function DriftPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'}
+        </p>
+      </ContainedBlock>
+
       <DriftStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -350,7 +360,9 @@ export function DriftPage() {
         title={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.openFindings ?? 'Open findings'} value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} tooltip={openFindingsTooltip(stats)} detail={openFindingsDetail(stats)} to={driftLinks.openFindings} />
           <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalOpenTooltip(stats)} detail={criticalOpenDetail()} to={driftLinks.critical} />
@@ -364,7 +376,7 @@ export function DriftPage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'critical_findings'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'never_scanned'
@@ -372,12 +384,25 @@ export function DriftPage() {
                 : 'border-warn/30 bg-warn/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'critical_findings'
+                ? 'danger'
+                : stats.topPriority === 'never_scanned'
+                  ? 'brand'
+                  : 'warn'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'critical_findings' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -486,13 +511,15 @@ function FindingsTab({
   return (
     <div className="space-y-4">
       {Object.keys(bySurface).length > 1 && (
-        <div className="flex flex-wrap gap-2 text-xs text-fg-muted">
-          {Object.entries(bySurface).map(([s, n]) => (
-            <span key={s} className="rounded border border-edge-subtle px-2 py-0.5 font-mono">
-              {s}: {n}
-            </span>
-          ))}
-        </div>
+        <ContainedBlock tone="muted" label="By surface">
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(bySurface).map(([s, n]) => (
+              <SignalChip key={s} tone="neutral" className="font-mono">
+                {s}: {n}
+              </SignalChip>
+            ))}
+          </div>
+        </ContainedBlock>
       )}
 
       <Card className="overflow-hidden">
@@ -609,15 +636,19 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
 
   return (
     <Card className="max-w-lg p-6 space-y-4">
-      <div className="space-y-1">
+      <div className="space-y-2">
         <h2 className="text-base font-semibold text-fg-primary">Manual drift scan</h2>
-        <p className="text-sm text-fg-muted">
-          Builds a fresh contract snapshot then walks routes with Thompson-sampled priority.
-          Findings are deduplicated against the last 24 h.
-        </p>
+        <ContainedBlock tone="muted">
+          <p className="text-sm leading-relaxed text-fg-muted">
+            Builds a fresh contract snapshot then walks routes with Thompson-sampled priority.
+            Findings are deduplicated against the last 24 h.
+          </p>
+        </ContainedBlock>
       </div>
       {!projectId && (
-        <p className="text-xs text-warn">Select a project from the switcher before running a scan.</p>
+        <ContainedBlock tone="warn">
+          <p className="text-xs text-warn">Select a project from the switcher before running a scan.</p>
+        </ContainedBlock>
       )}
       <label className="block space-y-1">
         <span className="text-sm font-medium text-fg-primary">Max paths to walk</span>
@@ -634,15 +665,17 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
         {loading ? 'Scanning…' : 'Run scan'}
       </Btn>
       {result && (
-        <div className="rounded-md border border-ok/30 bg-ok/5 px-4 py-3 text-sm">
-          <p className="font-medium text-ok">Scan complete</p>
-          <p className="text-fg-muted">
-            {result.findings_found} findings discovered · {result.findings_inserted} new stored
-          </p>
-          <p className="text-xs text-fg-muted font-mono mt-1">
-            snapshot: {result.snapshot_id?.slice(0, 8)}…
-          </p>
-        </div>
+        <ContainedBlock tone="info" label="Scan complete">
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              <SignalChip tone="ok">{result.findings_found} discovered</SignalChip>
+              <SignalChip tone="brand">{result.findings_inserted} new stored</SignalChip>
+            </div>
+            <InlineProof className="font-mono">
+              snapshot: {result.snapshot_id?.slice(0, 8)}…
+            </InlineProof>
+          </div>
+        </ContainedBlock>
       )}
     </Card>
   )

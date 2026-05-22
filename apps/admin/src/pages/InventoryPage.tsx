@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
@@ -23,6 +23,14 @@ import {
   FreshnessPill,
   Badge,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { PageHero } from '../components/PageHero'
 import { PageActionBar } from '../components/PageActionBar'
 import { SetupNudge } from '../components/SetupNudge'
@@ -476,7 +484,10 @@ export function InventoryPage() {
   if (!entLoading && !has('inventory_v2')) {
     return (
       <div className="space-y-4">
-        <PageHeader title="User stories & inventory" projectScope={null} description="Maps specs to verified actions." />
+        <PageHeader title="User stories & inventory" projectScope={null} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">Maps specs to verified actions.</p>
+        </ContainedBlock>
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>
     )
@@ -512,12 +523,6 @@ export function InventoryPage() {
       <PageHeader
         title={copy?.title ?? 'User stories · Inventory'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          (stats.hasInventory
-            ? `${verified}/${total} verified — ${activeTabMeta.label} tab`
-            : 'Banner + INVENTORY SNAPSHOT — start on Overview, then Discovery or Yaml to ingest.')
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -557,6 +562,15 @@ export function InventoryPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            (stats.hasInventory
+              ? `${verified}/${total} verified — ${activeTabMeta.label} tab`
+              : 'Banner + INVENTORY SNAPSHOT — start on Overview, then Discovery or Yaml to ingest.')}
+        </p>
+      </ContainedBlock>
+
       <InventoryStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -580,7 +594,9 @@ export function InventoryPage() {
         title={copy?.sections?.snapshot ?? 'INVENTORY SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.verified ?? 'Verified'}
@@ -654,7 +670,7 @@ export function InventoryPage() {
 
           {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
             <Card
-              className={`p-4 ${
+              className={`space-y-3 p-4 ${
                 stats.topPriority === 'regressed'
                   ? 'border-danger/30 bg-danger/5'
                   : stats.topPriority === 'open_findings'
@@ -662,18 +678,36 @@ export function InventoryPage() {
                     : 'border-brand/30 bg-brand/5'
               }`}
             >
-              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
-              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={stats.topPriorityTo}>
-                  <Btn size="sm" variant="primary">
-                    Take action →
-                  </Btn>
-                </Link>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('stories')}>
+              <SignalChip
+                tone={
+                  stats.topPriority === 'regressed'
+                    ? 'danger'
+                    : stats.topPriority === 'open_findings'
+                      ? 'warn'
+                      : 'brand'
+                }
+              >
+                Top priority
+              </SignalChip>
+              <ContainedBlock
+                tone={
+                  stats.topPriority === 'regressed'
+                    ? 'warn'
+                    : stats.topPriority === 'open_findings'
+                      ? 'info'
+                      : 'info'
+                }
+              >
+                <p className="text-sm font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+              </ContainedBlock>
+              <ActionPillRow>
+                <ActionPill to={stats.topPriorityTo} tone="brand">
+                  Take action →
+                </ActionPill>
+                <ActionPill onClick={() => setActiveTab('stories')} tone="neutral">
                   User stories
-                </Btn>
-              </div>
+                </ActionPill>
+              </ActionPillRow>
             </Card>
           ) : null}
 
@@ -717,16 +751,19 @@ export function InventoryPage() {
             />
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <Btn size="sm" variant="primary" onClick={() => setActiveTab(stats.hasInventory ? 'stories' : 'discovery')}>
+          <ActionPillRow>
+            <ActionPill
+              onClick={() => setActiveTab(stats.hasInventory ? 'stories' : 'discovery')}
+              tone="brand"
+            >
               {stats.hasInventory ? 'Open user stories →' : 'Start Discovery →'}
-            </Btn>
+            </ActionPill>
             {stats.hasInventory ? (
-              <Btn size="sm" variant="ghost" onClick={() => setActiveTab('gates')}>
+              <ActionPill onClick={() => setActiveTab('gates')} tone="neutral">
                 View gates
-              </Btn>
+              </ActionPill>
             ) : null}
-          </div>
+          </ActionPillRow>
           </>
           )}
         </>
@@ -751,11 +788,23 @@ export function InventoryPage() {
           <div className="grid gap-2 md:grid-cols-5" data-dav-anchor="inventory:verify">
             {gateCards.map((g) => {
               const latest = runs.find((r) => r.gate === g)
+              const statusTone =
+                latest?.status === 'pass'
+                  ? 'ok'
+                  : latest?.status === 'fail'
+                    ? 'danger'
+                    : 'neutral'
               return (
-                <Card key={g} className="p-3">
-                  <p className="text-2xs uppercase text-fg-faint">{g.replace(/_/g, ' ')}</p>
-                  <p className="text-sm font-semibold">{latest?.status ?? '—'}</p>
-                  <p className="text-2xs text-fg-muted">{latest?.findings_count ?? 0} findings</p>
+                <Card key={g} className="space-y-2 p-3">
+                  <SignalChip tone="neutral" className="uppercase">
+                    {g.replace(/_/g, ' ')}
+                  </SignalChip>
+                  <ContainedBlock tone={statusTone === 'danger' ? 'warn' : 'muted'}>
+                    <p className="text-sm font-semibold text-fg">{latest?.status ?? '—'}</p>
+                    <InlineProof className="mt-1.5">
+                      {latest?.findings_count ?? 0} findings
+                    </InlineProof>
+                  </ContainedBlock>
                 </Card>
               )
             })}
@@ -780,7 +829,10 @@ export function InventoryPage() {
       {activeTab === 'synthetic' && (
         <div className="grid gap-3 md:grid-cols-2">
           {synthActions.length === 0 ? (
-            <p className="text-xs text-fg-muted">Ingest inventory with user stories to list Action nodes for probes.</p>
+            <EmptySectionMessage
+              text="No Action nodes for synthetic probes yet."
+              hint="Ingest inventory with user stories — each Action node becomes a probe target on this tab."
+            />
           ) : (
             synthActions.slice(0, 16).map((a) => (
               <SyntheticPreview key={a.id} projectId={projectId} actionId={a.id} label={`${a.storyLabel} · ${a.label}`} />

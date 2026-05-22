@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Btn } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 
 // Failure categories the repair card handles. Each has a different label
 // and hint shown alongside the Retry button.
@@ -164,19 +165,23 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
                   Fix-worker failure{failures.length > 1 ? ` · ${failures.length} retryable failures` : ''} — <span className="font-normal">Do stage bottleneck</span>
                 </p>
                 {latest.failure_category && CATEGORY_HINT[latest.failure_category] && (
-                  <p className="mt-0.5 text-2xs text-amber-700 dark:text-amber-400 leading-snug">
-                    {CATEGORY_HINT[latest.failure_category]}
-                  </p>
+                  <ContainedBlock tone="warn" className="mt-1">
+                    <p className="text-2xs text-amber-700 dark:text-amber-400 leading-snug">
+                      {CATEGORY_HINT[latest.failure_category]}
+                    </p>
+                  </ContainedBlock>
                 )}
                 {latest.failure_diagnostic && (
-                  <p className="mt-0.5 text-2xs text-amber-700/70 dark:text-amber-400/70 leading-snug line-clamp-2 font-mono">
-                    {latest.failure_diagnostic.slice(0, 180)}
-                  </p>
+                  <ContainedBlock tone="warn" className="mt-1">
+                    <p className="text-2xs text-amber-700/70 dark:text-amber-400/70 leading-snug line-clamp-2 font-mono">
+                      {latest.failure_diagnostic.slice(0, 180)}
+                    </p>
+                  </ContainedBlock>
                 )}
                 {extraCount > 0 && (
-                  <p className="mt-0.5 text-3xs text-amber-600/80 dark:text-amber-500/80">
+                  <SignalChip tone="warn" className="mt-1">
                     +{extraCount} more failure{extraCount !== 1 ? 's' : ''} in the last 7 days
-                  </p>
+                  </SignalChip>
                 )}
               </div>
             </div>
@@ -248,14 +253,20 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
           {advisorsExpanded && (
             <ul className="mt-2 space-y-1.5">
               {advisors.map((a, i) => (
-                <li key={i} className="text-2xs text-blue-700 dark:text-blue-300">
-                  <span className={`inline-block mr-1 rounded-full px-1 py-0 text-3xs font-semibold ${
-                    a.level === 'ERROR'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                      : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
-                  }`}>{a.level ?? 'INFO'}</span>
-                  <strong>{a.title ?? a.name}</strong>
-                  {a.description && ` — ${a.description.slice(0, 140)}`}
+                <li key={i}>
+                  <ContainedBlock tone="info" className="border-blue-300/40 bg-blue-50/50 dark:border-blue-700/30 dark:bg-blue-950/20">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                      <SignalChip tone={a.level === 'ERROR' ? 'danger' : 'warn'}>
+                        {a.level ?? 'INFO'}
+                      </SignalChip>
+                      <strong className="text-2xs text-blue-800 dark:text-blue-300">{a.title ?? a.name}</strong>
+                    </div>
+                    {a.description && (
+                      <p className="text-2xs text-blue-700 dark:text-blue-300 leading-snug">
+                        {a.description.slice(0, 140)}
+                      </p>
+                    )}
+                  </ContainedBlock>
                 </li>
               ))}
             </ul>

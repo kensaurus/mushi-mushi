@@ -1,23 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import {
   Section,
-  Field,
   PageHelp,
   RecommendedAction,
   EmptyState,
   ErrorAlert,
   Btn,
-  Badge,
   Callout,
-  InfoHint,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
-import { statusLabel, severityLabel, CATEGORY_LABELS, CATEGORY_BADGE } from '../lib/tokens'
+import { statusLabel, severityLabel } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
@@ -32,6 +29,7 @@ import {
   IconHealth,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
+import { ActionPill } from '../components/report-detail/ReportSurface'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { CursorAgentLaunch } from '../components/report-detail/CursorAgentLaunch'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
@@ -43,13 +41,16 @@ import { recordVisit } from '../lib/recentEntities'
 import {
   ClassificationFields,
   ScreenshotHero,
+  EmptySectionMessage,
 } from '../components/report-detail/ReportClassification'
 import {
   PerformanceMetrics,
   ConsoleLogs,
   NetworkLogs,
   EnvironmentFields,
+  DeviceAndBuildPanel,
 } from '../components/report-detail/ReportEvidence'
+import { UserReportFields } from '../components/report-detail/ReportUserSection'
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
@@ -223,9 +224,9 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
   return (
     <div>
-      <Link to="/reports" className="text-xs text-fg-muted hover:text-fg-secondary mb-3 inline-flex items-center gap-1">
-        <span aria-hidden="true">&larr;</span> Back to reports
-      </Link>
+      <ActionPill to="/reports" tone="neutral" className="mb-3">
+        ← Back to reports
+      </ActionPill>
 
       <PageHelp
         title="About this report"
@@ -294,35 +295,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Section title="User report" icon={<IconUser />}>
-          {report.user_category && (
-            <div className="mb-2.5">
-              <div className="flex items-center gap-1 text-xs text-fg-muted font-medium">
-                User category
-                <InfoHint content="What the reporter said the issue was about, before LLM classification." />
-              </div>
-              <div className="mt-1">
-                <Badge
-                  className={CATEGORY_BADGE[report.user_category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
-                >
-                  {CATEGORY_LABELS[report.user_category] ?? report.user_category}
-                </Badge>
-              </div>
-            </div>
-          )}
-          <Field label="Description" value={report.description} longForm />
-          {report.user_intent && (
-            <Field
-              label="User intent"
-              value={report.user_intent}
-              longForm
-              tooltip="What the reporter said they were trying to do when the issue happened."
-            />
-          )}
-          {!report.screenshot_url && (
-            <p className="text-2xs text-fg-faint italic mt-2">
-              No screenshot was captured for this report.
-            </p>
-          )}
+          <UserReportFields report={report} />
         </Section>
 
         <Section title="LLM classification" icon={<IconSparkle />}>
@@ -335,7 +308,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
               </p>
             </Callout>
           ) : (
-            <div className="text-fg-muted text-xs italic">Pending classification — refresh in a few seconds.</div>
+            <EmptySectionMessage
+              text="Pending classification — refresh in a few seconds."
+              hint="The Stage-1 LLM classifier runs asynchronously after ingest."
+            />
           )}
         </Section>
 
@@ -399,51 +375,4 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
     parts.push(updates.severity ? `severity \u2192 ${severityLabel(updates.severity)}` : 'severity cleared')
   }
   return parts.length > 0 ? parts.join(' \u00b7 ') : null
-}
-
-/** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
-const PLATFORM_BADGE: Record<string, string> = {
-  ios:     'bg-info-muted text-info border-info/20',
-  android: 'bg-ok-muted text-ok border-ok/20',
-  web:     'bg-brand/15 text-brand border-brand/20',
-  macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
-  windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
-}
-
-/**
- * Device & Build panel — renders SDK package, version, app version, and
- * the resolved platform tag in a compact definition grid. Mirrors the
- * density of EnvironmentFields so the two panels feel like one surface.
- */
-function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
-  const platform = (report.environment?.platform ?? '').toLowerCase()
-  const rows: Array<{ label: string; value: string }> = [
-    report.sdk_package  ? { label: 'SDK',         value: report.sdk_package }  : null,
-    report.sdk_version  ? { label: 'SDK version',  value: report.sdk_version }  : null,
-    report.app_version  ? { label: 'App version',  value: report.app_version }  : null,
-    platform            ? { label: 'Platform',     value: platform }             : null,
-  ].filter(Boolean) as Array<{ label: string; value: string }>
-
-  if (rows.length === 0) return null
-
-  return (
-    <div className="space-y-1.5">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-center gap-3">
-          <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
-          {row.label === 'Platform' ? (
-            <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-            >
-              {row.value}
-            </span>
-          ) : (
-            <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
-              {row.value}
-            </code>
-          )}
-        </div>
-      ))}
-    </div>
-  )
 }

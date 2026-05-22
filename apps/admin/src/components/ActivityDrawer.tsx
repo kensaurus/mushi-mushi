@@ -44,6 +44,8 @@ import { useActiveProjectId } from './ProjectSwitcher'
 import { Drawer } from './Drawer'
 import { RelativeTime, Badge, EmptyState, Loading, DetailRows, type DetailRowItem, type DetailRowTone } from './ui'
 import { debugLog, debugWarn } from '../lib/debug'
+import { ActionPill, ActionPillRow, ContainedBlock, InlineProof, SignalChip } from './report-detail/ReportSurface'
+import { EmptySectionMessage } from './report-detail/ReportClassification'
 
 type EventKind =
   | 'dispatched'
@@ -390,12 +392,10 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
         {/* Connection heartbeat — visible in both empty and populated
             states so operators always know the stream is alive. */}
         {!loading && !error && (
-          <div className="flex items-center gap-1.5 text-2xs text-fg-faint">
-            <span
-              aria-hidden
-              className="inline-block h-1.5 w-1.5 rounded-full bg-ok motion-safe:animate-pulse"
-            />
-            <span>Live</span>
+          <InlineProof className="flex items-center gap-1.5">
+            <SignalChip tone="ok" className="font-normal normal-case tracking-normal">
+              Live
+            </SignalChip>
             {lastSyncAt && (
               <>
                 <span className="text-fg-faint/60">·</span>
@@ -404,7 +404,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                 </span>
               </>
             )}
-          </div>
+          </InlineProof>
         )}
 
         {/* KPI strip — same layout as Inbox so the muscle-memory carries.
@@ -468,7 +468,9 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
 
         {loading && <Loading text="Loading activity…" />}
         {!loading && error && (
-          <p className="text-xs text-danger">{error}</p>
+          <ContainedBlock tone="warn">
+            <p className="text-xs text-danger">{error}</p>
+          </ContainedBlock>
         )}
         {!loading && !error && events.length === 0 && (
           <EmptyState
@@ -478,18 +480,19 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
         )}
 
         {!loading && !error && events.length > 0 && filtered.length === 0 && (
-          <div className="rounded-sm border border-dashed border-edge bg-surface-raised/30 px-3 py-4 text-center">
-            <p className="text-xs text-fg-muted">No events match this filter.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setFilter('all')
-                setSearch('')
-              }}
-              className="mt-2 text-2xs text-brand hover:text-brand-hover motion-safe:transition-colors"
-            >
-              Reset filters
-            </button>
+          <div className="space-y-2">
+            <EmptySectionMessage text="No events match this filter." />
+            <ActionPillRow>
+              <ActionPill
+                onClick={() => {
+                  setFilter('all')
+                  setSearch('')
+                }}
+                tone="brand"
+              >
+                Reset filters
+              </ActionPill>
+            </ActionPillRow>
           </div>
         )}
 
@@ -505,7 +508,9 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                     {BUCKET_LABEL[b.bucket]}
                   </h3>
                   <span aria-hidden className="text-fg-faint/60">·</span>
-                  <span className="text-3xs text-fg-muted tabular-nums">{b.events.length}</span>
+                  <SignalChip tone="neutral" className="font-mono">
+                    {b.events.length}
+                  </SignalChip>
                 </header>
                 <ol className="relative space-y-2 pl-4 before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-edge/60">
                   {b.events.map((e, idx) => {
@@ -593,37 +598,28 @@ function EventRow({
           />
         )}
         {event.branch && (
-          <span
-            className="font-mono text-3xs text-fg-faint truncate max-w-[10rem]"
-            title={`Branch ${event.branch}`}
-          >
-            {event.branch}
+          <span title={`Branch ${event.branch}`}>
+            <SignalChip tone="neutral" className="font-mono truncate max-w-[10rem]">
+              {event.branch}
+            </SignalChip>
           </span>
         )}
-        <RelativeTime value={event.at} className="ml-auto text-2xs text-fg-muted" />
+        <RelativeTime value={event.at} className="ml-auto text-2xs text-fg-muted shrink-0" />
       </div>
       <div className="mt-0.5 text-fg leading-snug">{event.label}</div>
       {event.detail && event.detail !== event.label && (
-        <div className={`text-2xs text-fg-muted leading-snug ${expanded ? '' : 'truncate'}`}>
+        <InlineProof className={`mt-0.5 ${expanded ? '' : 'truncate'}`}>
           {event.detail}
-        </div>
+        </InlineProof>
       )}
-      <div className="mt-1 flex items-center gap-2 text-2xs flex-wrap">
-        <Link
-          to={`/fixes?expand=${event.fix_attempt_id}`}
-          className="text-brand hover:underline"
-        >
+      <ActionPillRow className="mt-1">
+        <ActionPill to={`/fixes?expand=${event.fix_attempt_id}`} tone="brand">
           View fix
-        </Link>
+        </ActionPill>
         {event.pr_url && (
-          <a
-            href={event.pr_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-fg-muted hover:text-fg hover:underline"
-          >
+          <ActionPill href={event.pr_url} tone="neutral">
             PR #{event.pr_number ?? ''} ↗
-          </a>
+          </ActionPill>
         )}
         <button
           type="button"
@@ -633,7 +629,7 @@ function EventRow({
         >
           {expanded ? 'Less ▴' : 'More ▾'}
         </button>
-      </div>
+      </ActionPillRow>
       {expanded && <DetailRows dense className="mt-1.5" items={buildEventDetailRows(event)} />}
     </li>
   )

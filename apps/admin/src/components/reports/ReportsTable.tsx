@@ -234,18 +234,22 @@ export function ReportsTable({
         </table>
       </ResponsiveTable>
 
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
-        <span>
-          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+      <div className="flex items-center justify-between gap-2 border-t border-edge-subtle bg-surface-overlay/20 px-3 py-2">
+        <span className="inline-flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted">
+          <span className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-2 py-0.5 font-mono tabular-nums">
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+          </span>
           {groupCollapse && visibleGroupCount !== reports.length && (
-            <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>
+            <span className="rounded-sm border border-edge-subtle bg-surface-overlay/35 px-2 py-0.5 text-fg-faint">
+              grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}
+            </span>
           )}
         </span>
         <div className="flex items-center gap-1">
           <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => onSetPage(page - 1)}>
             <Kbd>[</Kbd> Prev
           </Btn>
-          <span className="font-mono px-2">
+          <span className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
             {page + 1} / {totalPages}
           </span>
           <Btn

@@ -4,6 +4,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { StatusBannerShell } from '../StatusBannerShell'
 import type { RewardsStats, RewardsTabId } from './types'
 
 interface Props {
@@ -38,36 +39,26 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
 
   if (!stats.organizationId) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">No organization selected</p>
-            <p className="text-2xs text-fg-muted">
-              Rewards is org-scoped — pick a team from the header org switcher before configuring rules or tiers.
-            </p>
-          </div>
-        </div>
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title="No organization selected"
+        subtitle="Rewards is org-scoped — pick a team from the header org switcher before configuring rules or tiers."
+      />
     )
   }
 
   if (!rewardsEntitlement) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">Rewards program requires Starter or higher</p>
-            <p className="text-2xs text-fg-muted">
-              Preview tabs below are read-only on Hobby — upgrade to edit rules, tiers, and webhooks for {orgLabel}.
-            </p>
-          </div>
-        </div>
-        <Link to="/billing">
-          <Btn size="sm" variant="ghost">View plans</Btn>
-        </Link>
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title="Rewards program requires Starter or higher"
+        subtitle={`Preview tabs below are read-only on Hobby — upgrade to edit rules, tiers, and webhooks for ${orgLabel}.`}
+        action={
+          <Link to="/billing">
+            <Btn size="sm" variant="ghost">View plans</Btn>
+          </Link>
+        }
+      />
     )
   }
 
@@ -77,136 +68,104 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefres
 
   if (priority === 'project_disabled') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">Rewards disabled for {projectLabel}</p>
-            <p className="text-2xs text-fg-muted">{label ?? 'Turn on rewards_enabled in project settings.'}</p>
-          </div>
-        </div>
-        <Link to="/settings?tab=dev">
-          <Btn size="sm" variant="primary">Open Settings</Btn>
-        </Link>
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={`Rewards disabled for ${projectLabel}`}
+        subtitle={label ?? 'Turn on rewards_enabled in project settings.'}
+        action={
+          <Link to="/settings?tab=dev">
+            <Btn size="sm" variant="primary">Open Settings</Btn>
+          </Link>
+        }
+      />
     )
   }
 
   if (priority === 'webhooks_failing') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-danger">
-              {stats.webhooksFailing} reward webhook{stats.webhooksFailing === 1 ? '' : 's'} failing
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab && actionTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Fix webhooks</Btn>
-        ) : (
-          <Link to="/rewards?tab=settings">
-            <Btn size="sm" variant="ghost">Fix webhooks</Btn>
-          </Link>
-        )}
-      </div>
+      <StatusBannerShell
+        tone="danger"
+        title={`${stats.webhooksFailing} reward webhook${stats.webhooksFailing === 1 ? '' : 's'} failing`}
+        subtitle={label}
+        action={
+          onTab && actionTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Fix webhooks</Btn>
+          ) : (
+            <Link to="/rewards?tab=settings">
+              <Btn size="sm" variant="ghost">Fix webhooks</Btn>
+            </Link>
+          )
+        }
+      />
     )
   }
 
   if (priority === 'open_disputes') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-danger">
-              {stats.openDisputesCount} open dispute{stats.openDisputesCount === 1 ? '' : 's'}
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab && actionTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Review disputes</Btn>
-        ) : (
-          <Link to="/rewards?tab=settings">
-            <Btn size="sm" variant="ghost">Review disputes</Btn>
-          </Link>
-        )}
-      </div>
+      <StatusBannerShell
+        tone="danger"
+        title={`${stats.openDisputesCount} open dispute${stats.openDisputesCount === 1 ? '' : 's'}`}
+        subtitle={label}
+        action={
+          onTab && actionTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Review disputes</Btn>
+          ) : (
+            <Link to="/rewards?tab=settings">
+              <Btn size="sm" variant="ghost">Review disputes</Btn>
+            </Link>
+          )
+        }
+      />
     )
   }
 
   if (priority === 'no_rules') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">No activity rules enabled</p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('rules')}>Add rules</Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title="No activity rules enabled"
+        subtitle={label}
+        action={onTab ? <Btn size="sm" variant="primary" onClick={() => onTab('rules')}>Add rules</Btn> : null}
+      />
     )
   }
 
   if (priority === 'high_rejection') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">
-              High rejection rate — {stats.rejectionRatePct24h}% in 24h
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('overview')}>Debug feed</Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={`High rejection rate — ${stats.rejectionRatePct24h}% in 24h`}
+        subtitle={label}
+        action={onTab ? <Btn size="sm" variant="ghost" onClick={() => onTab('overview')}>Debug feed</Btn> : null}
+      />
     )
   }
 
   if (priority === 'no_contributors') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-brand">Program configured — no contributor activity yet</p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('sandbox')}>Run simulator</Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="brand"
+        title="Program configured — no contributor activity yet"
+        subtitle={label}
+        action={onTab ? <Btn size="sm" variant="primary" onClick={() => onTab('sandbox')}>Run simulator</Btn> : null}
+      />
     )
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-ok/30 bg-ok/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-2 min-w-0">
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
-        <div>
-          <p className="text-xs font-medium text-ok">Rewards loop active for {orgLabel}</p>
-          <p className="text-2xs text-fg-muted">{label}</p>
-        </div>
-      </div>
-      {onRefresh ? (
-        <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
-        </Btn>
-      ) : onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('contributors')}>View leaderboard</Btn>
-      ) : null}
-    </div>
+    <StatusBannerShell
+      tone="ok"
+      title={`Rewards loop active for ${orgLabel}`}
+      subtitle={label}
+      action={
+        onRefresh ? (
+          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
+            Refresh
+          </Btn>
+        ) : onTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab('contributors')}>View leaderboard</Btn>
+        ) : null
+      }
+    />
   )
 }

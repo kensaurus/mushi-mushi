@@ -27,6 +27,7 @@ import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { FeedbackHubStrip } from '../support/FeedbackHubStrip'
+import { ActionPill, ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface LoopStage {
   id: PdcaStageId
@@ -104,7 +105,7 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
         <ConnectionStatus />
       </Card>
 
-      <div className="mt-4 text-2xs text-fg-faint flex flex-wrap gap-x-4 gap-y-1">
+      <InlineProof className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-0 bg-transparent px-0 py-0">
         <span>
           Viewing: <span className="font-mono text-fg-secondary">{project.project_name}</span>
         </span>
@@ -112,7 +113,7 @@ export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }
           {project.report_count} {pluralize(project.report_count, 'report')} · {project.fix_count} {pluralize(project.fix_count, 'fix', 'fixes')} dispatched
         </span>
         <Link to="/projects" className="text-brand hover:underline">Switch project →</Link>
-      </div>
+      </InlineProof>
     </div>
   )
 }
@@ -200,15 +201,17 @@ function FirstLoopPanel({ stages, project }: PanelProps) {
       <div className="flex items-baseline justify-between mb-3 gap-2 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold text-fg">Your first PDCA loop</h2>
-          <p className="text-2xs text-fg-muted mt-0.5">
-            {allDone
-              ? 'Loop closed. You\u2019ve shipped your first auto-fix on this project.'
-              : `Stage ${completedCount + 1} of ${stages.length} · finish each step to close the loop on ${project.project_name}.`}
-          </p>
+          <ContainedBlock tone="muted" className="mt-1.5">
+            <p className="text-2xs text-fg-muted">
+              {allDone
+                ? 'Loop closed. You\u2019ve shipped your first auto-fix on this project.'
+                : `Stage ${completedCount + 1} of ${stages.length} · finish each step to close the loop on ${project.project_name}.`}
+            </p>
+          </ContainedBlock>
         </div>
-        <Link to="/onboarding" className="text-2xs text-brand hover:underline">
+        <ActionPill to="/onboarding" tone="brand">
           Open full setup guide →
-        </Link>
+        </ActionPill>
       </div>
 
       <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -246,11 +249,13 @@ function LoopStageCard({ stage, step, isLast }: { stage: LoopStage; step: number
           {stage.state === 'done' ? '✓' : meta.letter}
         </span>
         <div className="min-w-0 flex-1">
-          <span className="text-2xs uppercase tracking-wider text-fg-muted">Step {step} · {meta.label}</span>
-          <h3 className="text-xs font-semibold text-fg truncate">{outcome.headline}</h3>
+          <SignalChip tone="neutral" className="uppercase tracking-wider text-3xs">Step {step} · {meta.label}</SignalChip>
+          <h3 className="text-xs font-semibold text-fg truncate mt-1">{outcome.headline}</h3>
         </div>
       </div>
-      <p className="text-2xs text-fg-secondary leading-snug min-h-[3rem]">{stage.status ?? outcome.outcome}</p>
+      <ContainedBlock tone="muted" className="min-h-[3rem]">
+        <p className="text-2xs text-fg-secondary leading-snug">{stage.status ?? outcome.outcome}</p>
+      </ContainedBlock>
       <div className="mt-2.5">
         <StageCta cta={cta} isLocked={isLocked} />
       </div>

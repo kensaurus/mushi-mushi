@@ -7,6 +7,7 @@ import { ConfiguredSecretField } from '../ConfiguredSecretField'
 import { Input } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
+import { InlineProof } from '../report-detail/ReportSurface'
 import {
   isSecretConfigured,
   normalizeSecretHint,
@@ -67,7 +68,7 @@ export function IntegrationFormField({
           value={value}
           onChange={onChange}
         />
-        <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
+        {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
       </div>
     )
   }
@@ -88,7 +89,7 @@ export function IntegrationFormField({
         onChange={(e) => onChange(e.target.value)}
         validate={resolveValidator(field.validator)}
       />
-      <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
+      {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
     </div>
   )
 }

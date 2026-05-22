@@ -34,8 +34,10 @@ Tick these off in order. Most are one-time.
 
 Keywords have been populated. Now confirm each package README opens strong:
 
-- [ ] Every SDK `README.md` starts with the tagline: *"Sentry sees what your
-  code throws. Mushi sees what your users feel."*
+- [ ] Every SDK `README.md` starts with the canonical tagline (12-word form from
+  `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Sentry sees what code throws.
+  Mushi sees what users feel — and closes the loop with AI."*
+  CI enforces this via `scripts/check-tagline-consistency.mjs`.
 - [ ] 60-second install snippet immediately under the tagline. No wall-of-text.
 - [ ] Link to the live demo above the API docs.
 - [ ] Badges row: npm version, size (for web), LICENSE-MIT. Keep to 5 or fewer.

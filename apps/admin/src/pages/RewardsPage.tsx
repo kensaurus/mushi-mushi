@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
@@ -34,6 +34,13 @@ import {
   RecommendedAction,
   type DetailRowItem,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import {
   IconSparkle,
   IconUser,
@@ -274,10 +281,12 @@ function OverviewTab() {
       </Section>
 
       {pendingLiability > 0 && (
-        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
-          <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
-          monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
-        </div>
+        <ContainedBlock tone="warn">
+          <p className="text-xs text-warn">
+            <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
+            monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
+          </p>
+        </ContainedBlock>
       )}
 
       {/* ── Debug: 24h activity feed ── */}
@@ -288,38 +297,40 @@ function OverviewTab() {
       >
         {feedData && (
           <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-fg">{feedData.stats_24h.total}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">total events</div>
-            </div>
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-ok">{feedData.stats_24h.accepted}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">accepted</div>
-            </div>
-            <div className={`rounded-lg bg-surface-overlay p-2 text-center ${feedData.stats_24h.rejected > 0 ? 'ring-1 ring-danger/30' : ''}`}>
-              <div className={`text-lg font-semibold tabular-nums ${feedData.stats_24h.rejected > 0 ? 'text-danger' : 'text-fg-muted'}`}>
-                {feedData.stats_24h.rejected}
-              </div>
-              <div className="text-2xs text-fg-muted mt-0.5">
-                rejected{feedData.stats_24h.rejection_rate_pct > 0 ? ` (${feedData.stats_24h.rejection_rate_pct}%)` : ''}
-              </div>
-            </div>
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-brand">+{feedData.stats_24h.points_awarded.toLocaleString()}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">pts awarded</div>
-            </div>
+            {[
+              { label: 'total events', value: feedData.stats_24h.total, tone: 'neutral' as const },
+              { label: 'accepted', value: feedData.stats_24h.accepted, tone: 'ok' as const },
+              {
+                label: 'rejected',
+                value: feedData.stats_24h.rejected,
+                tone: feedData.stats_24h.rejected > 0 ? ('danger' as const) : ('neutral' as const),
+                sub: feedData.stats_24h.rejection_rate_pct > 0 ? `${feedData.stats_24h.rejection_rate_pct}%` : undefined,
+              },
+              { label: 'pts awarded', value: `+${feedData.stats_24h.points_awarded.toLocaleString()}`, tone: 'brand' as const },
+            ].map((item) => (
+              <Card key={item.label} className="space-y-2 p-2 text-center">
+                <SignalChip tone={item.tone} className="mx-auto">
+                  {item.label}
+                  {item.sub ? ` (${item.sub})` : ''}
+                </SignalChip>
+                <div className={`text-lg font-semibold tabular-nums ${item.tone === 'danger' ? 'text-danger' : item.tone === 'ok' ? 'text-ok' : item.tone === 'brand' ? 'text-brand' : 'text-fg'}`}>
+                  {item.value}
+                </div>
+              </Card>
+            ))}
           </div>
         )}
 
         {feedData && feedData.stats_24h.top_actions.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {feedData.stats_24h.top_actions.map(({ action, count }) => (
-              <span key={action} className="inline-flex items-center gap-1 rounded bg-surface-overlay px-2 py-0.5 text-2xs text-fg-muted">
-                <span className="font-mono text-fg">{action.replace(/_/g, ' ')}</span>
-                <span className="text-fg-faint">×{count}</span>
-              </span>
-            ))}
-          </div>
+          <ContainedBlock tone="muted" label="Top actions" className="mb-3">
+            <div className="flex flex-wrap gap-1.5">
+              {feedData.stats_24h.top_actions.map(({ action, count }) => (
+                <SignalChip key={action} tone="neutral" className="font-mono">
+                  {action.replace(/_/g, ' ')} ×{count}
+                </SignalChip>
+              ))}
+            </div>
+          </ContainedBlock>
         )}
 
         {!feedData || feedData.events.length === 0 ? (
@@ -1359,10 +1370,12 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
         ) : undefined
       }
     >
-      <p className="text-2xs text-fg-muted mb-3">
-        Configure JWKS endpoints for Apple, Google, or Supabase sign-in. A verified JWT is{' '}
-        <strong>required</strong> before any monetary payout is processed (KYC/AML gate).
-      </p>
+      <ContainedBlock tone="muted" className="mb-3">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Configure JWKS endpoints for Apple, Google, or Supabase sign-in. A verified JWT is{' '}
+          <strong>required</strong> before any monetary payout is processed (KYC/AML gate).
+        </p>
+      </ContainedBlock>
 
       {showForm && (
         <Card className="p-3 mb-3 space-y-2.5">
@@ -1403,7 +1416,7 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
             value={form.issuer}
             onChange={(ev) => setForm((p) => ({ ...p, issuer: ev.target.value }))}
           />
-          <p className="text-2xs text-fg-faint">JWKS payloads are cached for 6 hours to avoid rate-limit issues.</p>
+          <InlineProof>JWKS payloads are cached for 6 hours to avoid rate-limit issues.</InlineProof>
           <div className="flex gap-2 justify-end pt-1">
             <Btn variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
             <Btn variant="primary" size="sm" loading={saving} onClick={saveProvider}>Save</Btn>
@@ -1421,14 +1434,14 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
       {(providers ?? []).map((p) => (
         <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-edge-subtle last:border-0">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-fg capitalize">{p.provider}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <SignalChip tone="brand" className="capitalize">{p.provider}</SignalChip>
               <Badge className={p.enabled ? 'bg-ok-muted text-ok text-2xs' : 'bg-surface-overlay text-fg-muted text-2xs'}>
                 {p.enabled ? 'Active' : 'Disabled'}
               </Badge>
             </div>
-            <div className="text-2xs text-fg-faint mt-0.5 truncate max-w-xs font-mono">{p.jwks_url}</div>
-            {p.audience && <div className="text-2xs text-fg-faint">aud: {p.audience}</div>}
+            <InlineProof className="mt-1.5 font-mono truncate max-w-xs">{p.jwks_url}</InlineProof>
+            {p.audience && <InlineProof className="mt-1">aud: {p.audience}</InlineProof>}
           </div>
           {canEdit && (
             <div className="flex items-center gap-1.5 shrink-0">
@@ -1490,14 +1503,16 @@ function DisputesSection() {
 
   return (
     <Section title="Disputes" icon={<IconShield />}>
-      <p className="text-2xs text-fg-muted mb-3">
-        Review flagged rewards. Denied disputes cancel associated pending payouts and remain on the ledger.
-      </p>
+      <ContainedBlock tone="muted" className="mb-3">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Review flagged rewards. Denied disputes cancel associated pending payouts and remain on the ledger.
+        </p>
+      </ContainedBlock>
       <div className="divide-y divide-edge-subtle text-xs">
         {(disputes ?? []).map((d) => (
           <div key={d.id} className="py-3">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-fg">
                     {d.end_users?.display_name ?? d.end_users?.external_user_id ?? d.end_user_id.slice(0, 8)}
@@ -1506,14 +1521,16 @@ function DisputesSection() {
                     {d.status}
                   </Badge>
                 </div>
-                <p className="text-2xs text-fg-muted mt-0.5 break-words">{d.reason}</p>
+                <ContainedBlock tone="warn">
+                  <p className="text-2xs break-words text-fg-secondary">{d.reason}</p>
+                </ContainedBlock>
                 {d.resolution_notes && (
-                  <p className="text-2xs text-fg-secondary mt-0.5">Resolution: {d.resolution_notes}</p>
+                  <InlineProof>Resolution: {d.resolution_notes}</InlineProof>
                 )}
-                <p className="text-2xs text-fg-faint mt-0.5">
+                <InlineProof>
                   Opened <RelativeTime value={d.opened_at} />
                   {d.resolved_at && <> · Resolved <RelativeTime value={d.resolved_at} /></>}
-                </p>
+                </InlineProof>
               </div>
               {(d.status === 'open' || d.status === 'under_review') && (
                 <div className="flex gap-1.5 shrink-0">
@@ -1561,10 +1578,12 @@ function PayoutLiabilitySection() {
 
   return (
     <Section title="Payout ledger" icon={<IconBilling />}>
-      <p className="text-2xs text-fg-muted mb-3">
-        Monetary payouts via Stripe Connect Express. Aggregator runs on the 1st of each month.
-        KYC must be complete and anti-fraud flags must be clear before funds transfer.
-      </p>
+      <ContainedBlock tone="muted" className="mb-3">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Monetary payouts via Stripe Connect Express. Aggregator runs on the 1st of each month.
+          KYC must be complete and anti-fraud flags must be clear before funds transfer.
+        </p>
+      </ContainedBlock>
       {(payouts ?? []).length === 0 ? (
         <EmptyState
           title="No payouts yet"
@@ -1574,13 +1593,17 @@ function PayoutLiabilitySection() {
         <div className="divide-y divide-edge-subtle text-xs">
           {(payouts ?? []).map((p) => (
             <div key={p.id} className="flex items-center justify-between py-2.5">
-              <div>
-                <span className="font-medium font-mono text-fg">${Number(p.amount_usd).toFixed(2)} {p.currency.toUpperCase()}</span>
-                {p.tier_slug && <span className="text-fg-muted ml-2 capitalize">{p.tier_slug}</span>}
-                <div className="text-2xs text-fg-faint mt-0.5">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <SignalChip tone="brand" className="font-mono">
+                    ${Number(p.amount_usd).toFixed(2)} {p.currency.toUpperCase()}
+                  </SignalChip>
+                  {p.tier_slug && <SignalChip tone="neutral" className="capitalize">{p.tier_slug}</SignalChip>}
+                </div>
+                <InlineProof>
                   <RelativeTime value={p.requested_at} />
                   {p.paid_at && <> → paid <RelativeTime value={p.paid_at} /></>}
-                </div>
+                </InlineProof>
               </div>
               <Badge className={`text-2xs ${PAYOUT_BADGE[p.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
                 {p.status}
@@ -1646,9 +1669,11 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
           ) : undefined
         }
       >
-        <p className="text-2xs text-fg-muted mb-3">
-          Receive a signed POST when a user's tier changes. Use this to apply credits, badges, or Pro access in your app.
-        </p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Receive a signed POST when a user's tier changes. Use this to apply credits, badges, or Pro access in your app.
+          </p>
+        </ContainedBlock>
 
         {showNewWebhook && (
           <Card className="p-3 mb-3 space-y-2.5">
@@ -1665,9 +1690,9 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
               value={webhookSecret}
               onChange={(ev) => setWebhookSecret(ev.target.value)}
             />
-            <p className="text-2xs text-fg-faint">
+            <InlineProof className="mt-1">
               After saving, set <code className="font-mono text-fg-secondary">MUSHI_REWARD_WEBHOOK_SECRET_&lt;ID&gt;</code> in your Supabase project env.
-            </p>
+            </InlineProof>
             <div className="flex gap-2 justify-end pt-1">
               <Btn variant="ghost" size="sm" onClick={() => setShowNewWebhook(false)}>Cancel</Btn>
               <Btn variant="primary" size="sm" loading={saving} onClick={createWebhook}>Save</Btn>
@@ -1681,15 +1706,17 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
 
         {(webhooks ?? []).map((w) => (
           <div key={w.id} className="flex items-center justify-between py-2.5 border-b border-edge-subtle last:border-0">
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-fg truncate max-w-sm font-mono">{w.url}</div>
-              <div className="text-2xs text-fg-faint mt-0.5">
-                Events: {w.events.join(', ')} ·{' '}
+            <div className="min-w-0 space-y-1.5">
+              <InlineProof className="truncate max-w-sm">{w.url}</InlineProof>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SignalChip tone="neutral">Events: {w.events.join(', ')}</SignalChip>
                 {w.last_status != null ? (
-                  <span className={w.last_status >= 200 && w.last_status < 300 ? 'text-ok' : 'text-danger'}>
+                  <SignalChip tone={w.last_status >= 200 && w.last_status < 300 ? 'ok' : 'danger'}>
                     Last: {w.last_status}
-                  </span>
-                ) : 'Never delivered'}
+                  </SignalChip>
+                ) : (
+                  <SignalChip tone="neutral">Never delivered</SignalChip>
+                )}
               </div>
             </div>
             {canEdit && <Btn variant="ghost" size="sm" onClick={() => deleteWebhook(w.id)}>Remove</Btn>}
@@ -1781,10 +1808,12 @@ function QuestsTab({ canEdit }: { canEdit: boolean }) {
         ) : undefined
       }
     >
-      <p className="text-2xs text-fg-muted mb-3">
-        Multi-step goals users complete to earn bonus points. Each step matches an SDK activity action.
-        When all steps complete in order the quest awards bonus points and fires a webhook.
-      </p>
+      <ContainedBlock tone="muted" className="mb-3">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Multi-step goals users complete to earn bonus points. Each step matches an SDK activity action.
+          When all steps complete in order the quest awards bonus points and fires a webhook.
+        </p>
+      </ContainedBlock>
 
       {showForm && (
         <Card className="p-3 mb-3 space-y-2.5">
@@ -1848,23 +1877,25 @@ function QuestsTab({ canEdit }: { canEdit: boolean }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-medium text-xs text-fg">{q.name}</span>
+                    <SignalChip tone="brand">{q.name}</SignalChip>
                     <Badge className={q.enabled ? 'text-2xs bg-ok-muted text-ok' : 'text-2xs bg-surface-overlay text-fg-muted'}>
                       {q.enabled ? 'Active' : 'Disabled'}
                     </Badge>
                     <Badge className="text-2xs bg-surface-overlay text-fg-secondary">+{q.completion_points} pts</Badge>
                     {q.repeatable && <Badge className="text-2xs bg-info-muted text-info">Repeatable</Badge>}
                   </div>
-                  {q.description && <p className="text-2xs text-fg-muted mt-0.5">{q.description}</p>}
+                  {q.description && (
+                    <ContainedBlock tone="muted" className="mt-1.5">
+                      <p className="text-2xs leading-relaxed text-fg-muted">{q.description}</p>
+                    </ContainedBlock>
+                  )}
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
                     {q.steps.map((s, i) => (
-                      <span key={i} className="text-2xs bg-surface-overlay rounded px-1.5 py-0.5 text-fg-secondary">
-                        {i + 1}. {s.label}
-                      </span>
+                      <SignalChip key={i} tone="neutral">{i + 1}. {s.label}</SignalChip>
                     ))}
                   </div>
                   {q.expires_after_days && (
-                    <p className="text-2xs text-fg-faint mt-0.5">Expires {q.expires_after_days}d after start</p>
+                    <InlineProof className="mt-1.5">Expires {q.expires_after_days}d after start</InlineProof>
                   )}
                 </div>
                 {canEdit && (
@@ -1902,10 +1933,12 @@ function RetentionAnalyticsTab() {
       icon={<IconDashboard />}
       freshness={{ at: lastFetchedAt, isValidating }}
     >
-      <p className="text-2xs text-fg-muted mb-4">
-        Compares the median active span (first seen → last seen) for users who reached the highest tier
-        vs everyone else. Higher lift = the rewards program drives retention.
-      </p>
+      <ContainedBlock tone="muted" className="mb-4">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Compares the median active span (first seen → last seen) for users who reached the highest tier
+          vs everyone else. Higher lift = the rewards program drives retention.
+        </p>
+      </ContainedBlock>
 
       {!data ? (
         <EmptyState title="No data yet" description="Retention analytics will appear once contributors earn points." />
@@ -1936,21 +1969,25 @@ function RetentionAnalyticsTab() {
           </div>
 
           {(data.lift_pct ?? 0) >= 50 && (
-            <div className="rounded-xl border border-ok/20 bg-ok/5 p-3 text-xs text-ok">
-              Top contributors retain <strong>{data.lift_pct}% longer</strong> than average — a strong
-              signal to invest further in the rewards program.
-            </div>
+            <ContainedBlock tone="info">
+              <p className="text-xs text-ok">
+                Top contributors retain <strong>{data.lift_pct}% longer</strong> than average — a strong
+                signal to invest further in the rewards program.
+              </p>
+            </ContainedBlock>
           )}
           {(data.lift_pct ?? 0) < 0 && (
-            <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
-              Top contributors are retaining <strong>less</strong> than average. Consider adding
-              recurring incentives or time-gated perks to retain power users after they hit the top tier.
-            </div>
+            <ContainedBlock tone="warn">
+              <p className="text-xs text-warn">
+                Top contributors are retaining <strong>less</strong> than average. Consider adding
+                recurring incentives or time-gated perks to retain power users after they hit the top tier.
+              </p>
+            </ContainedBlock>
           )}
 
-          <p className="text-2xs text-fg-faint">
+          <InlineProof>
             Computed from end_user first_seen_at → last_seen_at. Results update daily.
-          </p>
+          </InlineProof>
         </div>
       )}
     </Section>
@@ -1996,10 +2033,12 @@ function SandboxSimulatorTab() {
 
   return (
     <Section title="Sandbox simulator" icon={<IconQuery />}>
-      <p className="text-2xs text-fg-muted mb-4">
-        Enter a hypothetical activity log and see how many points it would earn and which tier it would
-        reach — without touching real user data. Use this to tune rules before going live.
-      </p>
+      <ContainedBlock tone="muted" className="mb-4">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Enter a hypothetical activity log and see how many points it would earn and which tier it would
+          reach — without touching real user data. Use this to tune rules before going live.
+        </p>
+      </ContainedBlock>
 
       <div className="space-y-1.5 mb-4">
         {lines.map((line, i) => (
@@ -2208,10 +2247,12 @@ export function RewardsPage() {
   if (!orgId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Rewards'}
-          description={copy?.description ?? 'Incentivize SDK activity with points, tiers, and payouts.'}
-        />
+        <PageHeader title={copy?.title ?? 'Rewards'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ?? 'Incentivize SDK activity with points, tiers, and payouts.'}
+          </p>
+        </ContainedBlock>
         <EmptyState
           title="Select an organization"
           description="Rewards is scoped to the team in the header org switcher — pick kenji or your workspace team first."
@@ -2264,10 +2305,6 @@ export function RewardsPage() {
     <div className="space-y-4" data-testid="mushi-page-rewards">
       <PageHeader
         title={copy?.title ?? 'Rewards'}
-        description={
-          copy?.description ??
-          'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks.'
-        }
         projectScope={stats.projectName ?? stats.organizationName ?? undefined}
       >
         <Badge
@@ -2291,6 +2328,13 @@ export function RewardsPage() {
         </Btn>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks.'}
+        </p>
+      </ContainedBlock>
+
       <RewardsStatusBanner
         stats={stats}
         rewardsEntitlement={rewardsEnabled}
@@ -2308,7 +2352,9 @@ export function RewardsPage() {
       />
 
       <Section title="REWARDS SNAPSHOT" freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label="Contributors · 30d"
@@ -2375,7 +2421,7 @@ export function RewardsPage() {
 
       {stats.topPriority !== 'healthy' && stats.topPriorityTo && active === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'high_rejection' || stats.topPriority === 'no_rules'
@@ -2383,12 +2429,25 @@ export function RewardsPage() {
                 : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
+                ? 'danger'
+                : stats.topPriority === 'high_rejection' || stats.topPriority === 'no_rules'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -2466,14 +2525,14 @@ export function RewardsPage() {
               />
             )}
             {stats.lastActivityAt && (
-              <p className="text-2xs text-fg-muted">
+              <InlineProof>
                 Last SDK activity <RelativeTime value={stats.lastActivityAt} />
                 {stats.identityProvidersConfigured === 0 ? (
                   <> · <span className="text-warn">No identity providers configured</span></>
                 ) : (
                   <> · {stats.identityProvidersConfigured} identity provider{stats.identityProvidersConfigured === 1 ? '' : 's'}</>
                 )}
-              </p>
+              </InlineProof>
             )}
             <OverviewTab />
           </div>

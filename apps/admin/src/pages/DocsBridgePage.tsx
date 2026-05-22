@@ -33,6 +33,7 @@ import { supabase } from '../lib/supabase'
 import { RESOLVED_API_URL } from '../lib/env'
 import { getActiveProjectIdSnapshot } from '../lib/activeProject'
 import { getActiveOrgIdSnapshot } from '../lib/activeOrg'
+import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
 
 type BridgeStatus = 'pending' | 'sent' | 'invalid_origin' | 'missing_opener' | 'no_session' | 'no_nonce'
 
@@ -183,37 +184,53 @@ export function DocsBridgePage() {
 
   return (
     <main className="grid min-h-screen place-items-center bg-surface p-6">
-      <div className="max-w-md rounded-xl border border-edge bg-surface p-6 text-center shadow-sm">
+      <div className="max-w-md rounded-xl border border-edge bg-surface p-6 text-center shadow-sm space-y-3">
         {status === 'pending' && (
-          <p className="text-sm text-fg-muted">Connecting your Mushi account to the docs…</p>
+          <>
+            <SignalChip tone="brand">Docs bridge</SignalChip>
+            <ContainedBlock tone="muted">
+              <p className="text-sm text-fg-muted">Connecting your Mushi account to the docs…</p>
+            </ContainedBlock>
+          </>
         )}
         {status === 'sent' && (
           <>
+            <SignalChip tone="ok">Connected</SignalChip>
             <p className="text-base font-medium text-fg">Docs sync connected</p>
-            <p className="mt-1 text-sm text-fg-muted">
-              You can close this window. Your migration checklist progress will sync automatically.
-            </p>
+            <ContainedBlock tone="muted">
+              <p className="text-sm text-fg-muted">
+                You can close this window. Your migration checklist progress will sync automatically.
+              </p>
+            </ContainedBlock>
           </>
         )}
         {status === 'no_session' && (
-          <p className="text-sm text-fg">
-            Sign in to your Mushi account in this browser, then re-open this window from the docs.
-          </p>
+          <ContainedBlock tone="warn">
+            <p className="text-sm text-fg">
+              Sign in to your Mushi account in this browser, then re-open this window from the docs.
+            </p>
+          </ContainedBlock>
         )}
         {status === 'no_nonce' && (
-          <p className="text-sm text-fg">This window is missing a sign-in nonce; close it and try again from the docs.</p>
+          <ContainedBlock tone="warn">
+            <p className="text-sm text-fg">This window is missing a sign-in nonce; close it and try again from the docs.</p>
+          </ContainedBlock>
         )}
         {status === 'invalid_origin' && (
-          <p className="text-sm text-fg">
-            The docs site that requested this sign-in isn't on the allowlist. Close this window —
-            this is a safety check.
-          </p>
+          <ContainedBlock tone="warn">
+            <p className="text-sm text-fg">
+              The docs site that requested this sign-in isn't on the allowlist. Close this window —
+              this is a safety check.
+            </p>
+          </ContainedBlock>
         )}
         {status === 'missing_opener' && (
-          <p className="text-sm text-fg">
-            We can't talk back to the docs window. Re-open this from the docs site so the bridge
-            can post the token securely.
-          </p>
+          <ContainedBlock tone="warn">
+            <p className="text-sm text-fg">
+              We can't talk back to the docs window. Re-open this from the docs site so the bridge
+              can post the token securely.
+            </p>
+          </ContainedBlock>
         )}
       </div>
     </main>

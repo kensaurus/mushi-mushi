@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { Card, Badge, Btn, RelativeTime } from '../ui'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
 import type { QueueItem } from './types'
+import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface Props {
   item: QueueItem
@@ -33,15 +34,14 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
             >
               {item.stage} · {pipelineStatusLabel(item.status)}
             </Badge>
-            <span className="text-2xs text-fg-muted font-mono">
+            <SignalChip tone="neutral" className="font-mono">
               {item.attempts}/{item.max_attempts} attempts
-            </span>
+            </SignalChip>
             {waitingChip && (
-              <span
-                className="text-2xs text-warn font-mono px-1.5 py-0.5 rounded-sm bg-warn/10 border border-warn/20"
-                title={`This job has been ${item.status === 'running' ? 'running' : 'queued'} for ${waitingChip}`}
-              >
-                Waiting {waitingChip}
+              <span title={`This job has been ${item.status === 'running' ? 'running' : 'queued'} for ${waitingChip}`}>
+                <SignalChip tone="warn" className="font-mono">
+                  Waiting {waitingChip}
+                </SignalChip>
               </span>
             )}
           </div>
@@ -52,18 +52,20 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
             {item.reports?.description?.slice(0, 150) ?? item.report_id}
           </Link>
           {item.last_error && (
-            <pre className="mt-1.5 max-h-16 overflow-auto rounded-sm bg-danger-muted/30 p-1.5 text-2xs text-danger font-mono">
-              {item.last_error}
-            </pre>
+            <ContainedBlock tone="warn" className="mt-1.5">
+              <pre className="max-h-16 overflow-auto text-2xs text-danger font-mono whitespace-pre-wrap">
+                {item.last_error}
+              </pre>
+            </ContainedBlock>
           )}
-          <p className="mt-1 text-2xs text-fg-muted">
+          <InlineProof className="mt-1">
             Created <RelativeTime value={item.created_at} />
             {item.completed_at && (
               <>
                 {' '}· last attempt <RelativeTime value={item.completed_at} />
               </>
             )}
-          </p>
+          </InlineProof>
         </div>
         <Btn
           variant="ghost"

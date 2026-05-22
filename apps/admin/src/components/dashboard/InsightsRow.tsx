@@ -9,6 +9,7 @@ import { Card } from '../ui'
 import { HealthPill } from '../charts'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { relTime, type ActivityItem, type IntegrationStatus } from './types'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
 
 interface Props {
   topComponents: Array<{ component: string; count: number }>
@@ -38,7 +39,7 @@ function TopComponentsCard({ topComponents }: { topComponents: Props['topCompone
         <Link to="/graph" className="text-2xs text-brand hover:text-brand-hover">Graph →</Link>
       </div>
       {topComponents.length === 0 ? (
-        <p className="text-2xs text-fg-faint">No component data yet.</p>
+        <EmptySectionMessage text="No component data yet." hint="Reports will populate this once classification runs." />
       ) : (
         <div className="space-y-1.5">
           {topComponents.map(({ component, count }) => {
@@ -78,7 +79,10 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
         <Link to="/integrations/config" className="text-2xs text-brand hover:text-brand-hover">Manage →</Link>
       </div>
       {integrations.length === 0 ? (
-        <p className="text-2xs text-fg-faint">Configure Sentry, Langfuse, GitHub on the Integrations page.</p>
+        <EmptySectionMessage
+          text="No integrations configured yet."
+          hint="Configure Sentry, Langfuse, and GitHub on the Integrations page."
+        />
       ) : (
         <div className="space-y-2">
           {integrations.map((it) => (
@@ -110,7 +114,7 @@ function ActivityCard({ activity }: { activity: ActivityItem[] }) {
         <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Recent activity</h3>
       </div>
       {activity.length === 0 ? (
-        <p className="text-2xs text-fg-faint">Nothing in the last 14 days.</p>
+        <EmptySectionMessage text="Nothing in the last 14 days." hint="Recent reports and fixes will appear here." />
       ) : (
         <div className="space-y-1">
           {activity.map((a, i) => (

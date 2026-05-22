@@ -6,9 +6,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { FeedbackModal } from './FeedbackModal'
 import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
+import { ActionPill, ActionPillRow, ContainedBlock, SignalChip } from './report-detail/ReportSurface'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DISMISS_KEY = 'mushi-mushi:beta-banner-dismissed-at'
@@ -71,39 +71,25 @@ export function BetaBanner() {
       >
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-1.5 text-xs">
           <span className="inline-flex min-w-0 flex-1 items-center gap-1.5">
-            <span
-              aria-hidden
-              className="inline-flex shrink-0 items-center justify-center rounded-sm bg-brand/15 px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-brand"
-            >
+            <SignalChip tone="brand" className="font-mono text-[0.6rem] uppercase tracking-[0.18em]">
               Beta
-            </span>
-            <span className="text-pretty leading-snug">
-              Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
-            </span>
+            </SignalChip>
+            <ContainedBlock tone="muted" className="inline-block max-w-none border-brand/20 bg-brand/5 px-2 py-0.5">
+              <span className="text-pretty leading-snug text-xs">
+                Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
+              </span>
+            </ContainedBlock>
           </span>
-          <span className="flex shrink-0 flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openFeedback('bug')}
-              className="inline-flex items-center gap-1 rounded-sm border border-brand/30 bg-surface-raised/60 px-2 py-0.5 text-2xs font-medium text-brand hover:bg-brand/10 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-            >
-              <span aria-hidden>🐛</span>
-              <span>Report a bug</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => openFeedback('feature')}
-              className="inline-flex items-center gap-1 rounded-sm border border-edge bg-surface-raised/60 px-2 py-0.5 text-2xs font-medium text-fg-secondary hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-            >
-              <span aria-hidden>✨</span>
-              <span>Request a feature</span>
-            </button>
-            <Link
-              to="/feedback"
-              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-            >
+          <ActionPillRow className="shrink-0">
+            <ActionPill onClick={() => openFeedback('bug')} tone="brand">
+              🐛 Report a bug
+            </ActionPill>
+            <ActionPill onClick={() => openFeedback('feature')} tone="neutral">
+              ✨ Request a feature
+            </ActionPill>
+            <ActionPill to="/feedback" tone="neutral">
               My submissions
-            </Link>
+            </ActionPill>
             <button
               type="button"
               onClick={handleDismiss}
@@ -112,7 +98,7 @@ export function BetaBanner() {
             >
               Dismiss
             </button>
-          </span>
+          </ActionPillRow>
         </div>
       </div>
 

@@ -55,6 +55,7 @@ import {
   totalSignupsTooltip,
 } from '../lib/statTooltips/users'
 import { usersLinks } from '../lib/statCardLinks'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
 
 interface SuperAdminUser {
   user_id: string
@@ -198,10 +199,13 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Users"
-        description="Operator-only — every signup, current plan, and recent activity. Service-role view, never reachable by non-operators."
-      />
+      <PageHeader title="Users" />
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          Operator-only — every signup, current plan, and recent activity. Service-role view, never reachable by non-operators.
+        </p>
+      </ContainedBlock>
 
       <PageHelp
         title={copy?.help?.title ?? 'About the user directory'}

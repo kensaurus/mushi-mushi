@@ -6,7 +6,6 @@
  */
 
 import { useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, Badge, RelativeTime } from '../ui';
 import { formatTokens } from '../charts';
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens';
@@ -19,6 +18,13 @@ import { FixAttemptFlow } from './FixAttemptFlow';
 import { CursorAgentBadge } from './CursorAgentBadge';
 import { CursorArtifactsGallery } from './CursorArtifactsGallery';
 import { ClaudeAgentBadge } from './ClaudeAgentBadge';
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  MetaChip,
+  SignalChip,
+} from '../report-detail/ReportSurface';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -135,87 +141,76 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
               </Badge>
             )}
           </div>
-          <span className="text-2xs text-fg-muted tabular-nums">
+          <span className="inline-flex shrink-0 items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 text-2xs tabular-nums text-fg-muted">
             <RelativeTime value={fix.started_at} />
           </span>
         </div>
 
-        {fix.summary && <p className="text-xs text-fg-secondary">{fix.summary}</p>}
+        {fix.summary && (
+          <ContainedBlock label="Proposed fix" tone="neutral">
+            <p className="text-xs leading-relaxed text-fg-secondary text-pretty">{fix.summary}</p>
+          </ContainedBlock>
+        )}
 
         <FixAttemptFlow fix={fix} className="mt-1" />
 
         <PdcaReceipt fix={fix} timeline={timeline} className="pt-1" />
 
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-muted font-mono">
-          <Link
-            to={`/reports/${fix.report_id}`}
-            className="hover:text-fg-secondary underline-offset-2 hover:underline"
-          >
-            Report: {fix.report_id.slice(0, 8)}…
-          </Link>
+        <div className="flex flex-wrap gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/20 px-2 py-1.5">
+          <MetaChip label="Report" to={`/reports/${fix.report_id}`}>
+            <span className="font-mono">{fix.report_id.slice(0, 8)}…</span>
+          </MetaChip>
           {fix.branch && (
-            <span title={fix.branch}>
-              Branch: {fix.branch.length > 32 ? `${fix.branch.slice(0, 32)}…` : fix.branch}
-            </span>
+            <MetaChip label="Branch" title={fix.branch}>
+              <span className="font-mono truncate max-w-[12rem]">
+                {fix.branch.length > 28 ? `${fix.branch.slice(0, 28)}…` : fix.branch}
+              </span>
+            </MetaChip>
           )}
           {fix.lines_changed != null && (
-            <span>{pluralizeWithCount(fix.lines_changed, 'line')}</span>
+            <SignalChip tone="brand" className="font-mono tabular-nums">
+              {pluralizeWithCount(fix.lines_changed, 'line')}
+            </SignalChip>
           )}
-          {fix.files_changed && <span>{pluralizeWithCount(fix.files_changed.length, 'file')}</span>}
+          {fix.files_changed && (
+            <SignalChip tone="neutral" className="font-mono">
+              {pluralizeWithCount(fix.files_changed.length, 'file')}
+            </SignalChip>
+          )}
           {totalTokens > 0 && (
             <span title={`Input: ${fix.llm_input_tokens} · Output: ${fix.llm_output_tokens}`}>
-              {formatTokens(totalTokens)} tok
+              <SignalChip tone="info" className="font-mono tabular-nums">
+                {formatTokens(totalTokens)} tok
+              </SignalChip>
             </span>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs">
+        <ActionPillRow>
           {fix.pr_url && (
-            <a
-              href={fix.pr_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent hover:text-accent-hover underline"
-            >
-              View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
-            </a>
+            <ActionPill href={fix.pr_url} tone="brand">
+              View PR{fix.pr_number ? ` #${fix.pr_number}` : ''} ↗
+            </ActionPill>
           )}
           {traceUrl && (
-            <a
-              href={traceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-fg-muted hover:text-accent underline-offset-2 hover:underline"
-              title="Inspect this fix's LLM call in Langfuse — prompts, output, token cost"
-            >
-              Langfuse trace
-            </a>
+            <ActionPill href={traceUrl} tone="neutral">
+              Langfuse trace ↗
+            </ActionPill>
           )}
-          <button
-            type="button"
-            onClick={onToggle}
-            className="text-fg-muted hover:text-fg underline-offset-2 hover:underline"
-          >
+          <ActionPill tone="neutral" onClick={onToggle}>
             {isOpen ? 'Hide details' : 'Show details'}
-          </button>
+          </ActionPill>
           {fix.status === 'failed' && (
-            <button
-              type="button"
-              onClick={() => void onRetry()}
-              className="text-warn hover:text-warn underline-offset-2 hover:underline"
-            >
+            <ActionPill tone="warn" onClick={() => void onRetry()}>
               Retry
-            </button>
+            </ActionPill>
           )}
-        </div>
+        </ActionPillRow>
 
         {isOpen && (
-          <div className="mt-1 pt-2 border-t border-edge space-y-2">
+          <div className="mt-1 space-y-2 border-t border-edge pt-2">
             {timeline ? (
-              <div>
-                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">
-                  PDCA timeline
-                </h4>
+              <ContainedBlock label="Branch & PR timeline" tone="muted">
                 <FixGitGraph
                   events={timeline}
                   prUrl={fix.pr_url}
@@ -227,27 +222,31 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
                   filesChanged={fix.files_changed}
                   linesChanged={fix.lines_changed}
                 />
-              </div>
+              </ContainedBlock>
             ) : (
-              <p className="text-2xs text-fg-faint">Loading timeline…</p>
+              <p className="rounded-sm border border-edge-subtle/50 bg-surface-overlay/30 px-2 py-1 text-2xs text-fg-faint">
+                Loading timeline…
+              </p>
             )}
             {fix.rationale && (
-              <div>
-                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Rationale</h4>
-                <p className="text-xs text-fg-secondary whitespace-pre-wrap">{fix.rationale}</p>
-              </div>
+              <ContainedBlock label="Agent rationale" tone="neutral">
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-fg-secondary">{fix.rationale}</p>
+              </ContainedBlock>
             )}
             {fix.files_changed && fix.files_changed.length > 0 && (
-              <div>
-                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">
-                  Files changed
-                </h4>
-                <ul className="text-2xs font-mono text-fg-muted space-y-0.5">
+              <ContainedBlock label="Files changed" tone="muted">
+                <div className="flex flex-wrap gap-1">
                   {fix.files_changed.map((f) => (
-                    <li key={f}>{f}</li>
+                    <code
+                      key={f}
+                      className="inline-flex max-w-full truncate rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-3xs text-fg-secondary"
+                      title={f}
+                    >
+                      {f}
+                    </code>
                   ))}
-                </ul>
-              </div>
+                </div>
+              </ContainedBlock>
             )}
             {specWarnings.length > 0 && (
               <div>

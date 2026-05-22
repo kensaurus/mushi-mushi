@@ -10,6 +10,7 @@ import { useState } from 'react'
 import type { EnvStatus } from '../lib/env'
 import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from '../lib/env'
 import { PageHelp, Btn, CopyButton } from '../components/ui'
+import { ContainedBlock, InlineProof, SignalChip, ActionPill } from '../components/report-detail/ReportSurface'
 
 const CLOUD_ENV_TEMPLATE = `VITE_SUPABASE_URL=${CLOUD_SUPABASE_URL}
 VITE_SUPABASE_ANON_KEY=${CLOUD_SUPABASE_ANON_KEY}`
@@ -39,7 +40,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
           <h1 className="text-xl font-bold">
             <span className="text-brand">mushi</span>mushi
           </h1>
-          <p className="text-2xs text-fg-muted mt-0.5">admin console</p>
+          <SignalChip tone="neutral" className="mt-1.5">admin console</SignalChip>
         </div>
 
         <div className="mb-3">
@@ -58,14 +59,21 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
           {/* Cloud option — primary */}
           <div>
             <h2 className="text-sm font-semibold text-fg mb-1">Quick start with Mushi Mushi Cloud</h2>
-            <p className="text-xs text-fg-muted mb-3">
-              Connect to the shared cloud backend — no Supabase project needed.
-              Copy these credentials into a <code className="text-2xs bg-surface-raised px-1 py-0.5 rounded">.env</code> file
-              in <code className="text-2xs bg-surface-raised px-1 py-0.5 rounded">apps/admin/</code>, then restart the dev server.
-            </p>
+            <ContainedBlock tone="muted" className="mb-3">
+              <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs leading-relaxed">
+                Connect to the shared cloud backend — no Supabase project needed.
+                Copy these credentials into a{' '}
+                <SignalChip tone="neutral" className="font-mono text-2xs">.env</SignalChip>
+                file in{' '}
+                <SignalChip tone="neutral" className="font-mono text-2xs">apps/admin/</SignalChip>
+                , then restart the dev server.
+              </InlineProof>
+            </ContainedBlock>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">.env (cloud)</span>
+              <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+                  .env (cloud)
+                </SignalChip>
                 <CopyButton
                   onCopy={() => copy(CLOUD_ENV_TEMPLATE, 'cloud')}
                   copied={copied === 'cloud'}
@@ -79,24 +87,22 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-2xs text-fg-faint">
+          <div className="flex items-center gap-3 text-2xs">
             <div className="flex-1 border-t border-edge-subtle" />
-            <span>or</span>
+            <SignalChip tone="neutral">or</SignalChip>
             <div className="flex-1 border-t border-edge-subtle" />
           </div>
 
           {/* Self-hosted option — secondary */}
           <div>
-            <button
-              onClick={() => setShowSelfHosted(!showSelfHosted)}
-              className="flex items-center gap-1.5 text-sm font-medium text-fg hover:text-brand transition-colors"
-            >
-              <span className="text-2xs">{showSelfHosted ? '▾' : '▸'}</span>
-              Connect your own Supabase project
-            </button>
-            <p className="text-xs text-fg-muted mt-1">
-              For full data sovereignty — bring your own Supabase backend.
-            </p>
+            <ActionPill onClick={() => setShowSelfHosted(!showSelfHosted)}>
+              {showSelfHosted ? '▾' : '▸'} Connect your own Supabase project
+            </ActionPill>
+            <ContainedBlock tone="muted" className="mt-1">
+              <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs leading-relaxed">
+                For full data sovereignty — bring your own Supabase backend.
+              </InlineProof>
+            </ContainedBlock>
           </div>
 
           {showSelfHosted && (
@@ -106,14 +112,13 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
                 {(['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const).map((v) => {
                   const isMissing = env.missing.includes(v)
                   return (
-                    <div key={v} className="flex items-center gap-2 text-xs">
-                      <span className={isMissing ? 'text-danger' : 'text-ok'}>
-                        {isMissing ? '✗' : '✓'}
-                      </span>
+                    <div key={v} className="flex items-center gap-2 text-xs flex-wrap">
+                      <SignalChip tone={isMissing ? 'danger' : 'ok'}>
+                        {isMissing ? 'Missing' : 'Set'}
+                      </SignalChip>
                       <code className={`font-mono text-2xs ${isMissing ? 'text-danger' : 'text-fg-secondary'}`}>
                         {v}
                       </code>
-                      {isMissing && <span className="text-2xs text-fg-faint">— missing</span>}
                     </div>
                   )
                 })}
@@ -121,8 +126,10 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
 
               {/* .env template */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">.env (self-hosted)</span>
+                <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                  <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+                    .env (self-hosted)
+                  </SignalChip>
                   <CopyButton
                     onCopy={() => copy(SELF_HOSTED_TEMPLATE, 'self')}
                     copied={copied === 'self'}
@@ -136,9 +143,9 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
               </div>
 
               {/* Where to find values */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-fg">Where to find these values</p>
-                <ol className="text-xs text-fg-muted space-y-1.5 list-decimal list-inside">
+              <ContainedBlock tone="muted" className="space-y-2">
+                <SignalChip tone="neutral">Where to find these values</SignalChip>
+                <ol className="text-xs text-fg-secondary space-y-1.5 list-decimal list-inside">
                   <li>
                     Go to{' '}
                     <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-brand hover:text-brand-hover underline">
@@ -147,18 +154,24 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
                     {' '}and create or select a project
                   </li>
                   <li>Open <strong>Settings → API</strong> in the Supabase dashboard</li>
-                  <li>Copy the <strong>Project URL</strong> → paste as <code className="text-2xs bg-surface-raised px-1 py-0.5 rounded">VITE_SUPABASE_URL</code></li>
-                  <li>Copy the <strong>anon / public</strong> key → paste as <code className="text-2xs bg-surface-raised px-1 py-0.5 rounded">VITE_SUPABASE_ANON_KEY</code></li>
+                  <li>
+                    Copy the <strong>Project URL</strong> → paste as{' '}
+                    <SignalChip tone="brand" className="font-mono text-2xs">VITE_SUPABASE_URL</SignalChip>
+                  </li>
+                  <li>
+                    Copy the <strong>anon / public</strong> key → paste as{' '}
+                    <SignalChip tone="brand" className="font-mono text-2xs">VITE_SUPABASE_ANON_KEY</SignalChip>
+                  </li>
                 </ol>
-              </div>
+              </ContainedBlock>
             </div>
           )}
 
           {/* Refresh */}
           <div className="flex items-center justify-between pt-2 border-t border-edge-subtle">
-            <p className="text-2xs text-fg-muted">
+            <InlineProof>
               After creating <code className="bg-surface-raised px-1 py-0.5 rounded">.env</code>, restart the dev server.
-            </p>
+            </InlineProof>
             <Btn variant="primary" onClick={() => window.location.reload()}>
               Refresh
             </Btn>

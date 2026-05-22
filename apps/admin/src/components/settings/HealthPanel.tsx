@@ -12,6 +12,7 @@ import { ConnectionStatus } from '../ConnectionStatus'
 import { RESOLVED_API_URL } from '../../lib/env'
 import { SdkInstallCard } from '../SdkInstallCard'
 import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
+import { ContainedBlock } from '../report-detail/ReportSurface'
 
 interface HealthPanelProps {
   projectId: string
@@ -30,7 +31,9 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
       }
     >
       <Section title="SDK Configuration Reference">
-        <p className="text-2xs text-fg-muted mb-2">Use these values when configuring the Mushi SDK in your app:</p>
+        <ContainedBlock tone="muted" className="mb-2">
+          <p className="text-2xs leading-relaxed text-fg-muted">Use these values when configuring the Mushi SDK in your app:</p>
+        </ContainedBlock>
         <div className="space-y-1.5">
           <div>
             <span className="text-xs text-fg-muted font-medium">API Endpoint</span>
@@ -44,10 +47,12 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
       <QuickTestSection project={project} />
 
       <Section title="Install the SDK" className="lg:col-span-2">
-        <p className="text-2xs text-fg-muted mb-2">
-          Per-framework <code className="font-mono">npm install</code> command and init snippet,
-          pre-filled with this project&apos;s id.
-        </p>
+        <ContainedBlock tone="muted" className="mb-2">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Per-framework <code className="font-mono">npm install</code> command and init snippet,
+            pre-filled with this project&apos;s id.
+          </p>
+        </ContainedBlock>
         <SdkInstallCard projectId={project.id} />
       </Section>
     </SettingsPanelLayout>
@@ -85,10 +90,12 @@ function QuickTestSection({ project }: QuickTestSectionProps) {
 
   return (
     <Section title="Pipeline Quick Test">
-      <p className="text-2xs text-fg-muted mb-2">
-        Submit a test report to verify the ingest pipeline works end-to-end.
-        Tests the project <span className="font-mono text-fg-secondary">{project.name}</span>.
-      </p>
+      <ContainedBlock tone="muted" className="mb-2">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Submit a test report to verify the ingest pipeline works end-to-end.
+          Tests the project <span className="font-mono text-fg-secondary">{project.name}</span>.
+        </p>
+      </ContainedBlock>
       <div className="flex flex-wrap items-center gap-2">
         <Btn
           size="sm"

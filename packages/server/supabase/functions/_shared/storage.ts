@@ -42,6 +42,8 @@ export interface UploadInput {
   key: string                 // path inside the bucket (no leading slash)
   body: Uint8Array
   contentType: string
+  /** SEC (Wave 5 Gap-B): TTL for signed URL in seconds. Defaults to 3600. */
+  ttlSecs?: number
 }
 
 export interface UploadResult {
@@ -308,11 +310,28 @@ class SupabaseStorageAdapter implements StorageAdapter {
       upsert: false,
     })
     if (error) throw new Error(`Supabase upload failed: ${error.message}`)
-    const { data } = this.db.storage.from(this.bucket).getPublicUrl(input.key)
+
+    // SEC (Wave 5 Gap-B): the screenshots bucket is public=false. Using
+    // getPublicUrl() on a private bucket produces a URL that resolves to a 400
+    // today — but if the bucket were ever flipped to public the value stored in
+    // reports.screenshot_url would retroactively expose every screenshot.
+    // createSignedUrl() is always correct for private buckets: it works now,
+    // stays correct after any bucket config change, and makes intent explicit.
+    //
+    // TTL: screenshots are stored at-rest indefinitely alongside their report.
+    // A short TTL (e.g. 3600) would make every screenshot in the admin UI
+    // silently break after 60 minutes. 7 years (220_752_000 s) matches the
+    // de-facto "permanent" convention used elsewhere in the codebase while
+    // still being bounded (Supabase max is 315_360_000).
+    const ttlSecs = input.ttlSecs ?? 220_752_000;
+    const { data: signed, error: signErr } = await this.db.storage
+      .from(this.bucket)
+      .createSignedUrl(input.key, ttlSecs)
+    if (signErr || !signed) throw new Error(`Supabase signed URL failed: ${signErr?.message}`)
     return {
-      url: data?.publicUrl ?? '',
+      url: signed.signedUrl,
       storagePath: `storage://supabase/${this.bucket}/${input.key}`,
-      signed: false,
+      signed: true,
     }
   }
 

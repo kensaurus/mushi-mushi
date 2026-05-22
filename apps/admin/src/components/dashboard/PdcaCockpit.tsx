@@ -17,6 +17,7 @@ import { PDCA_STAGES } from '../../lib/pdca'
 import { Card } from '../ui'
 import { LineSparkline } from '../charts'
 import type { PdcaStage, PdcaStageId, PdcaStageTone } from './types'
+import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface Props {
   stages: PdcaStage[]
@@ -43,9 +44,9 @@ export function PdcaCockpit({ stages, focusStage }: Props) {
         <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
           Loop status &mdash; Plan, Do, Check, Act
         </h2>
-        <span className="text-2xs text-fg-faint">
+        <InlineProof className="border-0 bg-transparent px-0 py-0">
           One loop · Plan → Do → Check → Act
-        </span>
+        </InlineProof>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -116,13 +117,15 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
             </span>
           </header>
 
-          <p className="text-2xs text-fg-faint mt-1.5 leading-snug line-clamp-2">{stage.description}</p>
+          <ContainedBlock tone="muted" className="mt-1.5">
+            <p className="text-2xs text-fg-faint leading-snug line-clamp-2">{stage.description}</p>
+          </ContainedBlock>
 
-          <div className="mt-2.5 flex items-baseline gap-1.5">
+          <div className="mt-2.5 flex items-baseline gap-1.5 flex-wrap">
             <span className={`text-2xl font-semibold font-mono leading-none ${numberTone}`}>
               {stage.count}
             </span>
-            <span className="text-2xs text-fg-muted truncate">{stage.countLabel}</span>
+            <SignalChip tone="neutral">{stage.countLabel}</SignalChip>
           </div>
 
           {stage.series && stage.series.length >= 2 && stage.series.some((v) => v > 0) && (
@@ -142,9 +145,11 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
             </div>
           )}
 
-          <p className="mt-2 text-2xs text-fg-secondary leading-snug min-h-[2.25rem] line-clamp-2">
-            {stage.bottleneck ?? <span className="text-fg-faint">Clean — nothing waiting in this stage.</span>}
-          </p>
+          <ContainedBlock tone={stage.bottleneck ? 'warn' : 'muted'} className="mt-2 min-h-[2.25rem]">
+            <p className="text-2xs text-fg-secondary leading-snug line-clamp-2">
+              {stage.bottleneck ?? <span className="text-fg-faint">Clean — nothing waiting in this stage.</span>}
+            </p>
+          </ContainedBlock>
 
           <div className="mt-2.5 flex items-center justify-between">
             <span className="text-2xs text-brand inline-flex items-center gap-1 group-hover:underline">

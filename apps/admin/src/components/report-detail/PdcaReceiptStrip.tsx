@@ -12,9 +12,9 @@
  *            Act   = PR merged AND report status = fixed
  */
 
-import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
+import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
@@ -57,24 +57,18 @@ export function PdcaReceiptStrip({ report, dispatchState, className = '' }: Prop
               <span className={r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-muted'}>{meta.label}</span>
               <Stamp stamp={r.stamp} />
             </div>
-            <p className={`mt-1 text-2xs leading-snug line-clamp-2 ${r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-secondary'}`}>{r.proof}</p>
+            <p className={`mt-1 ${r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-secondary'}`}>
+              <InlineProof>{r.proof}</InlineProof>
+            </p>
             {r.link && (
               r.link.href.startsWith('http') ? (
-                <a
-                  href={r.link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-                >
-                  {r.link.label}
-                </a>
+                <ActionPill href={r.link.href} tone="brand" className="mt-1.5">
+                  {r.link.label} ↗
+                </ActionPill>
               ) : (
-                <Link
-                  to={r.link.href}
-                  className="mt-1 inline-block text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-                >
-                  {r.link.label}
-                </Link>
+                <ActionPill to={r.link.href} tone="brand" className="mt-1.5">
+                  {r.link.label} →
+                </ActionPill>
               )
             )}
           </li>

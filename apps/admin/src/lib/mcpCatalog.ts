@@ -247,6 +247,21 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Manually promote this user to Champion tier as a thank-you.',
   },
+  {
+    name: 'setup_repo_for_mushi',
+    title: 'Bootstrap repo for Mushi',
+    description:
+      'Writes the three Mushi bootstrap files into the current repo root: ' +
+      '`.cursorrules` (Cursor evolution-loop coding rules), ' +
+      '`.mushi/lessons.json` (initial empty lesson cache), ' +
+      'and `MUSHI.md` (one-page project contract for agents). ' +
+      'Idempotent — safe to re-run after lessons sync. ' +
+      'Requires mcp:write scope. ' +
+      'Call this once after connecting the repo; subsequently use `mushi sync-lessons` from CI to keep lessons current.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: false },
+    useCase: 'Set up this repo for the Mushi evolution loop in one step.',
+  },
 ]
 
 export interface ResourceSpec {
@@ -277,6 +292,28 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
     uri: 'project://settings',
     title: 'Project settings',
     description: 'Project configuration — autofix agent, plugins enabled, ontology, LLM budgets.',
+    scope: 'mcp:read',
+  },
+  {
+    name: 'privacy_status',
+    uri: 'privacy://status',
+    title: 'Privacy posture',
+    description:
+      'Returns the privacy posture for this project: storage region, LLM provider, whether BYOK is configured, ' +
+      'data retention window, and last audit timestamp. ' +
+      'Agents should read this before dispatching a fix to confirm that client data stays within the expected boundary. ' +
+      'Reads as project data does not leave the project\'s own LLM account when byok_configured=true.',
+    scope: 'mcp:read',
+  },
+  {
+    name: 'evolution_history',
+    uri: 'evolution://history',
+    title: 'Evolution history',
+    description:
+      'Returns the project\'s last 30 days of judge scores, prompt promotions, fixed-bug count, and lesson inductions. ' +
+      'Agents can read this to see whether the loop is converging (rising judge scores, falling recurrence) ' +
+      'or stalling (flat scores, same bugs re-appearing). Use before triage to understand which bug classes ' +
+      'the loop has already learned to handle, and which still need human attention.',
     scope: 'mcp:read',
   },
 ]

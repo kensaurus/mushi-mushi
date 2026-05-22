@@ -9,6 +9,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER, detectLayer } from './exploreLayers'
 import type { ExploreEdge, ExploreLayer, ExploreNode } from './exploreTypes'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface NodeRect {
   id: string
@@ -118,8 +120,8 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
 
   if (columns.length === 0) {
     return (
-      <div className="border border-edge rounded-md bg-surface-root p-6 text-center text-2xs text-fg-muted">
-        No files indexed yet.
+      <div className="py-8">
+        <EmptySectionMessage text="No files indexed yet — run codebase indexing from Settings to populate the graph." />
       </div>
     )
   }
@@ -179,7 +181,9 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                     aria-hidden="true"
                   />
                   <span className="text-2xs font-semibold" style={{ color: col.color }}>{col.label}</span>
-                  <span className="text-2xs text-fg-faint font-mono ml-auto">{col.nodes.length}</span>
+                  <SignalChip tone="neutral" className="ml-auto font-mono">
+                    {col.nodes.length}
+                  </SignalChip>
                 </div>
                 {/* Proportional fill bar */}
                 <div className="h-1 rounded-full bg-surface-overlay overflow-hidden">
@@ -189,9 +193,11 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                   />
                 </div>
                 {col.topNode && col.nodes.length > 1 && (
-                  <div className="text-3xs text-fg-faint truncate" title={`Most-imported: ${col.topNode.label}`}>
-                    hub: <span className="text-fg-secondary font-mono">{col.topNode.label}</span>
-                  </div>
+                  <span title={`Most-imported: ${col.topNode.label}`}>
+                    <InlineProof className="truncate">
+                      hub: <span className="text-fg-secondary font-mono">{col.topNode.label}</span>
+                    </InlineProof>
+                  </span>
                 )}
               </div>
 

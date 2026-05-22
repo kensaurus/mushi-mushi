@@ -6,9 +6,9 @@
  *          projects under 50% usage are hidden to keep the dashboard quiet.
  */
 
-import { Link } from 'react-router-dom'
-import { Card, Badge } from '../ui'
+import { Card } from '../ui'
 import { usePageData } from '../../lib/usePageData'
+import { ActionPill, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 interface QuotaProject {
   project_id: string
@@ -59,14 +59,14 @@ export function QuotaBanner() {
           <Card key={p.project_id} className={`p-2 border ${border}`}>
             <div className="flex items-center justify-between gap-2 text-2xs">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-fg-secondary truncate">{p.project_name}</span>
                   {p.over_quota ? (
-                    <Badge className="bg-danger-subtle text-danger">Over quota</Badge>
+                    <SignalChip tone="danger">Over quota</SignalChip>
                   ) : pct >= 80 ? (
-                    <Badge className="bg-warn/10 text-warn">{pct}% of free quota</Badge>
+                    <SignalChip tone="warn">{pct}% of free quota</SignalChip>
                   ) : (
-                    <Badge className="bg-surface-overlay text-fg-muted">{pct}% of free quota</Badge>
+                    <SignalChip tone="neutral">{pct}% of free quota</SignalChip>
                   )}
                 </div>
                 <div
@@ -78,13 +78,13 @@ export function QuotaBanner() {
                 >
                   <div className={`h-full ${bar}`} style={{ width: `${Math.max(2, pct)}%` }} />
                 </div>
-                <p className="text-3xs text-fg-faint mt-0.5 font-mono">
+                <InlineProof className="mt-1 font-mono tabular-nums">
                   {p.usage.reports.toLocaleString()} / {limit.toLocaleString()} reports this month
-                </p>
+                </InlineProof>
               </div>
-              <Link to="/billing" className="text-2xs text-brand hover:text-brand-hover shrink-0">
+              <ActionPill to="/billing" tone="brand">
                 Manage →
-              </Link>
+              </ActionPill>
             </div>
           </Card>
         )

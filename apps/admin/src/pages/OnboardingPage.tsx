@@ -11,15 +11,17 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { Btn, Card, Input, PageHelp, PageHeader, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
+import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { PageHero } from '../components/PageHero'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
@@ -338,15 +340,21 @@ export function OnboardingPage() {
       <PageHeader
         title={copy?.title ?? 'Setup'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'
-        }
       >
         <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn/10 text-warn' : 'bg-info/10 text-info'}>
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'}
+        </p>
+      </ContainedBlock>
+
+      {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
+      <OnboardingModeIntroCard />
 
       <OnboardingStatusBanner
         stats={stats}
@@ -371,7 +379,9 @@ export function OnboardingPage() {
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
         {!ux.hideOverviewTab ? (
-          <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+          <ContainedBlock tone="muted" className="mb-3">
+            <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+          </ContainedBlock>
         ) : null}
         <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
           <StatCard
@@ -476,14 +486,20 @@ export function OnboardingPage() {
                 ✓
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-fg">Setup complete</h3>
+                <h3 className="text-sm font-semibold text-fg">
+                  Pipeline live &middot; {project?.complete ?? 0} of {project?.total ?? 8} steps
+                </h3>
                 <p className="text-xs text-fg-muted mt-0.5">
-                  Bookmark this page — the SDK install snippet below stays handy when you wire Mushi into a new
-                  framework, repo, or environment.
+                  Required steps done — reports flow in and the loop runs automatically.
+                  {(project?.complete ?? 0) < (project?.total ?? 8) && (
+                    <span> Optional integrations (fix agents, routing) are on the Steps tab.</span>
+                  )}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Btn size="sm" variant="primary" onClick={() => navigate('/integrations')}>
+                    Unlock auto-fix →
+                  </Btn>
                   <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => navigate('/projects')}>Manage projects</Btn>
                 </div>
               </div>
             </div>
@@ -551,9 +567,11 @@ export function OnboardingPage() {
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Create your first project</h3>
-            <p className="text-xs text-fg-muted mt-1">
-              A project groups all bug reports from one application. Name it after your app.
-            </p>
+            <ContainedBlock tone="muted" className="mt-2">
+              <p className="text-xs text-fg-muted">
+                A project groups all bug reports from one application. Name it after your app.
+              </p>
+            </ContainedBlock>
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
@@ -597,9 +615,11 @@ export function OnboardingPage() {
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Generate an API key</h3>
-            <p className="text-xs text-fg-muted mt-1">
-              Your SDK uses this key to authenticate report submissions. The full key is shown <strong>only once</strong> — copy it before navigating away.
-            </p>
+            <ContainedBlock tone="warn" className="mt-2">
+              <p className="text-xs text-fg-muted">
+                Your SDK uses this key to authenticate report submissions. The full key is shown <strong>only once</strong> — copy it before navigating away.
+              </p>
+            </ContainedBlock>
           </div>
           {!apiKey ? (
             <>
@@ -621,13 +641,17 @@ export function OnboardingPage() {
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
-            <p className="text-xs text-fg-muted mt-1">
-              Verify that the backend is reachable and the pipeline can accept reports.
-            </p>
+            <ContainedBlock tone="muted" className="mt-2">
+              <p className="text-xs text-fg-muted">
+                Verify that the backend is reachable and the pipeline can accept reports.
+              </p>
+            </ContainedBlock>
           </div>
           <ConnectionStatus />
           <div className="border-t border-edge-subtle pt-3">
-            <p className="text-xs text-fg-muted mb-2">Submit a test report to verify the full pipeline:</p>
+            <ContainedBlock tone="muted" className="mb-2">
+              <p className="text-xs text-fg-muted">Submit a test report to verify the full pipeline:</p>
+            </ContainedBlock>
             <div className="flex items-center gap-3 flex-wrap">
               <Btn
                 onClick={submitTestReport}
@@ -656,6 +680,90 @@ export function OnboardingPage() {
         <Card className="p-4 border border-edge-subtle">
           <p className="text-xs text-fg-muted">Generate an API key on the Steps tab first — verification needs an active ingest key.</p>
           <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('steps')}>Go to Steps</Btn>
+        </Card>
+      )}
+
+      {/* Pipeline already verified — both steps complete but no in-session test ran yet.
+          Prevents the tab from looking completely empty for returning users. */}
+      {project && !setup.isStepIncomplete('api_key_generated') && !setup.isStepIncomplete('first_report_received') && testStatus !== 'pass' && (
+        <Card className="p-5 space-y-4 border border-ok/20 bg-ok/5">
+          <div className="flex items-start gap-3">
+            <span className="text-ok text-base mt-0.5" aria-hidden="true">✓</span>
+            <div>
+              <h3 className="text-sm font-semibold text-fg">Pipeline verified</h3>
+              <p className="text-xs text-fg-muted mt-0.5">
+                Your ingest key is active and at least one report has arrived. The pipeline is working.
+              </p>
+            </div>
+          </div>
+          <ConnectionStatus />
+          <div className="border-t border-edge-subtle pt-3 flex items-center gap-3 flex-wrap">
+            <Btn
+              size="sm"
+              onClick={submitTestReport}
+              loading={testStatus === 'running'}
+              disabled={testStatus === 'running'}
+            >
+              {testStatus === 'running' ? 'Submitting…' : 'Send another test'}
+            </Btn>
+            {testStatus === 'fail' && (
+              <ResultChip tone="error" at={testRanAt}>{error || 'Submission failed'}</ResultChip>
+            )}
+            <Link to="/reports" className="text-xs text-fg-muted underline hover:no-underline">
+              View your reports →
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {/* "Show me one loop running" — demo the full 5-stage evolution loop.
+          Available once the pipeline is verified (test report passes). */}
+      {project && testStatus === 'pass' && (
+        <Card className="p-5 space-y-3 border border-ok/30 bg-ok/4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-fg">See the evolution loop close</span>
+              <span className="inline-flex items-center gap-1 text-2xs font-medium text-ok">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-ok" />
+                pipeline live
+              </span>
+            </div>
+            <p className="text-xs text-fg-muted mt-1">
+              Your test report is in the pipeline. Follow it through all 5 stages
+              — capture → classify → fix → verify → remember — to see exactly what
+              happens to a real user's bug.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link to={`/reports?filter=test`}>
+              <Btn size="sm" variant="primary">
+                Watch the loop →
+              </Btn>
+            </Link>
+            <Link to="/judge" className="text-xs text-fg-muted underline hover:no-underline">
+              See judge scores
+            </Link>
+            <Link to="/lessons" className="text-xs text-fg-muted underline hover:no-underline">
+              See lesson library
+            </Link>
+          </div>
+          <div className="grid grid-cols-5 gap-1 pt-1">
+            {[
+              { stage: 'Capture', desc: 'screenshot + logs', done: true },
+              { stage: 'Classify', desc: 'AI triage', done: testStatus === 'pass' },
+              { stage: 'Fix', desc: 'draft PR', done: false },
+              { stage: 'Verify', desc: 'QA stories', done: false },
+              { stage: 'Remember', desc: 'lesson library', done: false },
+            ].map(({ stage, desc, done }) => (
+              <div
+                key={stage}
+                className={`px-2 py-1.5 rounded-sm text-center text-2xs space-y-0.5 ${done ? 'bg-ok/10 border border-ok/20' : 'bg-surface-raised border border-edge-subtle'}`}
+              >
+                <div className={`font-semibold ${done ? 'text-ok' : 'text-fg-muted'}`}>{stage}</div>
+                <div className="text-fg-faint">{desc}</div>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
         </>
