@@ -167,14 +167,39 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-/** TesterRoute — like ProtectedRoute but redirects to /login?as=tester for unauthenticated visitors. */
+/**
+ * TesterRoute — like ProtectedRoute but:
+ *   1. Redirects unauthenticated visitors to /login?as=tester
+ *   2. Wave 9: Self-hosted instances see an upgrade CTA instead of the tester portal.
+ *      The marketplace is cloud-only (per plan spec).
+ */
 function TesterRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   const location = useLocation()
   if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
+  // Wave 9 self-host gate: marketplace is cloud-only.
+  if (envStatus.mode === 'self-hosted') {
+    return (
+      <div className="flex h-screen items-center justify-center p-8">
+        <div className="max-w-md text-center space-y-4">
+          <p className="text-2xl">🪲</p>
+          <h1 className="text-lg font-semibold">Mushi Bounties requires Mushi Cloud</h1>
+          <p className="text-sm text-fg-muted">
+            The tester marketplace and reward system are hosted features — they
+            require a Mushi Cloud account with Pro or higher.
+          </p>
+          <a
+            href="https://kensaur.us/mushi-mushi/pricing"
+            className="inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover motion-safe:transition-colors"
+          >
+            Upgrade to Mushi Cloud →
+          </a>
+        </div>
+      </div>
+    )
+  }
   if (!session) return <Navigate to={`/login?as=tester&next=${encodeURIComponent(location.pathname)}`} replace />
   return <>{children}</>
-}
 }
 
 function ResilienceLayer() {
