@@ -600,3 +600,4 @@ export function registerBudgetRoutes(parent: Hono<{ Variables: Variables }>) {
 
   parent.route('/v1/admin/org/budget', r)
 }
+

@@ -15,7 +15,6 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
-import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
@@ -76,7 +75,7 @@ async function requireMarketplacePublish(
 
 // ─── Route registration ───────────────────────────────────────
 
-export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>) {
+export function registerPublishedAppsRoutes(app: Hono) {
   // GET /v1/admin/published-apps/:projectId
   app.get('/v1/admin/published-apps/:projectId', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')

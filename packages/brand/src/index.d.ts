@@ -6,6 +6,19 @@ export declare const editorialTokens: {
   readonly fontMono: string
 }
 
+export declare const MUSHI_BOUNTIES_NAME: {
+  /** Full product name — landing pages, press, partner docs, OG tags. */
+  readonly full: string
+  /** Short form — admin console, nav items, breadcrumbs. */
+  readonly short: string
+  /** URL slug — route paths, slugs, href attributes. */
+  readonly slug: string
+  /** 5-word pitch — hero eyebrows, email subjects, social captions. */
+  readonly pitch: string
+  /** Sub-tagline — section labels, parallels MUSHI_TAGLINE.spine. */
+  readonly spine: string
+}
+
 export declare const MUSHI_TAGLINE: {
   /** Full 12-word form — README headers, landing H1, docs landing. */
   readonly full: string

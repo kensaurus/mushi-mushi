@@ -60,7 +60,6 @@
  */
 
 import type { Hono } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { adminOrApiKey } from '../../_shared/auth.ts';
@@ -144,7 +143,7 @@ function rowToA2ATask(row: FixDispatchRow): Record<string, unknown> {
   };
 }
 
-export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerA2ATaskRoutes(app: Hono): void {
   // ----------------------------------------------------------------
   // POST /v1/a2a/tasks — create a Task
   //

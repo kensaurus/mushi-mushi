@@ -56,6 +56,7 @@ import {
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
+import { PublishingTab } from '../components/rewards/PublishingTab'
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
 import {
   contributors30dDetail,
@@ -2154,6 +2155,7 @@ const TABS: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'analytics',     label: 'Retention',       description: 'Retention lift for top-tier contributors vs everyone else.' },
   { id: 'sandbox',       label: 'Simulator',       description: 'Simulate any activity log against current rules without real data.' },
   { id: 'settings',      label: 'Settings',        description: 'Webhooks, identity providers, payout ledger, and disputes.' },
+  { id: 'publishing',    label: 'Bounties',         description: 'Publish your app to the Mushi Bounties marketplace and reward testers with mushi-points.' },
 ]
 
 function isTabId(v: string | null): v is TabId {
@@ -2235,6 +2237,7 @@ export function RewardsPage() {
         label: 'Settings',
         count: stats.webhooksFailing > 0 ? stats.webhooksFailing : undefined,
       },
+      { id: 'publishing' as const, label: '🪲 Bounties' },
     ],
     [
       stats.enabledRulesCount,
@@ -2544,6 +2547,9 @@ export function RewardsPage() {
         {active === 'analytics' && <RetentionAnalyticsTab />}
         {active === 'sandbox' && <SandboxSimulatorTab />}
         {active === 'settings' && <SettingsTab canEdit={canEdit} />}
+        {active === 'publishing' && (
+          <PublishingTab projectId={stats.projectId} canEdit={canEdit} />
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,4 @@
 import type { Hono, Context } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -44,7 +43,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerPublicRoutes(app: Hono): void {
   // ============================================================
   // SDK ROUTES (API key auth)
   // ============================================================

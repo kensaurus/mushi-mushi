@@ -55,6 +55,7 @@ import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
+import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 
@@ -344,6 +345,16 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
           <TimelineCard report={report} />
         </Section>
       </div>
+
+      {/* Mushi Bounties: reviewer grading card when report came from a tester */}
+      {report.tester_submission_id && report.tester_submission && (
+        <div className="mt-3 rounded-lg border border-brand/20 bg-brand/5 p-4">
+          <TesterSubmissionCard
+            submission={report.tester_submission}
+            onReviewed={reload}
+          />
+        </div>
+      )}
 
       <div className="mt-3">
         <SentryContextPanel

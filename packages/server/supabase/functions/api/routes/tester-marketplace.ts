@@ -29,8 +29,7 @@
 //   GET /v1/me/tester-status
 // ============================================================
 
-import type { Hono } from 'npm:hono@4'
-import type { Variables } from '../types.ts'
+import type { Hono, Context } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
@@ -42,7 +41,8 @@ const rlog = log.child('tester-marketplace-routes')
 
 // ─── OFAC-denied country codes (simplified list) ─────────────
 
-const OFAC_DENIED = new Set(['CU', 'IR', 'KP', 'SY', 'UA-CR']) // Cuba, Iran, DPRK, Syria, Crimea
+// Wave 9: Import centralized sanctions module (replaces inline OFAC set).
+import { checkSanctions } from '../../_shared/sanctions.ts'
 
 // ─── Helper: forward submission event to developer's Sentry DSN ──────────────
 // Parses the DSN to extract the store endpoint and sends a minimal Sentry
@@ -111,7 +111,7 @@ async function resolveTester(
 
 // ─── Route registration ───────────────────────────────────────
 
-export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables }>) {
+export function registerTesterMarketplaceRoutes(app: Hono) {
 
   // ── Public routes ────────────────────────────────────────────
 
@@ -297,6 +297,49 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     })
   })
 
+  // PUT /v1/tester/kyc — KYC metadata submission (Wave 9)
+  // Receives the tax form kind + TIN hash (hashed client-side).
+  // Sets withholding_status='pending' until a reviewer clears it.
+  app.put('/v1/tester/kyc', jwtAuth, async (c) => {
+    const authUserId = c.get('userId') as string
+    const supabase = getServiceClient()
+    const tester = await resolveTester(supabase, authUserId)
+    if (!tester) return c.json({ error: 'not_a_tester' }, 403)
+
+    const body = await c.req.json()
+    const { jurisdiction, taxFormKind, legalName, tinProvidedHash } = body as {
+      jurisdiction?: string
+      taxFormKind?: string
+      legalName?: string
+      tinProvidedHash?: string
+    }
+
+    if (!jurisdiction || !taxFormKind || !tinProvidedHash) {
+      return c.json({ error: 'jurisdiction, taxFormKind, and tinProvidedHash are required' }, 400)
+    }
+
+    // Upsert KYC row. withholding_status starts as 'pending' until manually reviewed.
+    const { error } = await supabase
+      .from('tester_kyc')
+      .upsert(
+        {
+          tester_id: tester.id,
+          jurisdiction,
+          tax_form_kind: taxFormKind,
+          tin_provided_hash: tinProvidedHash,
+          withholding_status: 'pending',
+          tax_form_collected_at: new Date().toISOString(),
+          sanctions_screened_at: new Date().toISOString(),
+        },
+        { onConflict: 'tester_id' },
+      )
+
+    if (error) return c.json({ error: error.message }, 500)
+
+    rlog.info('Tester KYC submitted', { testerId: tester.id, taxFormKind, jurisdiction })
+    return c.json({ ok: true, status: 'pending_review' })
+  })
+
   // POST /v1/tester/export — GDPR data portability
   app.post('/v1/tester/export', jwtAuth, async (c) => {
     const authUserId = c.get('userId') as string
@@ -427,13 +470,14 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    // OFAC check.
-    if (tester.country_code && OFAC_DENIED.has(tester.country_code)) {
-      return c.json({ error: 'region_not_supported' }, 403)
+    // OFAC check (Wave 9 sanctions geofence).
+    const sanctionsResult = checkSanctions(tester.country_code)
+    if (sanctionsResult.blocked) {
+      return c.json({ error: 'region_not_supported', reason: sanctionsResult.reason }, 403)
     }
 
     // Accept either UUID or slug.
-    const isUuid = /^[0-9a-f-]{36}$/i.test(slug)
+    const isUuid = /^[0-9a-f-]{36}$/i.test(slug ?? '')
     const appQuery = supabase
       .from('published_apps')
       .select('id, published_app_targeting (reputation_min)')
@@ -568,20 +612,16 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       return c.json({ error: 'not_subscribed' }, 403)
     }
 
-    // Velocity check: max 5 per app per 24h.
-    const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-    const { count: velocity } = await supabase
-      .from('tester_submissions')
-      .select('id', { count: 'exact', head: true })
-      .eq('tester_id', tester.id)
-      .eq('app_id', app.id)
-      .gte('created_at', since24h)
-
-    if ((velocity ?? 0) >= 5) {
-      return c.json({ error: 'velocity_cap_exceeded', cap: 5, window: '24h' }, 429)
-    }
+    // Wave 8: Tester velocity check via shared anti-gaming module.
+    // 20 global / 5 per-app per 24h. Excess withholds points, not rejected outright.
+    const { checkTesterVelocity } = await import('../../_shared/anti-gaming.ts')
+    const velocityResult = await checkTesterVelocity(supabase, tester.id, app.id)
+    // velocityResult.withheld means we'll create the submission but won't auto-award points.
+    const withheldByVelocity = velocityResult.withheld
 
     // Create the tester_submissions row.
+    // If velocity cap is exceeded, the submission is still created but marked withheld
+    // so points are not auto-awarded until a reviewer approves.
     const { data: submission, error: subErr } = await supabase
       .from('tester_submissions')
       .insert({
@@ -591,7 +631,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
         severity,
         description,
         title,
-        status: 'pending',
+        status: withheldByVelocity ? 'spam' : 'pending', // 'spam' withholds auto-award; reviewer can override
       })
       .select()
       .single()
@@ -723,9 +763,10 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
 
     // Gift-card specific checks.
     if (kind === 'gift_card') {
-      // OFAC check.
-      if (tester.country_code && OFAC_DENIED.has(tester.country_code)) {
-        return c.json({ error: 'region_not_supported' }, 403)
+      // OFAC / sanctions check (Wave 9 defense-in-depth).
+      const giftCardSanctions = checkSanctions(tester.country_code)
+      if (giftCardSanctions.blocked) {
+        return c.json({ error: 'region_not_supported', reason: giftCardSanctions.reason }, 403)
       }
 
       // KYC threshold ($400).
@@ -796,9 +837,43 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       })
     }
 
-    // For closed-loop mushi_pro_credit: Wave 7 will wire the actual coupon creation.
-    // For now, mark as complete immediately.
+    // For closed-loop mushi_pro_credit / app_slot / api_quota:
+    // Apply a Stripe customer balance credit so it appears on the tester's
+    // next Mushi Pro invoice. Uses 1.3x premium multiplier (set above).
     if (kind !== 'gift_card') {
+      try {
+        const { stripeFromEnv } = await import('../../_shared/stripe.ts')
+        const { createCustomerBalanceCredit } = await import('../../_shared/stripe.ts')
+        const stripeCfg = stripeFromEnv()
+
+        // Look up the tester's Stripe customer ID from their auth account.
+        const { data: userSubscription } = await supabase
+          .from('subscriptions')
+          .select('stripe_customer_id')
+          .eq('user_id', authUserId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (stripeCfg && userSubscription?.stripe_customer_id) {
+          const faceValueCents = Math.round(
+            (points_spent / 100) * 100 * premiumMultiplier, // 1.3x premium
+          )
+          await createCustomerBalanceCredit(stripeCfg, {
+            customerId: userSubscription.stripe_customer_id,
+            amountCents: faceValueCents,
+            currency: 'usd',
+            description: `Mushi Bounties: ${points_spent.toLocaleString()} points → $${(faceValueCents / 100).toFixed(2)} Mushi Pro credit (1.3× premium)`,
+            idempotencyKey: `mbounty:credit:${redemption.id}`,
+          })
+        }
+      } catch (err) {
+        rlog.warn('Stripe Pro credit failed — redemption still marked complete', {
+          error: String(err),
+          redemptionId: redemption.id,
+        })
+      }
+
       await supabase
         .from('tester_redemptions')
         .update({ status: 'complete', processed_at: new Date().toISOString() })
@@ -840,8 +915,9 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     note: z.string().max(2000).optional(), // alias used by TesterSubmissionCard
   })
 
+  // deno-lint-ignore no-explicit-any
   async function handleReview(
-    c: Parameters<Parameters<typeof app.post>[1]>[0],
+    c: Context<any>,
     action: 'accepted' | 'informative' | 'duplicate' | 'spam',
   ) {
     const id = c.req.param('id')
@@ -920,6 +996,98 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
   app.post('/v1/admin/tester-submissions/:id/duplicate',   jwtAuth, (c) => handleReview(c, 'duplicate'))
   app.post('/v1/admin/tester-submissions/:id/spam',        jwtAuth, (c) => handleReview(c, 'spam'))
 
+  // ── Withheld redemptions admin endpoints (AntiGamingPage) ────────────────────
+  // GET /v1/admin/tester-redemptions/withheld — list redemptions with status='withheld'
+  app.get('/v1/admin/tester-redemptions/withheld', jwtAuth, async (c) => {
+    const supabase = getServiceClient()
+    const { data, count } = await supabase
+      .from('tester_redemptions')
+      .select(`
+        id,
+        tester_id,
+        kind,
+        points_spent,
+        face_value_usd,
+        requested_at,
+        mushi_testers!tester_redemptions_tester_id_fkey ( public_handle )
+      `, { count: 'exact' })
+      .eq('status', 'withheld')
+      .order('requested_at', { ascending: false })
+      .limit(50)
+
+    return c.json({ count: count ?? 0, items: data ?? [] })
+  })
+
+  // POST /v1/admin/tester-redemptions/:id/approve — approve a withheld redemption
+  app.post('/v1/admin/tester-redemptions/:id/approve', jwtAuth, async (c) => {
+    const id = c.req.param('id')
+    const supabase = getServiceClient()
+
+    const { data: redemption } = await supabase
+      .from('tester_redemptions')
+      .select('id, tester_id, kind, points_spent, face_value_usd, status')
+      .eq('id', id)
+      .eq('status', 'withheld')
+      .single()
+
+    if (!redemption) return c.json({ error: 'withheld_redemption_not_found' }, 404)
+
+    await supabase
+      .from('tester_redemptions')
+      .update({ status: 'pending' })
+      .eq('id', id)
+
+    // If gift_card, make sure a tremendous_orders row exists (it may have been
+    // created already but with status='withheld' — re-open it).
+    if (redemption.kind === 'gift_card') {
+      await supabase
+        .from('tremendous_orders')
+        .update({ status: 'pending', external_id: null })
+        .eq('redemption_id', id)
+    } else {
+      // Non-gift-card (mushi_pro_credit, app_slot, api_quota): complete immediately.
+      await supabase
+        .from('tester_redemptions')
+        .update({ status: 'complete', processed_at: new Date().toISOString() })
+        .eq('id', id)
+    }
+
+    rlog.info('Withheld redemption approved by admin', { redemptionId: id })
+    return c.json({ ok: true })
+  })
+
+  // POST /v1/admin/tester-redemptions/:id/deny — deny + refund a withheld redemption
+  app.post('/v1/admin/tester-redemptions/:id/deny', jwtAuth, async (c) => {
+    const id = c.req.param('id')
+    const supabase = getServiceClient()
+
+    const { data: redemption } = await supabase
+      .from('tester_redemptions')
+      .select('id, tester_id, points_spent, status')
+      .eq('id', id)
+      .eq('status', 'withheld')
+      .single()
+
+    if (!redemption) return c.json({ error: 'withheld_redemption_not_found' }, 404)
+
+    // Mark as failed.
+    await supabase
+      .from('tester_redemptions')
+      .update({ status: 'failed', failure_reason: 'denied_by_reviewer' })
+      .eq('id', id)
+
+    // Refund the points.
+    await supabase.rpc('award_tester_points', {
+      p_tester_id: redemption.tester_id,
+      p_delta_points: redemption.points_spent,
+      p_reason: 'reversal',
+      p_idempotency_key: `refund:withheld:${id}`,
+    })
+
+    rlog.info('Withheld redemption denied + refunded by admin', { redemptionId: id })
+    return c.json({ ok: true })
+  })
+
   // ── Tremendous webhook receiver ──────────────────────────────────────────────
   // Tremendous sends signed POST events when an order status changes.
   // HMAC-SHA256 signed with the secret stored in TREMENDOUS_WEBHOOK_SECRET.
@@ -927,7 +1095,8 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const supabase = getServiceClient()
 
     // Verify HMAC signature.
-    const secret = (c.get('env') as Record<string, string> | undefined)?.TREMENDOUS_WEBHOOK_SECRET
+    const envVars = (c.get as (key: string) => unknown)('env') as Record<string, string> | undefined
+    const secret = envVars?.TREMENDOUS_WEBHOOK_SECRET
       ?? Deno.env.get('TREMENDOUS_WEBHOOK_SECRET')
       ?? ''
 

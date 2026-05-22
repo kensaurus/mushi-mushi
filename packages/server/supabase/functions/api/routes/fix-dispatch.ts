@@ -1,5 +1,4 @@
 import type { Hono, Context } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -45,7 +44,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerFixDispatchRoutes(app: Hono): void {
   // ============================================================
   // FIX DISPATCH (V5.3 §2.10) — admin-triggered, queue-based
   // ============================================================

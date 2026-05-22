@@ -11,6 +11,7 @@ export type RewardsTabId =
   | 'analytics'
   | 'sandbox'
   | 'settings'
+  | 'publishing'
 
 export type RewardsTopPriority =
   | 'no_org'

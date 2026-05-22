@@ -164,7 +164,13 @@ export async function ingestReport(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   body: Record<string, any>,
-  options?: { ipAddress?: string; userAgent?: string },
+  options?: {
+    ipAddress?: string
+    userAgent?: string
+    /** Mushi Bounties: link the ingested report back to the tester and submission row. */
+    testerId?: string
+    testerSubmissionId?: string
+  },
 ): Promise<{ ok: boolean; reportId?: string; error?: string }> {
   const parsed = reportSubmissionSchema.safeParse(body);
   if (!parsed.success) {
@@ -406,6 +412,9 @@ export async function ingestReport(
     queued_at: report.queuedAt,
     synced_at: new Date().toISOString(),
     created_at: report.createdAt,
+    // Mushi Bounties tester linkage (Wave 6)
+    ...(options?.testerId ? { tester_id: options.testerId } : {}),
+    ...(options?.testerSubmissionId ? { tester_submission_id: options.testerSubmissionId } : {}),
   });
 
   if (insertError) {
@@ -571,8 +580,8 @@ export function triggerClassification(reportId: string, projectId: string) {
         await handleQueueFailure(db, reportId, String(err));
       });
 
-    if (typeof (globalThis as Record<string, unknown>).EdgeRuntime !== 'undefined') {
-      (globalThis as Record<string, unknown> & { EdgeRuntime: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime.waitUntil(classifyPromise);
+    if (typeof (globalThis as unknown as Record<string, unknown>).EdgeRuntime !== 'undefined') {
+      (globalThis as unknown as Record<string, unknown> & { EdgeRuntime: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime.waitUntil(classifyPromise);
     }
   } catch (err) {
     log.error('Failed to invoke fast-filter', { reportId, err: String(err) });

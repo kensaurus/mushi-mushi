@@ -87,6 +87,13 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m
 const DocsBridgePage = lazy(() => import('./pages/DocsBridgePage').then(m => ({ default: m.DocsBridgePage })))
 const ExplorePage = lazy(() => import('./pages/ExplorePage').then(m => ({ default: m.ExplorePage })))
 
+// Mushi Bounties — Tester Portal (Wave 3-4)
+const TesterHomePage = lazy(() => import('./pages/tester/TesterHomePage').then(m => ({ default: m.TesterHomePage })))
+const TesterAppsPage = lazy(() => import('./pages/tester/TesterAppsPage').then(m => ({ default: m.TesterAppsPage })))
+const TesterSubmissionsPage = lazy(() => import('./pages/tester/TesterSubmissionsPage').then(m => ({ default: m.TesterSubmissionsPage })))
+const TesterWalletPage = lazy(() => import('./pages/tester/TesterWalletPage').then(m => ({ default: m.TesterWalletPage })))
+const TesterSettingsPage = lazy(() => import('./pages/tester/TesterSettingsPage').then(m => ({ default: m.TesterSettingsPage })))
+
 /**
  * NotFoundPage — rendered for any unknown route the SPA's React Router
  * matches. Uses the editorial fallback so the visitor's experience is
@@ -160,6 +167,16 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** TesterRoute — like ProtectedRoute but redirects to /login?as=tester for unauthenticated visitors. */
+function TesterRoute({ children }: { children: ReactNode }) {
+  const { session, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
+  if (!session) return <Navigate to={`/login?as=tester&next=${encodeURIComponent(location.pathname)}`} replace />
+  return <>{children}</>
+}
+}
+
 function ResilienceLayer() {
   useSessionWatcher()
   return <OfflineBanner />
@@ -222,6 +239,61 @@ export function App() {
             Router v6 picks the more-specific match over `/*`. The admin
             integration config is available at /integrations/config. */}
         <Route path="/integrations" element={<IntegrationsRouteGate />} />
+        {/* Mushi Bounties — Tester Portal (Wave 3-4).
+            Mounted OUTSIDE the dev-console ProtectedRoute + Layout so testers get their own
+            TesterLayout chrome instead of the full admin sidebar. */}
+        {/* Mushi Bounties — Tester Portal (Wave 3-4).
+            Pages include TesterLayout; routes don't need the dev-console Layout. */}
+        <Route
+          path="/tester"
+          element={
+            <TesterRoute>
+              <Suspense fallback={<Loading text="Loading tester portal..." />}>
+                <TesterHomePage />
+              </Suspense>
+            </TesterRoute>
+          }
+        />
+        <Route
+          path="/tester/apps"
+          element={
+            <TesterRoute>
+              <Suspense fallback={<Loading text="Loading..." />}>
+                <TesterAppsPage />
+              </Suspense>
+            </TesterRoute>
+          }
+        />
+        <Route
+          path="/tester/submissions"
+          element={
+            <TesterRoute>
+              <Suspense fallback={<Loading text="Loading..." />}>
+                <TesterSubmissionsPage />
+              </Suspense>
+            </TesterRoute>
+          }
+        />
+        <Route
+          path="/tester/wallet"
+          element={
+            <TesterRoute>
+              <Suspense fallback={<Loading text="Loading..." />}>
+                <TesterWalletPage />
+              </Suspense>
+            </TesterRoute>
+          }
+        />
+        <Route
+          path="/tester/settings"
+          element={
+            <TesterRoute>
+              <Suspense fallback={<Loading text="Loading..." />}>
+                <TesterSettingsPage />
+              </Suspense>
+            </TesterRoute>
+          }
+        />
         <Route
           path="/*"
           element={

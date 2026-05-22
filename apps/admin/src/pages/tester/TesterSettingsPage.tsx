@@ -7,6 +7,7 @@ import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { Btn } from '../../components/ui'
 import { ContainedBlock } from '../../components/report-detail/ReportSurface'
+import { KycForm } from '../../components/tester/KycForm'
 
 const EXPERTISE_OPTIONS = [
   'web', 'ios', 'android', 'accessibility', 'security',
@@ -191,12 +192,18 @@ export function TesterSettingsPage() {
                   </p>
                 </ContainedBlock>
               ) : (
-                <ContainedBlock tone="muted">
-                  <p className="text-xs text-fg-secondary">
-                    Identity verification (W-9 or W-8BEN) is required once your gift-card redemptions
-                    reach $400 in a calendar year. You'll be prompted automatically.
-                  </p>
-                </ContainedBlock>
+                <div className="space-y-3">
+                  <ContainedBlock tone="muted">
+                    <p className="text-xs text-fg-secondary">
+                      Identity verification (W-9 or W-8BEN) is required once your gift-card redemptions
+                      reach $400 in a calendar year. You can also complete it proactively.
+                    </p>
+                  </ContainedBlock>
+                  <KycForm
+                    countryCode={profile?.country ?? null}
+                    onSubmitted={() => reload()}
+                  />
+                </div>
               )}
             </section>
 

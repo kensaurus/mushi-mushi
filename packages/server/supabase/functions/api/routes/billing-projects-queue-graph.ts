@@ -1,5 +1,4 @@
 import type { Hono, Context } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -43,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // =================================================================================
   // GET /v1/admin/billing/stats
   // Workspace health summary for billing banner + KPI strip (active project focus).

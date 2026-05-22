@@ -1,5 +1,4 @@
 import type { Hono, Context } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -43,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerQueryFixesRepoRoutes(app: Hono): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

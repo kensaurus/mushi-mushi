@@ -1,5 +1,4 @@
 import type { Hono } from 'npm:hono@4';
-import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -14,7 +13,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerSettingsResearchRoutes(app: Hono): void {
   // Settings admin endpoints
   app.get('/v1/admin/settings', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;

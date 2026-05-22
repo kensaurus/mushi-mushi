@@ -189,8 +189,22 @@ export function AntiGamingPage() {
     eventsQuery.reload()
   }, [devicesQuery, eventsQuery])
 
+  // Mushi Bounties: fetch withheld tester redemptions for the 3rd KPI tile.
+  const withheldRedemptionsQuery = usePageData<{ count: number; items: Array<{
+    id: string
+    tester_id: string
+    kind: string
+    points_spent: number
+    face_value_usd: number | null
+    requested_at: string
+    mushi_testers?: { public_handle: string | null } | null
+  }> }>('/v1/admin/tester-redemptions/withheld')
+  const withheldRedemptions = withheldRedemptionsQuery.data?.items ?? []
+  const withheldCount = withheldRedemptionsQuery.data?.count ?? 0
+
   useRealtime({ table: 'reporter_devices' }, devicesQuery.reload)
   useRealtime({ table: 'anti_gaming_events' }, eventsQuery.reload)
+  useRealtime({ table: 'tester_redemptions' }, withheldRedemptionsQuery.reload)
 
   const devices = useMemo(() => {
     if (!search.trim()) return allDevices
@@ -507,7 +521,33 @@ export function AntiGamingPage() {
           value={stats.totalReports}
           meaning="Cumulative reports ingested from any tracked device. Compare against the dashboard's 14d intake to see if abuse is inflating volume."
         />
+        {/* Mushi Bounties: 3rd KPI — tester redemptions awaiting manual review */}
+        <KpiTile
+          label="Tester redemptions withheld"
+          value={withheldCount}
+          accent={withheldCount > 0 ? 'warn' : undefined}
+          meaning="Mushi Bounties gift-card redemptions paused for manual review (velocity cap exceeded or anti-fraud flag). Approve or deny below."
+        />
       </div>
+
+      {/* Mushi Bounties: withheld tester redemptions review section */}
+      {withheldCount > 0 && (
+        <Section title={`🪲 Withheld tester redemptions (${withheldCount})`} icon={undefined}>
+          <p className="text-2xs text-fg-muted mb-3">
+            These gift-card redemptions were paused by the anti-fraud engine.
+            Review each one and approve or deny.
+          </p>
+          <div className="space-y-2">
+            {withheldRedemptions.map((r) => (
+              <WithheldRedemptionRow
+                key={r.id}
+                redemption={r}
+                onAction={withheldRedemptionsQuery.reload}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section
         title={
@@ -941,4 +981,69 @@ function deltaFromTimestamps(
     direction,
     tone,
   }
+}
+
+// ─── Withheld tester redemption row ──────────────────────────────────────────
+// Displayed in AntiGamingPage when a Mushi Bounties gift-card redemption was
+// held for manual review. Reviewer can approve (→ pending, picked up by cron)
+// or deny (→ failed, points refunded to tester).
+
+function WithheldRedemptionRow({
+  redemption,
+  onAction,
+}: {
+  redemption: {
+    id: string
+    tester_id: string
+    kind: string
+    points_spent: number
+    face_value_usd: number | null
+    requested_at: string
+    mushi_testers?: { public_handle: string | null } | null
+  }
+  onAction: () => void
+}) {
+  const toast = useToast()
+  const [acting, setActing] = useState<'approve' | 'deny' | null>(null)
+
+  const act = async (action: 'approve' | 'deny') => {
+    setActing(action)
+    try {
+      await apiFetch(`/v1/admin/tester-redemptions/${redemption.id}/${action}`, { method: 'POST' })
+      toast.success(action === 'approve' ? 'Redemption approved' : 'Redemption denied — points refunded')
+      onAction()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Action failed')
+    } finally {
+      setActing(null)
+    }
+  }
+
+  const handle = redemption.mushi_testers?.public_handle ?? redemption.tester_id.slice(0, 8)
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium truncate">@{handle}</span>
+          <Badge tone="warn" size="xs">{redemption.kind.replace(/_/g, ' ')}</Badge>
+          {redemption.face_value_usd && (
+            <span className="text-xs text-fg-secondary">${redemption.face_value_usd} gift card</span>
+          )}
+          <span className="text-2xs text-fg-faint">{redemption.points_spent.toLocaleString()} pts</span>
+        </div>
+        <p className="text-2xs text-fg-faint">
+          Requested {new Date(redemption.requested_at).toLocaleDateString()}
+        </p>
+      </div>
+      <div className="flex gap-1.5 flex-shrink-0">
+        <Btn size="sm" variant="primary" disabled={!!acting} onClick={() => act('approve')}>
+          {acting === 'approve' ? '…' : 'Approve'}
+        </Btn>
+        <Btn size="sm" variant="ghost" disabled={!!acting} onClick={() => act('deny')}>
+          {acting === 'deny' ? '…' : 'Deny'}
+        </Btn>
+      </div>
+    </div>
+  )
 }

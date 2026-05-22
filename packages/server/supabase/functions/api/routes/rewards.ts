@@ -26,7 +26,6 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
-import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
@@ -130,7 +129,7 @@ function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefin
 }
 
 // ─────────────────────────────────────────────────────────────
-export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerRewardsRoutes(app: Hono): void {
 
   // ===========================================================
   // SDK: POST /v1/sdk/activity
