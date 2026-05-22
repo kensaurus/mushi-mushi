@@ -66,7 +66,7 @@ Deno.serve(
     edgeCount += (inventoryNodes ?? []).length
 
     // 4. Postgres schema — public tables + columns introspection
-    const { data: pgSchema } = await db.rpc('execute_sql', {
+    const { data: pgSchema } = await Promise.resolve(db.rpc('execute_sql', {
       sql: `
         select
           t.table_name,
@@ -83,7 +83,7 @@ Deno.serve(
         group by t.table_name
         order by t.table_name
       `,
-    }).catch(() => ({ data: null }))
+    })).catch(() => ({ data: null }))
 
     // Persist snapshot
     const { data: snapshot, error } = await db

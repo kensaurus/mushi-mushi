@@ -110,7 +110,7 @@ Deno.serve(
     const criticalFindings = newFindings.filter(f => f.severity === 'critical')
     for (const finding of criticalFindings.slice(0, 5)) {
       // Insert a candidate cluster entry so the mistake-clusterer can pick it up
-      await db.from('mistake_clusters').insert({
+      await Promise.resolve(db.from('mistake_clusters').insert({
         project_id: projectId,
         status: 'candidate',
         name: `[Drift] ${finding.finding_type}`,
@@ -118,7 +118,7 @@ Deno.serve(
         suggested_rule: `Fix: ${finding.message}`,
         cluster_size: 1,
         severity_distribution: { critical: 1 },
-      }).catch(() => { /* best effort */ })
+      })).catch(() => { /* best effort */ })
     }
 
     return new Response(
