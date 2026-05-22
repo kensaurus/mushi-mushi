@@ -93,7 +93,7 @@ async function resolvePlanId(
 function periodFromAny(
   sub: Record<string, unknown>,
 ): { start: number | null; end: number | null } {
-  return readSubscriptionPeriod(sub as StripeSubscription)
+  return readSubscriptionPeriod(sub as unknown as StripeSubscription)
 }
 
 const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
