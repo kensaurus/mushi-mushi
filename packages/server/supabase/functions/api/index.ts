@@ -2,6 +2,7 @@ import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
 
 import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
+import type { Variables } from './types.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
@@ -25,6 +26,8 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
+import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 // ---------------------------------------------------------------------------
 // Closed-loop evolution + experiment routes.
 // middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
@@ -43,7 +46,7 @@ ensureSentry('api');
 
 // basePath('/api') is required by Supabase Edge Functions: the function name
 // is included in the request URL path (https://supabase.com/docs/guides/functions/routing).
-const app = new Hono().basePath('/api');
+const app = new Hono<{ Variables: Variables }>().basePath('/api');
 
 app.onError(sentryHonoErrorHandler);
 
@@ -407,6 +410,8 @@ registerInventoryRoutes(app);
 registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
+registerPublishedAppsRoutes(app);
+registerTesterMarketplaceRoutes(app);
 
 // Closed-loop evolution + experiment routes.
 registerLessonsRoutes(app);

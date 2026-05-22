@@ -108,7 +108,7 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
   if (Number.isFinite(native.minDescriptionLength)) {
     updates.sdk_min_description_length = Math.max(
       0,
-      Math.min(1000, Math.round(native.minDescriptionLength)),
+      Math.min(1000, Math.round(Number(native.minDescriptionLength))),
     );
   }
   updates.sdk_config_updated_at = new Date().toISOString();
@@ -571,8 +571,8 @@ export function triggerClassification(reportId: string, projectId: string) {
         await handleQueueFailure(db, reportId, String(err));
       });
 
-    if (typeof globalThis.EdgeRuntime !== 'undefined') {
-      (globalThis as any).EdgeRuntime.waitUntil(classifyPromise);
+    if (typeof (globalThis as Record<string, unknown>).EdgeRuntime !== 'undefined') {
+      (globalThis as Record<string, unknown> & { EdgeRuntime: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime.waitUntil(classifyPromise);
     }
   } catch (err) {
     log.error('Failed to invoke fast-filter', { reportId, err: String(err) });
