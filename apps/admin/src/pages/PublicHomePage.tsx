@@ -113,7 +113,7 @@ export function PublicHomePage() {
             subject
               ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`
               : `mailto:${CONTACT_EMAIL}`,
-          screenshots: (filename) => `/screenshots/${filename}`,
+          screenshots: (filename) => `${import.meta.env.BASE_URL}screenshots/${filename}`,
         },
       }
     },

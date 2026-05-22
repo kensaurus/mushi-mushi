@@ -347,8 +347,17 @@ export function ByokPanel() {
               </div>
             )}
 
+            {/* Wrap key input + base URL + action buttons in a <form> so the
+                browser password manager can associate the secret field with
+                a submit action and stops emitting the "Password field not
+                contained in a form" advisory. The form has no action/method
+                because everything is handled client-side via apiFetch. */}
+            <form
+              onSubmit={(e) => { e.preventDefault(); void save(k.provider) }}
+              aria-label={`Save ${meta.name} key`}
+            >
             {k.provider === 'openai' && (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 mb-3">
                 <label className="text-2xs text-fg-muted flex items-center gap-1">
                   <span>Base URL <span className="text-fg-faint">(optional — leave empty for OpenAI)</span></span>
                   <ConfigHelp helpId="settings.byok.openai_base_url" />
@@ -404,14 +413,15 @@ export function ByokPanel() {
               placeholder={meta.placeholder}
             />
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <Btn size="sm" onClick={() => save(k.provider)} loading={pending === k.provider}>
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              <Btn type="submit" size="sm" loading={pending === k.provider}>
                 {k.configured ? 'Rotate key' : 'Save key'}
               </Btn>
               {k.configured && (
                 <>
                   <Btn
                     id={testButtonId(k.provider)}
+                    type="button"
                     size="sm"
                     variant="ghost"
                     onClick={() => testKey(k.provider)}
@@ -420,6 +430,7 @@ export function ByokPanel() {
                     Test connection
                   </Btn>
                   <Btn
+                    type="button"
                     size="sm"
                     variant="ghost"
                     onClick={() => setClearTarget(k.provider)}
@@ -465,6 +476,7 @@ export function ByokPanel() {
                 {testResult.status === 'error_quota' && 'Your account hit a rate limit (HTTP 429). The key works — you just need to top up or wait.'}
               </div>
             )}
+            </form>
           </SettingsCard>
         )
       })}

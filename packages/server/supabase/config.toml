@@ -255,6 +255,12 @@ verify_jwt = false
 [functions.reward-payout-aggregator]
 verify_jwt = false
 
+[functions.tremendous-redemption-worker]
+verify_jwt = false
+
+[functions.recompute-tester-reputation]
+verify_jwt = false
+
 [functions.soc2-evidence]
 verify_jwt = false
 

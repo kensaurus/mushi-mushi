@@ -46,8 +46,7 @@ Deno.serve(
     const secret = Deno.env.get('SLACK_SIGNING_SECRET')
     if (!secret) {
       log.error('SLACK_SIGNING_SECRET is not set')
-      reportMessage('Slack signing secret missing', {
-        level: 'error',
+      reportMessage('Slack signing secret missing', 'error', {
         tags: { source: 'slack-interactions' },
       })
       return new Response('Server misconfigured', { status: 500 })

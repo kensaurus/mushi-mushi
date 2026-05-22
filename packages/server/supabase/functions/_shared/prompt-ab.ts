@@ -117,8 +117,8 @@ export async function getPromptForStage(
     return { promptTemplate: null, promptVersion: null, isCandidate: false, judgeRubric: null }
   }
 
-  const active = rows.find((r: PromptVersionRow) => r.is_active && !r.is_candidate)
-  const candidate = rows.find((r: PromptVersionRow) => r.is_candidate)
+  const active = rows.find((r) => (r as PromptVersionRow).is_active && !(r as PromptVersionRow).is_candidate) as PromptVersionRow | undefined
+  const candidate = rows.find((r) => (r as PromptVersionRow).is_candidate) as PromptVersionRow | undefined
 
   if (!active) {
     const first = rows[0] as PromptVersionRow
@@ -274,8 +274,8 @@ export async function checkPromotionEligibility(
 
   if (!rows?.length) return { ...noAction, reason: 'No prompt versions found' }
 
-  const active = rows.find((r: PromptVersionRow) => r.is_active && !r.is_candidate)
-  const candidate = rows.find((r: PromptVersionRow) => r.is_candidate)
+  const active = rows.find((r) => (r as PromptVersionRow).is_active && !(r as PromptVersionRow).is_candidate) as PromptVersionRow | undefined
+  const candidate = rows.find((r) => (r as PromptVersionRow).is_candidate) as PromptVersionRow | undefined
 
   if (!candidate) return { ...noAction, reason: 'No candidate prompt' }
   if (!active) return { ...noAction, reason: 'No active prompt to compare against' }

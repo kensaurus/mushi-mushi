@@ -122,7 +122,7 @@ export function humanizeFixError(
   if (/cursor api error 5\d\d/.test(m)) {
     return {
       title: 'Cursor Cloud had a server error.',
-      hint: 'This is on Cursor's side — retrying usually resolves it within a few minutes.',
+      hint: "This is on Cursor's side — retrying usually resolves it within a few minutes.",
       severity: 'soft',
       action: { label: 'Try again', target: { kind: 'retry' } },
       raw,
@@ -144,7 +144,7 @@ export function humanizeFixError(
   // ── Cursor Cloud: key not configured ──────────────────────────────────────
   if (m.includes('cursor_api_key_ref not set') || m.includes('cursor api key vault lookup failed')) {
     return {
-      title: 'Cursor isn't connected for this project yet.',
+      title: "Cursor isn't connected for this project yet.",
       hint: 'Add a Cursor API key in Integrations → Cursor Cloud to enable cloud agent fixes.',
       severity: 'hard',
       action: {
@@ -172,7 +172,7 @@ export function humanizeFixError(
   // ── GitHub: token rejected ─────────────────────────────────────────────────
   if (m.includes('github api error 401') || m.includes('github') && m.includes('401')) {
     return {
-      title: 'Your GitHub token isn't authorised on this repo.',
+      title: "Your GitHub token isn't authorised on this repo.",
       hint:
         'Re-save the token in Integrations → GitHub. It needs `contents:write` and `pull_requests:write` scopes.',
       severity: 'hard',
@@ -198,9 +198,9 @@ export function humanizeFixError(
   // ── GitHub: forbidden / no write access ───────────────────────────────────
   if (m.includes('github api error 403') || (m.includes('github') && m.includes('403'))) {
     return {
-      title: 'Mushi doesn't have write access to the repo.',
+      title: "Mushi doesn't have write access to the repo.",
       hint:
-        'Check the token has `contents:write` and `pull_requests:write` permissions, and that it hasn't expired.',
+        "Check the token has `contents:write` and `pull_requests:write` permissions, and that it hasn't expired.",
       severity: 'hard',
       action: {
         label: 'Re-save GitHub token',
@@ -213,7 +213,7 @@ export function humanizeFixError(
   // ── GitHub: repo not found ─────────────────────────────────────────────────
   if ((m.includes('github') || m.includes('github_404') || category === 'github_404') && m.includes('404')) {
     return {
-      title: 'Mushi can't find that GitHub repo or branch.',
+      title: "Mushi can't find that GitHub repo or branch.",
       hint:
         'Check the repo URL in Integrations → GitHub — the repo may have been renamed or the default branch changed.',
       severity: 'hard',
@@ -232,7 +232,7 @@ export function humanizeFixError(
     category === 'llm_no_object'
   ) {
     return {
-      title: 'The LLM gave a response that didn't fit the expected shape.',
+      title: "The LLM gave a response that didn't fit the expected shape.",
       hint:
         'This is usually a transient model hiccup — the fix-worker already retried with a schema-repair hint. Try once more.',
       severity: 'soft',
@@ -248,7 +248,7 @@ export function humanizeFixError(
     category === 'llm_schema_violation'
   ) {
     return {
-      title: 'The LLM's response had the right format but the wrong shape.',
+      title: "The LLM's response had the right format but the wrong shape.",
       hint:
         'A second retry usually resolves this — the model occasionally omits required fields when the prompt is complex.',
       severity: 'soft',
@@ -292,7 +292,7 @@ export function humanizeFixError(
   if (category === 'upstream_internal_server') {
     return {
       title: 'An upstream provider returned a server error.',
-      hint: 'This is on the provider's side. Retrying usually resolves it.',
+      hint: "This is on the provider's side. Retrying usually resolves it.",
       severity: 'soft',
       action: { label: 'Try again', target: { kind: 'retry' } },
       raw,
@@ -318,7 +318,7 @@ export function humanizeFixError(
     category === 'no_relevant_code'
   ) {
     return {
-      title: 'Mushi couldn't find relevant code to fix.',
+      title: "Mushi couldn't find relevant code to fix.",
       hint:
         'The codebase index may be out of date. Re-index under Settings → Codebase Indexing and retry.',
       severity: 'hard',
@@ -344,7 +344,7 @@ export function humanizeFixError(
     return {
       title: 'The fix failed a spec validation gate.',
       hint:
-        'The agent's changes didn't satisfy the inventory contract for this action. Expand the fix card to see the validation warnings.',
+        "The agent's changes didn't satisfy the inventory contract for this action. Expand the fix card to see the validation warnings.",
       severity: 'soft',
       action: { label: 'Retry', target: { kind: 'retry' } },
       raw,

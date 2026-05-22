@@ -376,7 +376,7 @@ async function processStage(
     .eq('project_id', projectId)
     .eq('stage', stage)
     .eq('is_active', true)
-    .maybeSingle()).data as { id: string; version: string; prompt_template: string } | null
+    .maybeSingle()).data as unknown as { id: string; version: string; prompt_template: string } | null
 
   let forkedFromGlobal = false
   if (!active) {

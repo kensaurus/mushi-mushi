@@ -225,13 +225,13 @@ ${JSON.stringify(report.reproduction_steps ?? []).slice(0, 500)}
 
 Score each dimension 0-1. Be critical of vague components, miscalibrated severity, and non-actionable repro steps.`
 
-          let evaluation: z.infer<typeof judgeSchema>
+          let evaluation: z.infer<typeof judgeSchema> | undefined
           let usage: { promptTokens?: number; completionTokens?: number } | undefined
           let usedJudgeModel = modelId
           let judgeFallbackUsed = false
 
           // C9: per-project BYOK resolution.
-          const anthropicResolved = await resolveLlmKey(db, project.id, 'anthropic')
+          const anthropicResolved = await resolveLlmKey(db!, project.id, 'anthropic')
           // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
           // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
           // direct Anthropic key. If we have no Anthropic key at all, skip the
@@ -295,7 +295,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             // (529 overloaded, 5xx) OR the deployment is BYOK-only on
             // OpenRouter / Together / Fireworks. Same Zod schema; we never
             // fail the whole batch just because the primary provider is down.
-            const openaiResolved = await resolveLlmKey(db, project.id, 'openai')
+            const openaiResolved = await resolveLlmKey(db!, project.id, 'openai')
             const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
             if (fallbackProvider !== 'openai' || !openaiKey) {
               throw primaryErr
@@ -330,6 +330,8 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             judgeFallbackUsed = tryAnthropic // only "fallback" if primary actually attempted
           }
 
+          if (!evaluation) throw new Error('Judge produced no evaluation (both primary and fallback failed or were skipped)')
+
           const compositeScore = (
             evaluation.accuracy * weights.accuracy +
             evaluation.severity_calibration * weights.severity +
@@ -337,7 +339,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             evaluation.repro_quality * weights.repro
           )
 
-          await db.from('classification_evaluations').insert({
+          await db!.from('classification_evaluations').insert({
             project_id: project.id,
             report_id: report.id,
             judge_model: usedJudgeModel,
@@ -360,7 +362,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             langfuse_trace_id: trace.id,
           })
 
-          await db.from('reports').update({
+          await db!.from('reports').update({
             judge_score: compositeScore,
             judge_model: usedJudgeModel,
             judge_evaluated_at: new Date().toISOString(),
@@ -369,7 +371,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           // D1: surface judge scores to webhook plugins (e.g. low-score
           // alerts to Slack/Linear). Async; failures must not affect batch.
           try {
-            void dispatchPluginEvent(db, project.id, 'judge.score_recorded', {
+            void dispatchPluginEvent(db!, project.id, 'judge.score_recorded', {
               report: { id: report.id },
               judge: {
                 model: usedJudgeModel,
@@ -390,13 +392,13 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           // so two projects sharing a version string don't corrupt each other's
           // running averages.
           if (report.stage1_prompt_version) {
-            recordPromptResult(db, report.id, report.stage1_prompt_version, compositeScore, {
+            recordPromptResult(db!, report.id, report.stage1_prompt_version, compositeScore, {
               projectId: project.id,
               stage: 'stage1',
             }).catch(e => rootLog.child('judge').error('recordPromptResult stage1 failed', { err: String(e) }))
           }
           if (report.stage2_prompt_version) {
-            recordPromptResult(db, report.id, report.stage2_prompt_version, compositeScore, {
+            recordPromptResult(db!, report.id, report.stage2_prompt_version, compositeScore, {
               projectId: project.id,
               stage: 'stage2',
             }).catch(e => rootLog.child('judge').error('recordPromptResult stage2 failed', { err: String(e) }))
@@ -451,7 +453,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
       })
 
       // Drift detection
-      const { data: drift } = await db.rpc('weekly_judge_scores', {
+      const { data: drift } = await db!.rpc('weekly_judge_scores', {
         p_project_id: project.id,
         p_weeks: 3,
       })
@@ -476,18 +478,18 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
       // Auto-promote candidate prompts if eligible
       for (const stage of ['stage1', 'stage2', 'judge'] as const) {
         try {
-          const eligibility = await checkPromotionEligibility(db, project.id, stage)
-          if (eligibility.shouldPromote) {
-            const { data: candidateRow } = await db
-              .from('prompt_versions')
-              .select('version')
-              .eq('project_id', project.id)
-              .eq('stage', stage)
-              .eq('is_candidate', true)
-              .single()
+          const eligibility = await checkPromotionEligibility(db!, project.id, stage)
+            if (eligibility.shouldPromote) {
+              const { data: candidateRow } = await db!
+                .from('prompt_versions')
+                .select('version')
+                .eq('project_id', project.id)
+                .eq('stage', stage)
+                .eq('is_candidate', true)
+                .single()
 
-            if (candidateRow) {
-              await promoteCandidate(db, project.id, stage, candidateRow.version)
+              if (candidateRow) {
+                await promoteCandidate(db!, project.id, stage, candidateRow.version)
               rootLog.child('judge').info('Auto-promoted candidate prompt', {
                 projectId: project.id,
                 stage,

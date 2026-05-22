@@ -117,6 +117,33 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
       'Payout liability dashboard and dispute resolution flow.',
     ],
   },
+  marketplace_publish: {
+    title: 'Mushi Bounties — publish your app',
+    tagline: 'Open your app to a crowd of paid bug-hunters and feedback testers.',
+    bullets: [
+      'Create a public listing in the Mushi Bounties marketplace.',
+      'Set per-action bounties: bug reports, accessibility checks, localization.',
+      'Testers earn mushi-points redeemable for Mushi Pro credit or gift cards.',
+    ],
+  },
+  tester_cashout: {
+    title: 'Mushi Bounties — gift-card redemptions',
+    tagline: 'Let your testers cash out to Amazon, Visa, and 100+ other rewards via Tremendous.',
+    bullets: [
+      '$599/year per-tester cap — below IRS 1099 threshold.',
+      'Tremendous holds money-transmitter licenses — no compliance lift for you.',
+      'Monthly budget ceiling per project to cap your spending.',
+    ],
+  },
+  marketplace_priority_listing: {
+    title: 'Mushi Bounties — priority listing',
+    tagline: 'Feature your app at the top of the marketplace to attract more testers faster.',
+    bullets: [
+      'Pinned position in the marketplace catalog.',
+      'Highlighted in Mushi Bounties email digest.',
+      'Enterprise-level concierge onboarding support.',
+    ],
+  },
 }
 
 interface InlineProps {

@@ -1,0 +1,162 @@
+---
+title: Mushi Bounties — crowd-testing marketplace
+---
+
+# Mushi Bounties
+
+import { Callout, Steps } from 'nextra/components'
+
+> **The loop closes faster with paid testers in it.**
+
+Mushi Bounties is the crowd-testing marketplace built into the evolution loop.
+Developers publish their app or website to a public listing. Testers — real humans
+who are not on the team — sign up, use the app, and earn **mushi-points** for every
+accepted bug report, accessibility finding, or localization note. Points can be
+redeemed at a 1.3× premium for Mushi Pro credit, or at base rate for 100+ gift
+card options via Tremendous (Amazon, Visa, App Store, and more).
+
+This is not a synthetic monitor, a survey, or a focus group. It is the same
+evolution loop — capture → classify → fix → verify → remember — extended with
+a motivated human in the capture stage.
+
+---
+
+## How it works
+
+<Steps>
+
+### Publish your app
+
+In the Mushi console, go to **Rewards → Bounties (Publishing tab)**. Set your
+app name, description, hero image, and the platforms you want tested. Configure
+per-action bounties (e.g., 50 points for a reproduced bug, 200 points for an
+accessibility issue accepted by your team). Set a monthly budget ceiling and
+target audience (country, language, device type, minimum tester reputation).
+
+Flip visibility to **Public** when you are ready. Your app appears on the
+[Mushi Bounties marketplace](https://kensaur.us/mushi-mushi/testers/).
+
+### Testers find your app
+
+Testers browse the public marketplace without an account. When they click
+"Join to test", they sign in with a magic link. The only information Mushi
+stores is their public handle, email hash (never plaintext), and the expertise
+tags they declare. No device recording, no video, no biometrics in v1.
+
+### Testers submit bugs
+
+Inside the tester dashboard, each app has a built-in submission form. The
+submission runs through the same `ingestReport()` pipeline as host-SDK reports:
+screenshot upload, PII scrub, console log capture, environment metadata. It
+lands in your existing Sentry inbox tagged `mushi_tester:true` so you triage it
+alongside your production errors — no new tool to learn.
+
+### You review and grade
+
+On the report detail page, a tester-submission card appears. Grade the report:
+
+| Decision | Points outcome | Reputation Δ |
+|---|---|---|
+| **Accept** | Full bounty awarded | +7 |
+| **Informative** | 50 % of bounty | 0 |
+| **Duplicate** | No points | +2 (of the pre-existing resolution) |
+| **Spam** | No points | −10 |
+
+Reputation scores gate join-access on future apps with a minimum threshold you
+configure. Testers with −50 or below are flagged for manual review before any
+further payouts.
+
+### Testers redeem
+
+Testers see their balance update in real time. Redemption options:
+
+- **Mushi Pro credit** — 1,000 mushi-points → $13 of Mushi Pro (the 1.3× premium
+  is a platform coupon, not cash compensation; no 1099 event).
+- **Gift cards** — 1,000 mushi-points → $10 face value via Tremendous (taxable
+  at FMV; $599/yr cap before KYC is required; Tremendous holds the money-transmitter
+  licenses on your behalf).
+
+</Steps>
+
+---
+
+## Reward model and legal posture
+
+<Callout type="warning">
+  This section is a summary of the design decisions documented in
+  `docs/research/tester-marketplace-research-2026-05-22.md` and its follow-up.
+  It is **not legal advice**. Before enabling gift-card cash-out (`tester_cashout`
+  entitlement), complete the legal review checklist in
+  `docs/runbooks/tester-marketplace-launch.md`.
+</Callout>
+
+The rewards model is deliberately conservative:
+
+- **mushi-points are closed-loop platform currency.** They are redeemable only
+  for Mushi Pro features or (optionally) for third-party gift cards via Tremendous.
+  They have no exchange rate to USD and cannot be transferred between testers.
+- **The 1.3× Pro-upgrade premium is a coupon**, not compensation. It is funded
+  by Mushi (the platform discounts its own product). The IRS classifies
+  issuer-funded discounts as price adjustments, not income (Anikeev safe harbor).
+  No 1099 event is triggered when a tester applies points toward Mushi Pro.
+- **Gift-card cash-out is a separate tax event.** When a tester redeems points
+  for a Tremendous gift card, the face value is taxable income at FMV at the time
+  of redemption. Mushi caps this at $599/yr per tester before requiring KYC
+  (W-9 for US, W-8BEN for international). Tremendous files the 1099-MISC; Mushi
+  does not.
+- **No crypto, no prize draws in v1.** Reddit Community Points sunset in November
+  2023 citing "a tough regulatory environment for cryptocurrency projects." Prize
+  draws require a free Alternative-Method-of-Entry path to avoid being classified
+  as an illegal lottery in U.S. states — both are deferred to a future wave.
+
+**Marketing copy rule:** say *"100+ rewards including Amazon"*, never *"earn
+Amazon gift cards."* Amazon's gift-card terms prohibit framing cards as
+cash-equivalent or as the primary pitch.
+
+---
+
+## Anti-gaming and reputation
+
+Bounties reuse the existing anti-gaming engine (`reporter_devices`, `anti_gaming_events`,
+`private.detect_reward_anomalies()`). Additional tester-specific layers:
+
+- **Velocity caps**: maximum 20 submissions per tester per 24h across all apps,
+  maximum 5 submissions per tester per app per 24h. Excess is queued pending
+  reviewer approval before points credit fires.
+- **Reputation scores** follow the HackerOne formula (+7 accepted / −10 spam
+  / +50 for a bounty ≥ μ+1σ). Score is recomputed daily by the
+  `recompute-tester-reputation` cron and gated against `published_app_targeting.reputation_min`.
+- **KYC gate at $400 YTD**: before a tester's gift-card redemptions cross $400
+  in a calendar year, they must file a W-9 or W-8BEN. Until cleared, gift-card
+  redemptions are queued; closed-loop Pro redemptions are always available.
+- **OFAC sanctions screen**: tester signups and redemptions from Cuba, Iran,
+  North Korea, Syria, Crimea, and occupied Ukraine are rejected before they reach
+  Tremendous.
+
+---
+
+## Architecture
+
+```
+apps/testers/             Next.js SSR — public browse + signup (kensaur.us/mushi-mushi/testers/)
+apps/admin /tester/*      Vite SPA — logged-in tester dashboard (same auth.users pool)
+apps/admin /rewards       Dev console — Publishing tab (Wave 2)
+packages/server/          API routes: tester-marketplace.ts, published-apps.ts
+                          Edge functions: tremendous-redemption-worker (cron)
+Supabase DB               mushi_testers, published_apps, tester_submissions,
+                          tester_credit_ledger, tester_redemptions, tremendous_orders, tester_kyc
+Tremendous API            /v2/orders — platform-funded gift card delivery
+Sentry                    Per-app DSN routing: tester submissions tagged mushi_tester:true
+```
+
+Cloud-only feature. Self-hosted installs see an upgrade CTA in place of the
+Publishing tab and all `/tester/*` routes.
+
+---
+
+## See also
+
+- [Evolution loop](/concepts/evolution-loop) — the underlying architecture Bounties extends
+- [Rewards & contributor identity](/concepts/rewards) — the host-app rewards engine Bounties reuses
+- [Anti-gaming & reputation](/concepts/anti-gaming) — the fraud-detection layer
+- [`docs/research/tester-marketplace-research-2026-05-22.md`](../../../docs/research/tester-marketplace-research-2026-05-22.md) — full research dossier

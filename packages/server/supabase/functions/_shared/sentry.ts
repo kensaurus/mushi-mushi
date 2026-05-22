@@ -136,7 +136,8 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
       },
       // 499 (Nginx) communicates "client closed connection". Hono accepts any
       // numeric status code; only 1xx/0 are forbidden by `new Response()`.
-      499,
+      // Cast needed because Hono's ContentfulStatusCode union omits non-standard codes.
+      499 as Parameters<typeof c.json>[1],
     )
   }
 

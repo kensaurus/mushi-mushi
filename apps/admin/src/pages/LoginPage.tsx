@@ -22,6 +22,8 @@ import { canUsePasskeys } from '../lib/passkeys'
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
 type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
 type SuccessState = null | 'signup-confirm' | 'reset-sent' | 'magic-sent'
+/** Top-level identity track: 'console' = dev/PM, 'tester' = Mushi Bounties tester */
+type LoginTrack = 'console' | 'tester'
 
 const cloud = isCloudMode()
 
@@ -48,7 +50,7 @@ function classifyAuthError(raw: string): string {
 }
 
 export function LoginPage() {
-  const { session, signIn, signInWithMagicLink, signInWithPasskey, signUp, resetPassword } = useAuth()
+  const { session, signIn, signInWithMagicLink, signInAsTester, signInWithPasskey, signUp, resetPassword } = useAuth()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const initialRememberedEmail = readRememberedLoginEmail()
@@ -62,9 +64,14 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(true)
   const [health, setHealth] = useState<HealthStatus>(cloud ? 'ok' : 'checking')
   const [passkeyAvailable, setPasskeyAvailable] = useState(false)
+  // Detect ?as=tester URL param (linked from marketplace "Join to test" CTA)
+  const [track, setTrack] = useState<LoginTrack>(
+    searchParams.get('as') === 'tester' ? 'tester' : 'console'
+  )
 
   const supabaseHost = getSupabaseHost()
-  const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'))
+  const defaultNextPath = track === 'tester' ? '/tester' : '/dashboard'
+  const nextPath = nextPathFromLoginState(location.state, searchParams.get('next')) ?? defaultNextPath
 
   useEffect(() => {
     if (cloud) return
@@ -131,7 +138,8 @@ export function LoginPage() {
           setSuccess('reset-sent')
         }
       } else if (mode === 'magic') {
-        const result = await signInWithMagicLink(email)
+        const magicFn = track === 'tester' ? signInAsTester : signInWithMagicLink
+        const result = await magicFn(email)
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else {
@@ -194,8 +202,30 @@ export function LoginPage() {
           <h1 className="text-xl font-bold">
             <span className="text-brand">mushi</span>mushi
           </h1>
-          <SignalChip tone="neutral" className="mt-1.5">admin console</SignalChip>
+          <SignalChip tone="neutral" className="mt-1.5">
+            {track === 'tester' ? '🪲 bounties tester' : 'admin console'}
+          </SignalChip>
         </div>
+
+        {/* Track switcher — console (dev/PM) vs tester (Mushi Bounties) */}
+        {cloud && (
+          <div className="grid grid-cols-2 rounded-md border border-edge-subtle bg-surface-root/40 p-1 mb-3">
+            <button
+              type="button"
+              onClick={() => { setTrack('console'); setError(''); setSuccess(null) }}
+              className={`rounded-sm px-2 py-1.5 text-2xs font-medium motion-safe:transition-colors ${track === 'console' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+            >
+              Developer Console
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTrack('tester'); setMode('magic'); setError(''); setSuccess(null) }}
+              className={`rounded-sm px-2 py-1.5 text-2xs font-medium motion-safe:transition-colors ${track === 'tester' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+            >
+              🪲 Tester Portal
+            </button>
+          </div>
+        )}
 
         {/* Success: signup confirmation */}
         {success === 'signup-confirm' && (
@@ -329,19 +359,21 @@ export function LoginPage() {
 
             <ContainedBlock tone="muted">
               <p className="text-xs text-center text-fg-muted">
-                {mode === 'forgot'
-                  ? 'Enter your email to receive a password reset link'
-                  : mode === 'magic'
-                    ? 'Email yourself a secure one-click sign-in link'
-                  : mode === 'signup'
-                    ? 'Create your account'
-                    : cloud
-                      ? 'Sign in to your account'
-                      : 'Sign in with your Supabase project account'}
+                {track === 'tester'
+                  ? 'Get a one-click magic link — we\'ll create your tester account automatically'
+                  : mode === 'forgot'
+                    ? 'Enter your email to receive a password reset link'
+                    : mode === 'magic'
+                      ? 'Email yourself a secure one-click sign-in link'
+                    : mode === 'signup'
+                      ? 'Create your account'
+                      : cloud
+                        ? 'Sign in to your account'
+                        : 'Sign in with your Supabase project account'}
               </p>
             </ContainedBlock>
 
-            {mode === 'login' || mode === 'magic' ? (
+            {track === 'console' && (mode === 'login' || mode === 'magic') ? (
               <div className="grid grid-cols-2 rounded-md border border-edge-subtle bg-surface-root/40 p-1">
                 <button
                   type="button"
@@ -360,7 +392,7 @@ export function LoginPage() {
               </div>
             ) : null}
 
-            {mode === 'login' && (
+            {track === 'console' && mode === 'login' && (
               <button
                 type="button"
                 onClick={handlePasskeySignIn}
@@ -409,7 +441,7 @@ export function LoginPage() {
               autoFocus={!rememberedEmail}
             />
 
-            {mode !== 'forgot' && mode !== 'magic' && (
+            {track === 'console' && mode !== 'forgot' && mode !== 'magic' && (
               <Input
                 label="Password"
                 id="password"
@@ -424,7 +456,7 @@ export function LoginPage() {
               />
             )}
 
-            {mode !== 'signup' && (
+            {track === 'console' && mode !== 'signup' && (
               <ContainedBlock tone="muted" className="py-2">
                 <label className="inline-flex items-center gap-2 text-2xs text-fg-secondary cursor-pointer">
                   <input
@@ -457,54 +489,64 @@ export function LoginPage() {
             <Btn type="submit" disabled={loading} className="w-full justify-center">
               {loading
                 ? 'Please wait...'
-                : mode === 'forgot'
-                  ? 'Send reset link'
-                  : mode === 'magic'
-                    ? 'Send sign-in link'
-                  : mode === 'signup'
-                    ? 'Create account'
-                    : 'Sign in'}
+                : track === 'tester'
+                  ? 'Send tester sign-in link'
+                  : mode === 'forgot'
+                    ? 'Send reset link'
+                    : mode === 'magic'
+                      ? 'Send sign-in link'
+                    : mode === 'signup'
+                      ? 'Create account'
+                      : 'Sign in'}
             </Btn>
 
-            {mode === 'login' && (
+            {track === 'console' && mode === 'login' && (
               <div className="flex justify-center">
                 <ActionPill onClick={() => switchMode('forgot')}>Forgot your password?</ActionPill>
               </div>
             )}
 
-            <ContainedBlock tone="muted" className="text-center">
-              <p className="text-2xs text-fg-secondary">
-                {mode === 'forgot' ? (
-                  <>
-                    Remember your password?{' '}
-                    <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                      Sign in
-                    </button>
-                  </>
-                ) : mode === 'magic' ? (
-                  <>
-                    Prefer a password?{' '}
-                    <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                      Use password
-                    </button>
-                  </>
-                ) : mode === 'login' ? (
-                  <>
-                    Don't have an account?{' '}
-                    <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                      Sign up
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    Already have an account?{' '}
-                    <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
-                      Sign in
-                    </button>
-                  </>
-                )}
-              </p>
-            </ContainedBlock>
+            {track === 'tester' ? (
+              <ContainedBlock tone="muted" className="text-center">
+                <p className="text-2xs text-fg-secondary">
+                  First time? We'll create your tester account automatically — no password needed.
+                </p>
+              </ContainedBlock>
+            ) : (
+              <ContainedBlock tone="muted" className="text-center">
+                <p className="text-2xs text-fg-secondary">
+                  {mode === 'forgot' ? (
+                    <>
+                      Remember your password?{' '}
+                      <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                        Sign in
+                      </button>
+                    </>
+                  ) : mode === 'magic' ? (
+                    <>
+                      Prefer a password?{' '}
+                      <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                        Use password
+                      </button>
+                    </>
+                  ) : mode === 'login' ? (
+                    <>
+                      Don't have an account?{' '}
+                      <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                        Sign up
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Already have an account?{' '}
+                      <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                        Sign in
+                      </button>
+                    </>
+                  )}
+                </p>
+              </ContainedBlock>
+            )}
 
             {mode === 'signup' && (
               <ContainedBlock tone="muted" className="text-center">

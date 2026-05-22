@@ -802,3 +802,9 @@ DELETE FROM end_user_activity WHERE retain_until < now();
 ### Point evaluation
 
 The server re-evaluates tier thresholds every time `end_user_points` is updated. For very high-volume apps (>10 events/second per user), consider batching point updates with a queue — the current design is append-first, so there is no risk of data loss if an evaluation is delayed.
+
+---
+
+## See also
+
+- [Mushi Bounties](./BOUNTIES.md) — the public crowd-test marketplace that extends the Rewards pipeline to anonymous testers; covers the Tremendous gift-card integration, KYC gate, OFAC compliance, anti-fraud velocity caps, and the 1.3× closed-loop Pro credit model.
