@@ -122,7 +122,7 @@ export function humanizeFixError(
   if (/cursor api error 5\d\d/.test(m)) {
     return {
       title: 'Cursor Cloud had a server error.',
-      hint: 'This is on Cursor's side — retrying usually resolves it within a few minutes.',
+      hint: "This is on Cursor's side — retrying usually resolves it within a few minutes.",
       severity: 'soft',
       action: { label: 'Try again', target: { kind: 'retry' } },
       raw,
@@ -248,7 +248,7 @@ export function humanizeFixError(
     category === 'llm_schema_violation'
   ) {
     return {
-      title: 'The LLM's response had the right format but the wrong shape.',
+      title: "The LLM's response had the right format but the wrong shape.",
       hint:
         'A second retry usually resolves this — the model occasionally omits required fields when the prompt is complex.',
       severity: 'soft',
@@ -292,7 +292,7 @@ export function humanizeFixError(
   if (category === 'upstream_internal_server') {
     return {
       title: 'An upstream provider returned a server error.',
-      hint: 'This is on the provider's side. Retrying usually resolves it.',
+      hint: "This is on the provider's side. Retrying usually resolves it.",
       severity: 'soft',
       action: { label: 'Try again', target: { kind: 'retry' } },
       raw,
@@ -344,7 +344,7 @@ export function humanizeFixError(
     return {
       title: 'The fix failed a spec validation gate.',
       hint:
-        'The agent's changes didn't satisfy the inventory contract for this action. Expand the fix card to see the validation warnings.',
+        "The agent's changes didn't satisfy the inventory contract for this action. Expand the fix card to see the validation warnings.",
       severity: 'soft',
       action: { label: 'Retry', target: { kind: 'retry' } },
       raw,
