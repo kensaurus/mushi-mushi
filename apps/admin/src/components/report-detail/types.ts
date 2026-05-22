@@ -159,4 +159,15 @@ export interface ReportDetail {
   sdk_version?: string | null
   /** Host app version string from the SDK, e.g. `2.4.1` or `(234)`. */
   app_version?: string | null
+  // Mushi Bounties — present when this report was submitted by a tester.
+  tester_id?: string | null
+  tester_submission_id?: string | null
+  tester_submission?: {
+    id: string
+    status: 'pending' | 'accepted' | 'informative' | 'duplicate' | 'spam'
+    points_awarded: number
+    tester_handle: string | null
+    app_name: string | null
+    reviewer_note: string | null
+  } | null
 }

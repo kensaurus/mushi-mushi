@@ -25,6 +25,8 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
+import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 // ---------------------------------------------------------------------------
 // Closed-loop evolution + experiment routes.
 // middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
@@ -36,7 +38,7 @@ import { registerMcpAdminRoutes } from './routes/mcp-admin.ts';
 import { registerDriftRoutes } from './routes/drift.ts';
 import { registerExperimentsRoutes } from './routes/experiments.ts';
 import { registerAnomaliesRoutes } from './routes/anomalies.ts';
-import { registerCostsRoutes } from './routes/costs.ts';
+import { registerCostsRoutes, registerBudgetRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 
 ensureSentry('api');
@@ -407,6 +409,8 @@ registerInventoryRoutes(app);
 registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
+registerPublishedAppsRoutes(app);
+registerTesterMarketplaceRoutes(app);
 
 // Closed-loop evolution + experiment routes.
 registerLessonsRoutes(app);
@@ -418,6 +422,7 @@ registerDriftRoutes(app);
 registerExperimentsRoutes(app);
 registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
+registerBudgetRoutes(app);
 registerEvolutionRoutes(app);
 
 registerA2ATaskRoutes(app);

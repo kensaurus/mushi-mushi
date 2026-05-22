@@ -411,7 +411,7 @@ Deno.serve(
 
         // A2A push for failures
         if (result.status === 'failed' || result.status === 'error') {
-          await db.from('a2a_push_deliveries').insert({
+          await Promise.resolve(db.from('a2a_push_deliveries').insert({
             project_id: pid,
             event_type: 'qa_story_failed',
             payload: {
@@ -423,7 +423,7 @@ Deno.serve(
               assertion_failures: result.assertion_failures,
               provider_session_url: result.provider_session_url,
             },
-          }).then(() => {
+          })).then(() => {
             rlog.info({ storyId: story.id, runId }, 'a2a push queued')
           }).catch((err: unknown) => {
             rlog.warn({ err }, 'a2a push failed — non-fatal')

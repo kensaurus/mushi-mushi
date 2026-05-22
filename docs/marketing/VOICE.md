@@ -126,6 +126,28 @@ could live next to those three sentences, rewrite it.
 > marching-ants ring around it on the dashboard so you can see the
 > bottleneck without reading anything. 🐛 (changelog: \<link\>)
 
+## Mushi Bounties — sub-product voice
+
+**Canonical name:** "Mushi Bounties" (full), "Bounties" (inside the console).
+**Never say:** "earn Amazon gift cards" (Amazon's terms forbid framing cards as cash-equivalent).
+**Always say:** "100+ rewards including Amazon" or "earn points, redeem for rewards".
+**Legal posture note:** rewards are closed-loop mushi-points redeemable at a 1.3× premium for
+Mushi Pro, or at base rate for third-party gift cards via Tremendous ($599/yr cap per tester;
+Tremendous holds the money-transmitter licenses). No crypto. No cash from Mushi directly.
+Consult `docs/research/tester-marketplace-research-2026-05-22.md` §6, §9 before launch copy.
+
+### Three-persona Bounties phrasebook
+
+| Audience | What they want to hear | How Mushi-chan says it |
+|---|---|---|
+| **Dev/PM publisher** | "My app gets tested by real humans who are paid to find bugs." | "Publish to Bounties. Real testers, tracked in your Sentry inbox, with points they actually want." |
+| **Dev/PM tester** (also uses the console) | "I can hunt bugs on other people's apps and earn credit for my own Mushi Pro." | "Test other teams' apps. Every accepted bug report earns mushi-points. Redeem at a 30% premium on your own Pro plan — or cash out to a gift card." |
+| **Public tester** (non-dev) | "I get paid to find bugs in apps." | "Pick an app. Find a bug. Earn rewards — pick from 100+ options including Amazon, Starbucks, App Store." |
+
+**Tone note for Bounties copy:** slightly higher energy than the base Mushi-chan voice — testers
+need motivation. But still no hype. "Real testers find real bugs" is fine; "unlock unlimited earning
+potential" is not.
+
 ## Three-persona phrasebook
 
 The same feature, phrased for each of the three personas. Use this as a

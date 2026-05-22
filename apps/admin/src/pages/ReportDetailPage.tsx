@@ -55,6 +55,7 @@ import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
+import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 
@@ -196,7 +197,7 @@ export function ReportDetailPage() {
 
   if (!report) return <DetailSkeleton label="Loading report" />
 
-  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} />
+  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
 }
 
 interface ReportDetailViewProps {
@@ -204,9 +205,10 @@ interface ReportDetailViewProps {
   onTriage: (updates: Record<string, string>) => Promise<void>
   saving: boolean
   savedAt: number | null
+  onReload: () => void
 }
 
-function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailViewProps) {
+function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: ReportDetailViewProps) {
   const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
@@ -344,6 +346,16 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
           <TimelineCard report={report} />
         </Section>
       </div>
+
+      {/* Mushi Bounties: reviewer grading card when report came from a tester */}
+      {report.tester_submission_id && report.tester_submission && (
+        <div className="mt-3 rounded-lg border border-brand/20 bg-brand/5 p-4">
+          <TesterSubmissionCard
+            submission={report.tester_submission}
+            onReviewed={onReload}
+          />
+        </div>
+      )}
 
       <div className="mt-3">
         <SentryContextPanel

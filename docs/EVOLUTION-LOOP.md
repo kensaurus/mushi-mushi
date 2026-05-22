@@ -53,9 +53,27 @@ The lesson library (`packages/mcp/src/catalog.ts` tool `lessons.query`) gives ev
 
 ---
 
+## Extending the loop with paid testers (Mushi Bounties)
+
+The weakest stage in the loop is capture: your own users are reluctant to
+report bugs. Mushi Bounties solves this by adding a motivated human in the
+capture stage — a public tester who earns **mushi-points** for every accepted
+bug report. Testers browse the marketplace, join an app, submit bugs through
+the same pipeline, and redeem points for Mushi Pro credit or gift cards.
+
+The rest of the loop is unchanged: the submission goes through `classify-report`,
+a draft PR lands via `fix-worker`, QA stories verify it, `judge-batch` scores
+the fix, and the lesson is promoted to `.mushi/lessons.json`. The only new piece
+is the human at the front.
+
+See the full concept: [Mushi Bounties — crowd-testing marketplace](./BOUNTIES.md).
+
+---
+
 ## Further reading
 
 - [The closed-loop thesis](../apps/docs/content/concepts/closed-loop.mdx) — Black Box Thinking · Antifragile · Cumulative selection
 - [Architecture](../apps/docs/content/concepts/architecture.mdx) — how the five edge functions connect
+- [Mushi Bounties](./BOUNTIES.md) — crowd-testing marketplace + rewards manifesto
 - [Security & privacy](../apps/docs/content/security/) — BYOK, RLS, data residency, no-leakage claim
 - [Quick start](../apps/docs/content/quickstart/) — running the loop in your app in 60 seconds

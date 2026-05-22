@@ -134,8 +134,8 @@ Deno.serve(
 
     for (const row of (unprocessed ?? [])) {
       const reportId = row.report_id as string
-      const projectId = (row.reports as { project_id: string }).project_id
-      const severity = (row.reports as { severity: string }).severity ?? 'warn'
+      const projectId = (row.reports as unknown as { project_id: string }).project_id
+      const severity = (row.reports as unknown as { severity: string }).severity ?? 'warn'
       const embedding = parseVector(row.embedding)
 
       // Load existing candidate clusters for this project
