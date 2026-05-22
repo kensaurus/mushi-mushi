@@ -43,6 +43,7 @@ const rlog = log.child('tester-marketplace-routes')
 
 // Wave 9: Import centralized sanctions module (replaces inline OFAC set).
 import { checkSanctions } from '../../_shared/sanctions.ts'
+import { hashTesterTin, normalizeTin } from '../../_shared/tin-hash.ts'
 
 // ─── Helper: forward submission event to developer's Sentry DSN ──────────────
 // Parses the DSN to extract the store endpoint and sends a minimal Sentry
@@ -298,7 +299,8 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
   })
 
   // PUT /v1/tester/kyc — KYC metadata submission (Wave 9)
-  // Receives the tax form kind + TIN hash (hashed client-side).
+  // Receives tax form kind + TIN (over HTTPS). Server HMACs with TESTER_TIN_PEPPER
+  // before storage so a DB-only leak cannot be brute-forced offline.
   // Sets withholding_status='pending' until a reviewer clears it.
   app.put('/v1/tester/kyc', jwtAuth, async (c) => {
     const authUserId = c.get('userId') as string
@@ -307,16 +309,24 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
     const body = await c.req.json()
-    const { jurisdiction, taxFormKind, legalName, tinProvidedHash } = body as {
+    const { jurisdiction, taxFormKind, legalName, tin } = body as {
       jurisdiction?: string
       taxFormKind?: string
       legalName?: string
-      tinProvidedHash?: string
+      tin?: string
     }
 
-    if (!jurisdiction || !taxFormKind || !tinProvidedHash) {
-      return c.json({ error: 'jurisdiction, taxFormKind, and tinProvidedHash are required' }, 400)
+    if (!jurisdiction || !taxFormKind || !tin?.trim()) {
+      return c.json({ error: 'jurisdiction, taxFormKind, and tin are required' }, 400)
     }
+
+    const pepper = Deno.env.get('TESTER_TIN_PEPPER')
+    if (!pepper || pepper.length < 32) {
+      rlog.error('TESTER_TIN_PEPPER not configured or too short')
+      return c.json({ error: 'kyc_unavailable' }, 503)
+    }
+
+    const tinProvidedHash = await hashTesterTin(normalizeTin(tin), pepper)
 
     // Upsert KYC row. withholding_status starts as 'pending' until manually reviewed.
     const { error } = await supabase
@@ -646,7 +656,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     // is injected via project_settings so classify-report routes it to the right
     // Sentry project automatically.
     try {
-      const { ingestReport } = await import('../../helpers.ts')
+      const { ingestReport } = await import('../helpers.ts')
       const ingestResult = await ingestReport(
         supabase,
         app.project_id,
