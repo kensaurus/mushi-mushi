@@ -260,22 +260,31 @@ export interface AntiGamingEventRecord {
   eventType: 'multi_account' | 'velocity_anomaly' | 'manual_flag' | 'unflag'
   reason?: string | null
   metadata?: Record<string, unknown>
+  /** Mushi Bounties: optional FK columns added in 20260523030000 migration. */
+  testerId?: string
+  appId?: string
 }
 
 export function logAntiGamingEvent(
   db: SupabaseClient,
   rec: AntiGamingEventRecord,
 ): Promise<void> {
-  return db.from('anti_gaming_events').insert({
-    project_id: rec.projectId,
-    reporter_token_hash: rec.reporterTokenHash,
-    device_fingerprint: rec.deviceFingerprint ?? null,
-    ip_address: rec.ipAddress ?? null,
-    user_agent: rec.userAgent ?? null,
-    event_type: rec.eventType,
-    reason: rec.reason ?? null,
-    metadata: rec.metadata ?? {},
-  }).then(({ error }) => {
+  return Promise.resolve(
+    db.from('anti_gaming_events').insert({
+      project_id: rec.projectId,
+      reporter_token_hash: rec.reporterTokenHash,
+      device_fingerprint: rec.deviceFingerprint ?? null,
+      ip_address: rec.ipAddress ?? null,
+      user_agent: rec.userAgent ?? null,
+      event_type: rec.eventType,
+      reason: rec.reason ?? null,
+      metadata: rec.metadata ?? {},
+      ...(rec.testerId ? { tester_id: rec.testerId } : {}),
+      ...(rec.appId ? { app_id: rec.appId } : {}),
+    }),
+  ).then(({ error }) => {
     if (error) log.warn('anti_gaming_events insert failed', { error: error.message })
+  }).catch((err: unknown) => {
+    log.warn('anti_gaming_events insert rejected', { error: String(err) })
   })
 }

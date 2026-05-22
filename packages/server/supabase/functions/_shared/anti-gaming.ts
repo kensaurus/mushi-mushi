@@ -1,5 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
+import { logAntiGamingEvent } from './telemetry.ts'
+
 export interface DeviceContext {
   fingerprint: string
   ipAddress?: string
@@ -188,4 +190,86 @@ async function runVelocityCheck(
   }
 
   return { allowed: true, flagged: false }
+}
+
+// ── Mushi Bounties: tester-specific velocity checks ───────────────────────────
+// Called from POST /v1/tester/submissions in addition to the per-token checks.
+// Velocity caps: 20 submissions / tester / 24h (global), 5 / tester / app / 24h.
+// Exceeding either cap withholds the submission for manual review.
+
+const TESTER_VELOCITY_CAP_24H = 20
+const TESTER_VELOCITY_CAP_PER_APP_24H = 5
+
+export interface TesterVelocityResult {
+  allowed: boolean
+  withheld: boolean
+  reason?: string
+}
+
+export async function checkTesterVelocity(
+  db: SupabaseClient,
+  testerId: string,
+  appId: string,
+  projectId: string,
+): Promise<TesterVelocityResult> {
+  const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+
+  // Global tester velocity.
+  const { count: globalCount } = await db
+    .from('tester_submissions')
+    .select('id', { count: 'exact', head: true })
+    .eq('tester_id', testerId)
+    .gte('created_at', since24h)
+
+  if ((globalCount ?? 0) >= TESTER_VELOCITY_CAP_24H) {
+    await logAntiGamingEvent(db, {
+      projectId,
+      reporterTokenHash: `tester:${testerId}`,
+      eventType: 'velocity_anomaly',
+      reason: `Global tester velocity exceeded: ${globalCount} submissions in 24h (cap=${TESTER_VELOCITY_CAP_24H})`,
+      metadata: {
+        source: 'tester_velocity_global',
+        submission_count_24h: globalCount,
+        cap: TESTER_VELOCITY_CAP_24H,
+      },
+      testerId,
+      appId,
+    })
+    return {
+      allowed: true,
+      withheld: true,
+      reason: `Global velocity cap: ${globalCount} submissions in 24h`,
+    }
+  }
+
+  // Per-app tester velocity.
+  const { count: appCount } = await db
+    .from('tester_submissions')
+    .select('id', { count: 'exact', head: true })
+    .eq('tester_id', testerId)
+    .eq('app_id', appId)
+    .gte('created_at', since24h)
+
+  if ((appCount ?? 0) >= TESTER_VELOCITY_CAP_PER_APP_24H) {
+    await logAntiGamingEvent(db, {
+      projectId,
+      reporterTokenHash: `tester:${testerId}`,
+      eventType: 'velocity_anomaly',
+      reason: `Per-app velocity exceeded for app ${appId}: ${appCount} submissions in 24h (cap=${TESTER_VELOCITY_CAP_PER_APP_24H})`,
+      metadata: {
+        source: 'tester_velocity_per_app',
+        submission_count_24h: appCount,
+        cap: TESTER_VELOCITY_CAP_PER_APP_24H,
+      },
+      testerId,
+      appId,
+    })
+    return {
+      allowed: true,
+      withheld: true,
+      reason: `Per-app velocity cap: ${appCount} submissions in 24h for this app`,
+    }
+  }
+
+  return { allowed: true, withheld: false }
 }

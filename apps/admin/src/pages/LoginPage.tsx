@@ -56,14 +56,18 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<FormMode>('login')
+  const initialTrack: LoginTrack = searchParams.get('as') === 'tester' ? 'tester' : 'console'
+  const [mode, setMode] = useState<FormMode>(initialTrack === 'tester' ? 'magic' : 'login')
   const [success, setSuccess] = useState<SuccessState>(null)
   const [rememberEmail, setRememberEmail] = useState(true)
   const [health, setHealth] = useState<HealthStatus>(cloud ? 'ok' : 'checking')
   const [passkeyAvailable, setPasskeyAvailable] = useState(false)
+  // Detect ?as=tester URL param (linked from marketplace "Join to test" CTA)
+  const [track, setTrack] = useState<LoginTrack>(initialTrack)
 
   const supabaseHost = getSupabaseHost()
-  const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'))
+  const defaultNextPath = track === 'tester' ? '/tester' : '/dashboard'
+  const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
 
   useEffect(() => {
     if (cloud) return
@@ -129,8 +133,9 @@ export function LoginPage() {
           persistEmailChoice()
           setSuccess('reset-sent')
         }
-      } else if (mode === 'magic') {
-        const result = await signInWithMagicLink(email)
+      } else if (mode === 'magic' || track === 'tester') {
+        const magicFn = track === 'tester' ? signInAsTester : signInWithMagicLink
+        const result = await magicFn(email)
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else {
