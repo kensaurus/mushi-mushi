@@ -32,7 +32,7 @@ function handler(event) {
   response.headers['permissions-policy'] = { value: 'camera=(), microphone=(), geolocation=()' };
   response.headers['strict-transport-security'] = { value: 'max-age=63072000; includeSubDomains; preload' };
   response.headers['content-security-policy'] = {
-    value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://www.google.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://kensaur.us https://*.sentry.io https://*.cloud.langfuse.com; frame-src 'none'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
   };
 
   if (status !== 403 && status !== 404) {

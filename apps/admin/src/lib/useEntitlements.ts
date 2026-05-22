@@ -28,6 +28,10 @@ export type FeatureFlag =
   | 'inventory_v2'
   | 'rewards_program'
   | 'rewards_monetary'
+  // Mushi Bounties marketplace flags (Wave 1)
+  | 'marketplace_publish'
+  | 'tester_cashout'
+  | 'marketplace_priority_listing'
 
 export interface UpgradeTarget {
   id: string

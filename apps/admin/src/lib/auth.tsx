@@ -25,6 +25,9 @@ interface AuthContextValue {
   clearPasswordRecovery: () => void
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>
+  /** Sign in as a Mushi Bounties tester via magic-link. Sets signup_intent='tester'
+   *  so the DB trigger auto-provisions a mushi_testers row on first login. */
+  signInAsTester: (email: string) => Promise<{ error?: string }>
   signInWithPasskey: () => Promise<{ error?: string }>
   signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
@@ -48,6 +51,7 @@ const AuthContext = createContext<AuthContextValue>({
   clearPasswordRecovery: () => {},
   signIn: async () => ({}),
   signInWithMagicLink: async () => ({}),
+  signInAsTester: async () => ({}),
   signInWithPasskey: async () => ({}),
   signUp: async () => ({}),
   signOut: async () => {},
@@ -119,6 +123,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
+  const signInAsTester = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: authRedirectUrl('/tester'),
+        shouldCreateUser: true,
+        data: { signup_intent: 'tester' },
+      },
+    })
+    return { error: error?.message }
+  }
+
   const signInWithPasskey = async () => signInWithPasskeyApi()
 
   const signUp = async (email: string, password: string) => {
@@ -158,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       session, user: session?.user ?? null, loading,
       isPasswordRecovery, clearPasswordRecovery,
-      signIn, signInWithMagicLink, signInWithPasskey, signUp, signOut, resetPassword, updatePassword,
+      signIn, signInWithMagicLink, signInAsTester, signInWithPasskey, signUp, signOut, resetPassword, updatePassword,
     }}>
       {children}
     </AuthContext.Provider>

@@ -96,6 +96,18 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     tagline: 'Monetary payouts via Stripe Connect require Pro.',
     pillLabel: 'PRO',
   },
+  marketplace_publish: {
+    tagline: 'Publish your app to the Mushi Bounties tester marketplace — Pro required.',
+    pillLabel: 'PRO',
+  },
+  tester_cashout: {
+    tagline: 'Enable tester gift-card redemptions for your published app — Pro required.',
+    pillLabel: 'PRO',
+  },
+  marketplace_priority_listing: {
+    tagline: 'Priority listing in the Mushi Bounties marketplace — Enterprise only.',
+    pillLabel: 'ENTERPRISE',
+  },
 }
 
 function ctaCopy(upgradeTo: UpgradeTarget | null | undefined): string {
