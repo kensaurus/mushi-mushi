@@ -127,6 +127,7 @@ describe('MCP protocol handshake', () => {
       'run_nl_query',
       'search_reports',
       'set_tier',
+      'setup_repo_for_mushi',
       'submit_fix_result',
       'test_gen_from_report',
       'transition_status',
@@ -148,6 +149,7 @@ describe('MCP protocol handshake', () => {
       'transition_status',
       'award_bonus_points',
       'set_tier',
+      'setup_repo_for_mushi',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()
@@ -170,7 +172,9 @@ describe('MCP protocol handshake', () => {
     const { resources } = await client.listResources()
     const uris = resources.map(r => r.uri).sort()
     expect(uris).toEqual([
+      'evolution://history',
       'inventory://current',
+      'privacy://status',
       'project://dashboard',
       'project://integration-health',
       'project://settings',
