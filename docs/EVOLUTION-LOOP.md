@@ -66,7 +66,7 @@ a draft PR lands via `fix-worker`, QA stories verify it, `judge-batch` scores
 the fix, and the lesson is promoted to `.mushi/lessons.json`. The only new piece
 is the human at the front.
 
-See the full concept: [Mushi Bounties — crowd-testing marketplace](../apps/docs/content/concepts/bounty-marketplace.mdx).
+See the full concept: [Mushi Bounties — crowd-testing marketplace](./BOUNTIES.md).
 
 ---
 
@@ -74,6 +74,6 @@ See the full concept: [Mushi Bounties — crowd-testing marketplace](../apps/doc
 
 - [The closed-loop thesis](../apps/docs/content/concepts/closed-loop.mdx) — Black Box Thinking · Antifragile · Cumulative selection
 - [Architecture](../apps/docs/content/concepts/architecture.mdx) — how the five edge functions connect
-- [Mushi Bounties](../apps/docs/content/concepts/bounty-marketplace.mdx) — crowd-testing marketplace + rewards
+- [Mushi Bounties](./BOUNTIES.md) — crowd-testing marketplace + rewards manifesto
 - [Security & privacy](../apps/docs/content/security/) — BYOK, RLS, data residency, no-leakage claim
 - [Quick start](../apps/docs/content/quickstart/) — running the loop in your app in 60 seconds

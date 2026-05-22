@@ -3,6 +3,7 @@
  * Fetches from the public API, renders cards with SEO-friendly metadata.
  */
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Mushi Bounties — crowd-testing marketplace',
@@ -89,12 +90,12 @@ export default async function MarketplacePage() {
           >
             Start testing →
           </a>
-          <a
-            href="/mushi-mushi/testers/leaderboard/"
+          <Link
+            href="/mushi-mushi/testers/apps/"
             className="rounded-xl border border-white/20 px-8 py-3 text-base font-semibold hover:border-white/40 transition-colors"
           >
-            View leaderboard
-          </a>
+            Browse apps
+          </Link>
         </div>
 
         {/* Value props */}
@@ -172,8 +173,9 @@ export default async function MarketplacePage() {
       <footer className="border-t border-white/10 py-8 text-center text-sm text-gray-500">
         <p>
           <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
-          <a href="/mushi-mushi/docs/" className="hover:text-gray-300">Docs</a> ·{' '}
-          <a href="/mushi-mushi/docs/concepts/bounty-marketplace" className="hover:text-gray-300">How it works</a> ·{' '}
+          <a href="/mushi-mushi/testers/apps/" className="hover:text-gray-300">Browse apps</a> ·{' '}
+          <a href="/mushi-mushi/testers/how-it-works/" className="hover:text-gray-300">How it works</a> ·{' '}
+          <a href="/mushi-mushi/testers/leaderboard/" className="hover:text-gray-300">Leaderboard</a> ·{' '}
           Gift cards powered by Tremendous · $599/yr cap before KYC
         </p>
       </footer>
