@@ -1026,7 +1026,7 @@ function WithheldRedemptionRow({
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium truncate">@{handle}</span>
-          <Badge tone="warn" size="xs">{redemption.kind.replace(/_/g, ' ')}</Badge>
+          <Badge className="bg-warn-muted text-warn">{redemption.kind.replace(/_/g, ' ')}</Badge>
           {redemption.face_value_usd && (
             <span className="text-xs text-fg-secondary">${redemption.face_value_usd} gift card</span>
           )}

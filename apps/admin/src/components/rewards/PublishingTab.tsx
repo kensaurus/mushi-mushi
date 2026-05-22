@@ -86,13 +86,12 @@ function UpgradePrompt() {
       title="Mushi Bounties · Pro feature"
       description="Publish your app to the Mushi Bounties tester marketplace and reward testers with mushi-points. Upgrade to Pro to enable publishing and set a gift-card budget."
       action={
-        <Btn
+        <a
           href="/settings?tab=billing"
-          size="sm"
-          variant="primary"
+          className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-hover motion-safe:transition-colors"
         >
           Upgrade to Pro
-        </Btn>
+        </a>
       }
     />
   )
@@ -253,15 +252,14 @@ export function PublishingTab({ projectId, canEdit }: PublishingTabProps) {
         {hasPriority && <Badge className="bg-brand/15 text-brand">Priority listing</Badge>}
         {hasCashout && <Badge className="bg-ok-muted text-ok">Gift-card budget enabled</Badge>}
         {app.visibility === 'public' && (
-          <Btn
-            size="xs"
-            variant="ghost"
+          <a
             href={`https://kensaur.us/mushi-mushi/testers/apps/${app.slug}`}
             target="_blank"
             rel="noopener noreferrer"
+            className="text-xs text-brand hover:text-brand-hover motion-safe:transition-colors"
           >
             View live listing ↗
-          </Btn>
+          </a>
         )}
       </div>
 
@@ -272,69 +270,81 @@ export function PublishingTab({ projectId, canEdit }: PublishingTabProps) {
             <Input
               label="App name"
               value={form.name ?? app.name ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, name: v }))}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               disabled={!canEdit}
               maxLength={80}
             />
+            <div>
+              <Input
+                label="URL slug"
+                value={form.slug ?? app.slug ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+                disabled={!canEdit}
+              />
+              <p className="mt-1 text-2xs text-fg-faint">
+                Appears in the marketplace URL: /testers/apps/your-slug
+              </p>
+            </div>
+          </div>
+          <div>
             <Input
-              label="URL slug"
-              value={form.slug ?? app.slug ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, slug: v }))}
+              label="Tagline"
+              value={form.tagline ?? app.tagline ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
               disabled={!canEdit}
-              hint="Appears in the marketplace URL: /testers/apps/your-slug"
+              maxLength={140}
+            />
+            <p className="mt-1 text-2xs text-fg-faint">One sentence · 140 chars max</p>
+          </div>
+          <div>
+            <label className="block text-2xs font-medium text-fg-muted uppercase tracking-wider mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description ?? app.description ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              disabled={!canEdit}
+              rows={4}
+              maxLength={4000}
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-50 resize-y"
             />
           </div>
-          <Input
-            label="Tagline"
-            value={form.tagline ?? app.tagline ?? ''}
-            onChange={(v) => setForm((f) => ({ ...f, tagline: v }))}
-            disabled={!canEdit}
-            maxLength={140}
-            hint="One sentence · 140 chars max"
-          />
-          <Input
-            label="Description"
-            value={form.description ?? app.description ?? ''}
-            onChange={(v) => setForm((f) => ({ ...f, description: v }))}
-            disabled={!canEdit}
-            multiline
-            rows={4}
-            maxLength={4000}
-          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Input
               label="Web URL"
               value={form.web_url ?? app.web_url ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, web_url: v }))}
+              onChange={(e) => setForm((f) => ({ ...f, web_url: e.target.value }))}
               disabled={!canEdit}
               placeholder="https://your-app.com"
             />
             <Input
               label="App Store URL"
               value={form.app_store_url ?? app.app_store_url ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, app_store_url: v }))}
+              onChange={(e) => setForm((f) => ({ ...f, app_store_url: e.target.value }))}
               disabled={!canEdit}
               placeholder="https://apps.apple.com/…"
             />
             <Input
               label="Play Store URL"
               value={form.play_store_url ?? app.play_store_url ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, play_store_url: v }))}
+              onChange={(e) => setForm((f) => ({ ...f, play_store_url: e.target.value }))}
               disabled={!canEdit}
               placeholder="https://play.google.com/…"
             />
           </div>
           <div>
-            <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider">
+            <label className="block text-2xs font-medium text-fg-muted uppercase tracking-wider mb-1">
               Sentry DSN (optional)
             </label>
             <Input
               value={form.sentry_dsn ?? app.sentry_dsn ?? ''}
-              onChange={(v) => setForm((f) => ({ ...f, sentry_dsn: v }))}
+              onChange={(e) => setForm((f) => ({ ...f, sentry_dsn: e.target.value }))}
               disabled={!canEdit}
               placeholder="https://…@sentry.io/…"
-              hint="Tester submissions will be tagged mushi_tester:true and routed to this Sentry project."
             />
+            <p className="mt-1 text-2xs text-fg-faint">
+              Tester submissions will be tagged <code>mushi_tester:true</code> and routed to this Sentry project.
+            </p>
           </div>
         </Card>
       </Section>
@@ -354,13 +364,11 @@ export function PublishingTab({ projectId, canEdit }: PublishingTabProps) {
                 <Input
                   label="Budget ceiling (USD / month)"
                   value={String(stats?.monthly_budget_usd ?? 0)}
-                  onChange={() => {
-                    /* handled by separate API call */
-                  }}
+                  onChange={() => { /* handled by separate API call */ }}
                   disabled={!canEdit}
                   type="number"
-                  hint="0 = no gift-card cash-out for this project's testers"
                 />
+                <p className="mt-1 text-2xs text-fg-faint">0 = no gift-card cash-out for this project&apos;s testers</p>
               </div>
               {stats && (
                 <div>
@@ -511,10 +519,10 @@ export function PublishingTab({ projectId, canEdit }: PublishingTabProps) {
                         submissions but keeps existing testers in your program.
                       </p>
                       <div className="flex gap-2">
-                        <Btn size="xs" variant="primary" onClick={handlePublish} loading={publishing}>
+                        <Btn size="sm" variant="primary" onClick={handlePublish} loading={publishing}>
                           Yes, publish
                         </Btn>
-                        <Btn size="xs" variant="ghost" onClick={() => setConfirmPublish(false)}>
+                        <Btn size="sm" variant="ghost" onClick={() => setConfirmPublish(false)}>
                           Cancel
                         </Btn>
                       </div>

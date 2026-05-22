@@ -197,7 +197,7 @@ export function ReportDetailPage() {
 
   if (!report) return <DetailSkeleton label="Loading report" />
 
-  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} />
+  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
 }
 
 interface ReportDetailViewProps {
@@ -205,9 +205,10 @@ interface ReportDetailViewProps {
   onTriage: (updates: Record<string, string>) => Promise<void>
   saving: boolean
   savedAt: number | null
+  onReload: () => void
 }
 
-function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailViewProps) {
+function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: ReportDetailViewProps) {
   const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
@@ -351,7 +352,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
         <div className="mt-3 rounded-lg border border-brand/20 bg-brand/5 p-4">
           <TesterSubmissionCard
             submission={report.tester_submission}
-            onReviewed={reload}
+            onReviewed={onReload}
           />
         </div>
       )}

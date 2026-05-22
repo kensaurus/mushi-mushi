@@ -180,8 +180,8 @@ export function TesterSettingsPage() {
             <section className="space-y-3">
               <h2 className="text-sm font-semibold" id="kyc">Identity verification (KYC)</h2>
               {profile?.kycStatus === 'cleared' ? (
-                <ContainedBlock tone="ok">
-                  <p className="text-xs text-ok font-medium">✓ Identity verified</p>
+                <ContainedBlock tone="info">
+                  <p className="text-xs font-medium">✓ Identity verified</p>
                   <p className="text-2xs text-fg-muted mt-0.5">Gift card redemptions up to $2,400/yr are unlocked.</p>
                 </ContainedBlock>
               ) : profile?.kycStatus === 'pending' ? (

@@ -84,14 +84,12 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
 
   return (
     <Card>
-      <Section
-        title={`Tax information required (${formKind})`}
-        description={
-          formKind === 'W9'
+      <Section title={`Tax information required (${formKind})`}>
+        <p className="text-2xs text-fg-muted mb-4">
+          {formKind === 'W9'
             ? 'US law requires we collect a W-9 before cumulative rewards exceed $400 USD. Your TIN is hashed immediately — we never store it in plaintext.'
-            : `Non-US recipients must complete a ${formKind} before cumulative rewards exceed $400 USD. Your TIN is hashed immediately — we never store it in plaintext.`
-        }
-      >
+            : `Non-US recipients must complete a ${formKind} before cumulative rewards exceed $400 USD. Your TIN is hashed immediately — we never store it in plaintext.`}
+        </p>
         <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
           <div>
             <label className="block text-xs font-medium text-fg-secondary mb-1">
