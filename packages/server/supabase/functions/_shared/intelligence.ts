@@ -95,14 +95,14 @@ export async function computeWeeklyStats(
     db.rpc('weekly_judge_scores', { p_project_id: projectId, p_weeks: 2 }),
   ])
 
-  const reports = (reportsRes.data ?? []) as Array<{
+  const reports = (reportsRes.data ?? []) as unknown as Array<{
     category: string
     severity: string | null
     component: string | null
     status: string
     created_at: string
   }>
-  const fixes = (fixesRes.data ?? []) as Array<{
+  const fixes = (fixesRes.data ?? []) as unknown as Array<{
     status: string
     started_at: string | null
     completed_at: string | null

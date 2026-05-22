@@ -161,29 +161,35 @@ export function logLlmInvocation(
     span.end().catch(() => {}) // non-fatal
   }
 
-  return db.from('llm_invocations').insert({
-    project_id: rec.projectId ?? null,
-    report_id: rec.reportId ?? null,
-    function_name: rec.functionName,
-    stage: rec.stage ?? null,
-    primary_model: rec.primaryModel,
-    used_model: rec.usedModel,
-    fallback_used: rec.fallbackUsed,
-    fallback_reason: rec.fallbackReason ?? null,
-    status: rec.status,
-    error_message: rec.errorMessage ?? null,
-    latency_ms: rec.latencyMs ?? null,
-    input_tokens: rec.inputTokens ?? null,
-    output_tokens: rec.outputTokens ?? null,
-    cost_usd: costUsd,
-    prompt_version: rec.promptVersion ?? null,
-    key_source: rec.keySource ?? null,
-    langfuse_trace_id: rec.langfuseTraceId ?? null,
-    cache_creation_input_tokens: rec.cacheCreationInputTokens ?? null,
-    cache_read_input_tokens: rec.cacheReadInputTokens ?? null,
-  }).then(({ error }) => {
+  // Wrap in Promise.resolve() so the Supabase PromiseLike<T> chain becomes a
+  // real Promise and `.catch()` / `.finally()` are available. Without this,
+  // TypeScript sees a PromiseLike<void> from the .then() return type and
+  // rejects the subsequent .catch() call (TS2339).
+  return Promise.resolve(
+    db.from('llm_invocations').insert({
+      project_id: rec.projectId ?? null,
+      report_id: rec.reportId ?? null,
+      function_name: rec.functionName,
+      stage: rec.stage ?? null,
+      primary_model: rec.primaryModel,
+      used_model: rec.usedModel,
+      fallback_used: rec.fallbackUsed,
+      fallback_reason: rec.fallbackReason ?? null,
+      status: rec.status,
+      error_message: rec.errorMessage ?? null,
+      latency_ms: rec.latencyMs ?? null,
+      input_tokens: rec.inputTokens ?? null,
+      output_tokens: rec.outputTokens ?? null,
+      cost_usd: costUsd,
+      prompt_version: rec.promptVersion ?? null,
+      key_source: rec.keySource ?? null,
+      langfuse_trace_id: rec.langfuseTraceId ?? null,
+      cache_creation_input_tokens: rec.cacheCreationInputTokens ?? null,
+      cache_read_input_tokens: rec.cacheReadInputTokens ?? null,
+    }),
+  ).then(({ error }) => {
     if (error) log.warn('llm_invocations insert failed', { error: error.message })
-  }).catch((err) => {
+  }).catch((err: unknown) => {
     // Network / JSON-parse / abort failures rejecting the insert promise
     // itself (distinct from a PostgREST `{ error }` payload). Callers commonly
     // invoke this as `void logLlmInvocation(...)` on the hot request path, so

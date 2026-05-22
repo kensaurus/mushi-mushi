@@ -115,6 +115,7 @@ export const elementSchema = z.object({
   notes: z.string().max(1000).optional(),
   owner_team: z.string().max(80).optional(),
   testid: z.string().max(120).optional(),
+  expected_outcome: z.string().max(1000).optional(),
 })
 export type Element = z.infer<typeof elementSchema>
 
