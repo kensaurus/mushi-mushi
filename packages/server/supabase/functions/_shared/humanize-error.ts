@@ -144,7 +144,7 @@ export function humanizeFixError(
   // ── Cursor Cloud: key not configured ──────────────────────────────────────
   if (m.includes('cursor_api_key_ref not set') || m.includes('cursor api key vault lookup failed')) {
     return {
-      title: 'Cursor isn't connected for this project yet.',
+      title: "Cursor isn't connected for this project yet.",
       hint: 'Add a Cursor API key in Integrations → Cursor Cloud to enable cloud agent fixes.',
       severity: 'hard',
       action: {
@@ -172,7 +172,7 @@ export function humanizeFixError(
   // ── GitHub: token rejected ─────────────────────────────────────────────────
   if (m.includes('github api error 401') || m.includes('github') && m.includes('401')) {
     return {
-      title: 'Your GitHub token isn't authorised on this repo.',
+      title: "Your GitHub token isn't authorised on this repo.",
       hint:
         'Re-save the token in Integrations → GitHub. It needs `contents:write` and `pull_requests:write` scopes.',
       severity: 'hard',
@@ -198,9 +198,9 @@ export function humanizeFixError(
   // ── GitHub: forbidden / no write access ───────────────────────────────────
   if (m.includes('github api error 403') || (m.includes('github') && m.includes('403'))) {
     return {
-      title: 'Mushi doesn't have write access to the repo.',
+      title: "Mushi doesn't have write access to the repo.",
       hint:
-        'Check the token has `contents:write` and `pull_requests:write` permissions, and that it hasn't expired.',
+        "Check the token has `contents:write` and `pull_requests:write` permissions, and that it hasn't expired.",
       severity: 'hard',
       action: {
         label: 'Re-save GitHub token',
@@ -213,7 +213,7 @@ export function humanizeFixError(
   // ── GitHub: repo not found ─────────────────────────────────────────────────
   if ((m.includes('github') || m.includes('github_404') || category === 'github_404') && m.includes('404')) {
     return {
-      title: 'Mushi can't find that GitHub repo or branch.',
+      title: "Mushi can't find that GitHub repo or branch.",
       hint:
         'Check the repo URL in Integrations → GitHub — the repo may have been renamed or the default branch changed.',
       severity: 'hard',
@@ -232,7 +232,7 @@ export function humanizeFixError(
     category === 'llm_no_object'
   ) {
     return {
-      title: 'The LLM gave a response that didn't fit the expected shape.',
+      title: "The LLM gave a response that didn't fit the expected shape.",
       hint:
         'This is usually a transient model hiccup — the fix-worker already retried with a schema-repair hint. Try once more.',
       severity: 'soft',
@@ -318,7 +318,7 @@ export function humanizeFixError(
     category === 'no_relevant_code'
   ) {
     return {
-      title: 'Mushi couldn't find relevant code to fix.',
+      title: "Mushi couldn't find relevant code to fix.",
       hint:
         'The codebase index may be out of date. Re-index under Settings → Codebase Indexing and retry.',
       severity: 'hard',
