@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -42,7 +43,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerReportsDashboardRoutes(app: Hono): void {
+export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // ADMIN ROUTES (JWT auth)
   // ============================================================
@@ -529,6 +530,22 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     // Inventory anchor: walk graph_edges to find the action node this report is
     // filed against (edge type='reports_against') and return its metadata so
     // MCP get_fix_context.inventoryAction is always populated when one exists.
+    // Fetch linked tester submission (if this report came from Mushi Bounties)
+    const testerSubmissionRes = data.tester_submission_id
+      ? await db
+          .from('tester_submissions')
+          .select(`
+            id,
+            status,
+            points_awarded,
+            reviewer_note,
+            mushi_testers!tester_submissions_tester_id_fkey ( public_handle ),
+            published_apps!tester_submissions_app_id_fkey ( name )
+          `)
+          .eq('id', data.tester_submission_id)
+          .single()
+      : { data: null }
+
     const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes] = await Promise.all([
       db
         .from('llm_invocations')
@@ -568,10 +585,24 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         .maybeSingle(),
     ]);
 
+    // Shape the tester_submission join for the UI.
+    const rawSub = testerSubmissionRes.data as Record<string, unknown> | null
+    const testerSubmission = rawSub
+      ? {
+          id: rawSub.id as string,
+          status: rawSub.status as string,
+          points_awarded: rawSub.points_awarded as number,
+          reviewer_note: rawSub.reviewer_note as string | null,
+          tester_handle: (rawSub.mushi_testers as Record<string, unknown> | null)?.public_handle as string | null ?? null,
+          app_name: (rawSub.published_apps as Record<string, unknown> | null)?.name as string | null ?? null,
+        }
+      : null
+
     return c.json({
       ok: true,
       data: {
         ...data,
+        tester_submission: testerSubmission,
         llm_invocations: invocationsRes.data ?? [],
         fix_attempts: fixesRes.data ?? [],
         judge_eval: judgeRes.data ?? null,

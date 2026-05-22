@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
@@ -300,7 +301,7 @@ async function loadAskMushiContextData(
   return { activeProject, userProjectIds, recentReportsBlock };
 }
 
-export function registerAskMushiRoutes(app: Hono): void {
+export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): void {
   // ── Endpoint: POST messages ──────────────────────────────────────────────
 
   // Per-user hourly throttle for Ask Mushi LLM calls. Returns either a

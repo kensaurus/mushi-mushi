@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { getServiceClient, getUserClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
@@ -235,7 +236,7 @@ function adminUrl(path: string): string {
   return `${base.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-export function registerOrganizationRoutes(app: Hono): void {
+export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/org', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

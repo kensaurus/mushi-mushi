@@ -25,6 +25,7 @@
  */
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { requireFeature } from '../../_shared/entitlements.ts'
@@ -95,7 +96,7 @@ function rateLimitResponse(
   )
 }
 
-export function registerInventoryRoutes(app: Hono): void {
+export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
   // Registered before /:projectId so "stats" is never parsed as a UUID.

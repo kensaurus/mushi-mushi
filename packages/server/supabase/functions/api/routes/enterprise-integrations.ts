@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -17,7 +18,7 @@ import {
   MUSHI_CLAUDE_GITHUB_SECRETS,
 } from '../../_shared/mushi-claude-workflow.ts';
 
-export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
+export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================

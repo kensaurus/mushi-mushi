@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -48,7 +49,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerModernizationHealthSuperRoutes(app: Hono): void {
+export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // LIBRARY MODERNIZATION
   // ============================================================

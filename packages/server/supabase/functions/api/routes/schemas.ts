@@ -32,6 +32,7 @@
  */
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 
 const HEADERS: Record<string, string> = {
   'Content-Type': 'application/schema+json; charset=utf-8',
@@ -229,7 +230,7 @@ const SCHEMAS: Record<string, unknown> = {
   'expected-outcome.json': EXPECTED_OUTCOME_JSON_SCHEMA,
 }
 
-export function registerSchemaRoutes(app: Hono): void {
+export function registerSchemaRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/schemas', (c) => {
     const url = new URL(c.req.raw.url)
     const base = `${url.protocol}//${url.host}/functions/v1/api/v1/schemas`

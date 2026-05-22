@@ -1,0 +1,33 @@
+{
+  "name": "@mushi-mushi/testers",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mushi Bounties — public tester marketplace (SSR Next.js)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "next --turbopack",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "clean": "rm -rf .next .turbo out"
+  },
+  "dependencies": {
+    "@mushi-mushi/brand": "workspace:*",
+    "next": "^15.5.18",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^22.19.17",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^10.3.0",
+    "postcss": "^8.5.13",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^5.9.3"
+  }
+}

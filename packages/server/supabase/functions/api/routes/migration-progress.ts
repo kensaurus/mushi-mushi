@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
@@ -73,7 +74,7 @@ function parseProjectIdFilter(c: Context): { projectId: string | null; error?: R
   return { projectId: raw };
 }
 
-export function registerMigrationProgressRoutes(app: Hono): void {
+export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables }>): void {
   // ─────────────────────────────────────────────────────────────────────
   // GET /v1/admin/migrations/progress
   //

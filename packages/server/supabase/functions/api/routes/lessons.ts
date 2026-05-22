@@ -19,12 +19,13 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, apiKeyAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
-export function registerLessonsRoutes(app: Hono) {
+export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
   app.get('/v1/admin/lessons/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
