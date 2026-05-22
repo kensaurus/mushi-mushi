@@ -19,7 +19,7 @@ import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
-export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
+export function registerDriftRoutes(parent: Hono<any>) {
   // GET /v1/admin/drift/stats — posture banner + DRIFT SNAPSHOT (before nested /:id routes).
   parent.get('/v1/admin/drift/stats', requireAuth, async (c) => {
     const userId = c.get('userId') as string

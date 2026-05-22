@@ -26,7 +26,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
 
-export function registerQaCoverageRoutes(app: Hono): void {
+export function registerQaCoverageRoutes(app: Hono<any>): void {
 
   // ── helper ────────────────────────────────────────────────────────────────
   async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string) {

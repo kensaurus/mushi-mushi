@@ -143,7 +143,7 @@ function rowToA2ATask(row: FixDispatchRow): Record<string, unknown> {
   };
 }
 
-export function registerA2ATaskRoutes(app: Hono): void {
+export function registerA2ATaskRoutes(app: Hono<any>): void {
   // ----------------------------------------------------------------
   // POST /v1/a2a/tasks — create a Task
   //

@@ -13,7 +13,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerSettingsResearchRoutes(app: Hono): void {
+export function registerSettingsResearchRoutes(app: Hono<any>): void {
   // Settings admin endpoints
   app.get('/v1/admin/settings', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;

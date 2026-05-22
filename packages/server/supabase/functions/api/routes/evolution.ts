@@ -201,6 +201,6 @@ app.get(
   },
 )
 
-export function registerEvolutionRoutes(parent: Hono<{ Variables: Variables }>) {
+export function registerEvolutionRoutes(parent: Hono<any>) {
   parent.route('', app)
 }

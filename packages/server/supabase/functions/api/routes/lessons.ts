@@ -24,7 +24,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, apiKeyAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
-export function registerLessonsRoutes(app: Hono) {
+export function registerLessonsRoutes(app: Hono<any>) {
   // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
   app.get('/v1/admin/lessons/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;

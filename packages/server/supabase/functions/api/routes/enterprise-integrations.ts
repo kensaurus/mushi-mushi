@@ -17,7 +17,7 @@ import {
   MUSHI_CLAUDE_GITHUB_SECRETS,
 } from '../../_shared/mushi-claude-workflow.ts';
 
-export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
+export function registerEnterpriseIntegrationsRoutes(app: Hono<any>): void {
   // ============================================================
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================

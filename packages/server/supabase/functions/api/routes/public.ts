@@ -43,7 +43,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerPublicRoutes(app: Hono): void {
+export function registerPublicRoutes(app: Hono<any>): void {
   // ============================================================
   // SDK ROUTES (API key auth)
   // ============================================================

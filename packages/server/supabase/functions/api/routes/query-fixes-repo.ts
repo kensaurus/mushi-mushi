@@ -42,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerQueryFixesRepoRoutes(app: Hono): void {
+export function registerQueryFixesRepoRoutes(app: Hono<any>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

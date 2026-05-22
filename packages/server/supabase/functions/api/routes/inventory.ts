@@ -95,7 +95,7 @@ function rateLimitResponse(
   )
 }
 
-export function registerInventoryRoutes(app: Hono): void {
+export function registerInventoryRoutes(app: Hono<any>): void {
   // ============================================================
   // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
   // Registered before /:projectId so "stats" is never parsed as a UUID.

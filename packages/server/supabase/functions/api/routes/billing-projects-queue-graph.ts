@@ -42,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
+export function registerBillingProjectsQueueGraphRoutes(app: Hono<any>): void {
   // =================================================================================
   // GET /v1/admin/billing/stats
   // Workspace health summary for billing banner + KPI strip (active project focus).
