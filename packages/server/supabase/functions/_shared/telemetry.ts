@@ -366,16 +366,18 @@ export function logAntiGamingEvent(
   db: SupabaseClient,
   rec: AntiGamingEventRecord,
 ): Promise<void> {
-  return db.from('anti_gaming_events').insert({
-    project_id: rec.projectId,
-    reporter_token_hash: rec.reporterTokenHash,
-    device_fingerprint: rec.deviceFingerprint ?? null,
-    ip_address: rec.ipAddress ?? null,
-    user_agent: rec.userAgent ?? null,
-    event_type: rec.eventType,
-    reason: rec.reason ?? null,
-    metadata: rec.metadata ?? {},
-  }).then(({ error }) => {
+  return Promise.resolve(
+    db.from('anti_gaming_events').insert({
+      project_id: rec.projectId,
+      reporter_token_hash: rec.reporterTokenHash,
+      device_fingerprint: rec.deviceFingerprint ?? null,
+      ip_address: rec.ipAddress ?? null,
+      user_agent: rec.userAgent ?? null,
+      event_type: rec.eventType,
+      reason: rec.reason ?? null,
+      metadata: rec.metadata ?? {},
+    }),
+  ).then(({ error }) => {
     if (error) log.warn('anti_gaming_events insert failed', { error: error.message })
   })
 }
