@@ -36,7 +36,7 @@ import { registerMcpAdminRoutes } from './routes/mcp-admin.ts';
 import { registerDriftRoutes } from './routes/drift.ts';
 import { registerExperimentsRoutes } from './routes/experiments.ts';
 import { registerAnomaliesRoutes } from './routes/anomalies.ts';
-import { registerCostsRoutes } from './routes/costs.ts';
+import { registerCostsRoutes, registerBudgetRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 
 ensureSentry('api');
@@ -418,6 +418,7 @@ registerDriftRoutes(app);
 registerExperimentsRoutes(app);
 registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
+registerBudgetRoutes(app);
 registerEvolutionRoutes(app);
 
 registerA2ATaskRoutes(app);

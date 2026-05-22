@@ -1,9 +1,11 @@
 // costs.ts — LLM cost tracking admin endpoints
 //
 // Admin:
-//   GET /v1/admin/costs           — paginated llm_invocations (+ legacy llm_cost_usd)
-//   GET /v1/admin/costs/stats     — workspace health summary for banner + KPI strip
-//   GET /v1/admin/costs/summary   — aggregated cost by operation + model + day
+//   GET /v1/admin/costs              — paginated llm_invocations (+ legacy llm_cost_usd)
+//   GET /v1/admin/costs/stats        — workspace health summary for banner + KPI strip
+//   GET /v1/admin/costs/summary      — aggregated cost by operation + model + day
+//   GET /v1/admin/org/budget         — monthly_llm_budget_usd for a project
+//   PUT /v1/admin/org/budget         — set/clear monthly_llm_budget_usd for a project
 //
 // Primary telemetry: `llm_invocations` (telemetry.ts on every edge function).
 // Legacy `llm_cost_usd` ledger rows are merged into summary + search.
@@ -13,6 +15,7 @@ import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
+import { accessibleProjectIds } from '../../_shared/project-access.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
@@ -539,4 +542,61 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
   })
 
   parent.route('/v1/admin/costs', r)
+}
+
+// ---------------------------------------------------------------------------
+// Budget endpoints — sit at /v1/admin/org/budget (outside the /costs prefix)
+// so they are registered on the parent directly via registerBudgetRoutes.
+// ---------------------------------------------------------------------------
+export function registerBudgetRoutes(parent: Hono<{ Variables: Variables }>) {
+  const r = new Hono<{ Variables: Variables }>()
+
+  // GET /v1/admin/org/budget?projectId=<pid>
+  r.get('/', requireAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const pid = c.req.query('projectId')
+    if (!pid) return c.json({ ok: false, error: 'projectId required' }, 400)
+
+    const projectIds = await accessibleProjectIds(db(), userId)
+    if (!projectIds.includes(pid)) return c.json({ ok: false, error: 'forbidden' }, 403)
+
+    const { data, error } = await db()
+      .from('project_settings')
+      .select('monthly_llm_budget_usd')
+      .eq('project_id', pid)
+      .maybeSingle()
+
+    if (error) return c.json({ ok: false, error: error.message }, 500)
+    return c.json({ ok: true, monthly_llm_budget_usd: data?.monthly_llm_budget_usd ?? null })
+  })
+
+  // PUT /v1/admin/org/budget  body: { projectId, monthly_llm_budget_usd: number | null }
+  r.put('/', requireAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const body = await c.req.json().catch(() => ({})) as {
+      projectId?: unknown
+      monthly_llm_budget_usd?: unknown
+    }
+
+    const pid = typeof body.projectId === 'string' ? body.projectId : null
+    if (!pid) return c.json({ ok: false, error: 'projectId required' }, 400)
+
+    const projectIds = await accessibleProjectIds(db(), userId)
+    if (!projectIds.includes(pid)) return c.json({ ok: false, error: 'forbidden' }, 403)
+
+    const rawBudget = body.monthly_llm_budget_usd
+    const budgetUsd =
+      rawBudget === null || rawBudget === undefined ? null :
+      typeof rawBudget === 'number' && rawBudget > 0 ? rawBudget :
+      null
+
+    const { error } = await db()
+      .from('project_settings')
+      .upsert({ project_id: pid, monthly_llm_budget_usd: budgetUsd }, { onConflict: 'project_id' })
+
+    if (error) return c.json({ ok: false, error: error.message }, 500)
+    return c.json({ ok: true, monthly_llm_budget_usd: budgetUsd })
+  })
+
+  parent.route('/v1/admin/org/budget', r)
 }
