@@ -25,6 +25,8 @@ import type { DailySpendSeries } from './dailySpendSeries'
 interface Props {
   projectId: string | null | undefined
   series: DailySpendSeries
+  /** UTC calendar month spend (from GET /v1/admin/costs/stats spendMonthUsd). */
+  monthToDateUsd: number
   fmtSpend: (usd: number) => string
 }
 
@@ -49,7 +51,7 @@ function ema7(values: number[]): number {
   return ema
 }
 
-export function BudgetForecastCard({ projectId, series, fmtSpend }: Props) {
+export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend }: Props) {
   const toast = useToast()
   const [budget, setBudget] = useState<number | null>(null)
   const [budgetInput, setBudgetInput] = useState('')
@@ -165,13 +167,13 @@ export function BudgetForecastCard({ projectId, series, fmtSpend }: Props) {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <ForecastCell
           label="Month-to-date"
-          value={fmtSpend(series.totalUsd)}
-          hint={`${daysElapsed} of ${daysTotal} days`}
+          value={fmtSpend(monthToDateUsd)}
+          hint={`${daysElapsed} of ${daysTotal} days (UTC)`}
         />
         <ForecastCell
           label="Linear forecast"
           value={fmtSpend(linearForecast)}
-          hint={`$${avg14dDaily.toFixed(3)}/day avg`}
+          hint={`$${avg14dDaily.toFixed(3)}/day · last ${series.days.length}d`}
           accent={isOverBudget80 ? (isOverBudget100 ? 'text-critical' : 'text-warn') : undefined}
         />
         <ForecastCell

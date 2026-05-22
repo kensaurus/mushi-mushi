@@ -3,7 +3,6 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import {
@@ -15,7 +14,9 @@ import {
   isCancellable,
 } from '../../lib/supportTickets'
 import { Modal } from '../Modal'
-import { Badge, Btn, DetailRows, RelativeTime } from '../ui'
+import { Btn, DetailRows, RelativeTime } from '../ui'
+import { ActionPill, ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
 
 interface SupportTicketDetailModalProps {
   ticket: SupportTicket | null
@@ -75,9 +76,9 @@ export function SupportTicketDetailModal({
       ariaLabel={`Support ticket: ${ticket.subject}`}
       title={<span className="truncate">{ticket.subject}</span>}
       headerAction={
-        <Badge className={TICKET_STATUS_TONE[ticket.status]}>
+        <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-2xs font-medium ${TICKET_STATUS_TONE[ticket.status]}`}>
           {TICKET_STATUS_LABEL[ticket.status]}
-        </Badge>
+        </span>
       }
       footer={
         <>
@@ -104,11 +105,11 @@ export function SupportTicketDetailModal({
     >
       <div className="space-y-3 text-xs">
         {release && release.status === 'published' && (
-          <section className="rounded-md border border-ok/30 bg-ok-muted/20 p-2.5 space-y-1">
-            <p className="text-2xs font-semibold text-ok uppercase tracking-wider">
+          <ContainedBlock tone="info" className="space-y-1 text-ok border-ok/30 bg-ok-muted/20">
+            <p className="text-2xs font-semibold uppercase tracking-wider">
               Shipped in release
             </p>
-            <p className="text-sm font-mono font-bold text-ok tabular-nums">
+            <p className="text-sm font-mono font-bold tabular-nums">
               v{release.version}
             </p>
             <p className="text-fg-secondary leading-snug">{release.title}</p>
@@ -116,17 +117,14 @@ export function SupportTicketDetailModal({
               <p className="text-fg-muted leading-relaxed">{ticket.shipped_note}</p>
             )}
             {release.published_at && (
-              <p className="text-2xs text-fg-faint">
+              <InlineProof className="border-ok/20 bg-ok-muted/10">
                 Published <RelativeTime value={release.published_at} />
-              </p>
+              </InlineProof>
             )}
-            <Link
-              to="/releases"
-              className="inline-block text-2xs text-brand hover:text-brand-hover font-medium"
-            >
+            <ActionPill to="/releases" tone="brand">
               View all releases →
-            </Link>
-          </section>
+            </ActionPill>
+          </ContainedBlock>
         )}
 
         <DetailRows
@@ -141,9 +139,11 @@ export function SupportTicketDetailModal({
 
         <section>
           <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Your message</h4>
-          <p className="text-fg-secondary leading-relaxed whitespace-pre-wrap break-words border border-edge-subtle/60 rounded-md bg-surface-raised/30 p-2.5">
-            {ticket.body?.trim() || <span className="italic text-fg-faint">No message recorded.</span>}
-          </p>
+          <ContainedBlock tone="muted">
+            <p className="text-fg-secondary leading-relaxed whitespace-pre-wrap break-words">
+              {ticket.body?.trim() || <span className="italic text-fg-faint">No message recorded.</span>}
+            </p>
+          </ContainedBlock>
         </section>
 
         {ticket.admin_response?.trim() ? (
@@ -157,17 +157,19 @@ export function SupportTicketDetailModal({
                 </span>
               )}
             </h4>
-            <p className="text-fg leading-relaxed whitespace-pre-wrap break-words border border-brand/30 rounded-md bg-brand/5 p-2.5">
-              {ticket.admin_response}
-            </p>
+            <ContainedBlock tone="info" className="border-brand/30 bg-brand/5">
+              <p className="text-fg leading-relaxed whitespace-pre-wrap break-words">
+                {ticket.admin_response}
+              </p>
+            </ContainedBlock>
           </section>
         ) : ticket.status === 'open' || ticket.status === 'in_progress' ? (
-          <p className="text-2xs text-fg-faint italic">
-            No reply yet. You will see updates here when we respond or ship your request.
-          </p>
+          <EmptySectionMessage text="No reply yet. You will see updates here when we respond or ship your request." />
         ) : null}
 
-        <p className="text-3xs text-fg-faint font-mono">Ticket {ticket.id.slice(0, 8)}…</p>
+        <InlineProof className="font-mono border-0 bg-transparent px-0 py-0">
+          Ticket {ticket.id.slice(0, 8)}…
+        </InlineProof>
       </div>
     </Modal>
   )

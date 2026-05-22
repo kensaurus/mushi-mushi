@@ -24,10 +24,10 @@
  *          the two surfaces never disagree on what state the loop is in.
  */
 
-import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import { RelativeTime } from '../ui'
+import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
@@ -127,7 +127,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           </span>
         )}
       </div>
-      <p className={`mt-0.5 text-xs leading-snug ${isIdle ? 'text-fg-faint' : 'text-fg-secondary'}`}>{node.headline}</p>
+      <InlineProof className={`mt-0.5 ${isIdle ? 'text-fg-faint' : ''}`}>{node.headline}</InlineProof>
       {(detailsClean.length > 0 || node.thumbnail || node.link) && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           {node.thumbnail && (
@@ -156,21 +156,13 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           ))}
           {node.link && (
             node.link.href.startsWith('http') ? (
-              <a
-                href={node.link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-              >
+              <ActionPill href={node.link.href} tone="brand">
                 {node.link.label} ↗
-              </a>
+              </ActionPill>
             ) : (
-              <Link
-                to={node.link.href}
-                className="text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
-              >
+              <ActionPill to={node.link.href} tone="brand">
                 {node.link.label} →
-              </Link>
+              </ActionPill>
             )
           )}
         </div>

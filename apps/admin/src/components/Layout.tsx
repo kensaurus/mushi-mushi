@@ -43,6 +43,7 @@ import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
 import { SidebarUserCard } from './SidebarUserCard'
+import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { VersionBadge } from './VersionBadge'
 import { AskMushiSidebar } from './AskMushiSidebar'
@@ -1366,6 +1367,8 @@ export function Layout({ children }: { children: ReactNode }) {
           don't fit a 48px rail, so we hide them. Focus mode + sign-out
           stay as icon-only buttons (always-needed escape hatches). */}
       <div className={`${compact ? 'px-1 py-2 space-y-2' : 'px-3 py-2.5 space-y-2'} border-t border-edge/60`}>
+        {/* Privacy posture badge — always visible, collapses to a dot when compact */}
+        <PrivacyPostureBadge compact={compact} />
         {!compact && <DensitySidebarToggle />}
         {!compact && (
           <ThemeSidebarToggle

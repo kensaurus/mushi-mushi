@@ -41,6 +41,14 @@ import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
 import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
+import {
   EMPTY_EXPLORE_STATS,
   type ExploreStats,
   type ExploreTabId,
@@ -429,10 +437,10 @@ export function ExplorePage() {
       <div className="space-y-4">
         <PageHeader title={copy?.title ?? 'Explore'} />
         <ExploreStatusBanner stats={stats} onTab={setActiveTab} />
-        <div className="rounded-md border border-edge bg-surface-raised p-8 text-center space-y-2">
-          <div className="text-sm font-medium text-fg">No project selected</div>
-          <div className="text-2xs text-fg-muted">Select a project from the top bar to explore its codebase.</div>
-        </div>
+        <EmptySectionMessage
+          text="No project selected"
+          hint="Select a project from the top bar to explore its codebase."
+        />
       </div>
     )
   }
@@ -464,17 +472,21 @@ export function ExplorePage() {
               ]}
             />
             {(loading || exploreQuery.isValidating) && (
-              <span className="text-2xs text-fg-faint animate-pulse">Loading…</span>
+              <SignalChip tone="info" className="animate-pulse font-normal">
+                Loading…
+              </SignalChip>
             )}
           </div>
-          <span className="text-2xs text-fg-faint font-mono">
+          <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
             {nodes.length}/{allNodes.length} nodes · {edges.length}/{allEdges.length} edges
-          </span>
+          </InlineProof>
         </div>
 
         {layerEntries.length > 0 && !loading && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-3xs text-fg-faint uppercase tracking-wider shrink-0">Filter:</span>
+            <SignalChip tone="neutral" className="uppercase tracking-wider shrink-0">
+              Filter
+            </SignalChip>
             {layerEntries.map(([layer, count]) => {
               const active = activeLayerFilter === layer
               return (
@@ -499,13 +511,9 @@ export function ExplorePage() {
               )
             })}
             {activeLayerFilter && (
-              <button
-                type="button"
-                onClick={() => setActiveLayerFilter(null)}
-                className="text-3xs text-fg-faint hover:text-fg px-1.5 py-0.5 border border-edge-subtle rounded-full hover:border-edge transition-colors"
-              >
-                Clear
-              </button>
+              <ActionPill tone="neutral" onClick={() => setActiveLayerFilter(null)} className="rounded-full">
+                Clear filter
+              </ActionPill>
             )}
             <div className="relative ml-auto">
               <input
@@ -537,21 +545,17 @@ export function ExplorePage() {
   ) : error ? (
     <ErrorAlert message={exploreErrorMessage(error) ?? error} onRetry={reloadAll} />
   ) : notIndexed ? (
-    <div className="rounded-md border border-edge bg-surface-raised p-8 text-center space-y-3">
-      <div className="text-sm font-medium text-fg">Codebase not indexed yet</div>
-      <div className="text-2xs text-fg-muted max-w-md mx-auto">
-        Enable codebase indexing in{' '}
-        <Link to="/settings" className="text-brand hover:underline">Settings → Codebase Indexing</Link>
-        {' '}or run{' '}
-        <code className="text-2xs font-mono bg-surface-overlay px-1 rounded">mushi index</code>
-        {' '}in your project directory.
-      </div>
-      <div className="flex items-center justify-center gap-2 pt-1">
-        <Btn size="sm" onClick={() => setActiveTab('index')}>Open Index tab</Btn>
-        <Link to="/settings">
-          <Btn size="sm" variant="ghost">Settings</Btn>
-        </Link>
-      </div>
+    <div className="space-y-3">
+      <EmptySectionMessage
+        text="Codebase not indexed yet"
+        hint="Enable codebase indexing in Settings → Codebase Indexing or run mushi index in your project directory."
+      />
+      <ActionPillRow className="justify-center">
+        <ActionPill tone="brand" onClick={() => setActiveTab('index')}>
+          Open Index tab
+        </ActionPill>
+        <ActionPill to="/settings">Settings</ActionPill>
+      </ActionPillRow>
     </div>
   ) : activeTab === 'graph' ? (
     <div className="space-y-3">
@@ -621,10 +625,6 @@ export function ExplorePage() {
       <PageHeader
         title={copy?.title ?? 'Explore'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -664,6 +664,13 @@ export function ExplorePage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'}
+        </p>
+      </ContainedBlock>
+
       <ExploreStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -687,7 +694,9 @@ export function ExplorePage() {
         title={copy?.sections?.snapshot ?? 'EXPLORE SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.files ?? 'Files'}
@@ -812,9 +821,11 @@ export function ExplorePage() {
       {activeTab === 'search' && (
         <div className={selectedNode ? 'grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-4 items-start' : ''}>
           {stats.withEmbeddings === 0 && !loading && (
-            <div className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-2xs text-warn mb-2">
-              No embeddings yet — semantic search needs indexed files with vectors. Check Index tab.
-            </div>
+            <ContainedBlock tone="warn" className="mb-2">
+              <p className="text-2xs text-warn">
+                No embeddings yet — semantic search needs indexed files with vectors. Check Index tab.
+              </p>
+            </ContainedBlock>
           )}
           <ExploreSearchBar
             projectId={projectId}
@@ -840,11 +851,13 @@ export function ExplorePage() {
         <div className="space-y-4">
           <Card className="p-4 space-y-3">
             <p className="text-sm font-medium text-fg">Indexer debug</p>
-            <p className="text-2xs text-fg-muted">
-              Live state from <code className="font-mono">project_repos</code> and{' '}
-              <code className="font-mono">project_codebase_files</code>. Use this when the banner
-              shows ERROR or INDEXING.
-            </p>
+            <ContainedBlock tone="muted">
+              <p className="text-2xs text-fg-muted">
+                Live state from <code className="font-mono">project_repos</code> and{' '}
+                <code className="font-mono">project_codebase_files</code>. Use this when the banner
+                shows ERROR or INDEXING.
+              </p>
+            </ContainedBlock>
             <DetailRows items={buildIndexRows(stats)} />
           </Card>
           <div className="flex flex-wrap gap-2">

@@ -24,6 +24,7 @@ import {
   type ComposerToken,
   type SlashCommand,
 } from '../lib/askMushiCommands'
+import { InlineProof } from './report-detail/ReportSurface'
 import type { PageMentionable } from '../lib/pageContext'
 
 export interface MentionResult {
@@ -258,7 +259,9 @@ export function AskMushiComposer({
                         </span>
                         <span className="text-2xs text-fg-secondary truncate">{cmd.label}</span>
                       </div>
-                      <span className="text-3xs text-fg-faint leading-snug truncate">{cmd.hint}</span>
+                      <InlineProof className="border-0 bg-transparent px-0 py-0 text-3xs truncate">
+                        {cmd.hint}
+                      </InlineProof>
                     </Command.Item>
                   ))
                 : mentionItems.map((m) => (
@@ -275,7 +278,9 @@ export function AskMushiComposer({
                         <span className="font-mono text-2xs text-brand truncate">{m.label}</span>
                       </div>
                       {m.sublabel && (
-                        <span className="text-3xs text-fg-faint leading-snug truncate">{m.sublabel}</span>
+                        <InlineProof className="border-0 bg-transparent px-0 py-0 text-3xs truncate">
+                          {m.sublabel}
+                        </InlineProof>
                       )}
                     </Command.Item>
                   ))}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Btn, Card, Badge, ErrorAlert } from '../ui'
+import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
@@ -373,14 +374,16 @@ function ActionCard({
             <SdkIcon />
           </div>
           <div className="min-w-0">
-            <p className="text-2xs uppercase tracking-wider text-fg-faint">Step 1 — Install</p>
+            <SignalChip tone="info" className="mb-1.5 uppercase tracking-wider text-3xs">Step 1 — Install</SignalChip>
             <h3 className="text-sm font-semibold text-fg">Add the SDK so we can observe your app</h3>
-            <p className="text-xs text-fg-muted mt-1">
-              Install <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">@mushi-mushi/web</code> and
-              flip on <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">discoverInventory: true</code>.
-              Every navigation will post a tiny payload — route, page title, the data-testids in the DOM, outbound API calls,
-              and a 200-char DOM summary. Once we have ≥3 routes & ≥10 events, Claude can draft your inventory.
-            </p>
+            <ContainedBlock tone="muted" className="mt-2">
+              <p className="text-xs text-fg-muted">
+                Install <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">@mushi-mushi/web</code> and
+                flip on <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">discoverInventory: true</code>.
+                Every navigation will post a tiny payload — route, page title, the data-testids in the DOM, outbound API calls,
+                and a 200-char DOM summary. Once we have ≥3 routes & ≥10 events, Claude can draft your inventory.
+              </p>
+            </ContainedBlock>
           </div>
         </div>
         <pre className="text-2xs font-mono p-3 rounded-md bg-surface-overlay/60 border border-edge-subtle overflow-auto whitespace-pre">{`import { Mushi } from '@mushi-mushi/web'
@@ -411,18 +414,20 @@ Mushi.init({
             <ClockIcon />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-2xs uppercase tracking-wider text-fg-faint">Step 2 — Observe</p>
+            <SignalChip tone="warn" className="mb-1.5 uppercase tracking-wider text-3xs">Step 2 — Observe</SignalChip>
             <h3 className="text-sm font-semibold text-fg">A bit more traffic and we can draft</h3>
-            <p className="text-xs text-fg-muted mt-1">
-              We've seen <span className="text-fg font-medium tabular-nums">{eventCount}</span> event
-              {eventCount === 1 ? '' : 's'} across{' '}
-              <span className="text-fg font-medium tabular-nums">{routeCount}</span> route
-              {routeCount === 1 ? '' : 's'}. To make a useful proposal, Claude wants{' '}
-              <strong>at least 3 routes and 10 events</strong> — keep clicking through your app, or have a teammate try it out.
-            </p>
-            <div className="flex flex-wrap gap-3 mt-2 text-2xs text-fg-faint">
-              {needRoutes > 0 && <span>Need <span className="text-warn font-medium">{needRoutes} more route{needRoutes === 1 ? '' : 's'}</span></span>}
-              {needEvents > 0 && <span>Need <span className="text-warn font-medium">{needEvents} more event{needEvents === 1 ? '' : 's'}</span></span>}
+            <ContainedBlock tone="muted" className="mt-2">
+              <p className="text-xs text-fg-muted">
+                We've seen <span className="text-fg font-medium tabular-nums">{eventCount}</span> event
+                {eventCount === 1 ? '' : 's'} across{' '}
+                <span className="text-fg font-medium tabular-nums">{routeCount}</span> route
+                {routeCount === 1 ? '' : 's'}. To make a useful proposal, Claude wants{' '}
+                <strong>at least 3 routes and 10 events</strong> — keep clicking through your app, or have a teammate try it out.
+              </p>
+            </ContainedBlock>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {needRoutes > 0 && <SignalChip tone="warn">Need {needRoutes} more route{needRoutes === 1 ? '' : 's'}</SignalChip>}
+              {needEvents > 0 && <SignalChip tone="warn">Need {needEvents} more event{needEvents === 1 ? '' : 's'}</SignalChip>}
             </div>
           </div>
         </div>
@@ -440,25 +445,27 @@ Mushi.init({
             <SparkleIcon />
           </div>
           <div className="min-w-0">
-            <p className="text-2xs uppercase tracking-wider text-brand">Step 3 — Propose</p>
+            <SignalChip tone="brand" className="mb-1.5 uppercase tracking-wider text-3xs">Step 3 — Propose</SignalChip>
             <h3 className="text-sm font-semibold text-fg">
               {draftRow ? 'You have a draft ready to review' : 'Ready to draft your inventory'}
             </h3>
-            <p className="text-xs text-fg-muted mt-1">
-              {draftRow ? (
-                <>
-                  Claude already drafted from {routeCount} route{routeCount === 1 ? '' : 's'} ·{' '}
-                  {testidCount} testids · {eventCount} events. You can regenerate or open the existing draft.
-                </>
-              ) : (
-                <>
-                  Claude will analyse <span className="text-fg font-medium">{routeCount} route{routeCount === 1 ? '' : 's'}</span>,{' '}
-                  <span className="text-fg font-medium">{testidCount} test ids</span>, and{' '}
-                  <span className="text-fg font-medium">{eventCount} events</span> and propose user stories,
-                  pages, and actions. You'll review the draft before anything is saved as your active inventory.
-                </>
-              )}
-            </p>
+            <ContainedBlock tone="muted" className="mt-2">
+              <p className="text-xs text-fg-muted">
+                {draftRow ? (
+                  <>
+                    Claude already drafted from {routeCount} route{routeCount === 1 ? '' : 's'} ·{' '}
+                    {testidCount} testids · {eventCount} events. You can regenerate or open the existing draft.
+                  </>
+                ) : (
+                  <>
+                    Claude will analyse <span className="text-fg font-medium">{routeCount} route{routeCount === 1 ? '' : 's'}</span>,{' '}
+                    <span className="text-fg font-medium">{testidCount} test ids</span>, and{' '}
+                    <span className="text-fg font-medium">{eventCount} events</span> and propose user stories,
+                    pages, and actions. You'll review the draft before anything is saved as your active inventory.
+                  </>
+                )}
+              </p>
+            </ContainedBlock>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 md:flex-col md:items-end">

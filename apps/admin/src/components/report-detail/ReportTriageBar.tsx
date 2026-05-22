@@ -158,7 +158,9 @@ export function ReportTriageBar({
             </a>
           )}
           {dispatchState.status === 'failed' && dispatchState.error && (
-            <span className="text-2xs text-danger max-w-xs text-right">{dispatchState.error}</span>
+            <span className="rounded-sm border border-danger/25 bg-danger-muted/15 px-2 py-1 text-2xs text-danger max-w-xs text-right">
+              {dispatchState.error}
+            </span>
           )}
         </div>
       </div>

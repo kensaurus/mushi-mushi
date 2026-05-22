@@ -183,6 +183,23 @@ jobs:
         # at the right folder.
         run: node scripts/check-publish-readiness.mjs
 
+      - name: Bootstrap brand-new packages (no provenance first publish)
+        # REASON: NPM_CONFIG_PROVENANCE=true requires a Trusted Publisher rule
+        # to be pre-configured on npmjs.com for EACH package. Brand-new packages
+        # don't have that rule yet — the OIDC exchange fails and `changeset publish`
+        # returns a misleading 404. This step builds all packages (Turbo-cached)
+        # then publishes any not-yet-existing packages directly via NPM_TOKEN
+        # (no provenance) so they exist on the registry before `changeset publish`.
+        # Future releases go through the normal OIDC-provenance path once the
+        # Trusted Publisher rule is added on npmjs.com for the new package.
+        # See: scripts/bootstrap-new-packages.mjs
+        run: |
+          pnpm turbo run build --output-logs=errors-only
+          node scripts/bootstrap-new-packages.mjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "false"
+
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf  # v1.7.0

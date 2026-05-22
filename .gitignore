@@ -49,6 +49,7 @@ packages/server/.env.local
 *.pfx
 *.keystore
 .npmrc.local
+*.npmrc.tmp
 .netrc
 secrets/
 **/credentials.json

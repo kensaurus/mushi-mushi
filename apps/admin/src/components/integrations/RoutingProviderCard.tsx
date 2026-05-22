@@ -13,6 +13,7 @@ import { isStale } from '../../lib/staleness'
 import { HealthSparkline } from './HealthSparkline'
 import { IconPause, IconPlay, IconPencil, IconClose, IconExternalLink, IconAlertTriangle } from '../icons'
 import { ServiceFavicon } from './ServiceFavicon'
+import { InlineProof } from '../report-detail/ReportSurface'
 import { PLATFORM_STATUS_MAP, type HealthRow, type RoutingIntegration, type RoutingProviderDef } from './types'
 
 /** Maps probe status to a left-border color class on the card. */
@@ -238,7 +239,7 @@ export function RoutingProviderCard({
                 onChange={(e) => onChangeField(field.name, e.target.value)}
                 validate={resolveValidator(field.validator)}
               />
-              <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
+              {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
             </div>
           ))}
           <div className="flex items-center gap-2 pt-1">

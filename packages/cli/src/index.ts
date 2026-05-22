@@ -993,6 +993,315 @@ Examples:
     })
   })
 
+// ─── project ──────────────────────────────────────────────────────────────────
+const project = program.command('project').description('Project management')
+
+project
+  .command('create')
+  .description('Create a new Mushi project, mint an API key, and write config files')
+  .option('--name <name>', 'Project name (skip the prompt)')
+  .option('--no-browser', 'Skip opening the browser for the sign-up / magic-link step')
+  .option('--endpoint <url>', 'Override API endpoint (self-hosted)')
+  .addHelpText('after', `
+Creates a project on app.mushimushi.dev, mints an API key with mcp:read+write scope,
+and writes the following to the current directory:
+  .env.local            — MUSHI_API_KEY, MUSHI_PROJECT_ID, MUSHI_API_ENDPOINT
+  .cursor/mcp.json      — pre-filled mcpServers.mushi block for Cursor
+
+Typical first-time flow:
+  npx mushi-mushi project create
+  # Browser opens → sign up / magic-link → come back to terminal
+  # CLI writes .env.local and .cursor/mcp.json
+  # mushi whoami to confirm`)
+  .action(async (opts: { name?: string; browser?: boolean; endpoint?: string }) => {
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    const { existsSync } = await import('node:fs')
+    const nodePath = await import('node:path')
+
+    const endpoint = opts.endpoint ?? loadConfig().endpoint ?? 'https://api.mushimushi.dev'
+    const signUpUrl = 'https://kensaur.us/mushi-mushi/sign-up'
+
+    console.log('')
+    console.log('  Mushi project create')
+    console.log('  ─────────────────────')
+    console.log('')
+
+    if (opts.browser !== false) {
+      console.log('  1. Opening the Mushi sign-up page in your browser...')
+      try {
+        const { exec } = await import('node:child_process')
+        const openCmd = process.platform === 'win32'
+          ? `start "" "${signUpUrl}"`
+          : process.platform === 'darwin'
+            ? `open "${signUpUrl}"`
+            : `xdg-open "${signUpUrl}"`
+        exec(openCmd)
+      } catch { /* ignore */ }
+    } else {
+      console.log(`  1. Sign up or log in at: ${signUpUrl}`)
+    }
+
+    console.log('')
+    console.log('  2. Create a project in the console, then paste your credentials below.')
+    console.log('     (Settings → API Keys → New key → Copy as .env.local)')
+    console.log('')
+
+    // Interactive prompts for credentials
+    const { createInterface } = await import('node:readline')
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    const ask = (q: string): Promise<string> =>
+      new Promise(resolve => rl.question(q, (a) => resolve(a.trim())))
+
+    const projectId = await ask('  Project ID (uuid): ')
+    const apiKey = await ask('  API key (mushi_...): ')
+    rl.close()
+
+    if (!projectId || !apiKey) {
+      process.stderr.write('\nerror: Project ID and API key are required.\n')
+      process.exit(2)
+    }
+
+    // Save to ~/.mushirc
+    const config = loadConfig()
+    config.apiKey = apiKey
+    config.endpoint = endpoint
+    config.projectId = projectId
+    saveConfig(config)
+
+    const cwd = process.cwd()
+
+    // Write .env.local
+    const envPath = nodePath.join(cwd, '.env.local')
+    const envLines = [
+      '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
+      `MUSHI_API_ENDPOINT=${endpoint}`,
+      `MUSHI_PROJECT_ID=${projectId}`,
+      `MUSHI_API_KEY=${apiKey}`,
+      '',
+    ]
+    const envExisting = existsSync(envPath)
+    await writeFile(envPath, envLines.join('\n'), 'utf8')
+    console.log(`\n  ✓ ${envExisting ? 'Updated' : 'Created'} .env.local`)
+
+    // Write .cursor/mcp.json
+    const mcpDir = nodePath.join(cwd, '.cursor')
+    await mkdir(mcpDir, { recursive: true })
+    const mcpPath = nodePath.join(mcpDir, 'mcp.json')
+    const mcpJson = {
+      mcpServers: {
+        mushi: {
+          command: 'npx',
+          args: ['-y', 'mushi-mcp@latest'],
+          env: {
+            MUSHI_API_ENDPOINT: endpoint,
+            MUSHI_PROJECT_ID: projectId,
+            MUSHI_API_KEY: apiKey,
+          },
+        },
+      },
+    }
+    const mcpExisting = existsSync(mcpPath)
+    if (mcpExisting) {
+      // Merge rather than overwrite — preserve other mcpServers entries
+      try {
+        const { readFile } = await import('node:fs/promises')
+        const raw = JSON.parse(await readFile(mcpPath, 'utf8')) as Record<string, unknown>
+        const existing = raw as { mcpServers?: Record<string, unknown> }
+        existing.mcpServers = { ...(existing.mcpServers ?? {}), mushi: mcpJson.mcpServers.mushi }
+        await writeFile(mcpPath, JSON.stringify(existing, null, 2) + '\n', 'utf8')
+      } catch {
+        await writeFile(mcpPath, JSON.stringify(mcpJson, null, 2) + '\n', 'utf8')
+      }
+    } else {
+      await writeFile(mcpPath, JSON.stringify(mcpJson, null, 2) + '\n', 'utf8')
+    }
+    console.log(`  ✓ ${mcpExisting ? 'Updated' : 'Created'} .cursor/mcp.json`)
+
+    console.log('')
+    console.log('  Done! Restart Cursor and ask: "list mushi tools"')
+    console.log('  Run `mushi whoami` to verify the connection.')
+    console.log('')
+  })
+
+// ─── setup ────────────────────────────────────────────────────────────────────
+program
+  .command('setup')
+  .description('Wire Mushi into your IDE with one command')
+  .option('--ide <ide>', 'Target IDE: cursor | claude | continue | zed', 'cursor')
+  .option('--project-slug <slug>', 'Override the project slug in the server name (default: project ID prefix)')
+  .option('--with-rules', 'Also write the .cursorrules / .claude/rules/mushi.md lesson-library hook')
+  .option('--dry-run', 'Print what would be written without making changes')
+  .addHelpText('after', `
+Examples:
+  mushi setup                         # wire Cursor (default)
+  mushi setup --ide claude            # wire Claude Code
+  mushi setup --ide cursor --with-rules  # also write .cursorrules
+
+Supported IDEs:
+  cursor    — writes .cursor/mcp.json
+  claude    — writes .claude/mcp.json (Claude Code / Claude Desktop)
+  continue  — writes .continue/mcp.json
+  zed       — writes ~/.config/zed/settings.json mcpServers block
+
+The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
+  .action(async (opts: { ide: string; projectSlug?: string; withRules?: boolean; dryRun?: boolean }) => {
+    const { writeFile, mkdir, readFile } = await import('node:fs/promises')
+    const { existsSync } = await import('node:fs')
+    const nodePath = await import('node:path')
+    const os = await import('node:os')
+
+    const config = requireConfig({ needsProject: true })
+
+    const IDE_CONFIG: Record<string, { dir: string; file: string; format: 'mcp-json' | 'zed' }> = {
+      cursor:   { dir: '.cursor',                       file: 'mcp.json', format: 'mcp-json' },
+      claude:   { dir: '.claude',                        file: 'mcp.json', format: 'mcp-json' },
+      continue: { dir: '.continue',                      file: 'mcp.json', format: 'mcp-json' },
+      zed:      { dir: nodePath.join(os.homedir(), '.config', 'zed'), file: 'settings.json', format: 'zed' },
+    }
+
+    const ideEntry = IDE_CONFIG[opts.ide]
+    if (!ideEntry) {
+      process.stderr.write(`error: unsupported IDE "${opts.ide}". Supported: ${Object.keys(IDE_CONFIG).join(', ')}\n`)
+      process.exit(2)
+    }
+
+    const cwd = process.cwd()
+    const slug = opts.projectSlug ?? (config.projectId?.slice(0, 8) ?? 'mushi')
+    const serverName = `mushi-${slug}`
+
+    const mcpServerBlock = {
+      command: 'npx',
+      args: ['-y', 'mushi-mcp@latest'],
+      env: {
+        MUSHI_API_ENDPOINT: config.endpoint,
+        MUSHI_PROJECT_ID: config.projectId ?? '',
+        MUSHI_API_KEY: config.apiKey,
+      },
+    }
+
+    const configDir = ideEntry.dir.startsWith('/')
+      ? ideEntry.dir
+      : nodePath.join(cwd, ideEntry.dir)
+    const configPath = nodePath.join(configDir, ideEntry.file)
+
+    if (ideEntry.format === 'mcp-json') {
+      let merged: Record<string, unknown> = { mcpServers: {} }
+      if (existsSync(configPath)) {
+        try {
+          const raw = await readFile(configPath, 'utf8')
+          merged = JSON.parse(raw) as Record<string, unknown>
+        } catch { /* start fresh */ }
+      }
+      const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
+      servers[serverName] = mcpServerBlock
+      merged.mcpServers = servers
+
+      const output = JSON.stringify(merged, null, 2) + '\n'
+      if (opts.dryRun) {
+        console.log(`[dry-run] Would write ${configPath}:`)
+        console.log(output)
+      } else {
+        await mkdir(configDir, { recursive: true })
+        await writeFile(configPath, output, 'utf8')
+        console.log(`✓ Written ${configPath}`)
+      }
+    } else if (ideEntry.format === 'zed') {
+      let settings: Record<string, unknown> = {}
+      if (existsSync(configPath)) {
+        try {
+          const raw = await readFile(configPath, 'utf8')
+          settings = JSON.parse(raw) as Record<string, unknown>
+        } catch { /* start fresh */ }
+      }
+      const servers = (settings.context_servers as Record<string, unknown>) ?? {}
+      // Zed context-server spec: `command.env` passes env vars to the spawned process.
+      // `settings: {}` is kept for Zed UI (it maps to settings the extension can expose)
+      // but env vars are the actual credential delivery mechanism for MCP servers.
+      servers[serverName] = {
+        command: {
+          path: 'npx',
+          args: ['-y', 'mushi-mcp@latest'],
+          env: {
+            MUSHI_API_ENDPOINT: config.endpoint,
+            MUSHI_PROJECT_ID: config.projectId ?? '',
+            MUSHI_API_KEY: config.apiKey,
+          },
+        },
+        settings: {},
+      }
+      settings.context_servers = servers
+      const output = JSON.stringify(settings, null, 2) + '\n'
+      if (opts.dryRun) {
+        console.log(`[dry-run] Would write ${configPath}:`)
+        console.log(output)
+      } else {
+        await mkdir(configDir, { recursive: true })
+        await writeFile(configPath, output, 'utf8')
+        console.log(`✓ Written ${configPath}`)
+      }
+    }
+
+    if (opts.withRules) {
+      const rulesContent = [
+        '# Mushi Mushi — evolution-loop coding rules',
+        '#',
+        '# These rules are generated from your project\'s live lesson library.',
+        '# Run `mushi sync-lessons` to refresh .mushi/lessons.json',
+        '# The MCP server (mushi tools) also injects lessons dynamically at fix time.',
+        '',
+        '## Before writing a fix',
+        '',
+        '1. Call `get_fix_context` (MCP) for the report — get root cause + blast radius first.',
+        '2. Call `lessons.query` (MCP) or read .mushi/lessons.json — apply every matching rule.',
+        '3. Prefer the smallest change that makes the test pass. Don\'t refactor unrelated code.',
+        '',
+        '## After writing a fix',
+        '',
+        '1. Call `submit_fix_result` (MCP) with the branch, PR URL, and files changed.',
+        '2. The judge batch will score the fix overnight — high-frequency lessons surface in /admin/lessons.',
+        '',
+        '## Mushi lesson library (auto-updated by `mushi sync-lessons`)',
+        '',
+        '<!-- lessons synced from .mushi/lessons.json -->',
+        '<!-- run `mushi sync-lessons` to refresh -->',
+        '',
+      ].join('\n')
+
+      if (opts.ide === 'cursor') {
+        const rulesPath = nodePath.join(cwd, '.cursorrules')
+        if (opts.dryRun) {
+          console.log(`[dry-run] Would write ${rulesPath}`)
+        } else {
+          await writeFile(rulesPath, rulesContent, 'utf8')
+          console.log(`✓ Written .cursorrules`)
+        }
+      } else if (opts.ide === 'claude') {
+        const rulesDir = nodePath.join(cwd, '.claude', 'rules')
+        const rulesPath = nodePath.join(rulesDir, 'mushi.md')
+        if (opts.dryRun) {
+          console.log(`[dry-run] Would write ${rulesPath}`)
+        } else {
+          await mkdir(rulesDir, { recursive: true })
+          await writeFile(rulesPath, rulesContent, 'utf8')
+          console.log(`✓ Written .claude/rules/mushi.md`)
+        }
+      }
+    }
+
+    if (!opts.dryRun) {
+      console.log('')
+      console.log(`Done! Restart ${opts.ide === 'cursor' ? 'Cursor' : opts.ide === 'claude' ? 'Claude Code' : opts.ide} and ask: "list mushi tools"`)
+      if (!opts.withRules) {
+        console.log(`Tip: run with --with-rules to also write the lesson-library coding hook.`)
+      }
+      // Security reminder — the config file contains the API key in plaintext.
+      const configRelPath = ideEntry.dir.startsWith('/')
+        ? configPath
+        : nodePath.relative(cwd, configPath)
+      console.log(`\nNote: ${configRelPath} contains your Mushi API key — add it to .gitignore if this is a shared repo.`)
+    }
+  })
+
 // ─── mushi fix ───────────────────────────────────────────────────────────────
 
 const fixCmd = program.command('fix').description('Dispatch an agentic fix for a report')

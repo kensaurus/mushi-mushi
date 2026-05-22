@@ -2,29 +2,71 @@
 title: MCP server quickstart
 ---
 
+import { Callout } from 'nextra/components'
+
 # MCP server
 
-Wire Mushi into Claude Desktop, Cursor, Codex CLI, or any
-[Model Context Protocol](https://modelcontextprotocol.io/) client. The
-server exposes Mushi reports as tools, letting an agent triage, comment,
-and dispatch fixes from your IDE.
+Wire Mushi into Cursor, Claude Code, Codex CLI, or any
+[Model Context Protocol](https://modelcontextprotocol.io/) client in
+**one command**. The server exposes your Mushi reports as tools so agents
+can triage, query lessons, and dispatch AI fixes without leaving the editor.
 
-## Install
+## One-liner setup (recommended)
 
 ```bash
-pnpm add -g @mushi-mushi/mcp
+npx mushi-mushi setup --ide cursor
+# or: npx mushi-mushi setup --ide claude
 ```
 
-## Add to Claude Desktop (stdio transport — default)
+This reads `~/.mushirc` (written by `mushi login`), detects the IDE config
+path, and writes the `mcpServers.mushi` block for you. Restart the IDE and
+ask the agent: **"list mushi tools"**.
 
-```json filename="~/Library/Application Support/Claude/claude_desktop_config.json"
+<Callout type="info">
+  Run `npx mushi-mushi project create` on a brand-new machine to sign up,
+  mint a project, and write `.env.local` + `.cursor/mcp.json` in one flow.
+</Callout>
+
+## Manual setup: Cursor
+
+Add to `.cursor/mcp.json` in your repo root:
+
+```json filename=".cursor/mcp.json"
 {
   "mcpServers": {
-    "mushi-mushi": {
-      "command": "mushi-mushi-mcp",
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "mushi-mcp@latest"],
       "env": {
+        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
-        "MUSHI_API_KEY": "YOUR_SERVICE_API_KEY"
+        "MUSHI_API_KEY": "mushi_live_..."
+      }
+    }
+  }
+}
+```
+
+<Callout type="tip">
+  Get the pre-filled snippet in one click: Admin console →
+  **Settings → API Keys** → **Copy as `.cursor/mcp.json`**.
+</Callout>
+
+## Manual setup: Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
+(macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "mushi-mcp@latest"],
+      "env": {
+        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
+        "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
+        "MUSHI_API_KEY": "mushi_live_..."
       }
     }
   }
@@ -33,16 +75,13 @@ pnpm add -g @mushi-mushi/mcp
 
 ## Hosted Streamable HTTP transport (no subprocess)
 
-The Mushi backend also exposes the same tool catalog over the
-**Streamable HTTP** transport from the MCP 2025-03-26 spec at
-`/functions/v1/mcp`. Use this when you'd rather not spawn a local
-subprocess — typical for OpenAI Agents SDK, ChatGPT Agent, hosted
-CrewAI, or any orchestrator that talks remote MCP:
+Skip the local subprocess — use the hosted MCP endpoint when you're
+running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator:
 
 ```jsonc filename=".cursor/mcp.json"
 {
   "mcpServers": {
-    "mushi-mushi-hosted": {
+    "mushi-hosted": {
       "url": "https://api.mushimushi.dev/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_live_…",
@@ -53,25 +92,18 @@ CrewAI, or any orchestrator that talks remote MCP:
 }
 ```
 
-The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json`
-or `text/event-stream` per content negotiation), opens an SSE stream on
-GET for server-pushed notifications, and accepts DELETE for session
-termination. Auth is the same dual-mode API-key / JWT used everywhere
-else on `/v1/admin/*`.
-
 ## Available tools
 
-| Tool                 | Purpose                                      |
-| -------------------- | -------------------------------------------- |
-| `list_reports`       | Filter by status, severity, component        |
-| `get_report`         | Full detail incl. screenshot + classification |
-| `comment_on_report`  | Post a triage note (audit-logged)            |
-| `transition_report`  | `new → fixing → fixed` etc.                  |
-| `dispatch_fix`       | Hand off to the agentic fix orchestrator. Optionally accepts `inventoryActionNodeId` to pin the fix to a specific inventory `Action` (whitepaper §2.10 spec-traceability) |
-| `get_fix_context`    | One-shot brief for an external agent — root cause, smallest file set, repro, and the linked inventory `Action` with its `expected_outcome` contract when set |
-| `query_knowledge_graph` | Ask "what other reports look like this?"  |
-
-import { Callout } from 'nextra/components'
+| Tool                    | Purpose                                      |
+|-------------------------|----------------------------------------------|
+| `get_recent_reports`    | Filter by status, severity, component        |
+| `get_report_detail`     | Full detail incl. screenshot + classification |
+| `get_fix_context`       | One-shot fix brief — root cause + blast radius + repro |
+| `search_reports`        | Semantic + keyword search across reports     |
+| `dispatch_fix`          | Hand off to the agentic fix orchestrator     |
+| `triage_next_steps`     | "What should I fix next?" — 5-item plan from the dashboard |
+| `query_knowledge_graph` | Ask "what other reports look like this?"     |
+| `run_nl_query`          | Natural-language → SQL questions about your data |
 
 <Callout type="info" emoji="🔁">
   The MCP server speaks JSON-RPC 2.0 with `tools/call` semantics, and the
@@ -79,3 +111,16 @@ import { Callout } from 'nextra/components'
   [A2A Agent Card](/concepts/architecture#a2a-agent-card) at
   `/.well-known/agent-card`.
 </Callout>
+
+## Cursor rules hook (optional)
+
+After setup, run:
+
+```bash
+npx mushi-mushi setup --ide cursor --with-rules
+```
+
+This writes a `.cursorrules` file that tells Cursor to call `get_fix_context`
+before writing a fix and `submit_fix_result` after — closing the loop from
+inside the editor. Download the template:
+[cursor.cursorrules](/integrations/cursor.cursorrules)

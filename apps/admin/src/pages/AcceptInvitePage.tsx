@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/supabase'
 import { setActiveOrgIdSnapshot } from '../lib/activeOrg'
 import { useAuth } from '../lib/auth'
 import { Badge, Btn, Card, DetailRows, Loading, RelativeTime } from '../components/ui'
+import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { loginPathForLocation } from '../lib/authRedirect'
 
 type PreviewStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
@@ -112,10 +113,13 @@ export function AcceptInvitePage() {
     return (
       <main className="grid min-h-screen place-items-center bg-surface p-6">
         <Card className="max-w-md p-6 text-center">
+          <SignalChip tone="danger" className="mb-2">Not found</SignalChip>
           <p className="text-lg font-semibold text-fg">Invitation not found</p>
-          <p className="mt-2 text-sm text-fg-muted">
-            {previewError ?? 'This invite link is invalid. Ask the person who sent it to resend.'}
-          </p>
+          <ContainedBlock tone="muted" className="mt-3 text-left">
+            <p className="text-sm text-fg-muted">
+              {previewError ?? 'This invite link is invalid. Ask the person who sent it to resend.'}
+            </p>
+          </ContainedBlock>
           <Link to="/dashboard" className="mt-4 inline-flex text-sm text-brand hover:text-brand-hover">
             Back to dashboard
           </Link>
@@ -132,13 +136,15 @@ export function AcceptInvitePage() {
           <p className="text-lg font-semibold text-fg">
             {expired ? 'This invitation has expired' : 'This invitation was cancelled'}
           </p>
-          <p className="mt-2 text-sm text-fg-muted">
-            {expired
-              ? 'Invitations are valid for 7 days. Ask '
-              : 'The team admin cancelled this invite. Ask '}
-            <span className="font-medium text-fg">{preview.inviter.email ?? 'the team admin'}</span>
-            {' to send a fresh one.'}
-          </p>
+          <ContainedBlock tone="muted" className="mt-2 text-left">
+            <p className="text-sm text-fg-secondary">
+              {expired
+                ? 'Invitations are valid for 7 days. Ask '
+                : 'The team admin cancelled this invite. Ask '}
+              <span className="font-medium text-fg">{preview.inviter.email ?? 'the team admin'}</span>
+              {' to send a fresh one.'}
+            </p>
+          </ContainedBlock>
           <Link to="/dashboard" className="mt-4 inline-flex text-sm text-brand hover:text-brand-hover">
             Back to dashboard
           </Link>
@@ -152,9 +158,11 @@ export function AcceptInvitePage() {
       <main className="grid min-h-screen place-items-center bg-surface p-6">
         <Card className="max-w-md p-6 text-center">
           <p className="text-lg font-semibold text-fg">You've already joined</p>
-          <p className="mt-2 text-sm text-fg-muted">
-            This invitation was already accepted. Open the workspace to pick up where you left off.
-          </p>
+          <ContainedBlock tone="muted" className="mt-2">
+            <p className="text-sm text-fg-secondary">
+              This invitation was already accepted. Open the workspace to pick up where you left off.
+            </p>
+          </ContainedBlock>
           <Link to="/dashboard" className="mt-4 inline-flex text-sm text-brand hover:text-brand-hover">
             Open dashboard
           </Link>
@@ -173,10 +181,12 @@ export function AcceptInvitePage() {
           <h1 className="text-lg font-semibold text-fg">
             {preview.inviter.name ?? preview.inviter.email ?? 'A teammate'} invited you
           </h1>
-          <p className="mt-1 text-sm text-fg-muted">
-            Sign in as <span className="font-medium text-fg">{preview.invitation.email}</span> to join{' '}
-            <span className="font-medium text-fg">{preview.organization?.name ?? 'this team'}</span>.
-          </p>
+          <ContainedBlock tone="muted" className="mt-1">
+            <InlineProof className="border-0 bg-transparent px-0 py-0 text-sm">
+              Sign in as <span className="font-medium text-fg">{preview.invitation.email}</span> to join{' '}
+              <span className="font-medium text-fg">{preview.organization?.name ?? 'this team'}</span>.
+            </InlineProof>
+          </ContainedBlock>
           <Btn
             type="button"
             onClick={() => navigate(loginTo, { state: { from: location } })}
@@ -208,28 +218,38 @@ export function AcceptInvitePage() {
   return (
     <main className="grid min-h-screen place-items-center bg-surface p-6">
       <Card className="w-full max-w-md p-6">
-        <p className="text-xs uppercase tracking-wider text-fg-faint">You've been invited</p>
+        <SignalChip tone="neutral" className="uppercase tracking-wider">
+          You've been invited
+        </SignalChip>
         <h1 className="mt-1 text-xl font-semibold text-fg">
           Join {preview.organization?.name ?? 'this team'}
         </h1>
-        <p className="mt-2 text-sm text-fg-muted">
-          <span className="font-medium text-fg">{inviterLabel}</span>
-          {preview.inviter.email && preview.inviter.name ? (
-            <span className="text-fg-faint"> ({preview.inviter.email})</span>
-          ) : null}{' '}
-          invited you to join as
-        </p>
+        <ContainedBlock tone="muted" className="mt-2">
+          <InlineProof className="border-0 bg-transparent px-0 py-0 text-sm">
+            <span className="font-medium text-fg">{inviterLabel}</span>
+            {preview.inviter.email && preview.inviter.name ? (
+              <SignalChip tone="neutral" className="ml-1 font-mono text-2xs">
+                {preview.inviter.email}
+              </SignalChip>
+            ) : null}{' '}
+            invited you to join as
+          </InlineProof>
+        </ContainedBlock>
 
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex items-start gap-2 flex-wrap">
           <Badge className={ROLE_TONE[preview.invitation.role]}>{preview.invitation.role}</Badge>
-          <span className="text-xs text-fg-muted">{ROLE_DESCRIPTION[preview.invitation.role]}</span>
+          <ContainedBlock tone="muted" className="flex-1 min-w-[12rem]">
+            <p className="text-xs text-fg-muted">{ROLE_DESCRIPTION[preview.invitation.role]}</p>
+          </ContainedBlock>
         </div>
 
         {preview.invitation.note && (
-          <blockquote className="mt-4 rounded-md border-l-2 border-brand/60 bg-surface-overlay/40 px-3 py-2 text-sm italic text-fg-muted">
-            &ldquo;{preview.invitation.note}&rdquo;
-            <footer className="mt-1 text-2xs not-italic text-fg-faint">— {inviterLabel}</footer>
-          </blockquote>
+          <ContainedBlock tone="info" className="mt-4 border-l-2 border-brand/60">
+            <p className="text-sm italic text-fg-secondary">&ldquo;{preview.invitation.note}&rdquo;</p>
+            <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs not-italic">
+              — {inviterLabel}
+            </InlineProof>
+          </ContainedBlock>
         )}
 
         <DetailRows
@@ -251,9 +271,9 @@ export function AcceptInvitePage() {
         />
 
         {acceptDone ? (
-          <div className="mt-5 rounded-md bg-ok-muted/40 px-3 py-2 text-center text-sm text-ok">
+          <ContainedBlock tone="info" className="mt-5 text-center text-sm text-ok border-ok/30 bg-ok-muted/40">
             You're in. Opening {preview.organization?.name ?? 'the workspace'}…
-          </div>
+          </ContainedBlock>
         ) : (
           <>
             <Btn
@@ -266,17 +286,17 @@ export function AcceptInvitePage() {
               Accept invitation
             </Btn>
             {acceptError && (
-              <div className="mt-3 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
-                {acceptError.message}
+              <ContainedBlock tone="warn" className="mt-3">
+                <p className="text-xs text-warn">{acceptError.message}</p>
                 {emailMismatchHint}
-              </div>
+              </ContainedBlock>
             )}
-            <p className="mt-3 text-2xs text-fg-faint">
+            <InlineProof className="mt-3">
               Signed in as <span className="font-medium">{session.user.email}</span>.{' '}
               <Link to="/dashboard" className="text-brand hover:text-brand-hover">
                 Decide later
               </Link>
-            </p>
+            </InlineProof>
           </>
         )}
       </Card>

@@ -23,7 +23,6 @@ import {
   ErrorAlert,
   EmptyState,
   Btn,
-  Badge,
   Card,
   CodeValue,
   DefinitionChips,
@@ -37,10 +36,18 @@ import { usePageCopy } from '../lib/copy'
 import { useRepoUx, resolveQuickRepoTab } from '../lib/repoModeUx'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
-import { IconGit, IconIntegrations } from '../components/icons'
+import { IconGit } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
 import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/repo/RepoStatsTypes'
 import { usePageData } from '../lib/usePageData'
 
@@ -449,12 +456,17 @@ export function RepoPage() {
         onChange={setBucket}
       />
       {filteredBranches.length === 0 ? (
-        <p className="text-2xs text-fg-muted px-2 py-3">
-          No branches in this state right now.{' '}
-          <button type="button" onClick={() => setBucket('all')} className="text-brand hover:underline">
-            Show all
-          </button>
-        </p>
+        <div className="space-y-3 px-2 py-1">
+          <EmptySectionMessage
+            text="No branches in this state right now."
+            hint="Switch the filter above or dispatch a fix to open a new branch."
+          />
+          <ActionPillRow>
+            <ActionPill tone="neutral" onClick={() => setBucket('all')}>
+              Show all branches
+            </ActionPill>
+          </ActionPillRow>
+        </div>
       ) : (
         <div className="space-y-2">
           {filteredBranches.map((b) => (
@@ -482,43 +494,43 @@ export function RepoPage() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 justify-between">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
+          <div className="flex flex-wrap items-center gap-1.5">
             {repo.default_branch && (
-              <span className="inline-flex items-center gap-1">
-                <span className="text-fg-faint">default:</span>
-                <CodeValue value={repo.default_branch} tone="hash" inline copyable={false} />
-              </span>
+              <SignalChip tone="neutral">
+                default: {repo.default_branch}
+              </SignalChip>
             )}
             {repo.github_app_installation_id ? (
-              <Badge className="bg-ok-subtle text-ok">GitHub App installed</Badge>
+              <SignalChip tone="ok">GitHub App installed</SignalChip>
             ) : hasRepo ? (
-              <Badge className="bg-warn-subtle text-warn">No GitHub App installation</Badge>
+              <>
+                <SignalChip tone="warn">No GitHub App installation</SignalChip>
+              </>
             ) : null}
             {repo.last_indexed_at && (
-              <span className="whitespace-nowrap">
+              <SignalChip tone="brand">
                 Indexed <RelativeTime value={repo.last_indexed_at} />
-              </span>
+              </SignalChip>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {hasRepo && (
-              <a
-                href={repo.repo_url!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors"
+          <ActionPillRow className="shrink-0">
+            {hasRepo && !repo.github_app_installation_id && (
+              <ActionPill
+                href={`https://github.com/apps/mushi-mushi/installations/new?state=${activeProjectId ?? ''}`}
+                tone="brand"
               >
-                Open on GitHub ↗
-              </a>
+                Install Mushi on GitHub ↗
+              </ActionPill>
             )}
-            <Link
-              to="/integrations/config"
-              className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors inline-flex items-center gap-1"
-            >
-              <IconIntegrations />
+            {hasRepo && (
+              <ActionPill href={repo.repo_url!} tone="neutral">
+                Open on GitHub ↗
+              </ActionPill>
+            )}
+            <ActionPill to="/integrations/config" tone="neutral">
               Manage
-            </Link>
-          </div>
+            </ActionPill>
+          </ActionPillRow>
         </div>
         <div className="pt-2 border-t border-edge-subtle/60">
           <DefinitionChips items={headerChips} columns="auto" dense />
@@ -558,14 +570,7 @@ export function RepoPage() {
         howToUse={copy?.help?.howToUse ?? 'Summary shows repo connection health. Branches lists every fix PR with CI status. Activity is a chronological log across all branches.'}
       />
 
-      <PageHeader
-        title={copy?.title ?? 'Repo graph'}
-        projectScope={projectName}
-        description={
-          copy?.description ??
-          'Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log.'
-        }
-      >
+      <PageHeader title={copy?.title ?? 'Repo graph'} projectScope={projectName}>
         <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         <span className="text-2xs text-fg-faint font-mono">
           {pluralizeWithCount(counts.total, 'branch', 'branches')}
@@ -574,6 +579,13 @@ export function RepoPage() {
           Refresh
         </Btn>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log.'}
+        </p>
+      </ContainedBlock>
 
       <RepoStatusBanner
         stats={repoStats}
@@ -621,6 +633,19 @@ export function RepoPage() {
   )
 }
 
+function ciSignalTone(b: RepoBranch): 'ok' | 'danger' | 'warn' | 'info' | 'neutral' {
+  const c = b.check_run_conclusion?.toLowerCase()
+  if (c === 'success') return 'ok'
+  if (c === 'failure' || c === 'timed_out') return 'danger'
+  if (c === 'action_required') return 'warn'
+  const s = b.check_run_status?.toLowerCase()
+  if (s === 'in_progress' || s === 'queued' || s === 'pending') return 'info'
+  if (b.status === 'failed') return 'danger'
+  if (b.status === 'completed' && b.pr_url) return 'info'
+  if (b.status === 'running' || b.status === 'queued') return 'info'
+  return 'neutral'
+}
+
 function BranchRow({ branch }: { branch: RepoBranch }) {
   const ci = ciBadge(branch)
   const events = synthesiseEvents(branch)
@@ -649,7 +674,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
       <div className="grid gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={ci.className}>{ci.label}</Badge>
+            <SignalChip tone={ciSignalTone(branch)}>{ci.label}</SignalChip>
             {branch.branch && <CodeValue value={branch.branch} tone="hash" copyable={false} />}
             {branch.pr_url && (
               <a
@@ -663,17 +688,19 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
             )}
           </div>
           {(branch.report_summary || branch.summary) && (
-            <p className="text-xs text-fg-secondary wrap-break-word max-w-prose leading-relaxed">
-              {branch.report_summary ?? branch.summary}
-            </p>
+            <ContainedBlock tone="muted">
+              <p className="max-w-prose text-xs leading-relaxed text-fg-secondary wrap-break-word">
+                {branch.report_summary ?? branch.summary}
+              </p>
+            </ContainedBlock>
           )}
-          <div className="flex flex-wrap items-center gap-2 text-3xs text-fg-faint font-mono">
+          <InlineProof className="font-mono">
             <Link to={`/reports/${branch.report_id}`} className="hover:text-fg-secondary underline-offset-2 hover:underline">
               Report {branch.report_id.slice(0, 8)}
             </Link>
-            <span>·</span>
+            {' · '}
             <RelativeTime value={branch.created_at} />
-          </div>
+          </InlineProof>
         </div>
         <div className="min-w-0">
           <FixGitGraph

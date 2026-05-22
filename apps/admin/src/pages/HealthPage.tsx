@@ -32,6 +32,13 @@ import {
 } from '../components/ui'
 import { HealthStatusBanner } from '../components/health/HealthStatusBanner'
 import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import {
   EMPTY_HEALTH_STATS,
   type HealthStats,
   type HealthTabId,
@@ -491,10 +498,6 @@ export function HealthPage() {
       <PageHeader
         title={copy?.title ?? 'System Health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.'
-        }
       >
         <Badge
           className={
@@ -543,6 +546,13 @@ export function HealthPage() {
         </Btn>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.'}
+        </p>
+      </ContainedBlock>
+
       <HealthStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -563,7 +573,9 @@ export function HealthPage() {
 
       {!ux.hideHealthSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.calls ?? 'LLM calls'}
@@ -618,7 +630,7 @@ export function HealthPage() {
 
       {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' && !ux.hideOverviewChrome ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'idle'
@@ -626,12 +638,29 @@ export function HealthPage() {
                 : 'border-warn/30 bg-warn/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
+                ? 'danger'
+                : stats.topPriority === 'idle'
+                  ? 'brand'
+                  : 'warn'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock
+            tone={
+              stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error' ? 'warn' : 'info'
+            }
+          >
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -743,37 +772,45 @@ export function HealthPage() {
                 ]}
               />
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {fnNames.map((fn) => {
                   const f = byFunction[fn]
                   const isFiltered = fnFilter === fn
+                  const costStr = `$${(f.costUsd ?? 0).toFixed((f.costUsd ?? 0) >= 1 ? 2 : 4)}`
                   return (
-                    <Card key={fn} className="p-2.5 flex items-center justify-between text-xs gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <code className="font-mono text-2xs text-fg font-medium truncate">{fn}</code>
-                      </div>
-                      <div className="flex items-center gap-3 text-2xs text-fg-muted shrink-0 flex-wrap justify-end">
-                        <span>{f.calls} calls</span>
-                        <span title="Average call latency">avg {f.avgLatencyMs}ms</span>
-                        <span title="95th percentile latency over the window">p95 {f.p95LatencyMs ?? 0}ms</span>
-                        <span title="Estimated USD spend over the window">${(f.costUsd ?? 0).toFixed((f.costUsd ?? 0) >= 1 ? 2 : 4)}</span>
-                        {f.fallbacks > 0 && <Badge className="bg-warn-muted text-warn">{f.fallbacks} fallback{f.fallbacks === 1 ? '' : 's'}</Badge>}
-                        {f.errors > 0 && <Badge className="bg-danger-muted text-danger">{f.errors} error{f.errors === 1 ? '' : 's'}</Badge>}
+                    <Card key={fn} className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <code className="min-w-0 truncate font-mono text-2xs font-medium text-fg">{fn}</code>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <SignalChip tone="neutral">{f.calls} calls</SignalChip>
+                        <SignalChip tone="info">avg {f.avgLatencyMs}ms</SignalChip>
+                        <SignalChip tone="neutral">p95 {f.p95LatencyMs ?? 0}ms</SignalChip>
+                        <SignalChip tone="brand">{costStr}</SignalChip>
+                        {f.fallbacks > 0 && (
+                          <SignalChip tone="warn">
+                            {f.fallbacks} fallback{f.fallbacks === 1 ? '' : 's'}
+                          </SignalChip>
+                        )}
+                        {f.errors > 0 && (
+                          <SignalChip tone="danger">
+                            {f.errors} error{f.errors === 1 ? '' : 's'}
+                          </SignalChip>
+                        )}
                         {f.lastFailureAt && (
-                          <span className="text-danger" title={`Last failure ${new Date(f.lastFailureAt).toLocaleString()}`}>
-                            last failure <RelativeTime value={f.lastFailureAt} />
+                          <span title={`Last failure ${new Date(f.lastFailureAt).toLocaleString()}`}>
+                            <SignalChip tone="danger">
+                              failed <RelativeTime value={f.lastFailureAt} />
+                            </SignalChip>
                           </span>
                         )}
-                        <Btn
-                          variant="ghost"
-                          size="sm"
+                        <ActionPill
+                          tone={isFiltered ? 'brand' : 'neutral'}
                           onClick={() => {
                             updateParam('fn', isFiltered ? '' : fn)
                             if (!isFiltered) setActiveTab('activity')
                           }}
                         >
                           {isFiltered ? 'Clear filter' : 'Filter activity'}
-                        </Btn>
+                        </ActionPill>
                       </div>
                     </Card>
                   )
@@ -790,16 +827,18 @@ export function HealthPage() {
                 description="When models start serving traffic, you'll see Haiku, Sonnet, and the judge each broken out with their own latency and cost."
               />
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {Object.entries(byModel).map(([model, m]) => (
-                  <Card key={model} className="p-2.5 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <code className="font-mono text-2xs text-fg-secondary truncate">{model}</code>
-                    </div>
-                    <div className="flex items-center gap-3 text-2xs text-fg-muted flex-shrink-0">
-                      <span>{m.calls} calls</span>
-                      <span>{m.tokens.toLocaleString()} tokens</span>
-                      {m.errors > 0 && <Badge className="bg-danger-muted text-danger">{m.errors} errors</Badge>}
+                  <Card key={model} className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <code className="min-w-0 truncate font-mono text-2xs text-fg-secondary">{model}</code>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <SignalChip tone="neutral">{m.calls} calls</SignalChip>
+                      <SignalChip tone="info">{m.tokens.toLocaleString()} tokens</SignalChip>
+                      {m.errors > 0 && (
+                        <SignalChip tone="danger">
+                          {m.errors} error{m.errors === 1 ? '' : 's'}
+                        </SignalChip>
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -833,7 +872,7 @@ export function HealthPage() {
                         )}
                       </div>
                       {j ? (
-                        <p className="mt-1 text-2xs text-fg-faint">
+                        <InlineProof className="mt-1.5">
                           Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs ·{' '}
                           <Pct
                             value={j.successRate * 100}
@@ -847,9 +886,11 @@ export function HealthPage() {
                               {' '}· {j.staleness} ({j.stalenessMinutes}m since last run)
                             </span>
                           )}
-                        </p>
+                        </InlineProof>
                       ) : (
-                        <p className="mt-1 text-2xs text-fg-faint">No telemetry yet — job has not executed since the telemetry table was created.</p>
+                        <InlineProof className="mt-1.5">
+                          No telemetry yet — job has not executed since the telemetry table was created.
+                        </InlineProof>
                       )}
                     </div>
                     {isManual && (
@@ -891,11 +932,11 @@ export function HealthPage() {
                           <code className="text-xs font-mono font-medium capitalize">{kind}</code>
                           <Badge className={statusColor}>{r?.status ?? 'not probed'}</Badge>
                         </div>
-                        <p className="mt-1 text-2xs text-fg-faint">
+                        <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
                           {r
                             ? `${r.latencyMs}ms · last probed ${new Date(r.at).toLocaleTimeString()}${r.detail ? ` · ${r.detail.slice(0, 120)}` : ''}`
                             : 'Runs a 1-token round-trip against the provider\'s live API. Abort after 5s if upstream is stuck.'}
-                        </p>
+                        </InlineProof>
                       </div>
                       <Btn
                         size="sm"

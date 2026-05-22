@@ -12,6 +12,7 @@ import { SettingsChangeHint } from './SettingsChangeHint'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { valuesEqual } from './settingsDiff'
+import { ContainedBlock } from '../report-detail/ReportSurface'
 
 export function DevToolsPanel() {
   const toast = useToast()
@@ -36,6 +37,14 @@ export function DevToolsPanel() {
 
   return (
     <SettingsPanelLayout
+      fullWidth={
+        <ContainedBlock tone="muted">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Local-only debug flags — saved to this browser via Apply. API calls, auth events, and timings
+            log to the console when debug mode is on.
+          </p>
+        </ContainedBlock>
+      }
       footer={
         <SettingsFormFooter
           dirty={dirty}

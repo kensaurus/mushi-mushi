@@ -1,5 +1,4 @@
 import {
-  Field,
   ImageZoom,
   InfoHint,
   Tooltip,
@@ -17,6 +16,7 @@ import {
   confidenceBadgeClass,
 } from '../../lib/tokens'
 import { IconCamera, IconSparkle } from '../icons'
+import { ContainedBlock } from './ReportSurface'
 import type { ReportDetail } from './types'
 
 export function ClassificationFields({ report }: { report: ReportDetail }) {
@@ -56,9 +56,28 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
             label: 'Confidence',
             hint: 'LLM self-reported confidence. Below 70% usually warrants human review.',
             value: (
-              <Badge className={confidenceBadgeClass(conf)} title={conf != null ? `${(conf * 100).toFixed(1)}%` : undefined}>
-                {confLabel}
-              </Badge>
+              <div className="flex min-w-0 flex-col gap-1">
+                <Badge className={confidenceBadgeClass(conf)} title={conf != null ? `${(conf * 100).toFixed(1)}%` : undefined}>
+                  {confLabel}
+                </Badge>
+                {conf != null && (
+                  <div
+                    className="h-1 w-full max-w-[8rem] overflow-hidden rounded-full bg-surface-overlay/80"
+                    role="progressbar"
+                    aria-valuenow={Math.round(conf * 100)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Classification confidence"
+                  >
+                    <div
+                      className={`h-full rounded-full transition-[width] ${
+                        conf >= 0.85 ? 'bg-ok' : conf >= 0.7 ? 'bg-warn' : 'bg-danger'
+                      }`}
+                      style={{ width: `${Math.min(100, Math.max(0, conf * 100))}%` }}
+                    />
+                  </div>
+                )}
+              </div>
             ),
           },
         ]}
@@ -71,22 +90,18 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
       )}
 
       {report.component && (
-        <div className="mb-2 last:mb-0">
-          <span className="flex items-center gap-1 text-xs text-fg-muted font-medium mb-0.5">
-            Component
+        <ContainedBlock label="Component" tone="muted">
+          <div className="flex items-center gap-1 mb-1">
             <InfoHint content="The UI component or code area the LLM believes is responsible." />
-          </span>
+          </div>
           <CodeValue value={report.component} tone="hash" />
-        </div>
+        </ContainedBlock>
       )}
 
       {reproductionHint && (
-        <Field
-          label="Reproduction hint"
-          value={reproductionHint}
-          longForm
-          tooltip="LLM-generated summary of the steps to reproduce. Treat as a starting point, not a verified repro."
-        />
+        <ContainedBlock label="Reproduction hint" tone="info">
+          <LongFormText value={reproductionHint} tone="muted" maxWidth="max-w-none" />
+        </ContainedBlock>
       )}
       <ModelFooter model={report.stage1_model} latency={report.stage1_latency_ms} />
     </>
@@ -96,16 +111,19 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
 function ModelFooter({ model, latency }: { model: string | null; latency: number | null }) {
   if (!model && latency == null) return null
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-edge-subtle pt-2 text-2xs text-fg-faint">
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-edge-subtle pt-2">
       {model && (
-        <div className="inline-flex min-w-0 items-center gap-1">
-          <span className="shrink-0 text-fg-faint">Model</span>
-          <CodeValue value={model} inline tone="neutral" copyable={false} />
-        </div>
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/35 px-1.5 py-0.5 text-2xs">
+          <span className="shrink-0 text-3xs font-medium uppercase tracking-wider text-fg-faint">Model</span>
+          <code className="min-w-0 truncate font-mono text-fg-secondary">{model}</code>
+        </span>
       )}
       {latency != null && (
         <Tooltip content="End-to-end classification latency (Stage-1 only).">
-          <span className="font-mono text-fg-muted tabular-nums cursor-help">{latency} ms</span>
+          <span className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/35 px-1.5 py-0.5 text-2xs font-mono tabular-nums text-fg-muted cursor-help">
+            <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint not-italic font-sans">Latency</span>
+            {latency.toLocaleString()} ms
+          </span>
         </Tooltip>
       )}
     </div>
@@ -122,7 +140,10 @@ export function ScreenshotBlock({ url }: { url: string | null }) {
       {url ? (
         <ImageZoom src={url} alt="Bug report screenshot" thumbClassName="max-h-72 inline-block" />
       ) : (
-        <EmptySectionMessage text="No screenshot was captured for this report." />
+        <EmptySectionMessage
+          text="No screenshot was captured for this report."
+          hint="Reporters must tap the camera button in the widget before submitting."
+        />
       )}
     </div>
   )
@@ -150,6 +171,11 @@ export function ScreenshotHero({ url, className = '' }: { url: string; className
   )
 }
 
-export function EmptySectionMessage({ text }: { text: string }) {
-  return <div className="text-xs text-fg-muted italic py-1">{text}</div>
+export function EmptySectionMessage({ text, hint }: { text: string; hint?: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-edge-subtle/70 bg-surface-overlay/20 px-3 py-2.5">
+      <p className="text-xs text-fg-muted leading-relaxed">{text}</p>
+      {hint && <p className="mt-1 text-2xs text-fg-faint leading-relaxed">{hint}</p>}
+    </div>
+  )
 }

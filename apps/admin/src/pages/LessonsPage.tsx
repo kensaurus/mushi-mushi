@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -34,6 +34,12 @@ import {
   RecommendedAction,
   Card,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
 import {
   EMPTY_LESSONS_STATS,
@@ -653,10 +659,6 @@ export function LessonsPage() {
       <PageHeader
         title={copy?.title ?? 'Lessons'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -691,6 +693,13 @@ export function LessonsPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'}
+        </p>
+      </ContainedBlock>
+
       <LessonsStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -714,7 +723,9 @@ export function LessonsPage() {
         title={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.activeLessons ?? 'Active lessons'} value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} tooltip={activeLessonsTooltip(stats)} detail={activeLessonsDetail(stats)} to={lessonsLinks.activeLessons} />
           <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalLessonsTooltip(stats)} detail={criticalLessonsDetail()} to={lessonsLinks.critical} />
@@ -728,7 +739,7 @@ export function LessonsPage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'critical_lessons'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'no_data'
@@ -736,12 +747,25 @@ export function LessonsPage() {
                 : 'border-warn/30 bg-warn/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'critical_lessons'
+                ? 'danger'
+                : stats.topPriority === 'no_data'
+                  ? 'brand'
+                  : 'warn'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'critical_lessons' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 

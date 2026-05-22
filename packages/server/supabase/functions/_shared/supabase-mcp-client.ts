@@ -58,7 +58,9 @@ async function callTool<T = unknown>(
   toolName: string,
   toolArgs: Record<string, unknown> = {},
 ): Promise<T> {
-  const cacheKey = `${opts.projectRef}:${toolName}:${JSON.stringify(toolArgs)}`
+  // Include the last 8 chars of the PAT so two orgs with the same projectRef
+  // (misconfiguration) can never receive each other's cached advisor data.
+  const cacheKey = `${opts.projectRef}:${opts.pat.slice(-8)}:${toolName}:${JSON.stringify(toolArgs)}`
   const cached = cacheGet<T>(cacheKey)
   if (cached !== null) return cached
 

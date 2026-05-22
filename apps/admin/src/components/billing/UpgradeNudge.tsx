@@ -39,6 +39,7 @@ import type { ReactNode } from 'react'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { Tooltip } from '../ui'
+import { ActionPill, ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 
 // Re-export here so callers don't have to chase imports across modules
 // — `<UpgradePill flag="teams" />` should just need this file.
@@ -168,19 +169,16 @@ export function UpgradeBanner({
             <span aria-hidden className="text-fg-faint">·</span> {tagline}
           </p>
           {density === 'comfy' && (
-            <p className="text-2xs text-fg-muted mt-0.5">
+            <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
               You're on{' '}
               <span className="font-medium text-fg">{ent.planName ?? 'your current plan'}</span>.
-            </p>
+            </InlineProof>
           )}
         </div>
       </div>
-      <Link
-        to={billingHref(flag)}
-        className="inline-flex items-center justify-center rounded-full bg-fg px-3 py-1 text-2xs font-semibold text-bg shadow-sm hover:opacity-90 motion-safe:transition-opacity shrink-0"
-      >
+      <ActionPill to={billingHref(flag)} tone="brand">
         {ctaCopy(upgradeTo)}
-      </Link>
+      </ActionPill>
     </div>
   )
 }
@@ -305,13 +303,12 @@ export function UpgradeLockOverlay({
           <p className="text-xs font-semibold text-fg">
             {headline ?? `${copy.pillLabel} required`}
           </p>
-          <p className="text-2xs text-fg-muted">{tagline}</p>
-          <Link
-            to={billingHref(flag)}
-            className="mt-1 inline-flex items-center justify-center rounded-full bg-fg px-3 py-1 text-2xs font-semibold text-bg shadow-sm hover:opacity-90 motion-safe:transition-opacity"
-          >
+          <ContainedBlock tone="muted">
+            <p className="text-2xs text-fg-muted">{tagline}</p>
+          </ContainedBlock>
+          <ActionPill to={billingHref(flag)} tone="brand" className="mt-1">
             {ctaCopy(upgradeTo)}
-          </Link>
+          </ActionPill>
         </div>
       </div>
     </div>

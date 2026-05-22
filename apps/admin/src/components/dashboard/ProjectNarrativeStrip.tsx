@@ -11,8 +11,8 @@
  *          same screen.
  */
 
-import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { ActionPill, ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 
 interface Props {
   projectName: string
@@ -43,9 +43,9 @@ export function ProjectNarrativeStrip({ projectName, sdkInstalled, hasReports, h
     >
       <span aria-hidden="true" className="absolute -top-10 -left-10 h-32 w-32 rounded-full bg-brand/20 blur-3xl opacity-40" />
       <div className="relative">
-        <p className="text-2xs font-medium uppercase tracking-wider text-fg-muted">
+        <InlineProof className="font-medium uppercase tracking-wider text-fg-muted border-0 bg-transparent px-0 py-0">
           Your loop on <span className="font-mono text-fg-secondary normal-case tracking-normal">{projectName}</span>
-        </p>
+        </InlineProof>
         <h2 className="mt-1 text-base font-semibold text-fg leading-tight">
           {allDone
             ? `${projectName} has shipped its first auto-fix end to end. New reports flow through Plan → Do → Check → Act automatically.`
@@ -99,15 +99,13 @@ function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
           <span className="block text-xs font-semibold text-fg leading-tight truncate">{stage.headline}</span>
         </div>
       </header>
-      <p className="mt-2 text-2xs text-fg-secondary leading-snug min-h-[3rem]">{stage.body}</p>
+      <ContainedBlock tone="muted" className="mt-2 min-h-[3rem]">
+        <p className="text-2xs text-fg-secondary leading-snug">{stage.body}</p>
+      </ContainedBlock>
       {stage.cta && (
-        <Link
-          to={stage.cta.to}
-          className="mt-2 inline-flex items-center gap-1 text-2xs text-brand hover:underline"
-        >
-          {stage.cta.label}
-          <span aria-hidden="true">→</span>
-        </Link>
+        <ActionPill to={stage.cta.to} tone="brand" className="mt-2">
+          {stage.cta.label} →
+        </ActionPill>
       )}
       {isCurrent && stage.state !== 'done' && (
         <span className={`absolute -top-2 right-2 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${meta.text} ${meta.tintBg} border ${meta.tintBorder}`}>

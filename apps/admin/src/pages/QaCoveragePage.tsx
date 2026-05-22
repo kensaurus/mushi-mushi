@@ -35,7 +35,6 @@ import {
   Card,
   Btn,
   ErrorAlert,
-  EmptyState,
   RelativeTime,
   Section,
   StatCard,
@@ -45,6 +44,14 @@ import {
   RecommendedAction,
 } from '../components/ui'
 import { QaCoverageStatusBanner } from '../components/qa-coverage/QaCoverageStatusBanner'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import {
   EMPTY_QA_COVERAGE_STATS,
   type QaCoverageStats,
@@ -67,7 +74,7 @@ import {
   totalStoriesTooltip,
 } from '../lib/statTooltips/qa-coverage'
 import { qaCoverageLinks } from '../lib/statCardLinks'
-import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
+import { IconPlay, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -216,22 +223,17 @@ function StoryCard({
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-medium text-fg truncate leading-snug">{coverage.name}</span>
             {isQueued && (
-              <span className="inline-flex items-center gap-1 text-3xs border px-1.5 py-0.5 rounded-full font-medium bg-brand/10 border-brand/20 text-brand">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
+              <SignalChip tone="brand" className="motion-safe:animate-pulse">
                 queued
-              </span>
+              </SignalChip>
             )}
             {!coverage.enabled && !isQueued && (
-              <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-full">
-                disabled
-              </span>
+              <SignalChip tone="neutral">disabled</SignalChip>
             )}
           </div>
-          <span
-            className={`inline-block text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[coverage.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-          >
+          <SignalChip tone="info">
             {PROVIDER_LABEL[coverage.browser_provider] ?? coverage.browser_provider}
-          </span>
+          </SignalChip>
         </div>
 
         <Btn
@@ -250,15 +252,15 @@ function StoryCard({
       {/* Pass rate bar + stats */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-2xs">
-          <span className="text-fg-muted tabular-nums">
+          <SignalChip tone={coverage.runs_24h === 0 ? 'neutral' : 'info'}>
             {coverage.runs_24h === 0 ? 'No runs in 24h' : `${coverage.runs_24h} run${coverage.runs_24h === 1 ? '' : 's'} · 24h`}
-          </span>
+          </SignalChip>
           {passRate !== null ? (
-            <span className={`font-medium tabular-nums ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}>
+            <SignalChip tone={passRate >= 80 ? 'ok' : passRate >= 50 ? 'warn' : 'danger'}>
               {passRate}%
-            </span>
+            </SignalChip>
           ) : (
-            <span className="text-fg-faint">—</span>
+            <SignalChip tone="neutral">—</SignalChip>
           )}
         </div>
         <div className="h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
@@ -272,12 +274,12 @@ function StoryCard({
       {/* Footer row: last run time + failure link */}
       <div className="flex items-center justify-between gap-2">
         {coverage.last_run_at ? (
-          <div className="flex items-center gap-1 text-2xs text-fg-faint">
+          <InlineProof className="flex items-center gap-1">
             <IconClock className="h-2.5 w-2.5 shrink-0" />
             <RelativeTime value={coverage.last_run_at} />
-          </div>
+          </InlineProof>
         ) : (
-          <span className="text-2xs text-fg-faint italic">never run</span>
+          <InlineProof className="italic">never run</InlineProof>
         )}
 
         {coverage.last_failure_url && (
@@ -993,16 +995,16 @@ export function QaCoveragePage() {
     }
     if (rows.length === 0) {
       return (
-        <EmptyState
-          icon={<IconHealth className="h-8 w-8 text-fg-faint" />}
-          title={emptyTitle}
-          description={emptyDescription}
-          action={
-            activeTab !== 'failing' ? (
-              <Btn size="sm" onClick={() => setShowCreate(true)}>+ New story</Btn>
-            ) : undefined
-          }
-        />
+        <div className="space-y-3">
+          <EmptySectionMessage text={emptyTitle} hint={emptyDescription} />
+          {activeTab !== 'failing' && (
+            <ActionPillRow className="justify-center">
+              <ActionPill tone="brand" onClick={() => setShowCreate(true)}>
+                + New story
+              </ActionPill>
+            </ActionPillRow>
+          )}
+        </div>
       )
     }
     return (
@@ -1070,10 +1072,6 @@ export function QaCoveragePage() {
       <PageHeader
         title={copy?.title ?? 'QA Coverage'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.'
-        }
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -1116,6 +1114,13 @@ export function QaCoveragePage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.'}
+        </p>
+      </ContainedBlock>
+
       <QaCoverageStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -1137,7 +1142,9 @@ export function QaCoveragePage() {
 
       {!ux.hideQaSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'QA SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.stories ?? 'Stories'}
@@ -1199,7 +1206,7 @@ export function QaCoveragePage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'failing'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'no_stories'
@@ -1207,16 +1214,38 @@ export function QaCoveragePage() {
                 : 'border-warn/30 bg-warn/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <SignalChip
+            tone={
+              stats.topPriority === 'failing'
+                ? 'danger'
+                : stats.topPriority === 'no_stories'
+                  ? 'brand'
+                  : 'warn'
+            }
+          >
+            Top priority
+          </SignalChip>
+          <ContainedBlock
+            tone={
+              stats.topPriority === 'failing' ? 'warn' : stats.topPriority === 'no_stories' ? 'info' : 'muted'
+            }
+          >
+            <p className="text-xs font-medium leading-snug text-fg-primary">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
             {stats.topPriority === 'no_stories' ? (
-              <Btn size="sm" variant="ghost" onClick={() => setShowCreate(true)}>+ New story</Btn>
+              <ActionPill tone="brand" onClick={() => setShowCreate(true)}>
+                + New story
+              </ActionPill>
             ) : (
-              <Btn size="sm" variant="ghost" onClick={() => setActiveTab(stats.topPriority === 'failing' ? 'failing' : 'stories')}>
+              <ActionPill
+                tone="brand"
+                onClick={() => setActiveTab(stats.topPriority === 'failing' ? 'failing' : 'stories')}
+              >
                 Take action →
-              </Btn>
+              </ActionPill>
             )}
-          </div>
+          </ActionPillRow>
         </Card>
       ) : null}
 

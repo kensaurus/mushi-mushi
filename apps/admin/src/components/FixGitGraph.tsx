@@ -28,6 +28,7 @@ import { useMemo, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Modal } from './Modal'
 import { Badge, CodeValue } from './ui'
+import { SignalChip } from './report-detail/ReportSurface'
 
 export interface FixTimelineEvent {
   // Lock-step with the DB constraint on `fix_events.kind`
@@ -87,6 +88,19 @@ const PR_STATE_TONE: Record<PrState, string> = {
   merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
   closed: 'bg-danger-subtle text-danger',
   draft: 'bg-surface-overlay text-fg-muted',
+}
+
+const EVENT_KIND_TONE: Record<FixTimelineEvent['kind'], 'brand' | 'info' | 'ok' | 'danger' | 'warn' | 'neutral'> = {
+  dispatched: 'brand',
+  started: 'info',
+  branch: 'neutral',
+  commit: 'brand',
+  pr_opened: 'ok',
+  ci_started: 'info',
+  ci_resolved: 'ok',
+  pr_state_changed: 'warn',
+  completed: 'ok',
+  failed: 'danger',
 }
 
 function nodeColor(e: FixTimelineEvent): string {
@@ -223,7 +237,7 @@ export function FixGitGraph({
   const mergeY = completedIdx >= 0 ? completedIdx * ROW_H + 12 : null
 
   return (
-    <div className={`grid grid-cols-[7.5rem_1fr] gap-3 ${className}`}>
+    <div className={`grid grid-cols-[7.5rem_1fr] gap-3 rounded-sm border border-edge-subtle/55 bg-surface-overlay/20 p-2 ${className}`}>
       <svg
         viewBox={`0 0 80 ${totalH}`}
         width="80"
@@ -347,21 +361,21 @@ export function FixGitGraph({
       </svg>
 
       <ul className="space-y-0 text-xs">
-        <li className="h-3 text-3xs uppercase tracking-wider text-fg-faint flex items-center gap-2">
-          <span className="font-mono">{baseBranch}</span>
+        <li className="mb-1 flex h-auto min-h-[1.25rem] flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
+          <span className="font-mono normal-case text-fg-secondary">{baseBranch}</span>
           <span className="text-fg-faint">→</span>
           {branchUrl && branchName ? (
             <a
               href={branchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-fg-secondary truncate hover:text-brand underline-offset-2 hover:underline"
+              className="truncate font-mono normal-case text-brand hover:text-brand-hover underline-offset-2 hover:underline"
               title={`View branch ${branchName} on GitHub`}
             >
               {branchName}
             </a>
           ) : (
-            <span className="font-mono text-fg-secondary truncate">
+            <span className="truncate font-mono normal-case text-fg-secondary">
               {branchName ?? 'feature/—'}
             </span>
           )}
@@ -374,12 +388,14 @@ export function FixGitGraph({
         {events.map((e, i) => {
           const selected = selectedIdx === i
           const canDiff = e.kind === 'commit' && (commitSha || (filesChanged && filesChanged.length > 0))
+          const statusTone =
+            e.status === 'fail' ? 'danger' : e.status === 'pending' ? 'info' : e.status === 'ok' ? 'ok' : EVENT_KIND_TONE[e.kind]
           return (
             <li
               key={i}
               className={[
-                'flex items-start gap-2 rounded-sm px-1 -mx-1 motion-safe:transition-colors',
-                selected ? 'bg-brand/10 ring-1 ring-brand/40' : '',
+                'flex items-start gap-2 rounded-sm border border-transparent px-1.5 py-0.5 -mx-0.5 motion-safe:transition-colors',
+                selected ? 'border-brand/30 bg-brand/10 ring-1 ring-brand/25' : 'hover:bg-surface-overlay/30',
               ].join(' ')}
               style={{ minHeight: `${ROW_H}px` }}
               aria-current={selected ? 'true' : undefined}
@@ -390,13 +406,16 @@ export function FixGitGraph({
               }}
               title={tooltipFor(e, agentModel)}
             >
-              <div className="flex-1 min-w-0">
+              <SignalChip tone={statusTone} className="mt-1 shrink-0 font-mono text-3xs uppercase">
+                {kindLabel(e.kind)}
+              </SignalChip>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-fg text-xs font-medium leading-tight truncate">
+                  <span className="truncate text-xs font-medium leading-tight text-fg">
                     {e.label}
                   </span>
                   <span
-                    className="text-3xs text-fg-faint font-mono shrink-0"
+                    className="shrink-0 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1 py-0.5 font-mono text-3xs tabular-nums text-fg-faint"
                     title={new Date(e.at).toISOString()}
                   >
                     {new Date(e.at).toLocaleTimeString(undefined, {

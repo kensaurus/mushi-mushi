@@ -7,13 +7,19 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PageHeader, PageHelp, Section, SegmentedControl, StatCard, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
 import { ByokPanel } from '../components/settings/ByokPanel'
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
 import { HealthPanel } from '../components/settings/HealthPanel'
 import { DevToolsPanel } from '../components/settings/DevToolsPanel'
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import {
   EMPTY_SETTINGS_STATS,
   type SettingsStats,
@@ -142,13 +148,14 @@ export function SettingsPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Project settings'}
-          description={
-            copy?.description ??
-            'Per-project flags, LLM keys, SDK widget, and developer tools — scoped to the active project.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'Project settings'} />
+
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Per-project flags, LLM keys, SDK widget, and developer tools — scoped to the active project.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -188,12 +195,15 @@ export function SettingsPage() {
 
       <PageHeader
         title={copy?.title ?? 'Project settings'}
-        description={
-          copy?.description ??
-          'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'
-        }
         projectScope={projectName ?? stats.projectName}
       />
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'}
+        </p>
+      </ContainedBlock>
 
       <SettingsStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
 
@@ -208,7 +218,9 @@ export function SettingsPage() {
 
       {!ux.hideSettingsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.byok ?? 'BYOK keys'}
@@ -251,6 +263,49 @@ export function SettingsPage() {
           />
         </div>
       </Section>
+      )}
+
+      {stats.topPriority &&
+        stats.topPriority !== 'healthy' &&
+        stats.topPriority !== 'routing_optional' &&
+        stats.topPriorityTo && (
+        <Card
+          className={`space-y-3 p-4 ${
+            stats.topPriority === 'byok_failing'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'no_anthropic' || stats.topPriority === 'sdk_off'
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <SignalChip
+            tone={
+              stats.topPriority === 'byok_failing'
+                ? 'danger'
+                : stats.topPriority === 'no_anthropic' || stats.topPriority === 'sdk_off'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'byok_failing' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">
+              {stats.topPriorityLabel ?? 'Review project settings before production traffic.'}
+            </p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
+        </Card>
+      )}
+
+      {ux.hideSettingsSnapshot && (
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
       )}
 
       <div

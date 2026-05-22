@@ -45,6 +45,7 @@ import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { EMPTY_REPORTS_STATS, type ReportsStats, type ReportsTabId } from '../components/reports/ReportsStatsTypes'
 import {
   critical14dDetail,
@@ -955,12 +956,6 @@ export function ReportsPage() {
       <PageHeader
         title={copy?.title ?? 'Reports'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          (stats.newUntriaged > 0
-            ? `${stats.newUntriaged} awaiting triage — Queue tab for bulk actions`
-            : 'User-felt friction reports — Overview for posture, Queue to triage, Severity for 14d trends')
-        }
       >
         <Badge
           className={
@@ -993,8 +988,8 @@ export function ReportsPage() {
           channel={channelState}
         />
         {activeTab === 'queue' && (
-          <span className="text-xs text-fg-muted font-mono tabular-nums">
-            {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
+          <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-xs tabular-nums text-fg-muted">
+            {total} total{total > PAGE_SIZE ? ` · p${page + 1}/${totalPages}` : ''}
           </span>
         )}
         {!ux.hideKeyboardShortcuts && (
@@ -1013,6 +1008,15 @@ export function ReportsPage() {
           Refresh
         </Btn>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-3">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            (stats.newUntriaged > 0
+              ? `${stats.newUntriaged} awaiting triage — Queue tab for bulk actions`
+              : 'User-felt friction reports — Overview for posture, Queue to triage, Severity for 14d trends')}
+        </p>
+      </ContainedBlock>
 
       {!ux.hideOverviewChrome && <DogfoodNarrativeBanner />}
 
@@ -1036,7 +1040,9 @@ export function ReportsPage() {
 
       {!ux.hideReportsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'TRIAGE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.total14d ?? '14d total'}

@@ -6,6 +6,7 @@
 
 import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '../ui'
+import { SignalChip } from '../report-detail/ReportSurface'
 import { SeverityStackedBars, LineSparkline } from '../charts'
 import { ChartAnnotations } from '../charts/ChartAnnotations'
 import type { LlmDay, ReportDay } from './types'
@@ -51,7 +52,7 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <div className="text-2xs text-fg-muted mb-1">Tokens / day</div>
+            <SignalChip tone="neutral" className="mb-1.5">Tokens / day</SignalChip>
             <div className="relative">
               <LineSparkline
                 values={llmByDay.map((d) => d.tokens)}
@@ -78,7 +79,7 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
             </div>
           </div>
           <div>
-            <div className="text-2xs text-fg-muted mb-1">Calls / day</div>
+            <SignalChip tone="info" className="mb-1.5">Calls / day</SignalChip>
             <div className="relative">
               <LineSparkline
                 values={llmByDay.map((d) => d.calls)}

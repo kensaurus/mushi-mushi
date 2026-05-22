@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { StatusBannerShell } from '../StatusBannerShell'
 import type { McpStats, McpTabId } from './types'
 
 interface Props {
@@ -33,122 +34,98 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBann
 
   if (!stats.hasAnyProject) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-info">No project selected</p>
-            <p className="text-2xs text-fg-muted">MCP keys and snippets are scoped to the active project in the header.</p>
-          </div>
-        </div>
-      </div>
+      <StatusBannerShell
+        tone="info"
+        title="No project selected"
+        subtitle="MCP keys and snippets are scoped to the active project in the header."
+      />
     )
   }
 
   if (priority === 'endpoint_mismatch') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">
-              {plainBanner ? 'MCP key hits the wrong server' : 'MCP key talking to a different backend'}
-            </p>
-            <p className="text-2xs text-fg-muted">
-              {label ??
-                `Last heartbeat hit ${stats.lastSeenEndpointHost} — expected ${stats.expectedEndpointHost}. Check MUSHI_API_ENDPOINT in your snippet.`}
-            </p>
-          </div>
-        </div>
-        {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('setup')}>{actions.setup ?? 'Fix snippet'}</Btn>
-        ) : null}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={plainBanner ? 'MCP key hits the wrong server' : 'MCP key talking to a different backend'}
+        subtitle={
+          label ??
+          `Last heartbeat hit ${stats.lastSeenEndpointHost} — expected ${stats.expectedEndpointHost}. Check MUSHI_API_ENDPOINT in your snippet.`
+        }
+        action={
+          onTab ? (
+            <Btn size="sm" variant="ghost" onClick={() => onTab('setup')}>{actions.setup ?? 'Fix snippet'}</Btn>
+          ) : null
+        }
+      />
     )
   }
 
   if (priority === 'report_only_keys') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-brand">
-              {stats.reportOnlyKeyCount} SDK key{stats.reportOnlyKeyCount === 1 ? '' : 's'} — no MCP scope
-            </p>
-            <p className="text-2xs text-fg-muted">
-              {label ??
-                `report:write keys capture bugs but cannot list tools — mint mcp:read on /projects for ${projectLabel}.`}
-            </p>
-          </div>
-        </div>
-        <Link to="/projects">
-          <Btn size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
-        </Link>
-      </div>
+      <StatusBannerShell
+        tone="brand"
+        title={`${stats.reportOnlyKeyCount} SDK key${stats.reportOnlyKeyCount === 1 ? '' : 's'} — no MCP scope`}
+        subtitle={
+          label ??
+          `report:write keys capture bugs but cannot list tools — mint mcp:read on /projects for ${projectLabel}.`
+        }
+        action={
+          <Link to="/projects">
+            <Btn size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
+          </Link>
+        }
+      />
     )
   }
 
   if (priority === 'no_mcp_key') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-brand">
-              {plainBanner ? 'No MCP keys yet' : `No MCP keys for ${projectLabel}`}
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        <Link to="/projects">
-          <Btn size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
-        </Link>
-      </div>
+      <StatusBannerShell
+        tone="brand"
+        title={plainBanner ? 'No MCP keys yet' : `No MCP keys for ${projectLabel}`}
+        subtitle={label}
+        action={
+          <Link to="/projects">
+            <Btn size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
+          </Link>
+        }
+      />
     )
   }
 
   if (priority === 'never_connected') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
-          <div>
-            <p className="text-xs font-medium text-warn">
-              {stats.neverConnectedCount} MCP key{stats.neverConnectedCount === 1 ? '' : 's'} minted but never connected
-            </p>
-            <p className="text-2xs text-fg-muted">{label}</p>
-          </div>
-        </div>
-        {onTab && actionTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab(actionTab)}>{actions.setup ?? 'Paste snippet'}</Btn>
-        ) : (
-          <Link to="/mcp?tab=setup">
-            <Btn size="sm" variant="primary">{actions.setup ?? 'Paste snippet'}</Btn>
-          </Link>
-        )}
-      </div>
+      <StatusBannerShell
+        tone="warn"
+        title={`${stats.neverConnectedCount} MCP key${stats.neverConnectedCount === 1 ? '' : 's'} minted but never connected`}
+        subtitle={label}
+        action={
+          onTab && actionTab ? (
+            <Btn size="sm" variant="primary" onClick={() => onTab(actionTab)}>{actions.setup ?? 'Paste snippet'}</Btn>
+          ) : (
+            <Link to="/mcp?tab=setup">
+              <Btn size="sm" variant="primary">{actions.setup ?? 'Paste snippet'}</Btn>
+            </Link>
+          )
+        }
+      />
     )
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-ok/30 bg-ok/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-2 min-w-0">
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
-        <div>
-          <p className="text-xs font-medium text-ok">
-            {plainBanner ? 'Your editor can talk to Mushi' : `Agent access live on ${projectLabel}`}
-          </p>
-          <p className="text-2xs text-fg-muted">{label}</p>
-        </div>
-      </div>
-      {onRefresh ? (
-        <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          {actions.refresh ?? 'Refresh'}
-        </Btn>
-      ) : onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('catalog')}>{actions.catalog ?? 'View catalog'}</Btn>
-      ) : null}
-    </div>
+    <StatusBannerShell
+      tone="ok"
+      title={plainBanner ? 'Your editor can talk to Mushi' : `Agent access live on ${projectLabel}`}
+      subtitle={label}
+      action={
+        onRefresh ? (
+          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
+            {actions.refresh ?? 'Refresh'}
+          </Btn>
+        ) : onTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab('catalog')}>{actions.catalog ?? 'View catalog'}</Btn>
+        ) : null
+      }
+    />
   )
 }

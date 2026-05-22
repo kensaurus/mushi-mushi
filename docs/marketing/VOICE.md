@@ -1,5 +1,25 @@
 # VOICE — how Mushi-chan talks
 
+## Canonical tagline ladder
+
+These are the **only allowed phrasings** for public surfaces. Import from
+`@mushi-mushi/brand` (`MUSHI_TAGLINE`) instead of hard-coding. The CI script
+`scripts/check-tagline-consistency.mjs` fails any README that opens with a
+non-canonical variant.
+
+| Length | Form | Use on |
+|--------|------|--------|
+| 12 words | *"Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI."* | README headers, landing H1, docs landing |
+| 5 words | *"Bug reports that close themselves."* | Social bios, npm descriptions, secondary headlines |
+| 3 words | *"Capture. Classify. Fix."* | CTAs, slide headers, og:description |
+| 1 word | *"虫虫"* | Logo-adjacent, footer whisper |
+| Sub-tagline | *"the evolution loop for AI-assisted software"* | Eyebrow, section label, positioning line |
+
+**Never write a variant.** If none of the five forms fits the context, use the
+closest one and trim — don't rephrase.
+
+
+
 Mushi-chan is the voice of the project. Not a brand persona you wheel out for
 marketing — the actual narrator. Every README sentence, tweet, reply, changelog
 blurb, error message, and cold DM goes through this filter.
@@ -105,6 +125,25 @@ could live next to those three sentences, rewrite it.
 > v0.5: I learned a new trick. When the Do stage backs up, I draw a little
 > marching-ants ring around it on the dashboard so you can see the
 > bottleneck without reading anything. 🐛 (changelog: \<link\>)
+
+## Three-persona phrasebook
+
+The same feature, phrased for each of the three personas. Use this as a
+lookup when writing copy for a feature that could resonate differently.
+
+| Feature | Vibe coder | AI-native dev team | PM / founder |
+|---------|------------|-------------------|--------------|
+| **The loop** | "My users report, my agents fix — I just ship." | "Our agents write code. Mushi tells them which bugs to fix next and scores their PRs." | "I get bug + feature signal direct from users. The cheap ones fix themselves." |
+| **Shake-to-report** | "Drop in 14 KB. Every shake is a classified ticket." | "Event source: the SDK. Every shake triggers a classify → fix pipeline step." | "No support queue. Users shake instead of complaining on Reddit." |
+| **BYOK** | "My Anthropic key. My data. My bills." | "All LLM calls run under your project key — zero platform data exposure." | "Your users' data never touches Mushi's cloud LLM account." |
+| **Lesson library** | "My agents learn from every fix I merge." | "The lesson library feeds the system prompt — each fix makes the next one smarter." | "Fewer repeat bugs means fewer repeat escalations." |
+| **Judge scores** | "My fix either ships or I know why it didn't." | "Judge scores gate prompt promotions — the quality ratchets up over time." | "I can see whether the auto-fix quality is improving week over week." |
+| **MCP server** | "`get_fix_context` in Cursor before touching any file." | "One MCP install, every agent workflow — Cursor, Claude Code, Continue, Zed." | "Our Cursor-native engineers already have the fix context when they open a PR." |
+| **QA coverage** | "QA runs automatically after every fix. I never asked for it." | "Playwright / Browserbase stories verify each fix attempt before the judge scores it." | "Fewer regressions reaching users — the loop self-polices." |
+| **Privacy** | "My code stays in my repo. My keys stay in Vault." | "RLS-per-project, signed-URL screenshots, PII scrubbed at ingest." | "GDPR-friendly story: no user data in third-party LLMs unless the customer opts in." |
+
+**Usage rule:** write the copy for the persona the surface is targeting,
+then read it out loud as Mushi-chan. If it sounds like a slide deck, rewrite it.
 
 ## A quick test before you post
 

@@ -23,15 +23,21 @@ interface Props {
   artifacts: Artifact[];
 }
 
+/** Mutually exclusive bucket — MIME wins over kind when they disagree. */
+function artifactBucket(a: Artifact): 'screenshot' | 'video' | 'log' | 'file' {
+  if (a.mime.startsWith('image/') || a.kind === 'screenshot') return 'screenshot';
+  if (a.mime.startsWith('video/') || a.kind === 'video') return 'video';
+  if (a.kind === 'log' || a.mime === 'text/plain') return 'log';
+  return 'file';
+}
+
 export function CursorArtifactsGallery({ artifacts }: Props) {
   if (!artifacts.length) return null;
 
-  const screenshots = artifacts.filter((a) => a.kind === 'screenshot' || a.mime.startsWith('image/'));
-  const videos = artifacts.filter((a) => a.kind === 'video' || a.mime.startsWith('video/'));
-  const logs = artifacts.filter((a) => a.kind === 'log' || a.mime === 'text/plain');
-  const files = artifacts.filter(
-    (a) => !screenshots.includes(a) && !videos.includes(a) && !logs.includes(a),
-  );
+  const screenshots = artifacts.filter((a) => artifactBucket(a) === 'screenshot');
+  const videos = artifacts.filter((a) => artifactBucket(a) === 'video');
+  const logs = artifacts.filter((a) => artifactBucket(a) === 'log');
+  const files = artifacts.filter((a) => artifactBucket(a) === 'file');
 
   const filename = (a: Artifact) => a.path.split('/').pop() ?? a.path;
 

@@ -26,6 +26,7 @@ import { useState } from 'react'
 import { Btn } from '../ui'
 import { IconExternalLink } from '../icons'
 import { useToast } from '../../lib/toast'
+import { ContainedBlock } from './ReportSurface'
 import type { ReportDetail } from './types'
 
 interface CursorAgentLaunchProps {
@@ -109,15 +110,18 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
   }
 
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised/40 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-fg">Hand to a Cursor agent</div>
-          <div className="text-2xs text-fg-muted mt-0.5">
-            Mushi MCP must be configured in <span className="font-mono">.cursor/mcp.json</span> first.
-            Skip the dispatch worker and drive the fix loop yourself with full visibility into every tool call.
-          </div>
-        </div>
+    <div className="rounded-md border border-edge-subtle bg-surface-raised/40 p-3 mb-3">
+      <div className="mb-2">
+        <div className="text-sm font-semibold text-fg">Hand to a Cursor agent</div>
+        <ContainedBlock tone="muted" className="mt-1.5">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Mushi MCP must be configured in{' '}
+            <code className="rounded-sm border border-edge-subtle bg-surface-overlay/50 px-1 py-0.5 font-mono text-fg-secondary">
+              .cursor/mcp.json
+            </code>{' '}
+            first. Skip the dispatch worker and drive the fix loop yourself with full visibility into every tool call.
+          </p>
+        </ContainedBlock>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -136,9 +140,11 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
         </Btn>
       </div>
 
-      <details className="mt-2 text-2xs text-fg-muted">
-        <summary className="cursor-pointer hover:text-fg-secondary">View prompt</summary>
-        <pre className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-surface-overlay/40 p-2 font-mono">
+      <details className="mt-2 rounded-md border border-edge-subtle/60 bg-surface-overlay/20 px-2.5 py-2 text-2xs text-fg-muted">
+        <summary className="cursor-pointer text-3xs font-medium uppercase tracking-wider text-fg-faint hover:text-fg-secondary">
+          View prompt
+        </summary>
+        <pre className="mt-1.5 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-sm border border-edge-subtle/50 bg-surface-overlay/40 p-2 font-mono text-fg-secondary">
           {prompt}
         </pre>
       </details>

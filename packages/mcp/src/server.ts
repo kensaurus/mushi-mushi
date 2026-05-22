@@ -850,6 +850,210 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  // privacy://status — exposes the project's privacy posture so agents can
+  // inspect what happens to client data before dispatching a fix.
+  server.resource(
+    'privacy_status',
+    'privacy://status',
+    {
+      description:
+        'Returns the privacy posture for this project: storage region, LLM provider, whether BYOK is configured, ' +
+        'data retention window, and last audit timestamp. Read this before dispatching a fix to confirm ' +
+        'that client data stays within the expected boundary.',
+    },
+    async () => {
+      const path = projectId
+        ? `/v1/admin/projects/${projectId}/privacy-status`
+        : '/v1/admin/privacy-status'
+      let data: unknown
+      try {
+        data = await apiCall(path)
+      } catch {
+        // Graceful fallback: return a static posture skeleton when the endpoint
+        // doesn't exist yet (newly-deployed stacks, self-hosted instances
+        // missing the route). Agents can still inspect the structure.
+        data = {
+          region: null,
+          storage_provider: 'supabase',
+          llm_provider: 'platform',
+          byok_configured: false,
+          retention_days: 30,
+          last_audit_at: null,
+          _note: 'Live data unavailable — update Mushi server to get real values.',
+        }
+      }
+      return {
+        contents: [{
+          uri: 'privacy://status',
+          mimeType: 'application/json',
+          text: JSON.stringify(data, null, 2),
+        }],
+      }
+    },
+  )
+
+  // evolution://history — 30-day loop convergence data: judge scores,
+  // prompt promotions, fixed bugs, and lesson inductions.
+  server.resource(
+    'evolution_history',
+    'evolution://history',
+    {
+      description:
+        'Returns the project\'s last 30 days of judge scores, prompt promotions, fixed-bug count, ' +
+        'and lesson inductions. Use to see whether the loop is converging.',
+    },
+    async () => {
+      const path = projectId
+        ? `/v1/admin/projects/${projectId}/evolution-history`
+        : '/v1/admin/evolution-history'
+      let data: unknown
+      try {
+        data = await apiCall(path)
+      } catch {
+        data = {
+          days: 30,
+          fixed_bugs: null,
+          avg_judge_score: null,
+          prompt_promotions: null,
+          lesson_inductions: null,
+          weekly_scores: [],
+          _note: 'Live data unavailable — update Mushi server to get real values.',
+        }
+      }
+      return {
+        contents: [{
+          uri: 'evolution://history',
+          mimeType: 'application/json',
+          text: JSON.stringify(data, null, 2),
+        }],
+      }
+    },
+  )
+
+  // setup_repo_for_mushi — writes bootstrap files into the agent's repo
+  if (shouldRegister('setup_repo_for_mushi')) {
+    server.tool(
+      'setup_repo_for_mushi',
+      descOf('setup_repo_for_mushi'),
+      {
+        repo_root: z.string().describe('Absolute path to the repo root. Defaults to process.cwd() when omitted.').optional(),
+        project_name: z.string().describe('Human-readable project name used in MUSHI.md. Defaults to the directory name.').optional(),
+        overwrite: z.boolean().describe('When true, overwrite existing files. Default: false (skip if already present).').optional(),
+      },
+      annotationsFor('setup_repo_for_mushi'),
+      async ({ repo_root, project_name, overwrite }) => {
+        const nodePath = await import('node:path')
+        const { writeFile, mkdir } = await import('node:fs/promises')
+        const { existsSync } = await import('node:fs')
+
+        // Resolve and validate the root path before any writes.
+        const root = nodePath.resolve(repo_root ?? process.cwd())
+        if (!existsSync(root)) {
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: false, error: `repo_root does not exist: ${root}` }) }] }
+        }
+        const name = project_name ?? nodePath.basename(root)
+        const force = overwrite ?? false
+
+        const written: string[] = []
+        const skipped: string[] = []
+
+        async function writeIfNew(rel: string, content: string) {
+          // Prevent path traversal by checking the resolved abs path is still under root.
+          const abs = nodePath.resolve(root, rel)
+          if (!abs.startsWith(root + nodePath.sep) && abs !== root) {
+            skipped.push(rel)
+            return
+          }
+          if (!force && existsSync(abs)) {
+            skipped.push(rel)
+            return
+          }
+          await mkdir(nodePath.dirname(abs), { recursive: true })
+          await writeFile(abs, content, 'utf8')
+          written.push(rel)
+        }
+
+        // 1. Fetch current lessons from Mushi API
+        let lessonsJson: unknown = { schema_version: '1', project_id: projectId ?? '', generated_at: new Date().toISOString(), lessons: [] }
+        try {
+          const raw = await apiCall<{ lessons?: unknown[] }>('/v1/sync/lessons?limit=500')
+          if (raw && typeof raw === 'object') lessonsJson = raw
+        } catch { /* use empty skeleton */ }
+
+        // 2. .mushi/lessons.json
+        await writeIfNew('.mushi/lessons.json', JSON.stringify(lessonsJson, null, 2) + '\n')
+
+        // 3. .cursorrules
+        const cursorrules = [
+          `# Mushi Mushi — evolution-loop rules for ${name}`,
+          '#',
+          '# Generated by: setup_repo_for_mushi MCP tool',
+          '# Refresh lessons: mushi sync-lessons',
+          '',
+          '## Before writing a fix',
+          '1. Call get_fix_context (Mushi MCP) for the report — root cause + blast radius first.',
+          '2. Read .mushi/lessons.json — apply every matching rule.',
+          '3. Prefer the smallest change. Do not refactor unrelated code.',
+          '',
+          '## After writing a fix',
+          '1. Call submit_fix_result (Mushi MCP) with branch, PR URL, and files changed.',
+          '',
+        ].join('\n')
+        await writeIfNew('.cursorrules', cursorrules)
+
+        // 4. MUSHI.md
+        const mushiMd = [
+          `# MUSHI.md — ${name}`,
+          '',
+          '> This file is the Mushi agent contract for this project.',
+          '> Agents: read this before opening a PR.',
+          '',
+          '## Evolution loop',
+          '',
+          'This project uses Mushi\'s closed-loop PDCA cycle:',
+          '',
+          '```',
+          'User reports bug → Mushi captures → AI triages → AI opens PR',
+          '→ QA verifies → Judge scores → Lesson library remembers',
+          '```',
+          '',
+          '## Agent checklist',
+          '',
+          '- [ ] Read `get_fix_context` for the report before touching any file',
+          '- [ ] Check `.mushi/lessons.json` for patterns matching the affected component',
+          '- [ ] Prefer the smallest change that passes the repro test',
+          '- [ ] Call `submit_fix_result` after pushing the branch',
+          '',
+          '## Privacy',
+          '',
+          'Read `privacy://status` (Mushi MCP) to confirm where client data flows',
+          'before dispatching a fix that touches user data fields.',
+          '',
+          '## Lesson library',
+          '',
+          'Run `mushi sync-lessons` to refresh `.mushi/lessons.json` from the',
+          'project\'s live lesson library.',
+          '',
+        ].join('\n')
+        await writeIfNew('MUSHI.md', mushiMd)
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              ok: true,
+              written,
+              skipped,
+              message: written.length > 0
+                ? `Wrote ${written.length} file(s): ${written.join(', ')}`
+                : `All files already exist — run with overwrite=true to replace them.`,
+            }, null, 2),
+          }],
+        }
+      },
+    )
+  }
+
   // --- Prompts ---------------------------------------------------------
 
   server.prompt(

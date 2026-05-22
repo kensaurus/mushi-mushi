@@ -19,7 +19,6 @@ import {
   Btn,
   FilterSelect,
   Input,
-  EmptyState,
   ErrorAlert,
   SegmentedControl,
   Tooltip,
@@ -35,6 +34,14 @@ import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { IconEye, IconChevronUp, IconFlag, IconFlagOff } from '../components/icons'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 
 interface ReporterDevice {
   id: string
@@ -348,10 +355,7 @@ export function AntiGamingPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader
-        title="Anti-Gaming"
-        description="Protect intake quality — throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
-      >
+      <PageHeader title="Anti-Gaming">
         <FilterSelect
           label="Show"
           value={filter}
@@ -361,6 +365,12 @@ export function AntiGamingPage() {
         <ConfigHelp helpId="anti-gaming.flagged_filter" />
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          Protect intake quality — throttle bad-faith reporters, quarantine spam, and audit reward eligibility.
+        </p>
+      </ContainedBlock>
 
       {(() => {
         // Anti-gaming severity is largely driven by cross-account fingerprints
@@ -423,6 +433,39 @@ export function AntiGamingPage() {
             <div data-dav-anchor="anti-gaming:act">
               <PageActionBar scope="anti-gaming" action={antiGamingAction} />
             </div>
+
+            {(stats.crossAccount > 0 || stats.flagged > 0) && (
+              <Card
+                className={`space-y-3 p-4 ${
+                  stats.crossAccount > 0 ? 'border-danger/30 bg-danger/5' : 'border-warn/30 bg-warn/5'
+                }`}
+              >
+                <SignalChip tone={stats.crossAccount > 0 ? 'danger' : 'warn'}>
+                  Needs attention
+                </SignalChip>
+                <ContainedBlock tone="warn">
+                  <p className="text-xs font-medium leading-snug text-fg">
+                    {stats.crossAccount > 0
+                      ? `${stats.crossAccount} cross-account fingerprint${stats.crossAccount === 1 ? '' : 's'} — review and quarantine reward farming.`
+                      : `${stats.flagged} flagged device${stats.flagged === 1 ? '' : 's'} need review.`}
+                  </p>
+                </ContainedBlock>
+                <ActionPillRow>
+                  <ActionPill
+                    onClick={() => {
+                      setFilter('flagged')
+                      setSearch('')
+                    }}
+                    tone="brand"
+                  >
+                    Review flagged →
+                  </ActionPill>
+                  <ActionPill to="/audit?source=anti-gaming" tone="neutral">
+                    Audit log
+                  </ActionPill>
+                </ActionPillRow>
+              </Card>
+            )}
           </>
         )
       })()}
@@ -502,11 +545,14 @@ export function AntiGamingPage() {
           />
         ) : devices.length === 0 ? (
           search ? (
-            <EmptyState title="No devices match this search" description="Try a different fingerprint, token, or IP fragment." />
+            <EmptySectionMessage
+              text="No devices match this search."
+              hint="Try a different fingerprint, token, or IP fragment."
+            />
           ) : filter === 'flagged' ? (
-            <EmptyState
-              title="No flagged devices"
-              description="Switch to All to inspect every tracked device, or wait for the detector to fire."
+            <EmptySectionMessage
+              text="No flagged devices."
+              hint="Switch to All to inspect every tracked device, or wait for the detector to fire."
             />
           ) : (
             <SetupNudge
@@ -540,7 +586,9 @@ export function AntiGamingPage() {
                       <span className="font-mono text-xs text-fg truncate">{group.label}</span>
                       <Badge className="bg-surface-overlay text-fg-muted text-3xs">{group.count}</Badge>
                       {group.sublabel && (
-                        <span className="text-2xs text-fg-faint truncate">{group.sublabel}</span>
+                        <SignalChip tone="neutral" className="truncate max-w-[12rem]">
+                          {group.sublabel}
+                        </SignalChip>
                       )}
                     </button>
                   )}
@@ -575,16 +623,18 @@ export function AntiGamingPage() {
         }
         action={
           <div className="flex items-center gap-2">
-            <label className="inline-flex items-center gap-1.5 text-2xs text-fg-muted cursor-pointer">
-              <input
-                type="checkbox"
-                checked={aggregateEvents}
-                onChange={(e) => setAggregateEvents(e.target.checked)}
-                className="h-3 w-3 accent-brand"
-              />
-              Group identical
-              <ConfigHelp helpId="anti-gaming.aggregate_identical" />
-            </label>
+            <ContainedBlock tone="muted" className="inline-flex items-center gap-1.5 py-1 px-2">
+              <label className="inline-flex items-center gap-1.5 text-2xs text-fg-muted cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={aggregateEvents}
+                  onChange={(e) => setAggregateEvents(e.target.checked)}
+                  className="h-3 w-3 accent-brand"
+                />
+                Group identical
+                <ConfigHelp helpId="anti-gaming.aggregate_identical" />
+              </label>
+            </ContainedBlock>
             <FilterSelect
               label="Type"
               value={eventFilter}
@@ -595,7 +645,10 @@ export function AntiGamingPage() {
         }
       >
         {events.length === 0 ? (
-          <EmptyState title="No anti-gaming events yet" description={eventFilter ? 'Try a different event type.' : undefined} />
+          <EmptySectionMessage
+            text="No anti-gaming events yet."
+            hint={eventFilter ? 'Try a different event type.' : 'Events appear when devices are flagged or unflagged.'}
+          />
         ) : aggregateEvents ? (
           <div className="space-y-0.5 font-mono text-2xs">
             {eventGroups.map((g) => {
@@ -611,8 +664,10 @@ export function AntiGamingPage() {
                     disabled={!isRecurring}
                     className="w-full flex items-center gap-2 px-2 py-1 text-left disabled:cursor-default"
                   >
-                    <span className="text-fg-faint w-32 truncate" title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
-                      {new Date(g.last_at).toLocaleString()}
+                    <span title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
+                      <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
+                        {new Date(g.last_at).toLocaleString()}
+                      </SignalChip>
                     </span>
                     <Badge className={EVENT_BADGE[g.event_type]}>{g.event_type}</Badge>
                     {isRecurring && (
@@ -621,25 +676,31 @@ export function AntiGamingPage() {
                       </Badge>
                     )}
                     <span className="text-fg-secondary truncate flex-1">{g.reason ?? '—'}</span>
-                    <span className="text-fg-faint shrink-0 max-w-32 truncate" title={tokTip}>
-                      tok:{g.reporter_token_hash.slice(0, 8)}…
+                    <span title={tokTip}>
+                      <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
+                        tok:{g.reporter_token_hash.slice(0, 8)}…
+                      </SignalChip>
                     </span>
-                    {g.ip_address && <span className="text-fg-faint shrink-0">{g.ip_address}</span>}
+                    {g.ip_address && (
+                      <SignalChip tone="neutral" className="shrink-0 font-mono">
+                        {g.ip_address}
+                      </SignalChip>
+                    )}
                     {isRecurring && (
                       <span className="text-fg-faint shrink-0 text-3xs">{isOpen ? '▾' : '▸'}</span>
                     )}
                   </button>
                   {isOpen && isRecurring && (
-                    <div className="px-2 pb-2 ml-32 space-y-0.5 text-3xs text-fg-faint border-l border-edge-subtle">
+                    <ContainedBlock tone="muted" className="mx-2 mb-2 ml-32 space-y-1">
                       {events
                         .filter((e) => g.ids.includes(e.id))
                         .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
                         .map((e) => (
-                          <div key={e.id} className="pl-2 py-0.5">
+                          <InlineProof key={e.id} className="font-mono text-3xs border-0 bg-transparent px-0 py-0">
                             {new Date(e.created_at).toLocaleString()} · evt:{e.id.slice(0, 8)}
-                          </div>
+                          </InlineProof>
                         ))}
-                    </div>
+                    </ContainedBlock>
                   )}
                 </div>
               )
@@ -649,11 +710,19 @@ export function AntiGamingPage() {
           <div className="space-y-0.5 font-mono text-2xs">
             {events.map(e => (
               <div key={e.id} className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40">
-                <span className="text-fg-faint w-32 truncate">{new Date(e.created_at).toLocaleString()}</span>
+                <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
+                  {new Date(e.created_at).toLocaleString()}
+                </SignalChip>
                 <Badge className={EVENT_BADGE[e.event_type]}>{e.event_type}</Badge>
                 <span className="text-fg-secondary truncate flex-1">{e.reason ?? '—'}</span>
-                <span className="text-fg-faint shrink-0 max-w-32 truncate">tok:{e.reporter_token_hash.slice(0, 8)}…</span>
-                {e.ip_address && <span className="text-fg-faint shrink-0">{e.ip_address}</span>}
+                <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
+                  tok:{e.reporter_token_hash.slice(0, 8)}…
+                </SignalChip>
+                {e.ip_address && (
+                  <SignalChip tone="neutral" className="shrink-0 font-mono">
+                    {e.ip_address}
+                  </SignalChip>
+                )}
               </div>
             ))}
           </div>
@@ -725,17 +794,23 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
                   sdk:{d.fingerprint_hash.slice(0, 12)}…
                 </code>
               )}
-              <span className="text-2xs text-fg-faint">
-                {pluralizeWithCount(d.reporter_tokens.length, 'token')} · {pluralizeWithCount(d.ip_addresses.length, 'IP')} · {pluralizeWithCount(d.report_count, 'report')}
-                {d.distinct_user_count > 0 ? ` · ${pluralizeWithCount(d.distinct_user_count, 'distinct user')}` : ''}
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SignalChip tone="neutral">{pluralizeWithCount(d.reporter_tokens.length, 'token')}</SignalChip>
+                <SignalChip tone="info">{pluralizeWithCount(d.ip_addresses.length, 'IP')}</SignalChip>
+                <SignalChip tone="brand">{pluralizeWithCount(d.report_count, 'report')}</SignalChip>
+                {d.distinct_user_count > 0 ? (
+                  <SignalChip tone="warn">{pluralizeWithCount(d.distinct_user_count, 'distinct user')}</SignalChip>
+                ) : null}
+              </div>
             </div>
             {d.flag_reason && (
-              <p className="mt-1 text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
+              <ContainedBlock tone="warn" className="mt-2">
+                <p className="text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
+              </ContainedBlock>
             )}
-            <p className="mt-1 text-2xs text-fg-faint">
+            <InlineProof className="mt-2">
               First seen {new Date(d.created_at).toLocaleString()} · last activity {new Date(d.updated_at).toLocaleString()}
-            </p>
+            </InlineProof>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Tooltip content={isExpanded ? 'Collapse' : 'Details'}>
@@ -784,29 +859,27 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
       </div>
       {isExpanded && (
         <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2 space-y-2">
-          <div>
-            <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">Reporter tokens ({d.reporter_tokens.length})</div>
-            <div className="flex flex-wrap gap-1 font-mono text-2xs">
+          <ContainedBlock tone="muted" label={`Reporter tokens (${d.reporter_tokens.length})`}>
+            <div className="flex flex-wrap gap-1">
               {d.reporter_tokens.map((t) => (
-                <span key={t} className="px-1.5 py-0.5 bg-surface-raised rounded-sm text-fg-secondary">
+                <SignalChip key={t} tone="neutral" className="font-mono">
                   {t.slice(0, 16)}…
-                </span>
+                </SignalChip>
               ))}
             </div>
-          </div>
-          <div>
-            <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">IP addresses ({d.ip_addresses.length})</div>
-            <div className="flex flex-wrap gap-1 font-mono text-2xs">
+          </ContainedBlock>
+          <ContainedBlock tone="muted" label={`IP addresses (${d.ip_addresses.length})`}>
+            <div className="flex flex-wrap gap-1">
               {d.ip_addresses.map((ip) => (
-                <span key={ip} className="px-1.5 py-0.5 bg-surface-raised rounded-sm text-fg-secondary">
+                <SignalChip key={ip} tone="info" className="font-mono">
                   {ip}
-                </span>
+                </SignalChip>
               ))}
             </div>
-          </div>
-          <div className="text-2xs text-fg-faint font-mono">
+          </ContainedBlock>
+          <InlineProof className="font-mono">
             Full fingerprint: {d.device_fingerprint}
-          </div>
+          </InlineProof>
         </div>
       )}
     </Card>

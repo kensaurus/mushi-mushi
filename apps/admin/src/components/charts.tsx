@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Card, Badge, Tooltip } from './ui'
+import { InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { useBrushSelection } from '../lib/useBrushSelection'
 import { ChartFrame } from './charts/ChartFrame'
 import {
@@ -115,17 +116,18 @@ export function KpiTile({
           {value}
         </div>
         {delta && (
-          <span
-            className={`text-3xs font-mono shrink-0 ${TONE_TEXT[delta.tone]}`}
-            title="vs prior period"
-          >
-            {ARROW[delta.direction]}
-            {delta.value}
+          <span title="vs prior period">
+            <SignalChip tone={delta.tone === 'muted' ? 'neutral' : delta.tone} className="shrink-0 font-mono">
+              {ARROW[delta.direction]}
+              {delta.value}
+            </SignalChip>
           </span>
         )}
       </div>
       {sublabel && (
-        <div className="text-2xs text-fg-faint mt-0.5 truncate">{sublabel}</div>
+        <InlineProof className="mt-0.5 truncate border-0 bg-transparent px-0 py-0">
+          {sublabel}
+        </InlineProof>
       )}
       {showSpark && (
         <div className="-mx-1 mt-1.5" aria-hidden={seriesAriaLabel ? undefined : true}>
@@ -551,18 +553,18 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
           })}
         </div>
       </div>
-      <div className="flex justify-between text-3xs text-fg-faint font-mono mt-1 pl-5">
+      <InlineProof className="flex justify-between font-mono tabular-nums border-0 bg-transparent px-0 py-0 mt-1 pl-5 text-3xs">
         <span>{shortDay(data[0]?.day ?? '')}</span>
         <span className="text-fg-faint/70">reports per day</span>
         <span>{shortDay(data[data.length - 1]?.day ?? '')}</span>
-      </div>
-      <div className="flex flex-wrap gap-2 mt-2 text-3xs text-fg-muted">
-        <LegendDot color="bg-danger" label="Critical" />
-        <LegendDot color="bg-warn" label="High" />
-        <LegendDot color="bg-info" label="Medium" />
-        <LegendDot color="bg-ok" label="Low" />
+      </InlineProof>
+      <div className="flex flex-wrap gap-2 mt-2">
+        <SignalChip tone="danger">Critical</SignalChip>
+        <SignalChip tone="warn">High</SignalChip>
+        <SignalChip tone="info">Medium</SignalChip>
+        <SignalChip tone="ok">Low</SignalChip>
         {data.some((d) => d.unscored != null) && (
-          <LegendDot color="bg-fg-faint/40" label="Unscored" />
+          <SignalChip tone="neutral">Unscored</SignalChip>
         )}
       </div>
     </div>

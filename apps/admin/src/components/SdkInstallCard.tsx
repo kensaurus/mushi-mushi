@@ -31,6 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CopyButton } from './ui'
+import { ContainedBlock, InlineProof } from './report-detail/ReportSurface'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
@@ -231,12 +232,14 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
       {!compact && (
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>
-          <p className="text-xs text-fg-muted mt-1">
-            Tune the widget on the left, watch the snippet on the right update in real time, then copy it
-            into your app. Your project ID is pre-filled; replace
-            <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
-            with an API key (generate one in Projects).
-          </p>
+          <ContainedBlock tone="muted" className="mt-2">
+            <p className="text-xs text-fg-muted">
+              Tune the widget on the left, watch the snippet on the right update in real time, then copy it
+              into your app. Your project ID is pre-filled; replace
+              <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
+              with an API key (generate one in Projects).
+            </p>
+          </ContainedBlock>
         </div>
       )}
 
@@ -261,9 +264,9 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
 
           <ConfiguratorPanel config={config} enabled={enabled} framework={framework} onEnabledChange={setEnabled} onChange={setConfig} />
           <div className="flex items-center justify-between gap-2">
-            <p className="text-2xs text-fg-faint">
+            <InlineProof className="flex-1 border-0 bg-transparent px-0 py-0">
               {loadingConfig ? 'Loading saved config…' : saveMessage ?? 'Saved config is served to SDKs at startup.'}
-            </p>
+            </InlineProof>
             <button
               type="button"
               onClick={saveConfig}

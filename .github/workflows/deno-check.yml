@@ -67,19 +67,32 @@ jobs:
           deno-version: "~2.3"
 
       # Cache Deno deps (esm.sh + npm specifiers resolved at check time)
+      # node_modules is also cached: Deno 2.x materialises npm: specifier types
+      # into a local node_modules directory (--node-modules-dir) rather than the
+      # global DENO_DIR cache, so we restore it as part of the same key.
       - name: Cache Deno deps
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
-          path: ~/.cache/deno
+          path: |
+            ~/.cache/deno
+            packages/server/supabase/functions/node_modules
           key: deno-${{ runner.os }}-${{ hashFiles('packages/server/supabase/functions/**/*.ts', 'packages/server/supabase/functions/import_map.json') }}
           restore-keys: |
             deno-${{ runner.os }}-
+
+      # Resolve npm: specifiers (e.g. npm:@supabase/supabase-js@2) by creating a
+      # local node_modules directory.  Without this, `deno check` fails with
+      # "Could not find X in a node_modules folder" on a fresh checkout.
+      - name: Install npm specifiers
+        working-directory: packages/server/supabase/functions
+        run: deno install --node-modules-dir --allow-scripts --no-check --no-lock
 
       - name: Type-check _shared/
         working-directory: packages/server/supabase/functions
         run: |
           deno check \
             --no-lock \
+            --node-modules-dir \
             $(ls _shared/*.ts | grep -v '\.README\.ts' | tr '\n' ' ')
 
       - name: Type-check all function entry points
@@ -91,7 +104,7 @@ jobs:
           echo ""
           for f in $FUNCTIONS; do
             echo "--- deno check $f ---"
-            deno check --no-lock "$f"
+            deno check --no-lock --node-modules-dir "$f"
           done
 
       - name: Summary

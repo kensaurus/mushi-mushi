@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -29,6 +29,13 @@ import {
   RecommendedAction,
   RelativeTime,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { IterateStatusBanner } from '../components/iterate/IterateStatusBanner'
@@ -301,10 +308,6 @@ export function IteratePage() {
       <PageHeader
         title={copy?.title ?? 'Iterate'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops.'
-        }
         contextChip={<PdcaContextHint stage="act" />}
       >
         {!ux.hideOverviewChrome && (
@@ -341,6 +344,13 @@ export function IteratePage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops.'}
+        </p>
+      </ContainedBlock>
+
       <IterateStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -364,7 +374,9 @@ export function IteratePage() {
         title={copy?.sections?.snapshot ?? 'PDCA SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.total ?? 'Total runs'} value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} tooltip={totalRunsTooltip(stats)} detail={totalRunsDetail()} to={iterateLinks.total} />
           <StatCard
@@ -399,7 +411,7 @@ export function IteratePage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'last_failed'
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'active_runs'
@@ -407,12 +419,25 @@ export function IteratePage() {
                 : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'last_failed'
+                ? 'danger'
+                : stats.topPriority === 'active_runs'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.topPriority === 'last_failed' ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -468,41 +493,63 @@ export function IteratePage() {
               )}
 
               <div className="grid gap-3 sm:grid-cols-3">
-                <Card className="p-3 border-edge">
-                  <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Queued</p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums text-fg-primary">{stats.queued}</p>
-                  <p className="text-2xs text-fg-muted">Needs manual Trigger on Runs tab</p>
+                <Card className="space-y-2 border-edge p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Queued</p>
+                    <SignalChip tone={stats.queued > 0 ? 'warn' : 'neutral'}>
+                      {stats.queued > 0 ? 'Needs trigger' : 'Clear'}
+                    </SignalChip>
+                  </div>
+                  <p className="text-lg font-semibold tabular-nums text-fg-primary">{stats.queued}</p>
+                  <InlineProof>Needs manual Trigger on Runs tab</InlineProof>
                 </Card>
-                <Card className="p-3 border-edge">
-                  <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Running</p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums text-warn">{stats.running}</p>
-                  <p className="text-2xs text-fg-muted">Producer → critic loop active</p>
+                <Card className="space-y-2 border-edge p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Running</p>
+                    <SignalChip
+                      tone={stats.running > 0 ? 'brand' : 'neutral'}
+                      className={stats.running > 0 ? 'motion-safe:animate-pulse' : undefined}
+                    >
+                      {stats.running > 0 ? 'In flight' : 'Idle'}
+                    </SignalChip>
+                  </div>
+                  <p className="text-lg font-semibold tabular-nums text-warn">{stats.running}</p>
+                  <InlineProof>Producer → critic loop active</InlineProof>
                 </Card>
-                <Card className="p-3 border-edge">
-                  <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Aborted</p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums text-fg-muted">{stats.aborted}</p>
-                  <p className="text-2xs text-fg-muted">Stopped before completion</p>
+                <Card className="space-y-2 border-edge p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Aborted</p>
+                    <SignalChip tone={stats.aborted > 0 ? 'warn' : 'neutral'}>
+                      {stats.aborted > 0 ? 'Stopped' : 'None'}
+                    </SignalChip>
+                  </div>
+                  <p className="text-lg font-semibold tabular-nums text-fg-muted">{stats.aborted}</p>
+                  <InlineProof>Stopped before completion</InlineProof>
                 </Card>
               </div>
 
               {stats.lastRunAt && (
-                <p className="text-2xs text-fg-muted">
-                  Last run queued <RelativeTime value={stats.lastRunAt} />
-                  {stats.daysSinceLastRun != null && stats.daysSinceLastRun > 0
-                    ? ` (${stats.daysSinceLastRun}d ago)`
-                    : null}
-                </p>
+                <ContainedBlock tone="muted">
+                  <p className="text-2xs leading-relaxed text-fg-muted">
+                    Last run queued <RelativeTime value={stats.lastRunAt} />
+                    {stats.daysSinceLastRun != null && stats.daysSinceLastRun > 0
+                      ? ` (${stats.daysSinceLastRun}d ago)`
+                      : null}
+                  </p>
+                </ContainedBlock>
               )}
               {stats.lastFailedUrl && (
-                <p className="text-2xs text-danger truncate" title={stats.lastFailedUrl}>
-                  Latest failure: {stats.lastFailedUrl}
-                  {stats.lastFailedAt ? (
-                    <>
-                      {' '}
-                      · <RelativeTime value={stats.lastFailedAt} />
-                    </>
-                  ) : null}
-                </p>
+                <ContainedBlock tone="warn">
+                  <p className="truncate text-2xs leading-relaxed text-danger" title={stats.lastFailedUrl}>
+                    Latest failure: {stats.lastFailedUrl}
+                    {stats.lastFailedAt ? (
+                      <>
+                        {' '}
+                        · <RelativeTime value={stats.lastFailedAt} />
+                      </>
+                    ) : null}
+                  </p>
+                </ContainedBlock>
               )}
             </div>
           )}
