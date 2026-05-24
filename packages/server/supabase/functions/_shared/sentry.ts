@@ -74,7 +74,7 @@ export function reportMessage(
 /**
  * Drop-in handler for `app.onError(sentryHonoErrorHandler)` on a Hono app.
  *
- * Sentry MUSHI-MUSHI-SERVER-H story so far:
+ * Sentry MUSHI-MUSHI-SERVER-H / -P story so far:
  *   - 2026-04-23: First seen. RangeError "status (0) is not equal to 101 and
  *     outside [200, 599]" thrown by Deno's `new Response()` when Hono's
  *     `Context.set res` tried to clone a Response whose `status === 0`.
@@ -84,8 +84,8 @@ export function reportMessage(
  *   - 2026-04-24 (commit e218bbf): Added diagnostic tagging
  *     (`range_error_status_0=true`) so we could see which routes were
  *     affected, but kept reporting as a Sentry error.
- *   - 2026-04-29 (this fix): With the diagnostic data in hand, we can confirm
- *     there is NO app-code Response with status 0 anywhere in the codebase
+ *   - 2026-04-29: With the diagnostic data in hand, confirmed there is NO
+ *     app-code Response with status 0 anywhere in the codebase
  *     (grep'd `c.json(.*,\s*0)`, `status:\s*0`, `Response.error()`). The
  *     recurring path is the documented Deno/Supabase Edge Runtime quirk where
  *     a client disconnect mid-response surfaces inside Hono as a status-0
@@ -93,13 +93,20 @@ export function reportMessage(
  *       - https://stackoverflow.com/questions/77097886 (Deno aborts)
  *       - github.com/denoland/deno/issues/28632
  *       - github.com/supabase/supabase/issues/39287
- *     So this is a CLIENT-side disconnection event, not a server bug. Treat
- *     it accordingly: tag it, count it via `reportMessage(... 'warning')` so
- *     we still see the volume in Sentry's Issues list, but DON'T capture as
- *     an exception (which spawns a recurring P-issue, pages on-call, and
- *     skews error budgets). The user-facing response is still 499 Client
- *     Closed Request — semantically accurate per Nginx convention; the
- *     browser already disconnected so no one will see it anyway.
+ *     So this is a CLIENT-side disconnection event, not a server bug. The
+ *     handler was downgraded to `reportMessage(... 'warning')` on the
+ *     mistaken assumption that warning-level messages would not surface as
+ *     Issues. They do — per the Sentry JS SDK docs, every `captureMessage`
+ *     call creates an issue regardless of severity; level only affects
+ *     alert rules and priority. Sentry MUSHI-MUSHI-SERVER-P kept regressing
+ *     because of this, accumulating 9 events on the same client-abort path.
+ *   - 2026-05-24 (this fix): Stop calling `captureMessage` for client
+ *     aborts entirely. Volume tracking moves to `console.warn` with a
+ *     structured JSON payload — Supabase Logs aggregates these and the
+ *     `client_abort=true` field is queryable from the Logs Explorer
+ *     (`metadata.parsed.client_abort=true`). The Sentry side stays clean
+ *     for actual server bugs, and the 499 response is unchanged so any
+ *     proxy/CDN telemetry that pivots on status code keeps working.
  *
  * Anything else (real RangeErrors, TypeErrors, network failures from the
  * server-side, etc.) is still reported as a normal Sentry exception.
@@ -109,25 +116,30 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
     err instanceof RangeError && /status.*\(0\)|status.+not equal to 101/i.test(err.message)
 
   if (isRangeStatusZero) {
-    // Client disconnect — log as warning (visible in Sentry's "Issues" tab as
-    // a low-priority warning, not a P-issue) and return 499. Keep the route
-    // tag so we can still spot a real upstream regression if the count
-    // suddenly spikes on a new path.
-    reportMessage('client_aborted_response', 'warning', {
-      tags: {
+    // Structured warning to Supabase Logs only — no Sentry capture. Query
+    // volume in production via:
+    //   logs explorer → filter `metadata.parsed.event="client_aborted_response"`
+    // If that volume ever spikes on a NEW path/method, that's the operator's
+    // cue to investigate (probably means a regression elsewhere is causing
+    // long-running responses that legitimate clients now abort).
+    console.warn(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'warn',
+        scope: 'mushi:sentry-hono-handler',
+        event: 'client_aborted_response',
+        msg: 'client disconnected before response could be written',
         path: c.req.path,
         method: c.req.method,
-        client_abort: 'true',
-        range_error_status_0: 'true',
-      },
-      extra: {
+        client_abort: true,
+        range_error_status_0: true,
         cause:
           err.cause !== undefined
             ? String((err.cause as { message?: string }).message ?? err.cause).slice(0, 500)
             : null,
         message: err.message,
-      },
-    })
+      }),
+    )
     return c.json(
       {
         error: 'client_closed_request',

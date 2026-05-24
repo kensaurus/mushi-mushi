@@ -21,6 +21,7 @@ import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 
 ensureSentry('webhooks-github-indexer');
 
@@ -822,12 +823,28 @@ async function handleSweep(
         );
         if (stats.inserted === 0 && stats.failed > 0) {
           const msg = stats.lastError ?? 'all chunk embeddings failed';
-          log.error('sweep: repo index failed', {
-            repo: repo.repo_url,
-            error: msg,
-            failed: stats.failed,
-            skipped: stats.skipped,
-          });
+          const kind = classifyIndexerError(msg);
+          // Auth / permission / transient errors are operator-config or
+          // upstream issues — surface via `last_index_error` (admin UI
+          // shows it) and a structured `log.warn` so we don't generate a
+          // recurring Sentry Issue (regression history: MUSHI-MUSHI-SERVER-B).
+          if (kind === 'unknown') {
+            log.error('sweep: repo index failed', {
+              repo: repo.repo_url,
+              error: msg,
+              failed: stats.failed,
+              skipped: stats.skipped,
+              kind,
+            });
+          } else {
+            log.warn('sweep: repo index skipped', {
+              repo: repo.repo_url,
+              error: msg,
+              failed: stats.failed,
+              skipped: stats.skipped,
+              kind,
+            });
+          }
           await db
             .from('project_repos')
             .update({
@@ -835,7 +852,7 @@ async function handleSweep(
               last_index_error: msg.slice(0, 500),
             })
             .eq('id', repo.id);
-          summary.push({ repo: repo.repo_url, ok: false, error: msg, ...stats });
+          summary.push({ repo: repo.repo_url, ok: false, error: msg, kind, ...stats });
         } else {
           await db
             .from('project_repos')
@@ -852,7 +869,14 @@ async function handleSweep(
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg });
+        const kind = classifyIndexerError(err);
+        // See classifyIndexerError docblock for routing rationale (Sentry
+        // MUSHI-MUSHI-SERVER-B regression history).
+        if (kind === 'unknown') {
+          log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg, kind });
+        } else {
+          log.warn('sweep: repo index skipped', { repo: repo.repo_url, error: msg, kind });
+        }
         await db
           .from('project_repos')
           .update({
@@ -860,7 +884,7 @@ async function handleSweep(
             last_index_error: msg.slice(0, 500),
           })
           .eq('id', repo.id);
-        summary.push({ repo: repo.repo_url, ok: false, error: msg });
+        summary.push({ repo: repo.repo_url, ok: false, error: msg, kind });
       }
     }
     return summary;
