@@ -252,23 +252,41 @@ async function runBrowserbase(story: QaStory, apiKey: string): Promise<RunResult
 // ── Main handler ──────────────────────────────────────────────────────────
 Deno.serve(
   withSentry('qa-story-runner', async (req: Request) => {
-    requireServiceRoleAuth(req)
-    const { cronRunId, finish } = await startCronRun('qa-story-runner')
-    rlog.info({ cronRunId }, 'qa-story-runner invoked')
+    const unauthorized = requireServiceRoleAuth(req)
+    if (unauthorized) return unauthorized
 
     const db = getServiceClient()
     const now = new Date()
 
+    // 2026-05-24: previous code called `startCronRun('qa-story-runner')` —
+    // missing the `db` first argument and destructuring `cronRunId` instead
+    // of the actual `runId`/`finish`/`fail` shape the helper exposes. That
+    // crashed the isolate at runtime ("'qa-story-runner'.from is not a
+    // function") and the platform served 500s. The previously-deployed
+    // version (v19) predated this bug, which is why the redeploy from the
+    // Sentry-fix sweep was the first time the cron path actually executed
+    // it. Pinning the call to the helper's real signature.
+    const cronRun = await startCronRun(db, 'qa-story-runner', 'cron')
+    rlog.info({ jobName: 'qa-story-runner' }, 'qa-story-runner invoked')
+
     try {
-      // Fetch all enabled stories with their project base URL
+      // Fetch all enabled stories. The previous select embedded
+      // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
+      // which referenced a non-existent `projects → mushi_runtime_config`
+      // foreign key (PostgREST returned PGRST200 → 500). The embedded
+      // base_url was never read either — the per-run baseUrl falls through
+      // to `Deno.env.get('DEFAULT_BASE_URL')` below — so the safest fix is
+      // to drop the broken embed entirely. If we ever surface a per-project
+      // base URL again, plumb it through `project_settings` (which already
+      // has a real FK from `projects.id`).
       const { data: stories, error: storiesErr } = await db
         .from('qa_stories')
-        .select('*, projects!inner(id, base_url:mushi_runtime_config!inner(config))')
+        .select('*')
         .eq('enabled', true)
 
       if (storiesErr) {
         rlog.error({ err: storiesErr }, 'Failed to fetch qa_stories')
-        await finish('error', { message: storiesErr.message })
+        await cronRun.fail(new Error(storiesErr.message))
         return new Response('Internal error', { status: 500 })
       }
 
@@ -395,13 +413,16 @@ Deno.serve(
         rlog.info({ storyId: story.id, runId, status: result.status }, 'story run complete')
       }
 
-      await finish('ok', { due: dueStories.length })
+      await cronRun.finish({
+        rowsAffected: dueStories.length,
+        metadata: { total: stories?.length ?? 0, due: dueStories.length },
+      })
       return new Response(JSON.stringify({ ok: true, due: dueStories.length }), {
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (err) {
       rlog.error({ err }, 'qa-story-runner fatal error')
-      await finish('error', { message: err instanceof Error ? err.message : String(err) })
+      await cronRun.fail(err)
       return new Response('Internal error', { status: 500 })
     }
   }),
