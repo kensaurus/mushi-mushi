@@ -230,6 +230,7 @@ export default function AppDetailClient() {
           <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
           <a href="/mushi-mushi/testers/apps/" className="hover:text-gray-300">Browse apps</a> ·{' '}
           <a href="/mushi-mushi/testers/how-it-works/" className="hover:text-gray-300">How it works</a> ·{' '}
+          <a href="/mushi-mushi/testers/leaderboard/" className="hover:text-gray-300">Leaderboard</a> ·{' '}
           Gift cards powered by Tremendous · $599/yr cap before KYC
         </p>
       </footer>

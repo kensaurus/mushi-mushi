@@ -141,7 +141,7 @@ export default async function MarketplacePage() {
             {apps.map(app => (
               <a
                 key={app.id}
-                href={`${adminUrl}/login?as=tester&next=/tester/apps`}
+                href={`/mushi-mushi/testers/apps/${app.slug}/`}
                 className="flex gap-4 rounded-xl border border-white/10 bg-white/5 p-5 hover:border-violet-500/50 hover:bg-white/8 transition-all group"
               >
                 <div className="h-14 w-14 shrink-0 rounded-xl bg-gray-800 flex items-center justify-center text-2xl">
