@@ -21,6 +21,8 @@ import { canUsePasskeys } from '../lib/passkeys'
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
 type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
 type SuccessState = null | 'signup-confirm' | 'reset-sent' | 'magic-sent'
+/** Which portal flow led the user to this login page. */
+type LoginTrack = 'tester' | 'console'
 
 const cloud = isCloudMode()
 
@@ -63,7 +65,7 @@ export function LoginPage() {
   const [health, setHealth] = useState<HealthStatus>(cloud ? 'ok' : 'checking')
   const [passkeyAvailable, setPasskeyAvailable] = useState(false)
   // Detect ?as=tester URL param (linked from marketplace "Join to test" CTA)
-  const [track, setTrack] = useState<LoginTrack>(initialTrack)
+  const [track] = useState<LoginTrack>(initialTrack)
 
   const supabaseHost = getSupabaseHost()
   const defaultNextPath = track === 'tester' ? '/tester' : '/dashboard'
@@ -134,7 +136,8 @@ export function LoginPage() {
           setSuccess('reset-sent')
         }
       } else if (mode === 'magic' || track === 'tester') {
-        const magicFn = track === 'tester' ? signInAsTester : signInWithMagicLink
+        // Both tracks use magic-link; the post-auth redirect is driven by `nextPath`.
+        const magicFn = signInWithMagicLink
         const result = await magicFn(email)
         if (result.error) {
           setError(classifyAuthError(result.error))

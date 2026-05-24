@@ -33,11 +33,11 @@ const STATUS_CONFIG = {
 
 type ReviewAction = 'accept' | 'informative' | 'duplicate' | 'spam'
 
-const ACTIONS: Array<{ action: ReviewAction; label: string; variant: 'primary' | 'secondary' | 'ghost'; description: string }> = [
+const ACTIONS: Array<{ action: ReviewAction; label: string; variant: 'primary' | 'success' | 'ghost' | 'danger'; description: string }> = [
   { action: 'accept',      label: '✓ Accept',      variant: 'primary',   description: 'Full bounty awarded, +7 rep' },
-  { action: 'informative', label: 'Informative',   variant: 'secondary', description: '50% bounty, +0 rep' },
+  { action: 'informative', label: 'Informative',   variant: 'ghost',     description: '50% bounty, +0 rep' },
   { action: 'duplicate',   label: 'Duplicate',     variant: 'ghost',     description: 'No points, +2 rep' },
-  { action: 'spam',        label: '✗ Spam',         variant: 'ghost',     description: 'No points, −10 rep' },
+  { action: 'spam',        label: '✗ Spam',         variant: 'danger',    description: 'No points, −10 rep' },
 ]
 
 const REVIEW_SUCCESS_LABEL: Record<ReviewAction, string> = {

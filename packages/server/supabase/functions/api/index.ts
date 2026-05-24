@@ -25,6 +25,8 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
+import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 
 ensureSentry('api');
 
@@ -394,6 +396,9 @@ registerInventoryRoutes(app);
 registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
+
+registerTesterMarketplaceRoutes(app);
+registerPublishedAppsRoutes(app);
 
 registerA2ATaskRoutes(app);
 

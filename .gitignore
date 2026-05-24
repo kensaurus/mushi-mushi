@@ -53,6 +53,13 @@ packages/server/.env.local
 secrets/
 **/credentials.json
 **/service-account*.json
+# Cached Supabase auth sessions used by local QA scripts. The `tester-session`
+# variant in particular contains a real JWT + refresh token for the e2e tester
+# user and was once written into apps/admin/public/ where Vite would have
+# served it as a public asset. Block every variant so it cannot recur.
+**/tester-session.json
+**/admin-session.json
+**/playwright-session.json
 
 # --- Supabase local state ----------------------------------------------------
 **/supabase/.temp/

@@ -193,7 +193,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
 
-    if (!tester) return c.json({ isTester: false, handle: null, reputation: 0, balance: 0, totalEarned: 0, totalRedeemed: 0, acceptedSubmissions: 0, joinedApps: 0 })
+    if (!tester) return c.json({ ok: true, data: { isTester: false, handle: null, reputation: 0, balance: 0, totalEarned: 0, totalRedeemed: 0, acceptedSubmissions: 0, joinedApps: 0 } })
 
     const [{ data: testerRow }, { data: balance }, { data: rep }, { count: joinedApps }, { count: acceptedSubs }] = await Promise.all([
       supabase.from('mushi_testers').select('public_handle, display_name').eq('id', tester.id).single(),
@@ -206,16 +206,16 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     const totalEarned = balance?.total_points_lifetime ?? 0
     const currentPts = balance?.current_points ?? 0
 
-    return c.json({
+    return c.json({ ok: true, data: {
       isTester: true,
       handle: testerRow?.public_handle ?? testerRow?.display_name ?? null,
       reputation: rep?.score ?? 0,
       balance: currentPts,
       totalEarned,
-      totalRedeemed: totalEarned - currentPts,
+      totalRedeemed: Math.max(0, totalEarned - currentPts),
       acceptedSubmissions: acceptedSubs ?? 0,
       joinedApps: joinedApps ?? 0,
-    })
+    } })
   })
 
   // GET /v1/tester/me — camelCase response consumed by TesterSettingsPage
@@ -243,7 +243,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
         .single(),
     ])
 
-    return c.json({
+    return c.json({ ok: true, data: {
       handle: testerRow?.public_handle ?? testerRow?.display_name ?? null,
       bio: profile?.bio ?? null,
       expertiseTags: profile?.expertise_tags ?? [],
@@ -252,7 +252,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       kycClearedAt: kyc?.tax_form_collected_at ?? null,
       privacyPublicHandle: true,
       privacyPublicLeaderboard: testerRow?.public_leaderboard ?? true,
-    })
+    } })
   })
 
   // PUT /v1/tester/me — update profile (handle, bio, expertise_tags, country, privacy flags)
@@ -291,30 +291,119 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    const [{ data: balance }, { data: kyc }, { data: ledger }] = await Promise.all([
+    const [
+      { data: balance },
+      { data: kyc },
+      { data: ledger },
+      { data: ytdRows },
+      { data: pendingRows },
+      { data: tremendousEtaRows },
+    ] = await Promise.all([
       supabase.from('tester_balances').select('current_points, total_points_lifetime').eq('tester_id', tester.id).single(),
-      supabase.from('tester_kyc').select('withholding_status, ytd_gift_card_usd, tax_form_collected_at').eq('tester_id', tester.id).single(),
+      supabase.from('tester_kyc').select('withholding_status, tax_form_collected_at').eq('tester_id', tester.id).single(),
       supabase.from('tester_credit_ledger').select('id, delta_points, reason, created_at').eq('tester_id', tester.id).order('created_at', { ascending: false }).limit(20),
+      // YTD gift-card USD (same logic as the redeem gate — cannot diverge)
+      supabase.from('tester_redemptions')
+        .select('face_value_usd')
+        .eq('tester_id', tester.id)
+        .eq('kind', 'gift_card')
+        .in('status', ['complete', 'processing', 'pending'])
+        .gte('requested_at', `${new Date().getFullYear()}-01-01`),
+      // Pending and processing redemptions for in-flight display
+      supabase.from('tester_redemptions')
+        .select('id, kind, points_spent, face_value_usd, status, requested_at, processed_at')
+        .eq('tester_id', tester.id)
+        .in('status', ['pending', 'processing'])
+        .order('requested_at', { ascending: false })
+        .limit(10),
+      // Compute mean gift-card fulfillment latency from recent Tremendous orders
+      supabase.from('tremendous_orders')
+        .select('created_at, last_synced_at')
+        .eq('status', 'complete')
+        .not('last_synced_at', 'is', null)
+        .order('last_synced_at', { ascending: false })
+        .limit(20),
     ])
 
-    const ytdUsd = kyc?.ytd_gift_card_usd ?? 0
+    const ytdUsd = (ytdRows ?? []).reduce((acc, r) => acc + (r.face_value_usd ?? 0), 0)
     const kycStatus = kyc?.withholding_status ?? 'none'
+
+    // Derive median gift-card ETA in hours from completed Tremendous orders
+    let nextRedemptionEtaHours: number | null = null
+    if (tremendousEtaRows && tremendousEtaRows.length >= 3) {
+      const latencies = tremendousEtaRows
+        .filter(o => o.last_synced_at && o.created_at)
+        .map(o => (new Date(o.last_synced_at!).getTime() - new Date(o.created_at).getTime()) / 3_600_000)
+      if (latencies.length > 0) {
+        latencies.sort((a, b) => a - b)
+        const mid = Math.floor(latencies.length / 2)
+        const median = latencies.length % 2 === 0
+          ? (latencies[mid - 1] + latencies[mid]) / 2
+          : latencies[mid]
+        nextRedemptionEtaHours = Math.round(Math.max(1, median))
+      }
+    }
+
     const catalog: unknown[] = [
-      { id: 'pro-1000', name: 'Mushi Pro credit — $13', description: 'Apply 1,000 mushi-points toward your Mushi Pro subscription (1.3× premium).', pointsCost: 1000, valueUsd: 13, category: 'pro', icon: '🚀', isAvailable: true },
-      { id: 'gc-amazon-10', name: 'Amazon gift card — $10', description: '$10 Amazon.com gift card. Taxable at fair market value.', pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '🛍️', isAvailable: kycStatus !== 'rejected', unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined },
-      { id: 'gc-starbucks-10', name: 'Starbucks gift card — $10', description: '$10 Starbucks eGift card.', pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '☕', isAvailable: kycStatus !== 'rejected', unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined },
-      { id: 'gc-appstore-10', name: 'App Store gift card — $10', description: '$10 Apple App Store & iTunes gift card.', pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '🍎', isAvailable: kycStatus !== 'rejected', unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined },
+      {
+        id: 'pro-1000', name: 'Mushi Pro credit — $13',
+        description: 'Apply 1,000 mushi-points toward your Mushi Pro subscription (1.3× premium).',
+        pointsCost: 1000, valueUsd: 13, category: 'pro', icon: '🚀',
+        isAvailable: true, etaHours: null,
+        conversionPreview: '1,000 pts × 1.3× = $13.00 Mushi Pro credit · arrives within 60s',
+      },
+      {
+        id: 'gc-amazon-10', name: 'Amazon gift card — $10',
+        description: '$10 Amazon.com gift card. Taxable at fair market value.',
+        pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '🛍️',
+        isAvailable: kycStatus !== 'rejected',
+        unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined,
+        etaHours: nextRedemptionEtaHours,
+        conversionPreview: `1,000 pts × 1.0× = $10 Amazon eGift · email arrives within ${nextRedemptionEtaHours ?? 24}h`,
+      },
+      {
+        id: 'gc-starbucks-10', name: 'Starbucks gift card — $10',
+        description: '$10 Starbucks eGift card.',
+        pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '☕',
+        isAvailable: kycStatus !== 'rejected',
+        unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined,
+        etaHours: nextRedemptionEtaHours,
+        conversionPreview: `1,000 pts × 1.0× = $10 Starbucks eGift · email arrives within ${nextRedemptionEtaHours ?? 24}h`,
+      },
+      {
+        id: 'gc-appstore-10', name: 'App Store gift card — $10',
+        description: '$10 Apple App Store & iTunes gift card.',
+        pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '🍎',
+        isAvailable: kycStatus !== 'rejected',
+        unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined,
+        etaHours: nextRedemptionEtaHours,
+        conversionPreview: `1,000 pts × 1.0× = $10 App Store eGift · email arrives within ${nextRedemptionEtaHours ?? 24}h`,
+      },
     ]
 
     const walletCurrentPts = balance?.current_points ?? 0
     const walletTotalEarned = balance?.total_points_lifetime ?? 0
-    return c.json({
+    return c.json({ ok: true, data: {
       balance: walletCurrentPts,
       totalEarned: walletTotalEarned,
       totalRedeemed: walletTotalEarned - walletCurrentPts,
       ytdGiftCardUsd: ytdUsd,
+      // KYC thresholds exposed so the FE never hardcodes them
+      kycThresholdUsd: 400,
+      kycCapUsd: 599,
       kycRequired: ytdUsd >= 400,
       kycCleared: kycStatus === 'cleared',
+      nextRedemptionEtaHours,
+      // In-flight redemptions the tester can track
+      pendingRedemptions: (pendingRows ?? []).map(r => ({
+        id: r.id,
+        kind: r.kind,
+        pointsSpent: r.points_spent,
+        faceValueUsd: r.face_value_usd ?? null,
+        status: r.status,
+        requestedAt: r.requested_at,
+        processedAt: r.processed_at ?? null,
+      })),
       recentLedger: (ledger ?? []).map(e => ({
         id: e.id,
         type: (e.delta_points > 0 ? 'credit' : 'debit') as 'credit' | 'debit',
@@ -323,7 +412,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
         createdAt: e.created_at,
       })),
       catalog,
-    })
+    } })
   })
 
   // PUT /v1/tester/kyc — KYC metadata submission (Wave 9)
@@ -386,7 +475,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
     const { data: exportData } = await supabase.rpc('export_tester_data', { p_tester_id: tester.id })
-    return c.json(exportData ?? {})
+    return c.json({ ok: true, data: exportData ?? {} })
   })
 
   // POST /v1/tester/delete — GDPR right-to-erasure
@@ -400,49 +489,65 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     return c.json({ ok: true })
   })
 
-  // GET /v1/tester/apps — all public apps + tester's join status
+  // GET /v1/tester/apps — all public apps + per-app enrichment via get_tester_apps_enriched()
+  // The RPC aggregates bounty schedule, 30d activity signals, tester-personal stats,
+  // and fit flags in a single round trip (replaces the prior N+1 approach).
   app.get('/v1/tester/apps', jwtAuth, async (c) => {
     const authUserId = c.get('userId') as string
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    const [{ data: apps }, { data: subs }] = await Promise.all([
-      supabase
-        .from('published_apps')
-        .select(`
-          id, slug, name, tagline, hero_url, platforms, published_at,
-          targeting:published_app_targeting (reputation_min, target_countries, max_testers),
-          bounties:published_app_bounties (action, points_per_event, enabled)
-        `)
-        .eq('visibility', 'public')
-        .order('published_at', { ascending: false }),
-      supabase
-        .from('tester_app_subscriptions')
-        .select('app_id')
-        .eq('tester_id', tester.id)
-        .eq('status', 'active'),
-    ])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase RPC returns opaque jsonb
+    const { data: raw, error } = await (supabase as any).rpc('get_tester_apps_enriched', { p_tester_id: tester.id })
+    if (error) {
+      rlog.error('get_tester_apps_enriched RPC failed', { error: error.message })
+      return c.json({ error: error.message }, 500)
+    }
 
-    const joinedIds = new Set((subs ?? []).map(s => s.app_id))
-    const rep = tester as { id: string; country_code: string | null }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const apps: any[] = Array.isArray(raw) ? raw : []
 
-    return c.json((apps ?? []).map(app => ({
+    return c.json({ ok: true, data: apps.map(app => ({
       id: app.id,
-      projectId: app.slug,
+      slug: app.slug,
       name: app.name,
       tagline: app.tagline,
-      description: null,
-      logoUrl: app.hero_url,
+      description: app.description ?? null,
+      heroUrl: app.hero_url ?? null,
+      screenshotsUrls: app.screenshots_urls ?? [],
       platforms: app.platforms ?? [],
-      baseBountyPoints: (app.bounties as unknown as Array<{ action: string; points_per_event: number; enabled: boolean }> | null)
-        ?.find(b => b.action === 'bug_accept' && b.enabled)?.points_per_event ?? 50,
-      reputationMin: (app.targeting as unknown as { reputation_min: number } | null)?.reputation_min ?? 0,
-      targetCountries: (app.targeting as unknown as { target_countries: string[] | null } | null)?.target_countries ?? null,
+      webUrl: app.web_url ?? null,
+      appStoreUrl: app.app_store_url ?? null,
+      playStoreUrl: app.play_store_url ?? null,
       publishedAt: app.published_at,
-      isJoined: joinedIds.has(app.id),
-      openSlots: (app.targeting as unknown as { max_testers: number | null } | null)?.max_testers ?? null,
-    })))
+      // bounty info
+      maxBountyPoints: app.max_bounty_points ?? 0,
+      bountySchedule: app.bounty_schedule ?? [],
+      // targeting
+      reputationMin: app.reputation_min ?? 0,
+      targetCountries: app.country_codes?.length > 0 ? app.country_codes : null,
+      languages: app.languages ?? [],
+      expertiseTags: app.expertise_tags ?? [],
+      // subscription
+      joined: app.joined ?? false,
+      joinedAt: app.joined_at ?? null,
+      // activity signals
+      accepted30d: app.accepted_30d ?? 0,
+      submitted30d: app.submitted_30d ?? 0,
+      acceptRate30d: app.submitted_30d > 0
+        ? Math.round((app.accepted_30d / app.submitted_30d) * 100)
+        : null,
+      lastAcceptedAt: app.last_accepted_at ?? null,
+      avgResponseHours: app.avg_response_hours ?? null,
+      // tester personal stats
+      mySubmissions: app.my_submissions ?? 0,
+      myAccepted: app.my_accepted ?? 0,
+      myPointsEarned: app.my_points_earned ?? 0,
+      // fit flag
+      meetsReputationGate: app.meets_reputation_gate ?? true,
+      myReputationScore: app.my_reputation_score ?? 0,
+    })) })
   })
 
   // GET /v1/tester/apps/:slug
@@ -497,7 +602,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       points: leaderMap.get(id) ?? 0,
     }))
 
-    return c.json({ app, subscription: sub, leaderboard })
+    return c.json({ ok: true, data: { app, subscription: sub, leaderboard } })
   })
 
   // POST /v1/tester/apps/:idOrSlug/join — accepts app UUID or slug
@@ -546,8 +651,8 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .select()
       .single()
 
-    if (error) return c.json({ error: error.message }, 500)
-    return c.json(data, 201)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({ ok: true, data: data }, 201)
   })
 
   // POST /v1/tester/apps/:slug/leave
@@ -556,7 +661,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     const authUserId = c.get('userId') as string
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
-    if (!tester) return c.json({ error: 'not_a_tester' }, 403)
+    if (!tester) return c.json({ ok: false, error: { code: 'not_a_tester' } }, 403)
 
     const { data: app } = await supabase
       .from('published_apps')
@@ -564,7 +669,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .eq('slug', slug)
       .single()
 
-    if (!app) return c.json({ error: 'app_not_found' }, 404)
+    if (!app) return c.json({ ok: false, error: { code: 'app_not_found' } }, 404)
 
     await supabase
       .from('tester_app_subscriptions')
@@ -572,7 +677,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .eq('tester_id', tester.id)
       .eq('app_id', app.id)
 
-    return c.json({ success: true })
+    return c.json({ ok: true, data: { success: true } })
   })
 
   // GET /v1/tester/submissions
@@ -604,7 +709,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       reviewedAt: s.reviewed_at ?? null,
       reviewerNote: s.reviewer_note ?? null,
     }))
-    return c.json(normalized)
+    return c.json({ ok: true, data: { items: normalized, total: count ?? 0 } })
   })
 
   // POST /v1/tester/submissions
@@ -624,7 +729,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     const description: string = (body.description ?? '') as string
     const title: string = (body.title ?? description.slice(0, 80)) as string
 
-    if (!appId && !appSlug) return c.json({ error: 'app_id or app_slug required' }, 400)
+    if (!appId && !appSlug) return c.json({ ok: false, error: { code: 'MISSING_PARAM', message: 'app_id or app_slug required' } }, 400)
     if (!description) return c.json({ error: 'description required' }, 400)
 
     // Confirm tester is subscribed to this app.
@@ -744,7 +849,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       sentry_dsn: app.sentry_dsn ? '[set]' : '[not set]',
     })
 
-    return c.json(submission, 201)
+    return c.json({ ok: true, data: submission }, 201)
   })
 
   // GET /v1/tester/wallet/catalog
@@ -771,7 +876,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       ...(Array.isArray(catalog) ? catalog : []),
     ]
 
-    return c.json(options)
+    return c.json({ ok: true, data: options })
   })
 
   // POST /v1/tester/wallet/redeem
@@ -782,16 +887,41 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
     const body = await c.req.json()
-    const { kind, points_spent, face_value_usd, sku } = body as {
-      kind: string
-      points_spent: number
-      face_value_usd?: number
-      sku?: string
+
+    // Accept either the structured form { kind, points_spent, face_value_usd, sku }
+    // OR the catalog-item form { catalogItemId } sent by TesterWalletPage.
+    // Map catalogItemId → API fields to keep the frontend simple.
+    const CATALOG_ID_MAP: Record<string, { kind: string; points_spent: number; face_value_usd?: number; sku?: string }> = {
+      'pro-1000':       { kind: 'mushi_pro_credit', points_spent: 1000 },
+      'gc-amazon-10':   { kind: 'gift_card', points_spent: 1000, face_value_usd: 10, sku: 'amazon_10' },
+      'gc-starbucks-10':{ kind: 'gift_card', points_spent: 1000, face_value_usd: 10, sku: 'starbucks_10' },
+      'gc-appstore-10': { kind: 'gift_card', points_spent: 1000, face_value_usd: 10, sku: 'appstore_10' },
     }
 
-    if (!['mushi_pro_credit', 'gift_card', 'app_slot', 'api_quota'].includes(kind)) {
-      return c.json({ error: 'invalid_kind' }, 400)
+    let { kind, points_spent, face_value_usd, sku } = body as {
+      kind?: string
+      points_spent?: number
+      face_value_usd?: number
+      sku?: string
+      catalogItemId?: string
     }
+
+    if (!kind && body.catalogItemId) {
+      const mapped = CATALOG_ID_MAP[body.catalogItemId as string]
+      if (!mapped) {
+        return c.json({ ok: false, error: { code: 'invalid_catalog_item', message: 'Unknown catalog item' } }, 400)
+      }
+      kind = mapped.kind
+      points_spent = mapped.points_spent
+      face_value_usd = mapped.face_value_usd
+      sku = mapped.sku
+    }
+
+    if (!kind || !['mushi_pro_credit', 'gift_card', 'app_slot', 'api_quota'].includes(kind)) {
+      return c.json({ ok: false, error: { code: 'invalid_kind', message: 'Invalid redemption kind' } }, 400)
+    }
+
+    const effectivePointsSpent = points_spent ?? 1000
 
     // Check balance.
     const { data: balance } = await supabase
@@ -800,8 +930,8 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .eq('tester_id', tester.id)
       .single()
 
-    if ((balance?.current_points ?? 0) < points_spent) {
-      return c.json({ error: 'insufficient_balance' }, 400)
+    if ((balance?.current_points ?? 0) < effectivePointsSpent) {
+      return c.json({ ok: false, error: { code: 'insufficient_balance', message: 'Insufficient balance' } }, 400)
     }
 
     // Gift-card specific checks.
@@ -809,7 +939,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       // OFAC / sanctions check (Wave 9 defense-in-depth).
       const giftCardSanctions = checkSanctions(tester.country_code)
       if (giftCardSanctions.blocked) {
-        return c.json({ error: 'region_not_supported', reason: giftCardSanctions.reason }, 403)
+        return c.json({ ok: false, error: { code: 'region_not_supported', message: giftCardSanctions.reason ?? 'Region not supported' } }, 403)
       }
 
       // KYC threshold ($400).
@@ -833,7 +963,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
           if (!kyc || kyc.withholding_status !== 'cleared') {
             return c.json(
-              { error: 'kyc_required', ytd_total: ytd, threshold: 400 },
+              { ok: false, error: { code: 'kyc_required', message: 'Identity verification required', ytd_total: ytd, threshold: 400 } },
               402,
             )
           }
@@ -850,7 +980,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .insert({
         tester_id: tester.id,
         kind,
-        points_spent,
+        points_spent: effectivePointsSpent,
         face_value_usd: face_value_usd ?? null,
         premium_multiplier: premiumMultiplier,
         status: 'pending',
@@ -859,12 +989,12 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .select()
       .single()
 
-    if (redErr) return c.json({ error: redErr.message }, 500)
+    if (redErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: redErr.message } }, 500)
 
     // Deduct points.
     await supabase.rpc('award_tester_points', {
       p_tester_id: tester.id,
-      p_delta_points: -points_spent,
+      p_delta_points: -effectivePointsSpent,
       p_reason: 'redemption',
       p_idempotency_key: `deduct:${idempotencyKey}`,
     })
@@ -900,13 +1030,13 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
 
         if (stripeCfg && userSubscription?.stripe_customer_id) {
           const faceValueCents = Math.round(
-            (points_spent / 100) * 100 * premiumMultiplier, // 1.3x premium
+            (effectivePointsSpent / 100) * 100 * premiumMultiplier, // 1.3x premium
           )
           await createCustomerBalanceCredit(stripeCfg, {
             customerId: userSubscription.stripe_customer_id,
             amountCents: faceValueCents,
             currency: 'usd',
-            description: `Mushi Bounties: ${points_spent.toLocaleString()} points → $${(faceValueCents / 100).toFixed(2)} Mushi Pro credit (1.3× premium)`,
+            description: `Mushi Bounties: ${effectivePointsSpent.toLocaleString()} points → $${(faceValueCents / 100).toFixed(2)} Mushi Pro credit (1.3× premium)`,
             idempotencyKey: `mbounty:credit:${redemption.id}`,
           })
         }
@@ -923,7 +1053,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
         .eq('id', redemption.id)
     }
 
-    return c.json(redemption, 202)
+    return c.json({ ok: true, data: redemption }, 202)
   })
 
   // GET /v1/tester/wallet/history
@@ -948,7 +1078,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
         .limit(20),
     ])
 
-    return c.json({ ledger: ledger ?? [], redemptions: redemptions ?? [] })
+    return c.json({ ok: true, data: { ledger: ledger ?? [], redemptions: redemptions ?? [] } })
   })
 
   // ── Dev-side reviewer actions ────────────────────────────────
@@ -1031,7 +1161,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       notes: `Reviewer action: ${action}`,
     })
 
-    return c.json({ success: true, action, points_awarded: points })
+    return c.json({ ok: true, data: { success: true, action, points_awarded: points } })
   }
 
   app.post('/v1/admin/tester-submissions/:id/accept',      jwtAuth, (c) => handleReview(c, 'accepted'))
@@ -1058,7 +1188,7 @@ export function registerTesterMarketplaceRoutes(app: Hono) {
       .order('requested_at', { ascending: false })
       .limit(50)
 
-    return c.json({ count: count ?? 0, items: data ?? [] })
+    return c.json({ ok: true, data: { count: count ?? 0, items: data ?? [] } })
   })
 
   // POST /v1/admin/tester-redemptions/:id/approve — approve a withheld redemption

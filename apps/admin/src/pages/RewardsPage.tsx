@@ -1,14 +1,15 @@
 /**
  * FILE: apps/admin/src/pages/RewardsPage.tsx
  * PURPOSE: Rewards program management — URL-driven tab layout with animated
- *   indicator covering Overview, Activity Rules, Tier Ladder, Contributors,
- *   Quests, Retention, Simulator, and Settings.
+ *   indicator covering Overview, Bounties (Marketplace Publishing), Activity
+ *   Rules, Tier Ladder, Contributors, Quests, Retention, Simulator, and Settings.
  *   Design: matches the SettingsPage / HealthPage tablist pattern.
  */
 
 import { useState, useCallback, useLayoutEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { PublishingTab } from '../components/rewards/PublishingTab'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -2066,10 +2067,11 @@ function IconBilling(p: { className?: string }) {
 
 // ─── Tab definitions ─────────────────────────────────────────
 
-type TabId = 'overview' | 'rules' | 'tiers' | 'contributors' | 'quests' | 'analytics' | 'sandbox' | 'settings'
+type TabId = 'overview' | 'rules' | 'tiers' | 'contributors' | 'quests' | 'analytics' | 'sandbox' | 'settings' | 'publishing'
 
 const TABS: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'overview',      label: 'Overview',        description: 'KPIs, tier distribution, and pending payouts at a glance.' },
+  { id: 'publishing',    label: '🪲 Bounties',     description: 'Publish this app to the Mushi Bounties marketplace and reward testers for finding bugs.' },
   { id: 'rules',         label: 'Activity rules',  description: 'Points awarded per SDK action, daily caps, and lifetime limits.' },
   { id: 'tiers',         label: 'Tier ladder',     description: 'Tier names, point thresholds, and monetary reward amounts.' },
   { id: 'contributors',  label: 'Contributors',    description: 'Leaderboard of identified users by points and tier.' },
@@ -2213,6 +2215,7 @@ export function RewardsPage() {
           aria-labelledby={`rewards-tab-${active}`}
         >
           {active === 'overview'     && <OverviewTab />}
+          {active === 'publishing'   && <PublishingTab />}
           {active === 'rules'        && <ActivityRulesTab canEdit={canEdit} />}
           {active === 'tiers'        && <TierLadderTab canEdit={canEdit} />}
           {active === 'contributors' && <ContributorsTab />}
