@@ -440,6 +440,54 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  // --- Setup / admin tools -----------------------------------------------
+
+  server.registerTool(
+    'setup_check',
+    {
+      title: titleOf('setup_check'),
+      description: descOf('setup_check'),
+      annotations: annotationsFor('setup_check'),
+      inputSchema: {
+        projectId: z.string().optional().describe(
+          'Project UUID to check. Falls back to the projectId the server was initialised with.',
+        ),
+      },
+    },
+    async (args) => {
+      const resolvedId = args.projectId ?? projectId
+      if (!resolvedId) {
+        return jsonText({
+          ok: false,
+          error: 'No projectId provided and none configured on the MCP server. Pass projectId explicitly.',
+        })
+      }
+      const data = await apiCall<{
+        ready: boolean
+        checks: Array<{ key: string; ready: boolean; label: string; hint: string; fixHref: string }>
+        repoUrl: string | null
+      }>(`/v1/admin/projects/${resolvedId}/preflight`)
+
+      const summary = data.checks.map((c) => ({
+        check: c.key,
+        label: c.label,
+        passed: c.ready,
+        hint: c.hint,
+        fixPath: c.fixHref,
+      }))
+
+      return jsonText({
+        ready: data.ready,
+        repoUrl: data.repoUrl ?? null,
+        checks: summary,
+        // Human-readable summary for agents that paste the result into a prompt
+        summary: data.ready
+          ? `Project ${resolvedId} is ready to dispatch auto-fixes${data.repoUrl ? ` (target: ${data.repoUrl})` : ''}.`
+          : `Project ${resolvedId} cannot dispatch yet — ${summary.filter((c) => !c.passed).map((c) => c.label).join(', ')}.`,
+      })
+    },
+  )
+
   // --- Write / agentic tools -------------------------------------------
 
   server.registerTool(

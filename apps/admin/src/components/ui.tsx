@@ -907,11 +907,33 @@ interface RecommendedActionCta {
   disabled?: boolean
 }
 
+/** Compact key/value chip rendered under the recommendation title. Used by
+ *  the "A fix is in progress" path to surface when/elapsed/model/files
+ *  without forcing the user to scroll to FixProgressStream below. */
+export interface RecommendedActionMeta {
+  label: string
+  value: string
+  tone?: 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
+}
+
+/** Inline recovery action — used by skipped/failed fix paths to deep-link
+ *  the user to /integrations or /settings with a single click. Distinct
+ *  from the primary `cta` so we can render multiple (Enable + Retry). */
+export interface RecommendedActionInlineAction {
+  label: string
+  to?: string
+  href?: string
+  onClick?: () => void
+  tone?: 'primary' | 'ghost' | 'danger'
+}
+
 interface RecommendedActionProps {
   title: string
   description?: string
   cta?: RecommendedActionCta
   tone?: 'urgent' | 'info' | 'success' | 'neutral'
+  meta?: RecommendedActionMeta[]
+  actions?: RecommendedActionInlineAction[]
 }
 
 const RECOMMENDED_TONES = {
@@ -958,7 +980,52 @@ function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
   )
 }
 
-export function RecommendedAction({ title, description, cta, tone = 'info' }: RecommendedActionProps) {
+const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string> = {
+  neutral: 'bg-surface-overlay text-fg-secondary border-edge',
+  info: 'bg-info/10 text-info border-info/30',
+  ok: 'bg-ok/10 text-ok border-ok/30',
+  warn: 'bg-warn/10 text-warn border-warn/30',
+  danger: 'bg-danger/10 text-danger border-danger/30',
+}
+
+const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
+  primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
+  ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
+  danger: 'bg-danger/10 text-danger hover:bg-danger/20 border border-danger/30',
+}
+
+function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
+  const cls = `inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm motion-safe:transition-colors ${INLINE_ACTION_TONES[action.tone ?? 'ghost']}`
+  if (action.to) {
+    return <Link to={action.to} className={cls}>{action.label}</Link>
+  }
+  if (action.href) {
+    return (
+      <a
+        href={action.href}
+        target={action.href.startsWith('http') ? '_blank' : undefined}
+        rel={action.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+        className={cls}
+      >
+        {action.label}
+      </a>
+    )
+  }
+  return (
+    <button type="button" onClick={action.onClick} className={cls}>
+      {action.label}
+    </button>
+  )
+}
+
+export function RecommendedAction({
+  title,
+  description,
+  cta,
+  tone = 'info',
+  meta,
+  actions,
+}: RecommendedActionProps) {
   return (
     <div className={`flex items-start gap-3 rounded-md border p-3 mb-3 ${RECOMMENDED_TONES[tone]}`}>
       <div className={`mt-0.5 shrink-0 ${RECOMMENDED_ACCENTS[tone]}`}>
@@ -973,6 +1040,26 @@ export function RecommendedAction({ title, description, cta, tone = 'info' }: Re
           <p className="text-xs text-fg-muted mt-1 max-w-2xl leading-relaxed text-pretty wrap-break-word">
             {description}
           </p>
+        )}
+        {meta && meta.length > 0 && (
+          <ul className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Status details">
+            {meta.map((m, i) => (
+              <li
+                key={`${m.label}-${i}`}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border text-2xs ${META_CHIP_TONES[m.tone ?? 'neutral']}`}
+              >
+                <span className="font-medium uppercase tracking-wide text-2xs opacity-70">{m.label}</span>
+                <span className="font-mono">{m.value}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {actions && actions.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {actions.map((a, i) => (
+              <InlineActionEl key={`${a.label}-${i}`} action={a} />
+            ))}
+          </div>
         )}
       </div>
       {cta && <RecommendedActionCtaEl cta={cta} />}

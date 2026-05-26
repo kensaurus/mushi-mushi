@@ -1057,10 +1057,18 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
   };
 
+  // Whitelist of kinds this PUT endpoint accepts. Mirrors the GET endpoint
+  // above: only platform integrations (sentry / langfuse / github) live in
+  // `project_settings`; BYOK LLM providers (anthropic/openai) live in
+  // `llm_byok_keys` and have their own routes. Sourcing the list from
+  // PLATFORM_KIND_FIELDS avoids the previous `INTEGRATION_KINDS is not
+  // defined` ReferenceError that was 500ing every Save click.
+  const PLATFORM_KINDS_LIST = Object.keys(PLATFORM_KIND_FIELDS) as IntegrationKind[];
+
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind') as IntegrationKind;
-    if (!INTEGRATION_KINDS.includes(kind)) {
+    if (!PLATFORM_KINDS_LIST.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -2398,6 +2406,78 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
         })),
       },
     });
+  });
+
+  // ── GitHub App installation callback ─────────────────────────────────────
+  // Called by the GitHub App redirect after the user installs the App on
+  // their repo. GitHub appends `?installation_id=<int>&state=<projectId>`
+  // to the callback URL configured in the App settings.
+  //
+  // The user must be authenticated (jwtAuth) — the `state` param is their
+  // projectId, and we verify they own / are a member of it before writing.
+  // This prevents forged callbacks from hijacking another project's installation.
+  app.get('/v1/admin/integrations/github/app-callback', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const installationIdRaw = c.req.query('installation_id');
+    const projectId = c.req.query('state');
+
+    if (!installationIdRaw || !projectId) {
+      return c.json(
+        { ok: false, error: { code: 'MISSING_PARAMS', message: 'installation_id and state (projectId) required' } },
+        400,
+      );
+    }
+
+    const installationId = parseInt(installationIdRaw, 10);
+    if (!Number.isFinite(installationId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_INSTALLATION_ID' } },
+        400,
+      );
+    }
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
+        403,
+      );
+    }
+
+    // Upsert the project_repos row with the app installation ID
+    const { data: existing } = await db
+      .from('project_repos')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .maybeSingle();
+
+    if (existing) {
+      await db
+        .from('project_repos')
+        .update({ github_app_installation_id: installationId })
+        .eq('id', existing.id);
+    } else {
+      await db
+        .from('project_repos')
+        .insert({
+          project_id: projectId,
+          github_app_installation_id: installationId,
+          is_primary: true,
+          role: 'source',
+        });
+    }
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'github_app_installed', projectId, {
+      installation_id: installationId,
+    }).catch(() => {});
+
+    // Redirect back to integrations page — the card will refresh and show the
+    // "App connected" badge. Use a 302 so the browser doesn't cache the redirect.
+    const adminOrigin = c.req.header('origin') ?? Deno.env.get('MUSHI_ADMIN_URL') ?? '';
+    return c.redirect(`${adminOrigin}/integrations?github_app=installed`, 302);
   });
 
   app.post('/v1/admin/health/cron/:job/trigger', jwtAuth, async (c) => {

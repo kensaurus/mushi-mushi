@@ -42,7 +42,19 @@ export interface InitOptions {
 
 const ENV_FILES = ['.env.local', '.env'] as const
 
-const PROJECT_ID_PATTERN = /^proj_[A-Za-z0-9_-]{10,}$/
+// Project IDs are UUIDs in the live API (see migrations:
+// `create table projects ( id uuid primary key default gen_random_uuid() ... )`).
+// Accept both the canonical UUID and the legacy `proj_*` prefixed form (used
+// in tests, docs, and any future re-prefixing of project IDs) so users who
+// paste either format from the console successfully complete onboarding.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const PROJ_PREFIX_PATTERN = /^proj_[A-Za-z0-9_-]{10,}$/
+// Compose with explicit `i` flag so the UUID half stays case-insensitive
+// when the alternation is recombined.
+const PROJECT_ID_PATTERN = new RegExp(
+  `(${UUID_PATTERN.source})|(${PROJ_PREFIX_PATTERN.source})`,
+  'i',
+)
 const API_KEY_PATTERN = /^mushi_[A-Za-z0-9_-]{10,}$/
 
 export async function runInit(options: InitOptions = {}): Promise<void> {
@@ -114,7 +126,7 @@ function ensureInteractiveOrBailOut(options: InitOptions): void {
   process.stderr.write(
     'mushi-mushi: non-interactive terminal detected.\n' +
       'Pass all of --yes (or --framework), --project-id, and --api-key to run unattended.\n' +
-      'Example: npx mushi-mushi --yes --project-id proj_xxx --api-key mushi_xxx\n',
+      'Example: npx mushi-mushi --yes --project-id <uuid-from-console> --api-key mushi_xxx\n',
   )
   process.exit(1)
 }
@@ -158,12 +170,12 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
     existing.projectId ??
     (await promptText({
       message: 'Project ID',
-      placeholder: 'proj_xxxxxxxxxxxx',
-      hint: 'Find this at https://kensaur.us/mushi-mushi/projects',
+      placeholder: 'e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4',
+      hint: 'Copy this from your project page at the Mushi Mushi console',
       validate: (v) =>
-        PROJECT_ID_PATTERN.test(v)
+        PROJECT_ID_PATTERN.test(v.trim())
           ? undefined
-          : 'Expected format: proj_ followed by 10+ alphanumeric characters',
+          : 'Expected a UUID (e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4) — copy it from the console',
     }))
 
   const rawApiKey =
@@ -184,7 +196,8 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
 
   if (!PROJECT_ID_PATTERN.test(projectId)) {
     throw new Error(
-      `Invalid project ID. Expected format: proj_[A-Za-z0-9_-]{10,}. Got: ${redact(projectId)}`,
+      `Invalid project ID. Expected a UUID (e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4) ` +
+        `or the legacy proj_* prefixed form. Got: ${redact(projectId)}`,
     )
   }
   if (!API_KEY_PATTERN.test(apiKey)) {

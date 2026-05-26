@@ -81,6 +81,36 @@ export interface MushiWidgetConfig {
    * actively inviting feedback.
    */
   betaMode?: MushiBetaModeConfig;
+  /**
+   * Absolute base URL of the Mushi admin console (e.g. `https://mushi.example.com`).
+   * When set, the success step surfaces a one-tap link to the user's own report
+   * on the console so they can watch the status change in real time. Without
+   * this the success step still confirms submission but cannot deep-link.
+   *
+   * This is intentionally separate from the API endpoint — production apps
+   * usually have the API on `api.mushi.example.com` and the console on
+   * `app.mushi.example.com`.
+   */
+  dashboardUrl?: string;
+  /**
+   * Override the SLA copy shown in the success step's "what happens next"
+   * line. Defaults to "We aim to review within 48h". Set to an empty string
+   * to hide the line entirely (e.g. internal-only deployments where SLA
+   * messaging would be over-promising).
+   */
+  responseSlaLabel?: string;
+  /**
+   * Show a first-class "Feature request" card at the top of the category
+   * step. Defaults to true. Set to false for production-only deployments
+   * where you don't want to invite feature ideas through the widget.
+   * Internally this maps to `category='other'` with
+   * `user_category='Feature request'` so no DB migration is needed.
+   */
+  featureRequestCard?: boolean;
+  /** Override the localised label for the feature-request card. */
+  featureRequestLabel?: string;
+  /** Override the helper text shown under the feature-request card. */
+  featureRequestDescription?: string;
 }
 
 export interface MushiBetaModeConfig {
@@ -215,6 +245,17 @@ export interface MushiPrivacyConfig {
   maskSelectors?: string[];
   /** DOM subtrees to remove from screenshots before upload. */
   blockSelectors?: string[];
+  /**
+   * CSS selectors whose matching elements are blacked-out (filled with an
+   * opaque black rectangle) in screenshots before upload. Intended for
+   * sensitive fields that should never appear in any form — passwords, PII,
+   * financial data. Applied in addition to `maskSelectors`.
+   *
+   * Default: `['input[type="password"]', '[data-mushi-redact]']`
+   *
+   * To disable the default redaction, pass an empty array.
+   */
+  redactSelectors?: string[];
   /** Let reporters remove an attached screenshot before submitting. Defaults to true. */
   allowUserRemoveScreenshot?: boolean;
 }
@@ -225,6 +266,40 @@ export interface MushiProactiveConfig {
   longTask?: boolean;
   apiCascade?: boolean | MushiApiCascadeConfig;
   cooldown?: MushiCooldownConfig;
+  /**
+   * Beta-mode nudge: fire after the user has been on the same route for
+   * `thresholdMs` continuous milliseconds (default 5min). Pass `true` to
+   * accept the default threshold, or a config object to override. Use
+   * conservatively — set the per-session cap in `cooldown` to avoid
+   * nag fatigue.
+   */
+  pageDwell?: boolean | MushiPageDwellConfig;
+  /**
+   * One-shot welcome prompt for first-time visitors. Fires `delayMs` after
+   * `Mushi.init` (default 45s) and is suppressed permanently after the
+   * first fire via localStorage. Recommended for beta deployments.
+   */
+  firstSession?: boolean | MushiFirstSessionConfig;
+}
+
+export interface MushiPageDwellConfig {
+  /** Continuous dwell time before firing. Defaults to 5 minutes. */
+  thresholdMs?: number;
+  /**
+   * Route path prefixes (or glob-style patterns with `*`) that suppress the
+   * dwell nudge. Auth routes are excluded by default so users aren't prompted
+   * during login/signup flows.
+   *
+   * Default: `['/login', '/logout', '/signup', '/sso/*', '/auth/*']`
+   */
+  excludeRoutes?: string[];
+}
+
+export interface MushiFirstSessionConfig {
+  /** Delay before firing the welcome nudge. Defaults to 45 seconds. */
+  delayMs?: number;
+  /** Override the localStorage key used to mark the user as welcomed. */
+  storageKey?: string;
 }
 
 export type MushiUrlMatcher = string | RegExp;
@@ -798,7 +873,17 @@ export interface MushiDiagnosticsResult {
 }
 
 export interface MushiSDKInstance {
-  report(options?: { category?: MushiReportCategory }): void;
+  /**
+   * Open the reporter widget. With no options, opens to the category
+   * picker so the user can choose between bug categories and the
+   * feature-request shortcut. Pass `{ category }` to deep-link into a
+   * specific bug intent, or `{ featureRequest: true }` to deep-link into
+   * the feature-request description step (skips intent picker).
+   */
+  report(options?: {
+    category?: MushiReportCategory;
+    featureRequest?: boolean;
+  }): void;
   on(event: MushiEventType, handler: MushiEventHandler): () => void;
   setUser(user: { id: string; email?: string; name?: string }): void;
   setMetadata(key: string, value: unknown): void;
@@ -900,6 +985,13 @@ export interface MushiSDKInstance {
    * No-op when rewards are disabled or the user has not opted in.
    */
   recordActivity(action: string, metadata?: Record<string, unknown>): void;
+
+  /**
+   * Briefly animate the bug-report trigger button to draw the user's
+   * attention without opening the full widget. Ideal for subtle "feedback
+   * welcome" nudges (first-session, beta-onboarding).
+   */
+  pulseTrigger(): void;
 }
 
 export interface MushiCaptureExceptionOptions {

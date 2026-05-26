@@ -22,6 +22,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
 import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
+import { DryRunPanel } from '../components/integrations/DryRunPanel'
+import { DeploymentReadinessCard } from '../components/integrations/DeploymentReadinessCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   PLATFORM_DEFS,
@@ -73,6 +75,9 @@ export function IntegrationsPage() {
   })
   const [saving, setSaving] = useState<Kind | null>(null)
   const [testing, setTesting] = useState<Kind | null>(null)
+  const [inlineErrors, setInlineErrors] = useState<Partial<Record<Kind, string>>>({})
+  const clearInlineError = (kind: Kind) =>
+    setInlineErrors((e) => { const n = { ...e }; delete n[kind]; return n })
 
   const [routingEditing, setRoutingEditing] = useState<RoutingProviderDef['type'] | null>(null)
   const [routingDrafts, setRoutingDrafts] = useState<Record<string, Record<string, string>>>({})
@@ -134,9 +139,12 @@ export function IntegrationsPage() {
     })
     setSaving(null)
     if (!res.ok) {
-      toast.error(`Failed to save ${kind}`, res.error?.message ?? res.error?.code)
+      const msg = res.error?.message ?? res.error?.code ?? 'Unknown error'
+      toast.error(`Failed to save ${kind}`, msg)
+      setInlineErrors((e) => ({ ...e, [kind]: msg }))
       return
     }
+    clearInlineError(kind)
     toast.success(`Saved ${kind} integration`)
     setEditing(null)
     reloadAll()
@@ -352,6 +360,7 @@ export function IntegrationsPage() {
               onChangeField={(name, value) =>
                 setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
               }
+              inlineError={inlineErrors[def.kind] ?? null}
               onSave={() => void saveKind(def.kind)}
               onTest={() => void testKind(def.kind)}
             />
@@ -359,9 +368,25 @@ export function IntegrationsPage() {
           {activeProjectId && (
             <div data-dav-anchor="integrations:verify">
               <CodebaseIndexCard projectId={activeProjectId} />
+              <DryRunPanel projectId={activeProjectId} />
             </div>
           )}
         </div>
+      </Section>
+
+      <Section title="Deployment readiness">
+        <p className="text-2xs text-fg-secondary mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+          Close the loop between &ldquo;Mushi just dispatched a fix&rdquo; and
+          &ldquo;the fix shipped safely&rdquo;. Each item below is a one-click
+          deep link into the host platform settings so your branch-protection
+          rules, preview deploys, and production gates stay aligned with the
+          auto-fix workflow.
+        </p>
+        <DeploymentReadinessCard
+          projectId={activeProjectId ?? null}
+          githubAppInstalled={Boolean(platform?.github?.has_credentials)}
+          vercelProjectSlug={null}
+        />
       </Section>
 
       <Section title="Routing destinations">

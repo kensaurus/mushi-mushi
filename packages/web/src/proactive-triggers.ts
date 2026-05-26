@@ -7,7 +7,38 @@ export interface ProactiveTriggerConfig {
   apiCascade?: boolean | MushiApiCascadeConfig
   apiEndpoint?: string
   errorBoundary?: boolean
+  /**
+   * Beta-mode nudges. Fire when the user has been on the same route for
+   * `pageDwellMs` continuous milliseconds without filing any report. Default
+   * disabled because production apps usually don't want unsolicited prompts;
+   * recommended only when `betaMode.enabled` is true on the widget.
+   *
+   * Pass `true` to use the default 5-minute threshold, or a config object
+   * to override. Set to `false` (default) to disable entirely.
+   */
+  pageDwell?: boolean | { thresholdMs?: number; excludeRoutes?: string[] }
+  /**
+   * First-session welcome. Fires exactly once per user (tracked via
+   * `localStorage`) `delayMs` milliseconds after `Mushi.init`. Use to
+   * gently surface the bug button to new beta users so they know feedback
+   * is welcome. Default disabled.
+   */
+  firstSession?: boolean | { delayMs?: number; storageKey?: string }
+  /**
+   * The project ID, used to namespace the `firstSession` localStorage key so
+   * multi-tenant single-page apps don't share first-session state across
+   * projects. Sourced from `MushiConfig.projectId` by the SDK.
+   */
+  projectId?: string
 }
+
+const DEFAULT_EXCLUDE_ROUTES: readonly string[] = [
+  '/login',
+  '/logout',
+  '/signup',
+  '/sso/*',
+  '/auth/*',
+]
 
 export interface ProactiveTriggerCallbacks {
   onTrigger: (type: string, context: Record<string, unknown>) => void
@@ -99,6 +130,107 @@ export function setupProactiveTriggers(
     } as typeof fetch
 
     cleanups.push(() => { globalThis.fetch = origFetch })
+  }
+
+  // --- Page Dwell (beta-feedback nudge) ---
+  // Tracks continuous time on the same `location.pathname`. Resets on every
+  // navigation (pushState/replaceState/popstate). Auth routes are excluded by
+  // default so users are never prompted during login/signup flows.
+  const pageDwellEnabled = config.pageDwell === true
+    || (typeof config.pageDwell === 'object' && config.pageDwell !== null)
+  if (pageDwellEnabled && typeof window !== 'undefined') {
+    const dwellCfg = typeof config.pageDwell === 'object' ? config.pageDwell ?? {} : {}
+    const thresholdMs = dwellCfg.thresholdMs || 5 * 60 * 1000
+    const excludeRoutes: readonly string[] =
+      dwellCfg.excludeRoutes !== undefined ? dwellCfg.excludeRoutes : DEFAULT_EXCLUDE_ROUTES
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let lastPath = window.location?.pathname ?? ''
+
+    function isExcluded(path: string): boolean {
+      return excludeRoutes.some((pattern) => {
+        if (pattern.endsWith('/*')) {
+          return path.startsWith(pattern.slice(0, -2))
+        }
+        return path === pattern || path.startsWith(pattern + '/')
+      })
+    }
+
+    function fire(): void {
+      const path = window.location?.pathname ?? ''
+      if (isExcluded(path)) return
+      callbacks.onTrigger('page_dwell', { thresholdMs, path })
+    }
+    function arm(): void {
+      if (timer) clearTimeout(timer)
+      const path = window.location?.pathname ?? ''
+      if (!isExcluded(path)) {
+        timer = setTimeout(fire, thresholdMs)
+      }
+    }
+    function reset(): void {
+      const path = window.location?.pathname ?? ''
+      if (path !== lastPath) {
+        lastPath = path
+        arm()
+      }
+    }
+    arm()
+
+    // Patch History API to detect SPA navigations. Most SPAs use
+    // pushState/replaceState; popstate covers back/forward.
+    const history = window.history
+    const origPush = history?.pushState
+    const origReplace = history?.replaceState
+    if (history && origPush && origReplace) {
+      history.pushState = function (...args) {
+        const result = origPush.apply(this, args)
+        reset()
+        return result
+      }
+      history.replaceState = function (...args) {
+        const result = origReplace.apply(this, args)
+        reset()
+        return result
+      }
+    }
+    const onPop = (): void => reset()
+    window.addEventListener('popstate', onPop)
+    cleanups.push(() => {
+      if (timer) clearTimeout(timer)
+      window.removeEventListener('popstate', onPop)
+      if (history && origPush) history.pushState = origPush
+      if (history && origReplace) history.replaceState = origReplace
+    })
+  }
+
+  // --- First Session Welcome ---
+  // Beta apps benefit from a single, well-timed "feedback is welcome"
+  // nudge for new visitors. We persist a flag in localStorage so we only
+  // fire it once per user, not once per tab/session. Cooldown + suppression
+  // are still enforced by the ProactiveManager downstream.
+  //
+  // The storage key is project-scoped by default so multi-tenant SPAs
+  // (e.g. different projects in the same domain) don't share the "already
+  // shown" flag. Pass an explicit `storageKey` to override.
+  const firstSessionEnabled = config.firstSession === true
+    || (typeof config.firstSession === 'object' && config.firstSession !== null)
+  if (firstSessionEnabled && typeof window !== 'undefined') {
+    const opts = typeof config.firstSession === 'object' ? config.firstSession ?? {} : {}
+    const delayMs = opts.delayMs ?? 45 * 1000
+    const storageKey = opts.storageKey
+      ?? (config.projectId ? `mushi:${config.projectId}:firstSessionShown` : 'mushi:firstSessionShown')
+
+    let alreadyShown = false
+    try { alreadyShown = window.localStorage?.getItem(storageKey) === '1' }
+    catch { /* localStorage unavailable */ }
+
+    if (!alreadyShown) {
+      const timer = setTimeout(() => {
+        try { window.localStorage?.setItem(storageKey, '1') } catch { /* noop */ }
+        callbacks.onTrigger('first_session', { delayMs })
+      }, delayMs)
+      cleanups.push(() => clearTimeout(timer))
+    }
   }
 
   // --- Global Error Boundary ---

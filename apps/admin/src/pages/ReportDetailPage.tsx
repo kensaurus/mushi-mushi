@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNow } from '../lib/useNow'
 import { useParams, Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -55,6 +56,8 @@ import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFo
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
+import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
+import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -212,10 +215,34 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
   const platform = usePlatformIntegrations()
   const latestFix = report.fix_attempts?.[0]
 
+  // Tick the clock every second only while the agent is actively running so
+  // the elapsed chip in the recommendation banner live-updates without
+  // triggering a global setInterval storm across every open tab.
+  const isInFlight =
+    dispatchState.status === 'queueing' ||
+    dispatchState.status === 'queued' ||
+    dispatchState.status === 'running' ||
+    report.status === 'fixing'
+  const nowMs = useNow(1000, isInFlight)
+
   const recommendation = useMemo(
-    () => deriveRecommendation(report, dispatchState, commentCount, dispatch),
-    [report, dispatchState, commentCount, dispatch],
+    () => deriveRecommendation(report, dispatchState, commentCount, dispatch, nowMs),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [report, dispatchState, commentCount, dispatch, nowMs],
   )
+
+  const preflight = useDispatchPreflight(report.project_id)
+
+  // Show the preflight banner on reports that could be dispatched: not already
+  // in a terminal state, and not currently being fixed.
+  const isDispatchEligible =
+    report.status !== 'fixed' &&
+    report.status !== 'dismissed' &&
+    report.status !== 'fixing' &&
+    dispatchState.status !== 'queueing' &&
+    dispatchState.status !== 'queued' &&
+    dispatchState.status !== 'running' &&
+    dispatchState.status !== 'completed'
 
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   const reporterShort = report.reporter_token_hash?.slice(0, 8) ?? 'unknown'
@@ -263,11 +290,17 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
         <ScreenshotHero url={report.screenshot_url} className="mb-3" />
       )}
 
+      {isDispatchEligible && (
+        <DispatchPreflightBanner preflight={preflight} className="mb-2" />
+      )}
+
       <RecommendedAction
         title={recommendation.title}
         description={recommendation.description}
         cta={recommendation.cta}
         tone={recommendation.tone}
+        meta={recommendation.meta}
+        actions={recommendation.actions}
       />
 
       <ReportTriageBar

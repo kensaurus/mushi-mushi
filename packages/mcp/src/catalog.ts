@@ -187,6 +187,20 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What did Stage 2 say we should try for this report?',
   },
+  // --- Setup / admin -------------------------------------------------------
+  {
+    name: 'setup_check',
+    title: 'Dispatch preflight check',
+    description:
+      'Run the 4 dispatch-readiness checks for a project and return their pass/fail status ' +
+      '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
+      'Also returns the target repo URL when GitHub is connected. ' +
+      'Use this before calling dispatch_fix to understand why a dispatch might fail — ' +
+      'or to validate that the onboarding wizard is complete.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is this project ready to auto-fix bugs? What is blocking me?',
+  },
   // --- Write / agentic ----------------------------------------------------
   {
     name: 'submit_fix_result',

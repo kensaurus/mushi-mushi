@@ -42,6 +42,46 @@ export interface ReportRow {
   sentry_trace_id?: string | null
   sentry_release?: string | null
   sentry_environment?: string | null
+  // 2026-05-26 source-attribution boost. The triage row used to leave
+  // the user guessing where a report came from. These five fields turn
+  // the row into a self-describing "who, where, how" line so the
+  // triager doesn't have to drill into the report to know if it's an
+  // auto-captured server crash, a logged-in user shake-to-report,
+  // or a Sentry-bridged exception from a Node service.
+  sdk_package?: string | null
+  sdk_version?: string | null
+  /** Stable opaque user identifier passed by the host app via
+   *  `Mushi.identify()` — null when the reporter is anonymous. */
+  reporter_user_id?: string | null
+  /** SHA256 of the device fingerprint. Used only as a fallback "who"
+   *  identifier when reporter_user_id is unset; we display the first
+   *  6 hex chars as a stable monogram so two reports from the same
+   *  anonymous device are visibly co-attributed. */
+  reporter_token_hash?: string | null
+  /** Mushi auto-trigger that prompted the report (`window-error`,
+   *  `unhandled-rejection`, `shake`, `dev-cli`, …). NULL = the user
+   *  opened the widget themselves — the standard "felt-bug" path. */
+  proactive_trigger?: string | null
+  app_version?: string | null
+  /** The full environment jsonb. Used by the source-cell renderer to
+   *  extract `url` / `route` / `origin` (web vs node) without a second
+   *  round-trip. Shape mirrors `MushiEnvironment` in the core package. */
+  environment?: ReportEnvironmentLite | null
+}
+
+export interface ReportEnvironmentLite {
+  url?: string | null
+  /** Set by SDKs that compute a route from the URL (e.g. React Router
+   *  match). Falls back to a path-derived value when the SDK didn't
+   *  send one. */
+  route?: string | null
+  /** "web" | "node" | "react" | "react-native" — the SDK family. Maps
+   *  cleanly to a platform glyph in the table. */
+  origin?: string | null
+  platform?: string | null
+  userAgent?: string | null
+  env?: string | null
+  release?: string | null
 }
 
 /**

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip, ErrorAlert } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
 import { isStale } from '../../lib/staleness'
@@ -67,6 +67,9 @@ interface Props {
   draft: Record<string, string>
   saving: boolean
   testing: boolean
+  /** Pinned error from the last failed save — rendered inside the card so it
+   *  survives after the toast auto-dismisses. Cleared on the next successful save. */
+  inlineError?: string | null
   onStartEdit: () => void
   onCancelEdit: () => void
   onChangeField: (name: string, value: string) => void
@@ -83,6 +86,7 @@ export function PlatformIntegrationCard({
   draft,
   saving,
   testing,
+  inlineError,
   onStartEdit,
   onCancelEdit,
   onChangeField,
@@ -209,6 +213,9 @@ export function PlatformIntegrationCard({
               <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
             </div>
           ))}
+          {inlineError && (
+            <ErrorAlert title="Save failed" message={inlineError} />
+          )}
           <div className="flex items-center gap-2 pt-1">
             <Btn onClick={onSave} disabled={saving} loading={saving}>
               Save

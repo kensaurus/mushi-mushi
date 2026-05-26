@@ -102,6 +102,63 @@ the CLI never points users at a 404. This safety property is unit-pinned in
 `packages/cli/src/migrate.test.ts` (positive control + negative control +
 real-catalog regression guard).
 
+### `mushi doctor`
+
+Checks CLI and SDK health.  Without flags it verifies local config and endpoint
+reachability only.
+
+```bash
+mushi doctor                  # local checks only
+mushi doctor --server         # + calls /preflight on the backend (all 4 dispatch checks)
+mushi doctor --json           # machine-readable JSON output (exits 1 if any check fails)
+```
+
+Local checks performed:
+
+| Check | What it verifies |
+|---|---|
+| CLI config | `~/.mushirc` exists, `projectId` and `apiKey` fields are present |
+| Endpoint reachability | `GET /v1/sdk/config?project_id=...` returns 200 |
+| SDK install | `@mushi-mushi/web` or framework-specific SDK is in `node_modules` |
+
+With `--server`, also calls `GET /v1/admin/projects/:id/preflight` (same 4 checks
+the admin console dispatch popover uses) and merges the results.  The four
+server checks (`key` values returned by the endpoint):
+
+| `key` | What it verifies |
+|---|---|
+| `github` | A GitHub repo URL is linked (`project_repos.repo_url` or `project_settings.codebase_repo_url`) |
+| `codebase` | Codebase indexing is enabled AND `pgvector` has at least one non-tombstoned file AND `last_indexed_at` is set |
+| `anthropic` | A BYOK Anthropic key is stored in Supabase Vault (`project_settings.byok_anthropic_key_ref`) |
+| `autofix` | The autofix toggle is ON (`project_settings.autofix_enabled = true`) |
+
+`--server` requires `adminOrApiKey` credentials — set `MUSHI_API_KEY` to an
+admin key (not a public SDK key).
+
+### `mushi reset <projectId>`
+
+Archives a project and wipes its test data so the full onboarding flow can be
+re-run.  Useful for development and QA.
+
+```bash
+mushi reset proj_xxx --confirm   # required flag prevents accidental wipes
+```
+
+Wipes: `fix_attempts`, `project_codebase_files`, `reports`, `fix_dispatch_jobs`.
+Sets `projects.archived_at`.  **Irreversible.**
+
+### `mushi fixes tail --report-id <id>`
+
+Streams dispatch events for a report in real-time via SSE.  Pairs with
+`mushi doctor --server` for headless debugging without opening the admin console.
+
+```bash
+mushi fixes tail --report-id 11111111-2222-3333-4444-555555555555
+```
+
+Exits automatically when the job reaches a terminal status (`completed`,
+`failed`, `cancelled`, `skipped`).
+
 ## Security notes
 
 - `~/.mushirc` is written with mode `0o600` on Unix. Legacy configs with looser permissions are tightened on load.
