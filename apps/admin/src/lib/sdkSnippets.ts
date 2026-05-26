@@ -76,7 +76,8 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
 /**
  * Order matters — this is the tab strip order in `SdkInstallCard`. Web
  * frameworks come first (most users), then mobile (RN / Expo / Capacitor),
- * then the vanilla escape hatch last.
+ * then server-side (Node / Express / Fastify / Hono), then the vanilla
+ * escape hatch last.
  */
 export const FRAMEWORKS = [
   'react',
@@ -85,6 +86,10 @@ export const FRAMEWORKS = [
   'react-native',
   'expo',
   'capacitor',
+  'node',
+  'express',
+  'fastify',
+  'hono',
   'vanilla',
 ] as const
 export type Framework = (typeof FRAMEWORKS)[number]
@@ -102,12 +107,28 @@ export function isMobileFramework(fw: Framework): fw is MobileFramework {
   return (MOBILE_FRAMEWORKS as readonly string[]).includes(fw)
 }
 
+/**
+ * Server-side runtimes: use `@mushi-mushi/node` instead of the browser SDK.
+ * The widget preview and configurator don't apply to these — only the install
+ * command and code snippet are shown.
+ */
+export const SERVER_FRAMEWORKS = ['node', 'express', 'fastify', 'hono'] as const
+export type ServerFramework = (typeof SERVER_FRAMEWORKS)[number]
+
+export function isServerFramework(fw: Framework): fw is ServerFramework {
+  return (SERVER_FRAMEWORKS as readonly string[]).includes(fw)
+}
+
 export const API_KEY_PLACEHOLDER = 'mushi_xxx'
 
 export function frameworkLabel(fw: Framework): string {
   if (fw === 'vanilla') return 'Vanilla JS'
   if (fw === 'react-native') return 'React Native'
   if (fw === 'capacitor') return 'Capacitor'
+  if (fw === 'node') return 'Node.js'
+  if (fw === 'express') return 'Express'
+  if (fw === 'fastify') return 'Fastify'
+  if (fw === 'hono') return 'Hono'
   return fw.charAt(0).toUpperCase() + fw.slice(1)
 }
 
@@ -125,6 +146,8 @@ export function installCommand(fw: Framework): string {
   if (fw === 'react-native') return 'npm install @mushi-mushi/react-native'
   if (fw === 'expo') return 'npx expo install @mushi-mushi/react-native expo-sensors'
   if (fw === 'capacitor') return 'npm install @mushi-mushi/capacitor && npx cap sync'
+  // All server-side integrations ship through @mushi-mushi/node.
+  if (isServerFramework(fw)) return 'npm install @mushi-mushi/node'
   return `npm install @mushi-mushi/${fw} @mushi-mushi/web`
 }
 
@@ -367,6 +390,106 @@ export default function App() {
     </MushiProvider>
   )
 }`
+  }
+
+  // ── Server-side frameworks ──────────────────────────────────────────────
+  // These use @mushi-mushi/node rather than the browser SDK. There is no
+  // widget / screenshot / elementSelector — just error capture and
+  // breadcrumbs via the MushiNodeClient. The SdkInstallCard hides the
+  // widget preview and configurator for these frameworks.
+  //
+  // The snippet follows the two-step pattern all server integrations need:
+  //   ❶ Create + configure a singleton MushiNodeClient (typically in an
+  //     instrumentation file pre-loaded via `node --import` or at the top
+  //     of the server entry).
+  //   ❷ Wire the framework-specific error hook so 5xx errors are captured
+  //     automatically without the developer having to sprinkle try/catch.
+
+  if (fw === 'node') {
+    return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${key}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+
+// Capture unhandledRejection + uncaughtException as Mushi reports.
+// Node's process-terminating crash behaviour is NOT overridden — you
+// still get the crash, Mushi just also fires a report before it happens.
+attachUnhandledHook({ client: mushi })`
+  }
+
+  if (fw === 'express') {
+    return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${key}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+
+attachUnhandledHook({ client: mushi })
+
+// ❷ In your Express app — mount AFTER all routes:
+import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import type { Express } from 'express'
+
+export function attachMushi(app: Express) {
+  // Runs after Sentry (or any other error middleware). Captures 5xx by
+  // default; pass a custom \`shouldReport\` to tune the filter.
+  app.use(mushiExpressErrorHandler({ client: mushi }))
+}`
+  }
+
+  if (fw === 'fastify') {
+    return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${key}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+
+attachUnhandledHook({ client: mushi })
+
+// ❷ In your Fastify bootstrap:
+import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import Fastify from 'fastify'
+
+const app = Fastify()
+
+// Registers an onError lifecycle hook — coexists with setErrorHandler.
+mushiFastifyPlugin(app, { client: mushi })`
+  }
+
+  if (fw === 'hono') {
+    return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${key}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+
+attachUnhandledHook({ client: mushi })
+
+// ❷ In your Hono app:
+import { Hono } from 'hono'
+import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+
+const app = new Hono()
+
+// Wrap your own onError handler — Mushi runs first, then calls yours.
+app.onError(
+  mushiHonoErrorHandler({ client: mushi }, (err, c) =>
+    c.text('Internal Server Error', 500),
+  ),
+)`
   }
 
   // capacitor

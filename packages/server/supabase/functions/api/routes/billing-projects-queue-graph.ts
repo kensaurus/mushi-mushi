@@ -393,7 +393,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     // SDK heartbeat (`last_seen_*`) so the dashboard can prove the SDK has
     // reached THIS backend without waiting for a real user-triggered report —
     // see migration 20260505000000_project_api_keys_last_seen.sql for rationale.
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes] = await Promise.all([
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, indexedFilesRes] = await Promise.all([
       db
         .from('project_api_keys')
         .select(
@@ -403,7 +403,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .eq('is_active', true),
       db
         .from('project_settings')
-        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
+        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref, autofix_enabled, codebase_index_enabled')
         .in('project_id', projectIds),
       db
         .from('reports')
@@ -416,7 +416,19 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .select('project_id, merged_at')
         .in('project_id', projectIds)
         .limit(1000),
-      db.from('project_repos').select('project_id').in('project_id', projectIds),
+      db
+        .from('project_repos')
+        .select('project_id, last_indexed_at')
+        .in('project_id', projectIds),
+      // Count indexed (non-tombstoned) files per project — drives codebase_indexed step.
+      // This is a simple count per project_id without groupby support in PostgREST,
+      // so we fetch minimal rows and aggregate in JS.
+      db
+        .from('project_codebase_files')
+        .select('project_id', { count: 'exact' })
+        .in('project_id', projectIds)
+        .is('tombstoned_at', null)
+        .limit(50000),
     ]);
 
     const keyByProject = new Set<string>();
@@ -450,12 +462,30 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         github_repo_url: string | null;
         sentry_org_slug: string | null;
         byok_anthropic_key_ref: string | null;
+        autofix_enabled: boolean | null;
+        codebase_index_enabled: boolean | null;
       }
     >();
     for (const s of settingsRes.data ?? []) settingsByProject.set(s.project_id, s as never);
 
-    const reposByProject = new Set<string>();
-    for (const r of reposRes.data ?? []) reposByProject.add(r.project_id);
+    const reposByProject = new Map<string, { last_indexed_at: string | null }>();
+    for (const r of reposRes.data ?? []) {
+      const existing = reposByProject.get(r.project_id);
+      // Keep the most recently indexed repo entry per project
+      const newAt = (r as { last_indexed_at?: string | null }).last_indexed_at ?? null;
+      if (!existing || (newAt && (!existing.last_indexed_at || newAt > existing.last_indexed_at))) {
+        reposByProject.set(r.project_id, { last_indexed_at: newAt });
+      }
+    }
+
+    // Aggregate indexed file counts per project from the flat rows query
+    const indexedFilesByProject = new Map<string, number>();
+    for (const f of indexedFilesRes.data ?? []) {
+      indexedFilesByProject.set(
+        f.project_id,
+        (indexedFilesByProject.get(f.project_id) ?? 0) + 1,
+      );
+    }
 
     // Legacy fallback signal: at least one report whose `environment.platform`
     // is a real platform (not the admin-only `mushi-admin` synthetic the
@@ -498,6 +528,8 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       | 'github_connected'
       | 'sentry_connected'
       | 'byok_anthropic'
+      | 'codebase_indexed'
+      | 'autofix_enabled'
       | 'first_fix_dispatched';
 
     interface Step {
@@ -546,11 +578,16 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       // remain — keeps already-green checklists green after the migration.
       const hasSdk = Boolean(heartbeat) || sdkReportSignalByProject.has(p.id);
       const reportInfo = reportsByProject.get(p.id) ?? { count: 0, firstAt: null };
+      const repoEntry = reposByProject.get(p.id);
       const hasGithub = Boolean(settings?.github_repo_url) || reposByProject.has(p.id);
       const hasSentry = Boolean(settings?.sentry_org_slug);
       const hasByok = Boolean(settings?.byok_anthropic_key_ref);
       const fixCount = fixesByProject.get(p.id) ?? 0;
       const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0;
+      const indexedFiles = indexedFilesByProject.get(p.id) ?? 0;
+      const hasCodebaseIndexed =
+        Boolean(repoEntry?.last_indexed_at) && indexedFiles > 0;
+      const hasAutofixEnabled = Boolean(settings?.autofix_enabled);
 
       const steps: Step[] = [
         {
@@ -619,8 +656,26 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           description: 'BYOK avoids platform quotas and sends usage to your own bill.',
           complete: hasByok,
           required: false,
-          cta_to: '/settings',
+          cta_to: '/settings?tab=byok',
           cta_label: 'Add API key',
+        },
+        {
+          id: 'codebase_indexed',
+          label: 'Index your codebase',
+          description: 'Let the agent search your source files when drafting a patch. Required for auto-fix PRs.',
+          complete: hasCodebaseIndexed,
+          required: false,
+          cta_to: '/integrations',
+          cta_label: 'Configure indexing',
+        },
+        {
+          id: 'autofix_enabled',
+          label: 'Enable auto-fix',
+          description: 'Turn on the auto-fix queue so dispatched reports become pull requests.',
+          complete: hasAutofixEnabled,
+          required: false,
+          cta_to: '/integrations',
+          cta_label: 'Enable auto-fix',
         },
         {
           id: 'first_fix_dispatched',
@@ -2162,7 +2217,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       );
     }
 
-    const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }] = await Promise.all([
+    // File cap constant — keep in sync with code-indexer.ts MUSHI_REPO_INDEX_SWEEP_FILE_CAP
+    const FILE_CAP = parseInt(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300', 10);
+    const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }, { data: langRows }] = await Promise.all([
       db
         .from('project_settings')
         .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
@@ -2171,8 +2228,211 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       db
         .from('project_repos')
         .select(
-          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled',
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled, path_globs',
         )
+        .eq('project_id', projectId)
+        .eq('is_primary', true)
+        .maybeSingle(),
+      db
+        .from('project_codebase_files')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .is('tombstoned_at', null),
+      // Language distribution for the "what got indexed" sparkline.
+      // PostgREST doesn't support GROUP BY so we fetch just the language column
+      // and aggregate in JS. Capped at 5 000 rows (>> 300-file cap) so memory
+      // is bounded even if the cap is raised later.
+      db
+        .from('project_codebase_files')
+        .select('language')
+        .eq('project_id', projectId)
+        .is('tombstoned_at', null)
+        .limit(5000),
+    ]);
+
+    // Aggregate language distribution
+    const langCounts = new Map<string, number>();
+    for (const row of langRows ?? []) {
+      const lang = (row as { language?: string | null }).language ?? 'unknown';
+      langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1);
+    }
+    const language_distribution = Object.fromEntries(
+      [...langCounts.entries()].sort((a, b) => b[1] - a[1]),
+    );
+    const atFileCap = (indexedFiles ?? 0) >= FILE_CAP;
+
+    return c.json({
+      ok: true,
+      data: {
+        codebase_index_enabled: !!settings?.codebase_index_enabled,
+        repo_url: primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null,
+        default_branch: primaryRepo?.default_branch ?? null,
+        installation_id: primaryRepo?.github_app_installation_id ?? null,
+        indexing_enabled: primaryRepo?.indexing_enabled ?? null,
+        path_globs: (primaryRepo as { path_globs?: string[] | null } | null)?.path_globs ?? null,
+        indexed_files: indexedFiles ?? 0,
+        file_cap: FILE_CAP,
+        at_file_cap: atFileCap,
+        language_distribution,
+        last_indexed_at: primaryRepo?.last_indexed_at ?? null,
+        last_index_attempt_at: primaryRepo?.last_index_attempt_at ?? null,
+        last_index_error: primaryRepo?.last_index_error ?? null,
+        has_webhook_secret: !!settings?.github_webhook_secret,
+      },
+    });
+  });
+
+  // ── Webhook secret rotation ───────────────────────────────────────────────
+  // Rotates the GitHub webhook secret without disabling / re-enabling indexing.
+  // The previous secret becomes invalid the moment this returns, so the caller
+  // must immediately update the secret in GitHub → Settings → Webhooks.
+  app.post('/v1/admin/projects/:id/codebase/rotate-secret', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed || access.role === 'viewer') {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a project editor' } },
+        403,
+      );
+    }
+
+    const newSecret = await generateWebhookSecret();
+    const { error: updErr } = await db
+      .from('project_settings')
+      .update({ github_webhook_secret: newSecret })
+      .eq('project_id', projectId);
+    if (updErr) return dbError(c, updErr);
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'webhook_secret_rotated', projectId, {}).catch(() => {});
+
+    return c.json({ ok: true, data: { webhook_secret: newSecret } });
+  });
+
+  // ── Autofix toggle + preflight ────────────────────────────────────────────
+  //
+  // Phase-4 unblock (2026-05-26): the dispatch endpoint rejects with
+  // `AUTOFIX_DISABLED` when `project_settings.autofix_enabled` is `false`,
+  // but until now the admin UI had no toggle for that column — users had to
+  // flip it via SQL/Supabase Studio (the exact pain point that forced the
+  // earlier Management-API workaround when wiring up solo-boss-cloud).
+  //
+  // `GET /v1/admin/projects/:id/autofix` returns the current flag so the
+  // GitHub integration card can render an accurate toggle on first paint.
+  // `POST /v1/admin/projects/:id/autofix/toggle` flips it (owner/admin only)
+  // and writes an audit log.
+  //
+  // `GET /v1/admin/projects/:id/preflight` returns the dispatch readiness
+  // checklist in ONE call so the dispatch popover doesn't have to issue 4
+  // parallel fetches every time it opens. Each field maps 1:1 to a Dispatch
+  // prerequisite (github / codebase / anthropic / autofix), and `ready`
+  // short-circuits to `true` when every check passes.
+  app.get('/v1/admin/projects/:id/autofix', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
+        403,
+      );
+    }
+    const { data: settings, error } = await db
+      .from('project_settings')
+      .select('autofix_enabled')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { autofix_enabled: !!settings?.autofix_enabled } });
+  });
+
+  app.post('/v1/admin/projects/:id/autofix/toggle', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        403,
+      );
+    }
+
+    let body: { enabled?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_JSON', message: 'Body must be JSON' } },
+        400,
+      );
+    }
+    if (typeof body.enabled !== 'boolean') {
+      return c.json(
+        { ok: false, error: { code: 'BAD_BODY', message: '`enabled` must be a boolean' } },
+        400,
+      );
+    }
+    const enabled = body.enabled;
+
+    const { data: before } = await db
+      .from('project_settings')
+      .select('autofix_enabled')
+      .eq('project_id', projectId)
+      .maybeSingle();
+
+    const { error: updErr } = await db
+      .from('project_settings')
+      .upsert({ project_id: projectId, autofix_enabled: enabled }, { onConflict: 'project_id' });
+    if (updErr) return dbError(c, updErr);
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'autofix', projectId, {
+      previous: !!before?.autofix_enabled,
+      next: enabled,
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { autofix_enabled: enabled } });
+  });
+
+  app.get('/v1/admin/projects/:id/preflight', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
+        403,
+      );
+    }
+
+    // Read every dispatch prerequisite in parallel. Each query is cheap
+    // (single-row PK / count(*) HEAD), so one round-trip beats the FE's
+    // alternative of 4 sequential apiFetch calls per popover open.
+    //
+    // BYOK Anthropic key lives in `project_settings.byok_anthropic_key_ref`
+    // (a `vault://<uuid>` string when configured, null otherwise) — NOT in a
+    // separate `llm_byok_keys` table. Sourcing it from the same row as the
+    // other flags keeps this to a single project_settings round-trip.
+    const [
+      { data: settings },
+      { data: primaryRepo },
+      { count: indexedFiles },
+    ] = await Promise.all([
+      db
+        .from('project_settings')
+        .select(
+          'autofix_enabled, codebase_index_enabled, codebase_repo_url, byok_anthropic_key_ref',
+        )
+        .eq('project_id', projectId)
+        .maybeSingle(),
+      db
+        .from('project_repos')
+        .select('repo_url, github_app_installation_id, indexing_enabled, last_indexed_at')
         .eq('project_id', projectId)
         .eq('is_primary', true)
         .maybeSingle(),
@@ -2183,19 +2443,142 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .is('tombstoned_at', null),
     ]);
 
+    const githubRepoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null;
+    const githubReady = !!githubRepoUrl;
+    const codebaseReady =
+      !!settings?.codebase_index_enabled &&
+      (indexedFiles ?? 0) > 0 &&
+      !!primaryRepo?.last_indexed_at;
+    const anthropicReady = !!settings?.byok_anthropic_key_ref;
+    const autofixReady = !!settings?.autofix_enabled;
+
+    const checks = [
+      {
+        key: 'github' as const,
+        ready: githubReady,
+        label: 'GitHub repo connected',
+        hint: githubReady
+          ? `Repo: ${githubRepoUrl}`
+          : 'Paste your GitHub repo URL in Integrations to give the fix worker a target.',
+        fixHref: '/integrations',
+      },
+      {
+        key: 'codebase' as const,
+        ready: codebaseReady,
+        label: 'Codebase indexed for RAG',
+        hint: codebaseReady
+          ? `${indexedFiles ?? 0} files in pgvector`
+          : settings?.codebase_index_enabled
+            ? 'Indexing is enabled but no files yet — wait ~90s after first enable.'
+            : 'Enable codebase indexing so the fix worker reads real source instead of guessing.',
+        fixHref: '/integrations',
+      },
+      {
+        key: 'anthropic' as const,
+        ready: anthropicReady,
+        label: 'Anthropic key configured',
+        hint: anthropicReady
+          ? 'BYOK key present in Vault'
+          : 'Add an Anthropic key in Settings → BYOK so the agent can actually run.',
+        fixHref: '/settings?tab=byok',
+      },
+      {
+        key: 'autofix' as const,
+        ready: autofixReady,
+        label: 'Autofix enabled for this project',
+        hint: autofixReady
+          ? 'Dispatch will queue a fix worker.'
+          : 'Flip the Autofix switch on the GitHub integration card to allow dispatches.',
+        fixHref: '/integrations',
+      },
+    ];
+    const ready = checks.every((c) => c.ready);
+    return c.json({ ok: true, data: { ready, checks, repoUrl: githubRepoUrl } });
+  });
+
+  // ── Dry-run dispatch ──────────────────────────────────────────────────────
+  // Simulates the dispatch pipeline WITHOUT calling Anthropic / opening a PR.
+  // Returns a `simulatedSteps[]` array so the user can validate the pipeline
+  // end-to-end (preflight, repo resolution, context assembly, sandbox check)
+  // before burning a real Anthropic token. Also returns an estimated cost.
+  app.post('/v1/admin/projects/:id/fixes/dry-run', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
+        403,
+      );
+    }
+
+    // Run the same preflight checks as /preflight
+    const [settingsRes, repoRes, indexedRes] = await Promise.all([
+      db.from('project_settings').select('autofix_enabled, byok_anthropic_key_ref, sentry_org_slug').eq('project_id', projectId).maybeSingle(),
+      db.from('project_repos').select('repo_url, last_indexed_at, github_app_installation_id').eq('project_id', projectId).eq('is_primary', true).maybeSingle(),
+      db.from('project_codebase_files').select('*', { count: 'exact', head: true }).eq('project_id', projectId).is('tombstoned_at', null),
+    ]);
+    const settings = settingsRes.data;
+    const repo = repoRes.data;
+    const indexedFiles = indexedRes.count ?? 0;
+
+    const steps = [
+      {
+        step: 'preflight',
+        status: (settings?.autofix_enabled && repo?.repo_url && settings?.byok_anthropic_key_ref && indexedFiles > 0) ? 'pass' : 'fail',
+        detail: !settings?.autofix_enabled
+          ? 'Autofix is disabled for this project'
+          : !repo?.repo_url
+            ? 'No GitHub repository configured'
+            : !settings?.byok_anthropic_key_ref
+              ? 'No Anthropic BYOK key configured'
+              : indexedFiles === 0
+                ? 'Codebase not indexed — no files to search'
+                : `All prerequisites met (${indexedFiles} indexed files)`,
+      },
+      {
+        step: 'repo_resolution',
+        status: repo?.repo_url ? 'pass' : 'skip',
+        detail: repo?.repo_url
+          ? `Repository: ${repo.repo_url}`
+          : 'No repository configured',
+      },
+      {
+        step: 'context_assembly',
+        status: indexedFiles > 0 ? 'pass' : 'skip',
+        detail: indexedFiles > 0
+          ? `Would search ${indexedFiles} indexed file chunks for relevant context`
+          : 'Skipped — no indexed files',
+      },
+      {
+        step: 'llm_call',
+        status: settings?.byok_anthropic_key_ref ? 'simulated' : 'skip',
+        detail: settings?.byok_anthropic_key_ref
+          ? 'LLM call would use your BYOK Anthropic key (dry-run: call skipped)'
+          : 'Skipped — no Anthropic key configured',
+      },
+      {
+        step: 'pr_creation',
+        status: repo?.repo_url ? 'simulated' : 'skip',
+        detail: repo?.repo_url
+          ? `Would open a PR against ${repo.repo_url} (dry-run: PR skipped)`
+          : 'Skipped — no repository configured',
+      },
+    ];
+
+    const allPass = steps.filter((s) => s.status === 'fail').length === 0;
+    // Rough cost estimate: Claude Sonnet input ~$3/MTok, expect ~60k tokens for context assembly
+    const estimatedCostUsd = settings?.byok_anthropic_key_ref ? 0.18 : null;
+
     return c.json({
       ok: true,
       data: {
-        codebase_index_enabled: !!settings?.codebase_index_enabled,
-        repo_url: primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null,
-        default_branch: primaryRepo?.default_branch ?? null,
-        installation_id: primaryRepo?.github_app_installation_id ?? null,
-        indexing_enabled: primaryRepo?.indexing_enabled ?? null,
-        indexed_files: indexedFiles ?? 0,
-        last_indexed_at: primaryRepo?.last_indexed_at ?? null,
-        last_index_attempt_at: primaryRepo?.last_index_attempt_at ?? null,
-        last_index_error: primaryRepo?.last_index_error ?? null,
-        has_webhook_secret: !!settings?.github_webhook_secret,
+        ready: allPass,
+        simulatedSteps: steps,
+        estimatedCostUsd,
+        note: 'Dry-run does not call the LLM or open a PR. Run a real dispatch from the Reports page.',
       },
     });
   });
@@ -2878,6 +3261,72 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return c.json({
       ok: true,
       data: { sql: cleanedSql, results: results.slice(0, 100), rowCount: results.length, latencyMs },
+    });
+  });
+
+  // ── Project reset (test/dev environment wipe) ───────────────────────────
+  // POST /v1/admin/projects/:id/reset
+  // Archives a project and wipes transient test data: reports, fix_attempts,
+  // project_codebase_files. Does NOT delete the project itself or its API
+  // keys. Intended to speed up re-running the full onboarding flow.
+  // Only the project owner (or org admin/owner) may reset a project.
+  app.post('/v1/admin/projects/:id/reset', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string | undefined;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    // When called with a JWT, verify the caller owns / admins this project.
+    // When called with an API key (userId may be undefined), trust the key's
+    // project_id scope (adminOrApiKey already validates it targets this project).
+    if (userId) {
+      const access = await userCanAccessProject(db, userId, projectId);
+      if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+        return c.json(
+          { ok: false, error: { code: 'FORBIDDEN', message: 'Only project owners or admins may reset a project' } },
+          403,
+        );
+      }
+    }
+
+    // Wipe transient data in dependency order (fix_attempts refs reports, etc.)
+    const [
+      { error: faErr, count: faCount },
+      { error: cfErr, count: cfCount },
+      { error: rErr, count: rCount },
+    ] = await Promise.all([
+      db.from('fix_attempts').delete({ count: 'exact' }).eq('project_id', projectId),
+      db.from('project_codebase_files').delete({ count: 'exact' }).eq('project_id', projectId),
+      db.from('reports').delete({ count: 'exact' }).eq('project_id', projectId),
+    ]);
+
+    if (faErr) return dbError(c, faErr);
+    if (cfErr) return dbError(c, cfErr);
+    if (rErr) return dbError(c, rErr);
+
+    // Also wipe fix_dispatch_jobs for this project
+    const { error: fdErr, count: fdCount } = await db
+      .from('fix_dispatch_jobs')
+      .delete({ count: 'exact' })
+      .eq('project_id', projectId);
+    if (fdErr) return dbError(c, fdErr);
+
+    log.info('project.reset', { project_id: projectId, user_id: userId });
+
+    return c.json({
+      ok: true,
+      data: {
+        deletedReports: rCount ?? 0,
+        deletedFixAttempts: faCount ?? 0,
+        deletedCodebaseFiles: cfCount ?? 0,
+        deletedDispatchJobs: fdCount ?? 0,
+      },
     });
   });
 }

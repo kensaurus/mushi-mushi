@@ -19,6 +19,9 @@ import { SEVERITY } from '../../lib/tokens'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
+import { ReportSourceBadge } from './ReportSourceBadge'
+import { DispatchFixPreflight } from './DispatchFixPreflight'
+import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconBolt, IconShare, IconExternalLink, IconClose } from '../icons'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
@@ -50,6 +53,9 @@ interface Props {
   onCopyLink: () => void
   onDismiss: () => void
   onDispatchFix: () => void
+  /** Dispatch readiness for the active project, fetched once at the page
+   *  level and shared across every row's preflight popover. */
+  preflight?: PreflightState
 }
 
 function ReportRowViewInner({
@@ -68,6 +74,7 @@ function ReportRowViewInner({
   onCopyLink,
   onDismiss,
   onDispatchFix,
+  preflight,
 }: Props) {
   const summary = row.summary ?? row.description
   const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
@@ -232,6 +239,7 @@ function ReportRowViewInner({
         {row.component && (
           <div className="text-2xs text-fg-faint mt-0.5 font-mono truncate">{row.component}</div>
         )}
+        <ReportSourceBadge row={row} />
         {(hasObservability(row) || row.sentry_trace_id) && (
           <ObservabilityStrip row={row} />
         )}
@@ -272,20 +280,18 @@ function ReportRowViewInner({
       <td className="px-2 py-2 text-right align-top whitespace-nowrap">
         <div className="inline-flex items-center gap-1">
           {canDispatch ? (
-            <Tooltip content="Dispatch an agentic fix attempt for this report (creates a draft PR).">
-              <button
-                type="button"
-                data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDispatchFix()
-                }}
-                disabled={dispatchBusy}
-                className="inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 disabled:opacity-50 disabled:cursor-wait"
-              >
-                {dispatchBusy ? 'Dispatching…' : 'Dispatch fix →'}
-              </button>
-            </Tooltip>
+            <span data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}>
+              <DispatchFixPreflight
+                busy={dispatchBusy}
+                severity={row.severity}
+                blastRadius={blastRadius}
+                confidence={row.confidence}
+                onConfirm={onDispatchFix}
+                onOpenDetail={onOpen}
+                preflight={preflight}
+                repoUrl={preflight?.repoUrl ?? null}
+              />
+            </span>
           ) : (
             <Link
               to={`/reports/${row.id}`}

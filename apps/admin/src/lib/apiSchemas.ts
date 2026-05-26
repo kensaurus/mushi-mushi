@@ -30,6 +30,8 @@ export const SetupStepIdSchema = z.enum([
   'github_connected',
   'sentry_connected',
   'byok_anthropic',
+  'codebase_indexed',
+  'autofix_enabled',
   'first_fix_dispatched',
 ])
 /**

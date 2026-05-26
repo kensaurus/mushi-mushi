@@ -17,6 +17,7 @@ import { ReportRowView } from './ReportRowView'
 import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
+import type { PreflightState } from '../../lib/useDispatchPreflight'
 
 interface Props {
   reports: ReportRow[]
@@ -47,6 +48,10 @@ interface Props {
   onCopyLink: (row: ReportRow) => void
   onDismiss: (row: ReportRow) => void
   onDispatchFix: (row: ReportRow) => void
+  /** Shared dispatch preflight state. Threaded down to every row's
+   *  DispatchFixPreflight popover so prerequisites are visible BEFORE the
+   *  user clicks Queue (and we never round-trip the 4-check fetch per row). */
+  preflight?: PreflightState
 }
 
 interface DisplayRow {
@@ -84,6 +89,7 @@ export function ReportsTable({
   onCopyLink,
   onDismiss,
   onDispatchFix,
+  preflight,
 }: Props) {
   // Build the display list: when group-collapse is on, sibling rows that
   // share a report_group_id collapse behind their canonical (newest) row.
@@ -216,6 +222,7 @@ export function ReportsTable({
                 onCopyLink={() => onCopyLink(d.row)}
                 onDismiss={() => onDismiss(d.row)}
                 onDispatchFix={() => onDispatchFix(d.row)}
+                preflight={preflight}
               />
             ))}
           </tbody>

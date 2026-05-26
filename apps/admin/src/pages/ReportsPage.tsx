@@ -12,6 +12,7 @@ import { useUndoableBulk } from '../lib/useUndoableBulk'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import {
   PageHeader,
   PageHelp,
@@ -46,6 +47,10 @@ export function ReportsPage() {
   const undoable = useUndoableBulk()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
+  // One preflight fetch per page — shared by every row's dispatch popover so
+  // the missing-prereq checklist appears the moment the user opens it instead
+  // of after a 500 from /v1/admin/fixes/dispatch (AUTOFIX_DISABLED etc.).
+  const preflight = useDispatchPreflight(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/reports')
 
@@ -804,6 +809,7 @@ export function ReportsPage() {
             onCopyLink={handleCopyLink}
             onDismiss={handleDismiss}
             onDispatchFix={handleDispatchFix}
+            preflight={preflight}
           />
         </div>
       )}

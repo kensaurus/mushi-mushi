@@ -155,7 +155,14 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         // round-trip. The cost is ~2-5 KB per row of jsonb on average
         // (capped at 100 entries × ≤2 KB by the schema), well under the
         // existing per-row payload from `environment`/`screenshot_url`.
-        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id',
+        //
+        // 2026-05-26 source-attribution boost: surface `sdk_package`,
+        // `sdk_version`, `reporter_user_id`, `proactive_trigger`, and
+        // `app_version` so the triage row can answer the user's first
+        // three questions ("where did this come from? who reported it?
+        // what was the source?") without a row drill-down. These are
+        // text/short fields — payload impact is < 200 bytes per row.
+        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, sdk_package, sdk_version, reporter_user_id, reporter_token_hash, proactive_trigger, app_version',
         { count: 'exact' },
       )
       .in('project_id', projectIds)

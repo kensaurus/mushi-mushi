@@ -39,6 +39,7 @@ import {
   frameworkLabel,
   installCommand,
   isMobileFramework,
+  isServerFramework,
   renderSnippet,
   type Framework,
   type ScreenshotMode,
@@ -234,8 +235,25 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
+        {/* Hidden for server frameworks — the widget only runs in browsers. */}
+        {isServerFramework(framework) ? (
+          <div className="rounded-md border border-edge-subtle bg-surface-raised/50 px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
+            <p className="font-medium text-fg mb-1">Server-side capture</p>
+            <p>
+              <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">@mushi-mushi/node</code>{' '}
+              runs in Node 18+ (and edge runtimes). It captures uncaught exceptions, unhandled rejections,
+              and 5xx errors — no browser widget needed. Reports land in the same inbox as user-submitted bugs,
+              so your team sees server and client failures in one queue.
+            </p>
+            <p className="mt-2">
+              Add <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_PROJECT_ID</code> and{' '}
+              <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_API_KEY</code> to your
+              deployment env. Copy the snippet on the right into your instrumentation file.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between">
@@ -272,6 +290,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             </button>
           </div>
         </div>
+        )}
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
         <div className="space-y-3 min-w-0">
@@ -334,7 +353,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
               mobile bridges (React Native / Expo / Capacitor) don't
               ship these methods yet — they'll get a per-platform
               equivalent once their wave lands. */}
-          {framework !== 'react-native' && framework !== 'expo' && framework !== 'capacitor' && (
+          {!isMobileFramework(framework) && !isServerFramework(framework) && (
             <details className="rounded-md border border-edge-subtle bg-surface-raised/50">
               <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg hover:bg-surface-overlay rounded-md">
                 <span className="font-medium">Power-user APIs (identity, tags, breadcrumbs, Sentry)</span>
@@ -406,6 +425,11 @@ const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
   vue: 'vue',
   svelte: 'svelte',
   vanilla: 'html',
+  // Server-side: instrument files are TypeScript.
+  node: 'ts',
+  express: 'ts',
+  fastify: 'ts',
+  hono: 'ts',
 }
 
 interface CodeBlockProps {

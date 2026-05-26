@@ -76,8 +76,26 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
   };
 }
 
+const DEFAULT_REDACT_SELECTORS: readonly string[] = [
+  'input[type="password"]',
+  '[data-mushi-redact]',
+];
+
 function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Element {
   const clone = document.documentElement.cloneNode(true) as Element;
+
+  // Redact: black-out matching elements. Applied before mask/block so that
+  // password fields are always blacked out even if not explicitly listed
+  // in maskSelectors. Pass an empty array to `redactSelectors` to opt out.
+  const redactSelectors: readonly string[] = privacy?.redactSelectors !== undefined
+    ? privacy.redactSelectors
+    : DEFAULT_REDACT_SELECTORS;
+
+  for (const selector of redactSelectors) {
+    for (const el of safeQueryAll(clone, selector)) {
+      redactElement(el as HTMLElement);
+    }
+  }
 
   for (const selector of privacy?.blockSelectors ?? []) {
     for (const el of safeQueryAll(clone, selector)) {
@@ -100,6 +118,21 @@ function safeQueryAll(root: Element, selector: string): Element[] {
   } catch {
     return [];
   }
+}
+
+function redactElement(el: HTMLElement): void {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    el.value = '';
+    el.setAttribute('value', '');
+  }
+  el.textContent = '';
+  el.setAttribute(
+    'style',
+    `${el.getAttribute('style') ?? ''};background:#000!important;color:#000!important;text-shadow:none!important;border-color:#000!important;`,
+  );
+  el.setAttribute('data-mushi-redacted', 'true');
+  // Remove child nodes so no text nodes leak through the SVG serialiser
+  while (el.firstChild) el.removeChild(el.firstChild);
 }
 
 function maskElement(el: HTMLElement): void {

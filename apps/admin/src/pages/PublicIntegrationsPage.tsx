@@ -9,7 +9,8 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, type LinkProps } from 'react-router-dom'
+import { Link, Navigate, type LinkProps } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
 import {
   MarketingFooter,
   MarketingProvider,
@@ -390,7 +391,21 @@ function IntegrationTile({ integration }: { integration: Integration }) {
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export function PublicIntegrationsPage() {
+  // Keep all hook calls at the top — rules of hooks require that early
+  // returns don't change the call order.
+  const { session, loading } = useAuth()
   const [filter, setFilter] = useState<Category>('All')
+
+  // When a logged-in admin lands on `/integrations`, redirect them to the
+  // configurable view at `/integrations/config`. We intentionally keep the
+  // public marketing page route as `/integrations` for shareability + SEO,
+  // so the redirect is render-time inside this component rather than a
+  // route-level redirect (which would break the marketing URL for
+  // anonymous visitors). `loading` gate avoids a flicker during the
+  // initial supabase.getSession() handshake.
+  if (!loading && session) {
+    return <Navigate to="/integrations/config" replace />
+  }
 
   const theme: MarketingTheme = {
     Link: ReactRouterLinkAdapter,

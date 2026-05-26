@@ -46,6 +46,9 @@ export type {
   MushiSentryContext,
   MushiBetaModeConfig,
   MushiBetaChangelogEntry,
+  MushiReputationResult,
+  MushiTierResult,
+  MushiActivityEvent,
 } from './types';
 
 export {

@@ -136,6 +136,21 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       outline: 2px solid ${vermillion};
       outline-offset: 3px;
     }
+    /* First-session welcome pulse. Three soft halos at 800ms each, then
+       auto-clear. Uses a box-shadow ring rather than transform/scale so it
+       can compose with the hover transform without fighting it. Respects
+       prefers-reduced-motion. */
+    @keyframes mushi-trigger-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(212, 67, 50, 0.55), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
+      70%  { box-shadow: 0 0 0 16px rgba(212, 67, 50, 0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
+      100% { box-shadow: 0 0 0 0 rgba(212, 67, 50, 0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
+    }
+    .mushi-trigger-pulse {
+      animation: mushi-trigger-pulse 800ms ${easeStamp} 3;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mushi-trigger-pulse { animation: none; }
+    }
     .mushi-trigger.bottom-right {
       bottom: var(--mushi-bottom, calc(24px + env(safe-area-inset-bottom, 0px)));
       right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
@@ -405,6 +420,25 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       opacity: 0;
       transform: translateX(-4px);
       transition: opacity 220ms ${easeStamp}, transform 220ms ${easeStamp}, color 220ms ${easeStamp};
+    }
+    /* Feature-request and Reports-inbox entries sit above the five
+       category cards as discoverable shortcuts. We give them a subtle
+       left rule so the eye reads them as a separate group rather than
+       "another category". The shortcut group has zero hover indent
+       overshoot — we want them quiet until intent. */
+    .mushi-feature-entry,
+    .mushi-reports-entry {
+      padding-left: 10px;
+      border-left: 2px solid ${inkFaint};
+      transition: padding 220ms ${easeStamp}, color 220ms ${easeStamp}, border-color 220ms ${easeStamp};
+    }
+    .mushi-feature-entry:hover,
+    .mushi-reports-entry:hover {
+      border-left-color: ${vermillion};
+      padding-left: 14px;
+    }
+    .mushi-feature-entry .mushi-option-icon {
+      filter: none;
     }
     .mushi-report-row {
       width: 100%;
@@ -752,6 +786,113 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       letter-spacing: 0.10em;
       text-transform: uppercase;
       color: ${inkMuted};
+    }
+
+    /* ── Two-way receipt (success step) ──────────────────────────── */
+    /* The receipt block sits below the stamp/meta. Three states:    */
+    /*   1. delivering... (spinner pill, while host onSubmit awaits) */
+    /*   2. confirmed     (Receipt #abc12345 + Track on Mushi link)  */
+    /*   3. queued offline (warn pill — degrade gracefully)          */
+    .mushi-success-receipt {
+      margin-top: 14px;
+      width: 100%;
+      max-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .mushi-success-receipt-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: ${fontMono};
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      color: ${inkMuted};
+    }
+    .mushi-success-receipt-label {
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      color: ${inkMuted};
+    }
+    .mushi-success-receipt-id {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: transparent;
+      border: 1px dashed ${rule};
+      color: inherit;
+      font-family: ${fontMono};
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .mushi-success-receipt-id:hover,
+    .mushi-success-receipt-id:focus-visible {
+      background: rgba(217, 65, 47, 0.06);
+      border-color: ${vermillion};
+      color: ${vermillion};
+      outline: none;
+    }
+    .mushi-success-receipt-copy {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+    .mushi-success-receipt-track {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      background: ${vermillion};
+      color: #fff;
+      font-family: ${fontMono};
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      text-decoration: none;
+      transition: filter 120ms ease;
+    }
+    .mushi-success-receipt-track:hover,
+    .mushi-success-receipt-track:focus-visible {
+      filter: brightness(0.95);
+      outline: none;
+    }
+    .mushi-success-receipt-spinner {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 1.5px solid ${rule};
+      border-top-color: ${vermillion};
+      animation: mushi-receipt-spin 0.8s linear infinite;
+    }
+    @keyframes mushi-receipt-spin {
+      to { transform: rotate(360deg); }
+    }
+    .mushi-success-receipt-hint {
+      color: ${inkMuted};
+      font-style: italic;
+    }
+    .mushi-success-receipt-warn {
+      color: ${vermillion};
+    }
+    .mushi-success-sla {
+      margin-top: 2px;
+      font-family: ${fontDisplay};
+      font-size: 12px;
+      line-height: 1.45;
+      text-align: center;
+      color: ${inkMuted};
+      max-width: 260px;
+    }
+    .mushi-success-sla-default {
+      opacity: 0.85;
     }
 
     @keyframes mushi-stamp-ring {

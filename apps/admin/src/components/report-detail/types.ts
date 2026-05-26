@@ -8,9 +8,36 @@ export interface ReportEnvironment {
   [key: string]: unknown
 }
 
+/** Structured failure reason written by `categorizeFailure()` in fix-worker.
+ *  Matches the CHECK constraint in migration 20260510020000. */
+export type FixAttemptFailureCategory =
+  | 'sandbox_timeout'
+  | 'sandbox_error'
+  | 'validation_rejected'
+  | 'spec_violation'
+  | 'scope_blocked'
+  | 'llm_invalid_json'
+  | 'llm_no_object'
+  | 'llm_rate_limit'
+  | 'llm_other_error'
+  | 'github_403'
+  | 'github_404'
+  | 'github_422'
+  | 'github_other_error'
+  | 'no_relevant_code'
+  | 'context_assembly_failed'
+  | 'unknown'
+
 export interface ReportFixAttempt {
   id: string
-  status: string
+  /** Structured status. Prefix `skipped_` means no PR was attempted. */
+  status:
+    | 'skipped_no_context'
+    | 'skipped_unsupported_agent'
+    | 'skipped_no_sandbox'
+    | 'failed'
+    | 'completed'
+    | string
   agent: string | null
   pr_url: string | null
   pr_number: number | null
@@ -26,6 +53,9 @@ export interface ReportFixAttempt {
    *  haven't received a webhook yet. */
   pr_state: 'open' | 'closed' | 'merged' | 'draft' | null
   llm_model: string | null
+  /** Categorised failure reason from `categorizeFailure()` in fix-worker.
+   *  Only populated when status = 'failed'. */
+  failure_category: FixAttemptFailureCategory | null
   error: string | null
   started_at: string | null
   completed_at: string | null
