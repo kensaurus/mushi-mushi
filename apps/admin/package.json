@@ -27,8 +27,8 @@
     "cmdk": "^1.1.1",
     "framer-motion": "^12.38.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-router-dom": "^7.14.2",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.15.1",
     "streamdown": "^2.5.0",
     "web-vitals": "^5.2.0",
     "zod": "^3.25.76"

@@ -17,7 +17,7 @@
     "@mushi-mushi/brand": "workspace:*",
     "next": "^15.5.18",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
