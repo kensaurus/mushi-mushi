@@ -178,16 +178,12 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
       { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
-<<<<<<< HEAD
       { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconQaCoverage,   beginner: true },
       { label: 'Lessons',      path: '/lessons',      icon: IconLessons,      beginner: true },
       { label: 'Drift',        path: '/drift',        icon: IconDrift,        beginner: true },
       { label: 'Experiments',  path: '/experiments',  icon: IconExperiments },
       { label: 'Anomalies',    path: '/anomalies',    icon: IconAnomalies,    beginner: true },
       { label: 'Releases',     path: '/releases',     icon: IconReleases },
-=======
-      { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconHealth,       beginner: true },
->>>>>>> refs/remotes/origin/fix/screenshots-gitignore
       { label: 'Intelligence', path: '/intelligence', icon: IconIntelligence },
       { label: 'Research',     path: '/research',     icon: IconGlobe },
     ],
@@ -214,14 +210,10 @@ const NAV: NavSection[] = [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
       { label: 'Members',    path: '/organization/members', icon: IconMembers, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
-<<<<<<< HEAD
       { label: 'Rewards',    path: '/rewards',    icon: IconRewards },
       { label: '🪲 Bounties', path: '/rewards?tab=publishing', icon: IconRewards, requiresFeature: 'marketplace_publish' },
       { label: 'LLM Cost',   path: '/cost',       icon: IconGauge },
-=======
-      { label: 'Rewards',       path: '/rewards',    icon: IconSparkle },
-      { label: 'Tester portal', path: '/tester',    icon: IconMarketplace },
->>>>>>> refs/remotes/origin/fix/screenshots-gitignore
+      { label: 'Tester portal', path: '/tester',  icon: IconMarketplace },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
       { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
