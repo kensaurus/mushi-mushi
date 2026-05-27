@@ -42,7 +42,6 @@ export default {
   mcp: 'MCP',
   notifications: 'Notifications',
   cost: 'Cost & usage',
-  rewards: 'Rewards program',
   query: 'Natural-language query',
   'fine-tuning': 'Fine-tuning',
   realtime: 'Real-time collaboration',
