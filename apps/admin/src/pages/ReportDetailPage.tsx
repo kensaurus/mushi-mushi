@@ -227,7 +227,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
   const recommendation = useMemo(
     () => deriveRecommendation(report, dispatchState, commentCount, dispatch, nowMs),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [report, dispatchState, commentCount, dispatch, nowMs],
   )
 
