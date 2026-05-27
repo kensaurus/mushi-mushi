@@ -1,9 +1,11 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.6",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.6.0"
+    ],
     "highlights": [
       {
         "title": "Rewards subsystem",
@@ -36,9 +38,38 @@
       {
         "title": "`mushi nudge`",
         "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
+      },
+      {
+        "title": "Rewards subsystem",
+        "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
+      },
+      {
+        "title": "Proactive triggers",
+        "description": "(`src/proactive-triggers.ts`): schedule-based and event-based triggers that surface the widget at the right moment without developer code."
+      },
+      {
+        "title": "`pulseTrigger()`",
+        "description": "widget-level pulse animation accessible from `Mushi.pulseTrigger()`."
+      },
+      {
+        "title": "Screenshot simplification",
+        "description": "`screenshot.take()` now returns `Promise<string | null>` — callers no longer need to check an `{ ok, dataUrl }` result object."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.6.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.6.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.6.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.5",
@@ -280,13 +311,47 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.13.1",
       "0.13.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "Rewards subsystem",
+        "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
+      },
+      {
+        "title": "Proactive triggers",
+        "description": "(`src/proactive-triggers.ts`): schedule-based and event-based triggers that surface the widget at the right moment without developer code."
+      },
+      {
+        "title": "`pulseTrigger()`",
+        "description": "widget-level pulse animation accessible from `Mushi.pulseTrigger()`."
+      },
+      {
+        "title": "Screenshot simplification",
+        "description": "`screenshot.take()` now returns `Promise<string | null>` — callers no longer need to check an `{ ok, dataUrl }` result object."
+      },
+      {
+        "title": "`beforeSendFeedback` + `onCrashedLastRun`",
+        "description": "lifecycle hooks wired into the init flow."
+      },
+      {
+        "title": "`mushi project create`",
+        "description": "command: provisions a new Mushi project, mints an API key with `mcp:read+write` scope, and writes `.env.local` + `.cursor/mcp.json`."
+      },
+      {
+        "title": "`mushi doctor`",
+        "description": "pre-flight checks — verifies CLI config, endpoint reachability, SDK install, and optional server preflight."
+      },
+      {
+        "title": "`mushi nudge`",
+        "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.13.0"
+        "version": "0.13.1"
       }
     ]
   },
@@ -323,6 +388,38 @@
     ],
     "highlights": [
       {
+        "title": "Rewards subsystem",
+        "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
+      },
+      {
+        "title": "Proactive triggers",
+        "description": "(`src/proactive-triggers.ts`): schedule-based and event-based triggers that surface the widget at the right moment without developer code."
+      },
+      {
+        "title": "`pulseTrigger()`",
+        "description": "widget-level pulse animation accessible from `Mushi.pulseTrigger()`."
+      },
+      {
+        "title": "Screenshot simplification",
+        "description": "`screenshot.take()` now returns `Promise<string | null>` — callers no longer need to check an `{ ok, dataUrl }` result object."
+      },
+      {
+        "title": "`beforeSendFeedback` + `onCrashedLastRun`",
+        "description": "lifecycle hooks wired into the init flow."
+      },
+      {
+        "title": "`mushi project create`",
+        "description": "command: provisions a new Mushi project, mints an API key with `mcp:read+write` scope, and writes `.env.local` + `.cursor/mcp.json`."
+      },
+      {
+        "title": "`mushi doctor`",
+        "description": "pre-flight checks — verifies CLI config, endpoint reachability, SDK install, and optional server preflight."
+      },
+      {
+        "title": "`mushi nudge`",
+        "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
+      },
+      {
         "title": "`mushi sync-lessons`",
         "description": "— pulls promoted lessons from"
       },
@@ -332,6 +429,10 @@
       }
     ],
     "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.11.0"
+      },
       {
         "name": "@mushi-mushi/react-native",
         "version": "0.11.0"
@@ -386,6 +487,38 @@
       {
         "title": "Trackable error codes",
         "description": "every user-visible failure now flows through a structured `MushiCliError` carrying a stable `[E_*]` code (`E_AUTH_MISSING`, `E_NETWORK`, `E_RATE_LIMITED`, `E_INTERRUPTED`, etc.) and an actionable fix hint. Output format is grep-friendly:"
+      },
+      {
+        "title": "Rewards subsystem",
+        "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
+      },
+      {
+        "title": "Proactive triggers",
+        "description": "(`src/proactive-triggers.ts`): schedule-based and event-based triggers that surface the widget at the right moment without developer code."
+      },
+      {
+        "title": "`pulseTrigger()`",
+        "description": "widget-level pulse animation accessible from `Mushi.pulseTrigger()`."
+      },
+      {
+        "title": "Screenshot simplification",
+        "description": "`screenshot.take()` now returns `Promise<string | null>` — callers no longer need to check an `{ ok, dataUrl }` result object."
+      },
+      {
+        "title": "`beforeSendFeedback` + `onCrashedLastRun`",
+        "description": "lifecycle hooks wired into the init flow."
+      },
+      {
+        "title": "`mushi project create`",
+        "description": "command: provisions a new Mushi project, mints an API key with `mcp:read+write` scope, and writes `.env.local` + `.cursor/mcp.json`."
+      },
+      {
+        "title": "`mushi doctor`",
+        "description": "pre-flight checks — verifies CLI config, endpoint reachability, SDK install, and optional server preflight."
+      },
+      {
+        "title": "`mushi nudge`",
+        "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
       }
     ],
     "packages": [
@@ -399,6 +532,10 @@
       },
       {
         "name": "@mushi-mushi/core",
+        "version": "0.9.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.9.0"
       },
       {
@@ -524,6 +661,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.3",
       "0.7.2",
       "0.7.1",
       "0.7.0"
@@ -613,7 +751,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.2"
+        "version": "0.7.3"
       }
     ]
   },
@@ -695,6 +833,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.8",
       "0.5.7",
       "0.5.6",
       "0.5.5",
@@ -773,7 +912,7 @@
       },
       {
         "name": "@mushi-mushi/node",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -789,7 +928,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.7"
+        "version": "0.5.8"
       },
       {
         "name": "mushi-mushi",
