@@ -93,6 +93,7 @@ const TesterAppsPage = lazy(() => import('./pages/tester/TesterAppsPage').then(m
 const TesterWalletPage = lazy(() => import('./pages/tester/TesterWalletPage').then(m => ({ default: m.TesterWalletPage })))
 const TesterSettingsPage = lazy(() => import('./pages/tester/TesterSettingsPage').then(m => ({ default: m.TesterSettingsPage })))
 const TesterLearnPage = lazy(() => import('./pages/tester/TesterLearnPage').then(m => ({ default: m.TesterLearnPage })))
+const TesterSubmissionsPage = lazy(() => import('./pages/tester/TesterSubmissionsPage').then(m => ({ default: m.TesterSubmissionsPage })))
 
 /**
  * NotFoundPage — rendered for any unknown route the SPA's React Router

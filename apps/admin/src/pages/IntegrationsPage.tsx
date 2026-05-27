@@ -72,6 +72,8 @@ export function IntegrationsPage() {
     sentry: {},
     langfuse: {},
     github: {},
+    cursor_cloud: {},
+    claude_code_agent: {},
   })
   const [saving, setSaving] = useState<Kind | null>(null)
   const [testing, setTesting] = useState<Kind | null>(null)

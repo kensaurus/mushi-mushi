@@ -55,7 +55,7 @@ export function useDispatchPreflight(projectId: string | null | undefined): Pref
   }>({ loading: true, ready: false, checks: [], error: null, repoUrl: null })
   const aliveRef = useRef(true)
   const realtimeHealthy = useRef(false)
-  const pollTimerRef = useRef<ReturnType<typeof window.setInterval> | null>(null)
+  const pollTimerRef = useRef<number | null>(null)
 
   const fetchOnce = useCallback(async () => {
     if (!projectId) {

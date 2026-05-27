@@ -117,6 +117,15 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
       'Payout liability dashboard and dispute resolution flow.',
     ],
   },
+  marketplace_publish: {
+    title: 'Marketplace publishing',
+    tagline: 'Publish your Mushi plugin or integration to the public marketplace.',
+    bullets: [
+      'One-click publish flow with semver versioning.',
+      'Automated security scan before listing goes live.',
+      'Usage analytics and ratings dashboard.',
+    ],
+  },
 }
 
 interface InlineProps {

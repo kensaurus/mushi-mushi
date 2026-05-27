@@ -95,6 +95,10 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     tagline: 'Monetary payouts via Stripe Connect require Pro.',
     pillLabel: 'PRO',
   },
+  marketplace_publish: {
+    tagline: 'Publishing to the Mushi Marketplace requires Pro.',
+    pillLabel: 'PRO',
+  },
 }
 
 function ctaCopy(upgradeTo: UpgradeTarget | null | undefined): string {

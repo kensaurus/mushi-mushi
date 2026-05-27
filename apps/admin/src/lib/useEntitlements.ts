@@ -28,6 +28,7 @@ export type FeatureFlag =
   | 'inventory_v2'
   | 'rewards_program'
   | 'rewards_monetary'
+  | 'marketplace_publish'
 
 export interface UpgradeTarget {
   id: string

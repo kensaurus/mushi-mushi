@@ -32,16 +32,13 @@ export function GitHubAppInstallButton({ projectId, hasInstallation = false, cla
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <a
-        href={installUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex"
+      <Btn
+        variant={hasInstallation ? 'ghost' : 'primary'}
+        size="sm"
+        onClick={() => window.open(installUrl, '_blank', 'noreferrer')}
       >
-        <Btn variant={hasInstallation ? 'ghost' : 'primary'} size="sm" as="span">
-          {hasInstallation ? 'Reconnect GitHub App' : 'Install GitHub App'}
-        </Btn>
-      </a>
+        {hasInstallation ? 'Reconnect GitHub App' : 'Install GitHub App'}
+      </Btn>
       {hasInstallation && (
         <Badge className="bg-ok-muted text-ok">App connected</Badge>
       )}
