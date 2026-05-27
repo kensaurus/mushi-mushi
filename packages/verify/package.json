@@ -13,7 +13,7 @@
     "build": "echo 'verify: no build step — runs via tsx'"
   },
   "dependencies": {
-    "@playwright/test": "^1.59.1",
+    "@playwright/test": "^1.60.0",
     "@supabase/supabase-js": "^2.105.1",
     "pixelmatch": "^6.0.0",
     "pngjs": "^7.0.0"
