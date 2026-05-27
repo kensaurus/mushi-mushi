@@ -146,8 +146,8 @@ export class MushiNodeClient {
         body: JSON.stringify({
           projectId: this.opts.projectId,
           category: payload.userCategory ?? this.opts.defaultCategory ?? 'bug',
-          // API validates description.length >= 20; pad short server messages.
-          description: padDescription(payload.description),
+          description: payload.description,
+          ...(payload.severity ? { severity: payload.severity } : {}),
           environment: buildNodeEnvironment({
             url: payload.url,
             env: this.opts.environment,
@@ -158,7 +158,6 @@ export class MushiNodeClient {
             ...(payload.metadata ?? {}),
             error: payload.error,
             userId: payload.userId,
-            ...(payload.severity ? { severity: payload.severity } : {}),
             ...(payload.component ? { component: payload.component } : {}),
           },
           reporterToken: `node-${createHash('sha256').update(this.opts.projectId).digest('hex').slice(0, 32)}`,
@@ -182,11 +181,6 @@ export class MushiNodeClient {
 }
 
 const warnedMessages = new Set<string>()
-/** Ensure description meets the server's 20-character minimum. */
-function padDescription(desc: string): string {
-  if (desc.length >= 20) return desc
-  return desc.padEnd(20, ' ') // pad with spaces to meet minimum
-}
 
 function warnOnce(msg: string): void {
   if (warnedMessages.has(msg)) return

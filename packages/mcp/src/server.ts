@@ -75,6 +75,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   const { version, apiEndpoint, apiKey, projectId } = config
   const doFetch = config.fetch ?? globalThis.fetch
 
+  // Short-circuit for empty scope list: return a bare server with no tools
+  // capability. The MCP SDK only advertises `tools` when at least one tool
+  // has been registered; returning before any registerTool call means the
+  // client sees no `tools` capability and `tools/list` returns -32601.
+  if (config.scopes !== undefined && config.scopes.length === 0) {
+    return new McpServer({ name: 'mushi-mushi', version })
+  }
+
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const res = await doFetch(`${apiEndpoint}${path}`, {
       ...options,
@@ -124,6 +132,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   function jsonText(value: unknown) {
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
+    }
+  }
+
+  /**
+   * Like jsonText but also carries structuredContent for MCP clients that
+   * support the 2025-06-18 spec (Cursor 0.48+, Claude Desktop 2025+).
+   * Use only for tools that declare an outputSchema.
+   */
+  function jsonResult(value: unknown) {
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
+      structuredContent: value as Record<string, unknown>,
     }
   }
 
@@ -179,6 +199,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         severity: z.string().optional().describe('Filter by severity: critical, high, medium, low'),
         limit: z.number().optional().describe('Max reports to return (default 20, max 100)'),
       },
+      outputSchema: {
+        reports: z.array(z.unknown()),
+        total: z.number(),
+      },
     },
     async (args) => {
       const params = new URLSearchParams()
@@ -187,7 +211,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (args.severity) params.set('severity', args.severity)
       params.set('limit', String(Math.min(args.limit ?? 20, 100)))
       const data = await apiCall<{ reports: unknown[]; total: number }>(`/v1/admin/reports?${params}`)
-      return jsonText(data)
+      return jsonResult(data)
     },
   )
 
@@ -213,6 +237,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         limit: z.number().optional().describe('Max results (default 10, max 50)'),
         threshold: z.number().optional().describe('Similarity threshold 0..1, default 0.2'),
       },
+      outputSchema: {
+        results: z.array(z.unknown()),
+      },
     },
     async (args) => {
       const data = await apiCall<{ results: unknown[] }>('/v1/admin/reports/similarity', {
@@ -224,7 +251,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonText(data)
+      return jsonResult(data)
     },
   )
 
@@ -543,6 +570,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         idempotencyKey: z.string().uuid().optional().describe('Optional RFC 4122 UUID. Resend the same key to safely retry without dispatching a duplicate fix job (Idempotency-Key IETF draft).'),
         inventoryActionNodeId: z.string().uuid().optional().describe('Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.'),
       },
+      outputSchema: {
+        fixId: z.string(),
+        status: z.string(),
+      },
     },
     async (args, extra) => {
       // Long-running: emit a progress ping so MCP clients that support
@@ -573,7 +604,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonText(data)
+      return jsonResult(data)
     },
   )
 
@@ -643,6 +674,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'setup_repo_for_mushi',
+    {
+      title: titleOf('setup_repo_for_mushi'),
+      description: descOf('setup_repo_for_mushi'),
+      annotations: annotationsFor('setup_repo_for_mushi'),
+      inputSchema: {
+        projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
+      },
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required for setup_repo_for_mushi')
+      const data = await apiCall(`/v1/admin/projects/${pid}/repo/bootstrap`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      return jsonText(data)
+    },
+  )
+
   // --- Resources -------------------------------------------------------
 
   server.resource(
@@ -674,10 +726,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Rewards tools (P3) -------------------------------------------------
 
-  const rewardsMeta = (name: string) => {
-    const spec = TOOL_CATALOG.find((t) => t.name === name)!
-    return { title: spec.title, annotations: { readOnlyHint: spec.hints.readOnly, destructiveHint: spec.hints.destructive, idempotentHint: spec.hints.idempotent, openWorldHint: spec.hints.openWorld } }
-  }
+  const rewardsMeta = (name: string) => annotationsFor(name)
 
   server.tool(
     'list_top_contributors',
@@ -742,6 +791,40 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           }),
           null, 2,
         ),
+      }],
+    }),
+  )
+
+  server.resource(
+    'privacy_status',
+    'privacy://status',
+    {
+      description:
+        'Returns the privacy posture for this project: storage region, LLM provider, whether BYOK is configured, ' +
+        'data retention window, and last audit timestamp.',
+    },
+    async () => ({
+      contents: [{
+        uri: 'privacy://status',
+        mimeType: 'application/json',
+        text: JSON.stringify(await apiCall('/v1/admin/privacy/status'), null, 2),
+      }],
+    }),
+  )
+
+  server.resource(
+    'evolution_history',
+    'evolution://history',
+    {
+      description:
+        'Returns the project\'s last 30 days of judge scores, prompt promotions, fixed-bug count, and lesson inductions. ' +
+        'Agents can read this to see whether the loop is converging (rising judge scores, falling recurrence) or stalling.',
+    },
+    async () => ({
+      contents: [{
+        uri: 'evolution://history',
+        mimeType: 'application/json',
+        text: JSON.stringify(await apiCall('/v1/admin/evolution/history'), null, 2),
       }],
     }),
   )
@@ -859,6 +942,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }],
     }),
   )
+
+  // Apply scope filtering if granted scopes were provided.
+  // All tools are registered above for readability; this block removes the
+  // ones the caller's API key does not have access to. When `scopes` is
+  // undefined (default), every tool stays registered. When `scopes` is an
+  // empty array, every tool is removed — the SDK then omits the `tools`
+  // capability from the MCP handshake entirely.
+  const grantedScopes = config.scopes
+  if (grantedScopes !== undefined) {
+    // Access the internal registry via a known-private field. This is
+    // intentional: the SDK exposes no public "remove by name" method and
+    // we need post-registration filtering to keep the registration code
+    // readable. Cast once, filter, done.
+    type ToolRegistry = Record<string, { remove(): void }>
+    const toolRegistry = (server as unknown as { _registeredTools: ToolRegistry })._registeredTools
+    for (const spec of TOOL_CATALOG) {
+      if (!(grantedScopes as readonly string[]).includes(spec.scope)) {
+        toolRegistry[spec.name]?.remove()
+      }
+    }
+  }
 
   return server
 }

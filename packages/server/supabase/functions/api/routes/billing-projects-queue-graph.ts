@@ -1339,6 +1339,16 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       organizationId = writable?.organization_id ?? null;
     }
 
+    // Lazy-bootstrap: a brand-new signup can hit POST /v1/admin/projects
+    // before the auth trigger has had a chance to materialise their personal
+    // org row. Call bootstrap_personal_org now so first-time users land on
+    // the happy path instead of a dead-end 400.
+    if (!organizationId) {
+      const { data: bootstrapped } = await db
+        .rpc('bootstrap_personal_org', { p_user_id: userId });
+      organizationId = (bootstrapped as string | null) ?? null;
+    }
+
     if (!organizationId) {
       return c.json(
         {
