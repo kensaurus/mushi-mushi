@@ -79,14 +79,6 @@ verify_jwt = false
 [functions.judge-batch]
 verify_jwt = false
 
-# intelligence-report is invoked from `api` (POST /v1/admin/intelligence) using
-# the service-role bearer. Same sb_secret_* gateway issue as the other internal
-# pipeline functions — without verify_jwt = false the gateway returns
-# UNAUTHORIZED_INVALID_JWT_FORMAT and every manual + cron digest generation
-# fails before the function body runs.
-[functions.intelligence-report]
-verify_jwt = false
-
 # mcp is the Model Context Protocol Streamable HTTP transport
 # (2025-03-26 spec). Public endpoint reached by external orchestrators
 # (Cursor remote MCP, OpenAI Agents SDK, Anthropic Claude Agent SDK in
@@ -201,68 +193,71 @@ verify_jwt = false
 [functions.a2a-push-notify]
 verify_jwt = false
 
-# qa-story-runner is invoked every minute by pg_cron
-# (`qa-story-runner-tick` → `mushi.edge_function_post('qa-story-runner', …)`)
-# with the internal-caller token from `public.mushi_runtime_config`. That
-# token is the shared secret `MUSHI_INTERNAL_CALLER_SECRET` mirror — not a
-# real Supabase JWT — so the platform gateway *must not* try to verify it.
-# Without this entry the gateway returns 401 on every cron tick, the function
-# body never executes, and the public.cron_runs table stays empty (silent
-# failure). Auth is enforced inside the handler via requireServiceRoleAuth.
-[functions.qa-story-runner]
-verify_jwt = false
+# 2026-05-24 backfill: every entry below this line is for a function that was
+# already deployed to production with `verify_jwt = false` via legacy
+# `supabase functions deploy --no-verify-jwt` invocations (or earlier versions
+# of `scripts/deploy-edge-function.mjs` that defaulted to false). When the
+# strict-default script (which falls back to platform default `true` when the
+# config.toml entry is missing) re-deployed these functions, the gateway
+# started rejecting cron callers with `UNAUTHORIZED_INVALID_JWT_FORMAT`
+# because cron sends a non-JWT 64-char internal-caller token via
+# `mushi.edge_function_post()`. All nine functions authenticate inside the
+# handler via `requireServiceRoleAuth`, so the platform JWT gate must stay
+# off for them. Pinning the setting here makes the contract explicit and
+# survives any future redeploy.
 
-# Closed-loop evolution (Phases 1–6): cron + manual triggers use the
-# internal-caller token from mushi_runtime_config, not a Supabase JWT.
-# Auth is enforced inside each handler via requireServiceRoleAuth.
-[functions.mistake-clusterer]
-verify_jwt = false
-
-[functions.mistake-summarizer]
-verify_jwt = false
-
-[functions.release-builder]
-verify_jwt = false
-
-[functions.pdca-runner]
-verify_jwt = false
-
-[functions.contract-graph-builder]
-verify_jwt = false
-
-[functions.drift-walker]
-verify_jwt = false
-
-[functions.experiment-analyzer]
-verify_jwt = false
-
-[functions.anomaly-detector]
-verify_jwt = false
-
-# These functions all use requireServiceRoleAuth and are invoked by pg_cron
-# or the api function using the service-role bearer. Without verify_jwt = false
-# the Supabase gateway returns UNAUTHORIZED_INVALID_JWT_FORMAT before the
-# function body runs (same sb_secret_* key format issue as above).
-[functions.generate-synthetic]
-verify_jwt = false
-
-[functions.integration-health-probe]
-verify_jwt = false
-
+# plugin-dispatch-retry runs every minute via pg_cron `mushi-plugin-dispatch-retry`
+# (see migration 20260423040000_wave_t_runtime_config_and_rls_initplan.sql). It
+# walks `plugin_dispatch_attempts` and re-fires failed plugin webhooks. Auth is
+# enforced inside the handler.
 [functions.plugin-dispatch-retry]
 verify_jwt = false
 
-[functions.reward-payout-aggregator]
+# qa-story-runner runs every minute via pg_cron `qa-story-runner-tick` (see
+# migration 20260516000000_qa_story_runner_cron.sql). It picks up due stories
+# from `qa_stories` and dispatches them to firecrawl_actions / browserbase /
+# local providers. Auth is enforced inside the handler.
+[functions.qa-story-runner]
 verify_jwt = false
 
-[functions.tremendous-redemption-worker]
+# usage-aggregator runs hourly via pg_cron `mushi-usage-aggregator-hourly`. It
+# rolls `usage_events` rows into Stripe Meter Events and writes idempotency
+# keys back. Auth is enforced inside the handler.
+[functions.usage-aggregator]
 verify_jwt = false
 
+# intelligence-report runs weekly via pg_cron. It writes a narrative LLM summary
+# of KPI trends into `intelligence_reports`. Auth is enforced inside the handler.
+[functions.intelligence-report]
+verify_jwt = false
+
+# recompute-tester-reputation runs daily via pg_cron. It walks tester submissions
+# and recomputes accept/reject ratios + tier badges. Auth is enforced inside the
+# handler.
 [functions.recompute-tester-reputation]
 verify_jwt = false
 
+# reward-payout-aggregator runs daily via pg_cron. It batches accepted tester
+# submissions into Tremendous payout orders. Auth is enforced inside the handler
+# (and a sanctions check gates the actual payout).
+[functions.reward-payout-aggregator]
+verify_jwt = false
+
+# generate-synthetic runs hourly via pg_cron. It runs Playwright smoke tests
+# defined in `synthetic_monitors` and writes results to `synthetic_results`.
+# Auth is enforced inside the handler.
+[functions.generate-synthetic]
+verify_jwt = false
+
+# soc2-evidence is invoked by `api` (admin export) and by pg_cron (daily backup).
+# It collects SOC 2 evidence artifacts from `audit_log` + `change_history` and
+# uploads to the `soc2-evidence` storage bucket. Auth is enforced inside the
+# handler.
 [functions.soc2-evidence]
 verify_jwt = false
 
-[functions.usage-aggregator]
+# integration-health-probe runs every 5 min via pg_cron. It pings configured
+# project integrations (Slack, Linear, Jira) and updates `project_integrations.
+# last_health_check_at`. Auth is enforced inside the handler.
+[functions.integration-health-probe]
 verify_jwt = false

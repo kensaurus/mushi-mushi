@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNow } from '../lib/useNow'
+import { useParams, Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import {
   Section,
+  Field,
   PageHelp,
   RecommendedAction,
   EmptyState,
   ErrorAlert,
   Btn,
+  Badge,
   Callout,
+  InfoHint,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
-import { statusLabel, severityLabel } from '../lib/tokens'
+import { statusLabel, severityLabel, CATEGORY_LABELS, CATEGORY_BADGE } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
@@ -29,9 +33,7 @@ import {
   IconHealth,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
-import { ActionPill } from '../components/report-detail/ReportSurface'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
-import { CursorAgentLaunch } from '../components/report-detail/CursorAgentLaunch'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
@@ -41,23 +43,21 @@ import { recordVisit } from '../lib/recentEntities'
 import {
   ClassificationFields,
   ScreenshotHero,
-  EmptySectionMessage,
 } from '../components/report-detail/ReportClassification'
 import {
   PerformanceMetrics,
   ConsoleLogs,
   NetworkLogs,
   EnvironmentFields,
-  DeviceAndBuildPanel,
 } from '../components/report-detail/ReportEvidence'
-import { UserReportFields } from '../components/report-detail/ReportUserSection'
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
-import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
+import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
+import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -197,7 +197,7 @@ export function ReportDetailPage() {
 
   if (!report) return <DetailSkeleton label="Loading report" />
 
-  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
+  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} />
 }
 
 interface ReportDetailViewProps {
@@ -205,10 +205,9 @@ interface ReportDetailViewProps {
   onTriage: (updates: Record<string, string>) => Promise<void>
   saving: boolean
   savedAt: number | null
-  onReload: () => void
 }
 
-function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: ReportDetailViewProps) {
+function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailViewProps) {
   const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
@@ -216,19 +215,42 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const platform = usePlatformIntegrations()
   const latestFix = report.fix_attempts?.[0]
 
+  // Tick the clock every second only while the agent is actively running so
+  // the elapsed chip in the recommendation banner live-updates without
+  // triggering a global setInterval storm across every open tab.
+  const isInFlight =
+    dispatchState.status === 'queueing' ||
+    dispatchState.status === 'queued' ||
+    dispatchState.status === 'running' ||
+    report.status === 'fixing'
+  const nowMs = useNow(1000, isInFlight)
+
   const recommendation = useMemo(
-    () => deriveRecommendation(report, dispatchState, commentCount, dispatch),
-    [report, dispatchState, commentCount, dispatch],
+    () => deriveRecommendation(report, dispatchState, commentCount, dispatch, nowMs),
+    [report, dispatchState, commentCount, dispatch, nowMs],
   )
+
+  const preflight = useDispatchPreflight(report.project_id)
+
+  // Show the preflight banner on reports that could be dispatched: not already
+  // in a terminal state, and not currently being fixed.
+  const isDispatchEligible =
+    report.status !== 'fixed' &&
+    report.status !== 'dismissed' &&
+    report.status !== 'fixing' &&
+    dispatchState.status !== 'queueing' &&
+    dispatchState.status !== 'queued' &&
+    dispatchState.status !== 'running' &&
+    dispatchState.status !== 'completed'
 
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   const reporterShort = report.reporter_token_hash?.slice(0, 8) ?? 'unknown'
 
   return (
     <div>
-      <ActionPill to="/reports" tone="neutral" className="mb-3">
-        ← Back to reports
-      </ActionPill>
+      <Link to="/reports" className="text-xs text-fg-muted hover:text-fg-secondary mb-3 inline-flex items-center gap-1">
+        <span aria-hidden="true">&larr;</span> Back to reports
+      </Link>
 
       <PageHelp
         title="About this report"
@@ -267,11 +289,17 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         <ScreenshotHero url={report.screenshot_url} className="mb-3" />
       )}
 
+      {isDispatchEligible && (
+        <DispatchPreflightBanner preflight={preflight} className="mb-2" />
+      )}
+
       <RecommendedAction
         title={recommendation.title}
         description={recommendation.description}
         cta={recommendation.cta}
         tone={recommendation.tone}
+        meta={recommendation.meta}
+        actions={recommendation.actions}
       />
 
       <ReportTriageBar
@@ -286,18 +314,37 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <FixProgressStream reportId={report.id} dispatchState={dispatchState} />
 
-      {/* Cursor agent handoff — gives operators a way to drive the fix
-          loop themselves with full visibility, vs. delegating to the
-          internal fix-worker. Only shown for reports that haven't been
-          dispatched yet, since after dispatch the fix-worker owns the
-          loop and a parallel Cursor agent would race. */}
-      {report.status !== 'fixed' && report.status !== 'dismissed' && dispatchState.status === 'idle' && (
-        <CursorAgentLaunch report={report} />
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Section title="User report" icon={<IconUser />}>
-          <UserReportFields report={report} />
+          {report.user_category && (
+            <div className="mb-2.5">
+              <div className="flex items-center gap-1 text-xs text-fg-muted font-medium">
+                User category
+                <InfoHint content="What the reporter said the issue was about, before LLM classification." />
+              </div>
+              <div className="mt-1">
+                <Badge
+                  className={CATEGORY_BADGE[report.user_category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
+                >
+                  {CATEGORY_LABELS[report.user_category] ?? report.user_category}
+                </Badge>
+              </div>
+            </div>
+          )}
+          <Field label="Description" value={report.description} longForm />
+          {report.user_intent && (
+            <Field
+              label="User intent"
+              value={report.user_intent}
+              longForm
+              tooltip="What the reporter said they were trying to do when the issue happened."
+            />
+          )}
+          {!report.screenshot_url && (
+            <p className="text-2xs text-fg-faint italic mt-2">
+              No screenshot was captured for this report.
+            </p>
+          )}
         </Section>
 
         <Section title="LLM classification" icon={<IconSparkle />}>
@@ -310,10 +357,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
               </p>
             </Callout>
           ) : (
-            <EmptySectionMessage
-              text="Pending classification — refresh in a few seconds."
-              hint="The Stage-1 LLM classifier runs asynchronously after ingest."
-            />
+            <div className="text-fg-muted text-xs italic">Pending classification — refresh in a few seconds.</div>
           )}
         </Section>
 
@@ -347,16 +391,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         </Section>
       </div>
 
-      {/* Mushi Bounties: reviewer grading card when report came from a tester */}
-      {report.tester_submission_id && report.tester_submission && (
-        <div className="mt-3 rounded-lg border border-brand/20 bg-brand/5 p-4">
-          <TesterSubmissionCard
-            submission={report.tester_submission}
-            onReviewed={onReload}
-          />
-        </div>
-      )}
-
       <div className="mt-3">
         <SentryContextPanel
           mushiBreadcrumbs={report.breadcrumbs}
@@ -387,4 +421,51 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
     parts.push(updates.severity ? `severity \u2192 ${severityLabel(updates.severity)}` : 'severity cleared')
   }
   return parts.length > 0 ? parts.join(' \u00b7 ') : null
+}
+
+/** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
+const PLATFORM_BADGE: Record<string, string> = {
+  ios:     'bg-info-muted text-info border-info/20',
+  android: 'bg-ok-muted text-ok border-ok/20',
+  web:     'bg-brand/15 text-brand border-brand/20',
+  macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
+  windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
+}
+
+/**
+ * Device & Build panel — renders SDK package, version, app version, and
+ * the resolved platform tag in a compact definition grid. Mirrors the
+ * density of EnvironmentFields so the two panels feel like one surface.
+ */
+function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
+  const platform = (report.environment?.platform ?? '').toLowerCase()
+  const rows: Array<{ label: string; value: string }> = [
+    report.sdk_package  ? { label: 'SDK',         value: report.sdk_package }  : null,
+    report.sdk_version  ? { label: 'SDK version',  value: report.sdk_version }  : null,
+    report.app_version  ? { label: 'App version',  value: report.app_version }  : null,
+    platform            ? { label: 'Platform',     value: platform }             : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="space-y-1.5">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center gap-3">
+          <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
+          {row.label === 'Platform' ? (
+            <span
+              className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+            >
+              {row.value}
+            </span>
+          ) : (
+            <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
+              {row.value}
+            </code>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }

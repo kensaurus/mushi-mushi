@@ -33,12 +33,19 @@ const STATUS_CONFIG = {
 
 type ReviewAction = 'accept' | 'informative' | 'duplicate' | 'spam'
 
-const ACTIONS: Array<{ action: ReviewAction; label: string; variant: 'primary' | 'secondary' | 'ghost'; description: string }> = [
+const ACTIONS: Array<{ action: ReviewAction; label: string; variant: 'primary' | 'success' | 'ghost' | 'danger'; description: string }> = [
   { action: 'accept',      label: '✓ Accept',      variant: 'primary',   description: 'Full bounty awarded, +7 rep' },
-  { action: 'informative', label: 'Informative',   variant: 'secondary', description: '50% bounty, +0 rep' },
+  { action: 'informative', label: 'Informative',   variant: 'ghost',     description: '50% bounty, +0 rep' },
   { action: 'duplicate',   label: 'Duplicate',     variant: 'ghost',     description: 'No points, +2 rep' },
-  { action: 'spam',        label: '✗ Spam',         variant: 'ghost',     description: 'No points, −10 rep' },
+  { action: 'spam',        label: '✗ Spam',         variant: 'danger',    description: 'No points, −10 rep' },
 ]
+
+const REVIEW_SUCCESS_LABEL: Record<ReviewAction, string> = {
+  accept: 'accepted',
+  informative: 'marked informative',
+  duplicate: 'marked duplicate',
+  spam: 'marked as spam',
+}
 
 export function TesterSubmissionCard({ submission, onReviewed }: Props) {
   const toast = useToast()
@@ -56,7 +63,7 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: note || undefined }),
       })
-      toast.success(`Submission ${action === 'accept' ? 'accepted' : action + 'd'}`)
+      toast.success(`Submission ${REVIEW_SUCCESS_LABEL[action]}`)
       onReviewed()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Review action failed')
@@ -120,11 +127,11 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {ACTIONS.map(({ action, label, description }) => (
+            {ACTIONS.map(({ action, label, variant, description }) => (
               <Btn
                 key={action}
                 size="sm"
-                variant={action === 'accept' ? 'primary' : 'ghost'}
+                variant={variant}
                 disabled={!!reviewing}
                 onClick={() => handleReview(action)}
                 title={description}

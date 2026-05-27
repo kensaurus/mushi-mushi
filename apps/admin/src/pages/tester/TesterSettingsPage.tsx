@@ -31,6 +31,8 @@ export function TesterSettingsPage() {
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [form, setForm] = useState<Partial<TesterProfile>>({})
+  const [feedback, setFeedback] = useState({ subject: '', body: '' })
+  const [feedbackState, setFeedbackState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   useEffect(() => {
     if (profile) setForm(profile)
@@ -69,6 +71,22 @@ export function TesterSettingsPage() {
       window.location.href = '/login'
     } catch {
       setDeleting(false)
+    }
+  }
+
+  const handleSendFeedback = async () => {
+    if (feedback.subject.trim().length < 3 || feedback.body.trim().length < 10) return
+    setFeedbackState('sending')
+    try {
+      await apiFetch('/v1/support/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...feedback, category: 'other' }),
+      })
+      setFeedbackState('sent')
+      setFeedback({ subject: '', body: '' })
+    } catch {
+      setFeedbackState('error')
     }
   }
 
@@ -182,7 +200,7 @@ export function TesterSettingsPage() {
               {profile?.kycStatus === 'cleared' ? (
                 <ContainedBlock tone="info">
                   <p className="text-xs font-medium">✓ Identity verified</p>
-                  <p className="text-2xs text-fg-muted mt-0.5">Gift card redemptions up to $2,400/yr are unlocked.</p>
+                  <p className="text-2xs text-fg-muted mt-0.5">Gift card redemptions up to $599/yr are unlocked.</p>
                 </ContainedBlock>
               ) : profile?.kycStatus === 'pending' ? (
                 <ContainedBlock tone="info">
@@ -210,6 +228,47 @@ export function TesterSettingsPage() {
             <Btn onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </Btn>
+
+            <hr className="border-edge" />
+
+            {/* Tester → Mushi feedback channel */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold">Send feedback about Mushi Bounties</h2>
+              <p className="text-2xs text-fg-secondary">
+                Found a bug in the platform itself? Have a suggestion? Let us know — this goes directly to the Mushi team.
+              </p>
+              {feedbackState === 'sent' ? (
+                <ContainedBlock tone="info">
+                  <p className="text-xs font-medium">✓ Feedback sent</p>
+                  <p className="text-2xs text-fg-muted mt-0.5">We usually respond within 2 business days.</p>
+                </ContainedBlock>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    placeholder="Subject (e.g. Bug: wallet balance incorrect)"
+                    value={feedback.subject}
+                    onChange={e => setFeedback(f => ({ ...f, subject: e.target.value }))}
+                    className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  />
+                  <textarea
+                    placeholder="Describe the issue or suggestion in detail…"
+                    rows={3}
+                    value={feedback.body}
+                    onChange={e => setFeedback(f => ({ ...f, body: e.target.value }))}
+                    className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40 resize-none"
+                  />
+                  {feedbackState === 'error' && (
+                    <p className="text-2xs text-danger">Failed to send. Please try again.</p>
+                  )}
+                  <Btn
+                    onClick={handleSendFeedback}
+                    disabled={feedbackState === 'sending' || feedback.subject.trim().length < 3 || feedback.body.trim().length < 10}
+                  >
+                    {feedbackState === 'sending' ? 'Sending…' : 'Send feedback'}
+                  </Btn>
+                </div>
+              )}
+            </section>
 
             <hr className="border-edge" />
 

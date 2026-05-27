@@ -30,7 +30,7 @@
 
 import { useEffect, type ComponentPropsWithRef, type ElementType, type ReactNode } from 'react'
 import type { MushiReportCategory } from '@mushi-mushi/core'
-import { useMushi } from './hooks'
+import { useMushi, useMushiSdk } from './hooks'
 
 // ── MushiTrigger ────────────────────────────────────────────────────────────
 
@@ -57,13 +57,13 @@ export function MushiTrigger<C extends ElementType = 'button'>({
   onClick,
   ...rest
 }: MushiTriggerProps<C>) {
-  const sdk = useMushi()
+  const { report } = useMushi()
   const Component = (as ?? 'button') as ElementType
 
   function handleClick(e: React.MouseEvent) {
     ;(onClick as ((e: React.MouseEvent) => void) | undefined)?.(e)
     if (e.defaultPrevented) return
-    sdk?.report(category ? { category } : undefined)
+    report(category ? { category } : undefined)
   }
 
   return (
@@ -94,7 +94,7 @@ interface MushiAttachProps {
  * `MushiWidgetConfig` (position, theme, …) rather than a pre-selected category.
  */
 export function MushiAttach({ selector, category }: MushiAttachProps) {
-  const sdk = useMushi()
+  const sdk = useMushiSdk()
 
   useEffect(() => {
     if (!sdk || !selector) return

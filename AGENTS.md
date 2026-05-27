@@ -23,33 +23,6 @@ can execute without additional context.
 | `qa-story-runner` | `supabase/functions/qa-story-runner/` | cron (every minute) | Executes QA Coverage stories via Firecrawl / Browserbase / local |
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
-| `tremendous-redemption-worker` | `supabase/functions/tremendous-redemption-worker/` | pg_cron (every minute) | Drains `tremendous_orders` with `status='pending'`; calls Tremendous `/v2/orders`; updates status on delivery. Cloud-only. |
-| `recompute-tester-reputation` | `supabase/functions/recompute-tester-reputation/` | pg_cron (daily 04:30 UTC) | Recomputes `tester_reputation` score, `signal_pct`, `impact_pct`, `leaderboard_rank_30d` for all testers using the HackerOne-style formula. |
-| `tester-submission-router` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` | HTTP (API route) | Routes `POST /v1/tester/submissions` through `ingestReport()`, creates `tester_submissions` row, tags Sentry event per published-app DSN. |
-
----
-
-## Codebase Explorer API
-
-The admin console's `/explore` page is backed by two project-scoped REST endpoints in `billing-projects-queue-graph.ts`:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/v1/admin/projects/:id/codebase/explore` | `GET` | Returns the full codebase graph: `nodes` (files/symbols with layer, language, line range, content preview), `edges` (import relationships), `layers` (count per layer), `total_files`. Add `?symbols=1` for symbol-level granularity. |
-| `/v1/admin/projects/:id/codebase/search` | `POST` | Semantic search. Body: `{ query: string, k?: number }`. Generates an embedding for the query and calls the `match_codebase_files` RPC for vector similarity ranking. Returns ranked `results[]` with `similarity` scores. |
-
-**Data source:** `project_codebase_files` table. Populated by `mushi index` (CLI) or Settings → Codebase Indexing.
-
-**Architectural layers** (detected by `detectExploreLayer` on the backend, mirrored by `detectLayer` on the frontend):
-
-| Layer | Key | Heuristic |
-|-------|-----|-----------|
-| UI | `ui` | `app/`, `pages/`, `screens/`, `components/` directories; `.tsx/.jsx` extension |
-| Library | `lib` | `lib/`, `utils/`, `hooks/`, `shared/`, `common/` directories |
-| Backend | `backend` | `server/`, `api/`, `supabase/functions/`, `routes/` directories |
-| Tests | `test` | `tests/`, `__tests__/`, `spec/`, `.test.ts` / `.spec.ts` files |
-| Config | `config` | `config/`, `.github/`, `tooling/`; `.json`, `.yaml`, `.toml` files |
-| Other | `other` | Anything else |
 
 ---
 
@@ -120,31 +93,6 @@ Project-level API keys are stored encrypted in the `byok_keys` table
 5. Deploy: `npx supabase functions deploy <name> --no-verify-jwt`
 6. Add a cron if needed via `SELECT cron.schedule(...)` or a migration
 7. Update this file and `docs/execplans/PLANS.md`
-
----
-
-## Mushi Bounties — Tester Marketplace
-
-The **Mushi Bounties** sub-product (crowd-testing marketplace) adds the following
-surfaces on top of the core evolution loop:
-
-| Surface | Location | Audience |
-|---|---|---|
-| Public browse + signup | `apps/testers/` Next.js at `kensaur.us/mushi-mushi/testers/` | Anyone; no auth required to browse |
-| Tester dashboard | `apps/admin /tester/*` (Vite SPA, `<TesterRoute>`) | Logged-in testers |
-| Publishing controls | `apps/admin /rewards?tab=publishing` | Dev/PM (Pro+ only; cloud-only) |
-| Tester API | `api/routes/tester-marketplace.ts` | Testers via JWT |
-| Published-app admin API | `api/routes/published-apps.ts` | Dev/PM via JWT |
-| Redemption worker | `supabase/functions/tremendous-redemption-worker/` | cron (platform) |
-
-Key design constraints:
-- **Cloud-only.** Self-hosted installs see an upgrade CTA.
-- **No crypto, no prize draws.** mushi-points redeem for Mushi Pro (1.3× coupon) or Tremendous gift cards ($599/yr cap).
-- **Testers are NOT org members.** They use `auth.users` + `mushi_testers` table; never added to `organization_members`.
-- **Legal review required before gift-card cash-out.** See `docs/runbooks/tester-marketplace-launch.md`.
-
-Concept doc: [`apps/docs/content/concepts/bounty-marketplace.mdx`](apps/docs/content/concepts/bounty-marketplace.mdx).
-Research: [`docs/research/tester-marketplace-research-2026-05-22.md`](docs/research/tester-marketplace-research-2026-05-22.md).
 
 ---
 

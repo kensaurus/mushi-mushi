@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { ApiClientOptions } from '@mushi-mushi/core'
 import { DEFAULT_API_ENDPOINT } from '@mushi-mushi/core'
 
@@ -146,21 +147,22 @@ export class MushiNodeClient {
           projectId: this.opts.projectId,
           category: payload.userCategory ?? this.opts.defaultCategory ?? 'bug',
           description: payload.description,
-          severity: payload.severity,
-          component: payload.component,
-          environment: {
+          ...(payload.severity ? { severity: payload.severity } : {}),
+          environment: buildNodeEnvironment({
             url: payload.url,
             env: this.opts.environment,
             release: this.opts.release,
-            origin: 'node',
             traceContext: payload.traceContext,
-          },
+          }),
           metadata: {
             ...(payload.metadata ?? {}),
             error: payload.error,
             userId: payload.userId,
+            ...(payload.component ? { component: payload.component } : {}),
           },
-          reporterToken: `node-${this.opts.projectId}`,
+          reporterToken: `node-${createHash('sha256').update(this.opts.projectId).digest('hex').slice(0, 32)}`,
+          createdAt: new Date().toISOString(),
+          sdkPackage: '@mushi-mushi/node',
         }),
       })
       if (!res.ok) {
@@ -179,6 +181,7 @@ export class MushiNodeClient {
 }
 
 const warnedMessages = new Set<string>()
+
 function warnOnce(msg: string): void {
   if (warnedMessages.has(msg)) return
   warnedMessages.add(msg)
@@ -202,4 +205,40 @@ export function composeSignals(signals: Array<AbortSignal | undefined>): AbortSi
   }
   if (live.length === 1) return live[0]!
   return AbortSignal.any(live)
+}
+
+/**
+ * Build a MushiEnvironment-compatible object for server-side reports.
+ *
+ * The ingest API was designed for browser SDK payloads that include
+ * viewport, user-agent, timezone, etc. Server-side reports supply
+ * sensible server defaults so the schema validation passes, and the
+ * admin UI can still filter / display the report correctly via the
+ * `origin: 'node'` discriminator inside the env block.
+ */
+function buildNodeEnvironment(opts: {
+  url?: string
+  env?: string
+  release?: string
+  traceContext?: NodeReportPayload['traceContext']
+}): Record<string, unknown> {
+  return {
+    // Required MushiEnvironment fields — supply server-appropriate defaults
+    userAgent: `@mushi-mushi/node Node.js/${process.version} ${process.platform}`,
+    platform: process.platform,
+    language: process.env.LANG?.split('.')[0] ?? 'en',
+    viewport: { width: 0, height: 0 },
+    url: opts.url ?? process.env.SERVICE_URL ?? 'server',
+    referrer: '',
+    timestamp: new Date().toISOString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+
+    // Node-specific extras (stored in metadata by the server)
+    env: opts.env,
+    release: opts.release,
+    origin: 'node',
+    nodeVersion: process.version,
+    pid: process.pid,
+    ...(opts.traceContext ? { traceContext: opts.traceContext } : {}),
+  }
 }

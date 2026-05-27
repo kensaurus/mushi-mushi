@@ -17,6 +17,7 @@ import { ReportRowView } from './ReportRowView'
 import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
+import type { PreflightState } from '../../lib/useDispatchPreflight'
 
 interface Props {
   reports: ReportRow[]
@@ -47,10 +48,10 @@ interface Props {
   onCopyLink: (row: ReportRow) => void
   onDismiss: (row: ReportRow) => void
   onDispatchFix: (row: ReportRow) => void
-  onDispatchCursor?: (row: ReportRow) => void
-  onDispatchClaude?: (row: ReportRow) => void
-  cursorEnabled?: boolean
-  claudeEnabled?: boolean
+  /** Shared dispatch preflight state. Threaded down to every row's
+   *  DispatchFixPreflight popover so prerequisites are visible BEFORE the
+   *  user clicks Queue (and we never round-trip the 4-check fetch per row). */
+  preflight?: PreflightState
 }
 
 interface DisplayRow {
@@ -88,10 +89,7 @@ export function ReportsTable({
   onCopyLink,
   onDismiss,
   onDispatchFix,
-  onDispatchCursor,
-  onDispatchClaude,
-  cursorEnabled = false,
-  claudeEnabled = false,
+  preflight,
 }: Props) {
   // Build the display list: when group-collapse is on, sibling rows that
   // share a report_group_id collapse behind their canonical (newest) row.
@@ -224,32 +222,25 @@ export function ReportsTable({
                 onCopyLink={() => onCopyLink(d.row)}
                 onDismiss={() => onDismiss(d.row)}
                 onDispatchFix={() => onDispatchFix(d.row)}
-                onDispatchCursor={onDispatchCursor ? () => onDispatchCursor(d.row) : undefined}
-                onDispatchClaude={onDispatchClaude ? () => onDispatchClaude(d.row) : undefined}
-                cursorEnabled={cursorEnabled}
-                claudeEnabled={claudeEnabled}
+                preflight={preflight}
               />
             ))}
           </tbody>
         </table>
       </ResponsiveTable>
 
-      <div className="flex items-center justify-between gap-2 border-t border-edge-subtle bg-surface-overlay/20 px-3 py-2">
-        <span className="inline-flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted">
-          <span className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-2 py-0.5 font-mono tabular-nums">
-            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
-          </span>
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
+        <span>
+          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           {groupCollapse && visibleGroupCount !== reports.length && (
-            <span className="rounded-sm border border-edge-subtle bg-surface-overlay/35 px-2 py-0.5 text-fg-faint">
-              grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}
-            </span>
+            <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>
           )}
         </span>
         <div className="flex items-center gap-1">
           <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => onSetPage(page - 1)}>
             <Kbd>[</Kbd> Prev
           </Btn>
-          <span className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
+          <span className="font-mono px-2">
             {page + 1} / {totalPages}
           </span>
           <Btn

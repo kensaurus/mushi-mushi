@@ -47,10 +47,10 @@ Add to `.cursor/mcp.json` in your repo root:
 }
 ```
 
-<Callout type="tip">
-  Get the pre-filled snippet in one click: Admin console →
-  **Settings → API Keys** → **Copy as `.cursor/mcp.json`**.
-</Callout>
+  <Callout type="info">
+    Get the pre-filled snippet in one click: Admin console →
+    **Settings → API Keys** → **Copy as `.cursor/mcp.json`**.
+  </Callout>
 
 ## Manual setup: Claude Desktop
 
@@ -78,7 +78,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 Skip the local subprocess — use the hosted MCP endpoint when you're
 running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator:
 
-```jsonc filename=".cursor/mcp.json"
+```json filename=".cursor/mcp.json"
 {
   "mcpServers": {
     "mushi-hosted": {
@@ -105,7 +105,7 @@ running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator:
 | `query_knowledge_graph` | Ask "what other reports look like this?"     |
 | `run_nl_query`          | Natural-language → SQL questions about your data |
 
-<Callout type="info" emoji="🔁">
+<Callout type="info">
   The MCP server speaks JSON-RPC 2.0 with `tools/call` semantics, and the
   agent surface is also discoverable via the
   [A2A Agent Card](/concepts/architecture#a2a-agent-card) at

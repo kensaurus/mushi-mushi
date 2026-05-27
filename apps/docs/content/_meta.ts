@@ -30,6 +30,7 @@ export default {
   security: 'Security & compliance',
 
   '-- Extend': { type: 'separator', title: 'Extend Mushi' },
+  integrations: 'Integrations',
   plugins: 'Plugin marketplace',
 
   '-- Reference': { type: 'separator', title: 'Reference' },

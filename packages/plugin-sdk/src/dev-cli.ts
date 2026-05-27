@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs'
 import { verifySignature } from './sign.js'
 import type { MushiEventEnvelope, MushiEventName } from './types.js'
 
-const SAMPLE_ENVELOPES: Record<MushiEventName, MushiEventEnvelope> = {
+const SAMPLE_ENVELOPES: Partial<Record<MushiEventName, MushiEventEnvelope>> = {
   'report.created': { event: 'report.created', deliveryId: 'dev-0001', occurredAt: new Date().toISOString(), projectId: 'dev-project', pluginSlug: 'dev-plugin', data: { report: { id: 'r_dev_001', status: 'pending', category: 'bug', severity: 'high', title: 'Login button does nothing on /signin' } } },
   'report.classified': { event: 'report.classified', deliveryId: 'dev-0002', occurredAt: new Date().toISOString(), projectId: 'dev-project', pluginSlug: 'dev-plugin', data: { report: { id: 'r_dev_001', status: 'classified' }, classification: { category: 'bug', severity: 'high', confidence: 0.92, tags: ['auth', 'regression'] } } },
   'report.status_changed': { event: 'report.status_changed', deliveryId: 'dev-0003', occurredAt: new Date().toISOString(), projectId: 'dev-project', pluginSlug: 'dev-plugin', data: { report: { id: 'r_dev_001', status: 'fixed' }, previousStatus: 'fixing', newStatus: 'fixed', actorUserId: 'u_dev' } },

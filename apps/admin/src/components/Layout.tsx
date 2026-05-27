@@ -213,6 +213,7 @@ const NAV: NavSection[] = [
       { label: 'Rewards',    path: '/rewards',    icon: IconRewards },
       { label: '🪲 Bounties', path: '/rewards?tab=publishing', icon: IconRewards, requiresFeature: 'marketplace_publish' },
       { label: 'LLM Cost',   path: '/cost',       icon: IconGauge },
+      { label: 'Tester portal', path: '/tester',  icon: IconMarketplace },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
       { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },

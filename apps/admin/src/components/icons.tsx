@@ -586,7 +586,7 @@ export function IconChevronRight(p: IconProps) {
   </>)
 }
 
-// Inbox tray — "Inbox": arrow dropping into a tray. Distinct from IconBell
+// Inbox tray — "Inbox": arrow dropping into a tray.
 // (used by Notifications) so the two items always read differently in the sidebar.
 export function IconInbox(p: IconProps) {
   return wrap(p, <>

@@ -104,9 +104,9 @@ SELECT jobname, schedule, command
   FROM cron.job
  WHERE jobname IN (
    'refresh-tester-leaderboard-30d',
-   'recompute-tester-reputation-daily'
+   'recompute-tester-reputation'
  );
--- Expected: 2 rows.
+-- Expected: 2 rows (15-min MV refresh + daily edge-function recompute).
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 9. Smoke-test the auto-provision trigger path (dry-run).

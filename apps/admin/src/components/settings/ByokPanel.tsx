@@ -175,10 +175,27 @@ export function ByokPanel() {
     )
     setPending(null)
     if (res.ok && res.data) {
+      const savedHint = res.data.hint
       setDrafts((d) => ({ ...d, [provider]: '' }))
-      setFeedback({ provider, ok: true, message: `Saved (${res.data.hint}). Click Test connection to verify.` })
       setTestResults((r) => ({ ...r, [provider]: undefined }))
+      setFeedback({ provider, ok: true, message: `Saved (${savedHint}). Verifying…` })
       reload()
+      // Auto-probe immediately after save so the user sees a real
+      // "Connection OK · 142 ms" chip without the extra "now click Test"
+      // step that previously left people staring at a green chip that
+      // hadn't actually proven anything. Failures get the same inline
+      // diagnostic the manual Test button surfaces. We swallow exceptions
+      // because the save itself already succeeded — the worst-case is
+      // the user clicks Test manually.
+      try {
+        await testKey(provider)
+      } catch {
+        setFeedback({
+          provider,
+          ok: true,
+          message: `Saved (${savedHint}). Click Test connection to verify.`,
+        })
+      }
     } else {
       setFeedback({ provider, ok: false, message: res.error?.message ?? 'Failed to save key.' })
     }
