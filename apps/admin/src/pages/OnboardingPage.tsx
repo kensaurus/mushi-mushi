@@ -590,7 +590,12 @@ export function OnboardingPage() {
                 aria-describedby={createError ? 'onboarding-create-error' : undefined}
               />
             </div>
-            <Btn onClick={createProject} loading={creating} disabled={creating || !projectName.trim()}>
+            <Btn
+              onClick={createProject}
+              loading={creating}
+              disabled={creating || !projectName.trim()}
+              title={!projectName.trim() ? 'Enter a project name to continue' : undefined}
+            >
               Create
             </Btn>
           </div>

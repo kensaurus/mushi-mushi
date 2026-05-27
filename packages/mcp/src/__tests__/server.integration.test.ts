@@ -127,6 +127,7 @@ describe('MCP protocol handshake', () => {
       'run_nl_query',
       'search_reports',
       'set_tier',
+      'setup_check',
       'setup_repo_for_mushi',
       'submit_fix_result',
       'test_gen_from_report',

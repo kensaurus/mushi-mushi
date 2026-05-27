@@ -1,14 +1,15 @@
 /**
  * FILE: apps/admin/src/pages/RewardsPage.tsx
  * PURPOSE: Rewards program management — URL-driven tab layout with animated
- *   indicator covering Overview, Activity Rules, Tier Ladder, Contributors,
- *   Quests, Retention, Simulator, and Settings.
+ *   indicator covering Overview, Bounties (Marketplace Publishing), Activity
+ *   Rules, Tier Ladder, Contributors, Quests, Retention, Simulator, and Settings.
  *   Design: matches the SettingsPage / HealthPage tablist pattern.
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useLayoutEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { PublishingTab } from '../components/rewards/PublishingTab'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -30,17 +31,8 @@ import {
   RelativeTime,
   SegmentedControl,
   DetailRows,
-  FreshnessPill,
-  RecommendedAction,
   type DetailRowItem,
 } from '../components/ui'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  InlineProof,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
 import {
   IconSparkle,
   IconUser,
@@ -55,35 +47,6 @@ import {
 } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
-import { PublishingTab } from '../components/rewards/PublishingTab'
-import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
-import {
-  contributors30dDetail,
-  contributors30dTooltip,
-  overviewContributorsDetail,
-  overviewContributorsTooltip,
-  overviewPendingLiabilityDetail,
-  overviewPendingLiabilityTooltip,
-  overviewPointsDetail,
-  overviewPointsTooltip,
-  overviewTierHoldersDetail,
-  overviewTierHoldersTooltip,
-  pendingPayoutDetail,
-  pendingPayoutTooltip,
-  points30dDetail,
-  points30dTooltip,
-  questsDetail,
-  questsTooltip,
-  rulesTiersDetail,
-  rulesTiersTooltip,
-  webhooksDetail,
-  webhooksTooltip,
-} from '../lib/statTooltips/rewards'
-import { rewardsLinks } from '../lib/statCardLinks'
-import { usePageCopy } from '../lib/copy'
-import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -218,31 +181,23 @@ function OverviewTab() {
         <StatCard
           label="Active contributors (30d)"
           value={data?.active_contributors_30d ?? 0}
-          tooltip={overviewContributorsTooltip(data?.active_contributors_30d ?? 0)}
-          detail={overviewContributorsDetail()}
-          to={rewardsLinks.contributors30d}
+          hint="Distinct users who earned at least 1 point in the last 30 days."
         />
         <StatCard
           label="Points awarded (30d)"
           value={(data?.points_awarded_30d ?? 0).toLocaleString()}
-          tooltip={overviewPointsTooltip(data?.points_awarded_30d ?? 0)}
-          detail={overviewPointsDetail()}
-          to={rewardsLinks.points30d}
+          hint="Total points credited to all users in the last 30 days."
         />
         <StatCard
           label="Tier holders"
           value={totalHolders}
-          tooltip={overviewTierHoldersTooltip(totalHolders)}
-          detail={overviewTierHoldersDetail()}
-          to={rewardsLinks.rulesTiers}
+          hint="Users who have crossed a tier threshold and hold a non-free rank."
         />
         <StatCard
           label="Pending liability"
           value={`$${pendingLiability.toFixed(2)}`}
           accent={pendingLiability > 0 ? 'text-warn' : undefined}
-          tooltip={overviewPendingLiabilityTooltip(pendingLiability)}
-          detail={overviewPendingLiabilityDetail()}
-          to={rewardsLinks.pendingPayout}
+          hint="USD in pending monetary payouts awaiting the monthly Stripe aggregator run."
         />
       </div>
 
@@ -282,12 +237,10 @@ function OverviewTab() {
       </Section>
 
       {pendingLiability > 0 && (
-        <ContainedBlock tone="warn">
-          <p className="text-xs text-warn">
-            <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
-            monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
-          </p>
-        </ContainedBlock>
+        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+          <strong>${pendingLiability.toFixed(2)} USD</strong> in payouts are queued for the next
+          monthly aggregator run. Stripe Connect KYC must be complete before funds transfer.
+        </div>
       )}
 
       {/* ── Debug: 24h activity feed ── */}
@@ -298,40 +251,38 @@ function OverviewTab() {
       >
         {feedData && (
           <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              { label: 'total events', value: feedData.stats_24h.total, tone: 'neutral' as const },
-              { label: 'accepted', value: feedData.stats_24h.accepted, tone: 'ok' as const },
-              {
-                label: 'rejected',
-                value: feedData.stats_24h.rejected,
-                tone: feedData.stats_24h.rejected > 0 ? ('danger' as const) : ('neutral' as const),
-                sub: feedData.stats_24h.rejection_rate_pct > 0 ? `${feedData.stats_24h.rejection_rate_pct}%` : undefined,
-              },
-              { label: 'pts awarded', value: `+${feedData.stats_24h.points_awarded.toLocaleString()}`, tone: 'brand' as const },
-            ].map((item) => (
-              <Card key={item.label} className="space-y-2 p-2 text-center">
-                <SignalChip tone={item.tone} className="mx-auto">
-                  {item.label}
-                  {item.sub ? ` (${item.sub})` : ''}
-                </SignalChip>
-                <div className={`text-lg font-semibold tabular-nums ${item.tone === 'danger' ? 'text-danger' : item.tone === 'ok' ? 'text-ok' : item.tone === 'brand' ? 'text-brand' : 'text-fg'}`}>
-                  {item.value}
-                </div>
-              </Card>
-            ))}
+            <div className="rounded-lg bg-surface-overlay p-2 text-center">
+              <div className="text-lg font-semibold tabular-nums text-fg">{feedData.stats_24h.total}</div>
+              <div className="text-2xs text-fg-muted mt-0.5">total events</div>
+            </div>
+            <div className="rounded-lg bg-surface-overlay p-2 text-center">
+              <div className="text-lg font-semibold tabular-nums text-ok">{feedData.stats_24h.accepted}</div>
+              <div className="text-2xs text-fg-muted mt-0.5">accepted</div>
+            </div>
+            <div className={`rounded-lg bg-surface-overlay p-2 text-center ${feedData.stats_24h.rejected > 0 ? 'ring-1 ring-danger/30' : ''}`}>
+              <div className={`text-lg font-semibold tabular-nums ${feedData.stats_24h.rejected > 0 ? 'text-danger' : 'text-fg-muted'}`}>
+                {feedData.stats_24h.rejected}
+              </div>
+              <div className="text-2xs text-fg-muted mt-0.5">
+                rejected{feedData.stats_24h.rejection_rate_pct > 0 ? ` (${feedData.stats_24h.rejection_rate_pct}%)` : ''}
+              </div>
+            </div>
+            <div className="rounded-lg bg-surface-overlay p-2 text-center">
+              <div className="text-lg font-semibold tabular-nums text-brand">+{feedData.stats_24h.points_awarded.toLocaleString()}</div>
+              <div className="text-2xs text-fg-muted mt-0.5">pts awarded</div>
+            </div>
           </div>
         )}
 
         {feedData && feedData.stats_24h.top_actions.length > 0 && (
-          <ContainedBlock tone="muted" label="Top actions" className="mb-3">
-            <div className="flex flex-wrap gap-1.5">
-              {feedData.stats_24h.top_actions.map(({ action, count }) => (
-                <SignalChip key={action} tone="neutral" className="font-mono">
-                  {action.replace(/_/g, ' ')} ×{count}
-                </SignalChip>
-              ))}
-            </div>
-          </ContainedBlock>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {feedData.stats_24h.top_actions.map(({ action, count }) => (
+              <span key={action} className="inline-flex items-center gap-1 rounded bg-surface-overlay px-2 py-0.5 text-2xs text-fg-muted">
+                <span className="font-mono text-fg">{action.replace(/_/g, ' ')}</span>
+                <span className="text-fg-faint">×{count}</span>
+              </span>
+            ))}
+          </div>
         )}
 
         {!feedData || feedData.events.length === 0 ? (
@@ -1371,12 +1322,10 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
         ) : undefined
       }
     >
-      <ContainedBlock tone="muted" className="mb-3">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Configure JWKS endpoints for Apple, Google, or Supabase sign-in. A verified JWT is{' '}
-          <strong>required</strong> before any monetary payout is processed (KYC/AML gate).
-        </p>
-      </ContainedBlock>
+      <p className="text-2xs text-fg-muted mb-3">
+        Configure JWKS endpoints for Apple, Google, or Supabase sign-in. A verified JWT is{' '}
+        <strong>required</strong> before any monetary payout is processed (KYC/AML gate).
+      </p>
 
       {showForm && (
         <Card className="p-3 mb-3 space-y-2.5">
@@ -1417,7 +1366,7 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
             value={form.issuer}
             onChange={(ev) => setForm((p) => ({ ...p, issuer: ev.target.value }))}
           />
-          <InlineProof>JWKS payloads are cached for 6 hours to avoid rate-limit issues.</InlineProof>
+          <p className="text-2xs text-fg-faint">JWKS payloads are cached for 6 hours to avoid rate-limit issues.</p>
           <div className="flex gap-2 justify-end pt-1">
             <Btn variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
             <Btn variant="primary" size="sm" loading={saving} onClick={saveProvider}>Save</Btn>
@@ -1435,14 +1384,14 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
       {(providers ?? []).map((p) => (
         <div key={p.id} className="flex items-center justify-between py-2.5 border-b border-edge-subtle last:border-0">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SignalChip tone="brand" className="capitalize">{p.provider}</SignalChip>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-fg capitalize">{p.provider}</span>
               <Badge className={p.enabled ? 'bg-ok-muted text-ok text-2xs' : 'bg-surface-overlay text-fg-muted text-2xs'}>
                 {p.enabled ? 'Active' : 'Disabled'}
               </Badge>
             </div>
-            <InlineProof className="mt-1.5 font-mono truncate max-w-xs">{p.jwks_url}</InlineProof>
-            {p.audience && <InlineProof className="mt-1">aud: {p.audience}</InlineProof>}
+            <div className="text-2xs text-fg-faint mt-0.5 truncate max-w-xs font-mono">{p.jwks_url}</div>
+            {p.audience && <div className="text-2xs text-fg-faint">aud: {p.audience}</div>}
           </div>
           {canEdit && (
             <div className="flex items-center gap-1.5 shrink-0">
@@ -1504,16 +1453,14 @@ function DisputesSection() {
 
   return (
     <Section title="Disputes" icon={<IconShield />}>
-      <ContainedBlock tone="muted" className="mb-3">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Review flagged rewards. Denied disputes cancel associated pending payouts and remain on the ledger.
-        </p>
-      </ContainedBlock>
+      <p className="text-2xs text-fg-muted mb-3">
+        Review flagged rewards. Denied disputes cancel associated pending payouts and remain on the ledger.
+      </p>
       <div className="divide-y divide-edge-subtle text-xs">
         {(disputes ?? []).map((d) => (
           <div key={d.id} className="py-3">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-fg">
                     {d.end_users?.display_name ?? d.end_users?.external_user_id ?? d.end_user_id.slice(0, 8)}
@@ -1522,16 +1469,14 @@ function DisputesSection() {
                     {d.status}
                   </Badge>
                 </div>
-                <ContainedBlock tone="warn">
-                  <p className="text-2xs break-words text-fg-secondary">{d.reason}</p>
-                </ContainedBlock>
+                <p className="text-2xs text-fg-muted mt-0.5 break-words">{d.reason}</p>
                 {d.resolution_notes && (
-                  <InlineProof>Resolution: {d.resolution_notes}</InlineProof>
+                  <p className="text-2xs text-fg-secondary mt-0.5">Resolution: {d.resolution_notes}</p>
                 )}
-                <InlineProof>
+                <p className="text-2xs text-fg-faint mt-0.5">
                   Opened <RelativeTime value={d.opened_at} />
                   {d.resolved_at && <> · Resolved <RelativeTime value={d.resolved_at} /></>}
-                </InlineProof>
+                </p>
               </div>
               {(d.status === 'open' || d.status === 'under_review') && (
                 <div className="flex gap-1.5 shrink-0">
@@ -1579,12 +1524,10 @@ function PayoutLiabilitySection() {
 
   return (
     <Section title="Payout ledger" icon={<IconBilling />}>
-      <ContainedBlock tone="muted" className="mb-3">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Monetary payouts via Stripe Connect Express. Aggregator runs on the 1st of each month.
-          KYC must be complete and anti-fraud flags must be clear before funds transfer.
-        </p>
-      </ContainedBlock>
+      <p className="text-2xs text-fg-muted mb-3">
+        Monetary payouts via Stripe Connect Express. Aggregator runs on the 1st of each month.
+        KYC must be complete and anti-fraud flags must be clear before funds transfer.
+      </p>
       {(payouts ?? []).length === 0 ? (
         <EmptyState
           title="No payouts yet"
@@ -1594,17 +1537,13 @@ function PayoutLiabilitySection() {
         <div className="divide-y divide-edge-subtle text-xs">
           {(payouts ?? []).map((p) => (
             <div key={p.id} className="flex items-center justify-between py-2.5">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <SignalChip tone="brand" className="font-mono">
-                    ${Number(p.amount_usd).toFixed(2)} {p.currency.toUpperCase()}
-                  </SignalChip>
-                  {p.tier_slug && <SignalChip tone="neutral" className="capitalize">{p.tier_slug}</SignalChip>}
-                </div>
-                <InlineProof>
+              <div>
+                <span className="font-medium font-mono text-fg">${Number(p.amount_usd).toFixed(2)} {p.currency.toUpperCase()}</span>
+                {p.tier_slug && <span className="text-fg-muted ml-2 capitalize">{p.tier_slug}</span>}
+                <div className="text-2xs text-fg-faint mt-0.5">
                   <RelativeTime value={p.requested_at} />
                   {p.paid_at && <> → paid <RelativeTime value={p.paid_at} /></>}
-                </InlineProof>
+                </div>
               </div>
               <Badge className={`text-2xs ${PAYOUT_BADGE[p.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
                 {p.status}
@@ -1670,11 +1609,9 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
           ) : undefined
         }
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            Receive a signed POST when a user's tier changes. Use this to apply credits, badges, or Pro access in your app.
-          </p>
-        </ContainedBlock>
+        <p className="text-2xs text-fg-muted mb-3">
+          Receive a signed POST when a user's tier changes. Use this to apply credits, badges, or Pro access in your app.
+        </p>
 
         {showNewWebhook && (
           <Card className="p-3 mb-3 space-y-2.5">
@@ -1691,9 +1628,9 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
               value={webhookSecret}
               onChange={(ev) => setWebhookSecret(ev.target.value)}
             />
-            <InlineProof className="mt-1">
+            <p className="text-2xs text-fg-faint">
               After saving, set <code className="font-mono text-fg-secondary">MUSHI_REWARD_WEBHOOK_SECRET_&lt;ID&gt;</code> in your Supabase project env.
-            </InlineProof>
+            </p>
             <div className="flex gap-2 justify-end pt-1">
               <Btn variant="ghost" size="sm" onClick={() => setShowNewWebhook(false)}>Cancel</Btn>
               <Btn variant="primary" size="sm" loading={saving} onClick={createWebhook}>Save</Btn>
@@ -1707,17 +1644,15 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
 
         {(webhooks ?? []).map((w) => (
           <div key={w.id} className="flex items-center justify-between py-2.5 border-b border-edge-subtle last:border-0">
-            <div className="min-w-0 space-y-1.5">
-              <InlineProof className="truncate max-w-sm">{w.url}</InlineProof>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SignalChip tone="neutral">Events: {w.events.join(', ')}</SignalChip>
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-fg truncate max-w-sm font-mono">{w.url}</div>
+              <div className="text-2xs text-fg-faint mt-0.5">
+                Events: {w.events.join(', ')} ·{' '}
                 {w.last_status != null ? (
-                  <SignalChip tone={w.last_status >= 200 && w.last_status < 300 ? 'ok' : 'danger'}>
+                  <span className={w.last_status >= 200 && w.last_status < 300 ? 'text-ok' : 'text-danger'}>
                     Last: {w.last_status}
-                  </SignalChip>
-                ) : (
-                  <SignalChip tone="neutral">Never delivered</SignalChip>
-                )}
+                  </span>
+                ) : 'Never delivered'}
               </div>
             </div>
             {canEdit && <Btn variant="ghost" size="sm" onClick={() => deleteWebhook(w.id)}>Remove</Btn>}
@@ -1809,12 +1744,10 @@ function QuestsTab({ canEdit }: { canEdit: boolean }) {
         ) : undefined
       }
     >
-      <ContainedBlock tone="muted" className="mb-3">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Multi-step goals users complete to earn bonus points. Each step matches an SDK activity action.
-          When all steps complete in order the quest awards bonus points and fires a webhook.
-        </p>
-      </ContainedBlock>
+      <p className="text-2xs text-fg-muted mb-3">
+        Multi-step goals users complete to earn bonus points. Each step matches an SDK activity action.
+        When all steps complete in order the quest awards bonus points and fires a webhook.
+      </p>
 
       {showForm && (
         <Card className="p-3 mb-3 space-y-2.5">
@@ -1878,25 +1811,23 @@ function QuestsTab({ canEdit }: { canEdit: boolean }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <SignalChip tone="brand">{q.name}</SignalChip>
+                    <span className="font-medium text-xs text-fg">{q.name}</span>
                     <Badge className={q.enabled ? 'text-2xs bg-ok-muted text-ok' : 'text-2xs bg-surface-overlay text-fg-muted'}>
                       {q.enabled ? 'Active' : 'Disabled'}
                     </Badge>
                     <Badge className="text-2xs bg-surface-overlay text-fg-secondary">+{q.completion_points} pts</Badge>
                     {q.repeatable && <Badge className="text-2xs bg-info-muted text-info">Repeatable</Badge>}
                   </div>
-                  {q.description && (
-                    <ContainedBlock tone="muted" className="mt-1.5">
-                      <p className="text-2xs leading-relaxed text-fg-muted">{q.description}</p>
-                    </ContainedBlock>
-                  )}
+                  {q.description && <p className="text-2xs text-fg-muted mt-0.5">{q.description}</p>}
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
                     {q.steps.map((s, i) => (
-                      <SignalChip key={i} tone="neutral">{i + 1}. {s.label}</SignalChip>
+                      <span key={i} className="text-2xs bg-surface-overlay rounded px-1.5 py-0.5 text-fg-secondary">
+                        {i + 1}. {s.label}
+                      </span>
                     ))}
                   </div>
                   {q.expires_after_days && (
-                    <InlineProof className="mt-1.5">Expires {q.expires_after_days}d after start</InlineProof>
+                    <p className="text-2xs text-fg-faint mt-0.5">Expires {q.expires_after_days}d after start</p>
                   )}
                 </div>
                 {canEdit && (
@@ -1934,12 +1865,10 @@ function RetentionAnalyticsTab() {
       icon={<IconDashboard />}
       freshness={{ at: lastFetchedAt, isValidating }}
     >
-      <ContainedBlock tone="muted" className="mb-4">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Compares the median active span (first seen → last seen) for users who reached the highest tier
-          vs everyone else. Higher lift = the rewards program drives retention.
-        </p>
-      </ContainedBlock>
+      <p className="text-2xs text-fg-muted mb-4">
+        Compares the median active span (first seen → last seen) for users who reached the highest tier
+        vs everyone else. Higher lift = the rewards program drives retention.
+      </p>
 
       {!data ? (
         <EmptyState title="No data yet" description="Retention analytics will appear once contributors earn points." />
@@ -1970,25 +1899,21 @@ function RetentionAnalyticsTab() {
           </div>
 
           {(data.lift_pct ?? 0) >= 50 && (
-            <ContainedBlock tone="info">
-              <p className="text-xs text-ok">
-                Top contributors retain <strong>{data.lift_pct}% longer</strong> than average — a strong
-                signal to invest further in the rewards program.
-              </p>
-            </ContainedBlock>
+            <div className="rounded-xl border border-ok/20 bg-ok/5 p-3 text-xs text-ok">
+              Top contributors retain <strong>{data.lift_pct}% longer</strong> than average — a strong
+              signal to invest further in the rewards program.
+            </div>
           )}
           {(data.lift_pct ?? 0) < 0 && (
-            <ContainedBlock tone="warn">
-              <p className="text-xs text-warn">
-                Top contributors are retaining <strong>less</strong> than average. Consider adding
-                recurring incentives or time-gated perks to retain power users after they hit the top tier.
-              </p>
-            </ContainedBlock>
+            <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+              Top contributors are retaining <strong>less</strong> than average. Consider adding
+              recurring incentives or time-gated perks to retain power users after they hit the top tier.
+            </div>
           )}
 
-          <InlineProof>
+          <p className="text-2xs text-fg-faint">
             Computed from end_user first_seen_at → last_seen_at. Results update daily.
-          </InlineProof>
+          </p>
         </div>
       )}
     </Section>
@@ -2034,12 +1959,10 @@ function SandboxSimulatorTab() {
 
   return (
     <Section title="Sandbox simulator" icon={<IconQuery />}>
-      <ContainedBlock tone="muted" className="mb-4">
-        <p className="text-2xs leading-relaxed text-fg-muted">
-          Enter a hypothetical activity log and see how many points it would earn and which tier it would
-          reach — without touching real user data. Use this to tune rules before going live.
-        </p>
-      </ContainedBlock>
+      <p className="text-2xs text-fg-muted mb-4">
+        Enter a hypothetical activity log and see how many points it would earn and which tier it would
+        reach — without touching real user data. Use this to tune rules before going live.
+      </p>
 
       <div className="space-y-1.5 mb-4">
         {lines.map((line, i) => (
@@ -2144,10 +2067,11 @@ function IconBilling(p: { className?: string }) {
 
 // ─── Tab definitions ─────────────────────────────────────────
 
-type TabId = RewardsTabId
+type TabId = 'overview' | 'rules' | 'tiers' | 'contributors' | 'quests' | 'analytics' | 'sandbox' | 'settings' | 'publishing'
 
 const TABS: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'overview',      label: 'Overview',        description: 'KPIs, tier distribution, and pending payouts at a glance.' },
+  { id: 'publishing',    label: '🪲 Bounties',     description: 'Publish this app to the Mushi Bounties marketplace and reward testers for finding bugs.' },
   { id: 'rules',         label: 'Activity rules',  description: 'Points awarded per SDK action, daily caps, and lifetime limits.' },
   { id: 'tiers',         label: 'Tier ladder',     description: 'Tier names, point thresholds, and monetary reward amounts.' },
   { id: 'contributors',  label: 'Contributors',    description: 'Leaderboard of identified users by points and tier.' },
@@ -2155,7 +2079,6 @@ const TABS: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'analytics',     label: 'Retention',       description: 'Retention lift for top-tier contributors vs everyone else.' },
   { id: 'sandbox',       label: 'Simulator',       description: 'Simulate any activity log against current rules without real data.' },
   { id: 'settings',      label: 'Settings',        description: 'Webhooks, identity providers, payout ledger, and disputes.' },
-  { id: 'publishing',    label: 'Bounties',         description: 'Publish your app to the Mushi Bounties marketplace and reward testers with mushi-points.' },
 ]
 
 function isTabId(v: string | null): v is TabId {
@@ -2166,391 +2089,142 @@ function isTabId(v: string | null): v is TabId {
 
 export function RewardsPage() {
   const orgId = useActiveOrgSignal()
-  const activeProjectId = useActiveProjectId()
-  const copy = usePageCopy('/rewards')
   const { has } = useEntitlements()
   const rewardsEnabled = has('rewards_program')
   const canEdit = rewardsEnabled
-
-  const statsPath = orgId ? '/v1/admin/rewards/stats' : null
-  const {
-    data: statsData,
-    loading: statsLoading,
-    error: statsError,
-    reload: reloadStats,
-    lastFetchedAt,
-    isValidating,
-  } = usePageData<RewardsStats>(statsPath)
-  const stats = { ...EMPTY_REWARDS_STATS, ...statsData }
-
-  const reloadAll = useCallback(() => {
-    reloadStats()
-  }, [reloadStats])
-
-  useRealtimeReload(['end_user_activity', 'end_user_points', 'reward_rules', 'reward_tiers'], reloadAll)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
   const active: TabId = isTabId(param) ? param : 'overview'
   const activeMeta = TABS.find((t) => t.id === active) ?? TABS[0]
 
-  const setActive = useCallback(
-    (id: TabId) => {
-      const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
-      else next.set('tab', id)
-      setSearchParams(next, { replace: true, preventScrollReset: true })
-    },
-    [searchParams, setSearchParams],
-  )
-
-  const criticalCount =
-    (rewardsEnabled ? 0 : 1) +
-    (stats.projectRewardsEnabled ? 0 : 1) +
-    stats.webhooksFailing +
-    (stats.enabledRulesCount === 0 ? 1 : 0) +
-    (stats.rejectionRatePct24h >= 40 && stats.activity24hTotal >= 5 ? 1 : 0)
+  const setActive = (id: TabId) => {
+    const next = new URLSearchParams(searchParams)
+    if (id === 'overview') next.delete('tab')
+    else next.set('tab', id)
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }
 
   usePublishPageContext({
     route: '/rewards',
     title: `${activeMeta.label} · Rewards`,
     summary: activeMeta.description,
-    filters: { tab: active, org_id: orgId ?? undefined, project_id: activeProjectId ?? undefined },
-    criticalCount,
+    filters: { tab: active },
   })
 
-  const tabOptions = useMemo(
-    () => [
-      { id: 'overview' as const, label: 'Overview' },
-      { id: 'rules' as const, label: 'Rules', count: stats.enabledRulesCount || undefined },
-      { id: 'tiers' as const, label: 'Tiers', count: stats.enabledTiersCount || undefined },
-      {
-        id: 'contributors' as const,
-        label: 'Contributors',
-        count: stats.activeContributors30d > 0 ? stats.activeContributors30d : undefined,
-      },
-      { id: 'quests' as const, label: 'Quests' },
-      { id: 'analytics' as const, label: 'Retention' },
-      { id: 'sandbox' as const, label: 'Simulator' },
-      {
-        id: 'settings' as const,
-        label: 'Settings',
-        count: stats.webhooksFailing > 0 ? stats.webhooksFailing : undefined,
-      },
-      { id: 'publishing' as const, label: '🪲 Bounties' },
-    ],
-    [
-      stats.enabledRulesCount,
-      stats.enabledTiersCount,
-      stats.activeContributors30d,
-      stats.webhooksFailing,
-    ],
-  )
+  // Animated tab indicator
+  const tablistRef = useRef<HTMLDivElement | null>(null)
+  const tabRefs = useRef<Map<TabId, HTMLButtonElement>>(new Map())
+  const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
 
-  if (!orgId) {
-    return (
-      <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Rewards'} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ?? 'Incentivize SDK activity with points, tiers, and payouts.'}
-          </p>
-        </ContainedBlock>
-        <EmptyState
-          title="Select an organization"
-          description="Rewards is scoped to the team in the header org switcher — pick kenji or your workspace team first."
-        />
-      </div>
-    )
-  }
-
-  if (statsLoading && !statsData) {
-    return <PanelSkeleton rows={6} label="Loading rewards" />
-  }
-  if (statsError) {
-    return <ErrorAlert message={`Failed to load rewards stats: ${statsError}`} onRetry={reloadAll} />
-  }
-
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.organizationId
-      ? 'neutral'
-      : !rewardsEnabled
-        ? 'warn'
-        : stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
-          ? 'danger'
-          : stats.topPriority === 'project_disabled' ||
-              stats.topPriority === 'no_rules' ||
-              stats.topPriority === 'high_rejection'
-            ? 'warn'
-            : stats.topPriority === 'no_contributors'
-              ? 'brand'
-              : 'ok'
-
-  const headerBadge = !stats.organizationId
-    ? 'NO ORG'
-    : !rewardsEnabled
-      ? 'HOBBY'
-      : !stats.projectRewardsEnabled
-        ? 'DISABLED'
-        : stats.webhooksFailing > 0
-          ? `${stats.webhooksFailing} WEBHOOK FAIL`
-          : stats.openDisputesCount > 0
-            ? `${stats.openDisputesCount} DISPUTE`
-            : stats.enabledRulesCount === 0
-              ? 'NO RULES'
-              : stats.rejectionRatePct24h >= 40 && stats.activity24hTotal >= 5
-                ? `${stats.rejectionRatePct24h}% REJECT`
-                : stats.activeContributors30d === 0
-                  ? 'NO ACTIVITY'
-                  : 'ACTIVE'
+  useLayoutEffect(() => {
+    const measure = () => {
+      const tab = tabRefs.current.get(active)
+      if (!tab) return
+      setIndicator({ left: tab.offsetLeft, width: tab.offsetWidth })
+    }
+    measure()
+    const list = tablistRef.current
+    if (!list || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(list)
+    return () => ro.disconnect()
+  }, [active])
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-rewards">
+    <div className="space-y-4">
       <PageHeader
-        title={copy?.title ?? 'Rewards'}
-        projectScope={stats.projectName ?? stats.organizationName ?? undefined}
+        title="Rewards"
+        description="Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks."
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
-                : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {headerBadge}
-        </Badge>
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
-          Refresh
-        </Btn>
+        {rewardsEnabled
+          ? <Badge className="bg-ok-muted text-ok">Active</Badge>
+          : <Badge className="bg-surface-overlay text-fg-muted">Hobby — read-only</Badge>}
       </PageHeader>
 
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks.'}
-        </p>
-      </ContainedBlock>
-
-      <RewardsStatusBanner
-        stats={stats}
-        rewardsEntitlement={rewardsEnabled}
-        onTab={setActive}
-        onRefresh={reloadAll}
-        refreshing={isValidating}
+      <PageHelp
+        title="About Rewards"
+        whatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
+        useCases={[
+          'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
+          'Reward power users with monetary payments (via Stripe Connect) at the Champion tier',
+          'Use quests to guide new users through key flows while earning bonus points',
+        ]}
+        howToUse="Configure activity rules to set points per SDK event, then define the tier ladder. Share the SDK snippet with your app and call identify() to link users. Monitor contributors in the leaderboard; use the Simulator tab to preview changes before going live."
       />
 
-      <SegmentedControl
-        value={active}
-        onChange={setActive}
-        options={tabOptions}
-        ariaLabel="Rewards sections"
-        size="sm"
-      />
-
-      <Section title="REWARDS SNAPSHOT" freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label="Contributors · 30d"
-            value={stats.activeContributors30d}
-            accent={stats.activeContributors30d > 0 ? 'text-ok' : undefined}
-            tooltip={contributors30dTooltip(stats)}
-            detail={contributors30dDetail()}
-            to={rewardsLinks.contributors30d}
-          />
-          <StatCard
-            label="Points · 30d"
-            value={stats.pointsAwarded30d.toLocaleString()}
-            accent={stats.pointsAwarded30d > 0 ? 'text-brand' : undefined}
-            tooltip={points30dTooltip(stats)}
-            detail={points30dDetail(stats)}
-            to={rewardsLinks.points30d}
-          />
-          <StatCard
-            label="Rules · tiers"
-            value={`${stats.enabledRulesCount} · ${stats.enabledTiersCount}`}
-            accent={stats.enabledRulesCount > 0 ? 'text-ok' : 'text-warn'}
-            tooltip={rulesTiersTooltip(stats)}
-            detail={rulesTiersDetail()}
-            to={rewardsLinks.rulesTiers}
-          />
-          <StatCard
-            label="Quests"
-            value={stats.enabledQuestsCount}
-            accent={stats.enabledQuestsCount > 0 ? 'text-info' : undefined}
-            tooltip={questsTooltip(stats)}
-            detail={questsDetail()}
-            to={rewardsLinks.quests}
-          />
-          <StatCard
-            label="Webhooks"
-            value={
-              stats.webhooksConfigured === 0
-                ? 'None'
-                : stats.webhooksFailing > 0
-                  ? `${stats.webhooksFailing} fail`
-                  : `${stats.webhooksConfigured} ok`
-            }
-            accent={
-              stats.webhooksFailing > 0
-                ? 'text-danger'
-                : stats.webhooksConfigured > 0
-                  ? 'text-ok'
-                  : undefined
-            }
-            tooltip={webhooksTooltip(stats)}
-            detail={webhooksDetail(stats)}
-            to={rewardsLinks.webhooks}
-          />
-          <StatCard
-            label="Pending payout"
-            value={`$${stats.pendingPayoutLiabilityUsd.toFixed(2)}`}
-            accent={stats.pendingPayoutLiabilityUsd > 0 ? 'text-warn' : undefined}
-            tooltip={pendingPayoutTooltip(stats)}
-            detail={pendingPayoutDetail(stats)}
-            to={rewardsLinks.pendingPayout}
-          />
+      {!rewardsEnabled && (
+        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+          <strong>Rewards program requires Starter or higher.</strong>{' '}
+          <a href="/billing" className="underline">Upgrade your plan</a> to configure rules, tiers, and webhooks.
+          You can preview the program below.
         </div>
-      </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && active === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'high_rejection' || stats.topPriority === 'no_rules'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
-                ? 'danger'
-                : stats.topPriority === 'high_rejection' || stats.topPriority === 'no_rules'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
+      {!orgId && (
+        <div className="rounded-xl border border-danger/20 bg-danger/5 p-3 text-xs text-danger">
+          No active organization found. Please select an organization from the switcher.
+        </div>
+      )}
 
+      {/* Tab nav */}
       <div
-        role="tabpanel"
-        id={`rewards-panel-${active}`}
-        aria-labelledby={`rewards-tab-${active}`}
+        ref={tablistRef}
+        role="tablist"
+        aria-label="Rewards sections"
+        className="relative flex flex-wrap gap-1 border-b border-edge-subtle"
       >
-        {active === 'overview' && (
-          <div className="space-y-4">
-            <PageHelp
-              title={copy?.help?.title ?? 'About Rewards'}
-              whatIsIt={
-                copy?.help?.whatIsIt ??
-                'The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events, and promotes users through tiers.'
+        {TABS.map((t) => {
+          const selected = t.id === active
+          return (
+            <button
+              key={t.id}
+              ref={(el) => {
+                if (el) tabRefs.current.set(t.id, el)
+                else tabRefs.current.delete(t.id)
+              }}
+              role="tab"
+              aria-selected={selected}
+              aria-controls={`rewards-panel-${t.id}`}
+              id={`rewards-tab-${t.id}`}
+              onClick={() => setActive(t.id)}
+              className={
+                'px-3 py-1.5 text-xs font-medium rounded-t-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
+                (selected ? 'text-fg' : 'text-fg-muted hover:text-fg')
               }
-              useCases={
-                copy?.help?.useCases ?? [
-                  'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
-                  'Reward power users with monetary payments at the Champion tier',
-                  'Use quests to guide new users through key flows while earning bonus points',
-                ]
-              }
-              howToUse={
-                copy?.help?.howToUse ??
-                'Configure activity rules, define the tier ladder, then wire SDK identify() + activity. Use Overview to debug rejections; Simulator to preview rule changes.'
-              }
-            />
-            {stats.topPriority === 'healthy' && (
-              <RecommendedAction
-                tone="success"
-                title="Rewards loop active"
-                description={stats.topPriorityLabel ?? `${stats.activeContributors30d} contributors in the last 30 days.`}
-                cta={{ label: 'View leaderboard', to: '/rewards?tab=contributors' }}
-              />
-            )}
-            {stats.topPriority === 'project_disabled' && (
-              <RecommendedAction
-                tone="info"
-                title="Enable rewards on this project"
-                description={stats.topPriorityLabel ?? 'SDK activity will not award points until rewards_enabled is on.'}
-                cta={{ label: 'Open Settings', to: '/settings?tab=dev' }}
-              />
-            )}
-            {stats.topPriority === 'no_rules' && (
-              <RecommendedAction
-                tone="info"
-                title="Enable at least one activity rule"
-                description={stats.topPriorityLabel ?? 'Without rules, SDK events are logged but earn zero points.'}
-                cta={{ label: 'Configure rules', to: '/rewards?tab=rules' }}
-              />
-            )}
-            {stats.topPriority === 'no_contributors' && (
-              <RecommendedAction
-                tone="info"
-                title="Wire the SDK in your app"
-                description={stats.topPriorityLabel ?? 'Call identify() then activity() after user actions.'}
-                cta={{ label: 'Run simulator', to: '/rewards?tab=sandbox' }}
-              />
-            )}
-            {stats.topPriority === 'high_rejection' && (
-              <RecommendedAction
-                tone="urgent"
-                title="Debug rejected SDK events"
-                description={stats.topPriorityLabel ?? 'Check daily caps, fraud flags, and unknown action names.'}
-                cta={{ label: 'View 24h feed', to: '/rewards?tab=overview' }}
-              />
-            )}
-            {(stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes') && (
-              <RecommendedAction
-                tone="urgent"
-                title={stats.topPriority === 'open_disputes' ? 'Resolve open disputes' : 'Fix failing webhooks'}
-                description={stats.topPriorityLabel ?? 'Settings tab has delivery logs and dispute review.'}
-                cta={{ label: 'Open Settings tab', to: '/rewards?tab=settings' }}
-              />
-            )}
-            {stats.lastActivityAt && (
-              <InlineProof>
-                Last SDK activity <RelativeTime value={stats.lastActivityAt} />
-                {stats.identityProvidersConfigured === 0 ? (
-                  <> · <span className="text-warn">No identity providers configured</span></>
-                ) : (
-                  <> · {stats.identityProvidersConfigured} identity provider{stats.identityProvidersConfigured === 1 ? '' : 's'}</>
-                )}
-              </InlineProof>
-            )}
-            <OverviewTab />
-          </div>
-        )}
-        {active === 'rules' && <ActivityRulesTab canEdit={canEdit} />}
-        {active === 'tiers' && <TierLadderTab canEdit={canEdit} />}
-        {active === 'contributors' && <ContributorsTab />}
-        {active === 'quests' && <QuestsTab canEdit={canEdit} />}
-        {active === 'analytics' && <RetentionAnalyticsTab />}
-        {active === 'sandbox' && <SandboxSimulatorTab />}
-        {active === 'settings' && <SettingsTab canEdit={canEdit} />}
-        {active === 'publishing' && (
-          <PublishingTab projectId={stats.projectId} canEdit={canEdit} />
+            >
+              {t.label}
+            </button>
+          )
+        })}
+        {indicator.width > 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-px h-0.5 bg-brand rounded-full motion-safe:transition-[transform,width] motion-safe:duration-200 motion-safe:ease-out"
+            style={{ width: `${indicator.width}px`, transform: `translateX(${indicator.left}px)`, left: 0 }}
+          />
         )}
       </div>
+
+      <p className="text-2xs text-fg-muted">{activeMeta.description}</p>
+
+      {orgId && (
+        <div
+          role="tabpanel"
+          id={`rewards-panel-${active}`}
+          aria-labelledby={`rewards-tab-${active}`}
+        >
+          {active === 'overview'     && <OverviewTab />}
+          {active === 'publishing'   && <PublishingTab />}
+          {active === 'rules'        && <ActivityRulesTab canEdit={canEdit} />}
+          {active === 'tiers'        && <TierLadderTab canEdit={canEdit} />}
+          {active === 'contributors' && <ContributorsTab />}
+          {active === 'quests'       && <QuestsTab canEdit={canEdit} />}
+          {active === 'analytics'    && <RetentionAnalyticsTab />}
+          {active === 'sandbox'      && <SandboxSimulatorTab />}
+          {active === 'settings'     && <SettingsTab canEdit={canEdit} />}
+        </div>
+      )}
     </div>
   )
 }

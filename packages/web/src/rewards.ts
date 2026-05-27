@@ -113,6 +113,7 @@ export interface RewardsContext {
 /** Called by createInstance() when a user is identified and rewards are enabled. */
 export function initRewards(ctx: RewardsContext): void {
   apiClient = ctx.client;
+  void ctx.config; // config stored for future use
   currentUserId = ctx.userId;
   currentUserTraits = ctx.traits ?? null;
   reporterTokenHash = ctx.reporterToken ?? null;

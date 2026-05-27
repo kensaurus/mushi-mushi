@@ -1,5 +1,46 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Rewards subsystem",
+        "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
+      },
+      {
+        "title": "Proactive triggers",
+        "description": "(`src/proactive-triggers.ts`): schedule-based and event-based triggers that surface the widget at the right moment without developer code."
+      },
+      {
+        "title": "`pulseTrigger()`",
+        "description": "widget-level pulse animation accessible from `Mushi.pulseTrigger()`."
+      },
+      {
+        "title": "Screenshot simplification",
+        "description": "`screenshot.take()` now returns `Promise<string | null>` — callers no longer need to check an `{ ok, dataUrl }` result object."
+      },
+      {
+        "title": "`beforeSendFeedback` + `onCrashedLastRun`",
+        "description": "lifecycle hooks wired into the init flow."
+      },
+      {
+        "title": "`mushi project create`",
+        "description": "command: provisions a new Mushi project, mints an API key with `mcp:read+write` scope, and writes `.env.local` + `.cursor/mcp.json`."
+      },
+      {
+        "title": "`mushi doctor`",
+        "description": "pre-flight checks — verifies CLI config, endpoint reachability, SDK install, and optional server preflight."
+      },
+      {
+        "title": "`mushi nudge`",
+        "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.5",
     "headline": null,
     "pending": false,

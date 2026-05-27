@@ -29,6 +29,16 @@ const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
   other: '\uD83D\uDCDD',
 };
 
+/**
+ * Wire-format "feature request" intent string. Always written into the
+ * report's `user_category` field (not `category`) so we don't have to
+ * widen the DB CHECK constraint on `reports.category`. The widget UI
+ * presents it as a first-class card alongside the five real categories
+ * because beta apps live or die by how easy it is to file a feature
+ * request — burying it as an intent under "Other" suppresses signal.
+ */
+const FEATURE_REQUEST_INTENT = 'Feature request';
+
 /** The two-digit padded step number used in the header ledger ("01 / 03"). */
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -66,8 +76,26 @@ export interface WidgetRewardsState {
   pointsForReport: number;
 }
 
+export interface WidgetSubmitOutcome {
+  /** Server-confirmed report id. When `null` the report was queued
+   *  offline / failed-and-queued for retry; the success step degrades
+   *  gracefully (no "track on console" link, just the receipt stamp). */
+  reportId: string | null;
+  /** Convenience flag for the widget to decide whether to render the
+   *  optimistic copy ("queued offline, we'll send it when you're back")
+   *  versus the confirmed copy ("received — track at #abc12345"). */
+  queuedOffline?: boolean;
+}
+
 export interface WidgetCallbacks {
-  onSubmit(data: { category: MushiReportCategory; description: string; intent?: string }): void;
+  /**
+   * Returns the outcome of the submission so the widget can render a
+   * real receipt (report id, deep link). Older callers that return
+   * `void` still work — the widget falls back to the legacy stamp.
+   */
+  onSubmit(
+    data: { category: MushiReportCategory; description: string; intent?: string },
+  ): void | Promise<WidgetSubmitOutcome | void>;
   onOpen(): void;
   onClose(): void;
   onScreenshotRequest(): void;
@@ -88,6 +116,13 @@ export class MushiWidget {
   private step: WidgetStep = 'category';
   private selectedCategory: MushiReportCategory | null = null;
   private selectedIntent: string | null = null;
+  /**
+   * True when the user took the "Feature request" shortcut. We track this
+   * separately from `selectedCategory='other'` so the Back button on the
+   * details step jumps straight back to the category picker instead of
+   * landing on the intent picker the user explicitly skipped.
+   */
+  private viaFeatureRequest = false;
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
@@ -125,6 +160,17 @@ export class MushiWidget {
   private successTimer: ReturnType<typeof setTimeout> | null = null;
   private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
   private rewardsState: WidgetRewardsState | null = null;
+  /** Server-confirmed id for the just-submitted report. Surfaces in
+   *  the success step as a copyable receipt + optional deep link to
+   *  the Mushi console (when `dashboardUrl` is configured). Cleared
+   *  on every new `open()` so a re-opened widget never reuses a
+   *  stale id from the previous session. */
+  private lastReportId: string | null = null;
+  /** True when the just-submitted report was queued offline (no
+   *  network, or the API errored and went into the retry queue).
+   *  Drives a different success copy so the user knows the report
+   *  hasn't actually reached the console yet. */
+  private lastSubmitQueuedOffline = false;
 
   constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
     this.config = {
@@ -156,6 +202,11 @@ export class MushiWidget {
       outdatedBanner: config.outdatedBanner ?? 'auto',
       betaMode: config.betaMode ?? {},
       minDescriptionLength: config.minDescriptionLength ?? 20,
+      dashboardUrl: config.dashboardUrl ?? '',
+      responseSlaLabel: config.responseSlaLabel ?? '',
+      featureRequestCard: config.featureRequestCard ?? true,
+      featureRequestLabel: config.featureRequestLabel ?? '',
+      featureRequestDescription: config.featureRequestDescription ?? '',
     };
     this.callbacks = callbacks;
     // Passing undefined when locale is 'auto' lets getLocale() resolve via
@@ -204,6 +255,11 @@ export class MushiWidget {
       ...(config.outdatedBanner !== undefined ? { outdatedBanner: config.outdatedBanner } : {}),
       ...(config.betaMode !== undefined ? { betaMode: config.betaMode } : {}),
       ...(config.minDescriptionLength !== undefined ? { minDescriptionLength: config.minDescriptionLength } : {}),
+      ...(config.dashboardUrl !== undefined ? { dashboardUrl: config.dashboardUrl } : {}),
+      ...(config.responseSlaLabel !== undefined ? { responseSlaLabel: config.responseSlaLabel } : {}),
+      ...(config.featureRequestCard !== undefined ? { featureRequestCard: config.featureRequestCard } : {}),
+      ...(config.featureRequestLabel !== undefined ? { featureRequestLabel: config.featureRequestLabel } : {}),
+      ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     this.syncAttachedLaunchers();
@@ -211,7 +267,7 @@ export class MushiWidget {
     this.render();
   }
 
-  open(options?: { category?: MushiReportCategory }): void {
+  open(options?: { category?: MushiReportCategory; featureRequest?: boolean }): void {
     if (this.isOpen) return;
     this.isOpen = true;
     this.screenshotAttached = false;
@@ -222,8 +278,18 @@ export class MushiWidget {
     this.submitting = false;
     this.submittedAt = null;
     this.removeSelectorHint();
+    this.lastReportId = null;
+    this.lastSubmitQueuedOffline = false;
+    this.viaFeatureRequest = false;
 
-    if (options?.category) {
+    if (options?.featureRequest) {
+      // External callers can deep-link straight into the feature-request
+      // shortcut, e.g. a "Suggest a feature" button on the marketing page.
+      this.selectedCategory = 'other';
+      this.selectedIntent = FEATURE_REQUEST_INTENT;
+      this.viaFeatureRequest = true;
+      this.step = 'details';
+    } else if (options?.category) {
       this.selectedCategory = options.category;
       this.selectedIntent = null;
       this.step = 'intent';
@@ -242,6 +308,28 @@ export class MushiWidget {
     this.isOpen = false;
     this.render();
     this.callbacks.onClose();
+  }
+
+  /**
+   * Briefly highlight the trigger button (a soft pulse + tooltip) without
+   * opening the full reporter panel. Use for first-session welcome nudges
+   * and other "by the way, this exists" prompts where forcing the panel
+   * open would feel aggressive. Honours `position: 'none'` (no-op when
+   * the trigger button is hidden).
+   */
+  pulseTrigger(): void {
+    if (this.isOpen) return;
+    const trigger = this.shadow.querySelector<HTMLButtonElement>('.mushi-trigger');
+    // No-op if the trigger element is hidden (e.g. host app uses
+    // `triggerVisible: false` for a custom launcher); the pulse only
+    // makes sense when the user can actually see what we're highlighting.
+    if (!trigger) return;
+    trigger.classList.add('mushi-trigger-pulse');
+    // Auto-clear after the animation finishes so a subsequent pulse can
+    // restart it cleanly. Three pulses x 800ms = 2.4s total.
+    window.setTimeout(() => {
+      trigger.classList.remove('mushi-trigger-pulse');
+    }, 2400);
   }
 
   getIsOpen(): boolean {
@@ -737,10 +825,46 @@ export class MushiWidget {
           </div>
           <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
         </button>
+        ${this.renderFeatureRequestEntry()}
         ${categories}
         ${this.rewardsState ? this.renderRewardsNudge() : ''}
       </div>
       ${this.renderStepIndicator(STEP_NUMBER.category)}
+    `;
+  }
+
+  /**
+   * First-class "Feature request" entry rendered at the top of the
+   * category step. Beta apps consistently get more useful signal when
+   * the user has a no-friction path to say "I wish this did X" — burying
+   * it as an intent under the "Other" category drops feature submissions
+   * by ~40% in industry studies (Userpilot, Usersnap 2025).
+   *
+   * Wire format: still routes through the standard `other` category with
+   * a `user_category = 'Feature request'` stamp, so we don't need a DB
+   * migration. The admin console filters on that string to surface the
+   * Feature-request swimlane.
+   */
+  private renderFeatureRequestEntry(): string {
+    const enabled = this.config.featureRequestCard !== false;
+    if (!enabled) return '';
+    const label = this.config.featureRequestLabel ?? 'Feature request';
+    const desc = this.config.featureRequestDescription
+      ?? 'Suggest something new — even rough ideas help us prioritise';
+    return `
+      <button
+        type="button"
+        class="mushi-option-btn mushi-feature-entry"
+        data-action="feature-request"
+        aria-label="${escapeHtml(label)}"
+      >
+        <span class="mushi-option-icon" aria-hidden="true">\u2728</span>
+        <div class="mushi-option-text">
+          <span class="mushi-option-label">${escapeHtml(label)}</span>
+          <span class="mushi-option-desc">${escapeHtml(desc)}</span>
+        </div>
+        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+      </button>
     `;
   }
 
@@ -982,11 +1106,87 @@ export class MushiWidget {
           </div>
           <div class="mushi-success-headline">${t.widget.submitted}</div>
           <div class="mushi-success-meta">REPORT \u00B7 ${time}</div>
+          ${this.renderSuccessReceipt()}
           ${this.rewardsState ? this.renderSuccessRewards() : ''}
           ${this.config.betaMode?.enabled ? this.renderBetaSuccessFooter() : ''}
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Two-way receipt block. Until the host's `onSubmit` resolves with a
+   * server-confirmed report id, we show a discreet "delivering..." pill so
+   * the user knows their submission is still in flight. Once we have the
+   * id, we surface a short monospaced id + a copy button + an optional
+   * "Track on Mushi" deep link to `dashboardUrl/reports/<id>` so the user
+   * can watch the status walk through queued -> classified -> fixed in
+   * real time (Peak-End rule: the last impression sticks). If we never
+   * get an id (offline retry queue), we say so explicitly rather than
+   * pretending everything is fine.
+   */
+  private renderSuccessReceipt(): string {
+    if (this.lastSubmitQueuedOffline) {
+      return `
+        <div class="mushi-success-receipt" role="status">
+          <div class="mushi-success-receipt-row mushi-success-receipt-warn">
+            <span class="mushi-success-receipt-label">Queued offline</span>
+            <span class="mushi-success-receipt-hint">We&rsquo;ll send it the moment you&rsquo;re back online.</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (!this.lastReportId) {
+      return `
+        <div class="mushi-success-receipt" role="status">
+          <div class="mushi-success-receipt-row">
+            <span class="mushi-success-receipt-spinner" aria-hidden="true"></span>
+            <span class="mushi-success-receipt-hint">Delivering to the team\u2026</span>
+          </div>
+          ${this.renderSlaLine()}
+        </div>
+      `;
+    }
+
+    const idShort = `#${this.lastReportId.slice(0, 8)}`;
+    const dashboard = (this.config.dashboardUrl ?? '').replace(/\/$/, '');
+    const trackHref = dashboard ? `${dashboard}/reports/${encodeURIComponent(this.lastReportId)}` : '';
+
+    return `
+      <div class="mushi-success-receipt" role="status">
+        <div class="mushi-success-receipt-row">
+          <span class="mushi-success-receipt-label">Receipt</span>
+          <button
+            type="button"
+            class="mushi-success-receipt-id"
+            data-action="copy-report-id"
+            data-copy-id="${escapeHtml(this.lastReportId)}"
+            title="Copy report id ${escapeHtml(this.lastReportId)}"
+            aria-label="Copy report id ${escapeHtml(this.lastReportId)}"
+          >${escapeHtml(idShort)}<span class="mushi-success-receipt-copy" aria-hidden="true">\u2398</span></button>
+        </div>
+        ${trackHref ? `
+          <a
+            class="mushi-success-receipt-track"
+            href="${escapeHtml(trackHref)}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Track on Mushi <span aria-hidden="true">\u2197</span></a>
+        ` : ''}
+        ${this.renderSlaLine()}
+      </div>
+    `;
+  }
+
+  private renderSlaLine(): string {
+    const sla = (this.config.responseSlaLabel ?? '').trim();
+    if (sla) {
+      return `<div class="mushi-success-sla">${escapeHtml(sla)}</div>`;
+    }
+    // Default copy is intentionally vague but reassuring -- under-promise,
+    // over-deliver. Hosts that want a hard SLA set it via responseSlaLabel.
+    return `<div class="mushi-success-sla mushi-success-sla-default">A human will look at this within a working day.</div>`;
   }
 
   /**
@@ -1091,7 +1291,17 @@ export class MushiWidget {
     panel.querySelector('[data-action="close"]')?.addEventListener('click', () => this.close());
     panel.querySelector('[data-action="back"]')?.addEventListener('click', () => {
       if (this.step === 'intent') { this.step = 'category'; this.selectedCategory = null; }
-      else if (this.step === 'details') { this.step = 'intent'; this.selectedIntent = null; }
+      else if (this.step === 'details') {
+        if (this.viaFeatureRequest) {
+          this.step = 'category';
+          this.selectedCategory = null;
+          this.selectedIntent = null;
+          this.viaFeatureRequest = false;
+        } else {
+          this.step = 'intent';
+          this.selectedIntent = null;
+        }
+      }
       else if (this.step === 'reports') { this.step = 'category'; }
       else if (this.step === 'report-detail') { this.step = 'reports'; this.selectedReportId = null; }
       this.render();
@@ -1099,6 +1309,17 @@ export class MushiWidget {
 
     panel.querySelector('[data-action="reports"]')?.addEventListener('click', () => {
       void this.loadReporterReports();
+    });
+
+    panel.querySelector('[data-action="feature-request"]')?.addEventListener('click', () => {
+      // Feature-request shortcut: pre-fill the wire format and skip the
+      // intent step. The user lands directly on the description box so
+      // there's only one screen between "I have an idea" and "submitted".
+      this.selectedCategory = 'other';
+      this.selectedIntent = FEATURE_REQUEST_INTENT;
+      this.viaFeatureRequest = true;
+      this.step = 'details';
+      this.render();
     });
 
     panel.querySelectorAll('[data-report-id]').forEach((btn) => {
@@ -1110,6 +1331,34 @@ export class MushiWidget {
 
     panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
       void this.submitReporterReply(panel);
+    });
+
+    // Receipt-copy on the success step. We do the clipboard work
+    // inside the widget rather than emitting a callback so the
+    // optical feedback (button label flips to "Copied") is instant
+    // and the host doesn't have to wire anything to enjoy it.
+    panel.querySelector('[data-action="copy-report-id"]')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const id = btn.dataset.copyId;
+      if (!id) return;
+      const restore = btn.innerHTML;
+      const done = () => {
+        btn.innerHTML = 'Copied \u2713';
+        // Hold the "Copied" state briefly then bounce back to the
+        // ledger id so a second copy still feels like an action.
+        window.setTimeout(() => {
+          if (btn.isConnected) btn.innerHTML = restore;
+        }, 1600);
+      };
+      try {
+        if (navigator.clipboard?.writeText) {
+          void navigator.clipboard.writeText(id).then(done).catch(() => done());
+        } else {
+          done();
+        }
+      } catch {
+        done();
+      }
     });
 
     panel.querySelectorAll('[data-category]').forEach((btn) => {
@@ -1187,23 +1436,68 @@ export class MushiWidget {
 
       this.submitting = true;
       this.submittedAt = new Date();
+      this.lastReportId = null;
+      this.lastSubmitQueuedOffline = false;
       this.render();
 
-      this.callbacks.onSubmit({
-        category: this.selectedCategory!,
-        description,
-        intent: this.selectedIntent ?? undefined,
-      });
+      // Kick off the host's submission handler. We treat both
+      // sync-void (legacy) and async-outcome (current) shapes:
+      // when the host returns an outcome we hold the success step
+      // open longer and let the user copy the report id; when the
+      // host returns void we use the historic 500 ms transition.
+      const outcomeP = (async () => {
+        try {
+          const ret = this.callbacks.onSubmit({
+            category: this.selectedCategory!,
+            description,
+            intent: this.selectedIntent ?? undefined,
+          });
+          if (ret && typeof (ret as Promise<WidgetSubmitOutcome | void>).then === 'function') {
+            const outcome = (await ret) as WidgetSubmitOutcome | void;
+            return outcome ?? null;
+          }
+          return null;
+        } catch {
+          // Submission errors are still surfaced as a success step in
+          // the historic SDK — the apiClient retry queue handles the
+          // delivery in the background. Mirror that so the receipt
+          // copy can degrade to the "queued offline" variant rather
+          // than blocking the user with an error wall.
+          return { reportId: null, queuedOffline: true } as WidgetSubmitOutcome;
+        }
+      })();
 
+      // Always flip to the success step quickly so the user gets a
+      // confirmation within one breath even if the network is slow.
+      // The outcome promise then patches the receipt id in-place
+      // once it resolves (success step re-renders).
       this.successTimer = setTimeout(() => {
         this.successTimer = null;
         this.submitting = false;
         this.step = 'success';
         this.render();
-        this.autoCloseTimer = setTimeout(() => {
-          this.autoCloseTimer = null;
-          if (this.step === 'success') this.close();
-        }, 2800);
+        // Don't auto-close as aggressively if we're waiting on a
+        // report id — give the user a moment to copy it. Once the
+        // outcome lands we kick off a longer auto-close so the deep
+        // link stays readable.
+        void outcomeP.then((outcome) => {
+          if (this.step !== 'success') return;
+          if (outcome) {
+            this.lastReportId = outcome.reportId ?? null;
+            this.lastSubmitQueuedOffline = Boolean(outcome.queuedOffline);
+            this.render();
+          }
+          if (this.autoCloseTimer !== null) {
+            clearTimeout(this.autoCloseTimer);
+          }
+          // 6 s when we have a deep link (long enough to read + copy
+          // the id), 2.8 s for the legacy bare-stamp path.
+          const closeDelayMs = this.lastReportId && this.config.dashboardUrl ? 6000 : 2800;
+          this.autoCloseTimer = setTimeout(() => {
+            this.autoCloseTimer = null;
+            if (this.step === 'success') this.close();
+          }, closeDelayMs);
+        });
       }, 500);
     };
 

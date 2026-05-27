@@ -18,6 +18,9 @@ export type FrameworkId =
   | 'expo'
   | 'react-native'
   | 'capacitor'
+  | 'express'
+  | 'fastify'
+  | 'hono'
   | 'vanilla'
 
 export interface Framework {
@@ -48,6 +51,9 @@ export const FRAMEWORK_IDS: ReadonlyArray<FrameworkId> = [
   'expo',
   'react-native',
   'capacitor',
+  'express',
+  'fastify',
+  'hono',
   'vanilla',
 ]
 
@@ -215,6 +221,71 @@ import { Mushi } from '@mushi-mushi/capacitor'
 
 await Mushi.configure({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
   },
+  express: {
+    id: 'express',
+    label: 'Express',
+    packageName: '@mushi-mushi/node',
+    needsWebPackage: false,
+    snippet: (apiKey, projectId) => `// src/instrument.ts — load with: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import type { Express } from 'express'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${apiKey}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+attachUnhandledHook({ client: mushi })
+
+export function attachMushi(app: Express) {
+  app.use(mushiExpressErrorHandler({ client: mushi }))
+}`,
+  },
+  fastify: {
+    id: 'fastify',
+    label: 'Fastify',
+    packageName: '@mushi-mushi/node',
+    needsWebPackage: false,
+    snippet: (apiKey, projectId) => `// src/instrument.ts — load with: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import Fastify from 'fastify'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${apiKey}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+attachUnhandledHook({ client: mushi })
+
+const app = Fastify()
+mushiFastifyPlugin(app, { client: mushi })`,
+  },
+  hono: {
+    id: 'hono',
+    label: 'Hono',
+    packageName: '@mushi-mushi/node',
+    needsWebPackage: false,
+    snippet: (apiKey, projectId) => `// src/instrument.ts — load with: node --import ./dist/instrument.js
+import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+import { Hono } from 'hono'
+
+export const mushi = new MushiNodeClient({
+  projectId: '${projectId}',
+  apiKey: '${apiKey}',
+  environment: process.env.NODE_ENV ?? 'production',
+})
+attachUnhandledHook({ client: mushi })
+
+const app = new Hono()
+app.onError(
+  mushiHonoErrorHandler({ client: mushi }, (err, c) =>
+    c.text('Internal Server Error', 500),
+  ),
+)`,
+  },
   vanilla: {
     id: 'vanilla',
     label: 'Vanilla JS / unknown',
@@ -250,6 +321,12 @@ export function detectFramework(cwd: string, pkg: PackageJson | null): Framework
   if (deps.has('svelte')) return FRAMEWORKS.svelte
   if (deps.has('vue')) return FRAMEWORKS.vue
   if (deps.has('react')) return FRAMEWORKS.react
+  // Server-side frameworks — detected after client frameworks so a Next.js
+  // app that incidentally has `express` in devDependencies (for testing) is
+  // not mis-classified as an Express project.
+  if (deps.has('express')) return FRAMEWORKS.express
+  if (deps.has('fastify')) return FRAMEWORKS.fastify
+  if (deps.has('hono') || deps.has('@hono/hono')) return FRAMEWORKS.hono
 
   if (existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.ts'))) {
     return FRAMEWORKS.next
@@ -282,7 +359,18 @@ export function installCommand(pm: PackageManager, packages: string[]): string {
   return `${pm} ${verb} ${packages.join(' ')}`
 }
 
+const SERVER_FRAMEWORK_IDS: ReadonlySet<FrameworkId> = new Set(['express', 'fastify', 'hono'])
+
 export function envVarsToWrite(apiKey: string, projectId: string, framework: Framework): string {
+  // Server frameworks don't bundle env at build time — use bare names with
+  // no VITE_ / NEXT_PUBLIC_ prefix so they work in dotenv or cloud secret
+  // managers directly.
+  if (SERVER_FRAMEWORK_IDS.has(framework.id)) {
+    return [
+      `MUSHI_PROJECT_ID=${projectId}`,
+      `MUSHI_API_KEY=${apiKey}`,
+    ].join('\n')
+  }
   const prefix = framework.id === 'next' ? 'NEXT_PUBLIC_' : framework.id === 'nuxt' ? 'NUXT_PUBLIC_' : 'VITE_'
   return [
     `${prefix}MUSHI_PROJECT_ID=${projectId}`,

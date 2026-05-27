@@ -1,0 +1,161 @@
+# Dispatch prerequisites
+
+Before Mushi Mushi can automatically fix a bug, **four conditions** must be met
+for the project.  The admin console surfaces these as the **Dispatch Preflight**
+— a banner on report detail pages and a checklist inside the Queue fix popover.
+
+---
+
+## The four checks
+
+> **Wire format:** the canonical REST shape uses `{ key, ready, label, hint, fixHref }`.
+> The MCP `setup_check` tool renames fields for agent ergonomics
+> (`key → check`, `ready → passed`, `fixHref → fixPath`).
+> Throughout this guide we refer to checks by their `key`.
+
+### 1. GitHub connected (`key: 'github'`)
+
+A GitHub repository must be linked to the project.  Mushi Mushi uses this to
+open a pull request with the fix patch.
+
+**How to fix:** Go to **Integrations → GitHub** and either:
+
+- Click **Install GitHub App** to grant Mushi Mushi access using a GitHub App
+  (recommended — more secure, no token rotation required), or
+- Expand _Use a PAT instead (legacy)_ and enter a Personal Access Token with
+  `repo` scope.
+
+---
+
+### 2. Codebase indexed (`key: 'codebase'`)
+
+The codebase sweeper must have indexed at least one file.  Without indexed
+code, the fix agent cannot assemble context for the failing location.
+
+**How to fix:** Go to **Integrations → Codebase Indexer** and:
+
+1. Check the language allowlist — only `ts/tsx/js/jsx/py/go/rs/mjs/cjs/pyi`
+   are swept by default.  If your codebase is primarily Ruby or Java, you will
+   see 0 indexed files.
+2. Optionally add a **Path filter** (e.g. `src/**`, `apps/*/src/**`) to narrow
+   scope.
+3. Click **Enable indexing**.
+
+The indexer respects a 300-file cap (`MUSHI_REPO_INDEX_SWEEP_FILE_CAP`).  If
+your project has more than 300 eligible files the card shows a warning — use
+path filters to focus on the relevant subset.
+
+After indexing, the card shows `Indexed N of M eligible files` and a language
+distribution sparkline so you can confirm the right files were picked up.
+
+---
+
+### 3. Anthropic key set (`key: 'anthropic'`)
+
+An Anthropic API key must be stored in Supabase Vault (BYOK — Bring Your Own
+Key).  The fix agent calls Claude to generate patches.
+
+**How to fix:** Go to **Settings → API Keys → Anthropic** and paste your key.
+The panel tests connectivity before saving; a `✓ Connection OK` chip confirms
+the key works.
+
+---
+
+### 4. Autofix enabled (`key: 'autofix'`)
+
+The autofix toggle must be switched ON for the project.  This is an explicit
+per-project opt-in so you can run Mushi Mushi in report-only mode (no agentic
+changes) for sensitive projects.
+
+**How to fix:** Go to **Integrations** and toggle **Enable autofix**.
+
+---
+
+## Checking readiness programmatically
+
+### Admin console
+
+The **Dispatch Preflight** banner appears automatically on any report detail
+page where autofix is the suggested next action.
+
+### CLI
+
+```bash
+mushi doctor --server
+```
+
+Reports the same four checks via the terminal.  Add `--json` for
+machine-readable output suitable for CI gates.
+
+### MCP
+
+AI agents (Claude, Cursor) can call the `mushi.setup_check` tool:
+
+```
+mushi.setup_check({ projectId: "proj_..." })
+```
+
+Returns (MCP-flavoured shape — `check`/`passed`/`fixPath` rather than the
+REST `key`/`ready`/`fixHref`):
+
+```json
+{
+  "ready": false,
+  "repoUrl": null,
+  "checks": [
+    { "check": "github",    "label": "GitHub repo connected",        "passed": false, "hint": "Paste your GitHub repo URL…", "fixPath": "/integrations" },
+    { "check": "codebase",  "label": "Codebase indexed for RAG",     "passed": false, "hint": "Enable codebase indexing…",   "fixPath": "/integrations" },
+    { "check": "anthropic", "label": "Anthropic key configured",     "passed": true,  "hint": "BYOK key present in Vault",   "fixPath": "/settings?tab=byok" },
+    { "check": "autofix",   "label": "Autofix enabled for this project", "passed": false, "hint": "Flip the Autofix switch", "fixPath": "/integrations" }
+  ],
+  "summary": "Project proj_... cannot dispatch yet — GitHub repo connected, Codebase indexed for RAG, Autofix enabled for this project."
+}
+```
+
+### REST API
+
+```
+GET /v1/admin/projects/:id/preflight
+Authorization: Bearer <admin-key>
+```
+
+Accepts both `Authorization: Bearer <jwt>` (browser session) and
+`x-mushi-api-key: <admin-key>` (CLI / MCP / CI).
+
+---
+
+## Dry-run dispatch
+
+Before burning an Anthropic credit, you can simulate the full pipeline:
+
+```
+POST /v1/admin/projects/:id/fixes/dry-run
+```
+
+Returns `{ ready, simulatedSteps[], estimatedCostUsd }`.  No LLM call is made
+and no PR is opened.  Accessible from the **Validate pipeline** button on the
+Integrations page.
+
+---
+
+## Skipped and failed dispatches
+
+When the fix-worker cannot proceed, the `fix_attempts` row records two
+structured signals:
+
+| Field | Values |
+|---|---|
+| `status` | `skipped_no_context`, `skipped_unsupported_agent`, `skipped_no_sandbox`, `failed`, `completed` |
+| `failure_category` | `sandbox_timeout`, `sandbox_error`, `llm_rate_limit`, `llm_invalid_json`, `github_403`, `github_404`, `github_422`, `no_relevant_code`, `context_assembly_failed`, `scope_blocked`, `spec_violation`, `validation_rejected`, `llm_no_object`, `llm_other_error`, `github_other_error`, `unknown` |
+
+The **Recommended Action** on the report detail page uses these to surface the
+right recovery step:
+
+| Signal | Shown action |
+|---|---|
+| `status = skipped_no_context` or `failure_category = no_relevant_code` | "Codebase not indexed / no matching files" → link to `/integrations` |
+| `failure_category = context_assembly_failed` | "RAG embedding failed" → retry or check indexer |
+| `status = skipped_no_sandbox` | "Sandbox not available in this environment" |
+| `failure_category = llm_rate_limit` | "Anthropic rate limit hit" → retry later |
+| `failure_category = github_403` / `github_404` | "GitHub access error" → check token / App permissions |
+| `failure_category = sandbox_timeout` | "Fix timed out" → retry; complex patch may need manual intervention |

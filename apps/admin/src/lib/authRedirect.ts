@@ -39,10 +39,12 @@ export function pathFromLocationLike(location: {
 export function nextPathFromLoginState(
   state: unknown,
   queryNext: string | null | undefined,
+  fallbackPath: string = FALLBACK_PATH,
 ): string {
   const from = (state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
   if (from) return pathFromLocationLike(from)
-  return sanitizeNextPath(queryNext)
+  if (queryNext) return sanitizeNextPath(queryNext)
+  return fallbackPath
 }
 
 export function loginPathForLocation(location: {

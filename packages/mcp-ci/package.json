@@ -56,8 +56,9 @@
     "@types/node": "^22.19.17",
     "eslint": "^10.3.0",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+"typescript": "^6.0.3",
+    "vitest": "^4.1.6",
+"typescript": "^6.0.3"
   },
   "author": "Kenji Sakuramoto",
   "engines": {

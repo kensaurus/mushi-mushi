@@ -481,6 +481,94 @@ The admin console is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/
 - **Bundle splitting** (PERF-3, 2026-04-21; refined 2026-05-11): `vite.config.ts > build.rollupOptions.output.manualChunks` carves `node_modules` into named vendor chunks (`vendor-react`, `vendor-sentry` — now also captures `@sentry-internal/*`, `vendor-supabase`, `vendor-charts`, `vendor-maps`, `vendor-motion` — `framer-motion` + `motion-dom` + `motion-utils` extracted from `vendor-misc` for independent invalidation, `vendor-markdown`, `vendor-table`, `vendor-misc`). Every route is already `React.lazy()`'d, so the login + dashboard path only downloads `vendor-react` + `vendor-supabase` + route chunk; Recharts, Mapbox, animation, and the markdown/highlighter stack load on demand. Keeps TTI on cold loads independent of how heavy the long-tail pages get
 - **Web Vitals telemetry** (`src/lib/web-vitals.ts`, 2026-05-11): collects Core Web Vitals (CLS, FCP, INP, LCP, TTFB) via the `web-vitals` library and attaches each measurement to the active Sentry pageload span (`measurements.<vital>`) plus the current scope so any subsequent error capture inherits the vitals snapshot. The module is `import()`'d lazily from `main.tsx` inside a `window.addEventListener('load', ...)` so it has zero cost on the critical render path
 
+## Autofix prerequisites and dispatch readiness
+
+Dispatching an auto-fix requires four conditions to be met. The admin console
+surfaces these as the **Dispatch Preflight** — visible as a banner on report
+detail pages and inside the dispatch popover.
+
+| Check (`key`) | What it verifies | Where to fix (`fixHref`) |
+|---|---|---|
+| `github` | A GitHub repo URL is linked to the project (`project_repos.repo_url` or `project_settings.codebase_repo_url`) | `/integrations` → GitHub section |
+| `codebase` | Codebase indexing is enabled AND at least one file is in pgvector AND `last_indexed_at` is set | `/integrations` → Codebase Indexer |
+| `anthropic` | A BYOK Anthropic key is stored in Supabase Vault (`project_settings.byok_anthropic_key_ref`) | `/settings?tab=byok` |
+| `autofix` | The autofix toggle is ON (`project_settings.autofix_enabled = true`) | `/integrations` → Autofix toggle |
+
+> The setup checklist (`useSetupStatus.ts`) uses a different, broader naming
+> scheme (`github_connected`, `byok_anthropic`, `autofix_enabled` etc.) for
+> onboarding progress. Don't confuse the two — preflight is the runtime
+> dispatch gate, setup is the onboarding wizard.
+
+### Autofix toggle
+
+`POST /v1/admin/projects/:id/autofix/toggle`
+
+Body: `{ "enabled": true | false }`
+
+Uses `upsert` on `project_settings` so it works for projects created before
+the `project_settings` table was introduced (legacy projects lacked rows).
+
+### Dispatch preflight endpoint
+
+`GET /v1/admin/projects/:id/preflight`
+
+Authenticated with `adminOrApiKey({ scope: 'mcp:read' })` so the CLI and MCP
+server can call it without a browser session.
+
+Response shape (canonical — matches `useDispatchPreflight.ts` and the
+`preflight-contract.test.ts` snapshot):
+```json
+{
+  "ok": true,
+  "data": {
+    "ready": false,
+    "repoUrl": "https://github.com/owner/repo",
+    "checks": [
+      { "key": "github",    "ready": true,  "label": "GitHub repo connected",        "hint": "Repo: https://...",       "fixHref": "/integrations" },
+      { "key": "codebase",  "ready": false, "label": "Codebase indexed for RAG",     "hint": "Enable codebase indexing", "fixHref": "/integrations" },
+      { "key": "anthropic", "ready": true,  "label": "Anthropic key configured",    "hint": "BYOK key present in Vault","fixHref": "/settings?tab=byok" },
+      { "key": "autofix",   "ready": false, "label": "Autofix enabled for this project", "hint": "Flip the Autofix switch", "fixHref": "/integrations" }
+    ]
+  }
+}
+```
+
+The MCP `setup_check` tool wraps this and renames the fields for agent
+ergonomics: `key → check`, `ready → passed`, `fixHref → fixPath`. See
+`packages/mcp/src/server.ts` for the mapping.
+
+### Skipped fix-attempt recovery
+
+When the fix-worker skips or fails a dispatch, the `fix_attempts` row carries
+two structured signals:
+
+- `status` — `'skipped_no_context' | 'skipped_unsupported_agent' | 'skipped_no_sandbox' | 'failed' | 'completed'`
+- `failure_category` — one of 16 enum values (e.g. `llm_rate_limit`, `github_403`, `sandbox_timeout`)
+
+The `deriveRecommendation` classifier uses these structured fields (not
+substring matching) to surface the correct recovery action on the report detail
+page. See `apps/admin/src/components/report-detail/deriveRecommendation.ts`.
+
+### Setup checklist step IDs
+
+The setup checklist uses the `SETUP_STEPS` const object (defined in
+`apps/admin/src/lib/useSetupStatus.ts`) for type-safe step references.
+Never use raw string literals like `'first_report_received'` — always use
+`SETUP_STEPS.firstReportReceived`. New steps added in this release:
+
+- `SETUP_STEPS.codebaseIndexed` — gates on `project_repos.last_indexed_at IS NOT NULL AND indexed_files > 0`
+- `SETUP_STEPS.autofixEnabled` — gates on `project_settings.autofix_enabled = true`
+
+### Dry-run dispatch
+
+Before burning an Anthropic credit, operators can simulate the full pipeline:
+
+`POST /v1/admin/projects/:id/fixes/dry-run`
+
+Returns `{ ready, simulatedSteps[], estimatedCostUsd }` without creating a PR
+or calling the LLM. Accessible from the **Validate pipeline** button on the
+Integrations page.
+
 ## License
 
 See root [LICENSE](../../LICENSE).

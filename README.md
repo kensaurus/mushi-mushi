@@ -2,32 +2,24 @@
 
 # Mushi Mushi
 
-**Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
+**The bug your monitoring can't see, in your queue with a draft fix.**
 
-Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android. And then it _learns_: every report is embedded, clustered with similar ones, and promoted to a named learning rule that is injected into your next PR review and your next AI agent run.
+Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android.
 
-Mushi is the **antifragile closed-loop layer**: every bug report makes the next one less likely to recur, because the fix is encoded as a permanent rule the next developer and the next agent inherit. It ships with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **12 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier) so every tool in your stack stays in the loop.
+Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **12 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier) so every tool in your stack stays in the loop.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
 [![Server](https://img.shields.io/badge/server-BSL%201.1-orange.svg)](./packages/server/LICENSE)
 
-[Quick start](#try-it) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Evolution loop manifesto](./docs/EVOLUTION-LOOP.md) · [Rewards program](./docs/REWARDS.md) · [Bounties marketplace](./docs/BOUNTIES.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
+[Quick start](#try-it) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
 
 <a href="https://kensaur.us/mushi-mushi/admin/" title="Open the live admin demo — animated guided tour">
   <img src="./docs/screenshots/tour-pdca-loop.gif" alt="Animated guided tour through the logged-in admin console, walking the full Plan → Do → Check → Act loop." width="100%" />
 </a>
 
 <sub>↑ a logged-in 4-stop walk through the Plan → Do → Check → Act loop</sub>
-
-<br><br>
-
-<a href="https://kensaur.us/glot-it" title="Open glot.it — Mushi SDK dogfood demo">
-  <img src="./docs/screenshots/glotit-report-flow.gif" alt="glot.it with the Mushi web SDK — user opens the feedback widget and submits a felt bug" width="100%" />
-</a>
-
-<sub>↑ SDK dogfood on <a href="https://kensaur.us/glot-it">glot.it</a> · the same one-line install in your app</sub>
 
 <br><br>
 
@@ -76,18 +68,6 @@ Mushi v1 was the negative side: catch what your users _felt_ break and triage it
 - 🧩 **Headless SDK widget.** `MushiTrigger` and `MushiAttach` let you attach the feedback reporter to any button, icon, or menu item in your existing design system — no floating stamp, no fixed position, just your UI opening Mushi on click. Works in React (polymorphic `as` prop) and React Native (`cloneElement` injection). See [Headless integration](#headless-sdk-integration).
 - 🌐 **Multi-platform console.** Reports from iOS, Android, Web, and React Native are now filterable by platform and SDK package in the Reports list. Each report's detail drawer shows the "Device & Build" section with `sdk_version` and `app_version`. The Dashboard shows a **Platform Health** tile with 24h report volume per SDK.
 - 🤖 **QA Coverage Suite.** Define automated user-story tests as natural-language prompts or Playwright scripts, schedule them on cron, and run them via **Firecrawl Actions** (default, no setup), **Browserbase** (BYOK, cloud Chromium), or **local Playwright** (CLI). Pass/fail history appears on a dedicated `/qa-coverage` page and a dashboard tile. When you generate a Playwright test from a report, Mushi automatically creates a QA story so it runs on a weekly schedule as a regression guard. See [QA Coverage Suite](#qa-coverage-suite).
-- 🪲 **Mushi Bounties — crowd-test marketplace** *(cloud-only)*. Publish your app to the public Bounties marketplace at `kensaur.us/mushi-mushi/testers/`. Real users find bugs and earn mushi-points redeemable for **Mushi Pro credit (1.3× premium)** or **100+ gift cards** (Amazon, Starbucks, App Store, Visa, …) via Tremendous — subject to OFAC compliance and a $599/yr KYC threshold. Submissions route directly to your Sentry project and appear in the Reports queue with a `TesterSubmissionCard` for one-click accept/reject. See [docs/BOUNTIES.md](./docs/BOUNTIES.md) and the [live marketplace](https://kensaur.us/mushi-mushi/testers/).
-- 🧠 **Closed-loop evolution (Phases 0–6).** The antifragile layer that turns every bug into institutional memory:
-  - **Lessons** (`/lessons`) — vector-clustered mistake DB; BIRCH-style streaming clusterer promotes coherent clusters to named learning rules; `mushi sync-lessons` writes `.mushi/lessons.json` into your repo; `lessons.query` MCP tool injects token-budget-ranked rules into PR review.
-  - **Releases** (`/releases`) — auto-draft changelogs with reporter attribution; SDK toast credits beta users when their report ships.
-  - **Iterate** (`/iterate`) — PDCA producer/critic loop with selectable personas (Tufte, NN/g, WCAG, …); live progress + draft-PR exit.
-  - **Drift** (`/drift`) — Stagehand-based contract walker compares live app behaviour against inventory + OpenAPI + DB schema; findings feed back into the lesson library.
-  - **Experiments** (`/experiments`) — sticky A/B assignments via `mushi.experiment()`; CUPED + mSPRT analysis with SRM alarms.
-  - **Anomalies** (`/anomalies`) — STL + Page-Hinkley + isolation-forest detectors on inbound adapter metrics; confirmed regressions auto-open reports.
-  - **Cost** (`/cost`) — LLM spend breakdown across clustering, judging, PDCA, drift, and anomaly pipelines.
-  - **Docs** — [`closed-loop.mdx`](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop) essay + `EvolutionDiagram` / `LoopComparison` landing components. See [Why a closed loop](#why-a-closed-loop) below.
-- 🗺️ **Codebase Atlas (`/explore`).** Visual exploration of every indexed source file — a ReactFlow node graph coloured by architectural layer (UI, Library, Backend, Tests, Config), a horizontal Sankey flow view for at-a-glance dependency tracing, and a semantic search tab backed by vector embeddings. Click any node for its path, language, line count, and content preview; copy the path in one click; follow "View bug reports" to see Mushi reports filed against that component. Layer filter chips narrow all three views simultaneously. Enable indexing via `mushi index` or Settings → Codebase Indexing.
-- 🧪 **Beta expectations.** The console shows a persistent beta banner with a **Report a bug / Request a feature** button that opens an in-app feedback form (posts to `/v1/support/contact`). Project creation surfaces structured error codes (`NO_ORGANIZATION`, `FORBIDDEN`, …) with recovery actions instead of generic toasts. Personal workspaces auto-provision on signup so first-time users can create a project immediately.
 
 Get started in any project that already has Mushi installed:
 
@@ -103,22 +83,6 @@ Get started in any project that already has Mushi installed:
 Inside your IDE the same commands are exposed as MCP tools via [`@mushi-mushi/mcp`](./packages/mcp/), so Cursor / Claude Code / Copilot can run them on your behalf. From the admin UI you click _Run gates_ / _Run crawler_ directly on each row of the User stories page.
 
 Full schema in [`@mushi-mushi/inventory-schema`](./packages/inventory-schema/), ESLint rules in [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi/), the auth-bootstrap helper in [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner/).
-
----
-
-## Why a closed loop
-
-Software development has followed one model for 50 years: a bug is reported, fixed, and forgotten — the lesson evaporates. The next developer joins and makes the same mistake. The next user files the same ticket. The cost is real and it compounds.
-
-Three ideas justify a different model:
-
-**Black Box Thinking** (Matthew Syed, 2015, p. 9) — Aviation's NTSB turns every crash into institutional memory by dissecting each failure, naming each cause, and encoding it as a rule the next generation inherits. Software has no equivalent layer. Mushi is that layer: every bug report is named, clustered with similar ones, promoted to a lesson, and injected into the next PR review so neither human nor AI agent can repeat the same class of mistake.
-
-**Antifragile** (Nassim Nicholas Taleb, 2012, p. 230) — *"Innovations emerge as a consequence of trial-and-error and then become encoded in heuristics and practical knowhow."* A Mushi-equipped project is antifragile: each encoded lesson makes the next agent run less likely to repeat the same class of error. The more bugs the system absorbs, the richer the lesson library — the better it gets at absorbing the next unit of stress.
-
-**Cumulative selection** (Richard Dawkins, *Climbing Mount Improbable*, 1996, p. 74) — *"Cumulative selection is the key to all of evolution. … Each improvement, however slight, is retained and passed on."* Mushi operationalises this for software: catch the bug → embed it → cluster similar bugs → name the cluster → promote it to a learning rule → inject the rule into the next PR review and the next AI agent → reward the user who found it → repeat. Each iteration starts from a better baseline than the last.
-
-[Full thesis → Concepts / Closed-loop evolution](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop)
 
 ---
 
@@ -365,18 +329,6 @@ A quick look at where you'll spend your time. Every panel is a click-through to 
 </table>
 
 For the full screenshot tour (28 surfaces, every page in the console) see [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).
-
-### Codebase Atlas — `/explore`
-
-A lens for understanding how your indexed project is structured, before you file a bug or dispatch a fix.
-
-| View | What you see |
-|------|-------------|
-| **Graph** | ReactFlow canvas — every file as a node, coloured by layer, import edges drawn as directed arrows. Drag to pan, scroll to zoom, click a node for full metadata in a floating panel. |
-| **Layers** | Horizontal Sankey — files grouped left-to-right (UI → Library → Backend → Tests → Config). Import edges drawn as bezier curves with directional arrows. Column headers show a proportional fill bar so the heaviest layer is immediately obvious. |
-| **Search** | Semantic search over vector embeddings — describe what you're looking for in plain English ("authentication logic", "rate limiting middleware") and the most relevant files surface ranked by similarity, with a visual similarity bar. Layer filter tabs narrow results to a single architectural layer. |
-
-The **layer filter chips** at the top of any view narrow all three tabs simultaneously — click `Backend (12)` and the graph, lane, and search results all scope to backend files only.
 
 ---
 
@@ -669,7 +621,6 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi)      | **v2 gate rules** — `no-dead-handler` (empty `onClick` etc.) and `no-mock-leak` (faker / "John Doe" arrays in non-test paths). Ships a `recommended` preset                                                                                                                                |
 | [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner) | **v2 helper** — `npx mushi-mushi-auth refresh` runs the `inventory.yaml` `auth.scripted` Playwright block and seeds the resulting cookies into `project_settings` so the crawler + synthetic monitor can hit auth-gated routes                                                             |
 | [`@mushi-mushi/plugin-sdk`](./packages/plugin-sdk)                       | Build third-party plugins — signed webhook verification, REST callback, retry + validate helpers                                                                                                                                                                                           |
-| [`@mushi-mushi/plugin-cursor-cloud`](./packages/plugin-cursor-cloud)     | **Cursor Cloud Agent plugin** — when a critical report is classified, dispatches a Cursor Cloud Agent that opens a signed draft PR automatically. Installs from the Marketplace. See [Cursor Cloud Agent integration](#cursor-cloud-agent) below.                                           |
 | [`@mushi-mushi/plugin-jira`](./packages/plugin-jira)                     | Bidirectional Mushi ↔ Jira Cloud sync                                                                                                                                                                                                                                                      |
 | [`@mushi-mushi/plugin-slack-app`](./packages/plugin-slack-app)           | First-class Slack app — `/mushi` slash command                                                                                                                                                                                                                                             |
 | [`@mushi-mushi/plugin-linear`](./packages/plugin-linear)                 | Create + sync Linear issues                                                                                                                                                                                                                                                                |
@@ -690,53 +641,6 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 
 ---
 
-## Cursor Cloud Agent
-
-<a name="cursor-cloud-agent"></a>
-
-Mushi integrates with [Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) to close the loop automatically: when a critical report is classified, a Cursor agent spins up, opens a draft PR, and posts the link back into the Mushi console — all without a human in the loop.
-
-### Two ways to activate
-
-| Path | When to use | How it works |
-|------|-------------|-------------|
-| **Marketplace plugin** (Path A) | Opt-in per project, any agent value | Install _Cursor Cloud Agent_ from the Marketplace → Admin → Integrations, supply your API key + workspace ID. On `report.classified` / `fix.requested` / `qa_story.failed`, Mushi calls the Cursor REST API directly. Works from Deno edge functions with no Node dependency. |
-| **`autofix_agent=cursor_cloud`** (Path B) | Project-wide default, replaces Claude Code / Codex for all fixes | Set `autofix_agent` to `cursor_cloud` in Admin → Settings → Autofix. Uses `@cursor/sdk` in the Node orchestrator, waits for the run, persists the PR URL and artifacts in the Mushi DB. |
-
-### MCP dispatch
-
-```bash
-# Via MCP tool from any connected agent (Cursor, Claude Code, etc.)
-dispatch_fix --reportId <uuid> --agent cursor_cloud --cursorModel composer-latest
-```
-
-### CLI dispatch
-
-```bash
-# Dispatch and stream events to stdout
-mushi fix <reportId> --agent cursor_cloud --model composer-2.5 --wait
-
-# CI: fail the pipeline if the fix errors
-mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
-```
-
-### UI surface
-
-- **Admin → Integrations → Platform** — Cursor Cloud card with API key vault storage.
-- **Admin → Marketplace** — install the `cursor-cloud-agent` plugin with per-event subscription control.
-- **Fix detail page** — `CursorAgentBadge` links directly to the agent run in Cursor, and `CursorArtifactsGallery` renders screenshots / videos produced by the agent.
-- **Reports list** — kebab menu → _Send to Cursor agent_ for manual one-off dispatch.
-
-### Database columns added (migration `20260521000000_cursor_cloud_agent`)
-
-| Table | Column | Purpose |
-|-------|--------|---------|
-| `project_settings` | `cursor_api_key_ref` | Vault reference (never raw key) |
-| `project_settings` | `cursor_workspace_id`, `cursor_default_model`, `cursor_auto_create_pr`, `cursor_max_iterations` | Per-project defaults |
-| `fix_attempts` | `cursor_agent_id`, `cursor_run_id`, `cursor_artifacts` | Run metadata for the FixCard gallery |
-
----
-
 ## Contributing
 
 Issues and PRs welcome. To get started:
@@ -749,8 +653,6 @@ pnpm dev
 ```
 
 Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setup, [`docs/`](./docs/) for handover notes (newest first), and [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md) for the full admin tour.
-
-If your PR touches a published package and you're new to the release flow, read [`CONTRIBUTING.md`](./CONTRIBUTING.md#release-flow) — it covers the Changesets workflow and the [known CI/CD quirks](./CONTRIBUTING.md#known-cicd-quirks-and-their-automatic-safeguards) (silent-dropped `pull_request` events on `changeset-release/master`, orphaned changesets, the npm CDN propagation race on `audit signatures`) that are now caught automatically. The recovery procedures are in the same section if a release ever stalls in spite of the safeguards.
 
 ## License & branding
 

@@ -384,7 +384,7 @@ async function handler(req: Request): Promise<Response> {
         model: anthropic(modelId),
         schema: testGenSchema,
         system: SYSTEM_PROMPT,
-        prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
+        prompt: buildUserPrompt(report as Record<string, unknown>, repo),
         maxRetries: 1,
       })
       generated = result.object
@@ -397,7 +397,7 @@ async function handler(req: Request): Promise<Response> {
         model: openai(STAGE2_FALLBACK),
         schema: testGenSchema,
         system: SYSTEM_PROMPT,
-        prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
+        prompt: buildUserPrompt(report as Record<string, unknown>, repo),
         maxRetries: 1,
       })
       generated = result.object
@@ -461,7 +461,7 @@ async function handler(req: Request): Promise<Response> {
       await db.from('qa_stories').insert({
         project_id: projectId,
         name: storyName,
-        prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo).slice(0, 2000),
+        prompt: buildUserPrompt(report as Record<string, unknown>, repo).slice(0, 2000),
         script: generated.contents,
         script_lang: 'playwright-ts',
         browser_provider: 'local',

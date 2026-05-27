@@ -793,7 +793,11 @@ export function ProjectsPage() {
             aria-describedby={createError ? 'projects-create-error' : undefined}
           />
         </div>
-        <Btn onClick={createProject} disabled={creating || !newName.trim()}>
+        <Btn
+          onClick={createProject}
+          disabled={creating || !newName.trim()}
+          title={!newName.trim() ? 'Enter a project name to continue' : undefined}
+        >
           {creating ? 'Creating...' : 'Create project'}
         </Btn>
       </div>

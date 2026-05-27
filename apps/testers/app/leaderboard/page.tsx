@@ -5,7 +5,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Tester Leaderboard — Mushi Bounties',
+  title: 'Tester Leaderboard',
   description: 'Top Mushi Bounties testers in the last 30 days.',
 }
 
@@ -49,10 +49,16 @@ export default async function LeaderboardPage() {
   return (
     <div className="min-h-screen">
       <nav className="sticky top-0 z-40 border-b border-white/10 bg-gray-950/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center px-4">
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
           <a href="/mushi-mushi/testers/" className="text-lg font-bold">
             <span className="text-violet-400">mushi</span>mushi
             <span className="ml-2 text-sm font-normal text-gray-400">🪲 Bounties</span>
+          </a>
+          <a
+            href="/mushi-mushi/console/login?as=tester"
+            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium hover:bg-violet-500 transition-colors"
+          >
+            Sign in as tester
           </a>
         </div>
       </nav>
@@ -68,7 +74,7 @@ export default async function LeaderboardPage() {
             <p className="text-3xl mb-3">🏆</p>
             <p className="font-medium">No testers yet — be the first!</p>
             <a
-              href="/mushi-mushi/testers/"
+              href="/mushi-mushi/testers/apps/"
               className="mt-4 inline-block text-sm text-violet-400 hover:underline"
             >
               Browse apps →
@@ -104,6 +110,15 @@ export default async function LeaderboardPage() {
           ← Back to marketplace
         </a>
       </div>
+
+      <footer className="border-t border-white/10 py-8 text-center text-sm text-gray-500">
+        <p>
+          <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
+          <a href="/mushi-mushi/testers/apps/" className="hover:text-gray-300">Browse apps</a> ·{' '}
+          <a href="/mushi-mushi/testers/how-it-works/" className="hover:text-gray-300">How it works</a> ·{' '}
+          Gift cards powered by Tremendous · $599/yr cap before KYC
+        </p>
+      </footer>
     </div>
   )
 }

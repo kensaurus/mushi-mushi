@@ -485,48 +485,4 @@ export const createConnectTransfer = async (
   return (await res.json()) as StripeTransfer
 }
 
-// ── Mushi Bounties: apply a customer credit balance (Pro credit redemption) ────
-// Uses Stripe Customer Balance Transactions to apply a credit to the tester's
-// own Stripe customer record. The credit appears as "account balance" deducted
-// on next invoice — no coupon codes, no promotions, just a direct balance entry.
-
-export interface StripeBalanceTx {
-  id: string
-  type: string
-  amount: number
-  currency: string
-}
-
-export const createCustomerBalanceCredit = async (
-  cfg: StripeConfig,
-  args: {
-    customerId: string
-    amountCents: number // negative = credit (reduces balance)
-    currency: string
-    description: string
-    idempotencyKey: string
-  },
-): Promise<StripeBalanceTx> => {
-  const body = form({
-    amount: -Math.abs(args.amountCents), // negative = credit to customer
-    currency: args.currency,
-    description: args.description,
-  })
-  const res = await fetch(`${STRIPE_API}/customers/${args.customerId}/balance_transactions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${cfg.secretKey}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Stripe-Version': '2025-08-27.basil',
-      'Idempotency-Key': args.idempotencyKey,
-    },
-    body: body.toString(),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`stripe /customers/${args.customerId}/balance_transactions -> ${res.status}: ${text}`)
-  }
-  return (await res.json()) as StripeBalanceTx
-}
-
 declare const Deno: { env: { get(name: string): string | undefined } }

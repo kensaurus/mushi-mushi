@@ -39,7 +39,6 @@ import type { ReactNode } from 'react'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { Tooltip } from '../ui'
-import { ActionPill, ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 
 // Re-export here so callers don't have to chase imports across modules
 // — `<UpgradePill flag="teams" />` should just need this file.
@@ -97,16 +96,8 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     pillLabel: 'PRO',
   },
   marketplace_publish: {
-    tagline: 'Publish your app to the Mushi Bounties tester marketplace — Pro required.',
+    tagline: 'Publishing to the Mushi Marketplace requires Pro.',
     pillLabel: 'PRO',
-  },
-  tester_cashout: {
-    tagline: 'Enable tester gift-card redemptions for your published app — Pro required.',
-    pillLabel: 'PRO',
-  },
-  marketplace_priority_listing: {
-    tagline: 'Priority listing in the Mushi Bounties marketplace — Enterprise only.',
-    pillLabel: 'ENTERPRISE',
   },
 }
 
@@ -181,16 +172,19 @@ export function UpgradeBanner({
             <span aria-hidden className="text-fg-faint">·</span> {tagline}
           </p>
           {density === 'comfy' && (
-            <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
+            <p className="text-2xs text-fg-muted mt-0.5">
               You're on{' '}
               <span className="font-medium text-fg">{ent.planName ?? 'your current plan'}</span>.
-            </InlineProof>
+            </p>
           )}
         </div>
       </div>
-      <ActionPill to={billingHref(flag)} tone="brand">
+      <Link
+        to={billingHref(flag)}
+        className="inline-flex items-center justify-center rounded-full bg-fg px-3 py-1 text-2xs font-semibold text-bg shadow-sm hover:opacity-90 motion-safe:transition-opacity shrink-0"
+      >
         {ctaCopy(upgradeTo)}
-      </ActionPill>
+      </Link>
     </div>
   )
 }
@@ -315,12 +309,13 @@ export function UpgradeLockOverlay({
           <p className="text-xs font-semibold text-fg">
             {headline ?? `${copy.pillLabel} required`}
           </p>
-          <ContainedBlock tone="muted">
-            <p className="text-2xs text-fg-muted">{tagline}</p>
-          </ContainedBlock>
-          <ActionPill to={billingHref(flag)} tone="brand" className="mt-1">
+          <p className="text-2xs text-fg-muted">{tagline}</p>
+          <Link
+            to={billingHref(flag)}
+            className="mt-1 inline-flex items-center justify-center rounded-full bg-fg px-3 py-1 text-2xs font-semibold text-bg shadow-sm hover:opacity-90 motion-safe:transition-opacity"
+          >
             {ctaCopy(upgradeTo)}
-          </ActionPill>
+          </Link>
         </div>
       </div>
     </div>

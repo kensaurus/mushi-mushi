@@ -62,6 +62,12 @@ describe('auth redirect helpers', () => {
     ).toBe('/settings?project=p1')
   })
 
+  it('uses caller fallback when no state or query next', () => {
+    expect(nextPathFromLoginState(null, null)).toBe('/dashboard')
+    expect(nextPathFromLoginState(null, null, '/tester')).toBe('/tester')
+    expect(nextPathFromLoginState(undefined, undefined, '/tester')).toBe('/tester')
+  })
+
   it('builds redirect URLs under the deployed admin basename', () => {
     expect(
       authRedirectUrl('/reset-password', {
