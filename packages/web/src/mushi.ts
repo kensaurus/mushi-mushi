@@ -296,7 +296,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onSubmit: async ({ category, description, intent }) => {
       log.info('Report submitted', { category, intent });
       proactiveManager?.recordSubmission();
-      await submitReport(category, description, intent);
+      const outcome = await submitReport(category, description, intent);
+      // Surface the server-confirmed id back to the widget so the
+      // success step renders a real receipt rather than a fake stamp.
+      // `undefined` happens when the pre-filter/rate-limiter blocked
+      // the report — degrade to the "queued offline" copy so the user
+      // still sees acknowledgement instead of a silent close.
+      return outcome ?? { reportId: null, queuedOffline: true };
     },
     onOpen: () => {
       log.debug('Widget opened');
@@ -316,22 +322,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onScreenshotRequest: async () => {
       if (!screenshotCap || activeConfig.capture?.screenshot === 'off') return;
       log.debug('Taking screenshot');
-      widget.setScreenshotCapturing(true);
-      const result = await screenshotCap.take();
-      if (result.ok) {
-        pendingScreenshot = result.dataUrl;
-        widget.setScreenshotAttached(true);
-        log.debug('Screenshot captured');
-      } else {
-        pendingScreenshot = null;
-        // 'cancelled' means the user dismissed the getDisplayMedia picker — not an error.
-        if (result.reason !== 'cancelled') {
-          widget.setScreenshotError(true);
-          log.debug('Screenshot failed', { reason: result.reason, message: result.message });
-        } else {
-          widget.setScreenshotCapturing(false);
-        }
-      }
+      pendingScreenshot = await screenshotCap.take();
+      widget.setScreenshotAttached(pendingScreenshot !== null);
     },
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
@@ -390,7 +382,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     && (proactiveCfg.rageClick !== false
       || proactiveCfg.longTask !== false
       || proactiveCfg.apiCascade !== false
-      || proactiveCfg.errorBoundary === true);
+      || proactiveCfg.errorBoundary === true
+      || Boolean(proactiveCfg.pageDwell)
+      || Boolean(proactiveCfg.firstSession));
 
   if (hasAnyProactive && typeof document !== 'undefined') {
     proactiveManager = createProactiveManager(proactiveCfg?.cooldown);
@@ -405,7 +399,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           log.info('Proactive trigger fired', { type, context });
           pendingProactiveTrigger = type;
           emit('proactive:triggered', { type, context });
-          widget.open();
+          // First-session welcome bypasses the category step and just
+          // pulses the bug button — the user hasn't expressed intent yet,
+          // so opening the full reporter would be aggressive.
+          if (type === 'first_session') {
+            widget.pulseTrigger?.();
+          } else {
+            widget.open();
+          }
         },
       },
       {
@@ -414,6 +415,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         apiCascade: proactiveCfg?.apiCascade,
         apiEndpoint: resolveApiEndpoint(activeConfig),
         errorBoundary: proactiveCfg?.errorBoundary,
+        pageDwell: proactiveCfg?.pageDwell,
+        firstSession: proactiveCfg?.firstSession,
+        projectId: bootstrapConfig.projectId,
       },
     );
 
@@ -422,6 +426,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       longTask: proactiveCfg?.longTask !== false,
       apiCascade: proactiveCfg?.apiCascade !== false,
       errorBoundary: proactiveCfg?.errorBoundary === true,
+      pageDwell: Boolean(proactiveCfg?.pageDwell),
+      firstSession: Boolean(proactiveCfg?.firstSession),
     });
   }
 
@@ -499,11 +505,15 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
   }
 
-  async function submitReport(category: MushiReportCategory, description: string, intent?: string) {
+  async function submitReport(
+    category: MushiReportCategory,
+    description: string,
+    intent?: string,
+  ): Promise<{ reportId: string | null; queuedOffline?: boolean } | undefined> {
     const filterResult = preFilter.check(description);
     if (!filterResult.passed) {
       log.info('Report blocked by pre-filter', { reason: filterResult.reason });
-      return;
+      return undefined;
     }
 
     const wasm = config.preFilter?.wasmClassifier;
@@ -525,7 +535,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             confidence: verdict.confidence,
             reason: verdict.reason,
           });
-          return;
+          return undefined;
         }
         log.debug('On-device classifier verdict', { ...verdict });
       } catch (err) {
@@ -537,7 +547,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     if (!rateLimiter.tryConsume()) {
       log.warn('Report throttled — rate limit exceeded');
-      return;
+      return undefined;
     }
 
     const scrubbedDescription = piiScrubber.scrub(preFilter.truncate(description));
@@ -662,6 +672,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.info('Offline — report queued', { reportId: finalReport.id });
       emit('report:queued', { reportId: finalReport.id });
       return;
+      await offlineQueue.enqueue(report);
+      log.info('Offline — report queued', { reportId: report.id });
+      emit('report:queued', { reportId: report.id });
+      // Outcome propagates back to the widget so the success step can
+      // render the "Queued offline" receipt rather than implying the
+      // report already landed.
+      return { reportId: null, queuedOffline: true };
     }
 
     const result = await apiClient.submitReport(finalReport);
@@ -716,6 +733,15 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     pendingScreenshot = null;
     pendingElement = null;
     pendingProactiveTrigger = null;
+    // Returning the server-confirmed id lets the widget render the
+    // two-way receipt (Receipt #abc12345 + Track on Mushi link).
+    // When the submit failed and was queued for retry, return the
+    // queued-offline outcome so the widget can degrade gracefully.
+    if (result?.ok) {
+      const serverId = (result.data?.reportId as string | undefined) ?? report.id;
+      return { reportId: serverId, queuedOffline: false };
+    }
+    return { reportId: null, queuedOffline: true };
   }
 
   const sdk: MushiSDKInstance = {
@@ -1036,6 +1062,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (!activeConfig.rewards?.enabled) return;
       enqueueActivity({ action, metadata });
     },
+
+    pulseTrigger() {
+      widget.pulseTrigger?.();
+    },
   };
 
   if (typeof globalThis !== 'undefined' && (bootstrapConfig.debug ?? false)) {
@@ -1077,7 +1107,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     } catch { /* noop — addEventListener never actually throws on Window */ }
     if (typeof bootstrapConfig.onCrashedLastRun === 'function') {
       try {
-        bootstrapConfig.onCrashedLastRun({ crashed });
+        bootstrapConfig.onCrashedLastRun(crashed as boolean);
       } catch (err) {
         log.warn('onCrashedLastRun hook threw', {
           error: err instanceof Error ? err.message : String(err),
@@ -1352,6 +1382,7 @@ function createNoopInstance(): MushiSDKInstance {
     getReputation: async () => null,
     getTier: async () => null,
     recordActivity: () => {},
+    pulseTrigger: () => {},
   };
 }
 

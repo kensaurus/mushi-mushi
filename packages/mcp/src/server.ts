@@ -17,7 +17,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { ALL_SCOPES, TOOL_CATALOG, type McpScope } from './catalog.js'
+import { TOOL_CATALOG } from './catalog.js'
 
 /**
  * Every admin endpoint returns `{ ok: boolean; data?: T; error?: { code, message } }`.
@@ -54,19 +54,6 @@ export interface MushiServerConfig {
   /** Optional project hint. Used to scope multi-project tools. */
   projectId?: string
   /**
-   * Granted scopes for this connection. When provided, `tools/list` and the
-   * resource catalog only expose tools whose `scope` is included. Defaults
-   * to ALL_SCOPES (`['mcp:read', 'mcp:write']`) so existing API-key callers
-   * keep seeing every tool. Set to `['mcp:read']` for a read-only key so
-   * the LLM never sees `dispatch_fix` / `transition_status` / `set_tier`
-   * in its tool list — preventing the "tool exists, call returns 403" loop
-   * that wastes tokens and confuses agents.
-   *
-   * Mirrors the per-tool scope-filtering pattern used by getsentry/sentry-mcp
-   * (see `permissions.ts` in that repo).
-   */
-  scopes?: readonly McpScope[]
-  /**
    * Fetch implementation — overridable for tests. Tests pass a spy that
    * asserts request shape and returns canned envelopes without hitting the
    * network. Defaults to the global `fetch`.
@@ -82,11 +69,6 @@ export interface MushiServerConfig {
 export function createMushiServer(config: MushiServerConfig): McpServer {
   const { version, apiEndpoint, apiKey, projectId } = config
   const doFetch = config.fetch ?? globalThis.fetch
-  // Per-scope tool filtering: default to all scopes so existing callers
-  // (every API key issued before this flag was added) keep their full
-  // toolset. Read-only API keys passing scopes=['mcp:read'] will get a
-  // tools/list response that omits write tools entirely.
-  const grantedScopes: ReadonlySet<McpScope> = new Set(config.scopes ?? ALL_SCOPES)
 
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
     const res = await doFetch(`${apiEndpoint}${path}`, {
@@ -175,60 +157,12 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     return spec.title
   }
 
-  /**
-   * Resolve the catalog scope for a tool name and gate registration. Returns
-   * `true` when the tool should be registered for the current connection.
-   * Throws on unknown names so adding a tool without a catalog entry fails
-   * fast — the existing helpers do the same.
-   */
-  function shouldRegister(name: string): boolean {
-    const spec = TOOL_CATALOG.find((t) => t.name === name)
-    if (!spec) throw new Error(`[mushi-mcp] tool "${name}" is missing from TOOL_CATALOG`)
-    return grantedScopes.has(spec.scope)
-  }
-
-  /**
-   * Format any value as both an MCP text block AND a `structuredContent`
-   * object. The text block is what older clients see; modern clients
-   * (Claude Desktop, Cursor 0.54+) read `structuredContent` directly and
-   * pipe it into typed downstream tools. When an `outputSchema` is defined
-   * on `registerTool`, the SDK validates `structuredContent` against it
-   * before sending — so a regression in API shape produces a typed error
-   * the LLM can branch on, not a silent JSON drift.
-   */
-  function jsonResult<T extends Record<string, unknown>>(value: T) {
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
-      structuredContent: value,
-    }
-  }
-
-  /**
-   * Scope-gated wrapper around `server.registerTool`. Looks up the tool's
-   * required scope in `TOOL_CATALOG`; if the connection doesn't have it,
-   * registration is skipped entirely so the tool never appears in
-   * `tools/list`. Mirrors Sentry MCP's per-call scope check pattern but
-   * filters at registration time rather than at call time — cheaper and
-   * more honest, since the LLM can't see-then-fail-on a forbidden tool.
-   *
-   * The cast preserves the SDK's overload resolution at every call site
-   * (so `args` inside each handler keeps its Zod-inferred type) while
-   * still letting us skip registration when the scope check fails.
-   */
-  /* eslint-disable @typescript-eslint/no-explicit-any -- forwarding through SDK overloads */
-  const _serverRegisterTool = server.registerTool.bind(server) as any
-  const registerScopedTool: McpServer['registerTool'] = ((name: string, ...rest: any[]) => {
-    if (!shouldRegister(name)) return undefined as never
-    return _serverRegisterTool(name, ...rest)
-  }) as McpServer['registerTool']
-  /* eslint-enable @typescript-eslint/no-explicit-any */
-
   // --- Read tools -------------------------------------------------------
   // All tool metadata (description, title, readOnly/destructive hints) comes
   // from `TOOL_CATALOG` so the admin /mcp page and the MCP handshake can't
   // drift. Adding a tool = add a catalog entry + a registerTool call.
 
-  registerScopedTool(
+  server.registerTool(
     'get_recent_reports',
     {
       title: titleOf('get_recent_reports'),
@@ -240,13 +174,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         severity: z.string().optional().describe('Filter by severity: critical, high, medium, low'),
         limit: z.number().optional().describe('Max reports to return (default 20, max 100)'),
       },
-      // Output schema (MCP 2025-06-18): when set, the SDK validates the
-      // tool's `structuredContent` and lets typed clients deserialize
-      // without re-parsing the text payload.
-      outputSchema: {
-        reports: z.array(z.record(z.string(), z.unknown())).describe('Array of report rows'),
-        total: z.number().describe('Total matching rows (before limit)'),
-      },
     },
     async (args) => {
       const params = new URLSearchParams()
@@ -255,14 +182,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (args.severity) params.set('severity', args.severity)
       params.set('limit', String(Math.min(args.limit ?? 20, 100)))
       const data = await apiCall<{ reports: unknown[]; total: number }>(`/v1/admin/reports?${params}`)
-      return jsonResult({
-        reports: (data.reports ?? []) as Record<string, unknown>[],
-        total: data.total ?? 0,
-      })
+      return jsonText(data)
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'get_report_detail',
     {
       title: titleOf('get_report_detail'),
@@ -273,7 +197,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => jsonText(await apiCall(`/v1/admin/reports/${args.reportId}`)),
   )
 
-  registerScopedTool(
+  server.registerTool(
     'search_reports',
     {
       title: titleOf('search_reports'),
@@ -283,9 +207,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         query: z.string().describe('Natural-language search text or component path'),
         limit: z.number().optional().describe('Max results (default 10, max 50)'),
         threshold: z.number().optional().describe('Similarity threshold 0..1, default 0.2'),
-      },
-      outputSchema: {
-        results: z.array(z.record(z.string(), z.unknown())).describe('Ranked report rows with similarity scores'),
       },
     },
     async (args) => {
@@ -298,11 +219,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonResult({ results: (data.results ?? []) as Record<string, unknown>[] })
+      return jsonText(data)
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'get_similar_bugs',
     {
       title: titleOf('get_similar_bugs'),
@@ -311,9 +232,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: {
         query: z.string().describe('Component name, page path, or bug description'),
         limit: z.number().optional().describe('Max results (default 5, max 20)'),
-      },
-      outputSchema: {
-        results: z.array(z.record(z.string(), z.unknown())).describe('Ranked report rows with similarity scores'),
       },
     },
     async (args) => {
@@ -326,11 +244,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonResult({ results: (data.results ?? []) as Record<string, unknown>[] })
+      return jsonText(data)
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'get_fix_context',
     {
       title: titleOf('get_fix_context'),
@@ -350,7 +268,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'get_fix_timeline',
     {
       title: titleOf('get_fix_timeline'),
@@ -361,7 +279,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => jsonText(await apiCall(`/v1/admin/fixes/${args.fixId}/timeline`)),
   )
 
-  registerScopedTool(
+  server.registerTool(
     'get_blast_radius',
     {
       title: titleOf('get_blast_radius'),
@@ -372,7 +290,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => jsonText(await apiCall(`/v1/admin/graph/blast-radius/${args.nodeId}`)),
   )
 
-  registerScopedTool(
+  server.registerTool(
     'get_knowledge_graph',
     {
       title: titleOf('get_knowledge_graph'),
@@ -392,7 +310,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'graph_neighborhood',
     {
       title: titleOf('graph_neighborhood'),
@@ -412,7 +330,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'graph_node_status',
     {
       title: titleOf('graph_node_status'),
@@ -423,7 +341,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => jsonText(await apiCall(`/v1/admin/graph/node/${args.nodeId}`)),
   )
 
-  registerScopedTool(
+  server.registerTool(
     'inventory_get',
     {
       title: titleOf('inventory_get'),
@@ -440,7 +358,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'inventory_diff',
     {
       title: titleOf('inventory_diff'),
@@ -460,7 +378,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'inventory_findings',
     {
       title: titleOf('inventory_findings'),
@@ -483,7 +401,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'fix_suggest',
     {
       title: titleOf('fix_suggest'),
@@ -505,7 +423,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'run_nl_query',
     {
       title: titleOf('run_nl_query'),
@@ -522,9 +440,57 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  // --- Setup / admin tools -----------------------------------------------
+
+  server.registerTool(
+    'setup_check',
+    {
+      title: titleOf('setup_check'),
+      description: descOf('setup_check'),
+      annotations: annotationsFor('setup_check'),
+      inputSchema: {
+        projectId: z.string().optional().describe(
+          'Project UUID to check. Falls back to the projectId the server was initialised with.',
+        ),
+      },
+    },
+    async (args) => {
+      const resolvedId = args.projectId ?? projectId
+      if (!resolvedId) {
+        return jsonText({
+          ok: false,
+          error: 'No projectId provided and none configured on the MCP server. Pass projectId explicitly.',
+        })
+      }
+      const data = await apiCall<{
+        ready: boolean
+        checks: Array<{ key: string; ready: boolean; label: string; hint: string; fixHref: string }>
+        repoUrl: string | null
+      }>(`/v1/admin/projects/${resolvedId}/preflight`)
+
+      const summary = data.checks.map((c) => ({
+        check: c.key,
+        label: c.label,
+        passed: c.ready,
+        hint: c.hint,
+        fixPath: c.fixHref,
+      }))
+
+      return jsonText({
+        ready: data.ready,
+        repoUrl: data.repoUrl ?? null,
+        checks: summary,
+        // Human-readable summary for agents that paste the result into a prompt
+        summary: data.ready
+          ? `Project ${resolvedId} is ready to dispatch auto-fixes${data.repoUrl ? ` (target: ${data.repoUrl})` : ''}.`
+          : `Project ${resolvedId} cannot dispatch yet — ${summary.filter((c) => !c.passed).map((c) => c.label).join(', ')}.`,
+      })
+    },
+  )
+
   // --- Write / agentic tools -------------------------------------------
 
-  registerScopedTool(
+  server.registerTool(
     'submit_fix_result',
     {
       title: titleOf('submit_fix_result'),
@@ -560,7 +526,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'dispatch_fix',
     {
       title: titleOf('dispatch_fix'),
@@ -568,23 +534,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('dispatch_fix'),
       inputSchema: {
         reportId: z.string().describe('Report UUID to fix'),
-        agent: z.enum(['claude_code', 'codex', 'rest_worker', 'mcp', 'cursor_cloud']).optional()
-          .describe('Override the agent adapter. Use "cursor_cloud" to dispatch a Cursor Cloud Agent that opens a signed draft PR.'),
-        backend: z.enum(['default', 'claude_code', 'cursor_cloud', 'mcp']).optional()
-          .describe('Alias for agent — prefer agent. When both are set, agent wins.'),
-        cursorModel: z.string().optional()
-          .describe('Optional model override when agent=cursor_cloud (e.g. "composer-latest").'),
+        agent: z.enum(['claude_code', 'codex', 'rest_worker', 'mcp']).optional().describe('Override the agent adapter'),
         idempotencyKey: z.string().uuid().optional().describe('Optional RFC 4122 UUID. Resend the same key to safely retry without dispatching a duplicate fix job (Idempotency-Key IETF draft).'),
         inventoryActionNodeId: z.string().uuid().optional().describe('Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.'),
-      },
-      // Typed write-tool result. fixId is the cursor for get_fix_timeline so
-      // downstream tools can chain without re-parsing the text payload.
-      outputSchema: {
-        fixId: z.string().describe('Newly created fix_attempt UUID'),
-        status: z.string().optional().describe('Initial status (queued, running, delegated, …)'),
-        agentId: z.string().optional().describe('Cursor agent ID (bc-…) when agent=cursor_cloud'),
-        runId: z.string().optional().describe('Cursor run ID when agent=cursor_cloud'),
-        prUrl: z.string().optional().describe('Draft PR URL when agent=cursor_cloud and auto_create_pr=true'),
       },
     },
     async (args, extra) => {
@@ -604,37 +556,23 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           })
         } catch { /* client doesn't support progress — fine */ }
       }
-
-      // Resolve agent: explicit `agent` wins over the legacy `backend` alias.
-      const resolvedAgent = args.agent ?? (args.backend !== 'default' ? args.backend : undefined)
-
-      const data = await apiCall<{ fixId?: string; status?: string; agentId?: string; runId?: string; prUrl?: string }>(
-        '/v1/admin/fixes/dispatch',
-        {
-          method: 'POST',
-          headers: args.idempotencyKey
-            ? { 'Idempotency-Key': args.idempotencyKey }
-            : undefined,
-          body: JSON.stringify({
-            reportId: args.reportId,
-            agent: resolvedAgent,
-            inventoryActionNodeId: args.inventoryActionNodeId,
-            ...(args.cursorModel ? { cursorModel: args.cursorModel } : {}),
-            ...(projectId ? { projectId } : {}),
-          }),
-        },
-      )
-      return jsonResult({
-        fixId: data.fixId ?? '',
-        ...(data.status ? { status: data.status } : {}),
-        ...(data.agentId ? { agentId: data.agentId } : {}),
-        ...(data.runId ? { runId: data.runId } : {}),
-        ...(data.prUrl ? { prUrl: data.prUrl } : {}),
+      const data = await apiCall('/v1/admin/fixes/dispatch', {
+        method: 'POST',
+        headers: args.idempotencyKey
+          ? { 'Idempotency-Key': args.idempotencyKey }
+          : undefined,
+        body: JSON.stringify({
+          reportId: args.reportId,
+          agent: args.agent,
+          inventoryActionNodeId: args.inventoryActionNodeId,
+          ...(projectId ? { projectId } : {}),
+        }),
       })
+      return jsonText(data)
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'trigger_judge',
     {
       title: titleOf('trigger_judge'),
@@ -657,7 +595,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'test_gen_from_report',
     {
       title: titleOf('test_gen_from_report'),
@@ -679,7 +617,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  registerScopedTool(
+  server.registerTool(
     'transition_status',
     {
       title: titleOf('transition_status'),
@@ -731,17 +669,19 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Rewards tools (P3) -------------------------------------------------
 
-  registerScopedTool(
+  const rewardsMeta = (name: string) => {
+    const spec = TOOL_CATALOG.find((t) => t.name === name)!
+    return { title: spec.title, annotations: { readOnlyHint: spec.hints.readOnly, destructiveHint: spec.hints.destructive, idempotentHint: spec.hints.idempotent, openWorldHint: spec.hints.openWorld } }
+  }
+
+  server.tool(
     'list_top_contributors',
+    rewardsMeta('list_top_contributors').title,
     {
-      title: titleOf('list_top_contributors'),
-      description: descOf('list_top_contributors'),
-      inputSchema: {
-        limit: z.number().int().min(1).max(100).optional().default(10).describe('Max rows to return (default 10, max 100)'),
-        range: z.enum(['30d', '90d', 'all']).optional().default('30d').describe('Time window for points calculation'),
-      },
-      annotations: annotationsFor('list_top_contributors'),
+      limit: z.number().int().min(1).max(100).optional().default(10).describe('Max rows to return (default 10, max 100)'),
+      range: z.enum(['30d', '90d', 'all']).optional().default('30d').describe('Time window for points calculation'),
     },
+    rewardsMeta('list_top_contributors'),
     async ({ limit, range }) => ({
       content: [{
         type: 'text' as const,
@@ -753,18 +693,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   )
 
-  registerScopedTool(
+  server.tool(
     'award_bonus_points',
+    rewardsMeta('award_bonus_points').title,
     {
-      title: titleOf('award_bonus_points'),
-      description: descOf('award_bonus_points'),
-      inputSchema: {
-        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
-        points: z.number().int().min(1).max(50000).describe('Bonus points to award (max 50,000 per call)'),
-        reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
-      },
-      annotations: annotationsFor('award_bonus_points'),
+      external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+      points: z.number().int().min(1).max(50000).describe('Bonus points to award (max 50,000 per call)'),
+      reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
     },
+    rewardsMeta('award_bonus_points'),
     async ({ external_user_id, points, reason }) => ({
       content: [{
         type: 'text' as const,
@@ -780,18 +717,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   )
 
-  registerScopedTool(
+  server.tool(
     'set_tier',
+    rewardsMeta('set_tier').title,
     {
-      title: titleOf('set_tier'),
-      description: descOf('set_tier'),
-      inputSchema: {
-        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
-        tier_slug: z.string().describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
-        reason: z.string().max(200).optional().describe('Optional reason for manual override'),
-      },
-      annotations: annotationsFor('set_tier'),
+      external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+      tier_slug: z.string().describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
+      reason: z.string().max(200).optional().describe('Optional reason for manual override'),
     },
+    rewardsMeta('set_tier'),
     async ({ external_user_id, tier_slug, reason }) => ({
       content: [{
         type: 'text' as const,
@@ -849,210 +783,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }
     },
   )
-
-  // privacy://status — exposes the project's privacy posture so agents can
-  // inspect what happens to client data before dispatching a fix.
-  server.resource(
-    'privacy_status',
-    'privacy://status',
-    {
-      description:
-        'Returns the privacy posture for this project: storage region, LLM provider, whether BYOK is configured, ' +
-        'data retention window, and last audit timestamp. Read this before dispatching a fix to confirm ' +
-        'that client data stays within the expected boundary.',
-    },
-    async () => {
-      const path = projectId
-        ? `/v1/admin/projects/${projectId}/privacy-status`
-        : '/v1/admin/privacy-status'
-      let data: unknown
-      try {
-        data = await apiCall(path)
-      } catch {
-        // Graceful fallback: return a static posture skeleton when the endpoint
-        // doesn't exist yet (newly-deployed stacks, self-hosted instances
-        // missing the route). Agents can still inspect the structure.
-        data = {
-          region: null,
-          storage_provider: 'supabase',
-          llm_provider: 'platform',
-          byok_configured: false,
-          retention_days: 30,
-          last_audit_at: null,
-          _note: 'Live data unavailable — update Mushi server to get real values.',
-        }
-      }
-      return {
-        contents: [{
-          uri: 'privacy://status',
-          mimeType: 'application/json',
-          text: JSON.stringify(data, null, 2),
-        }],
-      }
-    },
-  )
-
-  // evolution://history — 30-day loop convergence data: judge scores,
-  // prompt promotions, fixed bugs, and lesson inductions.
-  server.resource(
-    'evolution_history',
-    'evolution://history',
-    {
-      description:
-        'Returns the project\'s last 30 days of judge scores, prompt promotions, fixed-bug count, ' +
-        'and lesson inductions. Use to see whether the loop is converging.',
-    },
-    async () => {
-      const path = projectId
-        ? `/v1/admin/projects/${projectId}/evolution-history`
-        : '/v1/admin/evolution-history'
-      let data: unknown
-      try {
-        data = await apiCall(path)
-      } catch {
-        data = {
-          days: 30,
-          fixed_bugs: null,
-          avg_judge_score: null,
-          prompt_promotions: null,
-          lesson_inductions: null,
-          weekly_scores: [],
-          _note: 'Live data unavailable — update Mushi server to get real values.',
-        }
-      }
-      return {
-        contents: [{
-          uri: 'evolution://history',
-          mimeType: 'application/json',
-          text: JSON.stringify(data, null, 2),
-        }],
-      }
-    },
-  )
-
-  // setup_repo_for_mushi — writes bootstrap files into the agent's repo
-  if (shouldRegister('setup_repo_for_mushi')) {
-    server.tool(
-      'setup_repo_for_mushi',
-      descOf('setup_repo_for_mushi'),
-      {
-        repo_root: z.string().describe('Absolute path to the repo root. Defaults to process.cwd() when omitted.').optional(),
-        project_name: z.string().describe('Human-readable project name used in MUSHI.md. Defaults to the directory name.').optional(),
-        overwrite: z.boolean().describe('When true, overwrite existing files. Default: false (skip if already present).').optional(),
-      },
-      annotationsFor('setup_repo_for_mushi'),
-      async ({ repo_root, project_name, overwrite }) => {
-        const nodePath = await import('node:path')
-        const { writeFile, mkdir } = await import('node:fs/promises')
-        const { existsSync } = await import('node:fs')
-
-        // Resolve and validate the root path before any writes.
-        const root = nodePath.resolve(repo_root ?? process.cwd())
-        if (!existsSync(root)) {
-          return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: false, error: `repo_root does not exist: ${root}` }) }] }
-        }
-        const name = project_name ?? nodePath.basename(root)
-        const force = overwrite ?? false
-
-        const written: string[] = []
-        const skipped: string[] = []
-
-        async function writeIfNew(rel: string, content: string) {
-          // Prevent path traversal by checking the resolved abs path is still under root.
-          const abs = nodePath.resolve(root, rel)
-          if (!abs.startsWith(root + nodePath.sep) && abs !== root) {
-            skipped.push(rel)
-            return
-          }
-          if (!force && existsSync(abs)) {
-            skipped.push(rel)
-            return
-          }
-          await mkdir(nodePath.dirname(abs), { recursive: true })
-          await writeFile(abs, content, 'utf8')
-          written.push(rel)
-        }
-
-        // 1. Fetch current lessons from Mushi API
-        let lessonsJson: unknown = { schema_version: '1', project_id: projectId ?? '', generated_at: new Date().toISOString(), lessons: [] }
-        try {
-          const raw = await apiCall<{ lessons?: unknown[] }>('/v1/sync/lessons?limit=500')
-          if (raw && typeof raw === 'object') lessonsJson = raw
-        } catch { /* use empty skeleton */ }
-
-        // 2. .mushi/lessons.json
-        await writeIfNew('.mushi/lessons.json', JSON.stringify(lessonsJson, null, 2) + '\n')
-
-        // 3. .cursorrules
-        const cursorrules = [
-          `# Mushi Mushi — evolution-loop rules for ${name}`,
-          '#',
-          '# Generated by: setup_repo_for_mushi MCP tool',
-          '# Refresh lessons: mushi sync-lessons',
-          '',
-          '## Before writing a fix',
-          '1. Call get_fix_context (Mushi MCP) for the report — root cause + blast radius first.',
-          '2. Read .mushi/lessons.json — apply every matching rule.',
-          '3. Prefer the smallest change. Do not refactor unrelated code.',
-          '',
-          '## After writing a fix',
-          '1. Call submit_fix_result (Mushi MCP) with branch, PR URL, and files changed.',
-          '',
-        ].join('\n')
-        await writeIfNew('.cursorrules', cursorrules)
-
-        // 4. MUSHI.md
-        const mushiMd = [
-          `# MUSHI.md — ${name}`,
-          '',
-          '> This file is the Mushi agent contract for this project.',
-          '> Agents: read this before opening a PR.',
-          '',
-          '## Evolution loop',
-          '',
-          'This project uses Mushi\'s closed-loop PDCA cycle:',
-          '',
-          '```',
-          'User reports bug → Mushi captures → AI triages → AI opens PR',
-          '→ QA verifies → Judge scores → Lesson library remembers',
-          '```',
-          '',
-          '## Agent checklist',
-          '',
-          '- [ ] Read `get_fix_context` for the report before touching any file',
-          '- [ ] Check `.mushi/lessons.json` for patterns matching the affected component',
-          '- [ ] Prefer the smallest change that passes the repro test',
-          '- [ ] Call `submit_fix_result` after pushing the branch',
-          '',
-          '## Privacy',
-          '',
-          'Read `privacy://status` (Mushi MCP) to confirm where client data flows',
-          'before dispatching a fix that touches user data fields.',
-          '',
-          '## Lesson library',
-          '',
-          'Run `mushi sync-lessons` to refresh `.mushi/lessons.json` from the',
-          'project\'s live lesson library.',
-          '',
-        ].join('\n')
-        await writeIfNew('MUSHI.md', mushiMd)
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              ok: true,
-              written,
-              skipped,
-              message: written.length > 0
-                ? `Wrote ${written.length} file(s): ${written.join(', ')}`
-                : `All files already exist — run with overwrite=true to replace them.`,
-            }, null, 2),
-          }],
-        }
-      },
-    )
-  }
 
   // --- Prompts ---------------------------------------------------------
 

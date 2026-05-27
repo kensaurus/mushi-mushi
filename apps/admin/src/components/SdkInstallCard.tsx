@@ -29,9 +29,8 @@
  *          dominating it.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CopyButton } from './ui'
-import { ContainedBlock, InlineProof } from './report-detail/ReportSurface'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
@@ -40,6 +39,7 @@ import {
   frameworkLabel,
   installCommand,
   isMobileFramework,
+  isServerFramework,
   renderSnippet,
   type Framework,
   type ScreenshotMode,
@@ -48,11 +48,6 @@ import {
   type WidgetTheme,
   type WidgetTrigger,
 } from '../lib/sdkSnippets'
-import {
-  detectFromPackageJson,
-  monorepoInstallGuidance,
-  type DetectionResult,
-} from '../lib/frameworkDetect'
 
 interface Props {
   /** The project's external `project_id` (the value the SDK sends back to the
@@ -139,7 +134,6 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
-  const [detection, setDetection] = useState<DetectionResult | null>(null)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [savedConfig, setSavedConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [enabled, setEnabled] = useState(true)
@@ -232,19 +226,34 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
       {!compact && (
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>
-          <ContainedBlock tone="muted" className="mt-2">
-            <p className="text-xs text-fg-muted">
-              Tune the widget on the left, watch the snippet on the right update in real time, then copy it
-              into your app. Your project ID is pre-filled; replace
-              <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
-              with an API key (generate one in Projects).
-            </p>
-          </ContainedBlock>
+          <p className="text-xs text-fg-muted mt-1">
+            Tune the widget on the left, watch the snippet on the right update in real time, then copy it
+            into your app. Your project ID is pre-filled; replace
+            <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
+            with an API key (generate one in Projects).
+          </p>
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className={`grid gap-4 ${isServerFramework(framework) ? '' : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {/* ─── LEFT COLUMN: live preview + configurator ─── */}
+        {/* Hidden for server frameworks — the widget only runs in browsers. */}
+        {isServerFramework(framework) ? (
+          <div className="rounded-md border border-edge-subtle bg-surface-raised/50 px-4 py-3 text-2xs text-fg-secondary leading-relaxed">
+            <p className="font-medium text-fg mb-1">Server-side capture</p>
+            <p>
+              <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">@mushi-mushi/node</code>{' '}
+              runs in Node 18+ (and edge runtimes). It captures uncaught exceptions, unhandled rejections,
+              and 5xx errors — no browser widget needed. Reports land in the same inbox as user-submitted bugs,
+              so your team sees server and client failures in one queue.
+            </p>
+            <p className="mt-2">
+              Add <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_PROJECT_ID</code> and{' '}
+              <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">MUSHI_API_KEY</code> to your
+              deployment env. Copy the snippet on the right into your instrumentation file.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between">
@@ -264,9 +273,9 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
 
           <ConfiguratorPanel config={config} enabled={enabled} framework={framework} onEnabledChange={setEnabled} onChange={setConfig} />
           <div className="flex items-center justify-between gap-2">
-            <InlineProof className="flex-1 border-0 bg-transparent px-0 py-0">
+            <p className="text-2xs text-fg-faint">
               {loadingConfig ? 'Loading saved config…' : saveMessage ?? 'Saved config is served to SDKs at startup.'}
-            </InlineProof>
+            </p>
             <button
               type="button"
               onClick={saveConfig}
@@ -281,36 +290,10 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             </button>
           </div>
         </div>
+        )}
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
         <div className="space-y-3 min-w-0">
-
-          {/* Auto-detect panel — paste package.json to skip manual tab picking */}
-          <FrameworkDetector
-            onDetect={(result) => {
-              setDetection(result)
-              if (result.confidence >= 0.5) {
-                setFramework(result.framework)
-                setSnippetCopied(false)
-                setInstallCopied(false)
-              }
-            }}
-          />
-
-          {/* Detection result banner.
-              When confidence ≥ 0.5 the tab has already switched to the
-              detected framework (line above), so installCommand(detection.framework)
-              and installCommand(framework) are the same.
-              When confidence < 0.5 the tab stays on the user's selection;
-              use that framework so the banner doesn't show a mismatched command. */}
-          {detection && (
-            <DetectionBanner
-              result={detection}
-              installCmd={installCommand(detection.confidence >= 0.5 ? detection.framework : framework)}
-              onDismiss={() => setDetection(null)}
-            />
-          )}
-
           {/* Framework tabs.
               `flex-wrap` is non-negotiable: there are 7 frameworks today
               (React / Vue / Svelte / React Native / Expo / Capacitor /
@@ -331,7 +314,6 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
                 aria-selected={framework === fw}
                 onClick={() => {
                   setFramework(fw)
-                  setDetection(null)
                   setSnippetCopied(false)
                   setInstallCopied(false)
                 }}
@@ -371,7 +353,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
               mobile bridges (React Native / Expo / Capacitor) don't
               ship these methods yet — they'll get a per-platform
               equivalent once their wave lands. */}
-          {framework !== 'react-native' && framework !== 'expo' && framework !== 'capacitor' && (
+          {!isMobileFramework(framework) && !isServerFramework(framework) && (
             <details className="rounded-md border border-edge-subtle bg-surface-raised/50">
               <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg hover:bg-surface-overlay rounded-md">
                 <span className="font-medium">Power-user APIs (identity, tags, breadcrumbs, Sentry)</span>
@@ -443,6 +425,11 @@ const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
   vue: 'vue',
   svelte: 'svelte',
   vanilla: 'html',
+  // Server-side: instrument files are TypeScript.
+  node: 'ts',
+  express: 'ts',
+  fastify: 'ts',
+  hono: 'ts',
 }
 
 interface CodeBlockProps {
@@ -949,163 +936,5 @@ function CaptureToggle({
         {helpId && <ConfigHelp helpId={helpId} />}
       </span>
     </label>
-  )
-}
-
-// ─── Auto-detect components ────────────────────────────────────────────────────
-
-/**
- * Collapsible "Detect my framework" accordion.
- * Users paste their package.json and we auto-select the right tab + show
- * monorepo / version warnings. ELI5, zero-config, never crashes.
- */
-function FrameworkDetector({ onDetect }: { onDetect: (r: DetectionResult) => void }) {
-  const [open, setOpen] = useState(false)
-  const [text, setText] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const taRef = useRef<HTMLTextAreaElement>(null)
-
-  function handleDetect() {
-    setError(null)
-    const trimmed = text.trim()
-    if (!trimmed) {
-      setError('Paste your package.json contents above first.')
-      return
-    }
-    const result = detectFromPackageJson(trimmed)
-    onDetect(result)
-    if (result.confidence < 0.5 || result.monorepo) {
-      // keep the panel open so the user can read the guidance
-    } else {
-      setOpen(false)
-      setText('')
-    }
-  }
-
-  return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised/40">
-      <button
-        type="button"
-        onClick={() => {
-          setOpen((v) => !v)
-          if (!open) setTimeout(() => taRef.current?.focus(), 50)
-        }}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-surface-overlay rounded-md transition-colors"
-        aria-expanded={open}
-      >
-        <span className="font-medium text-fg">
-          🔍 Detect my framework automatically
-        </span>
-        <span className="text-fg-faint text-2xs" aria-hidden>
-          {open ? '▲ hide' : '▼ paste package.json'}
-        </span>
-      </button>
-
-      {open && (
-        <div className="px-3 pb-3 pt-1 space-y-2">
-          <p className="text-2xs text-fg-muted leading-snug">
-            Paste the contents of your <code className="font-mono">package.json</code> and we'll
-            auto-select the right SDK tab, detect monorepos, and flag any known issues.
-          </p>
-          <textarea
-            ref={taRef}
-            value={text}
-            onChange={(e) => { setText(e.target.value); setError(null) }}
-            placeholder={'{\n  "dependencies": {\n    "react": "^18.0.0",\n    ...\n  }\n}'}
-            className="w-full h-32 font-mono text-2xs bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand resize-y placeholder:text-fg-faint"
-            aria-label="Paste your package.json here"
-            spellCheck={false}
-          />
-          {error && (
-            <p className="text-2xs text-danger" role="alert">{error}</p>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDetect}
-              disabled={!text.trim()}
-              className="px-3 py-1 rounded-sm text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Detect
-            </button>
-            <button
-              type="button"
-              onClick={() => { setText(''); setError(null); setOpen(false) }}
-              className="px-2 py-1 rounded-sm text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Result banner shown after auto-detect. Green when confident, amber when uncertain. */
-function DetectionBanner({
-  result,
-  installCmd,
-  onDismiss,
-}: {
-  result: DetectionResult
-  installCmd: string
-  onDismiss: () => void
-}) {
-  const isConfident = result.confidence >= 0.8
-  const monorepoNote = monorepoInstallGuidance(result, installCmd)
-
-  const tone = isConfident
-    ? 'border-ok/30 bg-ok-muted/10 text-ok'
-    : 'border-warn/30 bg-warn-muted/10 text-warn'
-
-  return (
-    <div className={`rounded-md border px-3 py-2.5 space-y-1.5 ${tone}`} role="status">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs font-semibold">
-            {isConfident ? '✓ Detected:' : '~ Best guess:'}
-          </span>
-          <code className="font-mono text-xs text-fg">{result.framework}</code>
-          <span className="text-2xs text-fg-muted">
-            ({Math.round(result.confidence * 100)}% confident)
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="text-fg-faint hover:text-fg text-2xs shrink-0"
-          aria-label="Dismiss detection result"
-        >
-          ✕
-        </button>
-      </div>
-
-      <p className="text-2xs text-fg-secondary leading-snug">{result.reason}</p>
-
-      {monorepoNote && (
-        <div className="rounded-sm border border-info/30 bg-info-muted/10 px-2 py-1.5 mt-1">
-          <p className="text-2xs text-info font-semibold mb-0.5">Monorepo detected</p>
-          <pre className="text-2xs text-fg-secondary whitespace-pre-wrap font-mono leading-snug">{monorepoNote}</pre>
-        </div>
-      )}
-
-      {result.warnings.length > 0 && (
-        <ul className="space-y-0.5 mt-1">
-          {result.warnings.map((w, i) => (
-            <li key={i} className="text-2xs text-warn leading-snug flex gap-1">
-              <span aria-hidden>⚠</span>
-              <span>{w}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {result.confidence < 0.5 && (
-        <p className="text-2xs text-fg-muted mt-1">
-          Low confidence — please select the correct framework tab above manually.
-        </p>
-      )}
-    </div>
   )
 }

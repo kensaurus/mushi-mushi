@@ -74,12 +74,9 @@ export const FirecrawlActionsProvider: BrowserProvider = {
         }
       }
 
-      // Cast to the SDK's ActionOption type — our FirecrawlAction union is
-      // a subset and compatible at runtime; the SDK's discriminated union is
-      // stricter about 'navigate' which Firecrawl supports as a documented beta.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (app.scrape as (url: string, opts: Record<string, unknown>) => ReturnType<typeof app.scrape>)(targetUrl, {
+      const result = await app.scrapeUrl(targetUrl, {
         formats: ['markdown', 'screenshot'],
+        // @ts-expect-error actions is a beta feature in firecrawl-js
         actions,
       })
 

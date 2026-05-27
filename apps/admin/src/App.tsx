@@ -87,12 +87,12 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m
 const DocsBridgePage = lazy(() => import('./pages/DocsBridgePage').then(m => ({ default: m.DocsBridgePage })))
 const ExplorePage = lazy(() => import('./pages/ExplorePage').then(m => ({ default: m.ExplorePage })))
 
-// Mushi Bounties — Tester Portal (Wave 3-4)
+// Mushi Bounties — tester portal pages (lazy, separate chunk so devs never load them)
 const TesterHomePage = lazy(() => import('./pages/tester/TesterHomePage').then(m => ({ default: m.TesterHomePage })))
 const TesterAppsPage = lazy(() => import('./pages/tester/TesterAppsPage').then(m => ({ default: m.TesterAppsPage })))
-const TesterSubmissionsPage = lazy(() => import('./pages/tester/TesterSubmissionsPage').then(m => ({ default: m.TesterSubmissionsPage })))
 const TesterWalletPage = lazy(() => import('./pages/tester/TesterWalletPage').then(m => ({ default: m.TesterWalletPage })))
 const TesterSettingsPage = lazy(() => import('./pages/tester/TesterSettingsPage').then(m => ({ default: m.TesterSettingsPage })))
+const TesterLearnPage = lazy(() => import('./pages/tester/TesterLearnPage').then(m => ({ default: m.TesterLearnPage })))
 
 /**
  * NotFoundPage — rendered for any unknown route the SPA's React Router
@@ -317,6 +317,28 @@ export function App() {
                 <TesterSettingsPage />
               </Suspense>
             </TesterRoute>
+          }
+        />
+        {/* Tester portal — uses TesterLayout, no dev console chrome or Layout.
+            Inner Routes must use RELATIVE paths (no leading /) so React Router v6
+            matches against the remaining path after /tester/, not the full URL. */}
+        <Route
+          path="/tester/*"
+          element={
+            <ProtectedRoute>
+              <ErrorBoundary source="tester-portal">
+              <Suspense fallback={<Loading text="Loading..." />}>
+              <SentryRoutes>
+                <Route index element={<TesterHomePage />} />
+                <Route path="apps" element={<TesterAppsPage />} />
+                <Route path="wallet" element={<TesterWalletPage />} />
+                <Route path="learn" element={<TesterLearnPage />} />
+                <Route path="settings" element={<TesterSettingsPage />} />
+                <Route path="*" element={<Navigate to="/tester" replace />} />
+              </SentryRoutes>
+              </Suspense>
+              </ErrorBoundary>
+            </ProtectedRoute>
           }
         />
         <Route

@@ -1,131 +1,375 @@
 /**
- * TesterHomePage — landing page for the Mushi Bounties tester portal.
- * Shows the tester's balance, recent activity, and quick links.
+ * TesterHomePage — landing dashboard for the tester portal.
+ * Shows greeting, stat strip, next-milestone progress, recommended apps,
+ * in-flight pipeline, and quick links to the Learn section.
  */
-import { TesterLayout } from '../../components/tester/TesterLayout'
+import { useTesterStatus, reputationTier, REP_TIERS } from '../../lib/useTesterStatus'
 import { usePageData } from '../../lib/usePageData'
-import { useAuth } from '../../lib/auth'
-import { Link } from 'react-router-dom'
+import { TesterLayout } from '../../components/tester/TesterLayout'
 
-interface TesterStatus {
-  isTester: boolean
-  handle: string | null
-  reputation: number
+interface TesterApp {
+  id: string
+  slug: string
+  name: string
+  tagline: string | null
+  heroUrl: string | null
+  platforms: string[]
+  maxBountyPoints: number
+  joined: boolean
+  meetsReputationGate: boolean
+  accepted30d: number
+  lastAcceptedAt: string | null
+  mySubmissions: number
+  myAccepted: number
+  myPointsEarned: number
+  bountySchedule: Array<{ action: string; points_per_event: number }>
+  targetCountries: string[] | null
+}
+
+interface WalletData {
   balance: number
   totalEarned: number
   totalRedeemed: number
-  acceptedSubmissions: number
-  joinedApps: number
+  ytdGiftCardUsd: number
+  kycRequired: boolean
+  kycCleared: boolean
+  kycThresholdUsd: number
+  kycCapUsd: number
+  pendingRedemptions: Array<{ id: string; kind: string; pointsSpent: number; faceValueUsd: number | null; status: string; requestedAt: string }>
 }
 
-export function TesterHomePage() {
-  const { user } = useAuth()
-  const { data: status, loading } = usePageData<TesterStatus>('/v1/me/tester-status')
-
-  return (
-    <TesterLayout>
-      <div className="space-y-6 max-w-3xl">
-        <div>
-          <h1 className="text-lg font-bold">Welcome back 🪲</h1>
-          <p className="text-sm text-fg-muted mt-0.5">{user?.email}</p>
-        </div>
-
-        {loading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-20 rounded-lg bg-surface animate-pulse" />
-            ))}
-          </div>
-        )}
-
-        {!loading && status && (
-          <>
-            {!status.isTester && (
-              <div className="rounded-lg border border-brand/30 bg-brand/5 p-4 text-sm text-fg-secondary">
-                Your tester profile is being set up. Check back in a moment.
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatCard label="Balance" value={`${status.balance.toLocaleString()} pts`} sub="mushi-points" />
-              <StatCard label="Reputation" value={status.reputation.toString()} sub="score" />
-              <StatCard label="Accepted" value={status.acceptedSubmissions.toString()} sub="bug reports" />
-              <StatCard label="Apps joined" value={status.joinedApps.toString()} sub="active" />
-            </div>
-
-            {status.balance > 0 && (
-              <div className="rounded-lg border border-ok/30 bg-ok/5 p-4">
-                <p className="text-sm font-medium text-fg">
-                  You have <span className="text-ok">{status.balance.toLocaleString()} mushi-points</span> ready to redeem.
-                </p>
-                <Link
-                  to="/tester/wallet"
-                  className="mt-2 inline-block text-2xs text-brand hover:text-brand-hover motion-safe:transition-colors"
-                >
-                  Redeem in wallet →
-                </Link>
-              </div>
-            )}
-          </>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <QuickLink
-            to="/tester/apps"
-            icon="📱"
-            title="Browse apps"
-            description="Find apps to test and earn mushi-points."
-          />
-          <QuickLink
-            to="/tester/submissions"
-            icon="🐛"
-            title="My submissions"
-            description="Track your bug reports and their status."
-          />
-          <QuickLink
-            to="/tester/wallet"
-            icon="💰"
-            title="Wallet & rewards"
-            description="Redeem your points for Mushi Pro or gift cards."
-          />
-          <QuickLink
-            to="/tester/settings"
-            icon="⚙️"
-            title="Profile settings"
-            description="Update your handle, expertise tags, and privacy."
-          />
-        </div>
-      </div>
-    </TesterLayout>
-  )
+interface Submission {
+  id: string
+  appName: string
+  title: string
+  status: string
+  submittedAt: string
+  pointsAwarded: number | null
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+/** SVG-safe color values for each tier — Tailwind class names can't be used as SVG stroke values. */
+const TIER_SVG_COLORS: Record<string, string> = {
+  Platinum: '#67e8f9',
+  Gold:     '#fde047',
+  Silver:   '#cbd5e1',
+  Bronze:   '#fbbf24',
+}
+
+function MilestoneRing({ value, max, label, color }: { value: number; max: number; label: string; color: string }) {
+  const pct = Math.min(1, value / max)
+  const r = 28
+  const circ = 2 * Math.PI * r
+  const dash = circ * pct
   return (
-    <div className="rounded-lg border border-edge bg-surface p-3 space-y-0.5">
-      <p className="text-2xs text-fg-muted">{label}</p>
-      <p className="text-lg font-bold">{value}</p>
-      <p className="text-2xs text-fg-faint">{sub}</p>
+    <div className="flex flex-col items-center gap-1">
+      <svg width="72" height="72" viewBox="0 0 72 72" className="-rotate-90">
+        <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="6" />
+        <circle
+          cx="36" cy="36" r={r} fill="none"
+          stroke={color} strokeWidth="6"
+          strokeDasharray={`${dash} ${circ - dash}`}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.6s ease' }}
+        />
+      </svg>
+      <p className="text-xs text-gray-400 -mt-1 text-center leading-tight">{label}</p>
     </div>
   )
 }
 
-function QuickLink({ to, icon, title, description }: {
-  to: string
-  icon: string
-  title: string
-  description: string
-}) {
+function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
+  if (!lastAcceptedAt) return <span className="inline-block h-2 w-2 rounded-full bg-gray-600" title="No activity yet" />
+  const days = (Date.now() - new Date(lastAcceptedAt).getTime()) / 86_400_000
+  const [cls, tip] = days < 7
+    ? ['bg-green-400', 'Active (last accepted < 7d ago)']
+    : days < 30
+    ? ['bg-yellow-400', 'Moderate activity (7–30d)']
+    : ['bg-gray-500', 'Low activity (>30d)']
+  return <span className={`inline-block h-2 w-2 rounded-full ${cls}`} title={tip} />
+}
+
+function RecommendedAppCard({ app }: { app: TesterApp }) {
+  const maxPts = app.maxBountyPoints
   return (
-    <Link
-      to={to}
-      className="flex items-start gap-3 rounded-lg border border-edge bg-surface p-4 hover:border-brand/40 hover:bg-brand/5 motion-safe:transition-all group"
+    <a
+      href="/tester/apps"
+      className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:border-violet-500/40 hover:bg-white/8 transition-all group"
     >
-      <span className="text-xl">{icon}</span>
-      <div>
-        <p className="text-sm font-medium group-hover:text-brand motion-safe:transition-colors">{title}</p>
-        <p className="text-2xs text-fg-muted mt-0.5">{description}</p>
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 shrink-0 rounded-lg bg-gray-800 flex items-center justify-center text-xl">
+          {app.heroUrl ? <img src={app.heroUrl} alt="" className="h-full w-full rounded-lg object-cover" /> : '📱'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold group-hover:text-violet-300 transition-colors truncate">{app.name}</p>
+            <ActivityDot lastAcceptedAt={app.lastAcceptedAt} />
+          </div>
+          {app.tagline && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{app.tagline}</p>}
+          <p className="text-xs text-violet-400 mt-1 font-medium">
+            Up to {maxPts.toLocaleString()} pts · {app.accepted30d} accepted last 30d
+          </p>
+        </div>
       </div>
-    </Link>
+    </a>
+  )
+}
+
+function PipelineItem({ icon, label, sub, href, badge }: { icon: string; label: string; sub: string; href: string; badge?: string }) {
+  return (
+    <a href={href} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 hover:border-white/20 transition-colors">
+      <span className="text-xl shrink-0">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium truncate">{label}</p>
+        <p className="text-xs text-gray-500 truncate">{sub}</p>
+      </div>
+      {badge && <span className="shrink-0 rounded-full bg-violet-500/20 px-2 py-0.5 text-2xs font-medium text-violet-300">{badge}</span>}
+    </a>
+  )
+}
+
+function LearnTile({ icon, title, href, description }: { icon: string; title: string; href: string; description: string }) {
+  return (
+    <a
+      href={href}
+      className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 p-4 hover:border-violet-500/40 hover:bg-violet-500/5 transition-all"
+    >
+      <span className="text-2xl">{icon}</span>
+      <p className="text-sm font-semibold leading-snug">{title}</p>
+      <p className="text-xs text-gray-400 leading-relaxed">{description}</p>
+    </a>
+  )
+}
+
+export function TesterHomePage() {
+  const { data: status, loading: statusLoading } = useTesterStatus()
+  const { data: appsRaw } = usePageData<{ data?: TesterApp[] } | TesterApp[]>('/v1/tester/apps')
+  const { data: walletRaw } = usePageData<{ data?: WalletData } | WalletData>('/v1/tester/wallet')
+  const { data: subsRaw } = usePageData<{ data?: { items: Submission[] } } | { items: Submission[] }>('/v1/tester/submissions')
+
+  // normalise nested .data wrappers
+  const apps: TesterApp[] = Array.isArray(appsRaw)
+    ? appsRaw
+    : (appsRaw as { data?: TesterApp[] } | null)?.data ?? []
+  const wallet: WalletData | null = walletRaw && 'data' in walletRaw && walletRaw.data
+    ? (walletRaw as { data: WalletData }).data
+    : walletRaw as unknown as WalletData | null
+  const submissions: Submission[] = (subsRaw as { data?: { items: Submission[] } } | null)?.data?.items
+    ?? (subsRaw as { items?: Submission[] } | null)?.items
+    ?? []
+
+  const handle = status?.handle ?? 'Tester'
+  const reputation = status?.reputation ?? 0
+  const tier = reputationTier(reputation)
+
+  // Next reputation tier
+  const currentTierIdx = REP_TIERS.findIndex(t => t.name === tier.name)
+  const nextTier = currentTierIdx > 0 ? REP_TIERS[currentTierIdx - 1] : null
+  // Recommended apps: not joined, meets gate, sort by maxBountyPoints
+  const recommended = apps
+    .filter(a => !a.joined && a.meetsReputationGate)
+    .sort((a, b) => b.maxBountyPoints - a.maxBountyPoints)
+    .slice(0, 3)
+
+  // Pending submissions
+  const pendingSubmissions = submissions.filter(s => s.status === 'pending').slice(0, 3)
+
+  const ytd = wallet?.ytdGiftCardUsd ?? 0
+  const kycThreshold = wallet?.kycThresholdUsd ?? 400
+  const kycCleared = wallet?.kycCleared ?? false
+  const pendingRedemptions = wallet?.pendingRedemptions ?? []
+
+  if (statusLoading) {
+    return (
+      <TesterLayout title="Home">
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-24 rounded-xl bg-white/5 animate-pulse" />
+          ))}
+        </div>
+      </TesterLayout>
+    )
+  }
+
+  return (
+    <TesterLayout title="Home">
+      <div className="space-y-8">
+
+        {/* Greeting */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Welcome back, {handle}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${tier.bg} ${tier.color}`}>
+                {tier.name} tester
+              </span>
+              <span className="text-sm text-gray-500">{reputation} reputation · {status?.acceptedSubmissions ?? 0} accepted reports</span>
+            </div>
+          </div>
+          <a
+            href="/tester/apps"
+            className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold hover:bg-violet-500 transition-colors"
+          >
+            Browse apps →
+          </a>
+        </div>
+
+        {/* Stat strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Balance',       value: `${(status?.balance ?? 0).toLocaleString()} pts`, sub: 'redeemable now' },
+            { label: 'Total earned',  value: `${(status?.totalEarned ?? 0).toLocaleString()} pts`, sub: 'all time' },
+            { label: 'Apps joined',   value: String(status?.joinedApps ?? 0),      sub: 'active programs' },
+            { label: 'Accepted',      value: String(status?.acceptedSubmissions ?? 0), sub: 'all-time reports' },
+          ].map(({ label, value, sub }) => (
+            <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
+              <p className="text-xl font-bold text-white">{value}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Milestones row */}
+        <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+          <h2 className="text-sm font-semibold mb-4">Milestones</h2>
+          <div className="flex items-start gap-8 flex-wrap">
+            {nextTier ? (
+              <div className="flex items-center gap-4">
+                <MilestoneRing
+                  value={reputation - tier.min}
+                  max={nextTier.min - tier.min}
+                  label={`→ ${nextTier.name}`}
+                  color={TIER_SVG_COLORS[nextTier.name] ?? '#7c3aed'}
+                />
+                <div>
+                  <p className="text-sm font-medium">{nextTier.name} tier</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {reputation} / {nextTier.min} rep
+                    {' '}· {nextTier.min - reputation} more needed
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Earn rep by getting reports accepted.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <MilestoneRing value={1} max={1} label="Max tier" color="#67e8f9" />
+                <div>
+                  <p className="text-sm font-medium">Platinum — max tier reached</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{reputation} rep · keep it up!</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-4">
+              <div className="w-48">
+                <p className="text-xs text-gray-400 mb-1.5">YTD gift cards</p>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden relative">
+                  {/* KYC gate at $400 */}
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      ytd >= kycThreshold && !kycCleared ? 'bg-yellow-400' : 'bg-violet-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (ytd / (wallet?.kycCapUsd ?? 599)) * 100)}%` }}
+                  />
+                  <div
+                    className="absolute top-0 h-full w-px bg-yellow-400/60"
+                    style={{ left: `${(kycThreshold / (wallet?.kycCapUsd ?? 599)) * 100}%` }}
+                    title="KYC required at this point"
+                  />
+                </div>
+                <div className="flex justify-between text-2xs text-gray-500 mt-1">
+                  <span>${ytd.toFixed(0)}</span>
+                  <span>${kycThreshold} KYC</span>
+                  <span>${wallet?.kycCapUsd ?? 599} cap</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium">Gift card cap</p>
+                {ytd >= kycThreshold && !kycCleared ? (
+                  <a href="/tester/settings#kyc" className="text-xs text-yellow-400 hover:underline mt-0.5 block">
+                    Verify identity to continue →
+                  </a>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-0.5">${((wallet?.kycCapUsd ?? 599) - ytd).toFixed(0)} remaining</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recommended apps */}
+        {recommended.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold">Recommended for you</h2>
+              <a href="/tester/apps" className="text-xs text-violet-400 hover:underline">See all apps →</a>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {recommended.map(app => <RecommendedAppCard key={app.id} app={app} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Pipeline strip: pending submissions + pending redemptions */}
+        {(pendingSubmissions.length > 0 || pendingRedemptions.length > 0) && (
+          <div>
+            <h2 className="text-sm font-semibold mb-3">In progress</h2>
+            <div className="space-y-2">
+              {pendingSubmissions.map(s => (
+                <PipelineItem
+                  key={s.id}
+                  icon="🐛"
+                  label={s.title}
+                  sub={`${s.appName} · submitted ${new Date(s.submittedAt).toLocaleDateString()}`}
+                  href="/tester/apps"
+                  badge="Pending review"
+                />
+              ))}
+              {pendingRedemptions.map(r => (
+                <PipelineItem
+                  key={r.id}
+                  icon={r.kind === 'mushi_pro_credit' ? '🚀' : '🎁'}
+                  label={r.kind === 'mushi_pro_credit' ? 'Mushi Pro credit' : `Gift card — $${r.faceValueUsd?.toFixed(0) ?? '?'}`}
+                  sub={`${r.pointsSpent.toLocaleString()} pts · ${new Date(r.requestedAt).toLocaleDateString()}`}
+                  href="/tester/wallet"
+                  badge={r.status === 'processing' ? 'Processing' : 'Pending'}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Learn corner */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold">Learn how Bounties works</h2>
+            <a href="/tester/learn" className="text-xs text-violet-400 hover:underline">Full guide →</a>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <LearnTile
+              icon="✅"
+              title="What makes a good report"
+              href="/tester/learn#good-report"
+              description="Steps to reproduce, expected vs actual, screenshots. Reports that get accepted every time."
+            />
+            <LearnTile
+              icon="💰"
+              title="The bounty math"
+              href="/tester/learn#bounty-math"
+              description="1,000 pts = $10 gift card or $13 Mushi Pro credit. How point values are set and calculated."
+            />
+            <LearnTile
+              icon="📋"
+              title="KYC & gift card cap"
+              href="/tester/learn#kyc"
+              description="$400 threshold, W-9 / W-8BEN, what your TIN is used for, and how to clear verification."
+            />
+          </div>
+        </div>
+
+      </div>
+    </TesterLayout>
   )
 }

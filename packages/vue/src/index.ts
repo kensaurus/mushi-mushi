@@ -31,6 +31,25 @@ const isBrowser = (): boolean =>
   typeof globalThis !== 'undefined' &&
   typeof (globalThis as { window?: unknown }).window !== 'undefined' &&
   typeof (globalThis as { document?: unknown }).document !== 'undefined'
+export interface MushiConfig {
+  projectId: string
+  apiKey: string
+  endpoint?: string
+  capture?: {
+    discoverInventory?: boolean
+  }
+}
+
+const MUSHI_KEY: InjectionKey<MushiSDKInstance> = Symbol('mushi')
+
+function toCoreConfig(config: MushiConfig): CoreMushiConfig {
+  return {
+    projectId: config.projectId,
+    apiKey: config.apiKey,
+    ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
+    ...(config.capture !== undefined ? { capture: config.capture } : {}),
+  }
+}
 
 export const MushiPlugin: Plugin = {
   install(app: App, config: MushiConfig) {

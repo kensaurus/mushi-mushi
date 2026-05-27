@@ -1,132 +1,19 @@
----
-title: Admin console
----
-
-import { Callout, Cards, Card } from 'nextra/components'
-
-<AdminDocHero page="index" preferGif showStatic={false} />
-
 # Admin console
 
-The admin console is the command surface for everything Mushi does after a report
-arrives. It is a React SPA at `app.mushimushi.dev` (or your self-hosted equivalent).
+The admin console is a React SPA at `app.mushimushi.dev` (or your
+self-hosted equivalent). It's the primary surface for triage, fix
+orchestration, governance, and real-time collaboration.
 
-All 30+ pages are organised around the **Plan → Do → Check → Act** loop. The sidebar
-groups them accordingly. Use the Command Palette (`⌘K` / `Ctrl K`) to jump to any page,
-report, or fix attempt by name.
+import { Cards } from 'nextra/components'
 
----
-
-## Pages at a glance
-
-### Plan — understand what's broken
-
-| Page | Route | What you do here |
-|------|-------|-----------------|
-| [Reports & triage](/admin/reports) | `/reports` | Review incoming reports, read AI classification, dispatch fixes |
-| [Inbox](/admin/reports) | `/inbox` | Unreviewed report queue with bulk-triage actions |
-| [Knowledge graph](/admin/graph) | `/graph` | Force-directed bug graph; Surface mode overlays inventory |
-| [User stories · Inventory](/admin/inventory) | `/stories` | Accept SDK-proposed `inventory.yaml`; trigger gate runs |
-| [Processing queue](/admin/reports) | `/queue` | Dead-letter queue and re-queue controls for failed dispatches |
-| [Anti-gaming](/admin/anti-gaming) | `/anti-gaming` | Device inspection, flag/unflag reporters, velocity rules |
-
-### Do — make the fix
-
-| Page | Route | What you do here |
-|------|-------|-----------------|
-| [Fix orchestrator](/admin/fixes) | `/fixes` | Watch agent runs stream live; browse PR diffs |
-| [Repo](/admin/fixes) | `/repo` | Branch graph, fix-worker branch status, activity log |
-| [Prompt lab](/admin/judge) | `/prompt-lab` | Create and A/B test classifier prompt versions |
-
-### Check — measure quality
-
-| Page | Route | What you do here |
-|------|-------|-----------------|
-| [Judge dashboard](/admin/judge) | `/judge` | 30-day classification score trend and A/B tournament |
-| [Integration health](/admin/health) | `/health` | Test BYOK connections (Anthropic, OpenAI, GitHub, Firecrawl…) |
-| [QA Coverage](/admin/qa-coverage) | `/qa-coverage` | Define and schedule automated user-story tests |
-| [Lessons](/admin/lessons) | `/lessons` | Vector-clustered mistake DB; query-sim tab |
-| [Intelligence reports](/admin/intelligence) | `/intelligence` | Weekly AI-generated bug digest |
-| [Research](/admin/research) | `/research` | Firecrawl-powered web research scoped to your stack |
-
-### Act — improve and iterate
-
-| Page | Route | What you do here |
-|------|-------|-----------------|
-| [Iterate (PDCA)](/admin/iterate) | `/iterate` | Run Plan→Do→Check→Act loops against a live URL |
-| [Drift scanner](/admin/drift) | `/drift` | Compare live app vs. contract snapshot; see what changed |
-| [Experiments](/admin/experiments) | `/experiments` | Create A/B tests; CUPED + mSPRT analysis |
-| [Anomaly detection](/admin/anomalies) | `/anomalies` | STL/Page-Hinkley detectors on inbound metrics |
-| [Releases](/admin/releases) | `/releases` | AI-drafted changelogs with reporter attribution |
-
-### Workspace — settings & administration
-
-| Page | Route | What you do here |
-|------|-------|-----------------|
-| [Settings](/admin/settings) | `/settings` | BYOK keys (LLM, Firecrawl), SDK config, dev tools, PDCA config |
-| [Storage](/admin/storage) | `/storage` | BYO bucket (S3 / R2 / GCS / Supabase) per project with health check |
-| [Integrations](/admin/integrations) | `/integrations/config` | Sentry, Langfuse, GitHub core connections + routing destinations |
-| [Marketplace](/admin/marketplace) | `/marketplace` | Browse, install, and manage outbound plugins |
-| [MCP](/admin/mcp) | `/mcp` | MCP server install snippet, key status, full tool + resource catalogue |
-| [Prompt lab](/admin/prompt-lab) | `/prompt-lab` | Version, A/B test, and promote LLM prompts for every pipeline stage |
-| [Rewards](/admin/rewards) | `/rewards` | Point rules, tier ladder, quests, contributor leaderboard |
-| [Cost](/admin/cost) | `/cost` | LLM spend breakdown across all pipelines with CSV export |
-| [Processing queue](/admin/queue) | `/queue` | Dead-letter queue, retry, flush queued, recover stranded items |
-| [Notifications](/admin/notifications) | `/notifications` | Reporter notification history; mark-read |
-| [Fine-tuning](/admin/fine-tuning) | `/fine-tuning` | Export → train → promote a fine-tuned classifier |
-| [Real-time collaboration](/admin/realtime) | `/realtime` | Live presence and threaded comments on reports |
-| [SDK health](/admin/sdk-health) | `/sdk-health` | Per-runtime heartbeat, version alerts |
-
-### Administration
-
-| Page | Route | What you do here |
-|------|-------|-----------------|
-| [Organization members](/admin/teams) | `/organization/members` | Roster, invite, resend, revoke, role management |
-| [SSO](/admin/sso) | `/sso` | SAML / OIDC identity provider registration (Pro/Enterprise) |
-| [Audit log](/admin/audit) | `/audit` | Immutable audit trail — filter by actor, action, resource, time |
-| [Compliance](/admin/compliance) | `/compliance` | SOC 2 evidence, data residency, retention policies, DSARs |
-| [Billing](/admin/billing) | `/billing` | Subscription, usage bar with forecast, invoices, support tickets |
-| [Users](/admin/users) | `/users` | Operator-only: all signups, MRR, churn, per-user detail |
-| [Docs bridge](/admin/docs-bridge) | `/docs-bridge` | Silent auth relay used by the docs site — not for direct use |
-
----
-
-## Navigation model
-
-The sidebar is always visible on desktop. Sections collapse/expand per-project.
-
-The top header shows:
-- **Project switcher** — jump between projects without leaving the current surface.
-- **Org switcher** — for users in multiple organisations.
-- **Presence badge** — how many teammates are in the console right now.
-- **Notifications bell** — fix completions, judge drift alerts, tier-up events.
-- **What's New** — annotated changelog with per-feature badges.
-
-<Callout type="info">
-**Command Palette** (`⌘K` / `Ctrl K`) reaches any page, report, fix attempt, or graph node
-by name, and exposes quick actions (dispatch a fix, trigger a gate run, export a dataset)
-without leaving the current page.
-</Callout>
-
----
-
-## First run — onboarding checklist
-
-When you create a project, the **Setup checklist** appears on the `/onboarding` page:
-
-1. **Add SDK** — install `@mushi-mushi/web` or `@mushi-mushi/react-native` and provide your project API key.
-2. **First report** — send a test report via the SDK or the **Send test report** button on the Projects page.
-3. **Connect integrations** — wire up BYOK keys on the [Settings → Integrations health](/admin/health) page.
-4. **First fix** — dispatch an approved triage decision from the Reports page.
-5. **Invite a teammate** — optional, via Organization members.
-
-The checklist persists in the header until all required steps are complete. If the SDK heartbeat doesn't arrive within an hour, a diagnostics card shows exactly which call is failing.
-
----
-
-## Self-hosting
-
-The admin console is a static SPA deployed from `apps/admin/`. See [Self-hosting → Admin SPA](/self-hosting/admin-spa-deploy).
-
-It reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` at build time. All other
-configuration flows through project settings stored in your Supabase instance.
+<Cards>
+  <Cards.Card title="Reports & triage" href="/admin/reports" arrow />
+  <Cards.Card title="Rewards program" href="/admin/rewards" arrow />
+  <Cards.Card title="Knowledge graph" href="/admin/graph" arrow />
+  <Cards.Card title="Fix orchestrator" href="/admin/fixes" arrow />
+  <Cards.Card title="Judge dashboard" href="/admin/judge" arrow />
+  <Cards.Card title="Natural-language query" href="/admin/query" arrow />
+  <Cards.Card title="Intelligence reports" href="/admin/intelligence" arrow />
+  <Cards.Card title="Fine-tuning" href="/admin/fine-tuning" arrow />
+  <Cards.Card title="Real-time collaboration" href="/admin/realtime" arrow />
+</Cards>

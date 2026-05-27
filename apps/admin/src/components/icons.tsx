@@ -586,6 +586,7 @@ export function IconChevronRight(p: IconProps) {
   </>)
 }
 
+<<<<<<< HEAD
 // Inbox tray — "Inbox": arrow dropping into a tray. Distinct from IconBell
 // (used by Notifications) so the two items always read differently in the sidebar.
 export function IconInbox(p: IconProps) {
@@ -781,3 +782,5 @@ export function IconPagerDuty(p: IconProps) {
   </>)
 }
 
+=======
+>>>>>>> refs/remotes/origin/fix/screenshots-gitignore

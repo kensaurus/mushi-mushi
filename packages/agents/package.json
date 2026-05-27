@@ -21,7 +21,7 @@
     "@modelcontextprotocol/sdk": ">=1.0.0"
   },
   "peerDependenciesMeta": {
-    "@cursor/sdk": {
+"@cursor/sdk": {
       "optional": true
     },
     "@modelcontextprotocol/sdk": {

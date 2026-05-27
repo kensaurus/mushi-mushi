@@ -1,86 +1,70 @@
-// ── sanctions.ts — OFAC/sanctions geofence for Mushi Bounties ────────────────
-//
-// Tango paid OFAC a $116K penalty in 2022 for sending gift cards to
-// sanctioned regions. This module provides defense-in-depth: reject
-// tester signups and gift-card redemptions before they reach Tremendous.
-//
-// Country codes follow ISO 3166-1 alpha-2. The list is intentionally
-// conservative — err on the side of blocking.
-//
-// Sources:
-//   - OFAC Specially Designated Nationals List (SDN)
-//   - Executive Order 13685 (Ukraine / Crimea)
-//   - Executive Order 13694 (DPRK)
-//   - Executive Order 13599 (Iran)
-//   - 31 CFR Part 515 (Cuba)
-//   - Executive Order 13582 (Syria)
-//   - Tango OFAC Settlement (2022) post-mortem
-//
-// This list must be reviewed and updated quarterly. Document the review
-// date in docs/runbooks/tester-marketplace-launch.md.
+/**
+ * FILE: _shared/sanctions.ts
+ * PURPOSE: OFAC + EU sanctions country-code gate for gift-card redemptions
+ *          and any other monetary flow that carries sanctions-compliance risk.
+ *
+ * The list below is a simplified, conservative set derived from OFAC SDN /
+ * comprehensive country programs (as of 2026-05). For a production rollout
+ * this list should be refreshed from the official OFAC CSV feed or a
+ * compliance-provider API (e.g. Comply Advantage). Updates here require a
+ * redeploy of the edge function.
+ *
+ * Usage:
+ *   const result = checkSanctions(countryCode)  // "IR", "RU", "CU", …
+ *   if (result.blocked) { return 403 }
+ */
 
-export const OFAC_DENIED_COUNTRIES = new Set<string>([
-  'CU', // Cuba
-  'IR', // Iran
-  'KP', // North Korea (DPRK)
-  'SY', // Syria
-  // Ukraine: Crimea region — can't geo-fence at country level, see notes below
-  // Belarus — not currently on SDN but add when escalated
-  'RU', // Russia (added post-2022 invasion comprehensive sanctions by US/EU)
-  'BY', // Belarus (Lukashenko regime sanctions)
+/** Two-letter ISO-3166-1 alpha-2 codes whose residents are blocked from
+ *  receiving gift-card or cash-equivalent rewards due to OFAC programs
+ *  and analogous regimes. */
+const BLOCKED_COUNTRY_CODES: ReadonlySet<string> = new Set([
+  'CU', // Cuba — OFAC comprehensive
+  'IR', // Iran — OFAC comprehensive
+  'KP', // North Korea — OFAC comprehensive
+  'RU', // Russia — post-2022 comprehensive SDN + sectoral
+  'SY', // Syria — OFAC comprehensive
+  'BY', // Belarus — post-2020 significant expansion
+  'MM', // Myanmar (Burma) — OFAC sectoral
+  'VE', // Venezuela — OFAC SDN / Maduro regime
+  'SD', // Sudan — OFAC comprehensive
+  'SS', // South Sudan — UN arms embargo / OFAC
+  'ZW', // Zimbabwe — OFAC SDN / sanctions list
+  'SO', // Somalia — UN arms embargo
+  'CF', // Central African Republic — UN arms embargo
+  'LY', // Libya — UN arms embargo
+  'ML', // Mali — UN arms embargo
+  'NI', // Nicaragua — OFAC sectoral
+  'YE', // Yemen — UN arms embargo
 ])
 
-// Sub-national regions that are OFAC-blocked within otherwise-allowed countries.
-// Mushi cannot currently geofence these precisely — add a reviewer note for
-// any redemption from countries where sub-national blocks apply.
-export const OFAC_REGION_NOTES: Record<string, string> = {
-  UA: 'Crimea, Donetsk, Luhansk regions are OFAC-blocked. Manual review required.',
-  CN: 'Review for SDN individuals. No country-level block in force.',
-}
-
-export interface SanctionsCheckResult {
+export interface SanctionsResult {
+  /** Whether the country is blocked from receiving monetary rewards. */
   blocked: boolean
-  reason?: string
-  requiresReview?: boolean
-  reviewNote?: string
+  /** Human-readable reason string, included in the API 403 response. */
+  reason: string | null
 }
 
 /**
- * Check whether a country code is OFAC-blocked for Mushi Bounties redemptions.
- * Call this before processing any gift-card redemption or tester signup.
+ * Check whether a given ISO-3166-1 alpha-2 country code is subject to
+ * sanctions that would block gift-card or cash-equivalent redemptions.
+ *
+ * @param countryCode - Two-letter ISO country code, or null/undefined if unknown.
+ * @returns `{ blocked: false }` when the country is clear, or
+ *          `{ blocked: true, reason: "..." }` when blocked.
  */
-export function checkSanctions(countryCode: string | null): SanctionsCheckResult {
+export function checkSanctions(countryCode: string | null | undefined): SanctionsResult {
   if (!countryCode) {
-    // Unknown country — allow but flag for manual review on large redemptions.
-    return { blocked: false, requiresReview: true, reviewNote: 'Unknown country code — manual review recommended for gift-card redemptions.' }
+    // Unknown country — allow (KYC gate handles the $400 threshold separately)
+    return { blocked: false, reason: null }
   }
 
-  const upper = countryCode.toUpperCase()
-
-  if (OFAC_DENIED_COUNTRIES.has(upper)) {
+  const upper = countryCode.toUpperCase().trim()
+  if (BLOCKED_COUNTRY_CODES.has(upper)) {
     return {
       blocked: true,
-      reason: `Tester country ${upper} is on the OFAC sanctions list. Gift-card redemptions are not available.`,
+      reason: `Gift-card redemptions are not available in your region (${upper}) due to applicable sanctions regulations.`,
     }
   }
 
-  const regionNote = OFAC_REGION_NOTES[upper]
-  if (regionNote) {
-    return {
-      blocked: false,
-      requiresReview: true,
-      reviewNote: regionNote,
-    }
-  }
-
-  return { blocked: false }
-}
-
-/**
- * Validate a tester country for signup purposes.
- * Softer than `checkSanctions` — allows signup but flags the account.
- */
-export function isTesterCountryAllowed(countryCode: string | null): boolean {
-  if (!countryCode) return true // allow unknown; flag later
-  return !OFAC_DENIED_COUNTRIES.has(countryCode.toUpperCase())
+  return { blocked: false, reason: null }
 }

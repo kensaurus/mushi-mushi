@@ -1,26 +1,38 @@
 /**
  * FILE: apps/admin/src/components/rewards/PublishingTab.tsx
- * PURPOSE: Wave 2 — Publishing tab on the Rewards page. Lets dev/PM publish
- *   their project's app to the Mushi Bounties tester marketplace.
- *   Gated by the `marketplace_publish` entitlement (Pro+ plans, cloud-only).
+ * PURPOSE: Dev/PM interface for managing a project's Mushi Bounties listing.
+ *   Lets developers publish their app to the public tester marketplace,
+ *   configure a bounty schedule, set targeting criteria, and monitor stats.
+ *
+ *   API surface: /v1/admin/published-apps/:projectId
+ *   Entitlement: marketplace_publish (Pro+). Shows an upgrade prompt if the
+ *   org doesn't have the entitlement.
  */
 
 import { useState, useCallback } from 'react'
-import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
+import { apiFetch } from '../../lib/supabase'
+import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
 import { useToast } from '../../lib/toast'
-import { useEntitlements } from '../../lib/useEntitlements'
 import {
   Card,
   Section,
+  Badge,
   Btn,
   Input,
   EmptyState,
   ErrorAlert,
-  Badge,
+  StatCard,
 } from '../ui'
+import { TableSkeleton } from '../skeletons/TableSkeleton'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────
+
+interface BountyTier {
+  action: string
+  points_per_event: number
+  enabled: boolean
+}
 
 interface PublishedApp {
   id: string
@@ -29,36 +41,15 @@ interface PublishedApp {
   name: string
   tagline: string | null
   description: string | null
-  hero_url: string | null
-  screenshots_urls: string[]
-  app_store_url: string | null
-  play_store_url: string | null
-  web_url: string | null
+  /** DB column is `visibility`; values: 'draft' | 'public' | 'paused' */
+  visibility: 'draft' | 'public' | 'paused'
   platforms: string[]
   sentry_dsn: string | null
-  auto_seer_analyze: boolean
-  visibility: 'draft' | 'public' | 'invite_only' | 'paused'
   published_at: string | null
-  paused_at: string | null
+  created_at: string
 }
 
-interface AppTargeting {
-  country_codes: string[]
-  languages: string[]
-  expertise_tags: string[]
-  reputation_min: number
-}
-
-interface AppBounty {
-  id: string
-  action: string
-  points_per_event: number
-  daily_cap: number | null
-  lifetime_cap_per_tester: number | null
-  enabled: boolean
-}
-
-interface AppStats {
+interface BountyStats {
   submissions_30d: number
   accepted_30d: number
   active_testers: number
@@ -67,497 +58,338 @@ interface AppStats {
   monthly_budget_used_pct: number
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Bounty action labels + colours ──────────────────────────
 
-function VisibilityBadge({ visibility }: { visibility: PublishedApp['visibility'] }) {
-  const map: Record<PublishedApp['visibility'], { label: string; cls: string }> = {
-    draft:       { label: 'Draft',       cls: 'bg-surface-overlay text-fg-muted' },
-    public:      { label: 'Live',        cls: 'bg-ok-muted text-ok' },
-    invite_only: { label: 'Invite only', cls: 'bg-brand/15 text-brand' },
-    paused:      { label: 'Paused',      cls: 'bg-warn/10 text-warn' },
-  }
-  const { label, cls } = map[visibility]
-  return <Badge className={cls}>{label}</Badge>
+const BOUNTY_ACTIONS = [
+  { action: 'bug_critical', label: 'Critical bug',       pts: 2500, color: 'text-red-400' },
+  { action: 'bug_high',     label: 'High severity bug',  pts: 1000, color: 'text-orange-400' },
+  { action: 'bug_medium',   label: 'Medium severity bug', pts: 500, color: 'text-yellow-400' },
+  { action: 'bug_low',      label: 'Low severity bug',   pts: 100,  color: 'text-gray-400' },
+  { action: 'enhancement',  label: 'Enhancement',        pts: 50,   color: 'text-blue-400' },
+]
+
+function statusBadge(visibility: PublishedApp['visibility']) {
+  if (visibility === 'public')  return <Badge className="bg-ok-muted text-ok">Live</Badge>
+  if (visibility === 'paused')  return <Badge className="bg-warn-muted text-warn">Paused</Badge>
+  return <Badge className="bg-surface-overlay text-fg-muted">Draft</Badge>
 }
 
-function UpgradePrompt() {
-  return (
-    <EmptyState
-      title="Mushi Bounties · Pro feature"
-      description="Publish your app to the Mushi Bounties tester marketplace and reward testers with mushi-points. Upgrade to Pro to enable publishing and set a gift-card budget."
-      action={
-        <a
-          href="/settings?tab=billing"
-          className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-hover motion-safe:transition-colors"
-        >
-          Upgrade to Pro
-        </a>
-      }
-    />
-  )
-}
+// ─── Main component ──────────────────────────────────────────
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
-interface PublishingTabProps {
-  projectId: string | null
-  canEdit: boolean
-}
-
-export function PublishingTab({ projectId, canEdit }: PublishingTabProps) {
-  const { has } = useEntitlements()
+export function PublishingTab() {
+  const projectId = getActiveProjectIdSnapshot()
   const toast = useToast()
 
-  const hasMarketplace = has('marketplace_publish')
-  const hasCashout = has('tester_cashout')
-  const hasPriority = has('marketplace_priority_listing')
-
-  // Fetch the published app for this project.
-  const {
-    data: app,
-    loading,
-    error,
-    reload,
-  } = usePageData<PublishedApp | null>(
-    projectId && hasMarketplace ? `/v1/admin/published-apps/${projectId}` : null,
+  const { data, loading, error, reload } = usePageData<PublishedApp>(
+    projectId ? `/v1/admin/published-apps/${projectId}` : null,
   )
 
-  const { data: targeting } = usePageData<AppTargeting | null>(
-    projectId && hasMarketplace && app?.id
-      ? `/v1/admin/published-apps/${projectId}/targeting`
-      : null,
+  const { data: bounties, loading: bLoading } = usePageData<BountyTier[]>(
+    projectId ? `/v1/admin/published-apps/${projectId}/bounties` : null,
   )
 
-  const { data: bounties } = usePageData<AppBounty[] | null>(
-    projectId && hasMarketplace && app?.id
-      ? `/v1/admin/published-apps/${projectId}/bounties`
-      : null,
+  const { data: stats, loading: sLoading } = usePageData<BountyStats>(
+    projectId ? `/v1/admin/published-apps/${projectId}/stats` : null,
   )
 
-  const { data: stats } = usePageData<AppStats | null>(
-    projectId && hasMarketplace && app?.id
-      ? `/v1/admin/published-apps/${projectId}/stats`
-      : null,
-  )
-
-  // Form state for the app listing
-  const [form, setForm] = useState<Partial<PublishedApp>>({})
-  const [saving, setSaving] = useState(false)
+  // Form state — synced from API data on first load
+  const [name, setName]           = useState('')
+  const [tagline, setTagline]     = useState('')
+  const [description, setDesc]    = useState('')
+  const [platforms, setPlatforms] = useState<string[]>(['web'])
+  const [sentryDsn, setSentryDsn] = useState('')
+  const [saving, setSaving]       = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [pausing, setPausing] = useState(false)
-  const [confirmPublish, setConfirmPublish] = useState(false)
+  const [formReady, setFormReady] = useState(false)
 
-  const handleSave = useCallback(async () => {
-    if (!projectId || !canEdit) return
+  // Populate form once data arrives
+  const populateForm = useCallback((app: PublishedApp) => {
+    setName(app.name)
+    setTagline(app.tagline ?? '')
+    setDesc(app.description ?? '')
+    setPlatforms(app.platforms.length ? app.platforms : ['web'])
+    setSentryDsn(app.sentry_dsn ?? '')
+    setFormReady(true)
+  }, [])
+
+  if (!formReady && data) {
+    populateForm(data)
+  }
+
+  // ── Mutations ──────────────────────────────────────────────
+
+  async function handleSave() {
+    if (!projectId) return
     setSaving(true)
     try {
-      await apiFetch(`/v1/admin/published-apps/${projectId}`, {
+      const res = await apiFetch<PublishedApp>(`/v1/admin/published-apps/${projectId}`, {
         method: 'PUT',
-        body: JSON.stringify({ ...app, ...form }),
+        body: JSON.stringify({
+          name, tagline, description, platforms,
+          sentry_dsn: sentryDsn || null,
+        }),
       })
-      toast.success('Listing saved')
-      setForm({})
-      reload()
-    } catch (e: unknown) {
-      toast.error(`Failed to save: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      if (res.ok) {
+        toast.success('Listing saved.')
+        setFormReady(false) // allow re-population from refreshed data
+        reload()
+      } else {
+        toast.error(res.error?.message ?? 'Save failed.')
+      }
     } finally {
       setSaving(false)
     }
-  }, [projectId, canEdit, app, form, toast, reload])
+  }
 
-  const handlePublish = useCallback(async () => {
-    if (!projectId || !canEdit) return
+  async function handlePublish() {
+    if (!projectId) return
     setPublishing(true)
-    setConfirmPublish(false)
     try {
-      await apiFetch(`/v1/admin/published-apps/${projectId}/publish`, { method: 'POST' })
-      toast.success('App is now live on Mushi Bounties')
-      reload()
-    } catch (e: unknown) {
-      toast.error(`Failed to publish: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      const res = await apiFetch<PublishedApp>(
+        `/v1/admin/published-apps/${projectId}/publish`,
+        { method: 'POST' },
+      )
+      if (res.ok) {
+        toast.success('App is now live on the marketplace!')
+        setFormReady(false)
+        reload()
+      } else {
+        toast.error(res.error?.message ?? 'Publish failed.')
+      }
     } finally {
       setPublishing(false)
     }
-  }, [projectId, canEdit, toast, reload])
+  }
 
-  const handlePause = useCallback(async () => {
-    if (!projectId || !canEdit) return
-    setPausing(true)
+  async function handlePause() {
+    if (!projectId) return
+    setPublishing(true)
     try {
-      await apiFetch(`/v1/admin/published-apps/${projectId}/pause`, { method: 'POST' })
-      toast.success('Listing paused — no new submissions accepted')
-      reload()
-    } catch (e: unknown) {
-      toast.error(`Failed to pause: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      const res = await apiFetch<PublishedApp>(
+        `/v1/admin/published-apps/${projectId}/pause`,
+        { method: 'POST' },
+      )
+      if (res.ok) {
+        toast.success('Listing paused — hidden from the marketplace.')
+        setFormReady(false)
+        reload()
+      } else {
+        toast.error(res.error?.message ?? 'Pause failed.')
+      }
     } finally {
-      setPausing(false)
+      setPublishing(false)
     }
-  }, [projectId, canEdit, toast, reload])
+  }
 
-  // ── Entitlement gate ────────────────────────────────────────────────────────
-  if (!hasMarketplace) return <UpgradePrompt />
+  function togglePlatform(p: string) {
+    setPlatforms(prev =>
+      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p],
+    )
+    setFormReady(false)
+  }
+
+  // ── Render ─────────────────────────────────────────────────
 
   if (!projectId) {
     return (
       <EmptyState
         title="No project selected"
-        description="Select a project from the header switcher to manage its Bounties listing."
+        description="Select a project from the top bar to manage its marketplace listing."
       />
     )
   }
 
-  if (loading) {
-    return <div className="text-xs text-fg-muted py-6 text-center">Loading listing…</div>
-  }
+  if (loading) return <TableSkeleton rows={6} />
 
   if (error) {
-    return <ErrorAlert message={`Failed to load listing: ${error}`} onRetry={reload} />
-  }
-
-  const live = app?.visibility === 'public'
-  const hasDraft = !app
-
-  // ── Empty state: no listing yet ─────────────────────────────────────────────
-  if (hasDraft) {
-    return (
-      <Section title="MUSHI BOUNTIES — PUBLISH YOUR APP">
+    const isEntitlementError = error.includes('not_entitled') || error.includes('403') || error.includes('forbidden')
+    if (isEntitlementError) {
+      return (
         <EmptyState
-          title="No listing yet"
-          description="Create a listing to publish your app to the Mushi Bounties tester marketplace. Testers earn mushi-points for accepted bug reports."
-          action={
-            <Btn
-              size="sm"
-              variant="primary"
-              onClick={() =>
-                apiFetch(`/v1/admin/published-apps/${projectId}`, {
-                  method: 'PUT',
-                  body: JSON.stringify({ name: 'My App', visibility: 'draft' }),
-                }).then(reload)
-              }
-            >
-              Create listing
-            </Btn>
-          }
+          title="Marketplace publishing requires a Pro plan"
+          description="Upgrade your workspace to publish apps to the Mushi Bounties marketplace and start rewarding testers."
+          action={<Btn variant="primary" onClick={() => window.location.href = '/billing'}>Upgrade to Pro</Btn>}
         />
-      </Section>
-    )
+      )
+    }
+    return <ErrorAlert message={error} onRetry={reload} />
   }
 
-  // ── Main listing editor ──────────────────────────────────────────────────────
+  const app = data
+  const visibility = app?.visibility ?? 'draft'
+  const isLive = visibility === 'public'
+  const marketplaceUrl = app
+    ? `${window.location.origin}/mushi-mushi/testers/apps/${app.slug}/`
+    : null
+
   return (
-    <div className="space-y-4">
-      {/* Status bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <VisibilityBadge visibility={app.visibility} />
-        {hasPriority && <Badge className="bg-brand/15 text-brand">Priority listing</Badge>}
-        {hasCashout && <Badge className="bg-ok-muted text-ok">Gift-card budget enabled</Badge>}
-        {app.visibility === 'public' && (
-          <a
-            href={`https://kensaur.us/mushi-mushi/testers/apps/${app.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-brand hover:text-brand-hover motion-safe:transition-colors"
-          >
-            View live listing ↗
-          </a>
-        )}
+    <div className="space-y-6">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">Marketplace listing</h2>
+            {app && statusBadge(visibility)}
+          </div>
+          <p className="text-sm text-fg-muted mt-0.5">
+            Publish this project to the Mushi Bounties marketplace so public testers can find and test it.
+          </p>
+          {marketplaceUrl && isLive && (
+            <a
+              href={marketplaceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-brand hover:underline mt-1 inline-block"
+            >
+              {marketplaceUrl} ↗
+            </a>
+          )}
+        </div>
+        <div className="flex gap-2 shrink-0">
+          {isLive ? (
+            <Btn variant="ghost" size="sm" loading={publishing} onClick={handlePause}>
+              Pause
+            </Btn>
+          ) : (
+            <Btn variant="primary" size="sm" loading={publishing} onClick={handlePublish}
+              disabled={!app || !name.trim()}
+            >
+              {visibility === 'paused' ? 'Re-publish' : 'Publish'}
+            </Btn>
+          )}
+        </div>
       </div>
 
-      {/* Card 1: App listing */}
-      <Section title="APP LISTING">
-        <Card className="space-y-3 p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input
-              label="App name"
-              value={form.name ?? app.name ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              disabled={!canEdit}
-              maxLength={80}
-            />
+      {/* ── Stats row (only when there are submissions) ── */}
+      {!sLoading && stats && stats.submissions_30d > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <StatCard label="Testers" value={stats.active_testers} />
+          <StatCard label="Submissions (30d)" value={stats.submissions_30d} />
+          <StatCard label="Accepted (30d)" value={stats.accepted_30d} />
+          <StatCard label="Points spent (30d)" value={stats.points_spent_30d.toLocaleString()} />
+          <StatCard label="Budget used" value={`${Math.round(stats.monthly_budget_used_pct)}%`} />
+        </div>
+      )}
+
+      {/* ── Listing form ── */}
+      <Section title="Listing details">
+        <Card>
+          <div className="space-y-4 p-4">
             <div>
+              <label className="block text-xs font-medium text-fg-muted mb-1">App name *</label>
               <Input
-                label="URL slug"
-                value={form.slug ?? app.slug ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
-                disabled={!canEdit}
+                value={name}
+                onChange={e => { setName(e.target.value); setFormReady(false) }}
+                placeholder="e.g. Mushi Mushi"
+                maxLength={80}
               />
-              <p className="mt-1 text-2xs text-fg-faint">
-                Appears in the marketplace URL: /testers/apps/your-slug
-              </p>
             </div>
-          </div>
-          <div>
-            <Input
-              label="Tagline"
-              value={form.tagline ?? app.tagline ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
-              disabled={!canEdit}
-              maxLength={140}
-            />
-            <p className="mt-1 text-2xs text-fg-faint">One sentence · 140 chars max</p>
-          </div>
-          <div>
-            <label className="block text-2xs font-medium text-fg-muted uppercase tracking-wider mb-1">
-              Description
-            </label>
-            <textarea
-              value={form.description ?? app.description ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              disabled={!canEdit}
-              rows={4}
-              maxLength={4000}
-              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-50 resize-y"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Input
-              label="Web URL"
-              value={form.web_url ?? app.web_url ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, web_url: e.target.value }))}
-              disabled={!canEdit}
-              placeholder="https://your-app.com"
-            />
-            <Input
-              label="App Store URL"
-              value={form.app_store_url ?? app.app_store_url ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, app_store_url: e.target.value }))}
-              disabled={!canEdit}
-              placeholder="https://apps.apple.com/…"
-            />
-            <Input
-              label="Play Store URL"
-              value={form.play_store_url ?? app.play_store_url ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, play_store_url: e.target.value }))}
-              disabled={!canEdit}
-              placeholder="https://play.google.com/…"
-            />
-          </div>
-          <div>
-            <label className="block text-2xs font-medium text-fg-muted uppercase tracking-wider mb-1">
-              Sentry DSN (optional)
-            </label>
-            <Input
-              value={form.sentry_dsn ?? app.sentry_dsn ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, sentry_dsn: e.target.value }))}
-              disabled={!canEdit}
-              placeholder="https://…@sentry.io/…"
-            />
-            <p className="mt-1 text-2xs text-fg-faint">
-              Tester submissions will be tagged <code>mushi_tester:true</code> and routed to this Sentry project.
-            </p>
+            <div>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Tagline</label>
+              <Input
+                value={tagline}
+                onChange={e => { setTagline(e.target.value); setFormReady(false) }}
+                placeholder="One-line description shown on app cards (max 140 chars)"
+                maxLength={140}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Description</label>
+              <textarea
+                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg
+                           placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-brand/60
+                           min-h-[100px] resize-y"
+                value={description}
+                onChange={e => { setDesc(e.target.value); setFormReady(false) }}
+                placeholder="Tell testers what the app does and what kind of bugs to look for."
+                maxLength={4000}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-fg-muted mb-1">Platforms</label>
+              <div className="flex flex-wrap gap-2">
+                {['web', 'ios', 'android', 'desktop'].map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => togglePlatform(p)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      platforms.includes(p)
+                        ? 'border-brand bg-brand/10 text-brand'
+                        : 'border-border bg-transparent text-fg-muted hover:border-fg-muted'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-fg-muted mb-1">
+                Sentry DSN{' '}
+                <span className="text-fg-faint font-normal">(optional — tester reports forward here)</span>
+              </label>
+              <Input
+                value={sentryDsn}
+                onChange={e => { setSentryDsn(e.target.value); setFormReady(false) }}
+                placeholder="https://xxx@oXXX.ingest.sentry.io/XXX"
+              />
+            </div>
+            <div className="flex justify-end pt-2">
+              <Btn variant="primary" size="sm" loading={saving} onClick={handleSave}
+                disabled={!name.trim()}
+              >
+                Save draft
+              </Btn>
+            </div>
           </div>
         </Card>
       </Section>
 
-      {/* Card 2: Budget (cloud + cashout gate) */}
-      {hasCashout && (
-        <Section title="BUDGET">
-          <Card className="p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <div className="text-xs font-medium text-fg mb-1">Monthly gift-card budget</div>
-                <div className="text-2xs text-fg-muted mb-2">
-                  Testers can redeem mushi-points for gift cards funded from this budget.
-                  When exhausted, gift-card redemptions queue until next month.
-                  Closed-loop Pro upgrades are always available regardless of this limit.
-                </div>
-                <Input
-                  label="Budget ceiling (USD / month)"
-                  value={String(stats?.monthly_budget_usd ?? 0)}
-                  onChange={() => { /* handled by separate API call */ }}
-                  disabled={!canEdit}
-                  type="number"
-                />
-                <p className="mt-1 text-2xs text-fg-faint">0 = no gift-card cash-out for this project&apos;s testers</p>
-              </div>
-              {stats && (
-                <div>
-                  <div className="text-xs font-medium text-fg mb-1">Usage this month</div>
-                  <div className="flex items-end gap-1">
-                    <span className="text-2xl font-semibold font-mono tabular-nums">
-                      {stats.monthly_budget_used_pct}%
-                    </span>
-                    <span className="text-xs text-fg-muted pb-0.5">used</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
-                    <div>
-                      <div className="text-fg-faint">Submissions (30d)</div>
-                      <div className="font-semibold">{stats.submissions_30d}</div>
-                    </div>
-                    <div>
-                      <div className="text-fg-faint">Accepted</div>
-                      <div className="font-semibold text-ok">{stats.accepted_30d}</div>
-                    </div>
-                    <div>
-                      <div className="text-fg-faint">Active testers</div>
-                      <div className="font-semibold">{stats.active_testers}</div>
-                    </div>
-                    <div>
-                      <div className="text-fg-faint">Points spent (30d)</div>
-                      <div className="font-semibold font-mono">{stats.points_spent_30d.toLocaleString()}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-        </Section>
-      )}
-
-      {/* Card 3: Bounties */}
-      <Section title="BOUNTIES">
-        <Card className="p-4">
-          <p className="text-2xs text-fg-muted mb-3">
-            Per-action point overrides for this app. Leave blank to inherit org-level rules.
-            Changes take effect on the next submission.
-          </p>
-          {bounties && bounties.length > 0 ? (
+      {/* ── Bounty schedule (read-only preview; editable via the Tier ladder tab) ── */}
+      <Section title="Bounty schedule">
+        {bLoading ? (
+          <TableSkeleton rows={5} />
+        ) : (
+          <Card>
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-fg-faint border-b border-border text-left">
-                  <th className="pb-1.5 font-medium">Action</th>
-                  <th className="pb-1.5 font-medium text-right">Points</th>
-                  <th className="pb-1.5 font-medium text-right">Daily cap</th>
-                  <th className="pb-1.5 font-medium text-right">Status</th>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2 text-left text-fg-muted font-medium uppercase tracking-wide">Action</th>
+                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Points</th>
+                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {bounties.map((b) => (
-                  <tr key={b.id} className="border-b border-border/40 last:border-0">
-                    <td className="py-2 font-mono">{b.action}</td>
-                    <td className="py-2 text-right font-semibold">{b.points_per_event}</td>
-                    <td className="py-2 text-right text-fg-muted">{b.daily_cap ?? '–'}</td>
-                    <td className="py-2 text-right">
-                      <Badge className={b.enabled ? 'bg-ok-muted text-ok' : 'bg-surface-overlay text-fg-faint'}>
-                        {b.enabled ? 'On' : 'Off'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                {BOUNTY_ACTIONS.map(({ action, label, pts, color }) => {
+                  const override = (bounties ?? []).find(b => b.action === action)
+                  const points = override?.points_per_event ?? pts
+                  const enabled = override?.enabled ?? true
+                  return (
+                    <tr key={action} className="border-t border-border/40">
+                      <td className={`px-4 py-2.5 font-medium ${color}`}>{label}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-fg">
+                        {points.toLocaleString()} pts
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {enabled ? (
+                          <Badge className="bg-ok-muted text-ok">Enabled</Badge>
+                        ) : (
+                          <Badge className="bg-surface-overlay text-fg-muted">Disabled</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
-          ) : (
-            <p className="text-xs text-fg-muted">
-              No bounty overrides — inheriting org-level reward rules. Add overrides via the API.
+            <p className="px-4 py-3 text-xs text-fg-muted border-t border-border/40">
+              1,000 pts = $10 gift card (Tremendous) or $13 Mushi Pro credit (1.3× premium).
+              Configure overrides in the Tier ladder tab.
             </p>
-          )}
-        </Card>
+          </Card>
+        )}
       </Section>
-
-      {/* Card 4: Targeting */}
-      <Section title="TARGETING">
-        <Card className="p-4 space-y-3">
-          <p className="text-2xs text-fg-muted">
-            Filters applied when a tester tries to join. Empty = unrestricted.
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 text-xs">
-            <div>
-              <div className="text-fg-faint mb-1">Countries</div>
-              <div className="font-mono">
-                {targeting?.country_codes?.length
-                  ? targeting.country_codes.join(', ')
-                  : 'All countries'}
-              </div>
-            </div>
-            <div>
-              <div className="text-fg-faint mb-1">Languages</div>
-              <div className="font-mono">
-                {targeting?.languages?.length ? targeting.languages.join(', ') : 'All languages'}
-              </div>
-            </div>
-            <div>
-              <div className="text-fg-faint mb-1">Min reputation</div>
-              <div className="font-semibold">{targeting?.reputation_min ?? 0}</div>
-            </div>
-          </div>
-          <p className="text-2xs text-fg-faint">
-            Advanced targeting (devices, expertise tags) is configurable via the published-apps API.
-          </p>
-        </Card>
-      </Section>
-
-      {/* Card 5: Visibility controls */}
-      <Section title="VISIBILITY">
-        <Card className="p-4 space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="text-xs font-medium text-fg mb-1">Current visibility</div>
-              <VisibilityBadge visibility={app.visibility} />
-              {live && (
-                <p className="text-2xs text-fg-muted mt-1">
-                  Your app is live. Pausing stops new submissions but keeps existing testers.
-                </p>
-              )}
-              {app.visibility === 'draft' && (
-                <p className="text-2xs text-fg-muted mt-1">
-                  In draft. Only you can see it. Once published, anyone with the link can join.
-                </p>
-              )}
-              {app.visibility === 'paused' && (
-                <p className="text-2xs text-fg-muted mt-1">
-                  Paused. Existing testers can still view, but new submissions are blocked.
-                  Re-publish to re-open.
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 shrink-0">
-              {!live && canEdit && (
-                <>
-                  {!confirmPublish ? (
-                    <Btn
-                      size="sm"
-                      variant="primary"
-                      onClick={() => setConfirmPublish(true)}
-                    >
-                      {app.visibility === 'paused' ? 'Re-publish' : 'Publish to Bounties'}
-                    </Btn>
-                  ) : (
-                    <div className="border border-warn/30 rounded p-2 bg-warn/5 space-y-2 text-xs">
-                      <p className="text-fg font-medium">Confirm publish?</p>
-                      <p className="text-fg-muted">
-                        Once live, testers can join and submit bugs. Pausing later stops new
-                        submissions but keeps existing testers in your program.
-                      </p>
-                      <div className="flex gap-2">
-                        <Btn size="sm" variant="primary" onClick={handlePublish} loading={publishing}>
-                          Yes, publish
-                        </Btn>
-                        <Btn size="sm" variant="ghost" onClick={() => setConfirmPublish(false)}>
-                          Cancel
-                        </Btn>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              {live && canEdit && (
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  onClick={handlePause}
-                  loading={pausing}
-                >
-                  Pause
-                </Btn>
-              )}
-            </div>
-          </div>
-        </Card>
-      </Section>
-
-      {/* Save bar */}
-      {Object.keys(form).length > 0 && canEdit && (
-        <div className="sticky bottom-4 flex justify-end">
-          <div className="flex gap-2 bg-surface-raised border border-border rounded-lg shadow-md p-2">
-            <Btn size="sm" variant="ghost" onClick={() => setForm({})}>
-              Discard
-            </Btn>
-            <Btn size="sm" variant="primary" onClick={handleSave} loading={saving}>
-              Save changes
-            </Btn>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
