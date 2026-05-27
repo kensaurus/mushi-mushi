@@ -27,23 +27,6 @@ const isBrowser = (): boolean =>
   typeof globalThis !== 'undefined' &&
   typeof (globalThis as { window?: unknown }).window !== 'undefined' &&
   typeof (globalThis as { document?: unknown }).document !== 'undefined'
-export interface MushiConfig {
-  projectId: string
-  apiKey: string
-  endpoint?: string
-  capture?: {
-    discoverInventory?: boolean
-  }
-}
-
-function toCoreConfig(config: MushiConfig): CoreMushiConfig {
-  return {
-    projectId: config.projectId,
-    apiKey: config.apiKey,
-    ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
-    ...(config.capture !== undefined ? { capture: config.capture } : {}),
-  }
-}
 
 /**
  * Initialise the Mushi SDK. SSR-safe: returns `null` when run on the
