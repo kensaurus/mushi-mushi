@@ -157,10 +157,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
    * `annotations` shape `registerTool` expects. Centralising this here means
    * we never forget to translate `readOnly` → `readOnlyHint` for a new tool.
    */
-  function annotationsFor(name: string): Record<string, unknown> {
+  function annotationsFor(name: string): { title: string; readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } {
     const spec = TOOL_CATALOG.find((t) => t.name === name)
     if (!spec) throw new Error(`[mushi-mcp] tool "${name}" is missing from TOOL_CATALOG`)
-    const a: Record<string, unknown> = {
+    const a: { title: string; readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } = {
       title: spec.title,
       readOnlyHint: spec.hints.readOnly,
     }
