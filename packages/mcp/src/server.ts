@@ -17,7 +17,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { TOOL_CATALOG } from './catalog.js'
+import { TOOL_CATALOG, type McpScope } from './catalog.js'
 
 /**
  * Every admin endpoint returns `{ ok: boolean; data?: T; error?: { code, message } }`.
@@ -57,7 +57,7 @@ export interface MushiServerConfig {
    * Granted scopes from the API key. When provided, only tools/resources that
    * require a subset of these scopes are registered. Defaults to ALL_SCOPES.
    */
-  scopes?: readonly import('./catalog.js').McpScope[]
+  scopes?: readonly McpScope[]
   /**
    * Fetch implementation — overridable for tests. Tests pass a spy that
    * asserts request shape and returns canned envelopes without hitting the

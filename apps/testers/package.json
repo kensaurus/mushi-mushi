@@ -6,7 +6,7 @@
     "dev": "next --turbopack --port 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -15,10 +15,12 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@tailwindcss/postcss": "^4.1.7",
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "eslint": "^10.3.0",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.8.3"
   }

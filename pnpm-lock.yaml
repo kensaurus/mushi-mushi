@@ -198,6 +198,9 @@ importers:
         specifier: ^19.1.0
         version: 19.2.5(react@19.2.5)
     devDependencies:
+      '@mushi-mushi/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint-config
       '@tailwindcss/postcss':
         specifier: ^4.1.7
         version: 4.2.4
@@ -210,6 +213,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.1.0
         version: 19.2.3(@types/react@19.2.14)
+      eslint:
+        specifier: ^10.3.0
+        version: 10.3.0(jiti@2.6.1)
       tailwindcss:
         specifier: ^4.1.7
         version: 4.2.4
