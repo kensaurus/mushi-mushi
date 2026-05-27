@@ -74,9 +74,9 @@ export const FirecrawlActionsProvider: BrowserProvider = {
         }
       }
 
-      const result = await app.scrapeUrl(targetUrl, {
+      const result = await app.scrape(targetUrl, {
         formats: ['markdown', 'screenshot'],
-        // @ts-expect-error actions is a beta feature in firecrawl-js
+        // @ts-expect-error FirecrawlAction subset is structurally compatible at runtime; SDK ActionOption type is more restrictive
         actions,
       })
 
