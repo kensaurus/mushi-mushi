@@ -54,6 +54,11 @@ export interface MushiServerConfig {
   /** Optional project hint. Used to scope multi-project tools. */
   projectId?: string
   /**
+   * Granted scopes from the API key. When provided, only tools/resources that
+   * require a subset of these scopes are registered. Defaults to ALL_SCOPES.
+   */
+  scopes?: readonly import('./catalog.js').McpScope[]
+  /**
    * Fetch implementation — overridable for tests. Tests pass a spy that
    * asserts request shape and returns canned envelopes without hitting the
    * network. Defaults to the global `fetch`.
