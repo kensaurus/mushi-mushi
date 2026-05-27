@@ -4,7 +4,7 @@
 '@mushi-mushi/mcp': minor
 '@mushi-mushi/cli': minor
 '@mushi-mushi/node': patch
-'@mushi-mushi/react': patch
+'@mushi-mushi/react': minor
 '@mushi-mushi/react-native': patch
 ---
 
@@ -46,7 +46,14 @@ Release tester marketplace, rewards program, dispatch preflight, proactive trigg
 
 ## @mushi-mushi/react
 
+**Breaking change**: `useMushi()` now returns `UseMushiResult` (`{ report, pulseTrigger, isReady }`) instead of the raw `MushiSDKInstance | null`. The raw instance accessor is now `useMushiSdk()`.
+
+**Migration**: replace `const sdk = useMushi(); sdk?.report()` with `const { report } = useMushi(); report()`.
+
+- New primary hook `useMushi()` returns a stable, destructurable `{ report, pulseTrigger, isReady }` — covers 90% of use cases without the optional-chain dance.
+- New `useMushiSdk()` replaces the old `useMushi()` for callers that need direct SDK access.
 - Re-export new core types (`MushiReputationResult`, `MushiTierResult`, `MushiActivityEvent`).
+- Export new `UseMushiResult` interface.
 
 ## @mushi-mushi/react-native
 

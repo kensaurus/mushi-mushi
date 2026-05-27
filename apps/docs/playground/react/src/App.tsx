@@ -1,11 +1,11 @@
 import { MushiProvider, useMushi } from '@mushi-mushi/react'
 
 const ReportButton = () => {
-  const { open } = useMushi()
+  const { report } = useMushi()
   return (
     <button
       type="button"
-      onClick={() => open()}
+      onClick={() => report()}
       style={{
         padding: '0.6rem 1.1rem',
         marginTop: '1.25rem',
