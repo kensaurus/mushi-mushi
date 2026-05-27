@@ -32,6 +32,8 @@ import { MUSHI_CLI_VERSION } from './version.js'
 import { assertEndpoint } from './endpoint.js'
 import { runSourcemapsUpload } from './sourcemaps.js'
 import { installSignalHandlers, getAbortSignal } from './signals.js'
+import { runDoctor, formatDoctorResult } from './doctor.js'
+import { renderNudgeSnippet, renderNudgeExplainer, type NudgePhase } from './nudge.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
 // Long-running commands (`mushi index`, `mushi sourcemaps upload`) can
@@ -431,6 +433,74 @@ Examples:
       const safe = { ...config, apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined }
       console.log(JSON.stringify(safe, null, 2))
     }
+  })
+
+// ─── doctor ──────────────────────────────────────────────────────────────────
+program
+  .command('doctor')
+  .description(
+    'Run pre-flight checks: CLI config, endpoint reachability, API key shape, ' +
+      'SDK install status, and (with --server) the same 4 dispatch-readiness ' +
+      'checks shown in the Mushi console. Mirrors the in-console dispatch ' +
+      'preflight so you can spot setup gaps before opening the admin UI.',
+  )
+  .option('--cwd <path>', 'Run package detection from a different directory')
+  .option('--json', 'Machine-readable output')
+  .option(
+    '--server',
+    'Also call GET /preflight on the backend and include the 4 dispatch ' +
+      'checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled). ' +
+      'Requires a configured projectId and API key.',
+  )
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean }) => {
+    const config = loadConfig()
+    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server })
+    if (opts.json) {
+      console.log(JSON.stringify({ checks: result.checks, ready: result.ready }, null, 2))
+      if (!result.ready) process.exit(1)
+      return
+    }
+    console.log(formatDoctorResult(result))
+    if (!result.ready) process.exit(1)
+  })
+
+// ─── nudge ───────────────────────────────────────────────────────────────────
+program
+  .command('nudge')
+  .description(
+    'Generate a Mushi.init() snippet tuned for your release phase ' +
+      '(alpha, beta, ga). Customises proactive triggers, cooldowns, ' +
+      'feature-request card, and beta-mode UI.',
+  )
+  .option('--phase <phase>', 'Release phase: alpha | beta | ga', 'beta')
+  .option('--explain', 'Print a human-readable summary of what the preset does')
+  .option('--max <n>', 'Override maxProactivePerSession')
+  .option('--cooldown <hours>', 'Override dismissCooldownHours')
+  .option('--dwell <minutes>', 'Override page-dwell threshold (0 disables)')
+  .option('--welcome <seconds>', 'Override first-session welcome delay (0 disables)')
+  .action((opts: {
+    phase: string
+    explain?: boolean
+    max?: string
+    cooldown?: string
+    dwell?: string
+    welcome?: string
+  }) => {
+    const validPhases: NudgePhase[] = ['alpha', 'beta', 'ga']
+    if (!validPhases.includes(opts.phase as NudgePhase)) {
+      console.error(`Unknown phase "${opts.phase}". Use one of: ${validPhases.join(', ')}`)
+      process.exit(1)
+    }
+    const phase = opts.phase as NudgePhase
+    const overrides: Record<string, number> = {}
+    if (opts.max) overrides.maxProactivePerSession = Number(opts.max)
+    if (opts.cooldown) overrides.dismissCooldownHours = Number(opts.cooldown)
+    if (opts.dwell !== undefined) overrides.pageDwellMinutes = Number(opts.dwell)
+    if (opts.welcome !== undefined) overrides.firstSessionSeconds = Number(opts.welcome)
+    if (opts.explain) {
+      console.log(renderNudgeExplainer(phase))
+    }
+    console.log(renderNudgeSnippet({ phase, overrides }))
   })
 
 // ─── deploy ───────────────────────────────────────────────────────────────────
