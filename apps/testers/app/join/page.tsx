@@ -5,8 +5,9 @@
  * Client component so it works with output: 'export' (no server-side searchParams).
  */
 import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function JoinPage() {
+function JoinPageInner() {
   const searchParams = useSearchParams()
   const appSlug = searchParams.get('app') ?? undefined
   const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/console'
@@ -121,5 +122,13 @@ export default function JoinPage() {
         </p>
       </footer>
     </div>
+  )
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-gray-950 text-white">Loading…</div>}>
+      <JoinPageInner />
+    </Suspense>
   )
 }

@@ -5,7 +5,7 @@
  * while still supporting filter-via-URL on the client.
  */
 import { useSearchParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 
 interface PublicApp {
   id: string
@@ -56,7 +56,7 @@ async function fetchApps(params: {
 
 const PLATFORMS = ['web', 'ios', 'android', 'desktop']
 
-export default function AppsPage() {
+function AppsPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const platform = searchParams.get('platform') ?? undefined
@@ -247,5 +247,13 @@ export default function AppsPage() {
         </p>
       </footer>
     </div>
+  )
+}
+
+export default function AppsPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-gray-950 text-white">Loading…</div>}>
+      <AppsPageInner />
+    </Suspense>
   )
 }
