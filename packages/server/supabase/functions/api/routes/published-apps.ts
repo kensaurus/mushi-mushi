@@ -19,6 +19,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
+import { accessibleProjectIds } from '../../_shared/project-access.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
 
@@ -56,21 +57,49 @@ async function requireMarketplacePublish(
   supabase: ReturnType<typeof getServiceClient>,
   projectId: string,
 ): Promise<{ orgId: string } | null> {
-  const { data: ps } = await supabase
-    .from('project_settings')
+  // organization_id lives on `projects`, not `project_settings`
+  const { data: project } = await supabase
+    .from('projects')
     .select('organization_id')
-    .eq('project_id', projectId)
+    .eq('id', projectId)
     .single()
 
-  if (!ps) return null
+  if (!project?.organization_id) return null
 
   const { data: plan } = await supabase.rpc('get_org_feature_flags', {
-    p_organization_id: ps.organization_id,
+    p_organization_id: project.organization_id,
   })
 
   if (!plan?.marketplace_publish) return null
 
-  return { orgId: ps.organization_id }
+  return { orgId: project.organization_id }
+}
+
+function slugFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 62)
+}
+
+async function requirePublishedAppsAccess(
+  supabase: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  userId: string,
+): Promise<{ ok: true; orgId: string } | { ok: false; error: string }> {
+  const allowed = await accessibleProjectIds(supabase, userId)
+  if (!allowed.includes(projectId)) {
+    return { ok: false, error: 'forbidden' }
+  }
+
+  const gate = await requireMarketplacePublish(supabase, projectId)
+  if (!gate) {
+    return { ok: false, error: 'not_found_or_not_entitled' }
+  }
+
+  return { ok: true, orgId: gate.orgId }
 }
 
 // ─── Route registration ───────────────────────────────────────
@@ -79,11 +108,12 @@ export function registerPublishedAppsRoutes(app: Hono) {
   // GET /v1/admin/published-apps/:projectId
   app.get('/v1/admin/published-apps/:projectId', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) {
-      return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) {
+      return c.json({ error: access.error }, 403)
     }
 
     const { data, error } = await supabase
@@ -94,10 +124,14 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
     if (error) {
       rlog.error('GET published-apps', { error: error.message })
-      return c.json({ error: error.message }, 500)
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     }
 
-    return c.json(data)
+    // data is null when no app has been published for this project yet.
+    // We MUST wrap in the ApiResult envelope — `usePageData` checks `res.ok`
+    // and crashes with "Cannot read properties of null (reading 'ok')" when we
+    // return raw null.
+    return c.json({ ok: true, data })
   })
 
   // PUT /v1/admin/published-apps/:projectId
@@ -106,8 +140,8 @@ export function registerPublishedAppsRoutes(app: Hono) {
     const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const body = await c.req.json()
     const parsed = AppUpsertSchema.safeParse(body)
@@ -133,11 +167,12 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
     const slug = parsed.data.slug
       ?? current?.slug
-      ?? parsed.data.name?.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/--+/g, '-').slice(0, 62)
+      ?? (parsed.data.name ? slugFromName(parsed.data.name) : undefined)
+      ?? projectId.slice(0, 62)
 
     const payload = {
       project_id: projectId,
-      organization_id: gate.orgId,
+      organization_id: access.orgId,
       owner_user_id: userId,
       slug,
       ...parsed.data,
@@ -151,7 +186,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
     if (error) {
       rlog.error('PUT published-apps', { error: error.message })
-      return c.json({ error: error.message }, 500)
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     }
 
     // Back-fill project_settings.marketplace_published_app_id.
@@ -160,16 +195,17 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .update({ marketplace_published_app_id: data.id })
       .eq('project_id', projectId)
 
-    return c.json(data)
+    return c.json({ ok: true, data })
   })
 
   // POST /v1/admin/published-apps/:projectId/publish
   app.post('/v1/admin/published-apps/:projectId/publish', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const { data, error } = await supabase
       .from('published_apps')
@@ -178,17 +214,18 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .select()
       .single()
 
-    if (error) return c.json({ error: error.message }, 500)
-    return c.json(data)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({ ok: true, data })
   })
 
   // POST /v1/admin/published-apps/:projectId/pause
   app.post('/v1/admin/published-apps/:projectId/pause', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const { data, error } = await supabase
       .from('published_apps')
@@ -197,17 +234,18 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .select()
       .single()
 
-    if (error) return c.json({ error: error.message }, 500)
-    return c.json(data)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({ ok: true, data })
   })
 
   // GET /v1/admin/published-apps/:projectId/targeting
   app.get('/v1/admin/published-apps/:projectId/targeting', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const { data: app } = await supabase
       .from('published_apps')
@@ -215,7 +253,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (!app) return c.json(null)
+    if (!app) return c.json({ ok: true, data: null })
 
     const { data } = await supabase
       .from('published_app_targeting')
@@ -223,16 +261,17 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .eq('app_id', app.id)
       .maybeSingle()
 
-    return c.json(data)
+    return c.json({ ok: true, data })
   })
 
   // PUT /v1/admin/published-apps/:projectId/targeting
   app.put('/v1/admin/published-apps/:projectId/targeting', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const { data: app } = await supabase
       .from('published_apps')
@@ -244,7 +283,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
 
     const body = await c.req.json()
     const parsed = TargetingSchema.safeParse(body)
-    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400)
+    if (!parsed.success) return c.json({ ok: false, error: { code: 'INVALID_BODY', message: parsed.error.flatten() } }, 400)
 
     const { data, error } = await supabase
       .from('published_app_targeting')
@@ -252,17 +291,18 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .select()
       .single()
 
-    if (error) return c.json({ error: error.message }, 500)
-    return c.json(data)
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({ ok: true, data })
   })
 
   // GET /v1/admin/published-apps/:projectId/bounties
   app.get('/v1/admin/published-apps/:projectId/bounties', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const { data: app } = await supabase
       .from('published_apps')
@@ -270,7 +310,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (!app) return c.json([])
+    if (!app) return c.json({ ok: true, data: [] })
 
     const { data } = await supabase
       .from('published_app_bounties')
@@ -278,16 +318,17 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .eq('app_id', app.id)
       .order('action')
 
-    return c.json(data ?? [])
+    return c.json({ ok: true, data: data ?? [] })
   })
 
   // GET /v1/admin/published-apps/:projectId/stats
   app.get('/v1/admin/published-apps/:projectId/stats', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
     const supabase = getServiceClient()
 
-    const gate = await requireMarketplacePublish(supabase, projectId)
-    if (!gate) return c.json({ error: 'not_found_or_not_entitled' }, 403)
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
 
     const { data: app } = await supabase
       .from('published_apps')
@@ -295,7 +336,7 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (!app) return c.json(null)
+    if (!app) return c.json({ ok: true, data: null })
 
     const { data: ps } = await supabase
       .from('project_settings')
@@ -327,13 +368,13 @@ export function registerPublishedAppsRoutes(app: Hono) {
       p_requested_amount_usd: 0,
     })
 
-    return c.json({
+    return c.json({ ok: true, data: {
       submissions_30d,
       accepted_30d,
       active_testers: active_testers ?? 0,
       points_spent_30d,
       monthly_budget_usd: ps?.marketplace_monthly_budget_usd ?? 0,
       monthly_budget_used_pct: budget?.pct_used ?? 0,
-    })
+    }})
   })
 }

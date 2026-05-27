@@ -1,22 +1,12 @@
 // ============================================================
 // recompute-tester-reputation — Mushi Bounties daily reputation cron.
 //
-// Runs once a day (02:00 UTC) via pg_cron. For every active tester:
-//   1. Loads all tester_reputation_events for the last 30d.
-//   2. Computes score = sum(delta_score), signal_pct = accepted/total,
-//      impact_pct = sigma-weighted ratio.
-//   3. Upserts tester_reputation row.
+// Runs once a day (02:00 UTC) via pg_cron. For every tester with
+// reputation activity in the last 30 days:
+//   1. Loads lifetime score from all reputation events.
+//   2. Loads only the last-30d events for signal_pct / impact_pct.
+//   3. Upserts tester_reputation row (percentages stored 0–100).
 //   4. Refreshes the tester_leaderboard_30d materialized view.
-//
-// HackerOne-style scoring (from tester_reputation_events.delta_score):
-//   +7  submission_accepted
-//   +2  submission_duplicate
-//   0   submission_informative
-//   -5  submission_not_applicable  (unused in v1)
-//   -10 submission_spam
-//   +50 bounty ≥ μ+1σ   (bounty_severe)
-//   +25 bounty > μ       (bounty_above_avg)
-//   +15 bounty ≥ μ-1σ    (bounty_below_avg)
 //
 // Schedule: 0 2 * * * (daily at 02:00 UTC)
 // Auth: requireServiceRoleAuth
@@ -33,6 +23,19 @@ declare const Deno: {
 
 const rlog = log.child('recompute-tester-reputation')
 
+const SUBMISSION_KINDS = new Set([
+  'submission_accepted',
+  'submission_duplicate',
+  'submission_informative',
+  'submission_spam',
+  'submission_not_applicable',
+])
+
+function pct(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0
+  return Math.round((numerator / denominator) * 1000) / 10
+}
+
 Deno.serve(
   withSentry(async (req: Request) => {
     const authError = requireServiceRoleAuth(req)
@@ -41,7 +44,6 @@ Deno.serve(
     const db = getServiceClient()
     const since30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
 
-    // Fetch all testers with at least one reputation event in the last 30d.
     const { data: activeTesterIds } = await db
       .from('tester_reputation_events')
       .select('tester_id')
@@ -60,37 +62,36 @@ Deno.serve(
     let updated = 0
     let failed = 0
 
-    // Compute per-tester stats.
-    const submissionKinds = new Set([
-      'submission_accepted',
-      'submission_duplicate',
-      'submission_informative',
-      'submission_spam',
-      'submission_not_applicable',
-    ])
-
     for (const testerId of uniqueIds) {
       try {
-        // Lifetime score (all events, not just 30d).
-        const { data: allEvents } = await db
-          .from('tester_reputation_events')
-          .select('kind, delta_score, created_at')
-          .eq('tester_id', testerId)
+        const [{ data: lifetimeEvents }, { data: events30d }] = await Promise.all([
+          db
+            .from('tester_reputation_events')
+            .select('delta_score')
+            .eq('tester_id', testerId),
+          db
+            .from('tester_reputation_events')
+            .select('kind')
+            .eq('tester_id', testerId)
+            .gte('created_at', since30d),
+        ])
 
-        const lifetimeScore = (allEvents ?? []).reduce((s, e) => s + (e.delta_score ?? 0), 0)
+        const lifetimeScore = Math.max(
+          -100,
+          (lifetimeEvents ?? []).reduce((s, e) => s + (e.delta_score ?? 0), 0),
+        )
 
-        // 30d signal_pct and impact_pct.
-        const events30d = (allEvents ?? []).filter((e) => e.created_at >= since30d)
-        const submissionEvents = events30d.filter((e) => submissionKinds.has(e.kind ?? ''))
+        const submissionEvents = (events30d ?? []).filter((e) =>
+          SUBMISSION_KINDS.has(e.kind ?? ''),
+        )
         const accepted = submissionEvents.filter((e) => e.kind === 'submission_accepted').length
         const total = submissionEvents.length
-        const signalPct = total > 0 ? accepted / total : 0
+        const signalPct = pct(accepted, total)
 
-        // impact_pct: ratio of high-impact events (bounty_severe + bounty_above_avg).
-        const highImpact = events30d.filter((e) =>
+        const highImpact = (events30d ?? []).filter((e) =>
           e.kind === 'bounty_severe' || e.kind === 'bounty_above_avg',
         ).length
-        const impactPct = total > 0 ? highImpact / total : 0
+        const impactPct = pct(highImpact, total)
 
         await db
           .from('tester_reputation')
@@ -112,7 +113,6 @@ Deno.serve(
       }
     }
 
-    // Refresh the leaderboard materialized view (non-fatal if it fails).
     try {
       await db.rpc('refresh_tester_leaderboard')
     } catch (err) {

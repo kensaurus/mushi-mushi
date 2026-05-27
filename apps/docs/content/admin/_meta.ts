@@ -9,6 +9,7 @@ export default {
 
   // Plan — understand what's broken
   reports: 'Reports & triage',
+  rewards: 'Rewards program',
   graph: 'Knowledge graph',
   lessons: 'Lessons',
   inventory: 'Inventory & user stories',
@@ -41,7 +42,6 @@ export default {
   mcp: 'MCP',
   notifications: 'Notifications',
   cost: 'Cost & usage',
-  rewards: 'Rewards program',
   query: 'Natural-language query',
   'fine-tuning': 'Fine-tuning',
   realtime: 'Real-time collaboration',

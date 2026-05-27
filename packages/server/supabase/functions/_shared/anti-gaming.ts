@@ -1,5 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
+import { logAntiGamingEvent } from './telemetry.ts'
+
 export interface DeviceContext {
   fingerprint: string
   ipAddress?: string
@@ -208,6 +210,7 @@ export async function checkTesterVelocity(
   db: SupabaseClient,
   testerId: string,
   appId: string,
+  projectId: string,
 ): Promise<TesterVelocityResult> {
   const since24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
 
@@ -219,11 +222,18 @@ export async function checkTesterVelocity(
     .gte('created_at', since24h)
 
   if ((globalCount ?? 0) >= TESTER_VELOCITY_CAP_24H) {
-    await db.from('anti_gaming_events').insert({
-      kind: 'tester_velocity_global',
-      tester_id: testerId,
-      app_id: appId,
-      notes: `Global tester velocity exceeded: ${globalCount} submissions in 24h (cap=${TESTER_VELOCITY_CAP_24H})`,
+    await logAntiGamingEvent(db, {
+      projectId,
+      reporterTokenHash: `tester:${testerId}`,
+      eventType: 'velocity_anomaly',
+      reason: `Global tester velocity exceeded: ${globalCount} submissions in 24h (cap=${TESTER_VELOCITY_CAP_24H})`,
+      metadata: {
+        source: 'tester_velocity_global',
+        submission_count_24h: globalCount,
+        cap: TESTER_VELOCITY_CAP_24H,
+      },
+      testerId,
+      appId,
     })
     return {
       allowed: true,
@@ -241,11 +251,18 @@ export async function checkTesterVelocity(
     .gte('created_at', since24h)
 
   if ((appCount ?? 0) >= TESTER_VELOCITY_CAP_PER_APP_24H) {
-    await db.from('anti_gaming_events').insert({
-      kind: 'tester_velocity_per_app',
-      tester_id: testerId,
-      app_id: appId,
-      notes: `Per-app velocity exceeded for app ${appId}: ${appCount} submissions in 24h (cap=${TESTER_VELOCITY_CAP_PER_APP_24H})`,
+    await logAntiGamingEvent(db, {
+      projectId,
+      reporterTokenHash: `tester:${testerId}`,
+      eventType: 'velocity_anomaly',
+      reason: `Per-app velocity exceeded for app ${appId}: ${appCount} submissions in 24h (cap=${TESTER_VELOCITY_CAP_PER_APP_24H})`,
+      metadata: {
+        source: 'tester_velocity_per_app',
+        submission_count_24h: appCount,
+        cap: TESTER_VELOCITY_CAP_PER_APP_24H,
+      },
+      testerId,
+      appId,
     })
     return {
       allowed: true,

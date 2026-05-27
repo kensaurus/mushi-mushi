@@ -21,7 +21,24 @@ export type SetupStepId =
   | 'github_connected'
   | 'sentry_connected'
   | 'byok_anthropic'
+  | 'codebase_indexed'
+  | 'autofix_enabled'
   | 'first_fix_dispatched'
+
+/** Type-safe const enum for step IDs — eliminates string literals at call sites.
+ *  Usage: `setup.isStepIncomplete(SETUP_STEPS.sdkInstalled)` */
+export const SETUP_STEPS = {
+  projectCreated: 'project_created',
+  apiKeyGenerated: 'api_key_generated',
+  sdkInstalled: 'sdk_installed',
+  firstReportReceived: 'first_report_received',
+  githubConnected: 'github_connected',
+  sentryConnected: 'sentry_connected',
+  byokAnthropic: 'byok_anthropic',
+  codebaseIndexed: 'codebase_indexed',
+  autofixEnabled: 'autofix_enabled',
+  firstFixDispatched: 'first_fix_dispatched',
+} as const satisfies Record<string, SetupStepId>
 
 /**
  * Optional diagnostic the backend emits alongside the `sdk_installed` step.

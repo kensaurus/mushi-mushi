@@ -1,32 +1,55 @@
 /**
- * FILE: apps/admin/src/lib/mcpCatalog.ts
- * PURPOSE: Admin-side mirror of `packages/mcp/src/catalog.ts`. The MCP
- *          package injects a shebang on every tsup entry (required for the
- *          CLI binary), so re-exporting the catalog through the package
- *          boundary is awkward. Since the catalog is pure data with no
- *          runtime deps, we duplicate it here and lean on a lint-style
- *          test (`scripts/check-mcp-catalog-sync.mjs`) to catch drift.
+ * FILE: packages/mcp/src/catalog.ts
+ * PURPOSE: Single source of truth for the MCP tool catalog — names, titles,
+ *          descriptions, annotation hints, and short "use case" strings.
  *
- *          Any edit to TOOL_CATALOG / RESOURCE_CATALOG / PROMPT_CATALOG
- *          here MUST be mirrored in `packages/mcp/src/catalog.ts` (and
- *          vice-versa).
+ *          Extracted into its own module so two consumers can share it:
+ *            • `server.ts` — feeds `title`, `annotations`, and `description`
+ *              into `registerTool()` so MCP clients (Cursor, Claude Desktop)
+ *              render a proper UI and auto-approve read-only calls.
+ *            • The admin `/mcp` page — renders the same catalog visually so
+ *              humans see exactly what an agent can do with a given API key
+ *              scope, without having to crack open the README.
+ *
+ *          Because the admin imports from this package (via a type-only
+ *          import), anything we add here shows up in both places on the
+ *          next build. Don't fork the list in two.
  */
 
+/** Raw-scope vocabulary — must match the CHECK constraint in migration 20260421003000. */
 export type McpScope = 'mcp:read' | 'mcp:write'
 
+/** Set of all defined scopes — convenient default when no caller restricts. */
+export const ALL_SCOPES: readonly McpScope[] = ['mcp:read', 'mcp:write'] as const
+
+/** How a client should treat a tool. Maps 1:1 to MCP `annotations`. */
 export interface ToolHints {
+  /** Read-only tool — clients MAY auto-approve. */
   readOnly: boolean
+  /** Performs a destructive operation (delete, dismiss). Only meaningful when !readOnly. */
   destructive?: boolean
+  /** Running the tool twice with the same args has the same effect. */
   idempotent?: boolean
+  /** Tool interacts with an external system whose state can change (the Mushi API). */
   openWorld?: boolean
 }
 
 export interface ToolSpec {
+  /** Machine name — matches `tools/list` and `tools/call`. Stable contract. */
   name: string
+  /** Human-readable title surfaced in MCP clients + the /mcp admin page. */
   title: string
+  /** One-paragraph description for the LLM. Explains when to call the tool. */
   description: string
+  /** Scope required to call the tool — gates UI rendering and server auth. */
   scope: McpScope
+  /** MCP annotation hints. */
   hints: ToolHints
+  /**
+   * One-liner that tells a human "what problem does calling this tool solve?".
+   * Shown on the admin /mcp catalog cards — should be end-user-shaped, not
+   * engineer-shaped ("What should I fix next?" not "GET /v1/admin/reports").
+   */
   useCase: string
 }
 
@@ -167,6 +190,20 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What did Stage 2 say we should try for this report?',
   },
+  // --- Setup / admin -------------------------------------------------------
+  {
+    name: 'setup_check',
+    title: 'Dispatch preflight check',
+    description:
+      'Run the 4 dispatch-readiness checks for a project and return their pass/fail status ' +
+      '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
+      'Also returns the target repo URL when GitHub is connected. ' +
+      'Use this before calling dispatch_fix to understand why a dispatch might fail — ' +
+      'or to validate that the onboarding wizard is complete.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is this project ready to auto-fix bugs? What is blocking me?',
+  },
   // --- Write / agentic ----------------------------------------------------
   {
     name: 'submit_fix_result',
@@ -174,6 +211,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     description:
       'Record a fix outcome (branch, PR, files, lines) from an external agent. Creates a fix_attempt then patches it to completed.',
     scope: 'mcp:write',
+    // Not idempotent: re-running creates a second fix_attempt row.
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'I just opened a PR — log it against the report.',
   },
@@ -210,6 +248,9 @@ export const TOOL_CATALOG: ToolSpec[] = [
     description:
       'Move a report between workflow states (new → classified → grouped → fixing → fixed → dismissed). Enforces the same transition rules as the admin UI.',
     scope: 'mcp:write',
+    // Transitioning to `dismissed` is destructive by intent — it removes the
+    // report from triage queues. Flag the whole tool as destructive so the
+    // client prompts the user on every call.
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Dismiss this duplicate / mark it fixed.',
   },

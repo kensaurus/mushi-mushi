@@ -3,7 +3,6 @@
  * Fetches from the public API, renders cards with SEO-friendly metadata.
  */
 import type { Metadata } from 'next'
-import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Mushi Bounties — crowd-testing marketplace',
@@ -90,12 +89,12 @@ export default async function MarketplacePage() {
           >
             Start testing →
           </a>
-          <Link
+          <a
             href="/mushi-mushi/testers/apps/"
             className="rounded-xl border border-white/20 px-8 py-3 text-base font-semibold hover:border-white/40 transition-colors"
           >
             Browse apps
-          </Link>
+          </a>
         </div>
 
         {/* Value props */}
@@ -142,7 +141,7 @@ export default async function MarketplacePage() {
             {apps.map(app => (
               <a
                 key={app.id}
-                href={`${adminUrl}/login?as=tester&next=/tester/apps`}
+                href={`/mushi-mushi/testers/apps/${app.slug}/`}
                 className="flex gap-4 rounded-xl border border-white/10 bg-white/5 p-5 hover:border-violet-500/50 hover:bg-white/8 transition-all group"
               >
                 <div className="h-14 w-14 shrink-0 rounded-xl bg-gray-800 flex items-center justify-center text-2xl">

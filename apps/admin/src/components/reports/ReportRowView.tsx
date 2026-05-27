@@ -16,10 +16,12 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Tooltip } from '../ui'
 import { SEVERITY } from '../../lib/tokens'
-import { ConfidenceMeter, SignalChip } from '../report-detail/ReportSurface'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
+import { ReportSourceBadge } from './ReportSourceBadge'
+import { DispatchFixPreflight } from './DispatchFixPreflight'
+import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconBolt, IconShare, IconExternalLink, IconClose } from '../icons'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
@@ -51,14 +53,9 @@ interface Props {
   onCopyLink: () => void
   onDismiss: () => void
   onDispatchFix: () => void
-  /** When set, shows a "Send to Cursor agent" menu item in the row kebab. */
-  onDispatchCursor?: () => void
-  /** When set, shows "Send to Claude Code Agent" in the row kebab. */
-  onDispatchClaude?: () => void
-  /** Whether Cursor Cloud is configured for this project. */
-  cursorEnabled?: boolean
-  /** Whether Claude Code Agent is configured for this project. */
-  claudeEnabled?: boolean
+  /** Dispatch readiness for the active project, fetched once at the page
+   *  level and shared across every row's preflight popover. */
+  preflight?: PreflightState
 }
 
 function ReportRowViewInner({
@@ -77,12 +74,10 @@ function ReportRowViewInner({
   onCopyLink,
   onDismiss,
   onDispatchFix,
-  onDispatchCursor,
-  onDispatchClaude,
-  cursorEnabled = false,
-  claudeEnabled = false,
+  preflight,
 }: Props) {
   const summary = row.summary ?? row.description
+  const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
   const dedupCount = row.dedup_count ?? 1
   // Real blast radius — distinct people who felt this. Falls back to the raw
   // dedup count when the BE is older than the migration so the column
@@ -199,13 +194,12 @@ function ReportRowViewInner({
             sentryEnvironment={row.sentry_environment}
           >
             <div
-              className="min-w-0 flex-1 rounded-sm border border-edge-subtle/55 bg-surface-overlay/25 px-2 py-1 text-sm leading-snug text-fg-secondary line-clamp-2"
+              className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1"
               title={typeof summary === 'string' ? summary : undefined}
             >
               {summary}
             </div>
           </BreadcrumbPeek>
-          <div className="flex shrink-0 flex-wrap items-center gap-1">
           {blastRadius > 1 && (
             <Tooltip
               content={
@@ -214,35 +208,38 @@ function ReportRowViewInner({
                   : `Felt by ${dedupCount} report${dedupCount === 1 ? '' : 's'} so far. One fix attempt closes the whole group — open to see siblings.`
               }
             >
-              <SignalChip
-                tone={blastRadius >= 5 ? 'danger' : blastRadius >= 3 ? 'warn' : 'info'}
-                className="cursor-help font-mono"
+              <span
+                className={`shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border ${
+                  blastRadius >= 5
+                    ? 'bg-danger/15 text-danger border-danger/30'
+                    : blastRadius >= 3
+                      ? 'bg-warn/15 text-warn border-warn/30'
+                      : 'bg-info-muted text-info border-info/20'
+                }`}
               >
                 ×{blastRadius} felt
-              </SignalChip>
+              </span>
             </Tooltip>
           )}
           {reporterReplied && (
             <Tooltip content="Reporter replied after the last developer response. Open the report thread.">
-              <SignalChip tone="accent" className="cursor-help">
+              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border bg-accent/15 text-accent border-accent/30">
                 reporter replied
-              </SignalChip>
+              </span>
             </Tooltip>
           )}
           {variantCount && variantCount > 1 && !isVariant && (
             <Tooltip content={`${variantCount - 1} sibling report${variantCount - 1 === 1 ? '' : 's'} on this page share the same fingerprint. Click the chevron to expand.`}>
-              <SignalChip tone="neutral" className="cursor-help font-mono">
+              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full border border-edge-subtle text-fg-muted cursor-help">
                 +{variantCount - 1} variant{variantCount - 1 === 1 ? '' : 's'}
-              </SignalChip>
+              </span>
             </Tooltip>
           )}
-          </div>
         </div>
         {row.component && (
-          <code className="mt-1 inline-flex max-w-full truncate rounded-sm border border-brand/20 bg-brand/8 px-1.5 py-0.5 font-mono text-2xs text-brand">
-            {row.component}
-          </code>
+          <div className="text-2xs text-fg-faint mt-0.5 font-mono truncate">{row.component}</div>
         )}
+        <ReportSourceBadge row={row} />
         {(hasObservability(row) || row.sentry_trace_id) && (
           <ObservabilityStrip row={row} />
         )}
@@ -267,11 +264,15 @@ function ReportRowViewInner({
         )}
       </td>
       <td className="px-2 py-2 text-right align-top">
-        <ConfidenceMeter confidence={row.confidence} />
+        {conf != null ? (
+          <span className="text-xs font-mono text-fg-muted">{conf}%</span>
+        ) : (
+          <span className="text-2xs text-fg-faint">—</span>
+        )}
       </td>
       <td className="px-2 py-2 text-right align-top">
         <Tooltip content={new Date(row.created_at).toLocaleString()}>
-          <span className="inline-flex cursor-help items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1.5 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
+          <span className="text-2xs text-fg-faint font-mono cursor-help">
             {formatRelative(row.created_at)}
           </span>
         </Tooltip>
@@ -279,20 +280,18 @@ function ReportRowViewInner({
       <td className="px-2 py-2 text-right align-top whitespace-nowrap">
         <div className="inline-flex items-center gap-1">
           {canDispatch ? (
-            <Tooltip content="Dispatch an agentic fix attempt for this report (creates a draft PR).">
-              <button
-                type="button"
-                data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDispatchFix()
-                }}
-                disabled={dispatchBusy}
-                className="inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 disabled:opacity-50 disabled:cursor-wait"
-              >
-                {dispatchBusy ? 'Dispatching…' : 'Dispatch fix →'}
-              </button>
-            </Tooltip>
+            <span data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}>
+              <DispatchFixPreflight
+                busy={dispatchBusy}
+                severity={row.severity}
+                blastRadius={blastRadius}
+                confidence={row.confidence}
+                onConfirm={onDispatchFix}
+                onOpenDetail={onOpen}
+                preflight={preflight}
+                repoUrl={preflight?.repoUrl ?? null}
+              />
+            </span>
           ) : (
             <Link
               to={`/reports/${row.id}`}
@@ -306,8 +305,6 @@ function ReportRowViewInner({
             row={row}
             onCopyLink={onCopyLink}
             onDismiss={onDismiss}
-            onDispatchCursor={cursorEnabled && canDispatch ? onDispatchCursor : undefined}
-            onDispatchClaude={claudeEnabled && canDispatch ? onDispatchClaude : undefined}
           />
         </div>
       </td>
@@ -319,11 +316,9 @@ interface KebabProps {
   row: ReportRow
   onCopyLink: () => void
   onDismiss: () => void
-  onDispatchCursor?: () => void
-  onDispatchClaude?: () => void
 }
 
-function RowKebab({ row, onCopyLink, onDismiss, onDispatchCursor, onDispatchClaude }: KebabProps) {
+function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
   return (
     <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 motion-safe:transition-opacity">
       <Tooltip content="Copy share link">
@@ -351,41 +346,6 @@ function RowKebab({ row, onCopyLink, onDismiss, onDispatchCursor, onDispatchClau
           <IconExternalLink size={12} />
         </a>
       </Tooltip>
-      {onDispatchCursor && (
-        <Tooltip content="Send to Cursor agent — dispatches a Cursor Cloud Agent to open a draft PR fixing this report">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDispatchCursor()
-            }}
-            className="p-1 text-[#a78bfa] hover:text-[#c4b5fd] hover:bg-[#7c3aed]/10 rounded-sm"
-            aria-label="Send to Cursor agent"
-          >
-            {/* Cursor diamond icon */}
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-              <polygon points="6,1 11,6 6,11 1,6" />
-            </svg>
-          </button>
-        </Tooltip>
-      )}
-      {onDispatchClaude && (
-        <Tooltip content="Send to Claude Code Agent — triggers your repo's mushi-claude-fix workflow (BYOK)">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDispatchClaude()
-            }}
-            className="p-1 text-[#d97706] hover:text-[#f59e0b] hover:bg-[#d97706]/10 rounded-sm"
-            aria-label="Send to Claude Code Agent"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-              <circle cx="6" cy="6" r="4.5" />
-            </svg>
-          </button>
-        </Tooltip>
-      )}
       <Tooltip content="Dismiss">
         <button
           type="button"
@@ -442,10 +402,10 @@ function ObservabilityStrip({ row }: { row: ReportRow }) {
     ? `${row.sentry_trace_id.slice(0, 7)}…`
     : null
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-1 rounded-sm border border-edge-subtle/45 bg-surface-overlay/20 px-1.5 py-1">
+    <div className="mt-1 flex items-center gap-1 flex-wrap">
       {inlineTag && (
         <span
-          className="inline-flex max-w-[14rem] items-center truncate rounded-sm border border-edge-subtle bg-surface-overlay/50 px-1.5 py-0.5 font-mono text-2xs text-fg-secondary"
+          className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-secondary max-w-[14rem] truncate"
           title={`Tag — ${inlineTag[0]}: ${String(inlineTag[1])}`}
         >
           <span className="text-fg-muted">{inlineTag[0]}</span>
@@ -454,16 +414,14 @@ function ObservabilityStrip({ row }: { row: ReportRow }) {
         </span>
       )}
       {tagCount > 1 && (
-        <SignalChip tone="neutral" className="font-mono">
-          +{tagCount - 1} tags
-        </SignalChip>
+        <span className="text-2xs text-fg-faint">+{tagCount - 1}</span>
       )}
       {traceShort && (
         <Tooltip content={`Sentry trace: ${row.sentry_trace_id}`}>
-          <SignalChip tone="brand" className="cursor-help font-mono">
+          <span className="inline-flex items-center gap-0.5 text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-[#7553ff]/10 text-[#7553ff] border border-[#7553ff]/30 cursor-help">
             <IconBolt className="size-2.5" />
             {traceShort}
-          </SignalChip>
+          </span>
         </Tooltip>
       )}
     </div>

@@ -1,28 +1,25 @@
+/**
+ * Root layout for the Mushi Bounties tester marketplace.
+ * Provides <html> and <body> tags required by Next.js App Router.
+ */
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import './globals.css'
+// Tailwind CSS is loaded via PostCSS at the app level — no explicit import needed
+// when using @tailwindcss/postcss with Turbopack.
 
 export const metadata: Metadata = {
   title: {
-    default: 'Mushi Bounties — earn rewards, find real bugs',
-    template: '%s | Mushi Bounties',
+    default: 'Mushi Bounties',
+    template: '%s · Mushi Bounties',
   },
   description:
-    'Join the Mushi Bounties crowd-testing marketplace. Pick an app, find a bug, earn mushi-points redeemable for Mushi Pro credit or 100+ gift cards.',
-  metadataBase: new URL('https://kensaur.us'),
-  openGraph: {
-    siteName: 'Mushi Bounties',
-    type: 'website',
-    locale: 'en_US',
-  },
+    'Browse apps, find bugs, earn mushi-points redeemable for Mushi Pro credit or gift cards.',
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-950 text-gray-100 antialiased">
-        {children}
-      </body>
+      <body className="bg-gray-950 text-white antialiased">{children}</body>
     </html>
   )
 }

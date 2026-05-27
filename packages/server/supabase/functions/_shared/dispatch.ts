@@ -78,7 +78,7 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
     .from('project_settings')
     .select('autofix_enabled')
     .eq('project_id', input.projectId)
-    .single()
+    .maybeSingle()
   if (!settings?.autofix_enabled) {
     return {
       ok: false,

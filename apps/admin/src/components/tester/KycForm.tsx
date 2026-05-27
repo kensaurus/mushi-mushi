@@ -7,7 +7,7 @@
  * keeping the UX simple.
  *
  * W-9 (US residents) / W-8BEN (non-US individuals) / W-8BEN-E (non-US entities).
- * TIN is SHA-256 hashed before storage — never stored in plaintext.
+ * TIN is HMAC'd server-side with TESTER_TIN_PEPPER before storage — never stored in plaintext.
  * Tax form PDFs are handled out-of-band; this form collects metadata only.
  *
  * Marketing copy guardrail (Wave 0 legal review): gift-card UI uses
@@ -55,13 +55,6 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
 
     setSubmitting(true)
     try {
-      // Hash the TIN client-side before sending — never transmits plaintext.
-      const tinBytes = new TextEncoder().encode(tin.trim())
-      const hashBuffer = await crypto.subtle.digest('SHA-256', tinBytes)
-      const tinHash = Array.from(new Uint8Array(hashBuffer))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')
-
       await apiFetch('/v1/tester/kyc', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -69,7 +62,7 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
           jurisdiction,
           taxFormKind: formKind,
           legalName,
-          tinProvidedHash: tinHash,
+          tin: tin.trim(),
         }),
       })
 
@@ -87,8 +80,8 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
       <Section title={`Tax information required (${formKind})`}>
         <p className="text-2xs text-fg-muted mb-4">
           {formKind === 'W9'
-            ? 'US law requires we collect a W-9 before cumulative rewards exceed $400 USD. Your TIN is hashed immediately — we never store it in plaintext.'
-            : `Non-US recipients must complete a ${formKind} before cumulative rewards exceed $400 USD. Your TIN is hashed immediately — we never store it in plaintext.`}
+            ? 'US law requires we collect a W-9 before cumulative rewards exceed $400 USD. Your TIN is encrypted in transit and stored only as a one-way HMAC — we never persist plaintext.'
+            : `Non-US recipients must complete a ${formKind} before cumulative rewards exceed $400 USD. Your TIN is encrypted in transit and stored only as a one-way HMAC — we never persist plaintext.`}
         </p>
         <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
           <div>
@@ -132,7 +125,7 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
               required
             />
             <p className="mt-1 text-2xs text-fg-faint">
-              Hashed with SHA-256 in your browser before being sent. We never see your TIN.
+              Transmitted over HTTPS. Hashed server-side with a secret key — never stored in plaintext.
             </p>
           </div>
 

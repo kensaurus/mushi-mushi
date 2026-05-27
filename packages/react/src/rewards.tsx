@@ -9,7 +9,7 @@
 
 import { useState, useEffect, type ElementType, type ComponentPropsWithoutRef } from 'react';
 import type { MushiReputationResult, MushiTierResult } from '@mushi-mushi/core';
-import { useMushi } from './hooks';
+import { useMushiSdk } from './hooks';
 
 // ──────────────────────────────────────────────────────────────
 // Hooks
@@ -17,7 +17,7 @@ import { useMushi } from './hooks';
 
 /** Returns the current user's reputation totals, or null if unavailable. */
 export function useReputation(): MushiReputationResult | null {
-  const sdk = useMushi();
+  const sdk = useMushiSdk();
   const [reputation, setReputation] = useState<MushiReputationResult | null>(null);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export function useReputation(): MushiReputationResult | null {
 
 /** Returns the current user's tier, or null if unavailable. */
 export function useTier(): MushiTierResult | null {
-  const sdk = useMushi();
+  const sdk = useMushiSdk();
   const [tier, setTier] = useState<MushiTierResult | null>(null);
 
   useEffect(() => {

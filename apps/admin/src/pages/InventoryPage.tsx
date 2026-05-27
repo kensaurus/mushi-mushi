@@ -1,13 +1,9 @@
-import { useCallback, useMemo, useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useCallback, useMemo, useState } from 'react'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
-import { useInventoryUx, resolveQuickInventoryTab } from '../lib/inventoryModeUx'
-import { inventoryLinks } from '../lib/statCardLinks'
-import { usePublishPageContext } from '../lib/pageContext'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import {
@@ -18,19 +14,7 @@ import {
   Card,
   ErrorAlert,
   Loading,
-  Section,
-  StatCard,
-  FreshnessPill,
-  Badge,
 } from '../components/ui'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  InlineProof,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
-import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { PageHero } from '../components/PageHero'
 import { PageActionBar } from '../components/PageActionBar'
 import { SetupNudge } from '../components/SetupNudge'
@@ -46,47 +30,9 @@ import { DiscoveryTab } from '../components/inventory/DiscoveryTab'
 import { SyntheticTimeline } from '../components/inventory/SyntheticTimeline'
 import { DriftDiffPanel } from '../components/inventory/DriftDiffPanel'
 import { INVENTORY_HELP } from '../components/inventory/inventoryCopy'
-import { InventoryStatusBanner } from '../components/inventory/InventoryStatusBanner'
-import {
-  EMPTY_INVENTORY_STATS,
-  type InventoryStats,
-  type InventoryTabId,
-} from '../components/inventory/InventoryStatsTypes'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
-const INVENTORY_TABS: Array<{ id: InventoryTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Posture banner, coverage snapshot, and how discovery → ingest → gates fit together.',
-  },
-  {
-    id: 'stories',
-    label: 'User stories',
-    description: 'Card map of stories and actions — status chips from gates, crawler, and synthetic probes.',
-  },
-  { id: 'tree', label: 'Tree', description: 'Page × element grid with backend and test wiring.' },
-  { id: 'gates', label: 'Gates', description: 'Latest gate runs and open findings — dead handlers, mock leaks, contracts.' },
-  { id: 'synthetic', label: 'Synthetic', description: 'Production probes per action — latency and pass/fail history.' },
-  { id: 'drift', label: 'Drift', description: 'Crawler diff — missing in inventory vs missing in app vs mismatches.' },
-  { id: 'discovery', label: 'Discovery', description: 'SDK observe → Claude propose → accept lifecycle.' },
-  { id: 'yaml', label: 'Yaml', description: 'Power-user ingest — paste inventory.yaml or tweak the raw snapshot.' },
-]
-
-function resolveInventoryTab(value: string | null): InventoryTabId {
-  if (
-    value === 'stories' ||
-    value === 'tree' ||
-    value === 'gates' ||
-    value === 'synthetic' ||
-    value === 'drift' ||
-    value === 'discovery' ||
-    value === 'yaml'
-  ) {
-    return value
-  }
-  return 'overview'
-}
+type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 'yaml'
 
 interface Summary {
   total?: number
@@ -196,38 +142,7 @@ export function InventoryPage() {
   const projectId = useActiveProjectId()
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
-  const ux = useInventoryUx()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  const activeTab = resolveInventoryTab(tabParam)
-  const activeTabMeta = INVENTORY_TABS.find((t) => t.id === activeTab) ?? INVENTORY_TABS[0]
-
-  const {
-    data: statsData,
-    loading: statsLoading,
-    error: statsError,
-    reload: reloadStats,
-    lastFetchedAt: statsFetchedAt,
-    isValidating: statsValidating,
-  } = usePageData<InventoryStats>('/v1/admin/inventory/stats')
-  const stats = statsData ?? EMPTY_INVENTORY_STATS
-
-  const setActiveTab = useCallback(
-    (id: InventoryTabId) => {
-      const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
-      else next.set('tab', id)
-      setSearchParams(next, { replace: true, preventScrollReset: true })
-    },
-    [searchParams, setSearchParams],
-  )
-
-  useEffect(() => {
-    if (!ux.isQuickstart || !projectId || statsLoading) return
-    const quickTab = resolveQuickInventoryTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, projectId, statsLoading, stats, activeTab, setActiveTab])
-
+  const [tab, setTab] = useState<Tab>('stories')
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
     id: string
@@ -247,13 +162,14 @@ export function InventoryPage() {
   })
   const storiesQuery = usePageData<{ tree: StoryPayload[] }>(
     basePath ? `${basePath}/user-stories` : null,
-    { deps: [projectId ?? '', activeTab] },
+    { deps: [projectId ?? '', tab] },
   )
+  // Findings drive the per-story open-finding badge AND the Gates tab's
+  // detail list. Loading them on `stories` lets the Stories cards advertise
+  // "X open findings" without an extra round-trip when the user clicks over.
   const findingsQuery = usePageData<FindingsPayload>(
-    basePath && (activeTab === 'gates' || activeTab === 'stories' || activeTab === 'overview')
-      ? `${basePath}/findings`
-      : null,
-    { deps: [projectId ?? '', activeTab] },
+    basePath && (tab === 'gates' || tab === 'stories') ? `${basePath}/findings` : null,
+    { deps: [projectId ?? '', tab] },
   )
 
   const payload = mainQuery.data
@@ -262,11 +178,10 @@ export function InventoryPage() {
   const treeRows = useMemo(() => buildTreeRows(snapshot?.parsed as Record<string, unknown>), [snapshot])
 
   const reloadAll = useCallback(() => {
-    reloadStats()
     mainQuery.reload()
     storiesQuery.reload()
     findingsQuery.reload()
-  }, [reloadStats, mainQuery, storiesQuery, findingsQuery])
+  }, [mainQuery, storiesQuery, findingsQuery])
 
   useRealtimeReload(['inventories', 'gate_runs', 'gate_findings', 'status_history', 'synthetic_runs'], reloadAll, {
     debounceMs: 1200,
@@ -420,63 +335,6 @@ export function InventoryPage() {
     return { missingInv, missingApp, mismatch }
   }, [findings, runs])
 
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : !stats.hasInventory
-        ? 'brand'
-        : stats.topPriority === 'regressed'
-          ? 'danger'
-          : stats.topPriority === 'open_findings'
-            ? 'warn'
-            : stats.topPriority === 'stub_heavy' || stats.topPriority === 'discovery_ready'
-              ? 'info'
-              : stats.topPriority === 'clear'
-                ? 'ok'
-                : 'brand'
-
-  const tabOptions = useMemo(
-    () => [
-      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      {
-        id: 'stories' as const,
-        label: copy?.tabLabels?.stories ?? 'User stories',
-        count: stats.userStories > 0 ? stats.userStories : undefined,
-      },
-      {
-        id: 'tree' as const,
-        label: copy?.tabLabels?.tree ?? 'Tree',
-        count: stats.total > 0 ? stats.total : undefined,
-      },
-      {
-        id: 'gates' as const,
-        label: copy?.tabLabels?.gates ?? 'Gates',
-        count: stats.openFindings > 0 ? stats.openFindings : undefined,
-      },
-      { id: 'synthetic' as const, label: copy?.tabLabels?.synthetic ?? 'Synthetic' },
-      { id: 'drift' as const, label: copy?.tabLabels?.drift ?? 'Drift' },
-      {
-        id: 'discovery' as const,
-        label: copy?.tabLabels?.discovery ?? 'Discovery',
-        count: stats.draftProposals > 0 ? stats.draftProposals : undefined,
-      },
-      { id: 'yaml' as const, label: copy?.tabLabels?.yaml ?? 'Yaml' },
-    ],
-    [copy?.tabLabels, stats],
-  )
-
-  usePublishPageContext({
-    route: '/inventory',
-    title: 'User stories',
-    summary: `${activeTabMeta.label} · ${stats.hasInventory ? `${stats.verified}/${stats.total} verified` : 'No inventory yet'}`,
-    filters: { tab: activeTab, project_id: projectId ?? undefined },
-    criticalCount: stats.regressed,
-    actions: [
-      { id: 'inventory-refresh', label: 'Refresh', hint: 'Re-fetch stats + snapshot', run: reloadAll },
-      { id: 'inventory-gates', label: 'Run gates', hint: 'Trigger gate suite on project', run: () => void runGates() },
-    ],
-  })
-
   if (!projectId) {
     return <Loading text="Select a project…" />
   }
@@ -484,292 +342,138 @@ export function InventoryPage() {
   if (!entLoading && !has('inventory_v2')) {
     return (
       <div className="space-y-4">
-        <PageHeader title="User stories & inventory" projectScope={null} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">Maps specs to verified actions.</p>
-        </ContainedBlock>
+        <PageHeader title="User stories & inventory" projectScope={null} description="Maps specs to verified actions." />
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>
     )
   }
 
-  if ((statsLoading && !statsData) || (mainQuery.loading && !mainQuery.data)) {
-    return (
-      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading inventory">
-        <div className="h-8 w-48 rounded bg-surface-raised" />
-        <div className="h-16 rounded bg-surface-raised/60" />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-  if (statsError) {
-    return <ErrorAlert message={`Failed to load inventory stats: ${statsError}`} onRetry={reloadAll} />
+  if (mainQuery.loading && !mainQuery.data) {
+    return <Loading text="Loading inventory…" />
   }
   if (mainQuery.error) {
-    return <ErrorAlert message={mainQuery.error} onRetry={reloadAll} />
+    return <ErrorAlert message={mainQuery.error} onRetry={mainQuery.reload} />
   }
 
-  const total = Number(summary.total ?? stats.total)
-  const verified = Number(summary.verified ?? stats.verified)
+  const total = Number(summary.total ?? 0)
+  const verified = Number(summary.verified ?? 0)
+  const regressed = Number(summary.regressed ?? 0)
+  const stub = Number(summary.stub ?? 0)
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-inventory">
-      <PageHelp {...INVENTORY_HELP} />
-
+    <div className="space-y-3" data-testid="mushi-page-inventory">
       <PageHeader
         title={copy?.title ?? 'User stories · Inventory'}
-        projectScope={stats.projectName ?? undefined}
+        projectScope={null}
+        description={
+          copy?.description ??
+          'Positive graph: stories, pages, elements, actions — status derived from gates, crawler, and reconciler.'
+        }
       >
-        {!ux.hideOverviewChrome && (
-          <>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
-                : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
-                    : bannerSeverity === 'info'
-                      ? 'bg-info/10 text-info'
-                      : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasInventory
-            ? stats.draftProposals > 0
-              ? `${stats.draftProposals} DRAFT`
-              : 'EMPTY'
-            : stats.regressed > 0
-              ? `${stats.regressed} REGRESSED`
-              : stats.openFindings > 0
-                ? `${stats.openFindings} FINDINGS`
-                : 'CURRENT'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? mainQuery.lastFetchedAt}
-          isValidating={statsValidating || mainQuery.isValidating}
+        <SegmentedControl<Tab>
+          size="sm"
+          ariaLabel="Inventory section"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { id: 'stories', label: 'User stories' },
+            { id: 'tree', label: 'Tree' },
+            { id: 'gates', label: 'Gates' },
+            { id: 'synthetic', label: 'Synthetic' },
+            { id: 'drift', label: 'Drift' },
+            { id: 'discovery', label: 'Discovery' },
+            { id: 'yaml', label: 'Yaml' },
+          ]}
         />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || mainQuery.isValidating}>
-          Refresh
-        </Btn>
-          </>
-        )}
       </PageHeader>
 
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            (stats.hasInventory
-              ? `${verified}/${total} verified — ${activeTabMeta.label} tab`
-              : 'Banner + INVENTORY SNAPSHOT — start on Overview, then Discovery or Yaml to ingest.')}
-        </p>
-      </ContainedBlock>
-
-      <InventoryStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating || mainQuery.isValidating}
-        plainBanner={ux.plainBanner}
+      <PageHero
+        scope="inventory"
+        title="Truth layer snapshot"
+        kicker="Plan → Act → Verify"
+        decide={{
+          label: total ? `${verified} / ${total} actions verified` : 'No actions ingested',
+          metric: `${stub} stub · ${regressed} regressed`,
+          summary: regressed > 0 ? 'Regressed actions need a fix or rollback before the next release.' : 'Surface looks healthy — keep gates green in CI.',
+          severity: regressed > 0 ? 'crit' : total === 0 ? 'neutral' : 'ok',
+          anchor: 'inventory:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            whyNow: regressed > 0
+              ? `${regressed} regressed action${regressed === 1 ? '' : 's'} need a fix or rollback before the next release.`
+              : total === 0
+                ? 'No actions ingested yet — connect a repo to populate the inventory.'
+                : `${verified}/${total} actions verified · ${stub} stub · ${regressed} regressed.`,
+            items: [
+              { label: 'Total', value: total, tone: 'neutral' },
+              { label: 'Verified', value: verified, tone: verified > 0 ? 'ok' : 'neutral' },
+              { label: 'Stub', value: stub, tone: stub > 0 ? 'info' : 'neutral' },
+              { label: 'Regressed', value: regressed, tone: regressed > 0 ? 'crit' : 'ok' },
+            ],
+          },
+        }}
+        act={nba}
+        actAnchor="inventory:act"
+        actEvidence={nba ? { kind: 'rule-trace', why: nba.reason ?? nba.title, threshold: regressed > 0 ? `${regressed} regressed` : undefined } : undefined}
+        verify={{
+          label: 'Latest ingest',
+          detail: snapshot?.commit_sha ? `commit ${snapshot.commit_sha.slice(0, 7)}` : '—',
+          to: '/repo',
+          secondaryTo: '/graph',
+          secondaryLabel: 'Open graph',
+          anchor: 'inventory:verify',
+          evidence: snapshot?.commit_sha ? {
+            kind: 'last-event',
+            at: mainQuery.lastFetchedAt ?? new Date().toISOString(),
+            by: 'crawler / reconciler',
+            payloadSummary: `commit ${snapshot.commit_sha.slice(0, 7)}`,
+            status: regressed > 0 ? 'warn' : 'ok',
+          } : undefined,
+        }}
+      />
+      <PageActionBar
+        scope="inventory"
+        action={nba}
+        trailing={
+          <div className="flex flex-wrap gap-2" data-dav-anchor="inventory:act">
+            <Btn type="button" size="sm" variant="ghost" onClick={() => void runGates()}>
+              Run gates
+            </Btn>
+            <Btn type="button" size="sm" variant="ghost" onClick={() => void reconcile()}>
+              Run crawler
+            </Btn>
+          </div>
+        }
       />
 
-      {!ux.hideTabs && (
-      <SegmentedControl<InventoryTabId>
-        size="sm"
-        ariaLabel="Inventory sections"
-        value={activeTab}
-        onChange={setActiveTab}
-        options={tabOptions}
-      />
+      <PageHelp {...INVENTORY_HELP} />
+
+      {!snapshot && (
+        <SetupNudge
+          requires={['github_connected']}
+          emptyTitle="No inventory yet"
+          emptyDescription="Either install @mushi-mushi/web with discoverInventory: true and let the SDK observe your app — Claude will draft an inventory.yaml — or hand-author one and paste it from the Yaml tab."
+          emptyIcon={<HeroGraphNodes />}
+          blockedIcon={<HeroGraphNodes accent="text-fg-faint" />}
+          emptyAction={
+            <div className="flex flex-wrap gap-2">
+              <Btn size="sm" onClick={() => setTab('discovery')}>
+                Open Discovery →
+              </Btn>
+              <Btn size="sm" variant="ghost" onClick={() => setTab('yaml')}>
+                Paste YAML
+              </Btn>
+            </div>
+          }
+          emptyHints={[
+            'Discovery (recommended): SDK observes → Claude proposes → you accept. Open the Discovery tab to see the four-step lifecycle.',
+            'Manual: author inventory.yaml directly and paste from the Yaml tab.',
+            'Either path supports auth-gated apps: cookie-paste from the Yaml tab\'s crawler settings card, or an inventory.yaml auth.scripted block.',
+          ]}
+        />
       )}
 
-      {!ux.hideInventorySnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'INVENTORY SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label={copy?.statLabels?.verified ?? 'Verified'}
-            value={stats.hasInventory ? `${stats.verified}/${stats.total}` : '—'}
-            accent={stats.regressed > 0 ? 'text-warn' : stats.verified > 0 ? 'text-ok' : undefined}
-            hint={stats.hasInventory ? `${stats.userStories} stories` : 'Not ingested'}
-            to={inventoryLinks.verified}
-          />
-          <StatCard
-            label={copy?.statLabels?.regressed ?? 'Regressed'}
-            value={stats.regressed}
-            accent={stats.regressed > 0 ? 'text-danger' : 'text-ok'}
-            hint={stats.regressed > 0 ? 'Fix before release' : 'None flagged'}
-            to={inventoryLinks.regressed}
-          />
-          <StatCard
-            label={copy?.statLabels?.findings ?? 'Findings'}
-            value={stats.openFindings}
-            accent={stats.openFindings > 0 ? 'text-warn' : undefined}
-            hint={stats.lastGateRunAt ? 'From latest gate runs' : 'No runs yet'}
-            to={inventoryLinks.findings}
-          />
-          <StatCard
-            label={copy?.statLabels?.discovery ?? 'Discovery'}
-            value={stats.discoveryEvents}
-            accent={stats.draftProposals > 0 ? 'text-brand' : undefined}
-            hint={
-              stats.draftProposals > 0
-                ? `${stats.draftProposals} draft proposal${stats.draftProposals === 1 ? '' : 's'}`
-                : 'SDK events observed'
-            }
-            to={inventoryLinks.discovery}
-          />
-        </div>
-      </Section>
-      )}
-
-      {activeTab === 'overview' && (
-        <>
-          {!ux.hideOverviewChrome && (
-          <>
-          <PageHero
-            scope="inventory"
-            title="User stories"
-            kicker="Plan"
-            decide={{
-              label: stats.topPriorityLabel ?? 'Truth layer',
-              metric: stats.hasInventory ? `${stats.verified}/${stats.total} verified` : undefined,
-              summary:
-                stats.topPriority === 'no_inventory'
-                  ? 'Brand banner — no inventory yet. Discovery tab runs observe → propose → accept; Yaml tab is the manual path.'
-                  : stats.topPriority === 'regressed'
-                    ? 'Red banner — regressed actions broke since last verify. Stories tab shows which cards regressed.'
-                    : stats.topPriority === 'open_findings'
-                      ? 'Amber banner — gate findings need review on the Gates tab.'
-                      : 'Green banner — coverage current. Tree tab shows page × element wiring.',
-              severity:
-                stats.topPriority === 'regressed'
-                  ? 'crit'
-                  : stats.topPriority === 'open_findings'
-                    ? 'warn'
-                    : stats.topPriority === 'clear'
-                      ? 'ok'
-                      : 'info',
-            }}
-            verify={{
-              label: 'Latest ingest',
-              detail: stats.commitSha ? `commit ${stats.commitSha.slice(0, 7)}` : stats.hasInventory ? 'Ingested' : '—',
-            }}
-          />
-
-          {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
-            <Card
-              className={`space-y-3 p-4 ${
-                stats.topPriority === 'regressed'
-                  ? 'border-danger/30 bg-danger/5'
-                  : stats.topPriority === 'open_findings'
-                    ? 'border-warn/30 bg-warn/5'
-                    : 'border-brand/30 bg-brand/5'
-              }`}
-            >
-              <SignalChip
-                tone={
-                  stats.topPriority === 'regressed'
-                    ? 'danger'
-                    : stats.topPriority === 'open_findings'
-                      ? 'warn'
-                      : 'brand'
-                }
-              >
-                Top priority
-              </SignalChip>
-              <ContainedBlock
-                tone={
-                  stats.topPriority === 'regressed'
-                    ? 'warn'
-                    : stats.topPriority === 'open_findings'
-                      ? 'info'
-                      : 'info'
-                }
-              >
-                <p className="text-sm font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-              </ContainedBlock>
-              <ActionPillRow>
-                <ActionPill to={stats.topPriorityTo} tone="brand">
-                  Take action →
-                </ActionPill>
-                <ActionPill onClick={() => setActiveTab('stories')} tone="neutral">
-                  User stories
-                </ActionPill>
-              </ActionPillRow>
-            </Card>
-          ) : null}
-
-          <PageActionBar
-            scope="inventory"
-            action={nba}
-            trailing={
-              <div className="flex flex-wrap gap-2" data-dav-anchor="inventory:act">
-                <Btn type="button" size="sm" variant="ghost" onClick={() => void runGates()}>
-                  Run gates
-                </Btn>
-                <Btn type="button" size="sm" variant="ghost" onClick={() => void reconcile()}>
-                  Run crawler
-                </Btn>
-              </div>
-            }
-          />
-
-          {!snapshot && (
-            <SetupNudge
-              requires={['github_connected']}
-              emptyTitle="No inventory yet"
-              emptyDescription="Either install @mushi-mushi/web with discoverInventory: true and let the SDK observe your app — Claude will draft an inventory.yaml — or hand-author one and paste it from the Yaml tab."
-              emptyIcon={<HeroGraphNodes />}
-              blockedIcon={<HeroGraphNodes accent="text-fg-faint" />}
-              emptyAction={
-                <div className="flex flex-wrap gap-2">
-                  <Btn size="sm" onClick={() => setActiveTab('discovery')}>
-                    Open Discovery →
-                  </Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => setActiveTab('yaml')}>
-                    Paste YAML
-                  </Btn>
-                </div>
-              }
-              emptyHints={[
-                'Discovery (recommended): SDK observes → Claude proposes → you accept.',
-                'Manual: author inventory.yaml directly and paste from the Yaml tab.',
-                'Either path supports auth-gated apps via crawler settings or auth.scripted blocks.',
-              ]}
-            />
-          )}
-
-          <ActionPillRow>
-            <ActionPill
-              onClick={() => setActiveTab(stats.hasInventory ? 'stories' : 'discovery')}
-              tone="brand"
-            >
-              {stats.hasInventory ? 'Open user stories →' : 'Start Discovery →'}
-            </ActionPill>
-            {stats.hasInventory ? (
-              <ActionPill onClick={() => setActiveTab('gates')} tone="neutral">
-                View gates
-              </ActionPill>
-            ) : null}
-          </ActionPillRow>
-          </>
-          )}
-        </>
-      )}
-
-      {activeTab === 'stories' && (
+      {tab === 'stories' && (
         <div data-dav-anchor="inventory:decide">
           <UserStoryMap
             stories={stories}
@@ -781,30 +485,18 @@ export function InventoryPage() {
         </div>
       )}
 
-      {activeTab === 'tree' && <InventoryTree rows={treeRows} onRowClick={openDrawerForRow} />}
+      {tab === 'tree' && <InventoryTree rows={treeRows} onRowClick={openDrawerForRow} />}
 
-      {activeTab === 'gates' && (
+      {tab === 'gates' && (
         <div className="space-y-3">
           <div className="grid gap-2 md:grid-cols-5" data-dav-anchor="inventory:verify">
             {gateCards.map((g) => {
               const latest = runs.find((r) => r.gate === g)
-              const statusTone =
-                latest?.status === 'pass'
-                  ? 'ok'
-                  : latest?.status === 'fail'
-                    ? 'danger'
-                    : 'neutral'
               return (
-                <Card key={g} className="space-y-2 p-3">
-                  <SignalChip tone="neutral" className="uppercase">
-                    {g.replace(/_/g, ' ')}
-                  </SignalChip>
-                  <ContainedBlock tone={statusTone === 'danger' ? 'warn' : 'muted'}>
-                    <p className="text-sm font-semibold text-fg">{latest?.status ?? '—'}</p>
-                    <InlineProof className="mt-1.5">
-                      {latest?.findings_count ?? 0} findings
-                    </InlineProof>
-                  </ContainedBlock>
+                <Card key={g} className="p-3">
+                  <p className="text-2xs uppercase text-fg-faint">{g.replace(/_/g, ' ')}</p>
+                  <p className="text-sm font-semibold">{latest?.status ?? '—'}</p>
+                  <p className="text-2xs text-fg-muted">{latest?.findings_count ?? 0} findings</p>
                 </Card>
               )
             })}
@@ -826,13 +518,10 @@ export function InventoryPage() {
         </div>
       )}
 
-      {activeTab === 'synthetic' && (
+      {tab === 'synthetic' && (
         <div className="grid gap-3 md:grid-cols-2">
           {synthActions.length === 0 ? (
-            <EmptySectionMessage
-              text="No Action nodes for synthetic probes yet."
-              hint="Ingest inventory with user stories — each Action node becomes a probe target on this tab."
-            />
+            <p className="text-xs text-fg-muted">Ingest inventory with user stories to list Action nodes for probes.</p>
           ) : (
             synthActions.slice(0, 16).map((a) => (
               <SyntheticPreview key={a.id} projectId={projectId} actionId={a.id} label={`${a.storyLabel} · ${a.label}`} />
@@ -841,7 +530,7 @@ export function InventoryPage() {
         </div>
       )}
 
-      {activeTab === 'drift' && (
+      {tab === 'drift' && (
         <DriftDiffPanel
           missingInInventory={driftFromFindings.missingInv}
           missingInApp={driftFromFindings.missingApp}
@@ -850,11 +539,11 @@ export function InventoryPage() {
         />
       )}
 
-      {activeTab === 'discovery' && (
+      {tab === 'discovery' && (
         <DiscoveryTab projectId={projectId} onAccepted={reloadAll} />
       )}
 
-      {activeTab === 'yaml' && (
+      {tab === 'yaml' && (
         <div className="space-y-4">
           <CrawlerSettingsCard projectId={projectId} />
           <div className="space-y-3">

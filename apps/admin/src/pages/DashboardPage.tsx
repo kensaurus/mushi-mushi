@@ -1,12 +1,14 @@
 /**
  * FILE: apps/admin/src/pages/DashboardPage.tsx
  * PURPOSE: 14-day operational view of bug intake, LLM cost, auto-fix
- *          pipeline, integration health, and the triage queue. Tab shell
- *          (Overview | Loop | Metrics | Health) + stats banner/KPI strip.
+ *          pipeline, integration health, and the triage queue. Page-level
+ *          orchestration only — data load + composition. Each row is a
+ *          dedicated subcomponent in components/dashboard/* so they can
+ *          evolve independently and stay below the 30-line-function limit.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useCallback, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import type { ChartEvent } from '../lib/apiSchemas'
 import { useRealtimeReload } from '../lib/realtime'
@@ -16,17 +18,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import {
-  PageHeader,
-  PageHelp,
-  Btn,
-  ErrorAlert,
-  FreshnessPill,
-  Section,
-  StatCard,
-  SegmentedControl,
-  Badge,
-} from '../components/ui'
+import { PageHeader, PageHelp, Btn, ErrorAlert, FreshnessPill } from '../components/ui'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
@@ -38,62 +30,13 @@ import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
-import { EvolutionHistoryWidget } from '../components/dashboard/EvolutionHistoryWidget'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
 import { PlatformHealthTile } from '../components/dashboard/PlatformHealthTile'
-import { DashboardStatusBanner } from '../components/dashboard/DashboardStatusBanner'
-import {
-  EMPTY_DASHBOARD_STATS,
-  type DashboardStats,
-  type DashboardTabId,
-} from '../components/dashboard/DashboardStatsTypes'
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
-import { useDashboardUx, resolveQuickDashboardTab } from '../lib/dashboardModeUx'
-import {
-  backlogDetail,
-  backlogTooltip,
-  fixesDetail,
-  fixesTooltip,
-  focusDetail,
-  focusTooltip,
-  reports14dDetail,
-  reports14dTooltip,
-} from '../lib/statTooltips/dashboard'
-import { dashboardLinks, statLink } from '../lib/statCardLinks'
-import { PageHero } from '../components/PageHero'
-import { ActionPill, ActionPillRow, ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
-import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
-
-const DASHBOARD_TABS: Array<{ id: DashboardTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Pipeline strip, setup checklist, and the fastest path to your next action.',
-  },
-  {
-    id: 'loop',
-    label: 'Loop',
-    description: 'Interactive Plan → Do → Check → Act canvas with live counts and activity.',
-  },
-  {
-    id: 'metrics',
-    label: 'Metrics',
-    description: '14-day KPIs, intake charts, LLM cost, triage queue, and component hotspots.',
-  },
-  {
-    id: 'health',
-    label: 'Health',
-    description: 'Integration probes and QA story coverage for the active project.',
-  },
-]
-
-function isDashboardTab(value: string | null): value is DashboardTabId {
-  return DASHBOARD_TABS.some((t) => t.id === value)
-}
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
   const activity = data.activity ?? []
@@ -106,24 +49,11 @@ function inferRunningStage(data: DashboardData): PdcaStageId | null {
   return null
 }
 
-function focusAccent(stage: string | null): string | undefined {
-  switch (stage) {
-    case 'plan':
-      return 'text-danger'
-    case 'do':
-      return 'text-warn'
-    case 'check':
-      return 'text-info'
-    case 'act':
-      return 'text-brand'
-    default:
-      return 'text-ok'
-  }
-}
-
 export function DashboardPage() {
-  const { data, loading, error, isValidating, lastFetchedAt, reload } =
-    usePageData<DashboardData>('/v1/admin/dashboard')
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
+  // Wave T.5.8b: chart annotations. Fetched lazily alongside the main
+  // dashboard payload — we swallow errors because annotations are a
+  // garnish, not critical data.
   const chartEventsQuery = usePageData<{ events: ChartEvent[] }>(
     '/v1/admin/chart-events?kinds=deploy,cron,byok',
   )
@@ -132,59 +62,26 @@ export function DashboardPage() {
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [showFullDashboard, setShowFullDashboard] = useState(
-    () => searchParams.get('tab') === 'metrics',
-  )
+  const [showFullDashboard, setShowFullDashboard] = useState(false)
   const copy = usePageCopy('/dashboard')
-  const ux = useDashboardUx()
 
-  const tabParam = searchParams.get('tab')
-  const activeTab: DashboardTabId = isDashboardTab(tabParam) ? tabParam : 'overview'
-  const activeTabMeta = DASHBOARD_TABS.find((t) => t.id === activeTab) ?? DASHBOARD_TABS[0]
-
-  const {
-    data: statsData,
-    loading: statsLoading,
-    error: statsError,
-    reload: reloadStats,
-    lastFetchedAt: statsFetchedAt,
-    isValidating: statsValidating,
-  } = usePageData<DashboardStats>('/v1/admin/dashboard/stats')
-  const stats = statsData ?? EMPTY_DASHBOARD_STATS
-
-  const reloadAll = useCallback(() => {
-    reloadStats()
-    reload()
-    setup.reload()
-  }, [reloadStats, reload, setup])
-
-  const setActiveTab = useCallback(
-    (id: DashboardTabId) => {
-      const next = new URLSearchParams(searchParams)
-      if (id === 'overview') next.delete('tab')
-      else next.set('tab', id)
-      setSearchParams(next, { replace: true, preventScrollReset: true })
-    },
-    [searchParams, setSearchParams],
-  )
-
-  const peekMetrics = useCallback(() => {
-    setShowFullDashboard(true)
-    setActiveTab('metrics')
-  }, [setActiveTab])
-
-  useEffect(() => {
-    if (!ux.isQuickstart || statsLoading || showFullDashboard) return
-    const quickTab = resolveQuickDashboardTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab, showFullDashboard])
-
-  const isEmpty = !data || data.empty
-  const realtimeEnabled = !loading && !error && !!stats.hasAnyProject
+  // First-fix-merged celebration: when `merged_fix_count` flips 0 → 1 we
+  // fire a confetti burst + a toast with a CTA to the merged PR. This is the
+  // single most important peak-end moment in the whole loop — it's the proof
+  // that Mushi closed a PDCA cycle on the user's project. (Round 2 polish.)
+  // SPA-route via `navigate` rather than `window.location.assign` — the
+  // latter discards in-memory state (toast queue, scroll, focus) on what
+  // should be a celebratory in-app jump.
+  // Live-pulse the dashboard via Supabase Realtime. Previously a 15s poll,
+  // now event-driven: when a report lands the queue ticks immediately and
+  // the PDCA pipeline can pulse the right stage. A 1s debounce avoids
+  // thrashing when a burst of webhooks (push + pr + check_run) for the
+  // same fix land in the same second. Dashboard reloads are cheap because
+  // the backend caches the aggregate for 10s server-side.
+  const realtimeEnabled = !loading && !error && !!data && !data.empty
   const { channelState } = useRealtimeReload(
     ['reports', 'fix_attempts', 'fix_events', 'fix_dispatch_jobs'],
-    reloadAll,
+    reload,
     { debounceMs: 1000, enabled: realtimeEnabled },
   )
 
@@ -201,36 +98,30 @@ export function DashboardPage() {
     { onFire: onFirstMergedFix },
   )
 
-  const dashProjectName = setup.activeProject?.project_name ?? stats.projectName
+  // Publish context so the browser tab title + favicon badge track the
+  // dashboard's live state (backlog / in-flight fixes / LLM failures).
+  // Called unconditionally — hooks rules — so we compute defensively.
+  const dashProjectName = setup.activeProject?.project_name ?? null
   const dashCounts = data?.counts
   const dashFix = data?.fixSummary
   const dashSummary = loading
     ? 'Loading dashboard…'
-    : statsError
-      ? 'Stats unavailable'
-      : !stats.hasAnyProject
-        ? 'Create a project on Setup'
-        : !stats.setupDone
-          ? `Setup ${stats.requiredComplete}/${stats.requiredTotal} — finish ingest to unlock metrics`
-          : stats.openBacklog > 0
-            ? `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting to triage`
-            : stats.fixesFailed > 0
-              ? `${stats.fixesFailed} failed fix${stats.fixesFailed === 1 ? '' : 'es'} need retry`
-              : isEmpty
-                ? 'Pipeline wired — waiting for first report'
-                : dashCounts
-                  ? `${dashCounts.openBacklog} to triage · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
-                  : `${stats.reports14d} reports in 14d`
-
+    : !data || data.empty
+      ? 'Waiting for first report'
+      : dashCounts
+        ? `${dashCounts.openBacklog} to triage · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
+        : undefined
   usePublishPageContext({
     route: '/dashboard',
     title: dashProjectName ? `Dashboard · ${dashProjectName}` : 'Dashboard',
-    summary: `${activeTabMeta.label} · ${dashSummary}`,
-    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
-    criticalCount: stats.openBacklog || dashCounts?.openBacklog || 0,
+    summary: dashSummary,
+    // `openBacklog` is the queue of reports the user still needs to
+    // action — treat every untriaged report as deserving the favicon
+    // red dot so the operator sees the nudge even from another tab.
+    criticalCount: dashCounts?.openBacklog ?? 0,
     questions: [
-      (stats.openBacklog || dashCounts?.openBacklog || 0) > 0
-        ? `What's in my backlog of ${stats.openBacklog || dashCounts!.openBacklog} reports right now?`
+      (dashCounts?.openBacklog ?? 0) > 0
+        ? `What\u2019s in my backlog of ${dashCounts!.openBacklog} reports right now?`
         : 'Is the PDCA loop healthy this week?',
       'Where is the bottleneck in the PDCA loop?',
       'What changed in the last 24 hours I should know about?',
@@ -239,322 +130,135 @@ export function DashboardPage() {
       {
         id: 'reload-dashboard',
         label: 'Refresh dashboard',
-        hint: 'Re-fetch stats and dashboard payload',
-        run: () => { void reloadAll() },
+        hint: 'Re-fetch the dashboard payload',
+        run: () => { void reload() },
       },
     ],
   })
 
-  const tabOptions = useMemo(
-    () => [
-      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      {
-        id: 'loop' as const,
-        label: copy?.tabLabels?.loop ?? 'Loop',
-        count: stats.focusStage ? 1 : undefined,
-      },
-      {
-        id: 'metrics' as const,
-        label: copy?.tabLabels?.metrics ?? 'Metrics',
-        count: stats.openBacklog > 0 ? stats.openBacklog : stats.reports14d > 0 ? stats.reports14d : undefined,
-      },
-      {
-        id: 'health' as const,
-        label: copy?.tabLabels?.health ?? 'Health',
-        count: stats.integrationIssues > 0 ? stats.integrationIssues : undefined,
-      },
-    ],
-    [stats, copy?.tabLabels],
-  )
+  if (loading) return <DashboardSkeleton />
+  if (error) return <ErrorAlert message={error} onRetry={reload} />
+  if (!data || data.empty) return <GettingStartedEmpty />
 
-  if ((loading && !data) || (statsLoading && !statsData)) return <DashboardSkeleton />
-  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
-  if (statsError) return <ErrorAlert message={`Failed to load dashboard stats: ${statsError}`} onRetry={reloadAll} />
-
-  const counts = data?.counts
-  const fixSummary = data?.fixSummary
-  const reportsByDay = data?.reportsByDay ?? []
-  const llmByDay = data?.llmByDay ?? []
-  const activity = data?.activity ?? []
-  const lastReportAt = activity.find((a) => a.kind === 'report')?.at ?? null
-  const projectName = setup.activeProject?.project_name ?? stats.projectName
-  const dashboardProjects = data?.projects ?? []
-  const dashDescription =
-    copy?.description ??
-    (dashboardProjects.length > 1
-      ? `Workspace overview · ${dashboardProjects.length} projects`
-      : projectName
-        ? `Your loop on ${projectName}`
-        : undefined)
+  const counts = data.counts!
+  const fixSummary = data.fixSummary!
+  const reportsByDay = data.reportsByDay ?? []
+  const llmByDay = data.llmByDay ?? []
+  const activity = data.activity ?? []
+  const lastReportAt = activity.find(a => a.kind === 'report')?.at ?? null
+  const projectName = setup.activeProject?.project_name ?? null
   const sdkInstalled = setup.activeProject ? !setup.isStepIncomplete('sdk_installed') : false
   const showFirstReportHero =
-    !!setup.activeProject && sdkInstalled && setup.activeProject.report_count === 0
-  const setupIncomplete =
     !!setup.activeProject &&
-    !setup.selectors.done &&
-    setup.selectors.required_complete < setup.selectors.required_total
+    sdkInstalled &&
+    setup.activeProject.report_count === 0
+  // First-action clarity: when required setup steps are
+  // missing, hide the wall of KPIs/charts/cockpit by default. Show only the
+  // checklist + hero intro so the user has exactly one thing to do.
+  const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
   const renderFullDashboard = !setupIncomplete || showFullDashboard
-  const metricsCounts =
-    counts ?? {
-      reports14d: stats.reports14d,
-      openBacklog: stats.openBacklog,
-      fixesTotal: stats.fixesInProgress + stats.fixesFailed,
-      openPrs: stats.openPrs,
-      llmCalls14d: stats.llmCalls14d,
-      llmTokens14d: 0,
-      llmFailures14d: stats.llmFailures14d,
-    }
-  const metricsFixSummary =
-    fixSummary ?? {
-      total: stats.fixesInProgress + stats.fixesFailed,
-      completed: 0,
-      failed: stats.fixesFailed,
-      inProgress: stats.fixesInProgress,
-      openPrs: stats.openPrs,
-    }
-  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
-    !stats.hasAnyProject
-      ? 'neutral'
-      : !stats.setupDone
-        ? 'warn'
-        : stats.openBacklog > 0 || stats.fixesFailed > 0
-          ? 'danger'
-          : stats.integrationIssues > 0
-            ? 'warn'
-            : !stats.hasData
-              ? 'info'
-              : 'ok'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Confetti triggerKey={confettiKey} />
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Dashboard'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'Tabbed workspace view: Overview for next actions, Loop for PDCA canvas, Metrics for 14-day charts, Health for probes.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Read the status banner first — it surfaces backlog, failures, and integration issues',
-            'Jump to Loop when you need the interactive stage canvas',
-            'Use Metrics when comparing intake vs fix throughput week over week',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'Click KPI tiles or tab badges to drill in. Green banner means nothing urgent is blocking the loop.'
-        }
-      />
-
-      <PageHeader title={copy?.title ?? 'Dashboard'} projectScope={projectName ?? undefined}>
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
-                : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : 'bg-info/10 text-info'
-          }
-        >
-          {bannerSeverity === 'ok'
-            ? 'HEALTHY'
-            : bannerSeverity === 'danger'
-              ? 'ACTION'
-              : bannerSeverity === 'warn'
-                ? 'ATTENTION'
-                : stats.hasAnyProject
-                  ? 'SETUP'
-                  : 'START'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? lastFetchedAt}
-          isValidating={statsValidating || isValidating}
-          channel={channelState}
-        />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
+      <PageHeader
+        title={copy?.title ?? 'Dashboard'}
+        description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
+      >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
+        <Btn size="sm" variant="ghost" onClick={reload}>
           Refresh
         </Btn>
-        <ActionPill to="/reports" tone="brand">
+        <Link to="/reports" className="text-xs text-brand hover:text-brand-hover">
           View all reports →
-        </ActionPill>
+        </Link>
       </PageHeader>
 
-      {dashDescription ? (
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">{dashDescription}</p>
-        </ContainedBlock>
-      ) : null}
-
-      <DashboardStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating || isValidating}
-        plainBanner={ux.plainBanner}
+      <LivePdcaPipeline
+        projectId={setup.activeProject?.project_id}
+        pdcaStages={data.pdcaStages}
+        onDemoReportSent={() => {
+          setup.reload()
+          reload()
+        }}
       />
 
-      {!ux.hideTabs && (
-        <SegmentedControl
-          value={activeTab}
-          onChange={setActiveTab}
-          options={tabOptions}
-          ariaLabel="Dashboard sections"
-          size="sm"
+      {showFirstReportHero && setup.activeProject && (
+        <FirstReportHero
+          projectId={setup.activeProject.project_id}
+          projectName={setup.activeProject.project_name}
+          onReportSent={() => {
+            setup.reload()
+            reload()
+          }}
         />
       )}
 
-      {!ux.hideLoopSnapshot && (
-        <Section title={copy?.sections?.snapshot ?? 'LOOP SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label={copy?.statLabels?.backlog ?? 'Backlog'}
-            value={stats.openBacklog}
-            accent={stats.openBacklog > 0 ? 'text-danger' : 'text-ok'}
-            tooltip={backlogTooltip(stats)}
-            detail={backlogDetail(stats)}
-            to={dashboardLinks.backlog}
-          />
-          <StatCard
-            label={copy?.statLabels?.reports ?? 'Reports 14d'}
-            value={stats.reports14d}
-            accent={stats.reports14d > 0 ? 'text-brand' : undefined}
-            tooltip={reports14dTooltip(stats)}
-            detail={reports14dDetail(stats)}
-            to={dashboardLinks.reports14d}
-          />
-          <StatCard
-            label={copy?.statLabels?.fixes ?? 'Fixes'}
-            value={stats.fixesInProgress}
-            accent={stats.fixesFailed > 0 ? 'text-danger' : stats.fixesInProgress > 0 ? 'text-warn' : undefined}
-            tooltip={fixesTooltip(stats)}
-            detail={fixesDetail(stats)}
-            to={dashboardLinks.fixes}
-          />
-          <StatCard
-            label={copy?.statLabels?.focus ?? 'Focus'}
-            value={stats.focusLabel ?? '—'}
-            accent={focusAccent(stats.focusStage)}
-            tooltip={focusTooltip(stats)}
-            detail={focusDetail(stats)}
-            to={statLink(dashboardLinks.focus, stats)}
-          />
+      {!showFirstReportHero && data.pdcaStages && data.pdcaStages.length > 0 && (
+        <HeroIntro
+          stages={data.pdcaStages}
+          focusStage={data.focusStage}
+          projectName={projectName}
+          lastReportAt={lastReportAt}
+        />
+      )}
+
+      {setup.activeProject && (
+        <SetupChecklist
+          project={setup.activeProject}
+          mode="banner"
+          onRefresh={setup.reload}
+          adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
+        />
+      )}
+
+      {setupIncomplete && !showFullDashboard && (
+        <div className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+          <p className="text-xs text-fg-muted">
+            Finish setup above to unlock the full dashboard. You can peek now if you like.
+          </p>
+          <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
+            Show full dashboard
+          </Btn>
         </div>
-      </Section>
       )}
 
-      {activeTab === 'overview' && (
+      {renderFullDashboard && (
         <>
-          {isEmpty ? (
-            <GettingStartedEmpty embedded />
-          ) : (
+          <PageHelp
+            title={copy?.help?.title ?? 'About the Dashboard'}
+            whatIsIt={copy?.help?.whatIsIt ?? '14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it.'}
+            useCases={copy?.help?.useCases ?? [
+              'See whether report intake is rising or falling vs the prior week',
+              'Catch a backlog of un-triaged reports before users complain',
+              'Spot a regression in LLM cost or failure rate after a prompt change',
+              'Jump into the highest-priority report that needs review',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Click any KPI or row to drill in. Hover the chart bars for per-day totals.'}
+          />
+
+          <QuotaBanner />
+
+          {data.pdcaStages && data.pdcaStages.length > 0 && (
             <>
-              <LivePdcaPipeline
-                projectId={setup.activeProject?.project_id}
-                pdcaStages={data!.pdcaStages}
-                onDemoReportSent={reloadAll}
-              />
-
-              {showFirstReportHero && setup.activeProject && (
-                <FirstReportHero
-                  projectId={setup.activeProject.project_id}
-                  projectName={setup.activeProject.project_name}
-                  onReportSent={reloadAll}
-                />
-              )}
-
-              {!showFirstReportHero && data!.pdcaStages && data!.pdcaStages.length > 0 && !ux.hideOverviewChrome && (
-                <HeroIntro
-                  stages={data!.pdcaStages}
-                  focusStage={data!.focusStage}
-                  projectName={projectName}
-                  lastReportAt={lastReportAt}
-                />
-              )}
-
-              {!ux.hideOverviewChrome && (
-              <PageHero
-                scope="dashboard"
-                title="Bug-fix loop"
-                kicker="Start here"
-                decide={{
-                  label: stats.bottleneck ?? (stats.setupDone ? 'Loop healthy' : 'Finish setup'),
-                  metric: stats.focusLabel ? `${stats.focusLabel} stage` : undefined,
-                  summary: stats.setupDone
-                    ? stats.hasData
-                      ? 'Reports are entering the loop — use Loop tab for the canvas or Metrics for charts.'
-                      : 'Pipeline wired — send a test report from Setup to populate charts.'
-                    : 'Complete project, key, SDK, and first report before metrics unlock.',
-                  severity: bannerSeverity === 'ok' ? 'ok' : bannerSeverity === 'danger' ? 'crit' : 'info',
-                }}
-                verify={{
-                  label: 'Live reload',
-                  detail: 'Dashboard stats refresh when reports or fixes change via webhook.',
-                }}
-              />
-              )}
-            </>
-          )}
-
-          {setup.activeProject && (
-            <SetupChecklist
-              project={setup.activeProject}
-              mode="banner"
-              onRefresh={setup.reload}
-              adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
-            />
-          )}
-
-          {!isEmpty && setupIncomplete && !showFullDashboard && (
-            <ContainedBlock tone="warn" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs">
-                Finish setup above to unlock Metrics tab. You can peek now if you like.
-              </InlineProof>
-              <Btn size="sm" variant="ghost" onClick={peekMetrics}>
-                Show full metrics
-              </Btn>
-            </ContainedBlock>
-          )}
-
-        </>
-      )}
-
-      {activeTab === 'loop' && (
-        <>
-          {isEmpty || !data!.pdcaStages?.length ? (
-            <div className="space-y-3">
-              <EmptySectionMessage
-                text="Loop canvas unlocks after first report"
-                hint="Send a test report from Setup — the Plan → Do → Check → Act canvas needs live stage counts."
-              />
-              <ActionPillRow>
-                <ActionPill to="/onboarding?tab=verify" tone="brand">
-                  Send test report
-                </ActionPill>
-              </ActionPillRow>
-            </div>
-          ) : (
-            <>
+              {/* Live React Flow canvas at sm+ breakpoints — pairs the four
+                  stages with live counts, bottlenecks, and an animated
+                  gradient edge out of the current focus stage so the eye
+                  lands on the bottleneck without reading text. */}
               <div className="hidden sm:block">
-                <div className="mb-2 flex items-baseline justify-between gap-2 flex-wrap">
-                  <SignalChip tone="neutral" className="uppercase tracking-wider font-semibold">
-                    Loop status — Plan, Do, Check, Act
-                  </SignalChip>
-                  <InlineProof className="border-0 bg-transparent px-0 py-0">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
+                    Loop status &mdash; Plan, Do, Check, Act
+                  </h2>
+                  <span className="text-2xs text-fg-faint">
                     Plan → Do → Check → Act (loops back)
-                  </InlineProof>
+                  </span>
                 </div>
                 <PdcaFlow
                   variant="live"
-                  stages={data!.pdcaStages}
-                  focusStage={data!.focusStage}
-                  runningStage={inferRunningStage(data!)}
+                  stages={data.pdcaStages}
+                  focusStage={data.focusStage}
+                  runningStage={inferRunningStage(data)}
                   activity={activity}
                   interactive
                   showActionPanel
@@ -562,133 +266,37 @@ export function DashboardPage() {
                   ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
                 />
               </div>
+              {/* Stacked-cards fallback on narrow viewports where a React
+                  Flow canvas doesn't read well; the cockpit already has a
+                  mobile-optimised vertical layout so we keep it verbatim. */}
               <div className="sm:hidden">
-                <PdcaCockpit stages={data!.pdcaStages} focusStage={data!.focusStage} />
+                <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
               </div>
-              {fixSummary && counts && (
-                <TriageAndFixRow triageQueue={data!.triageQueue ?? []} fixSummary={fixSummary} />
-              )}
             </>
           )}
-        </>
-      )}
 
-      {activeTab === 'metrics' && (
-        <>
-          {!renderFullDashboard ? (
-            <div className="space-y-3">
-              <ContainedBlock tone="warn">
-                <p className="text-xs font-medium text-warn">Setup incomplete — metrics gated</p>
-                <InlineProof className="mt-2">
-                  Finish required setup steps on Overview, or peek metrics now.
-                </InlineProof>
-              </ContainedBlock>
-              <ActionPillRow>
-                <ActionPill tone="neutral" onClick={peekMetrics}>
-                  Show metrics anyway
-                </ActionPill>
-              </ActionPillRow>
-            </div>
-          ) : (
-            <>
-              {ux.hideTabs && (
-                <ContainedBlock tone="muted" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-fg">Metrics preview</p>
-                    <InlineProof className="mt-2">
-                      {setupIncomplete
-                        ? 'Preview while setup finishes — charts fill in after first ingest.'
-                        : stats.hasData
-                          ? '14-day intake, auto-fix throughput, and LLM activity.'
-                          : 'Waiting for first report — tiles update as soon as ingest is live.'}
-                    </InlineProof>
-                  </div>
-                  <ActionPill tone="neutral" onClick={() => setActiveTab('overview')}>
-                    Back to overview
-                  </ActionPill>
-                </ContainedBlock>
-              )}
+          <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} llmByDay={llmByDay} />
 
-              {setupIncomplete && (
-                <ContainedBlock tone="warn" className="p-4">
-                  <p className="text-xs font-medium text-warn">
-                    Setup {stats.requiredComplete}/{stats.requiredTotal} — metrics preview
-                  </p>
-                  <InlineProof className="mt-2">
-                    Finish the checklist on Overview to unlock live charts. These tiles use workspace stats until ingest lands.
-                  </InlineProof>
-                  <Link to="/onboarding?tab=steps" className="mt-3 inline-block">
-                    <Btn size="sm" variant="ghost">Continue setup</Btn>
-                  </Link>
-                </ContainedBlock>
-              )}
+          <ChartsRow
+            reportsByDay={reportsByDay}
+            llmByDay={llmByDay}
+            totalLlmCalls={counts.llmCalls14d}
+            chartEvents={chartEvents}
+          />
 
-              {!stats.hasData && isEmpty && !setupIncomplete && (
-                <ContainedBlock tone="info" className="p-4">
-                  <p className="text-xs font-medium text-info">No metrics yet</p>
-                  <InlineProof className="mt-2">
-                    Charts populate after the first report lands — usually within seconds of SDK ingest.
-                  </InlineProof>
-                  <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
-                    <Btn size="sm" variant="ghost">Send test report</Btn>
-                  </Link>
-                </ContainedBlock>
-              )}
+          <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
 
-              <QuotaBanner />
-              {/* Evolution history widget — judge score sparkline + convergence badge */}
-              <EvolutionHistoryWidget projectId={activeProjectId ?? null} />
-              <KpiRow
-                counts={metricsCounts}
-                fixSummary={metricsFixSummary}
-                reportsByDay={reportsByDay}
-                llmByDay={llmByDay}
-              />
-              <ChartsRow
-                reportsByDay={reportsByDay}
-                llmByDay={llmByDay}
-                totalLlmCalls={metricsCounts.llmCalls14d}
-                chartEvents={chartEvents}
-              />
-              {!isEmpty && fixSummary && (
-                <TriageAndFixRow triageQueue={data!.triageQueue ?? []} fixSummary={fixSummary} />
-              )}
-              {!isEmpty && (
-                <InsightsRow
-                  topComponents={data!.topComponents ?? []}
-                  integrations={data!.integrations ?? []}
-                  activity={activity}
-                />
-              )}
-            </>
-          )}
-        </>
-      )}
+          <InsightsRow
+            topComponents={data.topComponents ?? []}
+            integrations={data.integrations ?? []}
+            activity={activity}
+          />
 
-      {activeTab === 'health' && (
-        <>
-          {!activeProjectId ? (
-            <ContainedBlock tone="info" className="p-4">
-              <p className="text-xs font-medium text-info">Select a project</p>
-              <InlineProof className="mt-2">
-                Health probes and QA coverage are scoped to the active project in the header switcher.
-              </InlineProof>
-              <Link to="/projects" className="mt-3 inline-block">
-                <Btn size="sm" variant="ghost">Open projects</Btn>
-              </Link>
-            </ContainedBlock>
-          ) : (
+          {activeProjectId && (
             <div className="grid gap-3 md:grid-cols-2">
               <PlatformHealthTile projectId={activeProjectId} />
               <QaCoverageTile projectId={activeProjectId} />
             </div>
-          )}
-          {!isEmpty && (data!.integrations ?? []).length > 0 && (
-            <InsightsRow
-              topComponents={[]}
-              integrations={data!.integrations ?? []}
-              activity={[]}
-            />
           )}
         </>
       )}

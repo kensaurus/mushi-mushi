@@ -32,6 +32,8 @@ import { MUSHI_CLI_VERSION } from './version.js'
 import { assertEndpoint } from './endpoint.js'
 import { runSourcemapsUpload } from './sourcemaps.js'
 import { installSignalHandlers, getAbortSignal } from './signals.js'
+import { renderNudgeSnippet, renderNudgeExplainer, type NudgePhase } from './nudge.js'
+import { runDoctor, formatDoctorResult } from './doctor.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
 // Long-running commands (`mushi index`, `mushi sourcemaps upload`) can
@@ -1427,6 +1429,187 @@ Examples:
 
     console.error('Polling timed out after 10 minutes. The fix may still be running.')
     process.exit(1)
+  })
+
+program
+  .command('nudge')
+  .description(
+    'Generate a Mushi.init() snippet tuned for your release phase ' +
+      '(alpha, beta, ga). Customises proactive triggers, cooldowns, ' +
+      'feature-request card, and beta-mode UI.',
+  )
+  .option('--phase <phase>', 'Release phase: alpha | beta | ga', 'beta')
+  .option('--explain', 'Print a human-readable summary of what the preset does')
+  .option('--max <n>', 'Override maxProactivePerSession')
+  .option('--cooldown <hours>', 'Override dismissCooldownHours')
+  .option('--dwell <minutes>', 'Override page-dwell threshold (0 disables)')
+  .option('--welcome <seconds>', 'Override first-session welcome delay (0 disables)')
+  .action((opts: {
+    phase: string
+    explain?: boolean
+    max?: string
+    cooldown?: string
+    dwell?: string
+    welcome?: string
+  }) => {
+    const validPhases: NudgePhase[] = ['alpha', 'beta', 'ga']
+    if (!validPhases.includes(opts.phase as NudgePhase)) {
+      console.error(`Unknown phase "${opts.phase}". Use one of: ${validPhases.join(', ')}`)
+      process.exit(1)
+    }
+    const phase = opts.phase as NudgePhase
+    const overrides: Record<string, number> = {}
+    if (opts.max) overrides.maxProactivePerSession = Number(opts.max)
+    if (opts.cooldown) overrides.dismissCooldownHours = Number(opts.cooldown)
+    if (opts.dwell !== undefined) overrides.pageDwellMinutes = Number(opts.dwell)
+    if (opts.welcome !== undefined) overrides.firstSessionSeconds = Number(opts.welcome)
+    if (opts.explain) {
+      console.log(renderNudgeExplainer(phase))
+    }
+    console.log(renderNudgeSnippet({ phase, overrides }))
+  })
+
+program
+  .command('doctor')
+  .description(
+    'Run pre-flight checks: CLI config, endpoint reachability, API key shape, ' +
+      'SDK install status, and (with --server) the same 4 dispatch-readiness ' +
+      'checks shown in the Mushi console. Mirrors the in-console dispatch ' +
+      'preflight so you can spot setup gaps before opening the admin UI.',
+  )
+  .option('--cwd <path>', 'Run package detection from a different directory')
+  .option('--json', 'Machine-readable output')
+  .option(
+    '--server',
+    'Also call GET /preflight on the backend and include the 4 dispatch ' +
+      'checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled). ' +
+      'Requires a configured projectId and API key.',
+  )
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean }) => {
+    const config = loadConfig()
+    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server })
+    const { checks } = result
+
+    if (opts.json) {
+      console.log(JSON.stringify({ checks, ready: result.ready }, null, 2))
+      if (!result.ready) process.exit(1)
+      return
+    }
+
+    console.log(formatDoctorResult(result))
+    if (!result.ready) process.exit(1)
+  })
+
+program
+  .command('reset [projectId]')
+  .description(
+    'Archive a project and wipe its test data (codebase_files, fix_attempts, reports). ' +
+      'Speeds up re-running the full onboarding flow from scratch. ' +
+      'Requires `--confirm` to prevent accidents.',
+  )
+  .option('--confirm', 'Required safety flag — must pass to proceed')
+  .option('--json', 'Machine-readable output')
+  .action(async (projectId: string | undefined, opts: { confirm?: boolean; json?: boolean }) => {
+    const config = loadConfig()
+    const resolvedId = projectId ?? config.projectId
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!resolvedId) { console.error('Provide a projectId or set one via `mushi config projectId <uuid>`'); process.exit(1) }
+    if (!opts.confirm) {
+      console.error(
+        `This will archive project ${resolvedId} and delete all its reports, fix_attempts, and codebase_files.\n` +
+          'Re-run with --confirm to proceed.',
+      )
+      process.exit(1)
+    }
+    const data = await apiCall(
+      `/v1/admin/projects/${resolvedId}/reset`,
+      config,
+      { method: 'POST' },
+    ) as unknown as Record<string, unknown>
+    if (opts.json) {
+      console.log(JSON.stringify(data, null, 2))
+    } else if ((data as Record<string, unknown>).ok) {
+      console.log(`Project ${resolvedId} archived and test data wiped.`)
+    } else {
+      console.error('Reset failed:', JSON.stringify(data, null, 2))
+      process.exit(1)
+    }
+  })
+
+const fixes = program.command('fixes').description('Fix dispatch management')
+
+fixes
+  .command('tail')
+  .description(
+    'Stream SSE dispatch events for a report in real time. ' +
+      'Useful for headless debugging without opening the browser.',
+  )
+  .requiredOption('--report-id <id>', 'Report ID to follow')
+  .action(async (opts: { reportId: string }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const url = `${config.endpoint}/v1/admin/reports/${opts.reportId}/dispatch/stream`
+    console.log(`Tailing dispatch stream for report ${opts.reportId}…`)
+    console.log(`(Ctrl-C to stop)\n`)
+
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'X-Mushi-Api-Key': config.apiKey,
+        'X-Mushi-Project': config.projectId ?? '',
+        'Accept': 'text/event-stream',
+      },
+    })
+
+    if (!res.ok || !res.body) {
+      console.error(`Failed to connect: HTTP ${res.status}`)
+      const text = await res.text().catch(() => '')
+      if (text) console.error(text.slice(0, 300))
+      process.exit(1)
+    }
+
+    const decoder = new TextDecoder()
+    const reader = res.body.getReader()
+
+    // Handle Ctrl-C gracefully
+    let done = false
+    process.on('SIGINT', () => {
+      done = true
+      void reader.cancel()
+      console.log('\nDisconnected.')
+      process.exit(0)
+    })
+
+    while (!done) {
+      const { value, done: streamDone } = await reader.read()
+      if (streamDone) break
+      const chunk = decoder.decode(value, { stream: true })
+      // Parse SSE lines and pretty-print them
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('data: ')) {
+          const raw = line.slice(6).trim()
+          if (raw === '[DONE]') {
+            console.log('\n[stream ended]')
+            process.exit(0)
+          }
+          try {
+            const event = JSON.parse(raw) as Record<string, unknown>
+            const ts = new Date().toISOString()
+            const type = (event.type ?? event.event ?? 'event') as string
+            const status = (event.status ?? event.data ?? '') as string
+            console.log(`${ts}  ${type.padEnd(24)}  ${status}`)
+          } catch {
+            console.log(line)
+          }
+        } else if (line.startsWith('event: ')) {
+          // SSE event name line — captured as context for the next data line
+        } else if (line && !line.startsWith(':')) {
+          console.log(line)
+        }
+      }
+    }
   })
 
 program.parse()

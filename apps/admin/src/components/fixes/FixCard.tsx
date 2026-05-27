@@ -6,6 +6,7 @@
  */
 
 import { useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, Badge, RelativeTime } from '../ui';
 import { formatTokens } from '../charts';
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens';
@@ -15,16 +16,6 @@ import { PdcaReceipt } from './PdcaReceipt';
 import { pluralizeWithCount } from '../../lib/format';
 import { ciBadge, type FixAttempt } from './types';
 import { FixAttemptFlow } from './FixAttemptFlow';
-import { CursorAgentBadge } from './CursorAgentBadge';
-import { CursorArtifactsGallery } from './CursorArtifactsGallery';
-import { ClaudeAgentBadge } from './ClaudeAgentBadge';
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  MetaChip,
-  SignalChip,
-} from '../report-detail/ReportSurface';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -93,15 +84,6 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
               {pipelineStatusLabel(fix.status)}
             </Badge>
             <span className="text-2xs text-fg-muted">via {fix.agent}</span>
-            {fix.agent === 'cursor_cloud' && fix.cursor_agent_id && (
-              <CursorAgentBadge agentId={fix.cursor_agent_id} />
-            )}
-            {fix.agent === 'claude_code_agent' && (
-              <ClaudeAgentBadge
-                workflowRunUrl={fix.claude_workflow_run_url}
-                isRunning={fix.status === 'running'}
-              />
-            )}
             {fix.llm_model && (
               <span className="text-2xs font-mono text-fg-faint" title="LLM model used">
                 {fix.llm_model}
@@ -141,76 +123,87 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
               </Badge>
             )}
           </div>
-          <span className="inline-flex shrink-0 items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 text-2xs tabular-nums text-fg-muted">
+          <span className="text-2xs text-fg-muted tabular-nums">
             <RelativeTime value={fix.started_at} />
           </span>
         </div>
 
-        {fix.summary && (
-          <ContainedBlock label="Proposed fix" tone="neutral">
-            <p className="text-xs leading-relaxed text-fg-secondary text-pretty">{fix.summary}</p>
-          </ContainedBlock>
-        )}
+        {fix.summary && <p className="text-xs text-fg-secondary">{fix.summary}</p>}
 
         <FixAttemptFlow fix={fix} className="mt-1" />
 
         <PdcaReceipt fix={fix} timeline={timeline} className="pt-1" />
 
-        <div className="flex flex-wrap gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/20 px-2 py-1.5">
-          <MetaChip label="Report" to={`/reports/${fix.report_id}`}>
-            <span className="font-mono">{fix.report_id.slice(0, 8)}…</span>
-          </MetaChip>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-muted font-mono">
+          <Link
+            to={`/reports/${fix.report_id}`}
+            className="hover:text-fg-secondary underline-offset-2 hover:underline"
+          >
+            Report: {fix.report_id.slice(0, 8)}…
+          </Link>
           {fix.branch && (
-            <MetaChip label="Branch" title={fix.branch}>
-              <span className="font-mono truncate max-w-[12rem]">
-                {fix.branch.length > 28 ? `${fix.branch.slice(0, 28)}…` : fix.branch}
-              </span>
-            </MetaChip>
+            <span title={fix.branch}>
+              Branch: {fix.branch.length > 32 ? `${fix.branch.slice(0, 32)}…` : fix.branch}
+            </span>
           )}
           {fix.lines_changed != null && (
-            <SignalChip tone="brand" className="font-mono tabular-nums">
-              {pluralizeWithCount(fix.lines_changed, 'line')}
-            </SignalChip>
+            <span>{pluralizeWithCount(fix.lines_changed, 'line')}</span>
           )}
-          {fix.files_changed && (
-            <SignalChip tone="neutral" className="font-mono">
-              {pluralizeWithCount(fix.files_changed.length, 'file')}
-            </SignalChip>
-          )}
+          {fix.files_changed && <span>{pluralizeWithCount(fix.files_changed.length, 'file')}</span>}
           {totalTokens > 0 && (
             <span title={`Input: ${fix.llm_input_tokens} · Output: ${fix.llm_output_tokens}`}>
-              <SignalChip tone="info" className="font-mono tabular-nums">
-                {formatTokens(totalTokens)} tok
-              </SignalChip>
+              {formatTokens(totalTokens)} tok
             </span>
           )}
         </div>
 
-        <ActionPillRow>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           {fix.pr_url && (
-            <ActionPill href={fix.pr_url} tone="brand">
-              View PR{fix.pr_number ? ` #${fix.pr_number}` : ''} ↗
-            </ActionPill>
+            <a
+              href={fix.pr_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:text-accent-hover underline"
+            >
+              View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
+            </a>
           )}
           {traceUrl && (
-            <ActionPill href={traceUrl} tone="neutral">
-              Langfuse trace ↗
-            </ActionPill>
+            <a
+              href={traceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-fg-muted hover:text-accent underline-offset-2 hover:underline"
+              title="Inspect this fix's LLM call in Langfuse — prompts, output, token cost"
+            >
+              Langfuse trace
+            </a>
           )}
-          <ActionPill tone="neutral" onClick={onToggle}>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="text-fg-muted hover:text-fg underline-offset-2 hover:underline"
+          >
             {isOpen ? 'Hide details' : 'Show details'}
-          </ActionPill>
+          </button>
           {fix.status === 'failed' && (
-            <ActionPill tone="warn" onClick={() => void onRetry()}>
+            <button
+              type="button"
+              onClick={() => void onRetry()}
+              className="text-warn hover:text-warn underline-offset-2 hover:underline"
+            >
               Retry
-            </ActionPill>
+            </button>
           )}
-        </ActionPillRow>
+        </div>
 
         {isOpen && (
-          <div className="mt-1 space-y-2 border-t border-edge pt-2">
+          <div className="mt-1 pt-2 border-t border-edge space-y-2">
             {timeline ? (
-              <ContainedBlock label="Branch & PR timeline" tone="muted">
+              <div>
+                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">
+                  PDCA timeline
+                </h4>
                 <FixGitGraph
                   events={timeline}
                   prUrl={fix.pr_url}
@@ -222,31 +215,27 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
                   filesChanged={fix.files_changed}
                   linesChanged={fix.lines_changed}
                 />
-              </ContainedBlock>
+              </div>
             ) : (
-              <p className="rounded-sm border border-edge-subtle/50 bg-surface-overlay/30 px-2 py-1 text-2xs text-fg-faint">
-                Loading timeline…
-              </p>
+              <p className="text-2xs text-fg-faint">Loading timeline…</p>
             )}
             {fix.rationale && (
-              <ContainedBlock label="Agent rationale" tone="neutral">
-                <p className="whitespace-pre-wrap text-xs leading-relaxed text-fg-secondary">{fix.rationale}</p>
-              </ContainedBlock>
+              <div>
+                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">Rationale</h4>
+                <p className="text-xs text-fg-secondary whitespace-pre-wrap">{fix.rationale}</p>
+              </div>
             )}
             {fix.files_changed && fix.files_changed.length > 0 && (
-              <ContainedBlock label="Files changed" tone="muted">
-                <div className="flex flex-wrap gap-1">
+              <div>
+                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-0.5">
+                  Files changed
+                </h4>
+                <ul className="text-2xs font-mono text-fg-muted space-y-0.5">
                   {fix.files_changed.map((f) => (
-                    <code
-                      key={f}
-                      className="inline-flex max-w-full truncate rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-3xs text-fg-secondary"
-                      title={f}
-                    >
-                      {f}
-                    </code>
+                    <li key={f}>{f}</li>
                   ))}
-                </div>
-              </ContainedBlock>
+                </ul>
+              </div>
             )}
             {specWarnings.length > 0 && (
               <div>
@@ -268,9 +257,6 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
                   ))}
                 </ul>
               </div>
-            )}
-            {fix.agent === 'cursor_cloud' && fix.cursor_artifacts && fix.cursor_artifacts.length > 0 && (
-              <CursorArtifactsGallery artifacts={fix.cursor_artifacts} />
             )}
             {inventoryAction && (
               <div>

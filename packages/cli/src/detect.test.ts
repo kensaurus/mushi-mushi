@@ -194,6 +194,7 @@ describe('FRAMEWORKS', () => {
       '@mushi-mushi/react-native',
       '@mushi-mushi/capacitor',
       '@mushi-mushi/web',
+      '@mushi-mushi/node',
     ])
     for (const fw of Object.values(FRAMEWORKS)) {
       expect(validPackages.has(fw.packageName)).toBe(true)

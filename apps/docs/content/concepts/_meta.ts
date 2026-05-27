@@ -12,4 +12,7 @@ export default {
   'inventory-and-gates': 'Inventory & gates',
   'orchestrator-interop': 'Connecting your orchestrator',
   'closed-loop': 'Closed-loop evolution — the thesis',
+  'evolution-loop': 'The evolution loop — five stages',
+  'agent-contract': 'Agent contract',
+  'bounty-marketplace': 'Bounty marketplace',
 }

@@ -15,7 +15,6 @@ interface ServiceFaviconProps {
   /** Accessible label for the image */
   label: string
   /** SVG fallback icon rendered when favicon fails or network is unavailable */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic icon component type
   FallbackIcon: ComponentType<{ size?: number; className?: string }>
   /** Tailwind text-color class applied to the fallback icon, e.g. "text-[#7B5EA7]" */
   colorClass?: string

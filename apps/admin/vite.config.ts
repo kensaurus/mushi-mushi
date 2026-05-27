@@ -193,5 +193,14 @@ export default defineConfig({
   },
   server: {
     port: 6464,
+    proxy: {
+      // Forward the testers public marketplace to its own Next.js dev server.
+      // Run `pnpm --filter @mushi-mushi/testers dev` on port 3001 separately.
+      '/mushi-mushi/testers': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
   },
 })

@@ -566,8 +566,13 @@ export function registerBudgetRoutes(parent: Hono<{ Variables: Variables }>) {
       .eq('project_id', pid)
       .maybeSingle()
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
-    return c.json({ ok: true, monthly_llm_budget_usd: data?.monthly_llm_budget_usd ?? null })
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    }
+    return c.json({
+      ok: true,
+      data: { monthly_llm_budget_usd: data?.monthly_llm_budget_usd ?? null },
+    })
   })
 
   // PUT /v1/admin/org/budget  body: { projectId, monthly_llm_budget_usd: number | null }
@@ -579,23 +584,42 @@ export function registerBudgetRoutes(parent: Hono<{ Variables: Variables }>) {
     }
 
     const pid = typeof body.projectId === 'string' ? body.projectId : null
-    if (!pid) return c.json({ ok: false, error: 'projectId required' }, 400)
+    if (!pid) {
+      return c.json({ ok: false, error: { code: 'MISSING_PROJECT', message: 'projectId required' } }, 400)
+    }
 
     const projectIds = await accessibleProjectIds(db(), userId)
-    if (!projectIds.includes(pid)) return c.json({ ok: false, error: 'forbidden' }, 403)
+    if (!projectIds.includes(pid)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'forbidden' } }, 403)
+    }
 
     const rawBudget = body.monthly_llm_budget_usd
-    const budgetUsd =
-      rawBudget === null || rawBudget === undefined ? null :
-      typeof rawBudget === 'number' && rawBudget > 0 ? rawBudget :
-      null
+    let budgetUsd: number | null
+    if (rawBudget === null || rawBudget === undefined) {
+      budgetUsd = null
+    } else if (typeof rawBudget === 'number' && Number.isFinite(rawBudget) && rawBudget > 0) {
+      budgetUsd = rawBudget
+    } else {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INVALID_BUDGET',
+            message: 'monthly_llm_budget_usd must be a positive number or null',
+          },
+        },
+        400,
+      )
+    }
 
     const { error } = await db()
       .from('project_settings')
       .upsert({ project_id: pid, monthly_llm_budget_usd: budgetUsd }, { onConflict: 'project_id' })
 
-    if (error) return c.json({ ok: false, error: error.message }, 500)
-    return c.json({ ok: true, monthly_llm_budget_usd: budgetUsd })
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    }
+    return c.json({ ok: true, data: { monthly_llm_budget_usd: budgetUsd } })
   })
 
   parent.route('/v1/admin/org/budget', r)

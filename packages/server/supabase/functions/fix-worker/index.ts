@@ -186,7 +186,7 @@ Deno.serve(
       .eq('id', body.dispatchId)
       .eq('status', 'queued')
       .select(
-        'id, project_id, report_id, requested_by, inventory_action_node_id, coordination_id, dispatch_metadata, agent_override',
+        'id, project_id, report_id, requested_by, inventory_action_node_id, coordination_id, dispatch_metadata',
       )
       .single();
 
@@ -214,28 +214,19 @@ Deno.serve(
     // Thread settings.autofix_agent through so the receipt is honest.
     const { data: requestedSettings } = await db
       .from('project_settings')
-      .select(
-        'autofix_agent, claude_api_key_ref, claude_default_model, claude_workflow_event, claude_default_branch',
-      )
+      .select('autofix_agent')
       .eq('project_id', dispatch.project_id)
       .single();
-    // agent_override on the dispatch row wins over project_settings.autofix_agent
-    // (used by "Send to Claude Code Agent" one-off override from the Reports UI).
-    const requestedAgent =
-      (dispatch as { agent_override?: string | null }).agent_override ??
-      (requestedSettings?.autofix_agent as string | null) ??
-      'claude_code';
+    const requestedAgent = (requestedSettings?.autofix_agent as string | null) ?? 'claude_code';
 
     // Agents the fix-worker can actually execute today. 'claude_code' is the
     // migration default and maps to the LLM path (Anthropic primary, OpenAI
-    // fallback). 'cursor_cloud' and 'claude_code_agent' delegate externally.
-    const SUPPORTED_AGENTS = new Set([
-      'claude_code',
-      'rest_fix_worker',
-      'llm',
-      'cursor_cloud',
-      'claude_code_agent',
-    ]);
+    // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
+    // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
+    // explicit opt-in for this same path. Anything else is the Node-only
+    // orchestrator territory and must be rejected rather than silently
+    // falling through.
+    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm']);
 
     // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
     // classify-report writes a `reports_against` graph edge from the report
@@ -325,275 +316,6 @@ Deno.serve(
 
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
-
-      // Cursor Cloud Agent: delegate to Node orchestrator by calling the
-      // dispatch-cursor internal endpoint. The fix_attempt row has already
-      // been created above; the Node side updates it with cursor_agent_id /
-      // cursor_run_id / cursor_artifacts once the Cursor run completes.
-      if (requestedAgent === 'cursor_cloud') {
-        const dispatchCursorUrl = Deno.env.get('MUSHI_DISPATCH_CURSOR_URL');
-        if (!dispatchCursorUrl) {
-          const reason =
-            'cursor_cloud agent requires the MUSHI_DISPATCH_CURSOR_URL environment variable ' +
-            'pointing to the Node orchestrator endpoint. Set it in Supabase edge-function secrets.';
-          log.warn('Fix delegation skipped: MUSHI_DISPATCH_CURSOR_URL not set', {
-            reportId: dispatch.report_id,
-          });
-          await completeAttempt(db, fixAttemptId, {
-            status: 'skipped_unsupported_agent',
-            error: reason,
-            files_changed: [],
-          });
-          await db
-            .from('fix_dispatch_jobs')
-            .update({ status: 'skipped', error: reason, finished_at: new Date().toISOString() })
-            .eq('id', dispatch.id);
-          await trace.end();
-          return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-
-        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-        let delegationError: string | undefined;
-
-        try {
-          const delegateRes = await fetch(dispatchCursorUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${serviceKey}`,
-            },
-            body: JSON.stringify({
-              dispatchId: dispatch.id,
-              fixAttemptId,
-              projectId: dispatch.project_id,
-              reportId: dispatch.report_id,
-            }),
-            signal: AbortSignal.timeout(30_000),
-          });
-
-          if (!delegateRes.ok) {
-            const errText = await delegateRes.text().catch(() => '');
-            delegationError =
-              `Cursor orchestrator rejected delegation (${delegateRes.status}): ${errText.slice(0, 200)}`;
-          }
-        } catch (err) {
-          delegationError = `Cursor orchestrator unreachable: ${String(err).slice(0, 200)}`;
-        }
-
-        if (delegationError) {
-          log.warn('Fix delegation failed', {
-            reportId: dispatch.report_id,
-            error: delegationError,
-          });
-          await completeAttempt(db, fixAttemptId, {
-            status: 'failed',
-            error: delegationError,
-            files_changed: [],
-          });
-          await db
-            .from('fix_dispatch_jobs')
-            .update({
-              status: 'failed',
-              error: delegationError,
-              finished_at: new Date().toISOString(),
-            })
-            .eq('id', dispatch.id);
-          await trace.end();
-          return new Response(
-            JSON.stringify({ ok: false, delegated: false, error: delegationError, fixAttemptId }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-
-        // Orchestrator accepted — mark running; it flips to completed/failed when done.
-        await db
-          .from('fix_dispatch_jobs')
-          .update({ status: 'running', started_at: new Date().toISOString() })
-          .eq('id', dispatch.id);
-
-        await trace.end();
-        return new Response(
-          JSON.stringify({ ok: true, delegated: true, agent: 'cursor_cloud', fixAttemptId }),
-          { status: 202, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // ── Claude Code Agent ────────────────────────────────────────────────────
-      // Dispatches a GitHub repository_dispatch event to trigger the
-      // mushi-claude-fix.yml workflow in the user's repo. The workflow runs
-      // @anthropic-ai/claude-code CLI, commits the fix to a branch, and opens
-      // a draft PR. We fire-and-forget and track progress via GitHub webhooks.
-      if (requestedAgent === 'claude_code_agent') {
-        // BYOK: Anthropic key runs in the customer's GitHub Actions (secrets.ANTHROPIC_API_KEY).
-        // Mushi never embeds keys in repository_dispatch payload or the public workflow YAML.
-
-        // 1. Resolve GitHub token for dispatching the repository_dispatch.
-        const githubToken = await resolveGithubToken(db, dispatch.project_id, project.owner_id);
-        if (!githubToken) {
-          const reason =
-            'No GitHub token found. Connect your GitHub repo in Settings → Integrations → GitHub.';
-          await completeAttempt(db, fixAttemptId, {
-            status: 'failed',
-            error: reason,
-            files_changed: [],
-            failure_category: 'github_403',
-          });
-          await db
-            .from('fix_dispatch_jobs')
-            .update({ status: 'failed', error: reason, finished_at: new Date().toISOString() })
-            .eq('id', dispatch.id);
-          await trace.end();
-          return new Response(
-            JSON.stringify({ ok: false, error: reason, fixAttemptId }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-
-        // 3. Resolve GitHub repo owner/name from project_settings.
-        const repoUrl = settings?.github_repo_url ?? settings?.codebase_repo_url ?? '';
-        const repoMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/);
-        if (!repoMatch) {
-          const reason =
-            'Cannot resolve GitHub repo from project settings. ' +
-            'Set github_repo_url in Settings → Integrations → GitHub.';
-          await completeAttempt(db, fixAttemptId, {
-            status: 'failed',
-            error: reason,
-            files_changed: [],
-            failure_category: 'github_404',
-          });
-          await db
-            .from('fix_dispatch_jobs')
-            .update({ status: 'failed', error: reason, finished_at: new Date().toISOString() })
-            .eq('id', dispatch.id);
-          await trace.end();
-          return new Response(
-            JSON.stringify({ ok: false, error: reason, fixAttemptId }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-        const [, repoOwner, repoName] = repoMatch;
-
-        // 4. Build the fix prompt for Claude Code CLI.
-        const claudePrompt = [
-          `You are fixing a bug in the ${project.name ?? repoName} codebase.`,
-          ``,
-          `Bug report: ${report.summary ?? report.description ?? '(no summary)'}`,
-          report.description ? `Description: ${report.description}` : '',
-          report.category ? `Category: ${report.category}` : '',
-          report.severity ? `Severity: ${report.severity}` : '',
-          report.reproduction_steps ? `Steps to reproduce: ${report.reproduction_steps}` : '',
-          ``,
-          `Instructions:`,
-          `1. Find the root cause of this bug in the codebase.`,
-          `2. Make the smallest change that fixes it.`,
-          `3. Preserve existing code style and patterns.`,
-          `4. Do not modify unrelated code.`,
-          `5. If you change behavior, add or update a test.`,
-          ``,
-          `Fix attempt ID: ${fixAttemptId}`,
-        ]
-          .filter(Boolean)
-          .join('\n');
-
-        // 5. Generate branch name + dispatch event ID.
-        const shortId = fixAttemptId.slice(0, 8);
-        const branchName = `mushi/claude-fix-${shortId}`;
-        const dispatchEventId = crypto.randomUUID();
-        const eventType = (requestedSettings?.claude_workflow_event as string | null) ?? 'mushi_claude_fix';
-        const targetBranch = (requestedSettings?.claude_default_branch as string | null) ?? 'main';
-        const claudeModel = (requestedSettings?.claude_default_model as string | null) ?? 'claude-opus-4-1';
-        const mushiSupabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/$/, '');
-
-        // 6. Update fix_attempts with branch + dispatch metadata.
-        await db
-          .from('fix_attempts')
-          .update({
-            branch: branchName,
-            claude_dispatch_event_id: dispatchEventId,
-            claude_workflow_run_url: `https://github.com/${repoOwner}/${repoName}/actions`,
-          })
-          .eq('id', fixAttemptId);
-
-        // 7. Dispatch repository_dispatch event to the user's GitHub repo.
-        const dispatchRes = await fetch(
-          `https://api.github.com/repos/${repoOwner}/${repoName}/dispatches`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${githubToken}`,
-              'Content-Type': 'application/json',
-              Accept: 'application/vnd.github.v3+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            body: JSON.stringify({
-              event_type: eventType,
-              client_payload: {
-                prompt: claudePrompt,
-                report_id: dispatch.report_id,
-                fix_attempt_id: fixAttemptId,
-                dispatch_event_id: dispatchEventId,
-                branch_name: branchName,
-                target_branch: targetBranch,
-                model: claudeModel,
-                // Public project URL — workflow PATCHes fix_attempts via BYOK secret
-                // MUSHI_SERVICE_ROLE_KEY (never passed in this payload).
-                mushi_supabase_url: mushiSupabaseUrl,
-              },
-            }),
-          },
-        );
-
-        if (!dispatchRes.ok) {
-          const errText = await dispatchRes.text().catch(() => '');
-          const reason =
-            `GitHub repository_dispatch returned ${dispatchRes.status}: ${errText.slice(0, 200)}`;
-          log.error('Claude dispatch failed', { reportId: dispatch.report_id, status: dispatchRes.status });
-          await completeAttempt(db, fixAttemptId, {
-            status: 'failed',
-            error: reason,
-            files_changed: [],
-            failure_category: 'claude_repo_dispatch_failed',
-          });
-          await db
-            .from('fix_dispatch_jobs')
-            .update({ status: 'failed', error: reason, finished_at: new Date().toISOString() })
-            .eq('id', dispatch.id);
-          await trace.end();
-          return new Response(
-            JSON.stringify({ ok: false, error: reason, fixAttemptId }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-
-        // 8. Mark dispatch as running; the webhook indexer flips to
-        //    completed/failed when the workflow_run event arrives.
-        await db
-          .from('fix_dispatch_jobs')
-          .update({ status: 'running', started_at: new Date().toISOString() })
-          .eq('id', dispatch.id);
-
-        log.info('Claude Code Agent dispatch succeeded', {
-          reportId: dispatch.report_id,
-          fixAttemptId,
-          branch: branchName,
-          eventType,
-        });
-        await trace.end();
-        return new Response(
-          JSON.stringify({
-            ok: true,
-            delegated: true,
-            agent: 'claude_code_agent',
-            fixAttemptId,
-            branch: branchName,
-          }),
-          { status: 202, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
 
       // Agent pre-flight: fix-worker can only run the LLM path today. Any
       // other autofix_agent (mcp, generic_mcp, codex) needs the Node-side
@@ -899,117 +621,62 @@ ${
       const activeFixSystemPrompt = fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT;
       const fixPromptVersion = fixPromptSelection.promptVersion;
 
-      // ---- 5. Call LLM with structured output (with schema-repair retry) ----
-      // Round 9 (2026-05-21): wrap the generateObject call in a one-retry loop.
-      // MUSHI-MUSHI-SERVER-J + MUSHI-MUSHI-SERVER-8 (regressed 2026-04-23):
-      // `AI_NoObjectGeneratedError` fires when Anthropic/OpenAI returns text that
-      // passes surface checks but fails one of the Zod refinements (e.g. a
-      // `files[].contents` that trips the placeholder-rejection refine, or a
-      // `rationale` field the model truncated below 20 chars). Previous code
-      // had no retry path — first failure → Sentry + failed dispatch.
-      //
-      // Fix: on `NoObjectGeneratedError`, extract the exact Zod issue messages,
-      // append a schema-repair hint to the prompt (telling the model exactly
-      // what it got wrong), and call `generateObject` once more. If the second
-      // call also fails, we persist the failure with richer diagnostics so the
-      // admin "Do bottleneck" card can surface what the LLM returned.
-      //
-      // The repair hint is appended as a NEW user message (Anthropic) or
-      // appended to the system prompt (OpenAI) — the model sees its own failure
-      // alongside the original task, which is the most direct self-correction
-      // signal we can give without a multi-turn agentic loop.
+      // ---- 5. Call LLM with structured output -------------------------------
       const llmSpan = trace.span('llm.fix');
       const llmStart = Date.now();
       let fix: FixOutput;
       let usedModel = '';
       let inputTokens = 0;
       let outputTokens = 0;
-      let repairAttempts = 0;
-      let failureDiagnostic: string | null = null;
 
+      // Model defaults come from _shared/models.ts (Wave R, 2026-04-22):
+      // Sonnet 4-6 for Anthropic (upgrade from 4-5-20250929 which had skewed
+      // against the rest of the stack), GPT-5.4 for the OpenAI/OpenRouter
+      // path. Both are strong at structured-output tool use; Sonnet 4-6 also
+      // gets the Anthropic prompt-cache speedup on the system prompt.
       const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
-      const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`;
+      const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`; // OpenRouter-friendly slug
 
       try {
         if (anthropicResolved) {
           usedModel = DEFAULT_ANTHROPIC_MODEL;
           const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
-
-          // Attempt 1 (and possibly only attempt):
-          // - temperature=0 for deterministic structured output
-          // - ephemeral cache on system prompt (Wave S 2026-04-23)
-          const baseMessages: Parameters<typeof generateObject>[0]['messages'] = [
-            {
-              role: 'system',
-              content: activeFixSystemPrompt,
-              experimental_providerMetadata: {
-                anthropic: { cacheControl: { type: 'ephemeral' } },
+          // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): pin temperature to 0 so
+          // the structured tool-call output is deterministic. Without it, the
+          // `files[].contents` string would occasionally break the schema's
+          // min/max constraints (e.g. a summary under 10 chars) and throw
+          // AI_NoObjectGeneratedError with no retry path. maxTokens was
+          // already sufficient; temperature was the missing knob.
+          // Wave S (2026-04-23): mark the system prompt as cacheable. The
+          // fix-worker system prompt is ~4 KB of stable guardrails; every
+          // dispatch re-sends it unchanged. Anthropic's ephemeral cache
+          // halves the prompt-tokens bill on the second request within 5
+          // minutes — the judge, classify, and fast-filter functions already
+          // do this, fix-worker was the outlier.
+          const { object, usage } = await generateObject({
+            model: anthropic(usedModel),
+            schema: fixSchema,
+            temperature: 0,
+            messages: [
+              {
+                role: 'system',
+                content: activeFixSystemPrompt,
+                experimental_providerMetadata: {
+                  anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
               },
-            } as const,
-            { role: 'user', content: userPrompt },
-          ];
-
-          let generateResult: { object: FixOutput; usage: { promptTokens: number; completionTokens: number } };
-          try {
-            generateResult = await generateObject({
-              model: anthropic(usedModel),
-              schema: fixSchema,
-              temperature: 0,
-              messages: baseMessages,
-              maxTokens: 8_000,
-            });
-          } catch (firstErr) {
-            if (!NoObjectGeneratedError.isInstance(firstErr)) throw firstErr;
-
-            // Attempt 2: append schema-repair hint as an additional user message.
-            repairAttempts = 1;
-            const zodIssues = extractZodIssues(firstErr);
-            const failedOutput = (firstErr as { text?: string }).text ?? '';
-            failureDiagnostic = buildFailureDiagnostic(zodIssues, failedOutput);
-            log.warn('Fix worker schema violation — retrying with repair hint', {
-              dispatchId: dispatch.id,
-              model: usedModel,
-              zodIssues,
-              failedOutputSlice: failedOutput.slice(0, 400),
-            });
-
-            try {
-              generateResult = await generateObject({
-                model: anthropic(usedModel),
-                schema: fixSchema,
-                temperature: 0,
-                messages: [
-                  ...baseMessages,
-                  {
-                    role: 'assistant',
-                    content: failedOutput.slice(0, 2000),
-                  },
-                  {
-                    role: 'user',
-                    content: buildSchemaRepairHint(zodIssues),
-                  },
-                ],
-                maxTokens: 8_000,
-              });
-            } catch (secondErr) {
-              // Both attempts exhausted — persist richer diagnostic so admin UI
-              // can show what the LLM returned instead of a bare "Retrying…".
-              await db
-                .from('fix_attempts')
-                .update({
-                  repair_attempts: repairAttempts,
-                  failure_diagnostic: failureDiagnostic?.slice(0, 1000) ?? null,
-                })
-                .eq('id', fixAttemptId)
-                .then(() => undefined, () => undefined);
-              throw secondErr;
-            }
-          }
-
-          fix = generateResult.object;
-          inputTokens = generateResult.usage?.promptTokens ?? 0;
-          outputTokens = generateResult.usage?.completionTokens ?? 0;
+              { role: 'user', content: userPrompt },
+            ],
+            maxTokens: 8_000,
+          });
+          fix = object;
+          inputTokens = usage?.promptTokens ?? 0;
+          outputTokens = usage?.completionTokens ?? 0;
         } else {
+          // For OpenRouter the model slug needs the "provider/model" prefix;
+          // for plain OpenAI it's just the bare slug. We use the OpenRouter
+          // form by default since that's what BYOK users are most likely to
+          // configure, and plain OpenAI tolerates stripping the prefix.
           const openaiKey = openaiResolved!.key;
           const openaiBaseUrl = openaiResolved!.baseUrl;
           const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
@@ -1018,74 +685,46 @@ ${
             apiKey: openaiKey,
             ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
           });
-
-          let generateResult: { object: FixOutput; usage: { promptTokens: number; completionTokens: number } };
-          try {
-            generateResult = await generateObject({
-              model: openai(usedModel),
-              schema: fixSchema,
-              temperature: 0,
-              system: activeFixSystemPrompt,
-              prompt: userPrompt,
-              maxTokens: 8_000,
-            });
-          } catch (firstErr) {
-            if (!NoObjectGeneratedError.isInstance(firstErr)) throw firstErr;
-
-            repairAttempts = 1;
-            const zodIssues = extractZodIssues(firstErr);
-            const failedOutput = (firstErr as { text?: string }).text ?? '';
-            failureDiagnostic = buildFailureDiagnostic(zodIssues, failedOutput);
-            log.warn('Fix worker schema violation — retrying with repair hint (OpenAI path)', {
-              dispatchId: dispatch.id,
-              model: usedModel,
-              zodIssues,
-              failedOutputSlice: failedOutput.slice(0, 400),
-            });
-
-            try {
-              generateResult = await generateObject({
-                model: openai(usedModel),
-                schema: fixSchema,
-                temperature: 0,
-                system: activeFixSystemPrompt + '\n\n' + buildSchemaRepairHint(zodIssues),
-                prompt: userPrompt,
-                maxTokens: 8_000,
-              });
-            } catch (secondErr) {
-              await db
-                .from('fix_attempts')
-                .update({
-                  repair_attempts: repairAttempts,
-                  failure_diagnostic: failureDiagnostic?.slice(0, 1000) ?? null,
-                })
-                .eq('id', fixAttemptId)
-                .then(() => undefined, () => undefined);
-              throw secondErr;
-            }
-          }
-
-          fix = generateResult.object;
-          inputTokens = generateResult.usage?.promptTokens ?? 0;
-          outputTokens = generateResult.usage?.completionTokens ?? 0;
+          const { object, usage } = await generateObject({
+            model: openai(usedModel),
+            schema: fixSchema,
+            temperature: 0,
+            system: activeFixSystemPrompt,
+            prompt: userPrompt,
+            maxTokens: 8_000,
+          });
+          fix = object;
+          inputTokens = usage?.promptTokens ?? 0;
+          outputTokens = usage?.completionTokens ?? 0;
         }
       } catch (llmErr) {
-        // Log structured fields to Sentry before re-throwing.
+        // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): preserve diagnostic detail
+        // for NoObjectGeneratedError — otherwise the wrapping Error below loses
+        // `.text` (the raw model output) and `.cause.issues` (the Zod failures)
+        // and the operator sees only "LLM call failed: AI_NoObjectGeneratedError"
+        // with nothing to act on. Log structured fields to Sentry before
+        // re-throwing so the first recurrence is already actionable.
         if (NoObjectGeneratedError.isInstance(llmErr)) {
-          const zodIssues = extractZodIssues(llmErr);
-          log.error('Fix worker structured-output schema violation (all retries exhausted)', {
+          const cause = llmErr.cause as
+            | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
+            | undefined;
+          log.error('Fix worker structured-output schema violation', {
             dispatchId: dispatch.id,
             model: usedModel,
-            repairAttempts,
             modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
-            zodIssues,
+            zodIssues:
+              cause?.issues?.slice(0, 5).map((i) => ({
+                path: i.path.join('.'),
+                code: i.code,
+                message: i.message,
+              })) ?? null,
           });
         }
         llmSpan.end({ error: String(llmErr).slice(0, 500) });
         throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
       }
       const llmLatencyMs = Date.now() - llmStart;
-      llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: llmLatencyMs, repairAttempts });
+      llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: llmLatencyMs });
 
       // ---- 6. Validate scope + circuit breaker ------------------------------
       const validationErrors: string[] = [];
@@ -1156,7 +795,6 @@ ${
           llm_input_tokens: inputTokens,
           llm_output_tokens: outputTokens,
           review_passed: !fix.needsHumanReview,
-          ...(repairAttempts > 0 ? { repair_attempts: repairAttempts } : {}),
         });
         await db
           .from('fix_dispatch_jobs')
@@ -1199,7 +837,6 @@ ${
         llm_input_tokens: inputTokens,
         llm_output_tokens: outputTokens,
         review_passed: !fix.needsHumanReview,
-        ...(repairAttempts > 0 ? { repair_attempts: repairAttempts } : {}),
         ...(specValidationWarnings.length > 0
           ? { spec_validation_warnings: specValidationWarnings }
           : {}),
@@ -2144,65 +1781,4 @@ async function ghFetchOptional(url: string, init: RequestInit): Promise<unknown 
   } catch {
     return null;
   }
-}
-
-// ============================================================================
-// Schema-repair retry helpers (Round 9, 2026-05-21)
-// Sentry MUSHI-MUSHI-SERVER-J + MUSHI-MUSHI-SERVER-8
-// ============================================================================
-
-type ZodIssueSlim = { path: string; code?: string; message: string };
-
-/**
- * Pull the Zod validation issues out of a `NoObjectGeneratedError`.
- * Returns an empty array if `err` isn't an `AI_NoObjectGeneratedError` or
- * if the cause doesn't carry `.issues` (e.g. pure JSON parse failure).
- */
-function extractZodIssues(err: unknown): ZodIssueSlim[] {
-  if (!NoObjectGeneratedError.isInstance(err)) return [];
-  const cause = (err as { cause?: unknown }).cause as
-    | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
-    | undefined;
-  return (
-    cause?.issues?.slice(0, 5).map((i) => ({
-      path: i.path.join('.'),
-      code: i.code,
-      message: i.message,
-    })) ?? []
-  );
-}
-
-/**
- * Build the user-facing repair hint appended on the second LLM call.
- * Keeps the wording imperative and specific so the model corrects the exact
- * field rather than regenerating everything from scratch.
- */
-function buildSchemaRepairHint(issues: ZodIssueSlim[]): string {
-  const issueLines =
-    issues.length > 0
-      ? issues.map((i) => `  • Field \`${i.path}\`: ${i.message}`).join('\n')
-      : '  • Unknown validation failure — ensure all required fields are present and non-empty.';
-
-  return [
-    'Your previous response did not satisfy the required JSON schema. Specific failures:',
-    issueLines,
-    '',
-    'Return ONLY the JSON object that fixes all of the above. No prose, no markdown fences.',
-    'Required fields: summary (10–120 chars), rationale (20–2000 chars), files (1–10 items each',
-    'with path, contents, and reason), needsHumanReview (boolean).',
-    'Never use "placeholder", "TODO", "lorem ipsum", "...", or any stub content — Zod will reject them.',
-  ].join('\n');
-}
-
-/**
- * Build a human-readable failure diagnostic stored on `fix_attempts.failure_diagnostic`
- * so the "Do bottleneck" admin card can show what the LLM returned instead of "Retrying…".
- */
-function buildFailureDiagnostic(issues: ZodIssueSlim[], failedOutput: string): string {
-  const issueStr =
-    issues.length > 0
-      ? issues.map((i) => `[${i.path}] ${i.message}`).join('; ')
-      : 'Unknown schema validation failure';
-  const outputPreview = failedOutput.slice(0, 300);
-  return `Schema violations: ${issueStr}. Model output preview: ${outputPreview}`;
 }

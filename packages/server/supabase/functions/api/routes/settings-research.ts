@@ -382,7 +382,18 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       secret_value: key,
     });
     if (vaultErr) {
-      log.error('vault_store_secret failed', { provider, error: vaultErr.message });
+      // Use vaultErrorCode (not `error`) so Sentry's default PII scrubber
+      // doesn't filter the field — we need the actual Postgres error message
+      // to diagnose intermittent vault failures (e.g. 23505 unique_violation,
+      // 42883 undefined_function, or vault extension timeouts).
+      log.error('vault_store_secret failed', {
+        provider,
+        vaultErrorCode: vaultErr.code,
+        vaultErrorHint: vaultErr.hint,
+        vaultErrorDetail: vaultErr.details,
+        vaultMessage: vaultErr.message,
+        secretName,
+      });
       return c.json(
         { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
         500,
@@ -690,7 +701,12 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         secret_value: key,
       });
       if (vaultErr) {
-        log.error('vault_store_secret failed for firecrawl', { error: vaultErr.message });
+        log.error('vault_store_secret failed for firecrawl', {
+          vaultErrorCode: vaultErr.code,
+          vaultErrorHint: vaultErr.hint,
+          vaultMessage: vaultErr.message,
+          secretName,
+        });
         return c.json(
           { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
           500,

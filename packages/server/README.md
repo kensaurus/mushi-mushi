@@ -185,6 +185,30 @@ supabase/migrations/         PostgreSQL schema + RLS policies. Recent migrations
                                 `authenticated` (when the row-level check would
                                 require user context) or `service_role` (when only
                                 cron / internal callers need them).
+                              - **`20260527000000_fix_dispatch_jobs_allow_skipped`** —
+                                extends the `fix_dispatch_jobs.status` CHECK constraint
+                                to include `'skipped'`. The fix-worker wrote
+                                `status='skipped'` for short-circuit paths
+                                (`skipped_no_context`, `skipped_unsupported_agent`,
+                                `skipped_no_sandbox`) but the original schema only
+                                allowed `queued|running|completed|failed|cancelled`,
+                                so every skip raised `23514 check_violation` and left
+                                the dispatch row stuck in `running`. Also updates the
+                                partial index `idx_fix_dispatch_status` (used by the
+                                claim-next query) to match the new constraint, and
+                                backfills any row stuck in `running` for > 1 hour as
+                                `failed` so operators see a clean state on next visit.
+                                **P0 production bug.**
+                              - **`20260527010000_backfill_project_settings`** —
+                                inserts a `project_settings` row for every project that
+                                was created before the `project_settings` auto-insert
+                                trigger was added. Legacy projects lacked rows, which
+                                caused `POST /autofix/toggle` (`.update()` path) to
+                                silently affect 0 rows and return `200 OK`, making the
+                                autofix toggle snap ON then immediately back to OFF on
+                                UI refresh. Also adds `codebase_index_enabled` and
+                                `autofix_enabled` columns with `DEFAULT false` if they
+                                don't already exist. **P0 production bug.**
 ```
 
 ## Development
