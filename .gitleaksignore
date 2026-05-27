@@ -32,3 +32,15 @@ cb2768f0fc5b62c34809228937620c61f19a793d:packages/ios/Tests/MushiMushiTests/PIIS
 # the historical commit de552be where the old name still appeared in the
 # diff so PR-range scans stop flagging this already-audited finding.
 de552be0acaa76835bd244f732f2f2887db1e124:packages/mcp/src/__tests__/scopes.test.ts:generic-api-key:22
+
+# CLI doctor test fixtures: `mushi_test_key_*` and `mushi_abcdefgh*` were
+# 22-char alphanumeric literals used in `doctor.test.ts` to verify the
+# CLI's API key shape validation and truncation logic. Never real Mushi
+# tokens — renamed in the working tree to `TEST-FIXTURE-NOT-A-REAL-KEY-*`
+# (low entropy, clearly fake). The fingerprints below pin the historical
+# commit 15334c8 where the high-entropy literals first appeared so
+# PR-range scans stop flagging this already-audited finding.
+15334c8a2c5d1bb11224d8064944940976c04563:packages/cli/src/doctor.test.ts:generic-api-key:22
+15334c8a2c5d1bb11224d8064944940976c04563:packages/cli/src/doctor.test.ts:generic-api-key:71
+3f662b9cbf9951021deea102216eccaa707553b1:packages/cli/src/doctor.test.ts:generic-api-key:22
+3f662b9cbf9951021deea102216eccaa707553b1:packages/cli/src/doctor.test.ts:generic-api-key:71

@@ -19,7 +19,7 @@ import {
 function makeConfig(overrides: Partial<DoctorCliConfig> = {}): DoctorCliConfig {
   return {
     endpoint: 'https://xyz.supabase.co/functions/v1/api',
-    apiKey: 'mushi_test_key_1234567890abcdef', // gitleaks:allow (test fixture, not a real key)
+    apiKey: 'TEST-FIXTURE-NOT-A-REAL-KEY-default',
     projectId: '00000000-0000-0000-0000-000000000001',
     ...overrides,
   }
@@ -68,11 +68,11 @@ describe('checkCliConfig', () => {
   })
 
   it('truncates the API key in the detail string', () => {
-    const config = makeConfig({ apiKey: 'mushi_abcdefgh12345678' }) // gitleaks:allow (test fixture, not a real key)
+    const fakeKey = 'TEST-FIXTURE-NOT-A-REAL-KEY-truncate'
+    const config = makeConfig({ apiKey: fakeKey })
     const checks = checkCliConfig(config)
     const keyCheck = checks.find((c) => c.name === 'API key configured')
-    // Should show start + end, not the full key
-    expect(keyCheck?.detail).not.toContain('mushi_abcdefgh12345678')
+    expect(keyCheck?.detail).not.toContain(fakeKey)
     expect(keyCheck?.detail).toContain('…')
   })
 })
