@@ -363,7 +363,8 @@ async function bedrockFetch(
     body: bodyStr || undefined,
   })
   if (!res.ok) {
-    const txt = await res.text().catch(() => '')
+    let txt = ''
+    try { txt = await res.text() } catch (_e: unknown) { /* ignore body read failure */ }
     throw new Error(`Bedrock ${method} ${path} ${res.status}: ${txt.slice(0, 400)}`)
   }
   return res
@@ -397,8 +398,9 @@ const bedrockAdapter: VendorAdapter = {
   },
 
   async poll(_db, job) {
-    if (!job.vendor_job_id) throw new Error('[bedrock] vendor_job_id (jobArn) not set')
-    const jobArnEncoded = encodeURIComponent(job.vendor_job_id)
+    const jobArn = (job.metrics as Record<string, unknown> | null)?.vendor_job_id as string | undefined
+    if (!jobArn) throw new Error('[bedrock] vendor_job_id (jobArn) not set in job.metrics — did submit() run?')
+    const jobArnEncoded = encodeURIComponent(jobArn)
     const res = await bedrockFetch(`/model-customization-jobs/${jobArnEncoded}`, 'GET')
     const json = await res.json() as { status?: string; outputModelArn?: string; failureMessage?: string }
     const rawStatus = json.status ?? 'Unknown'
@@ -406,7 +408,7 @@ const bedrockAdapter: VendorAdapter = {
     const failed = rawStatus === 'Failed' || rawStatus === 'Stopped'
     return {
       vendor: 'bedrock',
-      status: succeeded ? 'succeeded' : failed ? 'failed' : 'training',
+      status: succeeded ? 'succeeded' : failed ? 'failed' : 'running',
       fineTunedModelId: json.outputModelArn ?? null,
       error: json.failureMessage ?? null,
       rawStatus,
@@ -417,7 +419,7 @@ const bedrockAdapter: VendorAdapter = {
     if (!job.fine_tuned_model_id) throw new Error('[bedrock] fine_tuned_model_id not set — poll until succeeded')
     const modelId = encodeURIComponent(job.fine_tuned_model_id)
     const res = await bedrockFetch(`/model/${modelId}/invoke`, 'POST', {
-      prompt: `\n\nHuman: ${input.userMessage ?? 'classify'}\n\nAssistant:`,
+      prompt: `\n\nHuman: Classify this issue: ${input.description}\n\nAssistant:`,
       max_tokens_to_sample: 256,
     })
     const json = await res.json() as { completion?: string }
