@@ -519,7 +519,7 @@ export async function ingestReport(
         title: report.description?.slice(0, 80),
       },
       source: (report.metadata as Record<string, unknown> | undefined)?.source ?? null,
-    }).catch((err) =>
+    }).then(undefined, (err: unknown) =>
       log.warn('Plugin dispatch failed', { event: 'report.created', err: String(err) }),
     );
   } catch (err) {
