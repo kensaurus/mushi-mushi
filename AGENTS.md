@@ -37,7 +37,7 @@ Playwright scripts, schedule them via cron, and run them on three providers:
 | Provider | Where it runs | When to use |
 |----------|---------------|-------------|
 | `firecrawl_actions` | Firecrawl cloud (Deno-compatible, HTTP) | Default. No setup. Works for content verification and basic navigation. |
-| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires `BYOK_BROWSERBASE_API_KEY` in project settings. |
+| `browserbase` | Browserbase cloud Chromium | Complex UI interactions. Requires a Browserbase API key — configure via **Settings → Browserbase** in the admin console (stored in Supabase Vault; see [BYOK Providers](#byok-bring-your-own-key-providers)). |
 | `local` | Operator's machine via CLI | Full Playwright access. Not schedulable via edge function. Use `mushi-dev run-qa-stories`. |
 
 ### Story lifecycle
@@ -72,15 +72,23 @@ When a user triggers "Generate test from report" in the Reports page:
 
 ## BYOK (Bring Your Own Key) Providers
 
-Project-level API keys are stored encrypted in the `byok_keys` table
-(future) or referenced as text slugs in `qa_stories.byok_provider`.
+Project-level API keys are stored encrypted in the `byok_keys` table via
+Supabase Vault (`vault_store_secret` / `vault_get_secret` helpers). The unified
+`resolveLlmKey(provider, projectId)` function in `_shared/byok.ts` reads from
+`byok_keys` first, falls back to legacy `project_settings.byok_<provider>_key_ref`
+columns for backwards compatibility, then falls back to the environment variable.
 
-| Slug | Secret env var (set via Settings → API Keys) | Used by |
-|------|----------------------------------------------|---------|
-| `firecrawl` | `BYOK_FIRECRAWL_API_KEY` | `qa-story-runner` (firecrawl_actions provider) |
-| `browserbase` | `BYOK_BROWSERBASE_API_KEY` | `qa-story-runner` (browserbase provider) |
-| `openai` | `BYOK_OPENAI_API_KEY` | `test-gen-from-report`, `inventory-propose` |
-| `anthropic` | `BYOK_ANTHROPIC_API_KEY` | `test-gen-from-report`, `fix-worker`, `judge-batch` |
+Keys are managed self-service via **Settings → API Keys** in the admin console
+(a single table listing all four providers). Set via Settings UI, rotated by
+calling `PUT /v1/admin/byok/:provider` with a new key value.
+
+| Slug | Settings UI label | Used by |
+|------|-------------------|---------|
+| `firecrawl` | Firecrawl API Key | `qa-story-runner` (firecrawl_actions provider) |
+| `browserbase` | Browserbase API Key | `qa-story-runner` (browserbase provider) |
+| `openai` | OpenAI API Key | `test-gen-from-report`, `inventory-propose`, fine-tune jobs |
+| `anthropic` | Anthropic API Key | `test-gen-from-report`, `fix-worker`, `judge-batch` |
+| `aws-bedrock` | AWS Bedrock (Access Key ID + Secret) | Fine-tune jobs via `bedrockAdapter` (requires `MUSHI_BEDROCK_FINETUNE_ENABLED=1`) |
 
 ---
 

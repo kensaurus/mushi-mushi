@@ -93,7 +93,7 @@ interface UserDetail {
     slug: string
     created_at: string
     plan_tier: string | null
-    data_region: string | null
+    data_residency_region: string | null
   }>
   subscriptions: Array<{
     id: string

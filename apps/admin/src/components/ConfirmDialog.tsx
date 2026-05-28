@@ -56,7 +56,7 @@ export function ConfirmDialog({
     <DialogShell title={title} onCancel={loading ? () => {} : onCancel}>
       {body && <p className="text-2xs text-fg-secondary leading-snug">{body}</p>}
       <div ref={wrapperRef} className="flex justify-end gap-1.5 pt-1">
-        <Btn variant="ghost" onClick={onCancel} disabled={loading}>
+        <Btn variant="cancel" onClick={onCancel} disabled={loading}>
           {cancelLabel}
         </Btn>
         <Btn
@@ -156,7 +156,7 @@ export function PromptDialog({
           </p>
         )}
         <div className="flex justify-end gap-1.5 pt-1">
-          <Btn type="button" variant="ghost" onClick={onCancel} disabled={loading}>
+          <Btn type="button" variant="cancel" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Btn>
           <Btn type="submit" loading={loading}>
@@ -192,7 +192,7 @@ function DialogShell({ title, children, onCancel }: DialogShellProps) {
           <h3 className="text-sm font-semibold text-fg">{title}</h3>
           <button
             type="button"
-            className="text-fg-muted hover:text-fg text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm w-6 h-6 flex items-center justify-center"
+            className="text-danger hover:bg-danger-muted/50 text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 rounded-sm w-6 h-6 flex items-center justify-center"
             onClick={onCancel}
             aria-label="Close"
           >

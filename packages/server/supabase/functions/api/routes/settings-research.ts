@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -13,7 +14,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerSettingsResearchRoutes(app: Hono): void {
+export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables }>): void {
   // Settings admin endpoints
   app.get('/v1/admin/settings', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;
@@ -39,7 +40,6 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const db = getServiceClient();
 
     const empty = {
-      hasAnyProject: false,
       projectId: null as string | null,
       projectName: null as string | null,
       updatedAt: null as string | null,
@@ -58,16 +58,6 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       byokKeysUntested: 0,
       githubRepoConfigured: false,
       autofixEnabled: false,
-      topPriority: 'no_project' as
-        | 'no_project'
-        | 'byok_failing'
-        | 'no_anthropic'
-        | 'sdk_off'
-        | 'untested'
-        | 'routing_optional'
-        | 'healthy',
-      topPriorityLabel: null as string | null,
-      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -109,55 +99,19 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       else byokKeysUntested += 1;
     }
 
-    const slackConfigured = Boolean(row.slack_webhook_url);
-    const sentryConfigured = Boolean(row.sentry_dsn);
-    const byokAnthropicConfigured = Boolean(row.byok_anthropic_key_ref);
-    const sdkConfigEnabled = Boolean(row.sdk_config_enabled);
-
-    let topPriority: typeof empty.topPriority = 'healthy';
-    let topPriorityLabel: string | null = null;
-    let topPriorityTo: string | null = null;
-
-    if (byokKeysFailing > 0) {
-      topPriority = 'byok_failing';
-      topPriorityLabel = `${byokKeysFailing} BYOK key${byokKeysFailing === 1 ? '' : 's'} failing last test — re-run Test on LLM keys tab.`;
-      topPriorityTo = '/settings?tab=byok';
-    } else if (!byokAnthropicConfigured) {
-      topPriority = 'no_anthropic';
-      topPriorityLabel = 'No Anthropic BYOK — classify and autofix prefer your own Claude key.';
-      topPriorityTo = '/settings?tab=byok';
-    } else if (!sdkConfigEnabled) {
-      topPriority = 'sdk_off';
-      topPriorityLabel = 'SDK widget disabled — reporter capture and widget config are off.';
-      topPriorityTo = '/settings?tab=health';
-    } else if (byokKeysUntested > 0) {
-      topPriority = 'untested';
-      topPriorityLabel = `${byokKeysUntested} BYOK key${byokKeysUntested === 1 ? '' : 's'} never tested — run Test after saving.`;
-      topPriorityTo = '/settings?tab=byok';
-    } else if (!slackConfigured && !sentryConfigured) {
-      topPriority = 'routing_optional';
-      topPriorityLabel = 'BYOK passing and SDK on — Slack/Sentry hooks on General are optional; full integrations live under Act.';
-      topPriorityTo = '/integrations/config';
-    } else {
-      topPriority = 'healthy';
-      topPriorityLabel = `${byokKeysPassing} BYOK passing · SDK on${row.stage2_model ? ` · ${row.stage2_model}` : ''}.`;
-      topPriorityTo = '/settings?tab=health';
-    }
-
     return c.json({
       ok: true,
       data: {
-        hasAnyProject: true,
         projectId: project.id,
         projectName: project.name,
         updatedAt: (row.updated_at as string | null) ?? null,
-        slackConfigured,
-        sentryConfigured,
+        slackConfigured: Boolean(row.slack_webhook_url),
+        sentryConfigured: Boolean(row.sentry_dsn),
         reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
         stage2Model: (row.stage2_model as string | null) ?? null,
-        sdkConfigEnabled,
+        sdkConfigEnabled: Boolean(row.sdk_config_enabled),
         sdkConfigUpdatedAt: (row.sdk_config_updated_at as string | null) ?? null,
-        byokAnthropicConfigured,
+        byokAnthropicConfigured: Boolean(row.byok_anthropic_key_ref),
         byokOpenaiConfigured: Boolean(row.byok_openai_key_ref),
         byokFirecrawlConfigured: Boolean(row.byok_firecrawl_key_ref),
         byokKeysConfigured,
@@ -166,9 +120,6 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         byokKeysUntested,
         githubRepoConfigured: Boolean(row.github_repo_url),
         autofixEnabled: Boolean(row.autofix_enabled),
-        topPriority,
-        topPriorityLabel,
-        topPriorityTo,
       },
     });
   });
@@ -207,7 +158,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -233,7 +184,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   });
 
   app.put('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const db = getServiceClient();
@@ -326,7 +277,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.put('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
-    const provider = c.req.param('provider') as ByokProvider;
+    const provider = c.req.param('provider')! as ByokProvider;
     if (!BYOK_PROVIDERS.includes(provider)) {
       return c.json(
         { ok: false, error: { code: 'BAD_PROVIDER', message: `Unknown provider: ${provider}` } },
@@ -382,18 +333,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       secret_value: key,
     });
     if (vaultErr) {
-      // Use vaultErrorCode (not `error`) so Sentry's default PII scrubber
-      // doesn't filter the field — we need the actual Postgres error message
-      // to diagnose intermittent vault failures (e.g. 23505 unique_violation,
-      // 42883 undefined_function, or vault extension timeouts).
-      log.error('vault_store_secret failed', {
-        provider,
-        vaultErrorCode: vaultErr.code,
-        vaultErrorHint: vaultErr.hint,
-        vaultErrorDetail: vaultErr.details,
-        vaultMessage: vaultErr.message,
-        secretName,
-      });
+      log.error('vault_store_secret failed', { provider, error: vaultErr.message });
       return c.json(
         { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
         500,
@@ -453,7 +393,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.delete('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
-    const provider = c.req.param('provider') as ByokProvider;
+    const provider = c.req.param('provider')! as ByokProvider;
     if (!BYOK_PROVIDERS.includes(provider)) {
       return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
     }
@@ -514,7 +454,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
    */
   app.post('/v1/admin/byok/:provider/test', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
-    const provider = c.req.param('provider') as ByokProvider;
+    const provider = c.req.param('provider')! as ByokProvider;
     if (!BYOK_PROVIDERS.includes(provider)) {
       return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
     }
@@ -701,12 +641,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         secret_value: key,
       });
       if (vaultErr) {
-        log.error('vault_store_secret failed for firecrawl', {
-          vaultErrorCode: vaultErr.code,
-          vaultErrorHint: vaultErr.hint,
-          vaultMessage: vaultErr.message,
-          secretName,
-        });
+        log.error('vault_store_secret failed for firecrawl', { error: vaultErr.message });
         return c.json(
           { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
           500,
@@ -1167,7 +1102,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.get('/v1/admin/research/sessions/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const sessionId = c.req.param('id');
+    const sessionId = c.req.param('id')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -1193,7 +1128,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.post('/v1/admin/research/snippets/:id/attach', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const snippetId = c.req.param('id');
+    const snippetId = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { reportId?: string };
     const reportId = typeof body.reportId === 'string' ? body.reportId : '';
     if (!reportId) {

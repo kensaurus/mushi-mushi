@@ -852,7 +852,7 @@ async function handleSweep(
               last_index_error: msg.slice(0, 500),
             })
             .eq('id', repo.id);
-          summary.push({ repo: repo.repo_url, ok: false, error: msg, kind, ...stats });
+          summary.push({ repo: repo.repo_url, ok: false, error: msg });
         } else {
           await db
             .from('project_repos')
@@ -884,7 +884,7 @@ async function handleSweep(
             last_index_error: msg.slice(0, 500),
           })
           .eq('id', repo.id);
-        summary.push({ repo: repo.repo_url, ok: false, error: msg, kind });
+        summary.push({ repo: repo.repo_url, ok: false, error: msg });
       }
     }
     return summary;

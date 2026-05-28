@@ -22,11 +22,12 @@
  */
 
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
 
-export function registerQaCoverageRoutes(app: Hono): void {
+export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ── helper ────────────────────────────────────────────────────────────────
   async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string) {
@@ -35,10 +36,162 @@ export function registerQaCoverageRoutes(app: Hono): void {
     return projectId;
   }
 
+  // GET /v1/admin/projects/:pid/qa-coverage/stats — posture banner + QA SNAPSHOT.
+  app.get('/v1/admin/projects/:pid/qa-coverage/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const pid = c.req.param('pid')!;
+    const db = getServiceClient();
+    if (!(await resolveProject(db, userId, pid))) {
+      return c.json({ ok: true, data: {
+        hasAnyProject: false,
+        projectId: null,
+        projectName: null,
+        totalStories: 0,
+        enabledStories: 0,
+        disabledStories: 0,
+        passingStories: 0,
+        failingStories: 0,
+        noDataStories: 0,
+        avgPassRatePct: null,
+        totalRuns24h: 0,
+        pendingRuns: 0,
+        lastRunAt: null,
+        topFailingStoryId: null,
+        topFailingStoryName: null,
+        topFailingPassRatePct: null,
+        topPriority: 'no_project',
+        topPriorityLabel: null,
+        topPriorityTo: null,
+      } });
+    }
+
+    const { data: project } = await db
+      .from('projects')
+      .select('id, project_name')
+      .eq('id', pid)
+      .maybeSingle();
+
+    const [storiesRes, mvRes, pendingRes, lastRunRes] = await Promise.all([
+      db.from('qa_stories').select('id, name, enabled').eq('project_id', pid),
+      db.from('qa_story_coverage_24h').select('*').eq('project_id', pid),
+      db
+        .from('qa_story_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .in('status', ['pending', 'running']),
+      db
+        .from('qa_story_runs')
+        .select('started_at')
+        .eq('project_id', pid)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const stories = storiesRes.data ?? [];
+    const mvRows = mvRes.data ?? [];
+    const mvMap = new Map(mvRows.map((r: Record<string, unknown>) => [r.story_id as string, r]));
+
+    let totalRuns24h = 0;
+    let passingStories = 0;
+    let failingStories = 0;
+    let noDataStories = 0;
+    const passRates: number[] = [];
+    let topFailing: { id: string; name: string; rate: number } | null = null;
+
+    for (const s of stories) {
+      const m = mvMap.get(s.id) as Record<string, unknown> | undefined;
+      const runs24h = Number(m?.runs_24h ?? 0);
+      const passRate = m?.pass_rate_pct != null ? Number(m.pass_rate_pct) : null;
+      totalRuns24h += runs24h;
+
+      if (runs24h === 0) {
+        noDataStories += 1;
+      } else if (passRate != null && passRate >= 80) {
+        passingStories += 1;
+        passRates.push(passRate);
+      } else if (passRate != null && passRate < 80) {
+        failingStories += 1;
+        passRates.push(passRate);
+        if (!topFailing || passRate < topFailing.rate) {
+          topFailing = { id: s.id as string, name: s.name as string, rate: passRate };
+        }
+      }
+    }
+
+    const enabledStories = stories.filter((s) => s.enabled).length;
+    const disabledStories = stories.length - enabledStories;
+    const avgPassRatePct =
+      passRates.length > 0
+        ? Math.round((passRates.reduce((a, b) => a + b, 0) / passRates.length) * 10) / 10
+        : null;
+    const pendingRuns = pendingRes.count ?? 0;
+    const lastRunAt = lastRunRes.data?.started_at ?? null;
+
+    let topPriority: 'no_stories' | 'failing' | 'pending' | 'no_runs' | 'disabled_all' | 'healthy' = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (stories.length === 0) {
+      topPriority = 'no_stories';
+      topPriorityLabel = 'No QA stories yet — create one to start scheduled user-flow checks.';
+      topPriorityTo = '/qa-coverage?tab=overview';
+    } else if (failingStories > 0) {
+      topPriority = 'failing';
+      topPriorityLabel = `${failingStories} stor${failingStories === 1 ? 'y' : 'ies'} below 80% pass rate in the last 24h${topFailing ? ` — worst: ${topFailing.name} (${topFailing.rate}%)` : ''}.`;
+      topPriorityTo = topFailing
+        ? `/qa-coverage?tab=failing&highlight=${topFailing.id}`
+        : '/qa-coverage?tab=failing';
+    } else if (pendingRuns > 0) {
+      topPriority = 'pending';
+      topPriorityLabel = `${pendingRuns} run${pendingRuns === 1 ? '' : 's'} queued or in progress — results appear in run history.`;
+      topPriorityTo = '/qa-coverage?tab=stories';
+    } else if (enabledStories === 0) {
+      // Check disabled_all BEFORE no_runs: if all stories are disabled, "Run now"
+      // is impossible — surfacing no_runs would give an unactionable instruction.
+      topPriority = 'disabled_all';
+      topPriorityLabel = 'All stories are disabled — enable at least one to resume scheduled checks.';
+      topPriorityTo = '/qa-coverage?tab=stories';
+    } else if (totalRuns24h === 0) {
+      topPriority = 'no_runs';
+      topPriorityLabel = `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} configured but no runs in 24h — click Run now on a story.`;
+      topPriorityTo = '/qa-coverage?tab=stories';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${passingStories}/${stories.length} stories passing · ${totalRuns24h} runs in 24h · avg ${avgPassRatePct ?? 100}% pass rate.`;
+      topPriorityTo = '/qa-coverage?tab=stories';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: project?.project_name ?? null,
+        totalStories: stories.length,
+        enabledStories,
+        disabledStories,
+        passingStories,
+        failingStories,
+        noDataStories,
+        avgPassRatePct,
+        totalRuns24h,
+        pendingRuns,
+        lastRunAt,
+        topFailingStoryId: topFailing?.id ?? null,
+        topFailingStoryName: topFailing?.name ?? null,
+        topFailingPassRatePct: topFailing?.rate ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   // ── List stories + 24h coverage stats ────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-coverage', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -83,7 +236,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Dashboard tile summary ────────────────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-coverage-summary', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -109,8 +262,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Get single story ──────────────────────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-stories/:sid', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -127,7 +280,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Create story ──────────────────────────────────────────────────────────
   app.post('/v1/admin/projects/:pid/qa-stories', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -164,8 +317,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Update story ──────────────────────────────────────────────────────────
   app.patch('/v1/admin/projects/:pid/qa-stories/:sid', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -204,8 +357,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Delete story ──────────────────────────────────────────────────────────
   app.delete('/v1/admin/projects/:pid/qa-stories/:sid', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -221,8 +374,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── List runs for a story ─────────────────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
@@ -241,8 +394,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Evidence for a single run (with signed Storage URLs for image/video) ──
   app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const rid = c.req.param('rid');
+    const pid = c.req.param('pid')!;
+    const rid = c.req.param('rid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -287,8 +440,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Manual run trigger ────────────────────────────────────────────────────
   app.post('/v1/admin/projects/:pid/qa-stories/:sid/run', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -336,7 +489,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Platform health rollup (for PlatformHealthTile) ───────────────────────
   app.get('/v1/admin/projects/:pid/platform-rollup', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 

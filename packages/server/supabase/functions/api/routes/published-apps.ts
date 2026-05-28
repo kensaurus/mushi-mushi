@@ -15,6 +15,7 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
@@ -75,13 +76,26 @@ async function requireMarketplacePublish(
   return { orgId: project.organization_id }
 }
 
+// Generates a slug that conforms to the DB CHECK regex
+//   ^[a-z0-9][a-z0-9\-]{1,60}[a-z0-9]$
+// (start + end on alphanumeric, length 3..62). Empty / too-short / non-Latin
+// names fall back to '' so the caller can substitute a UUID-derived slug.
 function slugFromName(name: string): string {
-  return name
+  const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
     .slice(0, 62)
+    // trim leading/trailing hyphens AFTER the slice so we never end on '-'
+    .replace(/^-+|-+$/g, '')
+  return slug.length >= 3 ? slug : ''
+}
+
+// Stable UUID-derived fallback that always satisfies the slug regex.
+// UUIDs contain hyphens which can land at the [62] boundary, so strip them.
+function fallbackSlug(projectId: string): string {
+  const hex = projectId.replace(/-/g, '').toLowerCase()
+  return `app-${hex.slice(0, 12)}`
 }
 
 async function requirePublishedAppsAccess(
@@ -104,7 +118,7 @@ async function requirePublishedAppsAccess(
 
 // ─── Route registration ───────────────────────────────────────
 
-export function registerPublishedAppsRoutes(app: Hono) {
+export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/published-apps/:projectId
   app.get('/v1/admin/published-apps/:projectId', jwtAuth, async (c) => {
     const projectId = c.req.param('projectId')!
@@ -165,10 +179,11 @@ export function registerPublishedAppsRoutes(app: Hono) {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    const slug = parsed.data.slug
-      ?? current?.slug
-      ?? (parsed.data.name ? slugFromName(parsed.data.name) : undefined)
-      ?? projectId.slice(0, 62)
+    const generated = parsed.data.name ? slugFromName(parsed.data.name) : ''
+    const slug =
+      parsed.data.slug
+      || current?.slug
+      || (generated || fallbackSlug(projectId))
 
     const payload = {
       project_id: projectId,

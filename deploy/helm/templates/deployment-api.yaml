@@ -36,5 +36,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: supabase-service-role-key
+            {{- if .Values.global.region }}
+            - name: MUSHI_CLUSTER_REGION
+              value: {{ .Values.global.region | quote }}
+            {{- end }}
+            {{- if .Values.global.peerRegions }}
+            - name: MUSHI_PEER_REGIONS
+              value: {{ .Values.global.peerRegions | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}

@@ -1,0 +1,26 @@
+-- ============================================================================
+-- Drop stray vault_store_secret(text, text, uuid) overload
+-- ============================================================================
+-- Symptom (May 26, 2026): Every Save in /settings?tab=byok and every
+-- /v1/admin/integrations/platform/:kind PUT containing a vaulted field was
+-- returning HTTP 500 with:
+--
+--   VAULT_WRITE_FAILED: Could not choose the best candidate function between:
+--     public.vault_store_secret(secret_name => text, secret_value => text),
+--     public.vault_store_secret(secret_name => text, secret_value => text,
+--                               p_project_id => uuid)
+--
+-- Root cause: the canonical 2-arg `vault_store_secret(text, text)` is created
+-- by `20260418001600_byok_key_source.sql`. A 3-arg overload was added live
+-- (probably during a project_id-aware secret-namespacing experiment) but the
+-- migration was never committed, so it leaked into the deployed schema. All
+-- callers in the codebase invoke `db.rpc('vault_store_secret', { secret_name,
+-- secret_value })` with no third argument, so PostgREST's named-arg overload
+-- resolver hits the ambiguity and aborts.
+--
+-- Fix: drop the unreferenced 3-arg overload. Nothing in the repo (functions
+-- or migrations) calls it, so removing it is safe; the canonical 2-arg
+-- function remains intact. Use IF EXISTS so this migration is idempotent
+-- and so re-running on environments that never grew the stray overload is
+-- a no-op.
+DROP FUNCTION IF EXISTS public.vault_store_secret(text, text, uuid);

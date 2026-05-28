@@ -544,7 +544,7 @@ async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<
     // page slug. Trailing slashes / leading slashes are normalised.
     const stored = new Set(
       (parsed.pages ?? []).map((p) =>
-        String(p.slug ?? p.path ?? '').replace(/^\/+|\/+$/g, '').toLowerCase(),
+        String(((p as unknown as { slug?: string }).slug) ?? p.path ?? '').replace(/^\/+|\/+$/g, '').toLowerCase(),
       ),
     )
     const { data: observed } = await db

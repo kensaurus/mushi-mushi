@@ -21,7 +21,7 @@ import type { Variables } from '../types.ts'
 export function registerDbAdvisorsRoutes(parent: Hono<{ Variables: Variables }>) {
   parent.get('/v1/admin/projects/:id/db-advisors', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
-    const projectId = c.req.param('id')
+    const projectId = c.req.param('id')!
     const db = getServiceClient()
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {

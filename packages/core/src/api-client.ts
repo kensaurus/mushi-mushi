@@ -94,7 +94,9 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         return {
           ok: false,
           error: {
-            code: `HTTP_${response.status}`,
+            code:
+              (errorBody as { error?: { code?: string } }).error?.code ||
+              `HTTP_${response.status}`,
             message:
               (errorBody as { message?: string; error?: { message?: string } }).error?.message ||
               (errorBody as { message?: string }).message ||

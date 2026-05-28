@@ -519,7 +519,7 @@ function AnomaliesTab({
                   {a.status === 'open' && (
                     <>
                       <Btn size="sm" variant="primary" onClick={() => onConfirm(a.id)}>Confirm</Btn>
-                      <Btn size="sm" variant="ghost" onClick={() => onDismiss(a.id)}>Dismiss</Btn>
+                      <Btn size="sm" variant="cancel" onClick={() => onDismiss(a.id)}>Dismiss</Btn>
                     </>
                   )}
                   {a.auto_report_id && (

@@ -120,7 +120,7 @@ export async function evaluateTier(
     tier_after: { slug: newTier.slug, display_name: newTier.display_name, perks: newTier.perks },
     host_credit_payload: newTier.host_credit_payload,
     occurred_at: new Date().toISOString(),
-  }).catch((err) => tlog.error('webhook_dispatch_failed', { endUserId, error: String(err) }))
+  }).then(undefined, (err: unknown) => tlog.error('webhook_dispatch_failed', { endUserId, error: String(err) }))
 
   return { tierChanged: true, tier: newTier }
 }

@@ -1,12 +1,14 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/byok.ts
- * PURPOSE: Resolve effective LLM API keys (Bring-Your-Own-Key, V5.3 §2.7+§2.18).
+ * PURPOSE: Resolve effective API keys for all BYOK providers
+ *          (Bring-Your-Own-Key, V5.3 §2.7+§2.18 + Phase 1 expansion).
  *
  * RESOLUTION ORDER (per provider):
- *   1. project_settings.byok_<provider>_key_ref (BYOK)
+ *   1. byok_keys table (canonical, vault-backed — Phase 1+)
+ *   2. project_settings.byok_<provider>_key_ref (legacy columns — back-compat)
  *      - if value starts with `vault://<id>`, dereference via Supabase Vault.
  *      - otherwise treat as raw key (dev only — emit a warning).
- *   2. process.env.<PROVIDER>_API_KEY (host fallback)
+ *   3. process.env.<PROVIDER>_API_KEY (host fallback)
  *
  * The function returns null when neither is available so callers can fail with
  * a structured error instead of accidentally calling the API with `undefined`.
@@ -23,7 +25,8 @@ import { log as rootLog } from './logger.ts'
 
 const log = rootLog.child('byok')
 
-export type LlmProvider = 'anthropic' | 'openai'
+/** All four provider slugs supported by BYOK. */
+export type LlmProvider = 'anthropic' | 'openai' | 'firecrawl' | 'browserbase'
 
 export interface ResolvedKey {
   key: string
@@ -41,16 +44,22 @@ export interface ResolvedKey {
 const ENV_VAR: Record<LlmProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
+  firecrawl: 'FIRECRAWL_API_KEY',
+  browserbase: 'BROWSERBASE_API_KEY',
 }
 
-const REF_COL: Record<LlmProvider, string> = {
+/** Legacy project_settings column names (backward-compat fallback). */
+const LEGACY_REF_COL: Partial<Record<LlmProvider, string>> = {
   anthropic: 'byok_anthropic_key_ref',
   openai: 'byok_openai_key_ref',
+  firecrawl: 'byok_firecrawl_key_ref',
+  browserbase: 'byok_browserbase_key_ref',
 }
 
-const LAST_USED_COL: Record<LlmProvider, string> = {
+const LAST_USED_COL: Partial<Record<LlmProvider, string>> = {
   anthropic: 'byok_anthropic_key_last_used_at',
   openai: 'byok_openai_key_last_used_at',
+  firecrawl: 'byok_firecrawl_key_last_used_at',
 }
 
 export async function resolveLlmKey(
@@ -58,50 +67,66 @@ export async function resolveLlmKey(
   projectId: string,
   provider: LlmProvider,
 ): Promise<ResolvedKey | null> {
-  const refCol = REF_COL[provider]
-  // Pull base URL alongside the ref so the OpenRouter / OpenAI-compatible
-  // gateway path is a single round-trip. The column doesn't exist on the
-  // anthropic side; the select tolerates missing columns by selecting only
-  // what each provider needs.
-  const selectCols = provider === 'openai'
-    ? `${refCol}, byok_openai_base_url`
-    : refCol
-  const { data: settings, error } = await db
-    .from('project_settings')
-    .select(selectCols)
+  // Step 1: Check byok_keys table (canonical, vault-backed).
+  const { data: keyRow } = await db
+    .from('byok_keys')
+    .select('vault_secret_id')
     .eq('project_id', projectId)
-    .single()
+    .eq('provider_slug', provider)
+    .maybeSingle()
 
-  if (error) log.warn('Failed to read project_settings for BYOK', { projectId, provider, error: error.message })
-
-  const row = settings as Record<string, string | null> | null
-  const ref = row?.[refCol]
-  const baseUrl = provider === 'openai'
-    ? (row?.byok_openai_base_url ?? Deno.env.get('OPENAI_BASE_URL') ?? undefined)
-    : undefined
-
-  if (ref) {
+  if (keyRow?.vault_secret_id) {
+    const ref = `vault://${keyRow.vault_secret_id}`
     const dereffed = await dereferenceKey(db, ref)
     if (dereffed) {
       void recordUsage(db, projectId, provider).catch(() => { /* tolerate */ })
+      const baseUrl = provider === 'openai' ? (Deno.env.get('OPENAI_BASE_URL') ?? undefined) : undefined
       return { key: dereffed, source: 'byok', hint: hint(dereffed), baseUrl }
     }
-    log.warn('BYOK ref present but dereference failed; falling back to env', { projectId, provider })
   }
 
+  // Step 2: Fallback to legacy project_settings columns (back-compat).
+  const refCol = LEGACY_REF_COL[provider]
+  if (refCol) {
+    const selectCols = provider === 'openai'
+      ? `${refCol}, byok_openai_base_url`
+      : refCol
+    const { data: settings, error } = await db
+      .from('project_settings')
+      .select(selectCols)
+      .eq('project_id', projectId)
+      .single()
+
+    if (error) log.warn('Failed to read project_settings for BYOK', { projectId, provider, error: error.message })
+
+    const row = settings as Record<string, string | null> | null
+    const ref = row?.[refCol]
+    const baseUrl = provider === 'openai'
+      ? (row?.byok_openai_base_url ?? Deno.env.get('OPENAI_BASE_URL') ?? undefined)
+      : undefined
+
+    if (ref) {
+      const dereffed = await dereferenceKey(db, ref)
+      if (dereffed) {
+        void recordUsage(db, projectId, provider).catch(() => { /* tolerate */ })
+        return { key: dereffed, source: 'byok', hint: hint(dereffed), baseUrl }
+      }
+      log.warn('BYOK legacy ref present but dereference failed; falling back to env', { projectId, provider })
+    }
+  }
+
+  // Step 3: Platform env-var fallback.
   const env = Deno.env.get(ENV_VAR[provider])
   if (env) {
-    // SEC (Wave 5 Gap-D): the platform-default key sees every tenant's prompts
-    // when BYOK is not configured. Log this so the operator can surface the
+    // SEC (Wave 5 Gap-D): the platform-default key sees every tenant's data
+    // when BYOK is not configured. Log so the operator can surface the
     // "Platform key in use" warning chip in the admin UI (/onboarding, /settings).
-    // project_settings.require_byok = true (Enterprise/Cloud-paid) makes this
-    // a hard error rather than a fallback.
-    log.warn('LLM call using platform env key — BYOK not configured for this project', {
+    log.warn('BYOK call using platform env key — BYOK not configured for this project', {
       projectId,
       provider,
-      // hint is the last-4 indicator, never the full key
       hint: hint(env),
     })
+    const baseUrl = provider === 'openai' ? (Deno.env.get('OPENAI_BASE_URL') ?? undefined) : undefined
     return { key: env, source: 'env', hint: hint(env), baseUrl }
   }
   return null
@@ -142,7 +167,10 @@ async function dereferenceKey(db: SupabaseClient, ref: string): Promise<string |
 let warnedRaw = false
 
 async function recordUsage(db: SupabaseClient, projectId: string, provider: LlmProvider): Promise<void> {
-  await db.from('project_settings').update({ [LAST_USED_COL[provider]]: new Date().toISOString() }).eq('project_id', projectId)
+  const lastUsedCol = LAST_USED_COL[provider]
+  if (lastUsedCol) {
+    await db.from('project_settings').update({ [lastUsedCol]: new Date().toISOString() }).eq('project_id', projectId)
+  }
   await db.from('byok_audit_log').insert({ project_id: projectId, provider, action: 'used' })
 }
 

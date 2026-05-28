@@ -20,6 +20,7 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
@@ -44,7 +45,7 @@ const CodebaseUploadBody = z.object({
 
 // ─── Route registration ───────────────────────────────────────────────────────
 
-export function registerSyncRoutes(app: Hono) {
+export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── GET /v1/sync/whoami ────────────────────────────────────────────────────
   // Verify the API key is valid and return which project it belongs to.
   // Used by `mushi whoami` and by any CI step that needs to confirm credentials.
@@ -230,7 +231,7 @@ export function registerSyncRoutes(app: Hono) {
   app.get('/v1/sync/reports/:id', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
 
     const { data, error } = await db
       .from('reports')
@@ -254,18 +255,19 @@ export function registerSyncRoutes(app: Hono) {
     // Attach linked fix ID if present, via the report_groups table.
     // Scope to project_id to prevent cross-project data leakage if a
     // report_group_id is ever corrupted or guessed.
+    const row = data as unknown as Record<string, unknown>
     let fix_id: string | null = null
-    if (data.report_group_id) {
+    if (row.report_group_id) {
       const { data: group } = await db
         .from('report_groups')
         .select('fix_id')
-        .eq('id', data.report_group_id)
+        .eq('id', row.report_group_id as string)
         .eq('project_id', projectId)
         .maybeSingle()
       fix_id = group?.fix_id ?? null
     }
 
-    return c.json({ ok: true, data: { ...data, fix_id } })
+    return c.json({ ok: true, data: { ...row, fix_id } })
   })
 
   // ── PATCH /v1/sync/reports/:id ────────────────────────────────────────────
@@ -274,7 +276,7 @@ export function registerSyncRoutes(app: Hono) {
   app.patch('/v1/sync/reports/:id', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
 
     let rawBody: unknown
     try { rawBody = await c.req.json() } catch {
@@ -347,7 +349,7 @@ export function registerSyncRoutes(app: Hono) {
   app.get('/v1/sync/lessons/:id', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
 
     const { data, error } = await db
       .from('lessons')

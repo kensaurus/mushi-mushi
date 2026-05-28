@@ -56,10 +56,12 @@ async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: str
     ok: true,
     data: {
       byok_configured: byokConfigured,
+      llm_provider: byokConfigured ? 'byok' : 'platform',
       storage_provider: 'supabase',
       region: 'ap-southeast-1',
       retention_days: 90,
       last_audit_at: (row?.byok_status_checked_at as string | null) ?? null,
+      require_byok: false,
     },
   })
 }
@@ -73,7 +75,7 @@ app.get(
   adminOrApiKey({ scope: 'mcp:read' }),
   async (c) => {
     const userId = c.get('userId') as string
-    const pid = c.req.param('id')
+    const pid = c.req.param('id')!
 
     // Authz: API key callers are pinned to the key's own project — they
     // cannot be elevated to another project even if the owner has access.
@@ -137,7 +139,7 @@ app.get(
   adminOrApiKey({ scope: 'mcp:read' }),
   async (c) => {
     const userId = c.get('userId') as string
-    const pid = c.req.param('id')
+    const pid = c.req.param('id')!
 
     // Authz: API key callers are pinned to their key's project; JWT callers
     // use the full accessible-project set.
@@ -201,6 +203,6 @@ app.get(
   },
 )
 
-export function registerEvolutionRoutes(parent: Hono<{ Variables: Variables }>) {
+export function registerEvolutionRoutes(parent: Hono<{ Variables: Variables }>): void {
   parent.route('', app)
 }

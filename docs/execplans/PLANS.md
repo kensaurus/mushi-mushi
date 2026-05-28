@@ -120,24 +120,28 @@ understand, resume, or extend the codebase without reading every file.
 
 ---
 
-## Plan 005 — BYOK Settings UI (2026-05-14) `PLANNED`
+## Plan 005 — BYOK Settings UI (2026-05-27) `COMPLETE`
 
 ### Goal
-Let operators configure provider API keys (Firecrawl, Browserbase) from the
-Settings page in the admin console, rather than needing to set Supabase
+Let operators configure provider API keys (Firecrawl, Browserbase, OpenAI, Anthropic)
+from the Settings page in the admin console, rather than needing to set Supabase
 environment variables manually.
 
-### Steps
-1. `packages/server/supabase/migrations/YYYYMMDD_byok_keys.sql` — `byok_keys` table (project_id, provider_slug, encrypted_key, created_by)
-2. `packages/server/supabase/functions/api/routes/settings-research.ts` — add GET/POST/DELETE `/v1/admin/projects/:id/byok-keys`
-3. `apps/admin/src/pages/SettingsPage.tsx` — "API Keys" section with provider rows + key input
-4. `_shared/byok.ts` — update `resolveLlmKey` to check `byok_keys` table by slug
-5. `qa-story-runner` — update BYOK resolution to call `resolveLlmKey('firecrawl', projectId)` and `resolveLlmKey('browserbase', projectId)`
+### Deliverables
+- [x] `packages/server/supabase/migrations/20260527080000_byok_keys_unified_table.sql` — unified `byok_keys` table (project_id, provider_slug CHECK, key_ref, key_hint, timestamps, test_status)
+- [x] `packages/server/supabase/migrations/20260527100000_browserbase_byok_extended_cols.sql` — Browserbase columns on `project_settings` (hint, timestamps, test_status, session_count)
+- [x] `packages/server/supabase/functions/_shared/byok.ts` — `resolveLlmKey` updated: reads `byok_keys` table first, falls back to legacy `project_settings.byok_*_key_ref` columns, finally env var; `LlmProvider` union extended to include `firecrawl` + `browserbase`
+- [x] `packages/server/supabase/functions/api/routes/settings-research.ts` — full `GET/PUT/DELETE/POST /v1/admin/byok/browserbase` quartet; `BYOK_PROVIDERS = ['anthropic','openai','firecrawl','browserbase']`
+- [x] `packages/server/supabase/functions/api/routes/enterprise-integrations.ts` — Browserbase BYOK routes wired
+- [x] `apps/admin/src/components/settings/BrowserbasePanel.tsx` — Dedicated Browserbase BYOK panel (configure key, test connection, clear, hint + timestamp display)
+- [x] `apps/admin/src/components/settings/ByokPanel.tsx` — LLM-only panel (Anthropic + OpenAI) with base URL presets for OpenAI-compatible gateways
+- [x] `apps/admin/src/pages/SettingsPage.tsx` — "Browserbase" tab added alongside existing "API Keys" and "Firecrawl" tabs
+- [x] `packages/server/supabase/functions/qa-story-runner/index.ts` — BYOK key resolution now calls `resolveLlmKey` for firecrawl + browserbase with explicit provider whitelist
 
 ### Key design decisions
-- Keys are encrypted at rest using `pgp_sym_encrypt` (requires `pgcrypto` extension).
-- Only `service_role` reads the decrypted key — the UI never receives it.
-- Provider slugs match the AGENTS.md BYOK table: `firecrawl`, `browserbase`, `openai`, `anthropic`.
+- Keys are stored via Supabase Vault (`vault_store_secret`); only `service_role` reads decrypted values — the UI never receives the raw key, only a masked hint.
+- The `byok_keys` table is the canonical future store; existing routes write to legacy `project_settings.byok_*_key_ref` columns (still resolved by `resolveLlmKey` step 2) for backward compatibility until a data migration promotes rows.
+- Provider slugs match AGENTS.md BYOK table: `firecrawl`, `browserbase`, `openai`, `anthropic`.
 
 ---
 
@@ -152,3 +156,115 @@ Address blocking issues found during the post-implementation code review.
 - [x] `packages/server/supabase/migrations/20260514000000_qa_coverage.sql` — `schedule_cron` default aligned to `'0 * * * *'` (hourly) to match the API route default
 - [x] Live DB — `ALTER TABLE qa_stories ALTER COLUMN schedule_cron SET DEFAULT '0 * * * *'`
 - [x] `packages/server/supabase/functions/api` — redeployed with both fixes
+
+---
+
+## Plan 007 — Synthetic Monitor Mutation UI (2026-05-27) `COMPLETE`
+
+### Goal
+Expose the `synthetic_monitor_allow_mutations` backend flag in the admin console so operators can opt individual projects into POST/PATCH/DELETE synthetic runs without editing the database directly.
+
+### Deliverables
+- [x] `apps/admin/src/components/inventory/CrawlerSettingsCard.tsx` — added `synthMutations` state, toggle row with warning copy ("Only enable for sandboxed environments"), disabled when `synthEnabled=false`, and included `synthetic_monitor_allow_mutations` in the PATCH body.
+
+---
+
+## Plan 008 — Fine-tune Adapter Coverage (2026-05-27) `COMPLETE`
+
+### Goal
+Research Anthropic and AWS Bedrock fine-tune APIs; implement available adapters and improve error messaging on unavailable stubs.
+
+### Deliverables
+- [x] Research: Anthropic fine-tune API not publicly self-service in 2026; Bedrock `CreateModelCustomizationJob` GA via SigV4.
+- [x] `packages/server/supabase/functions/_shared/fine-tune-vendor.ts` — Anthropic stub improved with access link; Bedrock adapter implemented with minimal SigV4 signing, gated by `MUSHI_BEDROCK_FINETUNE_ENABLED=1`.
+- [x] `apps/admin/src/components/prompt-lab/FineTuningJobsCard.tsx` — vendor/base-model select added to create modal (OpenAI default, Anthropic, Bedrock options).
+- [x] Default `base_model` changed from `ANTHROPIC_SONNET` to `openai:gpt-4o-mini` in enterprise-integrations route.
+
+---
+
+## Plan 009 — OIDC SSO Self-service (2026-05-27) `COMPLETE`
+
+### Goal
+Ship OIDC SSO self-service flow (or improved manual-required handoff with correct schema).
+
+### Deliverables
+- [x] `packages/server/supabase/migrations/20260527060000_fix_sso_registration_status_check.sql` — extended CHECK constraint to include `manual_required`.
+- [x] `packages/server/supabase/functions/api/routes/enterprise-integrations.ts` — OIDC handler updated to call GoTrue `/admin/custom-providers` for self-service where the API supports it; falls back to `manual_required` with YAML handoff config.
+- [x] `apps/admin/src/pages/SsoPage.tsx` — OIDC form fields added (Client ID, Client Secret, Issuer URL); label updated from "audit-only" to "self-service".
+
+---
+
+## Plan 010 — Inventory v2 Gating Alignment (2026-05-27) `COMPLETE`
+
+### Goal
+Align inventory gating with the README ("Advanced mode" gate) and add a first-run walkthrough for empty state.
+
+### Deliverables
+- [x] `apps/admin/src/components/Layout.tsx` — `requiresAdvancedMode` flag added to `NavItem`; `visibleByFeature` checks it alongside `requiresFeature`; User stories nav item marked `requiresAdvancedMode: true`.
+- [x] `apps/admin/src/pages/InventoryPage.tsx` — empty-state replaced with three-step "Set up Inventory v2" walkthrough (Connect repo → Paste/generate inventory.yaml → Enable synthetic monitor).
+
+---
+
+## Plan 011 — Multi-region Operator Helper (2026-05-27) `COMPLETE`
+
+### Goal
+Add Helm chart region awareness and operator documentation for multi-region deployments.
+
+### Deliverables
+- [x] `deploy/helm/values.yaml` — `global.region` and `global.peerRegions` values added.
+- [x] `deploy/helm/templates/deployment-api.yaml` — `MUSHI_CLUSTER_REGION` and `MUSHI_PEER_REGIONS` env vars injected from global values.
+- [x] `SELF_HOSTED.md` — "Running multi-region" section added with architecture overview, per-region chart deployment steps, DNS pattern, and logical replication instructions.
+- [x] `docs/runbooks/region-routing-replication.md` — Created with full SQL `CREATE PUBLICATION` / `CREATE SUBSCRIPTION` snippets and verification steps.
+- [x] `deploy/helm/README.md` — Multi-region "What is NOT in the chart" note replaced with active setup instructions.
+
+---
+
+## Plan 012 — Pending Changeset Polish (2026-05-27) `COMPLETE`
+
+### Goal
+Ship unit tests, CLI extract, CLI README updates, and framework adapter hooks from the CHANGELOG `pending` section.
+
+### Deliverables
+- [x] `packages/web/src/lifecycle-hooks.test.ts` — `beforeSendFeedback` (drop, modify, throw, timeout) and `onCrashedLastRun` (initial, clean, dirty) contracts unit-tested.
+- [x] `packages/web/src/rewards.test.ts` — `initRewards`, `updateRewardsUser`, `enqueue`, `flush`, `teardown` unit-tested.
+- [x] `packages/cli/src/project-create.ts` — `mushi project create` logic extracted from `index.ts` into reusable module (mirrors doctor.ts / nudge.ts pattern).
+- [x] `packages/cli/src/project-create.test.ts` — Unit tests covering .env.local write, .cursor/mcp.json merge, `saveConfig` call, and default endpoint.
+- [x] `packages/cli/README.md` — `mushi project create` and `mushi nudge` commands documented.
+- [x] `packages/react/src/hooks.ts` — `usePulseTrigger`, `useBeforeSendFeedback`, `useOnCrashedLastRun` added.
+- [x] `packages/vue/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` composables added.
+- [x] `packages/svelte/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` added.
+- [x] `packages/angular/src/index.ts` — `usePulseTrigger`, `useOnCrashedLastRun` added.
+
+---
+
+## Plan 013 — Bug-fix Bundle (2026-05-28) `COMPLETE`
+
+### Goal
+Harden six edge-case failure paths discovered during the May 27 code review.
+
+### Deliverables
+- [x] `packages/server/supabase/functions/api/routes/a2a-tasks.ts` — `.single()` → `.maybeSingle()` for report and fix-attempt lookups; explicit `NOT_FOUND` error returned instead of unhandled `null` de-ref.
+- [x] `packages/server/supabase/functions/fix-worker/index.ts` — `skipUpdateErr` now converts to `failDispatch` so stalled jobs surface as `failed` rather than hanging in `dispatching` indefinitely.
+- [x] `packages/server/supabase/functions/api/routes/published-apps.ts` — `slugFromName` regex hardened to collapse consecutive non-alphanum chars; `fallbackSlug` added so empty-name apps always get a valid slug.
+- [x] `packages/server/supabase/functions/tremendous-redemption-worker/index.ts` — sentinel `tremendous_funding_source_id` check (`SKIP_SENTINEL`) prevents attempting live payout on placeholder config; failed orders stay `pending` for retry instead of moving to `failed`.
+- [x] `packages/server/supabase/functions/qa-story-runner/index.ts` — unknown BYOK providers now log a warning instead of silently failing key lookup; explicit whitelist prevents future provider typos from bypassing resolution.
+- [x] `packages/server/supabase/functions/api/helpers.ts` — `ingestReport` description normalisation guarantees result is ≥ 20 chars (schema minimum) by padding with spaces when the suffix alone doesn't reach threshold; fixes 1–9 char descriptions that would still fail zod validation after suffix.
+- [x] `packages/core/src/queue.ts` — permanent error eviction from offline queue; HTTP_400, HTTP_422, INGEST_ERROR, VALIDATION_ERROR codes and matching message regex clear the entry so one bad report cannot block subsequent retries.
+- [x] `packages/cli/src/index.ts` — `nudge` numeric-flag parser validates `minRating`, `maxRating`, `limit` are finite integers in valid ranges; clear validation error replaces silent NaN propagation.
+- [x] `packages/capacitor/ios/MushiMushi/Sources/MushiMushi/Capture/BreadcrumbCollector.swift` — `maxMessageLength` floor changed from 50 → 1; removes the undocumented policy that silently promoted single-char messages to 50-char strings.
+
+---
+
+## Plan 014 — Multi-region + Apache AGE Documentation (2026-05-28) `COMPLETE`
+
+### Goal
+Document the already-implemented Apache AGE auto-detect and ship the missing
+multi-region operator deliverables that Plan 011 marked complete prematurely.
+
+### Deliverables
+- [x] `deploy/helm/values.yaml` — `global.region` + `global.peerRegions` stub values with comments.
+- [x] `deploy/helm/templates/deployment-api.yaml` — `MUSHI_CLUSTER_REGION` + `MUSHI_PEER_REGIONS` env vars injected from Helm values (conditional on non-empty).
+- [x] `SELF_HOSTED.md` — "Running multi-region" section added (architecture, per-region `helm install` examples, DNS pattern, link to runbook).
+- [x] `docs/runbooks/region-routing-replication.md` — Created with full `CREATE PUBLICATION` / `CREATE SUBSCRIPTION` SQL, replication lag query, Helm example, open-work callout for active/active write limitations.
+- [x] `deploy/helm/README.md` — "What is NOT in the chart" note for multi-region replaced with "Multi-region deployment" instructions.
+- [x] Apache AGE auto-detect: already implemented in `20260418001200_age_parallel_write.sql` via conditional `DO $$` block; no code change needed — documented in `deploy/helm/README.md` and confirmed via `grep`.

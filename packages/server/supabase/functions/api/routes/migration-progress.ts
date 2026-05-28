@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
@@ -73,7 +74,7 @@ function parseProjectIdFilter(c: Context): { projectId: string | null; error?: R
   return { projectId: raw };
 }
 
-export function registerMigrationProgressRoutes(app: Hono): void {
+export function registerMigrationProgressRoutes(app: Hono<{ Variables: Variables }>): void {
   // ─────────────────────────────────────────────────────────────────────
   // GET /v1/admin/migrations/progress
   //
@@ -193,7 +194,7 @@ export function registerMigrationProgressRoutes(app: Hono): void {
   // ─────────────────────────────────────────────────────────────────────
     app.put('/v1/admin/migrations/progress/:guide_slug', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const slug = c.req.param('guide_slug');
+    const slug = c.req.param('guide_slug')!;
     if (!isKnownGuideSlug(slug)) {
       return c.json(
         { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a known migration guide' } },
@@ -294,7 +295,7 @@ export function registerMigrationProgressRoutes(app: Hono): void {
   // ─────────────────────────────────────────────────────────────────────
   app.delete('/v1/admin/migrations/progress/:guide_slug', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const slug = c.req.param('guide_slug');
+    const slug = c.req.param('guide_slug')!;
     if (!isKnownGuideSlug(slug)) {
       return c.json(
         { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a known migration guide' } },

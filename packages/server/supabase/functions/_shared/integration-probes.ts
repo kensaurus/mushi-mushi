@@ -32,6 +32,8 @@ export type IntegrationKind =
   | 'github_issues'
   | 'pagerduty'
   | 'reward_webhook'
+  | 'claude_code_agent'
+  | 'cursor_cloud'
 
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty', 'reward_webhook']

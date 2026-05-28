@@ -76,7 +76,7 @@ export const SetupProjectSchema = z
     report_count: z.number().int().nonnegative(),
     fix_count: z.number().int().nonnegative(),
     merged_fix_count: z.number().int().nonnegative(),
-    indexed_file_count: z.number().int().nonnegative(),
+    indexed_file_count: z.number().int().nonnegative().optional(),
   })
   .passthrough()
 export const SetupResponseSchema = z
