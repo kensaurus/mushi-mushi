@@ -342,7 +342,7 @@ function pdcaRoutes() {
         body: JSON.stringify({ run_id: runId }),
       })
       const json = await res.json()
-      if (!res.ok) return c.json({ ok: false, error: json }, res.status)
+      if (!res.ok) return c.json({ ok: false, error: json }, res.status as 200)
       return c.json({ ok: true, ...json })
     } catch (err) {
       return c.json({ ok: false, error: { code: 'ERROR', message: String(err) } }, 500)

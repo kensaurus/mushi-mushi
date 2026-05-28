@@ -391,16 +391,16 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     const now = Date.now()
     const severityWeight: Record<string, number> = { critical: 1.0, warn: 0.6, info: 0.2 }
 
-    const scored = stage1.map((lesson) => {
-      const ageDays = (now - new Date(lesson.last_reinforced_at ?? now).getTime()) / (1000 * 60 * 60 * 24)
+    const scored = stage1.map((lesson: Record<string, unknown>) => {
+      const ageDays = (now - new Date((lesson.last_reinforced_at as string | number | undefined) ?? now).getTime()) / (1000 * 60 * 60 * 24)
       const recencyDecay = Math.log(1 + Math.max(0, 1 / (1 + ageDays)))
       const score =
         0.5 * (lesson.similarity as number) +
-        0.3 * (severityWeight[lesson.severity] ?? 0.4) +
+        0.3 * (severityWeight[lesson.severity as string] ?? 0.4) +
         0.2 * recencyDecay
       return { ...lesson, final_score: score }
     })
-    scored.sort((a, b) => b.final_score - a.final_score)
+    scored.sort((a: { final_score: number }, b: { final_score: number }) => b.final_score - a.final_score)
 
     // Token budget packing — estimate ~4 chars per token
     const charsPerToken = 4

@@ -24,7 +24,7 @@
  * worst-case spend on Sonnet 4.6 + cron-triggered work.
  */
 
-import type { Hono } from 'npm:hono@4'
+import type { Hono, Context } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
@@ -78,7 +78,7 @@ function applyRateLimit(
 }
 
 function rateLimitResponse(
-  c: Parameters<Parameters<Hono['get']>[1]>[0],
+  c: Context<{ Variables: Variables }>,
   verdict: RateLimitVerdict,
   routeKey: string,
 ): Response {
@@ -958,7 +958,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           { inventory_id: result.inventoryId },
         )
         log.info('inventory.proposal.accepted', { projectId, proposalId, ...result })
-        return c.json({ ok: true, data: { inventoryId: result.inventoryId, ...result } })
+        return c.json({ ok: true, data: { ...result } })
       } catch (err) {
         reportError(err instanceof Error ? err : new Error(String(err)), {
           tags: { route: 'inventory.proposal.accept', project: projectId },

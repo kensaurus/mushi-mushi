@@ -836,7 +836,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     // Use raw SQL for the two aggregations that Supabase's query builder
     // handles poorly: COUNT(DISTINCT) and conditional SUM.
     const [rawAgg, tierRes, payoutLiabilityRes] = await Promise.all([
-      db.rpc('exec_sql_overview' as never, {} as never).single().then(() => null).catch(() => null),
+      Promise.resolve(db.rpc('exec_sql_overview' as never, {} as never).single()).then(() => null, () => null),
       db.from('end_user_points')
         .select('current_tier_id, reward_tiers(slug, display_name)')
         .eq('organization_id', orgId)

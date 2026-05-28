@@ -2,6 +2,7 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 
 import type { IntegrationKind } from '../../_shared/integration-probes.ts';
+import { PLATFORM_KINDS } from '../../_shared/integration-probes.ts';
 import type { ExportSampleRow } from '../../_shared/fine-tune.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -1347,7 +1348,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   // directly. They live in project_settings so the existing readers
   // (resolveLlmKey, fix-worker, fast-filter) pick them up without joins.
 
-  const PLATFORM_KIND_FIELDS: Record<IntegrationKind, string[]> = {
+  const PLATFORM_KIND_FIELDS: Record<string, string[]> = {
     sentry: [
       'sentry_org_slug',
       'sentry_project_slug',
@@ -1420,7 +1421,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   // value, write it to Supabase Vault and persist `vault://<name>` instead.
   // This matches the BYOK pattern and prevents secrets from sitting plaintext
   // in project_settings.
-  const VAULTED_FIELDS_BY_KIND: Record<IntegrationKind, string[]> = {
+  const VAULTED_FIELDS_BY_KIND: Record<string, string[]> = {
     sentry: ['sentry_auth_token_ref', 'sentry_webhook_secret'],
     langfuse: ['langfuse_public_key_ref', 'langfuse_secret_key_ref'],
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
@@ -1429,7 +1430,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind')! as IntegrationKind;
-    if (!INTEGRATION_KINDS.includes(kind)) {
+    if (!PLATFORM_KINDS.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -1537,7 +1538,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
         severity: report.severity ?? 'medium',
         component: report.component,
       },
-      storedTraceparent,
+      storedTraceparent ?? undefined,
     );
 
     await logAudit(db, report.project_id, userId, 'integration.synced', 'report', reportId, {
@@ -2222,7 +2223,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
 
     const entitlement = await resolveActiveEntitlement(c);
     const featureUnlocked = entitlement?.hasFeature('intelligence_reports') ?? false;
-    const planName = entitlement?.plan?.name ?? null;
+    const planName = entitlement?.plan?.display_name ?? null;
 
     const [reportsRes, jobsRes, findingsRes, settingsRes] = await Promise.all([
       db

@@ -16,6 +16,9 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   // v2 inventory + gates audit actions (whitepaper §4.1, §5)
   | 'inventory.ingest' | 'inventory.reconcile' | 'inventory.gates_run'
   | 'inventory.test_gen' | 'inventory.status_changed'
+  | 'inventory.proposal.edit' | 'inventory.proposal.accept' | 'inventory.proposal.discard'
+  | 'inventory.settings.update'
+  | 'report.bulk_undone'
   | 'settings.deleted'
 
 export async function logAudit(

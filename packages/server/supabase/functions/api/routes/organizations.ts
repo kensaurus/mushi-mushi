@@ -979,12 +979,13 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     // signal rather than a noisy "most recent" one. Best-effort: a
     // failure here doesn't block the response.
     if (status === 'pending' && !invite.last_seen_at) {
-      await db
-        .from('invitations')
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq('id', invite.id)
-        .is('last_seen_at', null)
-        .catch(() => {});
+      await Promise.resolve(
+        db
+          .from('invitations')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('id', invite.id)
+          .is('last_seen_at', null),
+      ).then(undefined, () => {});
     }
 
     return c.json({

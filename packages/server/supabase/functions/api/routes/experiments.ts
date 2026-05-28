@@ -268,7 +268,7 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       body: JSON.stringify({ experiment_id: c.req.param('id')! }),
     })
     const json = await res.json()
-    return c.json(json, res.status)
+    return c.json(json, res.status as 200)
   })
 
   admin.post('/:id/launch', async (c) => {
@@ -331,9 +331,10 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       }
     }
 
-    await db().from('experiment_assignments').insert({
-      experiment_id, variant_id: chosenVariant.id, reporter_token, end_user_id: end_user_id ?? null,
-    }).onConflict('experiment_id, reporter_token').ignore()
+    await db().from('experiment_assignments').upsert(
+      { experiment_id, variant_id: chosenVariant.id, reporter_token, end_user_id: end_user_id ?? null },
+      { onConflict: 'experiment_id, reporter_token', ignoreDuplicates: true },
+    )
 
     return c.json({ variant_id: chosenVariant.id, from_cache: false })
   })

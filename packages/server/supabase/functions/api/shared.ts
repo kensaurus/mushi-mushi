@@ -126,6 +126,7 @@ export async function userCanAccessProject(
 export interface OwnedProjectRef {
   id: string;
   name?: string | null;
+  project_name?: string | null;
   organization_id?: string | null;
   organization_role?: string | null;
 }

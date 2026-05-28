@@ -380,7 +380,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
 
     // RFC 7231 / WHATWG EventSource: the browser sends `Last-Event-ID` (note
     // capital-D) but Hono normalises header names to lower-case on Edge.
-    const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? null;
+    const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? undefined;
 
     // V5.3.2 §2.14, B3: AG-UI streaming protocol envelope.
     // The legacy `event: status` frame is still emitted for back-compat; new
@@ -556,7 +556,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           ),
         );
       }
-    });
+    }) as unknown as Promise<void>;
   });
 
   function sanitizeForLog(s: string): string {

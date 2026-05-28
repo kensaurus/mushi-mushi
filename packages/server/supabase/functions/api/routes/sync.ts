@@ -255,18 +255,19 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     // Attach linked fix ID if present, via the report_groups table.
     // Scope to project_id to prevent cross-project data leakage if a
     // report_group_id is ever corrupted or guessed.
+    const row = data as unknown as Record<string, unknown>
     let fix_id: string | null = null
-    if (data.report_group_id) {
+    if (row.report_group_id) {
       const { data: group } = await db
         .from('report_groups')
         .select('fix_id')
-        .eq('id', data.report_group_id)
+        .eq('id', row.report_group_id as string)
         .eq('project_id', projectId)
         .maybeSingle()
       fix_id = group?.fix_id ?? null
     }
 
-    return c.json({ ok: true, data: { ...data, fix_id } })
+    return c.json({ ok: true, data: { ...row, fix_id } })
   })
 
   // ── PATCH /v1/sync/reports/:id ────────────────────────────────────────────
