@@ -144,7 +144,7 @@ Deno.serve(
     let processed = 0
     let failed = 0
 
-    for (const order of (orders ?? []) as PendingOrder[]) {
+    for (const order of (orders ?? []) as unknown as PendingOrder[]) {
       const tester = order.mushi_testers
       if (!tester) {
         wlog.warn('Order has no tester row', { orderId: order.id })
