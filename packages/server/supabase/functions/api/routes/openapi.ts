@@ -50,7 +50,7 @@ const OPENAPI_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
 }
 
-export function registerOpenApiRoute(app: Hono<{ Variables: Variables }>): void {
+export function registerOpenApiRoute(app: Hono): void {
   app.get('/openapi.json', (c) => {
     const url = new URL(c.req.raw.url)
     const apiBase = `${url.protocol}//${url.host}/functions/v1/api`

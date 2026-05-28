@@ -20,7 +20,7 @@ import { jwtAuth, getOrgIdFromContext, apiKeyAuth } from '../../_shared/auth.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
-export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
+export function registerReleasesRoutes(app: Hono) {
   // GET /v1/admin/releases/stats — posture banner + RELEASES SNAPSHOT.
   app.get('/v1/admin/releases/stats', jwtAuth, async (c) => {
     const db = getServiceClient()

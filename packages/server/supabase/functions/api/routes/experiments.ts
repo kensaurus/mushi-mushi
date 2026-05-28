@@ -28,7 +28,7 @@ import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
-export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>) {
+export function registerExperimentsRoutes(parent: Hono) {
   // GET /v1/admin/experiments/stats — posture banner + EXPERIMENTS SNAPSHOT.
   parent.get('/v1/admin/experiments/stats', requireAuth, async (c) => {
     const userId = c.get('userId') as string

@@ -9,13 +9,14 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'fix.attempted' | 'fix.reviewed'
   | 'integration.synced' | 'plugin.executed'
   | 'billing.checkout_started' | 'billing.subscription_changed' | 'billing.payment_failed'
-  | 'support.ticket_created' | 'support.ticket_status_changed'
+  | 'support.ticket_created' | 'support.ticket_status_changed' | 'support.ticket_cancelled'
   | 'compliance.retention.updated'
   | 'compliance.dsar.created' | 'compliance.dsar.updated'
   | 'compliance.soc2.evidence_refreshed'
   // v2 inventory + gates audit actions (whitepaper §4.1, §5)
   | 'inventory.ingest' | 'inventory.reconcile' | 'inventory.gates_run'
   | 'inventory.test_gen' | 'inventory.status_changed'
+  | 'settings.deleted'
 
 export async function logAudit(
   db: SupabaseClient,

@@ -21,7 +21,7 @@ function hasMcpWrite(scopes: string[]): boolean {
   return scopes.includes('mcp:write')
 }
 
-export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
+export function registerMcpAdminRoutes(parent: Hono) {
   parent.get('/v1/admin/mcp/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
     const db = getServiceClient()

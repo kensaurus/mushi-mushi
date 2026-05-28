@@ -44,7 +44,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerFixDispatchRoutes(app: Hono): void {
   // ============================================================
   // FIX DISPATCH (V5.3 §2.10) — admin-triggered, queue-based
   // ============================================================
@@ -64,10 +64,6 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         // calling agent fix an action that hasn't yet been auto-linked
         // by classify-report (e.g. a freshly ingested inventory).
         inventoryActionNodeId?: string;
-        // One-off agent override: allows the "Send to Claude Code Agent"
-        // button to force a single dispatch to claude_code_agent without
-        // changing the project's autofix_agent setting.
-        agentOverride?: string;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
@@ -171,8 +167,6 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           // so the worker doesn't need to walk the graph for it. NULL =>
           // worker derives from `reports_against`.
           inventory_action_node_id: body.inventoryActionNodeId ?? null,
-          // Per-dispatch agent override (e.g. "Send to Claude Code Agent").
-          agent_override: body.agentOverride ?? null,
         })
         .select('id, status, created_at')
         .single();

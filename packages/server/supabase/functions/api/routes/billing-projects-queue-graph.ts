@@ -5,7 +5,7 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { reportError } from '../../_shared/sentry.ts';
+import { reportError, reportMessage } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
   requireFeature,
@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -42,7 +42,226 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
+  // =================================================================================
+  // GET /v1/admin/billing/stats
+  // Workspace health summary for billing banner + KPI strip (active project focus).
+  // =================================================================================
+  app.get('/v1/admin/billing/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectIdHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null;
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      organizationId: null as string | null,
+      billingMode: null as 'stripe' | 'complimentary' | null,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      subscriptionStatus: null as string | null,
+      isComplimentary: false,
+      hasStripeCustomer: false,
+      paymentOk: false,
+      cancelAtPeriodEnd: false,
+      reportsUsed: 0,
+      reportsLimit: null as number | null,
+      usagePct: null as number | null,
+      overQuota: false,
+      approachingQuota: false,
+      fixesAttempted: 0,
+      fixesSucceeded: 0,
+      llmCostUsdMonth: 0,
+      periodEnd: null as string | null,
+      projectCount: 0,
+      freeLimitReports: 1000,
+      pastDueProjects: 0,
+      unpaidProjects: 0,
+    };
+
+    const projectIdsForUser = await ownedProjectIds(db, userId);
+    if (projectIdsForUser.length === 0) {
+      const plans = await listPlans();
+      const hobby = plans.find((pl) => pl.id === 'hobby');
+      return c.json({
+        ok: true,
+        data: {
+          ...empty,
+          freeLimitReports:
+            hobby?.included_reports_per_month ??
+            Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000'),
+        },
+      });
+    }
+
+    const { data: projects } = await db
+      .from('projects')
+      .select('id, name, organization_id')
+      .in('id', projectIdsForUser)
+      .order('created_at', { ascending: true });
+
+    const projectRows = projects ?? [];
+    const activeProject =
+      projectIdHint && projectRows.some((p) => p.id === projectIdHint)
+        ? projectRows.find((p) => p.id === projectIdHint)!
+        : projectRows[0] ?? null;
+
+    const periodStart = new Date();
+    periodStart.setUTCDate(1);
+    periodStart.setUTCHours(0, 0, 0, 0);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+
+    const projectIds = projectRows.map((p) => p.id);
+    const orgIds = Array.from(
+      new Set(projectRows.map((p) => p.organization_id).filter((x): x is string => Boolean(x))),
+    );
+
+    const [
+      { data: subs },
+      { data: customers },
+      { data: usage },
+      { data: llmCosts },
+      { data: orgs },
+      plans,
+    ] = await Promise.all([
+      db
+        .from('billing_subscriptions')
+        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end')
+        .in('project_id', projectIds),
+      db
+        .from('billing_customers')
+        .select('project_id, stripe_customer_id, default_payment_ok')
+        .in('project_id', projectIds),
+      db
+        .from('usage_events')
+        .select('project_id, event_name, quantity')
+        .in('project_id', projectIds)
+        .gte('occurred_at', periodStart.toISOString()),
+      activeProject
+        ? db
+          .from('llm_invocations')
+          .select('cost_usd')
+          .eq('project_id', activeProject.id)
+          .gte('created_at', periodStart.toISOString())
+          .not('cost_usd', 'is', null)
+        : Promise.resolve({ data: [] as { cost_usd: number }[] }),
+      orgIds.length > 0
+        ? db.from('organizations').select('id, plan_id, billing_mode').in('id', orgIds)
+        : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
+      listPlans(),
+    ]);
+
+    const orgById = new Map<string, { plan_id: string; billing_mode: string }>();
+    for (const o of orgs ?? []) orgById.set(o.id, { plan_id: o.plan_id, billing_mode: o.billing_mode });
+
+    let pastDueProjects = 0;
+    let unpaidProjects = 0;
+    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean }>();
+    for (const s of subs ?? []) {
+      subByProject.set(s.project_id, s);
+      if (s.status === 'past_due') pastDueProjects += 1;
+      if (s.status === 'unpaid') unpaidProjects += 1;
+    }
+    const customerByProject = new Map<string, { stripe_customer_id?: string; default_payment_ok?: boolean }>();
+    for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
+
+    const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number }>();
+    for (const u of usage ?? []) {
+      const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0 };
+      if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity);
+      else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity);
+      else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity);
+      usageByProject.set(u.project_id, cur);
+    }
+
+    let llmCostUsdMonth = 0;
+    const llmCostRows =
+      llmCosts && typeof llmCosts === 'object' && 'data' in llmCosts
+        ? ((llmCosts as { data: { cost_usd: number }[] | null }).data ?? [])
+        : [];
+    for (const row of llmCostRows) {
+      llmCostUsdMonth += Number(row.cost_usd ?? 0);
+    }
+    llmCostUsdMonth = Math.round(llmCostUsdMonth * 10000) / 10000;
+
+    const hobby = plans.find((pl) => pl.id === 'hobby');
+    const freeLimitReports =
+      hobby?.included_reports_per_month ??
+      Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
+
+    if (!activeProject) {
+      return c.json({
+        ok: true,
+        data: { ...empty, projectCount: projectRows.length, freeLimitReports, pastDueProjects, unpaidProjects },
+      });
+    }
+
+    const sub = subByProject.get(activeProject.id) ?? null;
+    const cust = customerByProject.get(activeProject.id) ?? null;
+    const u = usageByProject.get(activeProject.id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0 };
+    const orgInfo = activeProject.organization_id ? orgById.get(activeProject.organization_id) ?? null : null;
+    const isComplimentary = orgInfo?.billing_mode === 'complimentary';
+    const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
+    const planId = subPlanActive
+      ? (sub!.plan_id ?? 'hobby')
+      : isComplimentary
+        ? orgInfo!.plan_id
+        : 'hobby';
+    const plan = await getPlan(planId);
+    const limit = plan.included_reports_per_month;
+    const usagePct = limit ? Math.round((u.reports / limit) * 100) : null;
+    const overQuota =
+      !isComplimentary &&
+      limit !== null &&
+      u.reports >= limit &&
+      !plan.overage_price_lookup_key;
+    const approachingQuota = usagePct != null && usagePct >= 80 && !overQuota;
+
+    const subscriptionStatus = subPlanActive
+      ? sub!.status
+      : isComplimentary && plan.id !== 'hobby'
+        ? 'active'
+        : plan.id === 'hobby'
+          ? 'free'
+          : sub?.status ?? null;
+
+    const periodEndIso = subPlanActive && sub?.current_period_end
+      ? sub.current_period_end
+      : periodEnd.toISOString();
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        organizationId: activeProject.organization_id ?? null,
+        billingMode: (orgInfo?.billing_mode as 'stripe' | 'complimentary' | undefined) ?? 'stripe',
+        planId: plan.id,
+        planDisplayName: plan.display_name,
+        subscriptionStatus,
+        isComplimentary,
+        hasStripeCustomer: Boolean(cust?.stripe_customer_id),
+        paymentOk: Boolean(cust?.default_payment_ok),
+        cancelAtPeriodEnd: Boolean(sub?.cancel_at_period_end),
+        reportsUsed: u.reports,
+        reportsLimit: limit,
+        usagePct,
+        overQuota,
+        approachingQuota,
+        fixesAttempted: u.fixes,
+        fixesSucceeded: u.fixesSucceeded,
+        llmCostUsdMonth,
+        periodEnd: periodEndIso,
+        projectCount: projectRows.length,
+        freeLimitReports,
+        pastDueProjects,
+        unpaidProjects,
+      },
+    });
+  });
+
   app.get('/v1/admin/billing', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -346,6 +565,174 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   });
 
   // =================================================================================
+  // GET /v1/admin/onboarding/stats
+  // Focused setup posture for the active (or first accessible) project.
+  // =================================================================================
+  app.get('/v1/admin/onboarding/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      requiredComplete: 0,
+      requiredTotal: 4,
+      stepsComplete: 0,
+      stepsTotal: 8,
+      optionalComplete: 0,
+      optionalTotal: 4,
+      setupDone: false,
+      nextStepId: 'project_created' as string | null,
+      nextStepLabel: 'Create your first project' as string | null,
+      sdkInstalled: false,
+      sdkHostMismatch: false,
+      adminEndpointHost: adminHost,
+      sdkEndpointHost: null as string | null,
+      hasApiKey: false,
+      reportCount: 0,
+      fixCount: 0,
+      mergedFixCount: 0,
+    };
+
+    const accessibleIds = await ownedProjectIds(db, userId);
+    if (accessibleIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { ...empty, hasAnyProject: true } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+    const pid = project.id;
+
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select(
+          'project_id, is_active, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
+        )
+        .eq('project_id', pid)
+        .eq('is_active', true),
+      db
+        .from('project_settings')
+        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
+        .eq('project_id', pid)
+        .maybeSingle(),
+      db
+        .from('reports')
+        .select('id, environment, created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      db.from('fix_attempts').select('id, merged_at').eq('project_id', pid).limit(200),
+      db.from('project_repos').select('project_id').eq('project_id', pid).limit(1),
+    ]);
+
+    const hasKey = (keysRes.data ?? []).length > 0;
+    let heartbeat: {
+      last_seen_at: string;
+      last_seen_endpoint_host: string | null;
+    } | null = null;
+    for (const k of keysRes.data ?? []) {
+      const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null;
+      if (!seenAt) continue;
+      if (heartbeat && heartbeat.last_seen_at >= seenAt) continue;
+      heartbeat = {
+        last_seen_at: seenAt,
+        last_seen_endpoint_host:
+          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
+      };
+    }
+
+    let sdkReportSignal = false;
+    const reports = reportsRes.data ?? [];
+    for (const r of reports) {
+      const env = (r.environment ?? {}) as Record<string, unknown>;
+      const platform = typeof env.platform === 'string' ? env.platform : '';
+      if (platform && platform !== 'mushi-admin') sdkReportSignal = true;
+    }
+
+    const hasSdk = Boolean(heartbeat) || sdkReportSignal;
+    const sdkEndpointHost = heartbeat?.last_seen_endpoint_host ?? null;
+    const sdkHostMismatch = Boolean(
+      adminHost && sdkEndpointHost && sdkEndpointHost !== adminHost && hasSdk,
+    );
+
+    const settings = settingsRes.data;
+    const hasGithub = Boolean(settings?.github_repo_url) || (reposRes.data ?? []).length > 0;
+    const hasSentry = Boolean(settings?.sentry_org_slug);
+    const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+    const reportCount = reports.length;
+    const fixes = fixesRes.data ?? [];
+    const fixCount = fixes.length;
+    const mergedFixCount = fixes.filter((f) => f.merged_at).length;
+
+    type StepDef = { id: string; label: string; complete: boolean; required: boolean };
+    const steps: StepDef[] = [
+      { id: 'project_created', label: 'Create your first project', complete: true, required: true },
+      { id: 'api_key_generated', label: 'Generate an API key', complete: hasKey, required: true },
+      { id: 'sdk_installed', label: 'Install the SDK in your app', complete: hasSdk, required: true },
+      {
+        id: 'first_report_received',
+        label: 'Receive your first bug report',
+        complete: reportCount > 0,
+        required: true,
+      },
+      { id: 'github_connected', label: 'Connect GitHub', complete: hasGithub, required: false },
+      { id: 'sentry_connected', label: 'Connect Sentry (optional)', complete: hasSentry, required: false },
+      { id: 'byok_anthropic', label: 'Add your Anthropic key (optional)', complete: hasByok, required: false },
+      {
+        id: 'first_fix_dispatched',
+        label: 'Dispatch your first auto-fix',
+        complete: fixCount > 0,
+        required: false,
+      },
+    ];
+
+    const requiredSteps = steps.filter((s) => s.required);
+    const optionalSteps = steps.filter((s) => !s.required);
+    const requiredComplete = requiredSteps.filter((s) => s.complete).length;
+    const setupDone = requiredComplete === requiredSteps.length;
+    const nextRequired = requiredSteps.find((s) => !s.complete) ?? null;
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: project.name,
+        requiredComplete,
+        requiredTotal: requiredSteps.length,
+        stepsComplete: steps.filter((s) => s.complete).length,
+        stepsTotal: steps.length,
+        optionalComplete: optionalSteps.filter((s) => s.complete).length,
+        optionalTotal: optionalSteps.length,
+        setupDone,
+        nextStepId: nextRequired?.id ?? null,
+        nextStepLabel: nextRequired?.label ?? null,
+        sdkInstalled: hasSdk,
+        sdkHostMismatch,
+        adminEndpointHost: adminHost,
+        sdkEndpointHost,
+        hasApiKey: hasKey,
+        reportCount,
+        fixCount,
+        mergedFixCount,
+      },
+    });
+  });
+
+  // =================================================================================
   // GET /v1/admin/setup
   // ---------------------------------------------------------------------------------
   // Aggregates the seven onboarding signals per owned project. Single source of truth
@@ -393,7 +780,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     // SDK heartbeat (`last_seen_*`) so the dashboard can prove the SDK has
     // reached THIS backend without waiting for a real user-triggered report —
     // see migration 20260505000000_project_api_keys_last_seen.sql for rationale.
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, indexedFilesRes] = await Promise.all([
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, codebaseFilesRes] = await Promise.all([
       db
         .from('project_api_keys')
         .select(
@@ -403,7 +790,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .eq('is_active', true),
       db
         .from('project_settings')
-        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref, autofix_enabled, codebase_index_enabled')
+        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
         .in('project_id', projectIds),
       db
         .from('reports')
@@ -416,19 +803,11 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .select('project_id, merged_at')
         .in('project_id', projectIds)
         .limit(1000),
-      db
-        .from('project_repos')
-        .select('project_id, last_indexed_at')
-        .in('project_id', projectIds),
-      // Count indexed (non-tombstoned) files per project — drives codebase_indexed step.
-      // This is a simple count per project_id without groupby support in PostgREST,
-      // so we fetch minimal rows and aggregate in JS.
-      db
-        .from('project_codebase_files')
-        .select('project_id', { count: 'exact' })
-        .in('project_id', projectIds)
-        .is('tombstoned_at', null)
-        .limit(50000),
+      db.from('project_repos').select('project_id').in('project_id', projectIds),
+      // Pull only project_id so we can count indexed files per project without
+      // transferring payload. Used by ExplorePage to determine the "not indexed
+      // yet" empty state.
+      db.from('project_codebase_files').select('project_id').in('project_id', projectIds),
     ]);
 
     const keyByProject = new Set<string>();
@@ -462,29 +841,16 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         github_repo_url: string | null;
         sentry_org_slug: string | null;
         byok_anthropic_key_ref: string | null;
-        autofix_enabled: boolean | null;
-        codebase_index_enabled: boolean | null;
       }
     >();
     for (const s of settingsRes.data ?? []) settingsByProject.set(s.project_id, s as never);
 
-    const reposByProject = new Map<string, { last_indexed_at: string | null }>();
-    for (const r of reposRes.data ?? []) {
-      const existing = reposByProject.get(r.project_id);
-      // Keep the most recently indexed repo entry per project
-      const newAt = (r as { last_indexed_at?: string | null }).last_indexed_at ?? null;
-      if (!existing || (newAt && (!existing.last_indexed_at || newAt > existing.last_indexed_at))) {
-        reposByProject.set(r.project_id, { last_indexed_at: newAt });
-      }
-    }
+    const reposByProject = new Set<string>();
+    for (const r of reposRes.data ?? []) reposByProject.add(r.project_id);
 
-    // Aggregate indexed file counts per project from the flat rows query
-    const indexedFilesByProject = new Map<string, number>();
-    for (const f of indexedFilesRes.data ?? []) {
-      indexedFilesByProject.set(
-        f.project_id,
-        (indexedFilesByProject.get(f.project_id) ?? 0) + 1,
-      );
+    const indexedFileCountByProject = new Map<string, number>();
+    for (const f of codebaseFilesRes.data ?? []) {
+      indexedFileCountByProject.set(f.project_id, (indexedFileCountByProject.get(f.project_id) ?? 0) + 1);
     }
 
     // Legacy fallback signal: at least one report whose `environment.platform`
@@ -528,8 +894,6 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       | 'github_connected'
       | 'sentry_connected'
       | 'byok_anthropic'
-      | 'codebase_indexed'
-      | 'autofix_enabled'
       | 'first_fix_dispatched';
 
     interface Step {
@@ -578,16 +942,11 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       // remain — keeps already-green checklists green after the migration.
       const hasSdk = Boolean(heartbeat) || sdkReportSignalByProject.has(p.id);
       const reportInfo = reportsByProject.get(p.id) ?? { count: 0, firstAt: null };
-      const repoEntry = reposByProject.get(p.id);
       const hasGithub = Boolean(settings?.github_repo_url) || reposByProject.has(p.id);
       const hasSentry = Boolean(settings?.sentry_org_slug);
       const hasByok = Boolean(settings?.byok_anthropic_key_ref);
       const fixCount = fixesByProject.get(p.id) ?? 0;
       const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0;
-      const indexedFiles = indexedFilesByProject.get(p.id) ?? 0;
-      const hasCodebaseIndexed =
-        Boolean(repoEntry?.last_indexed_at) && indexedFiles > 0;
-      const hasAutofixEnabled = Boolean(settings?.autofix_enabled);
 
       const steps: Step[] = [
         {
@@ -656,26 +1015,8 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
           description: 'BYOK avoids platform quotas and sends usage to your own bill.',
           complete: hasByok,
           required: false,
-          cta_to: '/settings?tab=byok',
+          cta_to: '/settings',
           cta_label: 'Add API key',
-        },
-        {
-          id: 'codebase_indexed',
-          label: 'Index your codebase',
-          description: 'Let the agent search your source files when drafting a patch. Required for auto-fix PRs.',
-          complete: hasCodebaseIndexed,
-          required: false,
-          cta_to: '/integrations',
-          cta_label: 'Configure indexing',
-        },
-        {
-          id: 'autofix_enabled',
-          label: 'Enable auto-fix',
-          description: 'Turn on the auto-fix queue so dispatched reports become pull requests.',
-          complete: hasAutofixEnabled,
-          required: false,
-          cta_to: '/integrations',
-          cta_label: 'Enable auto-fix',
         },
         {
           id: 'first_fix_dispatched',
@@ -706,6 +1047,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         report_count: reportInfo.count,
         fix_count: fixCount,
         merged_fix_count: mergedFixCount,
+        indexed_file_count: indexedFileCountByProject.get(p.id) ?? 0,
       };
     });
 
@@ -1264,6 +1606,154 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     });
   });
 
+  app.get('/v1/admin/projects/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const accessibleIds = await ownedProjectIds(db, userId);
+    const activeProjectHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null;
+
+    const empty = {
+      projectCount: 0,
+      activeKeyCount: 0,
+      projectsWithReports: 0,
+      sdkConnectedCount: 0,
+      neverIngestedCount: 0,
+      reportsLast24h: 0,
+      reportsLast30d: 0,
+      activeProjectId: activeProjectHint,
+      activeProjectName: null as string | null,
+      activeProjectHasReports: false,
+      activeProjectSdkConnected: false,
+      staleKeyCount: 0,
+      topPriority: 'no_projects' as
+        | 'no_projects'
+        | 'never_ingested'
+        | 'no_sdk_heartbeat'
+        | 'partial_ingest'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    if (accessibleIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { data: keyRows, error: keyErr },
+      { data: reportProjectRows, error: reportProjErr },
+      { count: reports24h, error: r24Err },
+      { count: reports30d, error: r30Err },
+      { data: activeProjectRow },
+    ] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('project_id, is_active, last_seen_at')
+        .in('project_id', accessibleIds),
+      db.from('reports').select('project_id').in('project_id', accessibleIds),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', accessibleIds)
+        .gte('created_at', since24h),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', accessibleIds)
+        .gte('created_at', since30d),
+      activeProjectHint && accessibleIds.includes(activeProjectHint)
+        ? db.from('projects').select('name').eq('id', activeProjectHint).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    if (keyErr) return dbError(c, keyErr);
+    if (reportProjErr) return dbError(c, reportProjErr);
+    if (r24Err) return dbError(c, r24Err);
+    if (r30Err) return dbError(c, r30Err);
+
+    const activeKeyCount = (keyRows ?? []).filter((k) => k.is_active !== false).length;
+    const sdkConnectedProjects = new Set<string>();
+    let staleKeyCount = 0;
+    for (const k of keyRows ?? []) {
+      const lastSeen = (k as { last_seen_at?: string | null }).last_seen_at;
+      if (lastSeen) {
+        sdkConnectedProjects.add(k.project_id as string);
+      } else if (k.is_active !== false) {
+        staleKeyCount += 1;
+      }
+    }
+    const projectsWithReportsSet = new Set<string>();
+    for (const r of reportProjectRows ?? []) {
+      projectsWithReportsSet.add(r.project_id as string);
+    }
+
+    const projectCount = accessibleIds.length;
+    const projectsWithReports = projectsWithReportsSet.size;
+    const sdkConnectedCount = sdkConnectedProjects.size;
+    const neverIngestedCount = Math.max(0, projectCount - projectsWithReports);
+
+    const activeProjectId =
+      activeProjectHint && accessibleIds.includes(activeProjectHint) ? activeProjectHint : null;
+    const activeProjectName = (activeProjectRow as { name?: string } | null)?.name ?? null;
+    const activeProjectHasReports = activeProjectId
+      ? projectsWithReportsSet.has(activeProjectId)
+      : false;
+    const activeProjectSdkConnected = activeProjectId
+      ? sdkConnectedProjects.has(activeProjectId)
+      : false;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (projectCount === 0) {
+      topPriority = 'no_projects';
+      topPriorityLabel = 'Create a project, mint an API key, and send a test report to prove ingest.';
+      topPriorityTo = '/projects?tab=create';
+    } else if (projectsWithReports === 0) {
+      topPriority = 'never_ingested';
+      topPriorityLabel = `${projectCount} project${projectCount === 1 ? '' : 's'} exist but none have ingested a report — mint a key and use Test report on a project card.`;
+      topPriorityTo = '/projects?tab=list';
+    } else if (sdkConnectedCount === 0) {
+      topPriority = 'no_sdk_heartbeat';
+      topPriorityLabel = 'Reports are landing but no API key shows a SDK heartbeat — expand a project card and compare endpoint host vs this admin.';
+      topPriorityTo = '/projects?tab=list';
+    } else if (neverIngestedCount > 0) {
+      topPriority = 'partial_ingest';
+      topPriorityLabel = `${neverIngestedCount} project${neverIngestedCount === 1 ? '' : 's'} never ingested · ${projectsWithReports}/${projectCount} receiving reports · ${sdkConnectedCount} with SDK heartbeat.`;
+      topPriorityTo = '/projects?tab=list';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${projectCount} project${projectCount === 1 ? '' : 's'} ingesting · ${activeKeyCount} active key${activeKeyCount === 1 ? '' : 's'} · ${reports24h ?? 0} report${(reports24h ?? 0) === 1 ? '' : 's'} in 24h.`;
+      topPriorityTo = '/reports';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        projectCount,
+        activeKeyCount,
+        projectsWithReports,
+        sdkConnectedCount,
+        neverIngestedCount,
+        reportsLast24h: reports24h ?? 0,
+        reportsLast30d: reports30d ?? 0,
+        activeProjectId,
+        activeProjectName,
+        activeProjectHasReports,
+        activeProjectSdkConnected,
+        staleKeyCount,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   app.post('/v1/admin/projects', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const { name } = (await c.req.json()) as { name: string };
@@ -1339,14 +1829,46 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       organizationId = writable?.organization_id ?? null;
     }
 
-    // Lazy-bootstrap: a brand-new signup can hit POST /v1/admin/projects
-    // before the auth trigger has had a chance to materialise their personal
-    // org row. Call bootstrap_personal_org now so first-time users land on
-    // the happy path instead of a dead-end 400.
-    if (!organizationId) {
-      const { data: bootstrapped } = await db
+    // Lazy bootstrap: a brand-new signup may have arrived before the
+    // `on_auth_user_created_personal_org` trigger could materialise
+    // their personal workspace (or the trigger may have failed — the
+    // 20260520300000_personal_org_on_signup migration intentionally
+    // swallows exceptions so a bad trigger run never blocks signup).
+    // Rather than dead-end the user on "NO_ORGANIZATION" with no
+    // recovery path in the UI, materialise the personal org on the
+    // fly via the same idempotent helper the trigger uses, then
+    // continue. Only triggers when (a) the caller didn't pass an
+    // explicit org hint AND (b) they have zero writable memberships
+    // — never silently widens scope of an explicit choice.
+    if (!organizationId && !orgIdHint) {
+      // The factory lives in `private.bootstrap_personal_org` (same
+      // convention as touch_org_member_activity / has_org_role etc),
+      // but PostgREST only exposes schemas listed in `api.schemas`
+      // (default: public, graphql_public). To avoid widening the
+      // PostgREST allowlist just for this one call, we ship a thin
+      // SECURITY DEFINER wrapper at `public.bootstrap_personal_org`
+      // (migration 20260520310000_personal_org_public_wrapper) that
+      // delegates to the private function. The wrapper is service-role
+      // only so an authenticated user can never call it with someone
+      // else's user id.
+      const { data: personalOrgId, error: bootstrapErr } = await db
         .rpc('bootstrap_personal_org', { p_user_id: userId });
-      organizationId = (bootstrapped as string | null) ?? null;
+      if (!bootstrapErr && typeof personalOrgId === 'string') {
+        organizationId = personalOrgId;
+      } else if (bootstrapErr) {
+        // Surface the DB error so it shows up in Sentry / postgres logs
+        // — the user still sees the friendlier NO_ORGANIZATION below.
+        try {
+          reportMessage(
+            `admin.projects.create.bootstrap_personal_org failed: ${bootstrapErr.message}`,
+            'warning',
+          );
+        } catch {
+          // Sentry init can race on cold-start of the edge function.
+          // We must never let a telemetry failure prevent the user
+          // from seeing the actionable error message below.
+        }
+      }
     }
 
     if (!organizationId) {
@@ -1362,11 +1884,28 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       );
     }
 
-    const slug = name
+    // Slug derivation:
+    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
+    //      trailing dashes — the historical shape.
+    //   2. If the user typed something like "!!!" or all-emoji that
+    //      reduces to an empty string, fall back to a short random tail
+    //      so we never write an empty slug. Empty slugs broke the slug
+    //      UNIQUE constraint as soon as a second emoji-named project
+    //      landed AND surfaced in the URL as `/projects//settings`,
+    //      which the React Router stopped resolving cleanly.
+    //   3. Cap the length at 48 chars so the slug fits in the URL bar
+    //      and in the audit log without truncation. Random suffixes
+    //      append AFTER the trim so a long-name + collision retry
+    //      below stays under the column cap.
+    let slug = name
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/^-|-$/g, '')
+      .slice(0, 48);
+    if (!slug) {
+      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
+    }
     const { data, error } = await db
       .from('projects')
       .insert({
@@ -2227,9 +2766,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       );
     }
 
-    // File cap constant — keep in sync with code-indexer.ts MUSHI_REPO_INDEX_SWEEP_FILE_CAP
-    const FILE_CAP = parseInt(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300', 10);
-    const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }, { data: langRows }] = await Promise.all([
+    const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }] = await Promise.all([
       db
         .from('project_settings')
         .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
@@ -2238,7 +2775,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       db
         .from('project_repos')
         .select(
-          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled, path_globs',
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled',
         )
         .eq('project_id', projectId)
         .eq('is_primary', true)
@@ -2248,28 +2785,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .is('tombstoned_at', null),
-      // Language distribution for the "what got indexed" sparkline.
-      // PostgREST doesn't support GROUP BY so we fetch just the language column
-      // and aggregate in JS. Capped at 5 000 rows (>> 300-file cap) so memory
-      // is bounded even if the cap is raised later.
-      db
-        .from('project_codebase_files')
-        .select('language')
-        .eq('project_id', projectId)
-        .is('tombstoned_at', null)
-        .limit(5000),
     ]);
-
-    // Aggregate language distribution
-    const langCounts = new Map<string, number>();
-    for (const row of langRows ?? []) {
-      const lang = (row as { language?: string | null }).language ?? 'unknown';
-      langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1);
-    }
-    const language_distribution = Object.fromEntries(
-      [...langCounts.entries()].sort((a, b) => b[1] - a[1]),
-    );
-    const atFileCap = (indexedFiles ?? 0) >= FILE_CAP;
 
     return c.json({
       ok: true,
@@ -2279,11 +2795,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         default_branch: primaryRepo?.default_branch ?? null,
         installation_id: primaryRepo?.github_app_installation_id ?? null,
         indexing_enabled: primaryRepo?.indexing_enabled ?? null,
-        path_globs: (primaryRepo as { path_globs?: string[] | null } | null)?.path_globs ?? null,
         indexed_files: indexedFiles ?? 0,
-        file_cap: FILE_CAP,
-        at_file_cap: atFileCap,
-        language_distribution,
         last_indexed_at: primaryRepo?.last_indexed_at ?? null,
         last_index_attempt_at: primaryRepo?.last_index_attempt_at ?? null,
         last_index_error: primaryRepo?.last_index_error ?? null,
@@ -2292,308 +2804,547 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     });
   });
 
-  // ── Webhook secret rotation ───────────────────────────────────────────────
-  // Rotates the GitHub webhook secret without disabling / re-enabling indexing.
-  // The previous secret becomes invalid the moment this returns, so the caller
-  // must immediately update the secret in GitHub → Settings → Webhooks.
-  app.post('/v1/admin/projects/:id/codebase/rotate-secret', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-
-    const access = await userCanAccessProject(db, userId, projectId);
-    if (!access.allowed || access.role === 'viewer') {
-      return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a project editor' } },
-        403,
-      );
-    }
-
-    const newSecret = await generateWebhookSecret();
-    const { error: updErr } = await db
-      .from('project_settings')
-      .update({ github_webhook_secret: newSecret })
-      .eq('project_id', projectId);
-    if (updErr) return dbError(c, updErr);
-
-    await logAudit(db, projectId, userId, 'settings.updated', 'webhook_secret_rotated', projectId, {}).catch(() => {});
-
-    return c.json({ ok: true, data: { webhook_secret: newSecret } });
-  });
-
-  // ── Autofix toggle + preflight ────────────────────────────────────────────
+  // ── Codebase Explorer ────────────────────────────────────────────────────
   //
-  // Phase-4 unblock (2026-05-26): the dispatch endpoint rejects with
-  // `AUTOFIX_DISABLED` when `project_settings.autofix_enabled` is `false`,
-  // but until now the admin UI had no toggle for that column — users had to
-  // flip it via SQL/Supabase Studio (the exact pain point that forced the
-  // earlier Management-API workaround when wiring up solo-boss-cloud).
+  // GET  /v1/admin/projects/:id/codebase/explore
+  //   Returns { nodes, edges, layers, total_files } — the full graph payload
+  //   the ExplorePage visualises. Nodes are project_codebase_files rows
+  //   (files or symbols); edges are derived by regex-scanning content_preview
+  //   for relative import paths.
   //
-  // `GET /v1/admin/projects/:id/autofix` returns the current flag so the
-  // GitHub integration card can render an accurate toggle on first paint.
-  // `POST /v1/admin/projects/:id/autofix/toggle` flips it (owner/admin only)
-  // and writes an audit log.
-  //
-  // `GET /v1/admin/projects/:id/preflight` returns the dispatch readiness
-  // checklist in ONE call so the dispatch popover doesn't have to issue 4
-  // parallel fetches every time it opens. Each field maps 1:1 to a Dispatch
-  // prerequisite (github / codebase / anthropic / autofix), and `ready`
-  // short-circuits to `true` when every check passes.
-  app.get('/v1/admin/projects/:id/autofix', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-    const access = await userCanAccessProject(db, userId, projectId);
-    if (!access.allowed) {
-      return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
-        403,
-      );
+  // POST /v1/admin/projects/:id/codebase/search
+  //   Accepts { query, k? } and returns top-k semantically similar files via
+  //   the match_codebase_files Postgres RPC.
+
+  type ExploreLayer = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
+
+  function detectExploreLayer(filePath: string): ExploreLayer {
+    const p = filePath.toLowerCase().replace(/\\/g, '/')
+    // Anchored to handle both root-relative paths (no leading /) and nested paths
+    if (/(^|\/)(tests?|__tests?__|spec|e2e|cypress|playwright)\//.test(p) || /\.(test|spec)\.[jt]sx?$/.test(p)) return 'test'
+    if (/(^|\/)(server|api|edge-function|supabase\/functions|backend|routes?)\//.test(p)) return 'backend'
+    if (/(^|\/)(app|pages?|screens?|views?|components?|layouts?|ui)\//u.test(p) || /\.(tsx|jsx)$/u.test(p)) return 'ui'
+    if (/(^|\/)(lib|libs?|utils?|helpers?|hooks?|contexts?|shared|common|core)\//u.test(p)) return 'lib'
+    if (/(^|\/)(config|configs?|tooling|scripts?|deploy|\.github|build)\//u.test(p) || /\.(json|yaml|yml|toml|mjs|cjs)$/u.test(p) || /^(vite|next|tailwind|tsconfig|package|turbo)/.test(p.split('/').pop() ?? '')) return 'config'
+    return 'other'
+  }
+
+  const IMPORT_RE = /(?:import\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\))/g
+
+  function extractRelativeImports(content: string): string[] {
+    const imports: string[] = []
+    let m: RegExpExecArray | null
+    IMPORT_RE.lastIndex = 0
+    while ((m = IMPORT_RE.exec(content)) !== null) {
+      const p = m[1] ?? m[2]
+      if (p && p.startsWith('.')) imports.push(p)
     }
-    const { data: settings, error } = await db
-      .from('project_settings')
-      .select('autofix_enabled')
-      .eq('project_id', projectId)
-      .maybeSingle();
-    if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { autofix_enabled: !!settings?.autofix_enabled } });
-  });
+    return imports
+  }
 
-  app.post('/v1/admin/projects/:id/autofix/toggle', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-
-    const access = await userCanAccessProject(db, userId, projectId);
-    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
-      return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
-        403,
-      );
+  /** Resolve a relative import path against its source file's directory. */
+  function resolveRelative(fromPath: string, importPath: string): string {
+    const dir = fromPath.split('/').slice(0, -1).join('/')
+    const segments = [...(dir ? dir.split('/') : []), ...importPath.split('/')]
+    const resolved: string[] = []
+    for (const seg of segments) {
+      if (seg === '..') resolved.pop()
+      else if (seg !== '.') resolved.push(seg)
     }
+    return resolved.join('/')
+  }
 
-    let body: { enabled?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json(
-        { ok: false, error: { code: 'INVALID_JSON', message: 'Body must be JSON' } },
-        400,
-      );
-    }
-    if (typeof body.enabled !== 'boolean') {
-      return c.json(
-        { ok: false, error: { code: 'BAD_BODY', message: '`enabled` must be a boolean' } },
-        400,
-      );
-    }
-    const enabled = body.enabled;
+  // GET /v1/admin/explore/stats — codebase atlas posture (banner + EXPLORE SNAPSHOT).
+  // Must be registered BEFORE /v1/admin/projects/:id/codebase/explore so "stats"
+  // is never swallowed as a project id.
+  app.get('/v1/admin/explore/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
 
-    const { data: before } = await db
-      .from('project_settings')
-      .select('autofix_enabled')
-      .eq('project_id', projectId)
-      .maybeSingle();
-
-    const { error: updErr } = await db
-      .from('project_settings')
-      .upsert({ project_id: projectId, autofix_enabled: enabled }, { onConflict: 'project_id' });
-    if (updErr) return dbError(c, updErr);
-
-    await logAudit(db, projectId, userId, 'settings.updated', 'autofix', projectId, {
-      previous: !!before?.autofix_enabled,
-      next: enabled,
-    }).catch(() => {});
-
-    return c.json({ ok: true, data: { autofix_enabled: enabled } });
-  });
-
-  app.get('/v1/admin/projects/:id/preflight', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
-    const projectId = c.req.param('id');
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-    const access = await userCanAccessProject(db, userId, projectId);
-    if (!access.allowed) {
-      return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
-        403,
-      );
+    const emptyLayers = { ui: 0, lib: 0, backend: 0, test: 0, config: 0, other: 0 }
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      codebaseIndexEnabled: false,
+      indexingEnabled: null as boolean | null,
+      repoUrl: null as string | null,
+      hasWebhookSecret: false,
+      indexedFiles: 0,
+      symbolCount: 0,
+      withEmbeddings: 0,
+      layers: emptyLayers,
+      topLanguages: [] as string[],
+      lastIndexedAt: null as string | null,
+      lastIndexAttemptAt: null as string | null,
+      lastIndexError: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'not_enabled'
+        | 'indexing'
+        | 'error'
+        | 'empty'
+        | 'ready'
+        | 'stale',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     }
 
-    // Read every dispatch prerequisite in parallel. Each query is cheap
-    // (single-row PK / count(*) HEAD), so one round-trip beats the FE's
-    // alternative of 4 sequential apiFetch calls per popover open.
-    //
-    // BYOK Anthropic key lives in `project_settings.byok_anthropic_key_ref`
-    // (a `vault://<uuid>` string when configured, null otherwise) — NOT in a
-    // separate `llm_byok_keys` table. Sourcing it from the same row as the
-    // other flags keeps this to a single project_settings round-trip.
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
     const [
-      { data: settings },
-      { data: primaryRepo },
-      { count: indexedFiles },
+      settingsRes,
+      primaryRepoRes,
+      filesCountRes,
+      symbolsCountRes,
+      embeddingsCountRes,
+      fileSampleRes,
     ] = await Promise.all([
       db
         .from('project_settings')
-        .select(
-          'autofix_enabled, codebase_index_enabled, codebase_repo_url, byok_anthropic_key_ref',
-        )
-        .eq('project_id', projectId)
+        .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
+        .eq('project_id', pid)
         .maybeSingle(),
       db
         .from('project_repos')
-        .select('repo_url, github_app_installation_id, indexing_enabled, last_indexed_at')
-        .eq('project_id', projectId)
+        .select(
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled',
+        )
+        .eq('project_id', pid)
         .eq('is_primary', true)
         .maybeSingle(),
       db
         .from('project_codebase_files')
-        .select('*', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .is('tombstoned_at', null),
-    ]);
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .not('symbol_name', 'is', null),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .not('embedding', 'is', null),
+      db
+        .from('project_codebase_files')
+        .select('file_path, language')
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null)
+        .limit(5000),
+    ])
 
-    const githubRepoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null;
-    const githubReady = !!githubRepoUrl;
-    const codebaseReady =
-      !!settings?.codebase_index_enabled &&
-      (indexedFiles ?? 0) > 0 &&
-      !!primaryRepo?.last_indexed_at;
-    const anthropicReady = !!settings?.byok_anthropic_key_ref;
-    const autofixReady = !!settings?.autofix_enabled;
+    const settings = settingsRes.data
+    const primaryRepo = primaryRepoRes.data
+    const indexedFiles = filesCountRes.count ?? 0
+    const symbolCount = symbolsCountRes.count ?? 0
+    const withEmbeddings = embeddingsCountRes.count ?? 0
+    const codebaseIndexEnabled = !!settings?.codebase_index_enabled
+    const indexingEnabled = primaryRepo?.indexing_enabled ?? null
+    const repoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null
+    const lastIndexedAt = primaryRepo?.last_indexed_at ?? null
+    const lastIndexAttemptAt = primaryRepo?.last_index_attempt_at ?? null
+    const lastIndexError = primaryRepo?.last_index_error ?? null
 
-    const checks = [
-      {
-        key: 'github' as const,
-        ready: githubReady,
-        label: 'GitHub repo connected',
-        hint: githubReady
-          ? `Repo: ${githubRepoUrl}`
-          : 'Paste your GitHub repo URL in Integrations to give the fix worker a target.',
-        fixHref: '/integrations',
-      },
-      {
-        key: 'codebase' as const,
-        ready: codebaseReady,
-        label: 'Codebase indexed for RAG',
-        hint: codebaseReady
-          ? `${indexedFiles ?? 0} files in pgvector`
-          : settings?.codebase_index_enabled
-            ? 'Indexing is enabled but no files yet — wait ~90s after first enable.'
-            : 'Enable codebase indexing so the fix worker reads real source instead of guessing.',
-        fixHref: '/integrations',
-      },
-      {
-        key: 'anthropic' as const,
-        ready: anthropicReady,
-        label: 'Anthropic key configured',
-        hint: anthropicReady
-          ? 'BYOK key present in Vault'
-          : 'Add an Anthropic key in Settings → BYOK so the agent can actually run.',
-        fixHref: '/settings?tab=byok',
-      },
-      {
-        key: 'autofix' as const,
-        ready: autofixReady,
-        label: 'Autofix enabled for this project',
-        hint: autofixReady
-          ? 'Dispatch will queue a fix worker.'
-          : 'Flip the Autofix switch on the GitHub integration card to allow dispatches.',
-        fixHref: '/integrations',
-      },
-    ];
-    const ready = checks.every((c) => c.ready);
-    return c.json({ ok: true, data: { ready, checks, repoUrl: githubRepoUrl } });
-  });
-
-  // ── Dry-run dispatch ──────────────────────────────────────────────────────
-  // Simulates the dispatch pipeline WITHOUT calling Anthropic / opening a PR.
-  // Returns a `simulatedSteps[]` array so the user can validate the pipeline
-  // end-to-end (preflight, repo resolution, context assembly, sandbox check)
-  // before burning a real Anthropic token. Also returns an estimated cost.
-  app.post('/v1/admin/projects/:id/fixes/dry-run', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-
-    const access = await userCanAccessProject(db, userId, projectId);
-    if (!access.allowed) {
-      return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
-        403,
-      );
+    const layers = { ...emptyLayers }
+    const langCounts = new Map<string, number>()
+    for (const row of fileSampleRes.data ?? []) {
+      const layer = detectExploreLayer(String(row.file_path ?? ''))
+      layers[layer] = (layers[layer] ?? 0) + 1
+      const lang = row.language ? String(row.language) : null
+      if (lang) langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1)
     }
+    const topLanguages = [...langCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([lang]) => lang)
 
-    // Run the same preflight checks as /preflight
-    const [settingsRes, repoRes, indexedRes] = await Promise.all([
-      db.from('project_settings').select('autofix_enabled, byok_anthropic_key_ref, sentry_org_slug').eq('project_id', projectId).maybeSingle(),
-      db.from('project_repos').select('repo_url, last_indexed_at, github_app_installation_id').eq('project_id', projectId).eq('is_primary', true).maybeSingle(),
-      db.from('project_codebase_files').select('*', { count: 'exact', head: true }).eq('project_id', projectId).is('tombstoned_at', null),
-    ]);
-    const settings = settingsRes.data;
-    const repo = repoRes.data;
-    const indexedFiles = indexedRes.count ?? 0;
+    let topPriority: typeof empty.topPriority = 'ready'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
 
-    const steps = [
-      {
-        step: 'preflight',
-        status: (settings?.autofix_enabled && repo?.repo_url && settings?.byok_anthropic_key_ref && indexedFiles > 0) ? 'pass' : 'fail',
-        detail: !settings?.autofix_enabled
-          ? 'Autofix is disabled for this project'
-          : !repo?.repo_url
-            ? 'No GitHub repository configured'
-            : !settings?.byok_anthropic_key_ref
-              ? 'No Anthropic BYOK key configured'
-              : indexedFiles === 0
-                ? 'Codebase not indexed — no files to search'
-                : `All prerequisites met (${indexedFiles} indexed files)`,
-      },
-      {
-        step: 'repo_resolution',
-        status: repo?.repo_url ? 'pass' : 'skip',
-        detail: repo?.repo_url
-          ? `Repository: ${repo.repo_url}`
-          : 'No repository configured',
-      },
-      {
-        step: 'context_assembly',
-        status: indexedFiles > 0 ? 'pass' : 'skip',
-        detail: indexedFiles > 0
-          ? `Would search ${indexedFiles} indexed file chunks for relevant context`
-          : 'Skipped — no indexed files',
-      },
-      {
-        step: 'llm_call',
-        status: settings?.byok_anthropic_key_ref ? 'simulated' : 'skip',
-        detail: settings?.byok_anthropic_key_ref
-          ? 'LLM call would use your BYOK Anthropic key (dry-run: call skipped)'
-          : 'Skipped — no Anthropic key configured',
-      },
-      {
-        step: 'pr_creation',
-        status: repo?.repo_url ? 'simulated' : 'skip',
-        detail: repo?.repo_url
-          ? `Would open a PR against ${repo.repo_url} (dry-run: PR skipped)`
-          : 'Skipped — no repository configured',
-      },
-    ];
-
-    const allPass = steps.filter((s) => s.status === 'fail').length === 0;
-    // Rough cost estimate: Claude Sonnet input ~$3/MTok, expect ~60k tokens for context assembly
-    const estimatedCostUsd = settings?.byok_anthropic_key_ref ? 0.18 : null;
+    if (!codebaseIndexEnabled && indexedFiles === 0) {
+      topPriority = 'not_enabled'
+      topPriorityLabel = 'Codebase indexing is off — enable in Settings or run mushi index'
+      topPriorityTo = '/explore?tab=index'
+    } else if (lastIndexError) {
+      topPriority = 'error'
+      topPriorityLabel = `Last index error — ${lastIndexError.slice(0, 120)}${lastIndexError.length > 120 ? '…' : ''}`
+      topPriorityTo = '/explore?tab=index'
+    } else if (indexedFiles === 0 && lastIndexAttemptAt && !lastIndexedAt) {
+      topPriority = 'indexing'
+      topPriorityLabel = 'Indexer is running — files should appear within ~90s'
+      topPriorityTo = '/explore?tab=index'
+    } else if (indexedFiles === 0) {
+      topPriority = 'empty'
+      topPriorityLabel = 'No files indexed yet — connect a repo or run mushi index'
+      topPriorityTo = '/settings'
+    } else if (
+      lastIndexedAt &&
+      Date.now() - new Date(lastIndexedAt).getTime() > 7 * 24 * 60 * 60 * 1000
+    ) {
+      topPriority = 'stale'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files · index may be stale (>7d)`
+      topPriorityTo = '/explore?tab=graph'
+    } else {
+      topPriority = 'ready'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files · ${withEmbeddings} embedded for search`
+      topPriorityTo = '/explore?tab=graph'
+    }
 
     return c.json({
       ok: true,
       data: {
-        ready: allPass,
-        simulatedSteps: steps,
-        estimatedCostUsd,
-        note: 'Dry-run does not call the LLM or open a PR. Run a real dispatch from the Reports page.',
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name ?? null,
+        projectCount: projectIds.length,
+        codebaseIndexEnabled,
+        indexingEnabled,
+        repoUrl,
+        hasWebhookSecret: !!settings?.github_webhook_secret,
+        indexedFiles,
+        symbolCount,
+        withEmbeddings,
+        layers,
+        topLanguages,
+        lastIndexedAt,
+        lastIndexAttemptAt,
+        lastIndexError,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
-    });
-  });
+    })
+  })
+
+  app.get('/v1/admin/projects/:id/codebase/explore', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const access = await userCanAccessProject(db, userId, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+    }
+
+    const includeSymbols = c.req.query('symbols') === '1'
+
+    let query = db
+      .from('project_codebase_files')
+      // Include last_modified so the frontend can show file freshness.
+      .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, last_modified')
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .order('file_path')
+      .limit(5000)
+
+    if (!includeSymbols) {
+      query = query.is('symbol_name', null)
+    }
+
+    const { data: rows, error: dbErr } = await query
+    if (dbErr) return dbError(c, dbErr)
+
+    const fileRows = rows ?? []
+
+    // Build nodes — set node_type based on whether the row represents a symbol
+    // or a file so the frontend can apply different styling per type.
+    const nodes = fileRows.map((r) => {
+      const layer = detectExploreLayer(r.file_path)
+      const label = r.symbol_name
+        ? `${r.file_path.split('/').pop()} · ${r.symbol_name}`
+        : (r.file_path.split('/').pop() ?? r.file_path)
+      return {
+        id: r.id,
+        node_type: (r.symbol_name ? 'code_symbol' : 'code_file') as 'code_symbol' | 'code_file',
+        label,
+        metadata: {
+          file_path: r.file_path,
+          symbol_name: r.symbol_name ?? null,
+          signature: r.signature ?? null,
+          line_start: r.line_start ?? null,
+          line_end: r.line_end ?? null,
+          language: r.language ?? null,
+          layer,
+          content_preview: r.content_preview ?? null,
+          last_modified: r.last_modified ?? null,
+        },
+      }
+    })
+
+    // Derive import edges from content_preview.
+    // In symbols mode, key nodeByPath by (file_path + symbol_name) so that
+    // multiple symbols in the same file don't collide and overwrite each other.
+    const edges: { id: string; source_node_id: string; target_node_id: string; edge_type: string; weight: number }[] = []
+    const seenEdges = new Set<string>()
+    // For edge resolution we only want file-level nodes (not symbols), so build
+    // the path → id map from file rows only.
+    const nodeByPath = new Map(
+      fileRows
+        .filter((r) => !r.symbol_name)
+        .map((r) => [r.file_path, r.id]),
+    )
+
+    for (const row of fileRows) {
+      if (!row.content_preview) continue
+      for (const imp of extractRelativeImports(row.content_preview)) {
+        const resolved = resolveRelative(row.file_path, imp)
+        // Try exact match first, then common extensions
+        const targetId =
+          nodeByPath.get(resolved) ??
+          nodeByPath.get(resolved + '.ts') ??
+          nodeByPath.get(resolved + '.tsx') ??
+          nodeByPath.get(resolved + '.js') ??
+          nodeByPath.get(resolved + '/index.ts') ??
+          nodeByPath.get(resolved + '/index.tsx')
+        if (!targetId || targetId === row.id) continue
+        const edgeKey = `${row.id}→${targetId}`
+        if (seenEdges.has(edgeKey) || edges.length >= 2000) continue
+        seenEdges.add(edgeKey)
+        edges.push({
+          id: edgeKey,
+          source_node_id: row.id,
+          target_node_id: targetId,
+          edge_type: 'imports',
+          weight: 1,
+        })
+      }
+    }
+
+    // Layer summary counts
+    const layerCounts: Record<string, number> = {}
+    for (const n of nodes) {
+      const l = n.metadata.layer
+      layerCounts[l] = (layerCounts[l] ?? 0) + 1
+    }
+
+    // Total distinct files (not symbols)
+    const { count: totalFiles } = await db
+      .from('project_codebase_files')
+      .select('*', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .is('symbol_name', null)
+
+    return c.json({
+      ok: true,
+      data: {
+        nodes,
+        edges,
+        layers: layerCounts,
+        total_files: totalFiles ?? fileRows.filter((r) => !r.symbol_name).length,
+      },
+    })
+  })
+
+  app.post('/v1/admin/projects/:id/codebase/search', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const access = await userCanAccessProject(db, userId, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+    }
+
+    let body: { query?: string; k?: number }
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'Body must be JSON' } }, 400)
+    }
+    if (!body.query || typeof body.query !== 'string' || !body.query.trim()) {
+      return c.json({ ok: false, error: { code: 'MISSING_QUERY', message: 'query is required' } }, 400)
+    }
+
+    const k = Math.min(20, Math.max(1, Number(body.k ?? 8)))
+    const { createEmbedding } = await import('../../_shared/embeddings.ts')
+    const embedding = await createEmbedding(body.query.trim(), { projectId })
+
+    const { data: hits, error: rpcErr } = await db.rpc('match_codebase_files', {
+      query_embedding: embedding,
+      match_project: projectId,
+      match_count: k,
+    })
+    if (rpcErr) return dbError(c, rpcErr)
+
+    // Return all fields the frontend ExploreSearchHit type expects:
+    // id, file_path, symbol_name, signature, line_start, line_end, language,
+    // content_preview, similarity, layer.
+    const results = (hits ?? []).map((h: Record<string, unknown>) => ({
+      id: String(h.id ?? ''),
+      file_path: String(h.file_path ?? ''),
+      symbol_name: h.symbol_name ? String(h.symbol_name) : null,
+      signature: h.signature ? String(h.signature) : null,
+      line_start: h.line_start != null ? Number(h.line_start) : null,
+      line_end: h.line_end != null ? Number(h.line_end) : null,
+      language: h.language ? String(h.language) : null,
+      similarity: Number(h.similarity ?? 0),
+      content_preview: h.content_preview != null ? String(h.content_preview) : null,
+      layer: detectExploreLayer(String(h.file_path ?? '')),
+    }))
+
+    return c.json({ ok: true, data: { results, query: body.query.trim() } })
+  })
 
   // DLQ admin endpoints
+
+  // GET /v1/admin/queue/stats — QueueStatusBanner posture data.
+  app.get('/v1/admin/queue/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      pending: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+      deadLetter: 0,
+      reportsQueued: 0,
+      strandedReports: 0,
+      oldestPendingMinutes: null as number | null,
+      topStage: null as string | null,
+      topStageDeadLetter: 0,
+      todayCreated: 0,
+      todayCompleted: 0,
+      todayFailed: 0,
+      topPriority: 'no_project' as
+        | 'no_project' | 'dead_letter' | 'failed' | 'circuit_breaker' | 'stalled' | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) return c.json({ ok: true, data: empty })
+
+    const projectRes = await db
+      .from('projects')
+      .select('id, project_name')
+      .in('id', projectIds)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const pid = projectRes.data?.id ?? projectIds[0]
+    const projectName = projectRes.data?.project_name ?? null
+
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
+
+    const [queueRes, reportsQueuedRes] = await Promise.all([
+      db.from('process_queue')
+        .select('id, status, stage, created_at, started_at')
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .limit(500),
+      db.from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .eq('status', 'queued'),
+    ])
+
+    const items = queueRes.data ?? []
+    const pending = items.filter((i) => i.status === 'pending').length
+    const running = items.filter((i) => i.status === 'running').length
+    const completed = items.filter((i) => i.status === 'completed').length
+    const failed = items.filter((i) => i.status === 'failed').length
+    const deadLetter = items.filter((i) => i.status === 'dead_letter').length
+    const reportsQueued = reportsQueuedRes.count ?? 0
+
+    const todayItems = items.filter((i) => i.created_at >= todayStart.toISOString())
+    const todayCreated = todayItems.length
+    const todayCompleted = todayItems.filter((i) => i.status === 'completed').length
+    const todayFailed = todayItems.filter((i) => i.status === 'failed').length
+
+    const oldestPendingItem = items.filter((i) => i.status === 'pending').at(-1)
+    const oldestPendingMinutes = oldestPendingItem
+      ? Math.floor((Date.now() - new Date(oldestPendingItem.created_at).getTime()) / 60000)
+      : null
+
+    const stageCounts = new Map<string, number>()
+    for (const i of items.filter((it) => it.status === 'dead_letter')) {
+      const s = i.stage ?? 'unknown'
+      stageCounts.set(s, (stageCounts.get(s) ?? 0) + 1)
+    }
+    const topEntry = [...stageCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+
+    let topPriority: typeof empty.topPriority = 'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (deadLetter > 0) {
+      topPriority = 'dead_letter'
+      topPriorityLabel = `${deadLetter} dead-letter job${deadLetter === 1 ? '' : 's'} — inspect and republish.`
+      topPriorityTo = '/queue?status=dead_letter'
+    } else if (failed > 0) {
+      topPriority = 'failed'
+      topPriorityLabel = `${failed} job${failed === 1 ? '' : 's'} failed — retry or quarantine.`
+      topPriorityTo = '/queue?status=failed'
+    } else if (reportsQueued > 0) {
+      topPriority = 'circuit_breaker'
+      topPriorityLabel = `${reportsQueued} report${reportsQueued === 1 ? '' : 's'} queued behind circuit breaker — flush when ready.`
+      topPriorityTo = '/queue'
+    } else if (oldestPendingMinutes !== null && oldestPendingMinutes > 15) {
+      topPriority = 'stalled'
+      topPriorityLabel = `Oldest pending job is ${oldestPendingMinutes}m old — possible stall.`
+      topPriorityTo = '/queue?status=pending'
+    } else {
+      topPriorityLabel = `${running} running · ${pending} pending — pipeline nominal.`
+      topPriorityTo = '/queue'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName,
+        projectCount: projectIds.length,
+        pending,
+        running,
+        completed,
+        failed,
+        deadLetter,
+        reportsQueued,
+        strandedReports: 0,
+        oldestPendingMinutes,
+        topStage: topEntry?.[0] ?? null,
+        topStageDeadLetter: topEntry?.[1] ?? 0,
+        todayCreated,
+        todayCompleted,
+        todayFailed,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   app.get('/v1/admin/queue', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -2783,7 +3534,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
     const { data: stranded } = await db
       .from('reports')
-      .select('id, project_id')
+      .select('id, project_id, status')
       .in('project_id', projectIds)
       .in('status', ['new', 'queued'])
       .lt('created_at', cutoff)
@@ -2859,6 +3610,194 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   // ============================================================
   // PHASE 2: KNOWLEDGE GRAPH
   // ============================================================
+
+  app.get('/v1/admin/graph/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasIngest: false,
+      nodeCount: 0,
+      edgeCount: 0,
+      reportNodes: 0,
+      inventoryNodes: 0,
+      fragileComponents: 0,
+      regressionEdges: 0,
+      duplicateEdges: 0,
+      fixVerifiedEdges: 0,
+      lastNodeAt: null as string | null,
+      graphBackend: 'sql_only' as string,
+      ageAvailable: false,
+      unsyncedNodes: 0,
+      unsyncedEdges: 0,
+      topPriority: 'waiting_ingest' as
+        | 'waiting_ingest'
+        | 'empty'
+        | 'fragile'
+        | 'regressions'
+        | 'clear',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const INVENTORY_NODE_TYPES = [
+      'app',
+      'page_v2',
+      'element',
+      'action',
+      'api_dep',
+      'db_dep',
+      'test',
+      'user_story',
+    ];
+
+    const [
+      reportCountRes,
+      nodesRes,
+      edgesRes,
+      settingsRes,
+      ageAvailRes,
+      unsyncedNodesRes,
+      unsyncedEdgesRes,
+      latestNodeRes,
+    ] = await Promise.all([
+      db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid),
+      db
+        .from('graph_nodes')
+        .select('id, node_type, created_at')
+        .eq('project_id', pid)
+        .limit(500),
+      db
+        .from('graph_edges')
+        .select('id, edge_type, source_node_id, target_node_id')
+        .eq('project_id', pid)
+        .limit(1000),
+      db.from('project_settings').select('graph_backend').eq('project_id', pid).maybeSingle(),
+      db.rpc('mushi_age_available'),
+      db
+        .from('graph_nodes')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('age_synced_at', null),
+      db
+        .from('graph_edges')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('age_synced_at', null),
+      db
+        .from('graph_nodes')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const nodes = nodesRes.data ?? [];
+    const edges = edgesRes.data ?? [];
+    const nodeCount = nodes.length;
+    const edgeCount = edges.length;
+    const hasIngest = (reportCountRes.count ?? 0) > 0;
+    const reportNodes = nodes.filter((n) => n.node_type === 'report_group').length;
+    const inventoryNodes = nodes.filter((n) => INVENTORY_NODE_TYPES.includes(String(n.node_type))).length;
+
+    const componentIds = new Set(
+      nodes.filter((n) => n.node_type === 'component').map((n) => n.id),
+    );
+    const incomingAffects = new Map<string, number>();
+    let regressionEdges = 0;
+    let duplicateEdges = 0;
+    let fixVerifiedEdges = 0;
+    for (const e of edges) {
+      const et = String(e.edge_type ?? '');
+      if (et === 'regression_of') regressionEdges += 1;
+      else if (et === 'duplicate_of') duplicateEdges += 1;
+      else if (et === 'fix_verified') fixVerifiedEdges += 1;
+      else if (et === 'affects' && componentIds.has(String(e.target_node_id))) {
+        incomingAffects.set(
+          String(e.target_node_id),
+          (incomingAffects.get(String(e.target_node_id)) ?? 0) + 1,
+        );
+      }
+    }
+    let fragileComponents = 0;
+    for (const count of incomingAffects.values()) {
+      if (count >= 3) fragileComponents += 1;
+    }
+
+    let topPriority: typeof empty.topPriority = 'waiting_ingest';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!hasIngest) {
+      topPriority = 'waiting_ingest';
+      topPriorityLabel = 'No reports ingested — graph seeds from classified bug reports';
+      topPriorityTo = '/onboarding?tab=verify';
+    } else if (nodeCount === 0) {
+      topPriority = 'empty';
+      topPriorityLabel = 'Reports ingested but graph empty — classifier may still be indexing';
+      topPriorityTo = '/reports?tab=queue';
+    } else if (fragileComponents > 0) {
+      topPriority = 'fragile';
+      topPriorityLabel = `${fragileComponents} fragile component${fragileComponents === 1 ? '' : 's'} (≥3 incoming affects edges)`;
+      topPriorityTo = '/graph?view=fragile';
+    } else if (regressionEdges > 0) {
+      topPriority = 'regressions';
+      topPriorityLabel = `${regressionEdges} regression edge${regressionEdges === 1 ? '' : 's'} — bugs that came back after a fix`;
+      topPriorityTo = '/graph?view=regressions';
+    } else {
+      topPriority = 'clear';
+      topPriorityLabel = `${nodeCount} nodes · ${edgeCount} edges — map is current`;
+      topPriorityTo = '/graph';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        hasIngest,
+        nodeCount,
+        edgeCount,
+        reportNodes,
+        inventoryNodes,
+        fragileComponents,
+        regressionEdges,
+        duplicateEdges,
+        fixVerifiedEdges,
+        lastNodeAt: latestNodeRes.data?.created_at ?? null,
+        graphBackend: settingsRes.data?.graph_backend ?? 'sql_only',
+        ageAvailable: ageAvailRes.data === true,
+        unsyncedNodes: unsyncedNodesRes.count ?? 0,
+        unsyncedEdges: unsyncedEdgesRes.count ?? 0,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
 
   app.get('/v1/admin/graph/nodes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -3271,72 +4210,6 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     return c.json({
       ok: true,
       data: { sql: cleanedSql, results: results.slice(0, 100), rowCount: results.length, latencyMs },
-    });
-  });
-
-  // ── Project reset (test/dev environment wipe) ───────────────────────────
-  // POST /v1/admin/projects/:id/reset
-  // Archives a project and wipes transient test data: reports, fix_attempts,
-  // project_codebase_files. Does NOT delete the project itself or its API
-  // keys. Intended to speed up re-running the full onboarding flow.
-  // Only the project owner (or org admin/owner) may reset a project.
-  app.post('/v1/admin/projects/:id/reset', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const projectId = c.req.param('id');
-    const userId = c.get('userId') as string | undefined;
-    const db = getServiceClient();
-
-    if (!UUID_RE.test(projectId)) {
-      return c.json(
-        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
-        400,
-      );
-    }
-
-    // When called with a JWT, verify the caller owns / admins this project.
-    // When called with an API key (userId may be undefined), trust the key's
-    // project_id scope (adminOrApiKey already validates it targets this project).
-    if (userId) {
-      const access = await userCanAccessProject(db, userId, projectId);
-      if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
-        return c.json(
-          { ok: false, error: { code: 'FORBIDDEN', message: 'Only project owners or admins may reset a project' } },
-          403,
-        );
-      }
-    }
-
-    // Wipe transient data in dependency order (fix_attempts refs reports, etc.)
-    const [
-      { error: faErr, count: faCount },
-      { error: cfErr, count: cfCount },
-      { error: rErr, count: rCount },
-    ] = await Promise.all([
-      db.from('fix_attempts').delete({ count: 'exact' }).eq('project_id', projectId),
-      db.from('project_codebase_files').delete({ count: 'exact' }).eq('project_id', projectId),
-      db.from('reports').delete({ count: 'exact' }).eq('project_id', projectId),
-    ]);
-
-    if (faErr) return dbError(c, faErr);
-    if (cfErr) return dbError(c, cfErr);
-    if (rErr) return dbError(c, rErr);
-
-    // Also wipe fix_dispatch_jobs for this project
-    const { error: fdErr, count: fdCount } = await db
-      .from('fix_dispatch_jobs')
-      .delete({ count: 'exact' })
-      .eq('project_id', projectId);
-    if (fdErr) return dbError(c, fdErr);
-
-    log.info('project.reset', { project_id: projectId, user_id: userId });
-
-    return c.json({
-      ok: true,
-      data: {
-        deletedReports: rCount ?? 0,
-        deletedFixAttempts: faCount ?? 0,
-        deletedCodebaseFiles: cfCount ?? 0,
-        deletedDispatchJobs: fdCount ?? 0,
-      },
     });
   });
 }

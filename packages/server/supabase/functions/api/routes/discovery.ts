@@ -47,7 +47,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerPreRegionDiscoveryRoutes(app: Hono): void {
   app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', region: currentRegion() }));
 
   // C7: data residency — public lookup so SDKs can prime their region
@@ -68,7 +68,7 @@ export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variable
   app.use('/v1/*', regionRouter);
 }
 
-export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerPostRegionDiscoveryRoutes(app: Hono): void {
   // ============================================================
   // A2A Agent Card
   //

@@ -1,6 +1,5 @@
 import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
-import type { Variables } from './types.ts';
 
 import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
@@ -26,15 +25,24 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
-import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
-import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
-import { registerEvolutionRoutes } from './routes/evolution.ts';
+// ---------------------------------------------------------------------------
+// Closed-loop evolution + experiment routes.
+// middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
+import { registerLessonsRoutes } from './routes/lessons.ts';
+import { registerSyncRoutes } from './routes/sync.ts';
+import { registerReleasesRoutes } from './routes/releases.ts';
+import { registerPdcaRoutes } from './routes/pdca.ts';
+import { registerMcpAdminRoutes } from './routes/mcp-admin.ts';
+import { registerDriftRoutes } from './routes/drift.ts';
+import { registerExperimentsRoutes } from './routes/experiments.ts';
+import { registerAnomaliesRoutes } from './routes/anomalies.ts';
+import { registerCostsRoutes } from './routes/costs.ts';
 
 ensureSentry('api');
 
 // basePath('/api') is required by Supabase Edge Functions: the function name
 // is included in the request URL path (https://supabase.com/docs/guides/functions/routing).
-const app = new Hono<{ Variables: Variables }>().basePath('/api');
+const app = new Hono().basePath('/api');
 
 app.onError(sentryHonoErrorHandler);
 
@@ -378,7 +386,6 @@ registerReportsDashboardRoutes(app);
 registerSettingsResearchRoutes(app);
 
 registerModernizationHealthSuperRoutes(app);
-registerEvolutionRoutes(app);
 
 registerBillingProjectsQueueGraphRoutes(app);
 
@@ -400,8 +407,16 @@ registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
 
-registerTesterMarketplaceRoutes(app);
-registerPublishedAppsRoutes(app);
+// Closed-loop evolution + experiment routes.
+registerLessonsRoutes(app);
+registerSyncRoutes(app);
+registerReleasesRoutes(app);
+registerPdcaRoutes(app);
+registerMcpAdminRoutes(app);
+registerDriftRoutes(app);
+registerExperimentsRoutes(app);
+registerAnomaliesRoutes(app);
+registerCostsRoutes(app);
 
 registerA2ATaskRoutes(app);
 

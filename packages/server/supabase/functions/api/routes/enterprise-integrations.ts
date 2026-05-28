@@ -1,21 +1,126 @@
 import type { Hono } from 'npm:hono@4';
 
+import type { IntegrationKind } from '../../_shared/integration-probes.ts';
+import type { ExportSampleRow } from '../../_shared/fine-tune.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import { requireFeature } from '../../_shared/entitlements.ts';
+import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, sendTestDelivery } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
-export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================
+
+  app.get('/v1/admin/sso/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      ssoEntitlement: false,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      totalConfigs: 0,
+      registeredCount: 0,
+      pendingCount: 0,
+      failedCount: 0,
+      manualRequiredCount: 0,
+      disabledCount: 0,
+      activeCount: 0,
+      domainCount: 0,
+      lastRegisteredAt: null as string | null,
+      defaultAcsUrl: null as string | null,
+      latestFailure: null as string | null,
+      latestProviderName: null as string | null,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const ssoEntitlement = entitlement?.hasFeature('sso') ?? false;
+
+    const { data: configs } = await db
+      .from('enterprise_sso_configs')
+      .select(
+        'provider_name, registration_status, is_active, domains, registered_at, registration_error, acs_url',
+      )
+      .eq('project_id', project.id);
+
+    const rows = configs ?? [];
+    let registeredCount = 0;
+    let pendingCount = 0;
+    let failedCount = 0;
+    let manualRequiredCount = 0;
+    let disabledCount = 0;
+    let activeCount = 0;
+    let domainCount = 0;
+    let lastRegisteredAt: string | null = null;
+    let latestFailure: string | null = null;
+    let latestProviderName: string | null = null;
+    let acsFromConfig: string | null = null;
+
+    for (const row of rows) {
+      const status = row.registration_status as string;
+      if (status === 'registered') registeredCount += 1;
+      else if (status === 'pending') pendingCount += 1;
+      else if (status === 'failed') failedCount += 1;
+      else if (status === 'manual_required') manualRequiredCount += 1;
+      else if (status === 'disabled') disabledCount += 1;
+      if (row.is_active) activeCount += 1;
+      domainCount += Array.isArray(row.domains) ? row.domains.length : 0;
+      if (row.registered_at && (!lastRegisteredAt || row.registered_at > lastRegisteredAt)) {
+        lastRegisteredAt = row.registered_at;
+      }
+      if (status === 'failed' && row.registration_error) {
+        latestFailure = row.registration_error;
+        latestProviderName = row.provider_name;
+      }
+      if (status === 'registered' && row.acs_url && !acsFromConfig) {
+        acsFromConfig = row.acs_url;
+      }
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? null;
+    const defaultAcsUrl =
+      acsFromConfig ?? (supabaseUrl ? `${supabaseUrl}/auth/v1/sso/saml/acs` : null);
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        ssoEntitlement,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        totalConfigs: rows.length,
+        registeredCount,
+        pendingCount,
+        failedCount,
+        manualRequiredCount,
+        disabledCount,
+        activeCount,
+        domainCount,
+        lastRegisteredAt,
+        defaultAcsUrl,
+        latestFailure,
+        latestProviderName,
+      },
+    });
+  });
 
   app.get('/v1/admin/sso', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -28,7 +133,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     const { data } = await db
       .from('enterprise_sso_configs')
       .select(
-        'id, project_id, provider_type, provider_name, metadata_url, entity_id, acs_url, is_active, sso_provider_id, registration_status, registration_error, registered_at, domains, created_at, oidc_client_id, oidc_issuer_url',
+        'id, project_id, provider_type, provider_name, metadata_url, entity_id, acs_url, is_active, sso_provider_id, registration_status, registration_error, registered_at, domains, created_at',
       )
       .eq('project_id', project.id)
       .limit(50);
@@ -56,9 +161,6 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       entityId?: string;
       acsUrl?: string;
       domains?: string[];
-      clientId?: string;
-      clientSecret?: string;
-      issuerUrl?: string;
     };
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
@@ -94,9 +196,6 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
         acs_url: body.acsUrl ?? null,
         domains: body.domains ?? [],
         registration_status: 'pending',
-        oidc_client_id: body.clientId ?? null,
-        oidc_client_secret: body.clientSecret ?? null,
-        oidc_issuer_url: body.issuerUrl ?? null,
       })
       .select('id')
       .single();
@@ -313,6 +412,173 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     return c.json({ ok: true });
   });
 
+  app.get('/v1/admin/audit/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      auditLogEntitlement: false,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      projectCount: 0,
+      totalEvents: 0,
+      events24h: 0,
+      events7d: 0,
+      failCount24h: 0,
+      warnCount24h: 0,
+      humanCount24h: 0,
+      agentCount24h: 0,
+      systemCount24h: 0,
+      activeProjectEvents24h: 0,
+      latestEventAt: null as string | null,
+      latestAction: null as string | null,
+      latestActorEmail: null as string | null,
+      topAction7d: null as string | null,
+      topAction7dCount: 0,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const auditLogEntitlement = entitlement?.hasFeature('audit_log') ?? false;
+
+    const projectIds = await ownedProjectIds(db, userId);
+    const now = Date.now();
+    const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const FAIL_ACTIONS = ['fix.failed', 'integration.disconnected'];
+    const WARN_ACTIONS = ['api_key.revoked', 'plugin.uninstalled'];
+
+    const [
+      { count: totalEvents },
+      { count: events24h },
+      { count: events7d },
+      { count: activeProjectEvents24h },
+      { data: recentRows },
+      { data: failRows },
+      { data: warnRows },
+      { data: topRows },
+    ] = await Promise.all([
+      db.from('audit_logs').select('id', { count: 'exact', head: true }).in('project_id', projectIds),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since24h),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since7d),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .gte('created_at', since24h),
+      db
+        .from('audit_logs')
+        .select('action, actor_email, actor_id, created_at')
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      db
+        .from('audit_logs')
+        .select('id')
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .in('action', FAIL_ACTIONS),
+      db
+        .from('audit_logs')
+        .select('id')
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .in('action', WARN_ACTIONS),
+      db
+        .from('audit_logs')
+        .select('action')
+        .in('project_id', projectIds)
+        .gte('created_at', since7d)
+        .limit(500),
+    ]);
+
+    let humanCount24h = 0;
+    let agentCount24h = 0;
+    let systemCount24h = 0;
+    for (const row of recentRows ?? []) {
+      const createdAt = row.created_at as string;
+      if (createdAt < since24h) continue;
+      const actorId = row.actor_id as string | null;
+      const actorEmail = row.actor_email as string | null;
+      if (
+        actorId &&
+        (actorId.startsWith('agent_') || (actorEmail?.startsWith('agent-') ?? false))
+      ) {
+        agentCount24h += 1;
+      } else if (
+        !actorId ||
+        actorId.startsWith('cron_') ||
+        actorId.startsWith('system_') ||
+        actorId.startsWith('webhook_')
+      ) {
+        systemCount24h += 1;
+      } else if (actorEmail && actorId) {
+        humanCount24h += 1;
+      } else {
+        systemCount24h += 1;
+      }
+    }
+
+    const actionCounts = new Map<string, number>();
+    for (const row of topRows ?? []) {
+      const action = row.action as string;
+      actionCounts.set(action, (actionCounts.get(action) ?? 0) + 1);
+    }
+    let topAction7d: string | null = null;
+    let topAction7dCount = 0;
+    for (const [action, count] of actionCounts) {
+      if (count > topAction7dCount) {
+        topAction7d = action;
+        topAction7dCount = count;
+      }
+    }
+
+    const latest = recentRows?.[0];
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        auditLogEntitlement,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        projectCount: projectIds.length,
+        totalEvents: totalEvents ?? 0,
+        events24h: events24h ?? 0,
+        events7d: events7d ?? 0,
+        failCount24h: failRows?.length ?? 0,
+        warnCount24h: warnRows?.length ?? 0,
+        humanCount24h,
+        agentCount24h,
+        systemCount24h,
+        activeProjectEvents24h: activeProjectEvents24h ?? 0,
+        latestEventAt: (latest?.created_at as string | undefined) ?? null,
+        latestAction: (latest?.action as string | undefined) ?? null,
+        latestActorEmail: (latest?.actor_email as string | undefined) ?? null,
+        topAction7d,
+        topAction7dCount,
+      },
+    });
+  });
+
   app.get('/v1/admin/audit', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -392,7 +658,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       .from('fine_tuning_jobs')
       .insert({
         project_id: project.id,
-        base_model: body.baseModel ?? 'openai:gpt-4o-mini',
+        base_model: body.baseModel ?? ANTHROPIC_SONNET,
         status: 'pending',
         promote_to_stage: body.promoteToStage ?? null,
         sample_window_days: body.sampleWindowDays ?? 30,
@@ -710,7 +976,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       // old mirror-truth behaviour for deterministic tests.
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
-      const report = await validateTrainedModel(db, job, (s) => adapter.predict(db, job, s));
+      const report = await validateTrainedModel(db, job, (s: ExportSampleRow) => adapter.predict(db, job, s));
       await logAudit(
         db,
         job.project_id,
@@ -977,6 +1243,102 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     return c.json({ ok: true });
   });
 
+  app.get('/v1/admin/integrations/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: {
+            platformTotal: 3,
+            platformConnected: 0,
+            platformHealthy: 0,
+            platformDown: 0,
+            routingActive: 0,
+            routingPaused: 0,
+            routingTotal: 0,
+            lastProbeAt: null,
+          },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const requiredByKind: Record<string, string[]> = {
+      sentry: ['sentry_org_slug', 'sentry_auth_token_ref'],
+      langfuse: ['langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref'],
+      github: ['github_repo_url', 'github_installation_token_ref'],
+    };
+    const platformKinds = Object.keys(requiredByKind);
+    const allFields = [
+      'sentry_org_slug',
+      'sentry_auth_token_ref',
+      'langfuse_host',
+      'langfuse_public_key_ref',
+      'langfuse_secret_key_ref',
+      'github_repo_url',
+      'github_installation_token_ref',
+    ].join(', ');
+
+    const [{ data: settings }, { data: routingRows }, { data: probes }] = await Promise.all([
+      db.from('project_settings').select(allFields).eq('project_id', project.id).maybeSingle(),
+      db
+        .from('project_integrations')
+        .select('integration_type, is_active')
+        .eq('project_id', project.id),
+      db
+        .from('integration_health_history')
+        .select('kind, status, checked_at')
+        .eq('project_id', project.id)
+        .order('checked_at', { ascending: false })
+        .limit(50),
+    ]);
+
+    const row = (settings ?? {}) as Record<string, unknown>;
+    let platformConnected = 0;
+    let platformHealthy = 0;
+    let platformDown = 0;
+
+    const latestProbeByKind = new Map<string, { status: string; checked_at: string }>();
+    for (const p of probes ?? []) {
+      if (!latestProbeByKind.has(p.kind as string)) {
+        latestProbeByKind.set(p.kind as string, {
+          status: p.status as string,
+          checked_at: p.checked_at as string,
+        });
+      }
+    }
+
+    for (const kind of platformKinds) {
+      const required = requiredByKind[kind] ?? [];
+      const connected = required.every((f) => row[f] != null && row[f] !== '');
+      if (!connected) continue;
+      platformConnected += 1;
+      const probe = latestProbeByKind.get(kind);
+      if (probe?.status === 'ok') platformHealthy += 1;
+      else if (probe?.status === 'down' || probe?.status === 'degraded') platformDown += 1;
+    }
+
+    const routing = routingRows ?? [];
+    const routingActive = routing.filter((r) => r.is_active).length;
+    const routingPaused = routing.filter((r) => !r.is_active).length;
+
+    return c.json({
+      ok: true,
+      data: {
+        platformTotal: platformKinds.length,
+        platformConnected,
+        platformHealthy,
+        platformDown,
+        routingActive,
+        routingPaused,
+        routingTotal: routing.length,
+        lastProbeAt: (probes?.[0]?.checked_at as string | null) ?? null,
+      },
+    });
+  });
+
   // ----- Platform integrations (Sentry / Langfuse / GitHub) ---------------
   // These are V5.3 §2.18 first-party integrations. Unlike Jira/Linear (which
   // live in project_integrations as routing destinations), Sentry/Langfuse/GH
@@ -1063,18 +1425,10 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
   };
 
-  // Whitelist of kinds this PUT endpoint accepts. Mirrors the GET endpoint
-  // above: only platform integrations (sentry / langfuse / github) live in
-  // `project_settings`; BYOK LLM providers (anthropic/openai) live in
-  // `llm_byok_keys` and have their own routes. Sourcing the list from
-  // PLATFORM_KIND_FIELDS avoids the previous `INTEGRATION_KINDS is not
-  // defined` ReferenceError that was 500ing every Save click.
-  const PLATFORM_KINDS_LIST = Object.keys(PLATFORM_KIND_FIELDS) as IntegrationKind[];
-
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind') as IntegrationKind;
-    if (!PLATFORM_KINDS_LIST.includes(kind)) {
+    if (!INTEGRATION_KINDS.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -1199,8 +1553,17 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
-    const plugins = await getActivePlugins(db, project.id);
-    return c.json({ ok: true, data: { plugins } });
+
+    const { data, error } = await db
+      .from('project_plugins')
+      .select(
+        'id, plugin_name, plugin_slug, webhook_url, subscribed_events, is_active, last_delivery_at, last_delivery_status, plugin_version, execution_order',
+      )
+      .eq('project_id', project.id)
+      .order('plugin_name', { ascending: true });
+
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { plugins: data ?? [] } });
   });
 
   app.post('/v1/admin/plugins', jwtAuth, requireFeature('plugins'), async (c) => {
@@ -1616,6 +1979,131 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     return c.json({ ok: true, data }, 201);
   });
 
+  app.get('/v1/admin/marketplace/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      catalogTotal: 0,
+      installedTotal: 0,
+      installedActive: 0,
+      installedPaused: 0,
+      deliveries7d: 0,
+      deliveriesOk: 0,
+      deliveriesFailed: 0,
+      deliverySuccessRatePct: 0,
+      lastDeliveryAt: null as string | null,
+      daysSinceLastDelivery: null as number | null,
+      failingPlugins: 0,
+      neverDeliveredPlugins: 0,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'delivery_failures'
+        | 'plugins_paused'
+        | 'no_plugins_installed'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [catalogRes, installedRes, dispatchRes] = await Promise.all([
+      db.from('plugin_registry').select('slug', { count: 'exact', head: true }).eq('is_listed', true),
+      db
+        .from('project_plugins')
+        .select('is_active, last_delivery_status, last_delivery_at')
+        .eq('project_id', project.id),
+      db
+        .from('plugin_dispatch_log')
+        .select('status, created_at')
+        .eq('project_id', project.id)
+        .gte('created_at', sevenDaysAgo)
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ]);
+
+    const installed = installedRes.data ?? [];
+    const dispatch = dispatchRes.data ?? [];
+    let deliveriesOk = 0;
+    let deliveriesFailed = 0;
+    let lastDeliveryAt: string | null = null;
+
+    for (const row of dispatch) {
+      const status = row.status as string;
+      if (status === 'ok') deliveriesOk += 1;
+      if (status === 'error' || status === 'timeout') deliveriesFailed += 1;
+      if (!lastDeliveryAt && row.created_at) lastDeliveryAt = row.created_at as string;
+    }
+
+    const failingPlugins = installed.filter(
+      (p) =>
+        p.last_delivery_status === 'error' || p.last_delivery_status === 'timeout',
+    ).length;
+    const neverDeliveredPlugins = installed.filter(
+      (p) => p.is_active && !p.last_delivery_at,
+    ).length;
+    const deliverySuccessRatePct =
+      dispatch.length > 0 ? Math.round((deliveriesOk / dispatch.length) * 100) : 0;
+    const daysSinceLastDelivery = lastDeliveryAt
+      ? Math.floor((Date.now() - new Date(lastDeliveryAt).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (deliveriesFailed > 0 || failingPlugins > 0) {
+      topPriority = 'delivery_failures';
+      topPriorityLabel = `${deliveriesFailed} failed deliver${deliveriesFailed === 1 ? 'y' : 'ies'} in 7d · ${failingPlugins} plugin${failingPlugins === 1 ? '' : 's'} with last status error/timeout — check Deliveries tab.`;
+      topPriorityTo = '/marketplace?tab=deliveries';
+    } else if (installed.filter((p) => !p.is_active).length > 0) {
+      topPriority = 'plugins_paused';
+      topPriorityLabel = `${installed.filter((p) => !p.is_active).length} plugin${installed.filter((p) => !p.is_active).length === 1 ? '' : 's'} paused — resume on Installed tab to receive events again.`;
+      topPriorityTo = '/marketplace?tab=installed';
+    } else if (installed.length === 0) {
+      topPriority = 'no_plugins_installed';
+      topPriorityLabel = `${catalogRes.count ?? 0} plugin${(catalogRes.count ?? 0) === 1 ? '' : 's'} in catalog — install a webhook receiver to react when reports classify or fixes land.`;
+      topPriorityTo = '/marketplace?tab=browse';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${installed.filter((p) => p.is_active).length} active · ${deliveriesOk} ok / ${dispatch.length} deliveries (7d) · ${deliverySuccessRatePct}% success rate.`;
+      topPriorityTo = '/marketplace?tab=deliveries';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: project.id as string,
+        projectName: (project.name as string | null) ?? null,
+        catalogTotal: catalogRes.count ?? 0,
+        installedTotal: installed.length,
+        installedActive: installed.filter((p) => p.is_active).length,
+        installedPaused: installed.filter((p) => !p.is_active).length,
+        deliveries7d: dispatch.length,
+        deliveriesOk,
+        deliveriesFailed,
+        deliverySuccessRatePct,
+        lastDeliveryAt,
+        daysSinceLastDelivery,
+        failingPlugins,
+        neverDeliveredPlugins,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   app.get('/v1/admin/plugins/dispatch-log', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -1672,6 +2160,184 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       .order('generated_at', { ascending: false })
       .limit(50);
     return c.json({ ok: true, data: { reports: data ?? [] } });
+  });
+
+  // GET /v1/admin/intelligence/stats — posture banner + INTELLIGENCE SNAPSHOT.
+  app.get('/v1/admin/intelligence/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      featureUnlocked: false,
+      planName: null as string | null,
+      reportCount: 0,
+      latestReportAt: null as string | null,
+      latestWeekStart: null as string | null,
+      daysSinceLastDigest: null as number | null,
+      totalReportsInLatest: 0,
+      totalFixAttempts: 0,
+      fixCompletionRatePct: 0,
+      activeJobCount: 0,
+      failedJobCount: 0,
+      completedJobCount: 0,
+      lastJobStatus: null as string | null,
+      lastJobError: null as string | null,
+      lastJobAt: null as string | null,
+      pendingFindings: 0,
+      securityFindings: 0,
+      benchmarkOptIn: false,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'feature_locked'
+        | 'job_running'
+        | 'job_failed'
+        | 'stale_digest'
+        | 'no_reports'
+        | 'pending_findings'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const featureUnlocked = entitlement?.hasFeature('intelligence_reports') ?? false;
+    const planName = entitlement?.plan?.name ?? null;
+
+    const [reportsRes, jobsRes, findingsRes, settingsRes] = await Promise.all([
+      db
+        .from('intelligence_reports')
+        .select('id, week_start, stats, created_at')
+        .eq('project_id', pid)
+        .order('week_start', { ascending: false })
+        .limit(52),
+      db
+        .from('intelligence_generation_jobs')
+        .select('id, status, error, created_at, started_at, finished_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      db
+        .from('modernization_findings')
+        .select('id, severity, status')
+        .eq('project_id', pid)
+        .eq('status', 'pending'),
+      db
+        .from('project_settings')
+        .select('benchmarking_optin')
+        .eq('project_id', pid)
+        .maybeSingle(),
+    ]);
+
+    const reports = reportsRes.data ?? [];
+    const jobs = jobsRes.data ?? [];
+    const findings = findingsRes.data ?? [];
+    const latestReport = reports[0] ?? null;
+    const latestJob = jobs[0] ?? null;
+    const activeJobs = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
+    const failedJobs = jobs.filter((j) => j.status === 'failed');
+    const completedJobs = jobs.filter((j) => j.status === 'completed');
+
+    const daysSinceLastDigest = latestReport?.created_at
+      ? Math.floor((Date.now() - new Date(latestReport.created_at).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    const latestStats = (latestReport?.stats as { reports?: { total?: number }; fixes?: { total?: number; completionRate?: number } } | null) ?? null;
+    const totalReportsInLatest = latestStats?.reports?.total ?? 0;
+    const totalFixAttempts = reports.reduce(
+      (sum, r) => sum + (((r.stats as { fixes?: { total?: number } } | null)?.fixes?.total) ?? 0),
+      0,
+    );
+    const rawRate = latestStats?.fixes?.completionRate ?? 0;
+    const fixCompletionRatePct =
+      rawRate <= 1 ? Math.round(rawRate * 1000) / 10 : Math.round(rawRate * 10) / 10;
+    const pendingFindings = findings.length;
+    const securityFindings = findings.filter((f) => f.severity === 'security').length;
+    const benchmarkOptIn = settingsRes.data?.benchmarking_optin === true;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!featureUnlocked) {
+      topPriority = 'feature_locked';
+      topPriorityLabel = `Intelligence reports require a plan upgrade${planName ? ` (current: ${planName})` : ''}.`;
+      topPriorityTo = '/billing';
+    } else if (activeJobs.length > 0) {
+      topPriority = 'job_running';
+      topPriorityLabel = `Job ${activeJobs[0]!.id.slice(0, 8)}… is ${activeJobs[0]!.status} — digest lands in Reports when complete (typical 20–60s).`;
+      topPriorityTo = '/intelligence?tab=pipeline';
+    } else if (latestJob?.status === 'failed') {
+      topPriority = 'job_failed';
+      topPriorityLabel = latestJob.error ?? 'Last generation failed — check Settings → LLM Keys and retry.';
+      topPriorityTo = '/intelligence?tab=pipeline';
+    } else if (reports.length === 0) {
+      topPriority = 'no_reports';
+      topPriorityLabel = 'No weekly digests archived yet — Monday cron writes automatically, or generate one now.';
+      topPriorityTo = '/intelligence?tab=overview';
+    } else if (daysSinceLastDigest != null && daysSinceLastDigest > 7) {
+      topPriority = 'stale_digest';
+      topPriorityLabel = `Last digest was ${daysSinceLastDigest} days ago — generate a fresh weekly narrative.`;
+      topPriorityTo = '/intelligence?tab=overview';
+    } else if (pendingFindings > 0) {
+      topPriority = 'pending_findings';
+      topPriorityLabel = `${pendingFindings} library modernization finding${pendingFindings === 1 ? '' : 's'} pending triage${securityFindings > 0 ? ` · ${securityFindings} security` : ''}.`;
+      topPriorityTo = '/intelligence?tab=pipeline';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${reports.length} digest${reports.length === 1 ? '' : 's'} on file · last ${daysSinceLastDigest ?? 0}d ago${benchmarkOptIn ? ' · benchmarking on' : ''}.`;
+      topPriorityTo = '/intelligence?tab=reports';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        featureUnlocked,
+        planName,
+        reportCount: reports.length,
+        latestReportAt: latestReport?.created_at ?? null,
+        latestWeekStart: latestReport?.week_start ?? null,
+        daysSinceLastDigest,
+        totalReportsInLatest,
+        totalFixAttempts,
+        fixCompletionRatePct,
+        activeJobCount: activeJobs.length,
+        failedJobCount: failedJobs.length,
+        completedJobCount: completedJobs.length,
+        lastJobStatus: latestJob?.status ?? null,
+        lastJobError: latestJob?.error ?? null,
+        lastJobAt: latestJob?.created_at ?? null,
+        pendingFindings,
+        securityFindings,
+        benchmarkOptIn,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
   });
 
   // Async generation: enqueue a job, kick the worker fire-and-forget, return
@@ -1812,7 +2478,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/intelligence/jobs', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { jobs: [] } });
     const { data } = await db
       .from('intelligence_generation_jobs')
@@ -1864,7 +2530,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/intelligence', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { reports: [] } });
 
     const { data, error } = await db
@@ -2096,6 +2762,204 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     const summary = hasError ? 'error' : hasDegraded ? 'degraded' : 'healthy';
 
     return c.json({ ok: true, data: { channels, staleSince, summary } });
+  });
+
+  // GET /v1/admin/health/stats — posture banner + HEALTH SNAPSHOT.
+  app.get('/v1/admin/health/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const windowParam = c.req.query('window') ?? '24h';
+    const windowMs: Record<string, number> = {
+      '1h': 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+    };
+    const ms = windowMs[windowParam] ?? windowMs['24h'];
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      window: windowParam,
+      totalCalls: 0,
+      errorRatePct: 0,
+      fallbackRatePct: 0,
+      avgLatencyMs: 0,
+      p95LatencyMs: 0,
+      cronJobCount: 3,
+      cronHealthyCount: 0,
+      cronErrorCount: 0,
+      cronStaleCount: 0,
+      cronWarnCount: 0,
+      redCount: 0,
+      amberCount: 0,
+      lastLlmCallAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'llm_errors'
+        | 'cron_error'
+        | 'llm_fallbacks'
+        | 'cron_stale'
+        | 'idle'
+        | 'cron_warn'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const since = new Date(Date.now() - ms).toISOString();
+    const KNOWN_JOBS = ['judge-batch', 'intelligence-report', 'data-retention'] as const;
+    const EXPECTED_CADENCE_MIN: Record<string, number> = {
+      'judge-batch': 60,
+      'intelligence-report': 60 * 24 * 7,
+      'data-retention': 60 * 24,
+    };
+
+    const [invRes, cronRes, lastCallRes] = await Promise.all([
+      db
+        .from('llm_invocations')
+        .select('fallback_used, status, latency_ms, created_at')
+        .eq('project_id', pid)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(500),
+      db
+        .from('cron_runs')
+        .select('job_name, status, started_at')
+        .order('started_at', { ascending: false })
+        .limit(100),
+      db
+        .from('llm_invocations')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const rows = invRes.data ?? [];
+    const totalCalls = rows.length;
+    const fallbacks = rows.filter((r) => r.fallback_used).length;
+    const errors = rows.filter((r) => r.status !== 'success').length;
+    const errorRatePct = totalCalls > 0 ? Math.round((errors / totalCalls) * 1000) / 10 : 0;
+    const fallbackRatePct = totalCalls > 0 ? Math.round((fallbacks / totalCalls) * 1000) / 10 : 0;
+    const latencies = rows.map((r) => r.latency_ms ?? 0).sort((a, b) => a - b);
+    const avgLatencyMs =
+      latencies.length > 0
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : 0;
+    const p95LatencyMs =
+      latencies.length > 0
+        ? (latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))] ?? 0)
+        : 0;
+
+    const cronRows = cronRes.data ?? [];
+    const now = Date.now();
+    let cronErrorCount = 0;
+    let cronStaleCount = 0;
+    let cronWarnCount = 0;
+    let cronHealthyCount = 0;
+
+    for (const job of KNOWN_JOBS) {
+      const jobRuns = cronRows.filter((r) => r.job_name === job);
+      const lastRun = jobRuns[0];
+      const lastStatus = lastRun?.status ?? null;
+      if (lastStatus === 'error') {
+        cronErrorCount += 1;
+        continue;
+      }
+      const lastRunIso = lastRun?.started_at ?? null;
+      if (!lastRunIso) {
+        cronStaleCount += 1;
+        continue;
+      }
+      const ageMin = Math.max(0, Math.round((now - new Date(lastRunIso).getTime()) / 60_000));
+      const expected = EXPECTED_CADENCE_MIN[job] ?? 60 * 24;
+      if (ageMin > expected * 3) cronStaleCount += 1;
+      else if (ageMin > expected) cronWarnCount += 1;
+      else cronHealthyCount += 1;
+    }
+
+    const redCount = (errorRatePct > 5 ? 1 : 0) + cronErrorCount;
+    const amberCount = (fallbackRatePct > 10 ? 1 : 0) + cronWarnCount + cronStaleCount;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (errorRatePct > 5) {
+      topPriority = 'llm_errors';
+      topPriorityLabel = `LLM error rate ${errorRatePct}% over ${windowParam} — check provider status or rotate API keys.`;
+      topPriorityTo = '/health?tab=llm';
+    } else if (cronErrorCount > 0) {
+      topPriority = 'cron_error';
+      topPriorityLabel = `${cronErrorCount} cron job${cronErrorCount === 1 ? '' : 's'} failing — trigger manually to confirm, then inspect logs.`;
+      topPriorityTo = '/health?tab=cron';
+    } else if (fallbackRatePct > 10) {
+      topPriority = 'llm_fallbacks';
+      topPriorityLabel = `Fallback rate ${fallbackRatePct}% — primary provider may be rate-limiting.`;
+      topPriorityTo = '/health?tab=llm';
+    } else if (cronStaleCount > 0) {
+      topPriority = 'cron_stale';
+      topPriorityLabel = `${cronStaleCount} cron job${cronStaleCount === 1 ? '' : 's'} stale — last run exceeded 3× expected cadence.`;
+      topPriorityTo = '/health?tab=cron';
+    } else if (totalCalls === 0) {
+      topPriority = 'idle';
+      topPriorityLabel = `No LLM activity in the last ${windowParam} — send a test report to verify routing.`;
+      topPriorityTo = '/onboarding';
+    } else if (cronWarnCount > 0) {
+      topPriority = 'cron_warn';
+      topPriorityLabel = `${cronWarnCount} cron job${cronWarnCount === 1 ? '' : 's'} running late — not yet blocking.`;
+      topPriorityTo = '/health?tab=cron';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${totalCalls} LLM calls · ${errorRatePct}% errors · ${fallbackRatePct}% fallbacks — all systems nominal.`;
+      topPriorityTo = '/health?tab=activity';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        window: windowParam,
+        totalCalls,
+        errorRatePct,
+        fallbackRatePct,
+        avgLatencyMs,
+        p95LatencyMs,
+        cronJobCount: KNOWN_JOBS.length,
+        cronHealthyCount,
+        cronErrorCount,
+        cronStaleCount,
+        cronWarnCount,
+        redCount,
+        amberCount,
+        lastLlmCallAt: lastCallRes.data?.created_at ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
   });
 
   app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
@@ -2412,78 +3276,6 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
         })),
       },
     });
-  });
-
-  // ── GitHub App installation callback ─────────────────────────────────────
-  // Called by the GitHub App redirect after the user installs the App on
-  // their repo. GitHub appends `?installation_id=<int>&state=<projectId>`
-  // to the callback URL configured in the App settings.
-  //
-  // The user must be authenticated (jwtAuth) — the `state` param is their
-  // projectId, and we verify they own / are a member of it before writing.
-  // This prevents forged callbacks from hijacking another project's installation.
-  app.get('/v1/admin/integrations/github/app-callback', jwtAuth, async (c) => {
-    const userId = c.get('userId') as string;
-    const db = getServiceClient();
-
-    const installationIdRaw = c.req.query('installation_id');
-    const projectId = c.req.query('state');
-
-    if (!installationIdRaw || !projectId) {
-      return c.json(
-        { ok: false, error: { code: 'MISSING_PARAMS', message: 'installation_id and state (projectId) required' } },
-        400,
-      );
-    }
-
-    const installationId = parseInt(installationIdRaw, 10);
-    if (!Number.isFinite(installationId)) {
-      return c.json(
-        { ok: false, error: { code: 'INVALID_INSTALLATION_ID' } },
-        400,
-      );
-    }
-
-    const access = await userCanAccessProject(db, userId, projectId);
-    if (!access.allowed) {
-      return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
-        403,
-      );
-    }
-
-    // Upsert the project_repos row with the app installation ID
-    const { data: existing } = await db
-      .from('project_repos')
-      .select('id')
-      .eq('project_id', projectId)
-      .eq('is_primary', true)
-      .maybeSingle();
-
-    if (existing) {
-      await db
-        .from('project_repos')
-        .update({ github_app_installation_id: installationId })
-        .eq('id', existing.id);
-    } else {
-      await db
-        .from('project_repos')
-        .insert({
-          project_id: projectId,
-          github_app_installation_id: installationId,
-          is_primary: true,
-          role: 'source',
-        });
-    }
-
-    await logAudit(db, projectId, userId, 'settings.updated', 'github_app_installed', projectId, {
-      installation_id: installationId,
-    }).catch(() => {});
-
-    // Redirect back to integrations page — the card will refresh and show the
-    // "App connected" badge. Use a 302 so the browser doesn't cache the redirect.
-    const adminOrigin = c.req.header('origin') ?? Deno.env.get('MUSHI_ADMIN_URL') ?? '';
-    return c.redirect(`${adminOrigin}/integrations?github_app=installed`, 302);
   });
 
   app.post('/v1/admin/health/cron/:job/trigger', jwtAuth, async (c) => {

@@ -229,7 +229,7 @@ const SCHEMAS: Record<string, unknown> = {
   'expected-outcome.json': EXPECTED_OUTCOME_JSON_SCHEMA,
 }
 
-export function registerSchemaRoutes(app: Hono<{ Variables: Variables }>): void {
+export function registerSchemaRoutes(app: Hono): void {
   app.get('/v1/schemas', (c) => {
     const url = new URL(c.req.raw.url)
     const base = `${url.protocol}//${url.host}/functions/v1/api/v1/schemas`
