@@ -31,6 +31,7 @@ interface SettingsPayload {
     }
   } | null
   synthetic_monitor_enabled: boolean
+  synthetic_monitor_allow_mutations: boolean
   synthetic_monitor_target_url: string | null
   synthetic_monitor_cadence_minutes: number
 }
@@ -54,6 +55,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
   const [cookieDomain, setCookieDomain] = useState('')
   const [bearerToken, setBearerToken] = useState('')
   const [synthEnabled, setSynthEnabled] = useState(false)
+  const [synthMutations, setSynthMutations] = useState(false)
   const [synthTarget, setSynthTarget] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -69,6 +71,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
     setCookieValue('')
     setBearerToken('')
     setSynthEnabled(data?.synthetic_monitor_enabled ?? false)
+    setSynthMutations(data?.synthetic_monitor_allow_mutations ?? false)
     setSynthTarget(data?.synthetic_monitor_target_url ?? '')
     setErr(null)
     setEditing(true)
@@ -81,6 +84,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
       const patch: Record<string, unknown> = {
         crawler_base_url: baseUrl.trim() || null,
         synthetic_monitor_enabled: synthEnabled,
+        synthetic_monitor_allow_mutations: synthMutations,
         synthetic_monitor_target_url: synthTarget.trim() || null,
       }
       if (authType === 'none') {
@@ -201,6 +205,17 @@ export function CrawlerSettingsCard({ projectId }: Props) {
               <span className="text-fg-faint">— same as crawler base URL</span>
             )}
           </SettingRow>
+          <SettingRow label="Allow mutations">
+            {data?.synthetic_monitor_allow_mutations ? (
+              <Badge className="bg-warn/10 text-warn border border-warn/25 font-mono">
+                mutations enabled
+              </Badge>
+            ) : (
+              <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle font-mono">
+                read-only (safe)
+              </Badge>
+            )}
+          </SettingRow>
         </div>
       )}
 
@@ -292,20 +307,40 @@ export function CrawlerSettingsCard({ projectId }: Props) {
               <input
                 type="checkbox"
                 checked={synthEnabled}
-                onChange={(e) => setSynthEnabled(e.target.checked)}
+                onChange={(e) => {
+                  setSynthEnabled(e.target.checked)
+                  if (!e.target.checked) setSynthMutations(false)
+                }}
               />
               <span>Enable synthetic monitor (probes each Action every 15 min)</span>
             </label>
             {synthEnabled && (
-              <Field label="Synthetic target URL (optional override)">
-                <input
-                  type="url"
-                  className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1 text-xs font-mono"
-                  placeholder="https://prod.example.com"
-                  value={synthTarget}
-                  onChange={(e) => setSynthTarget(e.target.value)}
-                />
-              </Field>
+              <>
+                <Field label="Synthetic target URL (optional override)">
+                  <input
+                    type="url"
+                    className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1 text-xs font-mono"
+                    placeholder="https://prod.example.com"
+                    value={synthTarget}
+                    onChange={(e) => setSynthTarget(e.target.value)}
+                  />
+                </Field>
+                <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2 space-y-1">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={synthMutations}
+                      onChange={(e) => setSynthMutations(e.target.checked)}
+                    />
+                    <span className="font-medium text-warn-fg">Allow mutating verbs (POST / PUT / PATCH / DELETE)</span>
+                  </label>
+                  <p className="text-2xs text-fg-faint leading-relaxed pl-5">
+                    Only enable when <strong>synthetic target URL</strong> points at a sandboxed or test environment
+                    where data loss is acceptable. By default the monitor only exercises GET / HEAD / OPTIONS
+                    so your production data is never touched.
+                  </p>
+                </div>
+              </>
             )}
           </div>
 
