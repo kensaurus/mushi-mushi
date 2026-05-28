@@ -109,7 +109,7 @@ function matchesSearch(row: CostRow, q: string): boolean {
   )
 }
 
-export function registerCostsRoutes(parent: Hono) {
+export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
   const r = new Hono<{ Variables: Variables }>()
   r.use('*', requireAuth, requireProjectAccess)
 
@@ -548,7 +548,7 @@ export function registerCostsRoutes(parent: Hono) {
 // Budget endpoints — sit at /v1/admin/org/budget (outside the /costs prefix)
 // so they are registered on the parent directly via registerBudgetRoutes.
 // ---------------------------------------------------------------------------
-export function registerBudgetRoutes(parent: Hono) {
+export function registerBudgetRoutes(parent: Hono<{ Variables: Variables }>) {
   const r = new Hono<{ Variables: Variables }>()
 
   // GET /v1/admin/org/budget?projectId=<pid>

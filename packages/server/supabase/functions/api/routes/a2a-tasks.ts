@@ -60,6 +60,7 @@
  */
 
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { adminOrApiKey } from '../../_shared/auth.ts';
@@ -143,7 +144,7 @@ function rowToA2ATask(row: FixDispatchRow): Record<string, unknown> {
   };
 }
 
-export function registerA2ATaskRoutes(app: Hono): void {
+export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void {
   // ----------------------------------------------------------------
   // POST /v1/a2a/tasks — create a Task
   //
@@ -451,7 +452,7 @@ export function registerA2ATaskRoutes(app: Hono): void {
   // ----------------------------------------------------------------
   app.get('/v1/a2a/tasks/:id', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const { data: row } = await db.from('fix_dispatch_jobs').select('*').eq('id', id).single();
     if (!row) return c.json({ error: { code: 'NOT_FOUND' } }, 404);
@@ -471,7 +472,7 @@ export function registerA2ATaskRoutes(app: Hono): void {
   // ----------------------------------------------------------------
   app.post('/v1/a2a/tasks/:id{[^:]+}:cancel', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const { data: job } = await db
       .from('fix_dispatch_jobs')
@@ -525,7 +526,7 @@ export function registerA2ATaskRoutes(app: Hono): void {
   // ----------------------------------------------------------------
   app.get('/v1/a2a/tasks/:id{[^:]+}:subscribe', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const { data: row } = await db.from('fix_dispatch_jobs').select('*').eq('id', id).single();
     if (!row) return c.json({ error: { code: 'NOT_FOUND' } }, 404);

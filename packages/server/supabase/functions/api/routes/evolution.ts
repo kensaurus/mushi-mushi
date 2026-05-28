@@ -75,7 +75,7 @@ app.get(
   adminOrApiKey({ scope: 'mcp:read' }),
   async (c) => {
     const userId = c.get('userId') as string
-    const pid = c.req.param('id')
+    const pid = c.req.param('id')!
 
     // Authz: API key callers are pinned to the key's own project — they
     // cannot be elevated to another project even if the owner has access.
@@ -139,7 +139,7 @@ app.get(
   adminOrApiKey({ scope: 'mcp:read' }),
   async (c) => {
     const userId = c.get('userId') as string
-    const pid = c.req.param('id')
+    const pid = c.req.param('id')!
 
     // Authz: API key callers are pinned to their key's project; JWT callers
     // use the full accessible-project set.
@@ -203,6 +203,6 @@ app.get(
   },
 )
 
-export function registerEvolutionRoutes(parent: Hono): void {
+export function registerEvolutionRoutes(parent: Hono<{ Variables: Variables }>): void {
   parent.route('', app)
 }

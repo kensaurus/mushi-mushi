@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -43,7 +44,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerPublicRoutes(app: Hono): void {
+export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // SDK ROUTES (API key auth)
   // ============================================================
@@ -864,7 +865,7 @@ export function registerPublicRoutes(app: Hono): void {
   // ============================================================
 
   app.get('/v1/reports/:id/status', apiKeyAuth, async (c) => {
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const projectId = c.get('projectId') as string;
     const db = getServiceClient();
 
@@ -1120,7 +1121,7 @@ export function registerPublicRoutes(app: Hono): void {
 
   app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const auth = await resolveReporterTokenHash(c, projectId);
     if (!auth.ok)
       return c.json(
@@ -1151,7 +1152,7 @@ export function registerPublicRoutes(app: Hono): void {
 
   app.post('/v1/reporter/reports/:id/reply', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const auth = await resolveReporterTokenHash(c, projectId);
     if (!auth.ok)
       return c.json(
@@ -1279,7 +1280,7 @@ export function registerPublicRoutes(app: Hono): void {
   });
 
   app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
-    const notifId = c.req.param('id');
+    const notifId = c.req.param('id')!;
     const projectId = c.get('projectId') as string;
     const auth = await resolveReporterTokenHash(c, projectId);
     if (!auth.ok)

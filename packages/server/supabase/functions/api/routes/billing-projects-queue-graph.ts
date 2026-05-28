@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -42,7 +43,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
+export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: Variables }>): void {
   // =================================================================================
   // GET /v1/admin/billing/stats
   // Workspace health summary for billing banner + KPI strip (active project focus).
@@ -1941,7 +1942,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // never break those. If we ever need slug edits, ship a separate
   // explicit "Change project handle" flow that owners only can use.
   app.patch('/v1/admin/projects/:id', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2034,7 +2035,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // would die with the data it documents. Log the deletion event to Sentry
   // (`category=project.deleted`) so monitoring keeps the receipt.
   app.delete('/v1/admin/projects/:id', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2303,7 +2304,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2373,7 +2374,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // inverse — leaking a window where both the old and new keys are valid would
   // silently extend the rotated key's effective lifetime.
   app.post('/v1/admin/projects/:id/keys/rotate', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2467,8 +2468,8 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   });
 
   app.delete('/v1/admin/projects/:id/keys/:keyId', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
-    const keyId = c.req.param('keyId');
+    const projectId = c.req.param('id')!;
+    const keyId = c.req.param('keyId')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2504,7 +2505,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // classification trigger. Tagged with metadata.source so admins can filter
   // these out of the inbox.
   app.post('/v1/admin/projects/:id/test-report', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2626,7 +2627,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   }
 
   app.post('/v1/admin/projects/:id/codebase/enable', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -2752,7 +2753,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/projects/:id/codebase/stats', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -3040,7 +3041,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   })
 
   app.get('/v1/admin/projects/:id/codebase/explore', jwtAuth, async (c) => {
-    const projectId = c.req.param('id')
+    const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
@@ -3160,7 +3161,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   })
 
   app.post('/v1/admin/projects/:id/codebase/search', jwtAuth, async (c) => {
-    const projectId = c.req.param('id')
+    const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
     const db = getServiceClient()
 
@@ -3440,7 +3441,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/queue/:id/retry', jwtAuth, async (c) => {
-    const queueId = c.req.param('id');
+    const queueId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -3942,7 +3943,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
    * Used by MCP `graph_node_status` and agents that need one row without listing 200.
    */
   app.get('/v1/admin/graph/node/:nodeId', adminOrApiKey(), async (c) => {
-    const nodeId = c.req.param('nodeId');
+    const nodeId = c.req.param('nodeId')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -3960,7 +3961,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/graph/blast-radius/:nodeId', adminOrApiKey(), async (c) => {
-    const nodeId = c.req.param('nodeId');
+    const nodeId = c.req.param('nodeId')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);

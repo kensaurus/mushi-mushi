@@ -18,7 +18,7 @@ import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
-export function registerAnomaliesRoutes(parent: Hono) {
+export function registerAnomaliesRoutes(parent: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/anomalies/stats — posture banner + ANOMALIES SNAPSHOT.
   parent.get('/v1/admin/anomalies/stats', requireAuth, async (c) => {
     const userId = c.get('userId') as string
@@ -196,7 +196,7 @@ export function registerAnomaliesRoutes(parent: Hono) {
     const update: Record<string, unknown> = {}
     if (status) update.status = status
     if (confirmed != null) update.confirmed = confirmed
-    const { error } = await db().from('anomaly_detections').update(update).eq('id', c.req.param('id'))
+    const { error } = await db().from('anomaly_detections').update(update).eq('id', c.req.param('id')!)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true })
   })

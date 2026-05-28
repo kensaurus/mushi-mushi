@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -13,7 +14,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerSettingsResearchRoutes(app: Hono): void {
+export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables }>): void {
   // Settings admin endpoints
   app.get('/v1/admin/settings', adminOrApiKey(), async (c) => {
     const userId = c.get('userId') as string;
@@ -157,7 +158,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -183,7 +184,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   });
 
   app.put('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
-    const projectId = c.req.param('id');
+    const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const db = getServiceClient();
@@ -276,7 +277,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.put('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
-    const provider = c.req.param('provider') as ByokProvider;
+    const provider = c.req.param('provider')! as ByokProvider;
     if (!BYOK_PROVIDERS.includes(provider)) {
       return c.json(
         { ok: false, error: { code: 'BAD_PROVIDER', message: `Unknown provider: ${provider}` } },
@@ -392,7 +393,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.delete('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
-    const provider = c.req.param('provider') as ByokProvider;
+    const provider = c.req.param('provider')! as ByokProvider;
     if (!BYOK_PROVIDERS.includes(provider)) {
       return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
     }
@@ -453,7 +454,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
    */
   app.post('/v1/admin/byok/:provider/test', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
-    const provider = c.req.param('provider') as ByokProvider;
+    const provider = c.req.param('provider')! as ByokProvider;
     if (!BYOK_PROVIDERS.includes(provider)) {
       return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
     }
@@ -1101,7 +1102,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.get('/v1/admin/research/sessions/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const sessionId = c.req.param('id');
+    const sessionId = c.req.param('id')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -1127,7 +1128,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
   app.post('/v1/admin/research/snippets/:id/attach', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const snippetId = c.req.param('id');
+    const snippetId = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { reportId?: string };
     const reportId = typeof body.reportId === 'string' ? body.reportId : '';
     if (!reportId) {

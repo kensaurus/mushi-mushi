@@ -28,7 +28,7 @@ import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
-export function registerExperimentsRoutes(parent: Hono) {
+export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/experiments/stats — posture banner + EXPERIMENTS SNAPSHOT.
   parent.get('/v1/admin/experiments/stats', requireAuth, async (c) => {
     const userId = c.get('userId') as string
@@ -222,40 +222,40 @@ export function registerExperimentsRoutes(parent: Hono) {
   })
 
   admin.get('/:id', async (c) => {
-    const { data, error } = await db().from('experiments').select('*, experiment_variants(*)').eq('id', c.req.param('id')).single()
+    const { data, error } = await db().from('experiments').select('*, experiment_variants(*)').eq('id', c.req.param('id')!).single()
     if (error) return c.json({ ok: false, error: { code: 'ERROR', message: 'Not found' } }, 404)
     return c.json({ ok: true, data })
   })
 
   admin.patch('/:id', async (c) => {
     const body = await c.req.json()
-    const { error } = await db().from('experiments').update(body).eq('id', c.req.param('id'))
+    const { error } = await db().from('experiments').update(body).eq('id', c.req.param('id')!)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true })
   })
 
   admin.delete('/:id', async (c) => {
-    await db().from('experiments').delete().eq('id', c.req.param('id')).eq('status', 'draft')
+    await db().from('experiments').delete().eq('id', c.req.param('id')!).eq('status', 'draft')
     return c.json({ ok: true })
   })
 
   admin.post('/:id/variants', async (c) => {
     const body = await c.req.json()
     const { name, description, config, traffic_weight } = body
-    const { data, error } = await db().from('experiment_variants').insert({ experiment_id: c.req.param('id'), name, description, config, traffic_weight }).select().single()
+    const { data, error } = await db().from('experiment_variants').insert({ experiment_id: c.req.param('id')!, name, description, config, traffic_weight }).select().single()
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true, data }, 201)
   })
 
   admin.patch('/:id/variants/:vid', async (c) => {
     const body = await c.req.json()
-    const { error } = await db().from('experiment_variants').update(body).eq('id', c.req.param('vid')).eq('experiment_id', c.req.param('id'))
+    const { error } = await db().from('experiment_variants').update(body).eq('id', c.req.param('vid')!).eq('experiment_id', c.req.param('id')!)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true })
   })
 
   admin.delete('/:id/variants/:vid', async (c) => {
-    await db().from('experiment_variants').delete().eq('id', c.req.param('vid')).eq('experiment_id', c.req.param('id'))
+    await db().from('experiment_variants').delete().eq('id', c.req.param('vid')!).eq('experiment_id', c.req.param('id')!)
     return c.json({ ok: true })
   })
 
@@ -265,19 +265,19 @@ export function registerExperimentsRoutes(parent: Hono) {
     const res = await fetch(`${supabaseUrl}/functions/v1/experiment-analyzer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-      body: JSON.stringify({ experiment_id: c.req.param('id') }),
+      body: JSON.stringify({ experiment_id: c.req.param('id')! }),
     })
     const json = await res.json()
     return c.json(json, res.status)
   })
 
   admin.post('/:id/launch', async (c) => {
-    await db().from('experiments').update({ status: 'running', start_at: new Date().toISOString() }).eq('id', c.req.param('id'))
+    await db().from('experiments').update({ status: 'running', start_at: new Date().toISOString() }).eq('id', c.req.param('id')!)
     return c.json({ ok: true })
   })
 
   admin.post('/:id/stop', async (c) => {
-    await db().from('experiments').update({ status: 'stopped', end_at: new Date().toISOString() }).eq('id', c.req.param('id'))
+    await db().from('experiments').update({ status: 'stopped', end_at: new Date().toISOString() }).eq('id', c.req.param('id')!)
     return c.json({ ok: true })
   })
 

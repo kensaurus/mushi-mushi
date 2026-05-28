@@ -25,6 +25,7 @@
  */
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { requireFeature } from '../../_shared/entitlements.ts'
@@ -95,7 +96,7 @@ function rateLimitResponse(
   )
 }
 
-export function registerInventoryRoutes(app: Hono): void {
+export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
   // Registered before /:projectId so "stats" is never parsed as a UUID.
@@ -292,7 +293,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -395,7 +396,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // GET /v1/admin/inventory/:projectId — current snapshot
   // ============================================================
   app.get('/v1/admin/inventory/:projectId', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const db = getServiceClient()
     const scope = await assertProjectScope(c, projectId, db)
     if (!scope.ok) return scope.response
@@ -436,7 +437,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // natively. Add `?format=json` to get the same data as JSON.
   // ============================================================
   app.get('/v1/admin/inventory/:projectId/agents.md', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const db = getServiceClient()
     const scope = await assertProjectScope(c, projectId, db)
     if (!scope.ok) return scope.response
@@ -590,7 +591,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey(),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -608,7 +609,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // GET /v1/admin/inventory/:projectId/diff?from=<sha>&to=<sha>
   // ============================================================
   app.get('/v1/admin/inventory/:projectId/diff', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const fromSha = c.req.query('from') ?? null
     const toSha = c.req.query('to') ?? null
     const db = getServiceClient()
@@ -657,7 +658,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // GET /v1/admin/inventory/:projectId/findings
   // ============================================================
   app.get('/v1/admin/inventory/:projectId/findings', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const gate = c.req.query('gate')
     const severity = c.req.query('severity')
     const db = getServiceClient()
@@ -704,8 +705,8 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey(),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
-      const actionNodeId = c.req.param('actionNodeId')
+      const projectId = c.req.param('projectId')!
+      const actionNodeId = c.req.param('actionNodeId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -735,7 +736,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -788,7 +789,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // GET /v1/admin/inventory/:projectId/proposals — list
   // ============================================================
   app.get('/v1/admin/inventory/:projectId/proposals', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const status = c.req.query('status')
     const db = getServiceClient()
     const scope = await assertProjectScope(c, projectId, db)
@@ -818,8 +819,8 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey(),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
-      const proposalId = c.req.param('id')
+      const projectId = c.req.param('projectId')!
+      const proposalId = c.req.param('id')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -844,8 +845,8 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
-      const proposalId = c.req.param('id')
+      const projectId = c.req.param('projectId')!
+      const proposalId = c.req.param('id')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -900,8 +901,8 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
-      const proposalId = c.req.param('id')
+      const projectId = c.req.param('projectId')!
+      const proposalId = c.req.param('id')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -984,8 +985,8 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
-      const proposalId = c.req.param('id')
+      const projectId = c.req.param('projectId')!
+      const proposalId = c.req.param('id')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -1023,7 +1024,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // to draft your first inventory.yaml?".
   // ============================================================
   app.get('/v1/admin/inventory/:projectId/discovery', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const db = getServiceClient()
     const scope = await assertProjectScope(c, projectId, db)
     if (!scope.ok) return scope.response
@@ -1065,7 +1066,7 @@ export function registerInventoryRoutes(app: Hono): void {
   // ever pulling the secret over the wire.
   // ============================================================
   app.get('/v1/admin/inventory/:projectId/settings', adminOrApiKey(), inventoryV2, async (c) => {
-    const projectId = c.req.param('projectId')
+    const projectId = c.req.param('projectId')!
     const db = getServiceClient()
     const scope = await assertProjectScope(c, projectId, db)
     if (!scope.ok) return scope.response
@@ -1131,7 +1132,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -1271,7 +1272,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -1331,7 +1332,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -1388,8 +1389,8 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey({ scope: 'mcp:write' }),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
-      const reportId = c.req.param('reportId')
+      const projectId = c.req.param('projectId')!
+      const reportId = c.req.param('reportId')!
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
@@ -1427,7 +1428,7 @@ export function registerInventoryRoutes(app: Hono): void {
     adminOrApiKey(),
     inventoryV2,
     async (c) => {
-      const projectId = c.req.param('projectId')
+      const projectId = c.req.param('projectId')!
       const nodeId = c.req.query('node_id')
       const db = getServiceClient()
       const scope = await assertProjectScope(c, projectId, db)

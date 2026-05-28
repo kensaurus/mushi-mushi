@@ -20,6 +20,7 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
@@ -44,7 +45,7 @@ const CodebaseUploadBody = z.object({
 
 // ─── Route registration ───────────────────────────────────────────────────────
 
-export function registerSyncRoutes(app: Hono) {
+export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── GET /v1/sync/whoami ────────────────────────────────────────────────────
   // Verify the API key is valid and return which project it belongs to.
   // Used by `mushi whoami` and by any CI step that needs to confirm credentials.
@@ -230,7 +231,7 @@ export function registerSyncRoutes(app: Hono) {
   app.get('/v1/sync/reports/:id', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
 
     const { data, error } = await db
       .from('reports')
@@ -274,7 +275,7 @@ export function registerSyncRoutes(app: Hono) {
   app.patch('/v1/sync/reports/:id', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
 
     let rawBody: unknown
     try { rawBody = await c.req.json() } catch {
@@ -347,7 +348,7 @@ export function registerSyncRoutes(app: Hono) {
   app.get('/v1/sync/lessons/:id', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
 
     const { data, error } = await db
       .from('lessons')

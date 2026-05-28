@@ -19,12 +19,13 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, apiKeyAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
-export function registerLessonsRoutes(app: Hono) {
+export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
   app.get('/v1/admin/lessons/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -213,7 +214,7 @@ export function registerLessonsRoutes(app: Hono) {
     const { data, error } = await db
       .from('lessons')
       .select('*, mistake_clusters(id, name, summary, suggested_rule, cluster_size, status, judge_coherence_score, first_seen_at, last_seen_at)')
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .single()
 
     if (error) return c.json({ ok: false, error: error.message }, error.code === 'PGRST116' ? 404 : 500)
@@ -242,7 +243,7 @@ export function registerLessonsRoutes(app: Hono) {
     const { data, error } = await db
       .from('lessons')
       .update(updates)
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .select()
       .single()
 
@@ -256,7 +257,7 @@ export function registerLessonsRoutes(app: Hono) {
     const { data: lesson } = await db
       .from('lessons')
       .select('cluster_id, sample_report_ids')
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .single()
 
     if (!lesson) return c.json({ ok: false, error: 'not found' }, 404)
@@ -299,10 +300,10 @@ export function registerLessonsRoutes(app: Hono) {
   app.get('/v1/admin/clusters/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
     const [clusterRes, membersRes] = await Promise.all([
-      db.from('mistake_clusters').select('*').eq('id', c.req.param('id')).single(),
+      db.from('mistake_clusters').select('*').eq('id', c.req.param('id')!).single(),
       db.from('report_cluster_membership')
         .select('report_id, distance, assigned_at, reports!inner(id, title, severity, category, status, created_at)')
-        .eq('cluster_id', c.req.param('id'))
+        .eq('cluster_id', c.req.param('id')!)
         .order('distance', { ascending: true })
         .limit(20),
     ])
@@ -317,7 +318,7 @@ export function registerLessonsRoutes(app: Hono) {
     const { data: cluster } = await db
       .from('mistake_clusters')
       .select('*')
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .single()
 
     if (!cluster) return c.json({ ok: false, error: 'cluster not found' }, 404)
@@ -336,7 +337,7 @@ export function registerLessonsRoutes(app: Hono) {
 
     if (error) return c.json({ ok: false, error: error.message }, 500)
 
-    await db.from('mistake_clusters').update({ status: 'promoted' }).eq('id', c.req.param('id'))
+    await db.from('mistake_clusters').update({ status: 'promoted' }).eq('id', c.req.param('id')!)
     return c.json({ ok: true, data: lesson })
   })
 

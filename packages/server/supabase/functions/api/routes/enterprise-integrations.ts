@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import type { IntegrationKind } from '../../_shared/integration-probes.ts';
 import type { ExportSampleRow } from '../../_shared/fine-tune.ts';
@@ -14,7 +15,7 @@ import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
-export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
+export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================
@@ -365,7 +366,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // audit log + sso_state attempts reference them.
   app.delete('/v1/admin/sso/:id', jwtAuth, requireFeature('sso'), async (c) => {
     const userId = c.get('userId') as string;
-    const configId = c.req.param('id');
+    const configId = c.req.param('id')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -679,7 +680,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // V5.3 §2.15 (B4): export step — render JSONL training set and upload it.
   app.post('/v1/admin/fine-tuning/:id/export', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job, error: loadErr } = await db
@@ -748,7 +749,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // endpoint (or the vendor webhook) to advance to `trained`.
   app.post('/v1/admin/fine-tuning/:id/submit', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
@@ -806,7 +807,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // kept as an admin endpoint so operators can also force a check.
   app.post('/v1/admin/fine-tuning/:id/poll', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
@@ -941,7 +942,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // for a real correctness check before promotion.
   app.post('/v1/admin/fine-tuning/:id/validate', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
@@ -1012,7 +1013,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // project_settings.fine_tuned_stage{1,2}_model. Idempotent.
   app.post('/v1/admin/fine-tuning/:id/promote', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
@@ -1057,7 +1058,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
 
   app.post('/v1/admin/fine-tuning/:id/reject', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const body = await c.req.json().catch(() => ({}));
     const db = getServiceClient();
 
@@ -1093,7 +1094,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // fine-tuning artifacts live in storage, not on this row.
   app.delete('/v1/admin/fine-tuning/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const jobId = c.req.param('id');
+    const jobId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db
@@ -1223,7 +1224,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // stale rows. Auditable; only the project owner can delete their own rows.
   app.delete('/v1/admin/integrations/:type', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const integrationType = c.req.param('type');
+    const integrationType = c.req.param('type')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -1427,7 +1428,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
 
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const kind = c.req.param('kind') as IntegrationKind;
+    const kind = c.req.param('kind')! as IntegrationKind;
     if (!INTEGRATION_KINDS.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
@@ -1506,7 +1507,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
 
   app.post('/v1/admin/integrations/sync/:reportId', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const reportId = c.req.param('reportId');
+    const reportId = c.req.param('reportId')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     const { data: report } = await db
@@ -1628,7 +1629,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
 
   app.delete('/v1/admin/plugins/:slug', jwtAuth, requireFeature('plugins'), async (c) => {
     const userId = c.get('userId') as string;
-    const slug = c.req.param('slug');
+    const slug = c.req.param('slug')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -1666,7 +1667,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
    */
   app.patch('/v1/admin/plugins/:slug', jwtAuth, requireFeature('plugins'), async (c) => {
     const userId = c.get('userId') as string;
-    const slug = c.req.param('slug');
+    const slug = c.req.param('slug')!;
     const body = await c.req.json().catch(() => ({}));
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
@@ -1731,7 +1732,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
    */
   app.post('/v1/admin/plugins/:slug/test-event', jwtAuth, requireFeature('plugins'), async (c) => {
     const userId = c.get('userId') as string;
-    const slug = c.req.param('slug');
+    const slug = c.req.param('slug')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -1770,7 +1771,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     requireFeature('plugins'),
     async (c) => {
       const userId = c.get('userId') as string;
-      const slug = c.req.param('slug');
+      const slug = c.req.param('slug')!;
       const db = getServiceClient();
       const resolvedProject = await resolveOwnedProject(c, db, userId);
       if ('response' in resolvedProject) return resolvedProject.response;
@@ -2497,7 +2498,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     requireFeature('intelligence_reports'),
     async (c) => {
       const userId = c.get('userId') as string;
-      const id = c.req.param('id');
+      const id = c.req.param('id')!;
       const db = getServiceClient();
       const projectIds = await ownedProjectIds(db, userId);
       if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
@@ -2550,7 +2551,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // window and use the browser's native print pipeline to save as PDF.
   app.get('/v1/admin/intelligence/:id/html', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0)
@@ -3279,7 +3280,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/health/cron/:job/trigger', jwtAuth, async (c) => {
-    const job = c.req.param('job');
+    const job = c.req.param('job')!;
     const allowed = ['judge-batch', 'intelligence-report'] as const;
     if (!allowed.includes(job as (typeof allowed)[number])) {
       return c.json(

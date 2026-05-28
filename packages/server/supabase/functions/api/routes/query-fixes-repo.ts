@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -42,7 +43,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerQueryFixesRepoRoutes(app: Hono): void {
+export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -206,7 +207,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // PATCH the is_saved flag — used by the Query page Saved sidebar.
   app.patch('/v1/admin/query/history/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { is_saved?: boolean };
     if (typeof body.is_saved !== 'boolean') {
       return c.json(
@@ -226,7 +227,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
 
   app.delete('/v1/admin/query/history/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const { error } = await db.from('nl_query_history').delete().eq('id', id).eq('user_id', userId);
     if (error) return dbError(c, error);
@@ -354,7 +355,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/groups/:id/merge', jwtAuth, async (c) => {
-    const groupId = c.req.param('id');
+    const groupId = c.req.param('id')!;
     const { targetGroupId } = await c.req.json();
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -757,7 +758,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/fixes/:id', jwtAuth, async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -782,7 +783,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // same sync periodically for every completed attempt.
   // ---------------------------------------------------------------------------
   app.post('/v1/admin/fixes/:id/refresh-ci', jwtAuth, async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -844,7 +845,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // fix_attempts + check-run signals into an ordered event stream so the UI
   // can render a real branch graph.
   app.get('/v1/admin/fixes/:id/timeline', adminOrApiKey(), async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -1443,7 +1444,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   });
 
   app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();

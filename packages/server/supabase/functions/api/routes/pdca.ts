@@ -63,7 +63,7 @@ async function assertRunAccess(
   return { ok: true, projectId: run.project_id as string }
 }
 
-export function registerPdcaRoutes(parent: Hono) {
+export function registerPdcaRoutes(parent: Hono<{ Variables: Variables }>) {
   parent.route('/v1/admin/pdca', pdcaRoutes())
 }
 
@@ -289,7 +289,7 @@ function pdcaRoutes() {
 
   // Run detail + iterations
   r.get('/:id', async (c) => {
-    const runId = c.req.param('id')
+    const runId = c.req.param('id')!
     const access = await assertRunAccess(c, runId)
     if (!access.ok) return access.response
 
@@ -309,7 +309,7 @@ function pdcaRoutes() {
 
   // Abort a run
   r.delete('/:id', async (c) => {
-    const runId = c.req.param('id')
+    const runId = c.req.param('id')!
     const access = await assertRunAccess(c, runId)
     if (!access.ok) return access.response
 
@@ -326,7 +326,7 @@ function pdcaRoutes() {
 
   // Manually trigger the runner for a queued run (invokes pdca-runner edge function)
   r.post('/:id/trigger', async (c) => {
-    const runId = c.req.param('id')
+    const runId = c.req.param('id')!
     const access = await assertRunAccess(c, runId)
     if (!access.ok) return access.response
 

@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
@@ -34,7 +35,7 @@ interface ContactBody {
 
 const RATE_LIMIT_PER_HOUR = 5;
 
-export function registerAdminOpsRoutes(app: Hono): void {
+export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/anti-gaming/stats — AntiGamingStatusBanner posture data.
   app.get('/v1/admin/anti-gaming/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
@@ -219,7 +220,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/anti-gaming/devices/:id/flag', jwtAuth, async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = await c.req.json().catch(() => ({}));
     const reason = (body.reason as string | undefined)?.trim() ?? 'Manual flag from admin console';
@@ -254,7 +255,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/anti-gaming/devices/:id/unflag', jwtAuth, async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -446,7 +447,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   app.post('/v1/admin/notifications/:id/read', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const notifId = c.req.param('id');
+    const notifId = c.req.param('id')!;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -632,7 +633,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const projectId = c.req.param('projectId');
+    const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (!projectIds.includes(projectId)) {
@@ -896,7 +897,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   app.patch('/v1/admin/compliance/dsars/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0)
@@ -1030,7 +1031,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
   // destination cluster (handled out-of-band by the support team for now).
   app.put('/v1/admin/residency/:projectId', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const projectId = c.req.param('projectId');
+    const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (!projectIds.includes(projectId)) {
@@ -1275,7 +1276,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   app.put('/v1/admin/storage/:projectId', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const projectId = c.req.param('projectId');
+    const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (!projectIds.includes(projectId))
@@ -1315,7 +1316,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   app.post('/v1/admin/storage/:projectId/health', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const projectId = c.req.param('projectId');
+    const projectId = c.req.param('projectId')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (!projectIds.includes(projectId))
@@ -2043,7 +2044,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
   // Tickets eligible to credit in a release draft (project-scoped).
   app.get('/v1/admin/projects/:projectId/support-tickets/linkable', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const projectId = c.req.param('projectId');
+    const projectId = c.req.param('projectId')!;
     if (!projectId) {
       return c.json({ ok: false, error: { code: 'PROJECT_ID_REQUIRED' } }, 400);
     }
@@ -2108,7 +2109,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
   // must own the ticket).
   app.get('/v1/admin/support/tickets/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const ticketId = c.req.param('id');
+    const ticketId = c.req.param('id')!;
     if (!ticketId) {
       return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
     }
@@ -2138,7 +2139,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
   // would falsify the history view used for SLA reporting.
   app.post('/v1/admin/support/tickets/:id/cancel', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const ticketId = c.req.param('id');
+    const ticketId = c.req.param('id')!;
     if (!ticketId) {
       return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
     }
@@ -2195,7 +2196,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   // Operator triage — link ticket to a published release + optional customer note.
   app.patch('/v1/super-admin/support/tickets/:id', jwtAuth, requireSuperAdmin, async (c) => {
-    const ticketId = c.req.param('id');
+    const ticketId = c.req.param('id')!;
     if (!ticketId) {
       return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
     }

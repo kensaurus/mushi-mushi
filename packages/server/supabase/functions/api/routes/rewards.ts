@@ -26,6 +26,7 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
@@ -129,7 +130,7 @@ function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefin
 }
 
 // ─────────────────────────────────────────────────────────────
-export function registerRewardsRoutes(app: Hono): void {
+export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ===========================================================
   // SDK: POST /v1/sdk/activity
@@ -1183,7 +1184,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const endUserId = c.req.param('id')
+    const endUserId = c.req.param('id')!
     const db = getServiceClient()
 
     const [euRes, ptsRes, actRes] = await Promise.all([
@@ -1278,7 +1279,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const db = getServiceClient()
 
     const { error } = await db
@@ -1394,7 +1395,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const db = getServiceClient()
 
     const { error } = await db.from('reward_quests').delete().eq('id', id).eq('organization_id', orgId)
@@ -1513,7 +1514,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
       return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
@@ -1853,7 +1854,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
       return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
@@ -1906,7 +1907,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const db = getServiceClient()
 
     // Verify ownership

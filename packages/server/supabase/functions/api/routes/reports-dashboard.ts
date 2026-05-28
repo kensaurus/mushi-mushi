@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -42,7 +43,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerReportsDashboardRoutes(app: Hono): void {
+export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // ADMIN ROUTES (JWT auth)
   // ============================================================
@@ -506,7 +507,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/reports/:id', adminOrApiKey(), async (c) => {
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -581,7 +582,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
   });
 
   app.patch('/v1/admin/reports/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
@@ -895,7 +896,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
   // touched on the specific ids it touched).
   app.post('/v1/admin/reports/bulk/:mutationId/undo', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const mutationId = c.req.param('mutationId');
+    const mutationId = c.req.param('mutationId')!;
     if (!mutationId || !/^[0-9a-f-]{36}$/i.test(mutationId)) {
       return c.json(
         { ok: false, error: { code: 'INVALID_INPUT', message: 'mutationId must be a UUID' } },
@@ -2669,7 +2670,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
 
   app.patch('/v1/admin/prompt-lab/prompts/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = await c.req.json().catch(() => ({}));
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -2735,7 +2736,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
 
   app.delete('/v1/admin/prompt-lab/prompts/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);

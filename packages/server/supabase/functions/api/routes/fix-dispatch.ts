@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -44,7 +45,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerFixDispatchRoutes(app: Hono): void {
+export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // FIX DISPATCH (V5.3 §2.10) — admin-triggered, queue-based
   // ============================================================
@@ -229,7 +230,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
 
   app.get('/v1/admin/fixes/dispatch/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const dispatchId = c.req.param('id');
+    const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
     const { data: job } = await db
       .from('fix_dispatch_jobs')
@@ -257,7 +258,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
   app.post('/v1/admin/fixes/dispatches/:id/cancel', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const userEmail = (c.get('userEmail') as string | undefined) ?? null;
-    const dispatchId = c.req.param('id');
+    const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db
@@ -363,7 +364,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
   // ------------------------------------------------------------
   app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
-    const dispatchId = c.req.param('id');
+    const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db

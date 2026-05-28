@@ -19,7 +19,7 @@ import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
-export function registerDriftRoutes(parent: Hono) {
+export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/drift/stats — posture banner + DRIFT SNAPSHOT (before nested /:id routes).
   parent.get('/v1/admin/drift/stats', requireAuth, async (c) => {
     const userId = c.get('userId') as string
@@ -245,7 +245,7 @@ export function registerDriftRoutes(parent: Hono) {
     const { data, error } = await db()
       .from('contract_snapshots')
       .select('*')
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .single()
     if (error) return c.json({ ok: false, error: { code: 'ERROR', message: 'Not found' } }, 404)
     return c.json({ ok: true, data })
@@ -261,7 +261,7 @@ export function registerDriftRoutes(parent: Hono) {
     const { error } = await db()
       .from('drift_findings')
       .update(update)
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true })
   })
@@ -271,7 +271,7 @@ export function registerDriftRoutes(parent: Hono) {
     const { data: finding } = await db()
       .from('drift_findings')
       .select('*')
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .single()
     if (!finding) return c.json({ ok: false, error: { code: 'ERROR', message: 'Not found' } }, 404)
     const { data: lesson, error } = await db()

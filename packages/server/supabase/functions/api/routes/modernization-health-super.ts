@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -48,7 +49,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerModernizationHealthSuperRoutes(app: Hono): void {
+export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // LIBRARY MODERNIZATION
   // ============================================================
@@ -86,7 +87,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
 
   app.post('/v1/admin/modernization/:id/dispatch', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const findingId = c.req.param('id');
+    const findingId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: finding } = await db
@@ -189,7 +190,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
 
   app.post('/v1/admin/modernization/:id/dismiss', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const findingId = c.req.param('id');
+    const findingId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: finding } = await db
@@ -237,7 +238,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
 
   app.post('/v1/admin/health/integration/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const kind = c.req.param('kind') as IntegrationKind;
+    const kind = c.req.param('kind')! as IntegrationKind;
     if (!ALL_INTEGRATION_KINDS.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
@@ -475,7 +476,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
   // recent reports. Used by the row-click drawer in /admin/users.
   app.get('/v1/super-admin/users/:id', jwtAuth, requireSuperAdmin, async (c) => {
     const db = getServiceClient();
-    const userId = c.req.param('id');
+    const userId = c.req.param('id')!;
 
     const { data: directory, error: dirErr } = await db
       .from('super_admin_user_directory')

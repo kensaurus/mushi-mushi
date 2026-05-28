@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
@@ -300,7 +301,7 @@ async function loadAskMushiContextData(
   return { activeProject, userProjectIds, recentReportsBlock };
 }
 
-export function registerAskMushiRoutes(app: Hono): void {
+export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): void {
   // ── Endpoint: POST messages ──────────────────────────────────────────────
 
   // Per-user hourly throttle for Ask Mushi LLM calls. Returns either a
@@ -981,7 +982,7 @@ export function registerAskMushiRoutes(app: Hono): void {
 
   app.get('/v1/admin/ask-mushi/threads/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
       return c.json(
         { ok: false, error: { code: 'BAD_REQUEST', message: 'invalid thread id' } },
@@ -1009,7 +1010,7 @@ export function registerAskMushiRoutes(app: Hono): void {
 
   app.delete('/v1/admin/ask-mushi/threads/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     if (!/^[0-9a-f-]{36}$/i.test(id)) {
       return c.json(
         { ok: false, error: { code: 'BAD_REQUEST', message: 'invalid thread id' } },

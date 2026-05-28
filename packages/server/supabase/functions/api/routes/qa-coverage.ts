@@ -22,11 +22,12 @@
  */
 
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { jwtAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
 
-export function registerQaCoverageRoutes(app: Hono): void {
+export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ── helper ────────────────────────────────────────────────────────────────
   async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string) {
@@ -38,7 +39,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // GET /v1/admin/projects/:pid/qa-coverage/stats — posture banner + QA SNAPSHOT.
   app.get('/v1/admin/projects/:pid/qa-coverage/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) {
       return c.json({ ok: true, data: {
@@ -190,7 +191,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── List stories + 24h coverage stats ────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-coverage', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -235,7 +236,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Dashboard tile summary ────────────────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-coverage-summary', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -261,8 +262,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Get single story ──────────────────────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-stories/:sid', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -279,7 +280,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Create story ──────────────────────────────────────────────────────────
   app.post('/v1/admin/projects/:pid/qa-stories', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -316,8 +317,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Update story ──────────────────────────────────────────────────────────
   app.patch('/v1/admin/projects/:pid/qa-stories/:sid', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -356,8 +357,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Delete story ──────────────────────────────────────────────────────────
   app.delete('/v1/admin/projects/:pid/qa-stories/:sid', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -373,8 +374,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── List runs for a story ─────────────────────────────────────────────────
   app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
@@ -393,8 +394,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Evidence for a single run (with signed Storage URLs for image/video) ──
   app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const rid = c.req.param('rid');
+    const pid = c.req.param('pid')!;
+    const rid = c.req.param('rid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -439,8 +440,8 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Manual run trigger ────────────────────────────────────────────────────
   app.post('/v1/admin/projects/:pid/qa-stories/:sid/run', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
-    const sid = c.req.param('sid');
+    const pid = c.req.param('pid')!;
+    const sid = c.req.param('sid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
@@ -488,7 +489,7 @@ export function registerQaCoverageRoutes(app: Hono): void {
   // ── Platform health rollup (for PlatformHealthTile) ───────────────────────
   app.get('/v1/admin/projects/:pid/platform-rollup', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const pid = c.req.param('pid');
+    const pid = c.req.param('pid')!;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
