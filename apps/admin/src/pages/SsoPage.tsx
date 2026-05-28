@@ -28,7 +28,7 @@ interface SsoConfig {
   acs_url: string | null;
   is_active: boolean;
   sso_provider_id: string | null;
-  registration_status: 'pending' | 'registered' | 'failed' | 'disabled';
+  registration_status: 'pending' | 'registered' | 'failed' | 'disabled' | 'manual_required';
   registration_error: string | null;
   registered_at: string | null;
   domains: string[] | null;
@@ -43,11 +43,12 @@ interface RegisterResult {
   hint?: string;
 }
 
-const REGISTRATION_TONE: Record<SsoConfig['registration_status'], string> = {
+const REGISTRATION_TONE: Record<string, string> = {
   registered: 'bg-ok-muted text-ok',
   pending: 'bg-warn/10 text-warn',
   failed: 'bg-danger-subtle text-danger',
   disabled: 'bg-surface-overlay text-fg-muted',
+  manual_required: 'bg-info/10 text-info',
 };
 
 export function SsoPage() {
@@ -59,6 +60,9 @@ export function SsoPage() {
     metadataUrl: '',
     entityId: '',
     domains: '',
+    clientId: '',
+    clientSecret: '',
+    issuerUrl: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [lastRegister, setLastRegister] = useState<RegisterResult | null>(null);
@@ -77,6 +81,14 @@ export function SsoPage() {
       toast.error('Missing fields', 'SAML registration requires a metadata URL.');
       return;
     }
+    if (form.providerType === 'oidc' && !form.issuerUrl.trim()) {
+      toast.error('Missing fields', 'OIDC requires an Issuer URL.');
+      return;
+    }
+    if (form.providerType === 'oidc' && !form.clientId.trim()) {
+      toast.error('Missing fields', 'OIDC requires a Client ID.');
+      return;
+    }
     setSubmitting(true);
     const domains = form.domains
       .split(',')
@@ -90,6 +102,9 @@ export function SsoPage() {
         metadataUrl: form.metadataUrl || undefined,
         entityId: form.entityId || undefined,
         domains,
+        clientId: form.clientId || undefined,
+        clientSecret: form.clientSecret || undefined,
+        issuerUrl: form.issuerUrl || undefined,
       }),
     });
     setSubmitting(false);
@@ -107,6 +122,9 @@ export function SsoPage() {
         metadataUrl: '',
         entityId: '',
         domains: '',
+        clientId: '',
+        clientSecret: '',
+        issuerUrl: '',
       });
       reload();
     } else {
@@ -165,7 +183,7 @@ export function SsoPage() {
                 onChange={(e) => setForm({ ...form, providerType: e.currentTarget.value })}
               >
                 <option value="saml">SAML 2.0 (self-service)</option>
-                <option value="oidc">OpenID Connect (audit-only — manual setup)</option>
+                <option value="oidc">OpenID Connect (saved for audit — requires Supabase support)</option>
               </SelectField>
               <Input
                 label="Provider name"
@@ -173,20 +191,47 @@ export function SsoPage() {
                 value={form.providerName}
                 onChange={(e) => setForm({ ...form, providerName: e.target.value })}
               />
-              <Input
-                label="Metadata URL"
-                helpId="sso.metadata_url"
-                placeholder={form.providerType === 'saml' ? 'Required' : 'Optional'}
-                value={form.metadataUrl}
-                onChange={(e) => setForm({ ...form, metadataUrl: e.target.value })}
-              />
-              <Input
-                label="Entity ID"
-                helpId="sso.entity_id"
-                placeholder="Optional, parsed from metadata"
-                value={form.entityId}
-                onChange={(e) => setForm({ ...form, entityId: e.target.value })}
-              />
+              {form.providerType === 'saml' ? (
+                <>
+                  <Input
+                    label="Metadata URL"
+                    helpId="sso.metadata_url"
+                    placeholder="Required"
+                    value={form.metadataUrl}
+                    onChange={(e) => setForm({ ...form, metadataUrl: e.target.value })}
+                  />
+                  <Input
+                    label="Entity ID"
+                    helpId="sso.entity_id"
+                    placeholder="Optional, parsed from metadata"
+                    value={form.entityId}
+                    onChange={(e) => setForm({ ...form, entityId: e.target.value })}
+                  />
+                </>
+              ) : (
+                <>
+                  <Input
+                    label="Issuer URL"
+                    placeholder="https://accounts.google.com"
+                    value={form.issuerUrl}
+                    onChange={(e) => setForm({ ...form, issuerUrl: e.target.value })}
+                  />
+                  <Input
+                    label="Client ID"
+                    placeholder="your-client-id"
+                    value={form.clientId}
+                    onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+                  />
+                  <Input
+                    label="Client Secret"
+                    type="password"
+                    placeholder="your-client-secret"
+                    value={form.clientSecret}
+                    onChange={(e) => setForm({ ...form, clientSecret: e.target.value })}
+                    className="col-span-2"
+                  />
+                </>
+              )}
               <Input
                 label="Email domains"
                 helpId="sso.allowed_domains"
