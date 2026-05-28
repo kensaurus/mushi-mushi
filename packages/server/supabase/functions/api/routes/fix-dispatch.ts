@@ -388,8 +388,8 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     return streamSSE(c, async (stream) => {
       const agui = new AguiEmitter({
         runId: dispatchId,
-        write: (frame) => stream.write(frame),
-        traceparent: extractInboundTraceparent(c.req.header('traceparent')),
+        write: (frame: string): Promise<void> => stream.write(frame) as unknown as Promise<void>,
+        traceparent: extractInboundTraceparent(c.req.header('traceparent')) ?? undefined,
       });
 
       // ---------------------------------------------------------------

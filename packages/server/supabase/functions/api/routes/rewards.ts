@@ -866,7 +866,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
 
     // Count tier holders
     const tierCounts: Record<string, number> = {}
-    for (const row of (tierRes.data ?? []) as Array<{ reward_tiers: { slug: string; display_name: string } }>) {
+    for (const row of (tierRes.data ?? []) as unknown as Array<{ reward_tiers: { slug: string; display_name: string } }>) {
       const slug = row.reward_tiers?.slug ?? 'unknown'
       tierCounts[slug] = (tierCounts[slug] ?? 0) + 1
     }
