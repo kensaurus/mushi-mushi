@@ -42,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerCodebaseRoutes(app: Hono): void {
+export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // CODEBASE INDEXER (V5.3 §2.3.4) — non-GitHub fallback for `mushi index`
   // Auth: project API key. Each call uploads ONE source file; server chunks +

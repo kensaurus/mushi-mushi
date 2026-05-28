@@ -1,5 +1,6 @@
 import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
+import type { Variables } from './types.ts';
 
 import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
@@ -33,7 +34,7 @@ ensureSentry('api');
 
 // basePath('/api') is required by Supabase Edge Functions: the function name
 // is included in the request URL path (https://supabase.com/docs/guides/functions/routing).
-const app = new Hono().basePath('/api');
+const app = new Hono<{ Variables: Variables }>().basePath('/api');
 
 app.onError(sentryHonoErrorHandler);
 

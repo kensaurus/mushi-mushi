@@ -42,7 +42,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
+export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/billing', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

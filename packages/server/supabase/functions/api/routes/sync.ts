@@ -44,7 +44,7 @@ const CodebaseUploadBody = z.object({
 
 // ─── Route registration ───────────────────────────────────────────────────────
 
-export function registerSyncRoutes(app: Hono) {
+export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // ── GET /v1/sync/whoami ────────────────────────────────────────────────────
   // Verify the API key is valid and return which project it belongs to.
   // Used by `mushi whoami` and by any CI step that needs to confirm credentials.

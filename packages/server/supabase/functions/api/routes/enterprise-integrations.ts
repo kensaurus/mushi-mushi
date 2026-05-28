@@ -12,7 +12,7 @@ import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
-export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
+export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================

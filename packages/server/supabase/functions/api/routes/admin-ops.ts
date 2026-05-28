@@ -34,7 +34,7 @@ interface ContactBody {
 
 const RATE_LIMIT_PER_HOUR = 5;
 
-export function registerAdminOpsRoutes(app: Hono): void {
+export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): void {
   // GET /v1/admin/anti-gaming/stats — AntiGamingStatusBanner posture data.
   app.get('/v1/admin/anti-gaming/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string
