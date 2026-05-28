@@ -1459,10 +1459,22 @@ program
     }
     const phase = opts.phase as NudgePhase
     const overrides: Record<string, number> = {}
-    if (opts.max) overrides.maxProactivePerSession = Number(opts.max)
-    if (opts.cooldown) overrides.dismissCooldownHours = Number(opts.cooldown)
-    if (opts.dwell !== undefined) overrides.pageDwellMinutes = Number(opts.dwell)
-    if (opts.welcome !== undefined) overrides.firstSessionSeconds = Number(opts.welcome)
+    // Parse + validate each numeric override; reject NaN / negative / Infinity
+    // so the generated snippet never silently emits a broken value.
+    const parseNumericFlag = (flag: string, raw: string, min: number): number => {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n < min) {
+        console.error(
+          `error: --${flag} must be a finite number >= ${min} (got "${raw}")`,
+        )
+        process.exit(1)
+      }
+      return n
+    }
+    if (opts.max !== undefined) overrides.maxProactivePerSession = parseNumericFlag('max', opts.max, 1)
+    if (opts.cooldown !== undefined) overrides.dismissCooldownHours = parseNumericFlag('cooldown', opts.cooldown, 0)
+    if (opts.dwell !== undefined) overrides.pageDwellMinutes = parseNumericFlag('dwell', opts.dwell, 0)
+    if (opts.welcome !== undefined) overrides.firstSessionSeconds = parseNumericFlag('welcome', opts.welcome, 0)
     if (opts.explain) {
       console.log(renderNudgeExplainer(phase))
     }

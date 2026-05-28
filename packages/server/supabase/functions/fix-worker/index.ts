@@ -335,7 +335,7 @@ Deno.serve(
           error: reason,
           files_changed: [],
         });
-        await db
+        const { error: skipUpdateErr } = await db
           .from('fix_dispatch_jobs')
           .update({
             status: 'skipped',
@@ -343,6 +343,22 @@ Deno.serve(
             finished_at: new Date().toISOString(),
           })
           .eq('id', dispatch.id);
+        if (skipUpdateErr) {
+          // The dispatch was claimed (status='running') in step 1. If we
+          // can't transition it to 'skipped', it will be stuck for the next
+          // poller. Fall back to failDispatch so the row is at least moved
+          // out of 'running'.
+          log.error('Failed to persist skipped dispatch — falling back to failDispatch', {
+            dispatchId: dispatch.id,
+            updateErr: skipUpdateErr.message,
+          });
+          await failDispatch(db, dispatch.id, `skip persist failed: ${skipUpdateErr.message}`);
+          await trace.end();
+          return new Response(
+            JSON.stringify({ ok: false, error: 'Failed to persist skipped state' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
           status: 200,

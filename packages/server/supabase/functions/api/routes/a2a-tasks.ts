@@ -269,12 +269,18 @@ export function registerA2ATaskRoutes(app: Hono): void {
 
       // For classify_report and judge_fix: verify the report exists and belongs to the project.
       if (skill === 'classify_report' || skill === 'judge_fix') {
-        const { data: report } = await db
+        const { data: report, error: reportErr } = await db
           .from('reports')
           .select('id')
           .eq('id', reportId)
           .eq('project_id', projectId)
-          .single();
+          .maybeSingle();
+        if (reportErr) {
+          return c.json(
+            { error: { code: 'INTERNAL', message: `Report lookup failed: ${reportErr.message}` } },
+            500,
+          );
+        }
         if (!report) {
           return c.json(
             { error: { code: 'NOT_FOUND', message: 'Report not found in this project' } },
@@ -284,13 +290,24 @@ export function registerA2ATaskRoutes(app: Hono): void {
 
         // For judge_fix, a fix attempt must exist to judge against.
         if (skill === 'judge_fix') {
-          const { data: attempt } = await db
+          const { data: attempt, error: attemptErr } = await db
             .from('fix_attempts')
             .select('id')
             .eq('report_id', reportId)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
+          if (attemptErr) {
+            return c.json(
+              {
+                error: {
+                  code: 'INTERNAL',
+                  message: `Fix attempt lookup failed: ${attemptErr.message}`,
+                },
+              },
+              500,
+            );
+          }
           if (!attempt) {
             return c.json(
               {

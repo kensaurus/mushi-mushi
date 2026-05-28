@@ -106,8 +106,14 @@ Deno.serve(
       .single()
 
     const fundingSourceId = (runtimeCfg?.value as string | null) ?? ''
-    if (!fundingSourceId) {
-      wlog.error('tremendous_funding_source_id not set in mushi_runtime_config')
+    const SENTINEL_FUNDING_SOURCE = 'REPLACE_WITH_YOUR_TREMENDOUS_FUNDING_SOURCE_ID'
+    // Tremendous funding source IDs look like `FUND_xxx` or a UUID — reject
+    // the seed sentinel explicitly so an un-configured install fails fast
+    // with 503 instead of silently calling Tremendous with garbage.
+    if (!fundingSourceId || fundingSourceId === SENTINEL_FUNDING_SOURCE) {
+      wlog.error('tremendous_funding_source_id is not configured', {
+        is_sentinel: fundingSourceId === SENTINEL_FUNDING_SOURCE,
+      })
       return new Response(JSON.stringify({ error: 'funding_source_not_configured' }), {
         status: 503,
         headers: { 'Content-Type': 'application/json' },
@@ -199,12 +205,14 @@ Deno.serve(
       } else {
         wlog.error('Tremendous order failed', { orderId: order.id, error: result.error })
 
-        // Mark as withheld for manual review rather than outright failed —
-        // Tremendous may be temporarily unavailable.
+        // Keep status='pending' so the next cron tick retries automatically —
+        // Tremendous outages are usually transient. Persistent failures are
+        // surfaced via the last_error payload field for ops triage; the
+        // separate manual-review/withhold workflow lives in the admin UI.
         await db
           .from('tremendous_orders')
           .update({
-            status: 'pending', // keep as pending but log the error
+            status: 'pending',
             raw_payload: { last_error: result.error },
             last_synced_at: new Date().toISOString(),
           })

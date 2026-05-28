@@ -20,7 +20,6 @@ import dev.mushimushi.sdk.capture.DeviceContext
 import dev.mushimushi.sdk.capture.MushiBreadcrumb
 import dev.mushimushi.sdk.capture.ScreenshotCapture
 import dev.mushimushi.sdk.capture.ShakeDetector
-import dev.mushimushi.sdk.capture.ExceptionNormaliser
 import dev.mushimushi.sdk.capture.normaliseThrowable
 import dev.mushimushi.sdk.capture.ProactiveDetector
 import dev.mushimushi.sdk.config.MushiConfig

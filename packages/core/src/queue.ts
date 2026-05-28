@@ -273,6 +273,23 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
         }
         sent++;
       } else {
+        const permanent =
+          result.error?.code === 'HTTP_400' ||
+          result.error?.code === 'HTTP_422' ||
+          result.error?.code === 'INGEST_ERROR' ||
+          result.error?.code === 'VALIDATION_ERROR' ||
+          (typeof result.error?.message === 'string' &&
+            /invalid payload|description must be at least|validation/i.test(
+              result.error.message,
+            ));
+        if (permanent) {
+          try {
+            if (backend === 'indexeddb') await idbDelete(rowId);
+            else lsDelete(rowId);
+          } catch {
+            lsDelete(rowId);
+          }
+        }
         failed++;
         if (i < batch.length - 1) {
           await sleep(getBackoffDelay(i));

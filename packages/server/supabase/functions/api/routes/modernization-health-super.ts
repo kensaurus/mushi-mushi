@@ -492,7 +492,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
     const [{ data: projects }, { data: subs }, { data: recentReports }] = await Promise.all([
       db
         .from('projects')
-        .select('id, name, slug, created_at, plan_tier, data_region')
+        .select('id, name, slug, created_at, plan_tier, data_residency_region')
         .eq('owner_id', userId)
         .order('created_at', { ascending: false }),
       db

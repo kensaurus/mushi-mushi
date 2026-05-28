@@ -329,14 +329,29 @@ Deno.serve(
 
         const runId: string = runRow.id
 
-        // Resolve BYOK key if configured
+        // Resolve BYOK key if configured.
+        // Maps story.byok_provider (e.g. 'firecrawl', 'browserbase') to the
+        // correct resolveLlmKey provider slug. Stories with an unknown slug
+        // get no key and rely on the env-var fallback inside the runner.
         let resolvedApiKey: string | undefined
         if (story.byok_provider) {
-          try {
-            const byokResult = await resolveLlmKey(db, pid, story.byok_provider)
-            resolvedApiKey = byokResult?.key
-          } catch {
-            // No BYOK key — some providers work without it
+          const knownProviders = ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const
+          type KnownProvider = typeof knownProviders[number]
+          const byokSlug = knownProviders.includes(story.byok_provider as KnownProvider)
+            ? (story.byok_provider as KnownProvider)
+            : null
+          if (byokSlug) {
+            try {
+              const byokResult = await resolveLlmKey(db, pid, byokSlug)
+              resolvedApiKey = byokResult?.key
+              if (!byokResult) {
+                rlog.warn({ storyId: story.id, provider: byokSlug }, 'no_key_configured — story will use env fallback or fail')
+              }
+            } catch (err) {
+              rlog.warn({ storyId: story.id, provider: byokSlug, err }, 'BYOK resolution error — continuing without key')
+            }
+          } else {
+            rlog.warn({ storyId: story.id, byok_provider: story.byok_provider }, 'unknown byok_provider slug — skipping BYOK lookup')
           }
         }
 
