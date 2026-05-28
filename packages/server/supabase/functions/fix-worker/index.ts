@@ -421,9 +421,9 @@ Deno.serve(
 
       const ragSpan = trace.span('context.rag');
       const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
-        symptom: report.summary ?? report.description?.slice(0, 200) ?? '',
-        action: report.user_intent ?? '',
-        component: report.component ?? '',
+        symptom: (report.summary as string | undefined) ?? (report.description as string | undefined)?.slice(0, 200) ?? '',
+        action: (report.user_intent as string | undefined) ?? '',
+        component: (report.component as string | undefined) ?? '',
       });
       const codeFiles = ragResult.files;
       ragSpan.end({
@@ -537,7 +537,7 @@ ${
       if (augmentReason) {
         try {
           const symptom =
-            report.summary ?? report.description?.slice(0, 200) ?? report.component ?? '';
+            (report.summary as string | undefined) ?? (report.description as string | undefined)?.slice(0, 200) ?? (report.component as string | undefined) ?? '';
           if (symptom.length > 0) {
             const augSpan = trace.span('fix.augment.firecrawl');
             webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 });
@@ -746,7 +746,7 @@ ${
 
       // ---- 6. Validate scope + circuit breaker ------------------------------
       const validationErrors: string[] = [];
-      const maxLines = settings?.autofix_max_lines ?? 200;
+      const maxLines = (settings?.autofix_max_lines as number | undefined) ?? 200;
       let totalLines = 0;
       for (const f of fix.files) {
         const lines = f.contents.split('\n').length;
