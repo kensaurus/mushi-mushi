@@ -11,6 +11,7 @@ import { PageHeader, PageHelp, Section, SegmentedControl, StatCard, ErrorAlert, 
 import { GeneralPanel } from '../components/settings/GeneralPanel'
 import { ByokPanel } from '../components/settings/ByokPanel'
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
+import { BrowserbasePanel } from '../components/settings/BrowserbasePanel'
 import { HealthPanel } from '../components/settings/HealthPanel'
 import { DevToolsPanel } from '../components/settings/DevToolsPanel'
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner'
@@ -50,6 +51,7 @@ const TABS: Array<{ id: SettingsTabId; label: string; description: string }> = [
   { id: 'general', label: 'General', description: 'Slack webhooks, Sentry DSN, LLM model, dedup threshold.' },
   { id: 'byok', label: 'LLM keys', description: 'Anthropic + OpenAI-compatible BYOK — save, test, rotate.' },
   { id: 'firecrawl', label: 'Firecrawl', description: 'Optional web research provider for triage.' },
+  { id: 'browserbase', label: 'Browserbase', description: 'BYOK Browserbase API key for cloud Chromium QA runs.' },
   { id: 'health', label: 'Health', description: 'Connection status, SDK reference, pipeline smoke test.' },
   { id: 'dev', label: 'Dev tools', description: 'SDK widget toggles and local-only debug flags.' },
 ]
@@ -58,6 +60,7 @@ const TAB_TITLES: Record<SettingsTabId, string> = {
   general: 'General',
   byok: 'BYOK',
   firecrawl: 'Firecrawl',
+  browserbase: 'Browserbase',
   health: 'Health',
   dev: 'Dev tools',
 }
@@ -139,6 +142,7 @@ export function SettingsPage() {
               : undefined,
       },
       { id: 'firecrawl' as const, label: copy?.tabLabels?.firecrawl ?? 'Firecrawl' },
+      { id: 'browserbase' as const, label: copy?.tabLabels?.browserbase ?? 'Browserbase' },
       { id: 'health' as const, label: copy?.tabLabels?.health ?? 'Health' },
       { id: 'dev' as const, label: copy?.tabLabels?.dev ?? 'Dev' },
     ],
@@ -317,6 +321,7 @@ export function SettingsPage() {
         {active === 'general' && <GeneralPanel />}
         {active === 'byok' && <ByokPanel />}
         {active === 'firecrawl' && <FirecrawlPanel />}
+        {active === 'browserbase' && <BrowserbasePanel />}
         {active === 'health' && <HealthPanel projectId={activeProjectId} projectName={projectName ?? stats.projectName} />}
         {active === 'dev' && <DevToolsPanel />}
       </div>

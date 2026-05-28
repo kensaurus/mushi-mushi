@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/components/settings/types.ts
  */
 
-export type SettingsTabId = 'general' | 'byok' | 'firecrawl' | 'health' | 'dev'
+export type SettingsTabId = 'general' | 'byok' | 'firecrawl' | 'browserbase' | 'health' | 'dev'
 
 export type SettingsTopPriority =
   | 'no_project'

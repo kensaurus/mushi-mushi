@@ -275,7 +275,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   // classify-report, judge-batch) then dereferences via `resolveLlmKey`.
   // ============================================================
 
-  const BYOK_PROVIDERS = ['anthropic', 'openai'] as const;
+  const BYOK_PROVIDERS = ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const;
   type ByokProvider = (typeof BYOK_PROVIDERS)[number];
 
   function byokSecretName(projectId: string, provider: ByokProvider): string {
@@ -850,6 +850,186 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         testedAt: now,
       },
     });
+  });
+
+  // ============================================================
+  // Browserbase BYOK routes (mirrors Firecrawl pattern above)
+  // ============================================================
+
+  function browserbaseSecretName(projectId: string): string {
+    return `byok_browserbase_${projectId.replace(/-/g, '_')}`;
+  }
+
+  app.get('/v1/admin/byok/browserbase', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: null }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data } = await db
+      .from('project_settings')
+      .select(
+        'byok_browserbase_key_ref, byok_browserbase_key_hint, byok_browserbase_key_added_at, byok_browserbase_key_last_used_at, byok_browserbase_test_status, byok_browserbase_tested_at, byok_browserbase_session_count',
+      )
+      .eq('project_id', project.id)
+      .maybeSingle();
+
+    return c.json({
+      ok: true,
+      data: {
+        configured: Boolean(data?.byok_browserbase_key_ref),
+        keyHint: (data?.byok_browserbase_key_hint as string | null) ?? null,
+        addedAt: (data?.byok_browserbase_key_added_at as string | null) ?? null,
+        lastUsedAt: (data?.byok_browserbase_key_last_used_at as string | null) ?? null,
+        testStatus: (data?.byok_browserbase_test_status as string | null) ?? null,
+        testedAt: (data?.byok_browserbase_tested_at as string | null) ?? null,
+        sessionCount: (data?.byok_browserbase_session_count as number | null) ?? null,
+      },
+    });
+  });
+
+  app.put('/v1/admin/byok/browserbase', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const body = (await c.req.json().catch(() => ({}))) as { key?: string };
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const update: Record<string, unknown> = { project_id: project.id };
+
+    if (typeof body.key === 'string' && body.key.trim().length > 0) {
+      const key = body.key.trim();
+      if (key.length < 8) {
+        return c.json(
+          { ok: false, error: { code: 'KEY_TOO_SHORT', message: 'Provide the full Browserbase API key.' } },
+          400,
+        );
+      }
+      const secretName = browserbaseSecretName(project.id);
+      const { error: vaultErr } = await db.rpc('vault_store_secret', {
+        secret_name: secretName,
+        secret_value: key,
+      });
+      if (vaultErr) {
+        log.error('vault_store_secret failed for browserbase', { vaultErrorCode: vaultErr.code, vaultMessage: vaultErr.message, secretName });
+        return c.json({ ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } }, 500);
+      }
+      update.byok_browserbase_key_ref = `vault://${secretName}`;
+      update.byok_browserbase_key_hint = byokKeyHint(key);
+      update.byok_browserbase_key_added_at = new Date().toISOString();
+      update.byok_browserbase_key_last_used_at = null;
+      update.byok_browserbase_test_status = null;
+      update.byok_browserbase_tested_at = null;
+    }
+
+    const { error } = await db.from('project_settings').upsert(update, { onConflict: 'project_id' });
+    if (error) return dbError(c, error);
+
+    try {
+      await db.from('byok_audit_log').insert({ project_id: project.id, provider: 'browserbase', action: 'rotated', actor_user_id: userId });
+    } catch { /* audit log is best-effort */ }
+    await logAudit(db, project.id, userId, 'settings.updated', 'byok', 'browserbase', { provider: 'browserbase' }).catch(() => {});
+    return c.json({ ok: true });
+  });
+
+  app.delete('/v1/admin/byok/browserbase', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const secretName = browserbaseSecretName(project.id);
+    try {
+      await db.rpc('vault_delete_secret', { secret_name: secretName });
+    } catch (err) {
+      log.warn('vault_delete_secret failed for browserbase (non-fatal)', { error: String(err) });
+    }
+
+    const { error } = await db.from('project_settings').upsert(
+      {
+        project_id: project.id,
+        byok_browserbase_key_ref: null,
+        byok_browserbase_key_hint: null,
+        byok_browserbase_key_added_at: null,
+        byok_browserbase_key_last_used_at: null,
+        byok_browserbase_test_status: null,
+        byok_browserbase_tested_at: null,
+      },
+      { onConflict: 'project_id' },
+    );
+    if (error) return dbError(c, error);
+
+    try {
+      await db.from('byok_audit_log').insert({ project_id: project.id, provider: 'browserbase', action: 'removed', actor_user_id: userId });
+    } catch { /* best-effort */ }
+    await logAudit(db, project.id, userId, 'settings.updated', 'byok', 'browserbase', { cleared: true }).catch(() => {});
+    return c.json({ ok: true });
+  });
+
+  app.post('/v1/admin/byok/browserbase/test', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('byok_browserbase_key_ref')
+      .eq('project_id', project.id)
+      .maybeSingle();
+
+    if (!settings?.byok_browserbase_key_ref) {
+      return c.json({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'No Browserbase key configured for this project.' } }, 400);
+    }
+
+    const secretName = browserbaseSecretName(project.id);
+    const { data: secretData } = await db.rpc('vault_get_secret', { secret_name: secretName });
+    const apiKey = typeof secretData === 'string' ? secretData.trim() : null;
+
+    if (!apiKey) {
+      return c.json({ ok: false, error: { code: 'VAULT_READ_FAILED', message: 'Could not retrieve Browserbase key from Vault.' } }, 500);
+    }
+
+    const start = Date.now();
+    let probeStatus: 'ok' | 'error_auth' | 'error_network' | 'error_quota' = 'ok';
+    let probeDetail = 'Connection OK';
+
+    try {
+      const res = await fetch('https://api.browserbase.com/v1/sessions', {
+        method: 'GET',
+        headers: { 'X-BB-API-Key': apiKey },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.status === 401 || res.status === 403) {
+        probeStatus = 'error_auth';
+        probeDetail = `Auth failed (${res.status})`;
+      } else if (res.status === 429) {
+        probeStatus = 'error_quota';
+        probeDetail = 'Rate limited or quota exceeded';
+      } else if (!res.ok) {
+        probeStatus = 'error_network';
+        probeDetail = `Unexpected response: ${res.status}`;
+      }
+    } catch (err) {
+      probeStatus = 'error_network';
+      probeDetail = err instanceof Error ? err.message : 'Network error';
+    }
+
+    const latencyMs = Date.now() - start;
+    const now = new Date().toISOString();
+
+    await db.from('project_settings').upsert(
+      { project_id: project.id, byok_browserbase_test_status: probeStatus, byok_browserbase_tested_at: now },
+      { onConflict: 'project_id' },
+    );
+
+    return c.json({ ok: true, data: { status: probeStatus, latencyMs, detail: probeDetail } });
   });
 
   // ============================================================

@@ -28,7 +28,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const { data } = await db
       .from('enterprise_sso_configs')
       .select(
-        'id, project_id, provider_type, provider_name, metadata_url, entity_id, acs_url, is_active, sso_provider_id, registration_status, registration_error, registered_at, domains, created_at',
+        'id, project_id, provider_type, provider_name, metadata_url, entity_id, acs_url, is_active, sso_provider_id, registration_status, registration_error, registered_at, domains, created_at, oidc_client_id, oidc_issuer_url',
       )
       .eq('project_id', project.id)
       .limit(50);
@@ -56,6 +56,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       entityId?: string;
       acsUrl?: string;
       domains?: string[];
+      clientId?: string;
+      clientSecret?: string;
+      issuerUrl?: string;
     };
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
@@ -91,6 +94,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
         acs_url: body.acsUrl ?? null,
         domains: body.domains ?? [],
         registration_status: 'pending',
+        oidc_client_id: body.clientId ?? null,
+        oidc_client_secret: body.clientSecret ?? null,
+        oidc_issuer_url: body.issuerUrl ?? null,
       })
       .select('id')
       .single();
@@ -386,7 +392,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       .from('fine_tuning_jobs')
       .insert({
         project_id: project.id,
-        base_model: body.baseModel ?? ANTHROPIC_SONNET,
+        base_model: body.baseModel ?? 'openai:gpt-4o-mini',
         status: 'pending',
         promote_to_stage: body.promoteToStage ?? null,
         sample_window_days: body.sampleWindowDays ?? 30,
