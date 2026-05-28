@@ -161,7 +161,7 @@ export function logLlmInvocation(
     span.end().catch(() => {}) // non-fatal
   }
 
-  return db.from('llm_invocations').insert({
+  return Promise.resolve(db.from('llm_invocations').insert({
     project_id: rec.projectId ?? null,
     report_id: rec.reportId ?? null,
     function_name: rec.functionName,
@@ -197,7 +197,7 @@ export function logLlmInvocation(
         error: err instanceof Error ? err.message : String(err),
       })
     },
-  )
+  ))
 }
 
 // -----------------------------------------------------------------------------
