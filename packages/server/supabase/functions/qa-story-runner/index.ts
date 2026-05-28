@@ -267,7 +267,7 @@ Deno.serve(
     // Sentry-fix sweep was the first time the cron path actually executed
     // it. Pinning the call to the helper's real signature.
     const cronRun = await startCronRun(db, 'qa-story-runner', 'cron')
-    rlog.info({ jobName: 'qa-story-runner' }, 'qa-story-runner invoked')
+    rlog.info('qa-story-runner invoked', { jobName: 'qa-story-runner' })
 
     try {
       // Fetch all enabled stories. The previous select embedded
@@ -285,7 +285,7 @@ Deno.serve(
         .eq('enabled', true)
 
       if (storiesErr) {
-        rlog.error({ err: storiesErr }, 'Failed to fetch qa_stories')
+        rlog.error('Failed to fetch qa_stories', { err: storiesErr })
         await cronRun.fail(new Error(storiesErr.message))
         return new Response('Internal error', { status: 500 })
       }
@@ -294,7 +294,7 @@ Deno.serve(
         cronMatches(s.schedule_cron ?? '*/15 * * * *', now)
       )
 
-      rlog.info({ total: stories?.length ?? 0, due: dueStories.length }, 'stories due')
+      rlog.info('stories due', { total: stories?.length ?? 0, due: dueStories.length })
 
       // Rate-limit by project
       const projectCounts: Record<string, number> = {}
@@ -323,20 +323,35 @@ Deno.serve(
           .single()
 
         if (runInsertErr || !runRow) {
-          rlog.warn({ storyId: story.id, err: runInsertErr }, 'failed to insert run row')
+          rlog.warn('failed to insert run row', { storyId: story.id, err: runInsertErr })
           continue
         }
 
         const runId: string = runRow.id
 
-        // Resolve BYOK key if configured
+        // Resolve BYOK key if configured.
+        // Maps story.byok_provider (e.g. 'firecrawl', 'browserbase') to the
+        // correct resolveLlmKey provider slug. Stories with an unknown slug
+        // get no key and rely on the env-var fallback inside the runner.
         let resolvedApiKey: string | undefined
         if (story.byok_provider) {
-          try {
-            const byokResult = await resolveLlmKey(db, pid, story.byok_provider)
-            resolvedApiKey = byokResult?.key
-          } catch {
-            // No BYOK key — some providers work without it
+          const knownProviders = ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const
+          type KnownProvider = typeof knownProviders[number]
+          const byokSlug = knownProviders.includes(story.byok_provider as KnownProvider)
+            ? (story.byok_provider as KnownProvider)
+            : null
+          if (byokSlug) {
+            try {
+              const byokResult = await resolveLlmKey(db, pid, byokSlug)
+              resolvedApiKey = byokResult?.key
+              if (!byokResult) {
+                rlog.warn('no_key_configured — story will use env fallback or fail')
+              }
+            } catch (err) {
+              rlog.warn('BYOK resolution error — continuing without key')
+            }
+          } else {
+            rlog.warn('unknown byok_provider slug — skipping BYOK lookup')
           }
         }
 
@@ -403,14 +418,13 @@ Deno.serve(
               assertion_failures: result.assertion_failures,
               provider_session_url: result.provider_session_url,
             },
-          }).then(() => {
-            rlog.info({ storyId: story.id, runId }, 'a2a push queued')
-          }).catch((err: unknown) => {
-            rlog.warn({ err }, 'a2a push failed — non-fatal')
-          })
+          }).then(
+            () => { rlog.info('a2a push queued', { storyId: story.id, runId }) },
+            (err: unknown) => { rlog.warn('a2a push failed — non-fatal', { err: err as Record<string, unknown> }) },
+          )
         }
 
-        rlog.info({ storyId: story.id, runId, status: result.status }, 'story run complete')
+        rlog.info('story run complete', { storyId: story.id, runId, status: result.status })
       }
 
       await cronRun.finish({
@@ -421,7 +435,7 @@ Deno.serve(
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (err) {
-      rlog.error({ err }, 'qa-story-runner fatal error')
+      rlog.error('qa-story-runner fatal error', { err: err as Record<string, unknown> })
       await cronRun.fail(err)
       return new Response('Internal error', { status: 500 })
     }

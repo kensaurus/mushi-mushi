@@ -11,6 +11,12 @@ global:
   llm:
     provider: anthropic
     model: claude-sonnet-4-6
+  # Multi-region: set region to a short identifier (e.g. "us", "eu", "jp").
+  # peerRegions is a comma-separated list of all OTHER region identifiers in
+  # the cluster (e.g. "eu,jp" when this chart is deployed in "us").
+  # Leave both empty for single-region deployments (default).
+  region: ""
+  peerRegions: ""
 
 api:
   replicas: 2

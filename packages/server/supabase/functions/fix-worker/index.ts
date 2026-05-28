@@ -78,7 +78,7 @@ function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | und
 }
 import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts';
 import { createTrace } from '../_shared/observability.ts';
-import { log as rootLog } from '../_shared/logger.ts';
+import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
@@ -293,7 +293,7 @@ Deno.serve(
       // fix-worker actually depends on — drift between handler code and
       // schema becomes a type error instead of a silent correctness risk.
       const ctxSpan = trace.span('context.assemble');
-      const [{ data: report }, { data: settings }, { data: project }] = await Promise.all([
+      const [{ data: _reportRaw }, { data: _settingsRaw }, { data: project }] = await Promise.all([
         db
           .from('reports')
           .select(
@@ -313,6 +313,8 @@ Deno.serve(
           .single(),
         db.from('projects').select('id, name, owner_id').eq('id', dispatch.project_id).single(),
       ]);
+      const report = _reportRaw as unknown as Record<string, unknown> | null;
+      const settings = _settingsRaw as unknown as Record<string, unknown> | null;
 
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
@@ -335,7 +337,7 @@ Deno.serve(
           error: reason,
           files_changed: [],
         });
-        await db
+        const { error: skipUpdateErr } = await db
           .from('fix_dispatch_jobs')
           .update({
             status: 'skipped',
@@ -343,6 +345,22 @@ Deno.serve(
             finished_at: new Date().toISOString(),
           })
           .eq('id', dispatch.id);
+        if (skipUpdateErr) {
+          // The dispatch was claimed (status='running') in step 1. If we
+          // can't transition it to 'skipped', it will be stuck for the next
+          // poller. Fall back to failDispatch so the row is at least moved
+          // out of 'running'.
+          log.error('Failed to persist skipped dispatch — falling back to failDispatch', {
+            dispatchId: dispatch.id,
+            updateErr: skipUpdateErr.message,
+          });
+          await failDispatch(db, dispatch.id, `skip persist failed: ${skipUpdateErr.message}`);
+          await trace.end();
+          return new Response(
+            JSON.stringify({ ok: false, error: 'Failed to persist skipped state' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
         await trace.end();
         return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
           status: 200,
@@ -403,9 +421,9 @@ Deno.serve(
 
       const ragSpan = trace.span('context.rag');
       const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
-        symptom: report.summary ?? report.description?.slice(0, 200) ?? '',
-        action: report.user_intent ?? '',
-        component: report.component ?? '',
+        symptom: (report.summary as string | undefined) ?? (report.description as string | undefined)?.slice(0, 200) ?? '',
+        action: (report.user_intent as string | undefined) ?? '',
+        component: (report.component as string | undefined) ?? '',
       });
       const codeFiles = ragResult.files;
       ragSpan.end({
@@ -519,7 +537,7 @@ ${
       if (augmentReason) {
         try {
           const symptom =
-            report.summary ?? report.description?.slice(0, 200) ?? report.component ?? '';
+            (report.summary as string | undefined) ?? (report.description as string | undefined)?.slice(0, 200) ?? (report.component as string | undefined) ?? '';
           if (symptom.length > 0) {
             const augSpan = trace.span('fix.augment.firecrawl');
             webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 });
@@ -728,7 +746,7 @@ ${
 
       // ---- 6. Validate scope + circuit breaker ------------------------------
       const validationErrors: string[] = [];
-      const maxLines = settings?.autofix_max_lines ?? 200;
+      const maxLines = (settings?.autofix_max_lines as number | undefined) ?? 200;
       let totalLines = 0;
       for (const f of fix.files) {
         const lines = f.contents.split('\n').length;
@@ -758,7 +776,7 @@ ${
       let specValidationWarnings: Array<{ code: string; message: string; hint?: string }> = [];
       if (inventoryAnchor) {
         const diffText: string | undefined = undefined; // edge runtime: no diff yet at this stage
-        const specResult = validateEdgeSpec(inventoryAnchor, fix.files, diffText);
+        const specResult = validateEdgeSpec(inventoryAnchor as unknown as Parameters<typeof validateEdgeSpec>[0], fix.files, diffText);
         if (specResult.errors.length > 0) {
           // Hard violations — the generated fix demonstrably regresses the contract.
           // Persist them as warnings with an ERR_ prefix so reviewers know these
@@ -895,7 +913,7 @@ ${
       // per matched repo* away. Best-effort — never blocks the success
       // path.
       try {
-        await markCrossRepoSpan(db, ghToken, {
+        await markCrossRepoSpan(db, ghToken, log, {
           projectId: dispatch.project_id,
           reportId: dispatch.report_id,
           fixAttemptId,
@@ -1096,6 +1114,7 @@ function categorizeFailure(err: unknown, msg: string): string {
 async function markCrossRepoSpan(
   db: ReturnType<typeof getServiceClient>,
   ghToken: string,
+  log: Logger,
   args: {
     projectId: string;
     reportId: string;
@@ -1548,7 +1567,7 @@ async function loadInventoryAnchor(
  * zero behaviour change.
  */
 function formatInventoryAnchor(anchor: InventoryAnchor): string {
-  return renderSpecContextEdge(anchor);
+  return renderSpecContextEdge(anchor as unknown as Parameters<typeof renderSpecContextEdge>[0]);
 }
 
 function buildUserPrompt(

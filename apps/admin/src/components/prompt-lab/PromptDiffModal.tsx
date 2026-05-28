@@ -85,7 +85,7 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
         )}
         {parent && <PerfStrip parent={parent} candidate={prompt} />}
         <div className="flex justify-end gap-1.5">
-          <Btn variant="ghost" onClick={onClose}>Close</Btn>
+          <Btn variant="cancel" onClick={onClose}>Close</Btn>
         </div>
       </Card>
     </div>

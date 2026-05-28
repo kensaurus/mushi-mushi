@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -44,7 +45,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerFixDispatchRoutes(app: Hono): void {
+export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // FIX DISPATCH (V5.3 §2.10) — admin-triggered, queue-based
   // ============================================================
@@ -64,10 +65,6 @@ export function registerFixDispatchRoutes(app: Hono): void {
         // calling agent fix an action that hasn't yet been auto-linked
         // by classify-report (e.g. a freshly ingested inventory).
         inventoryActionNodeId?: string;
-        // One-off agent override: allows the "Send to Claude Code Agent"
-        // button to force a single dispatch to claude_code_agent without
-        // changing the project's autofix_agent setting.
-        agentOverride?: string;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
@@ -171,8 +168,6 @@ export function registerFixDispatchRoutes(app: Hono): void {
           // so the worker doesn't need to walk the graph for it. NULL =>
           // worker derives from `reports_against`.
           inventory_action_node_id: body.inventoryActionNodeId ?? null,
-          // Per-dispatch agent override (e.g. "Send to Claude Code Agent").
-          agent_override: body.agentOverride ?? null,
         })
         .select('id, status, created_at')
         .single();
@@ -235,7 +230,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
 
   app.get('/v1/admin/fixes/dispatch/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const dispatchId = c.req.param('id');
+    const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
     const { data: job } = await db
       .from('fix_dispatch_jobs')
@@ -263,7 +258,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
   app.post('/v1/admin/fixes/dispatches/:id/cancel', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const userEmail = (c.get('userEmail') as string | undefined) ?? null;
-    const dispatchId = c.req.param('id');
+    const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db
@@ -369,7 +364,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
   // ------------------------------------------------------------
   app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
-    const dispatchId = c.req.param('id');
+    const dispatchId = c.req.param('id')!;
     const db = getServiceClient();
 
     const { data: job } = await db
@@ -385,7 +380,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
 
     // RFC 7231 / WHATWG EventSource: the browser sends `Last-Event-ID` (note
     // capital-D) but Hono normalises header names to lower-case on Edge.
-    const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? null;
+    const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? undefined;
 
     // V5.3.2 §2.14, B3: AG-UI streaming protocol envelope.
     // The legacy `event: status` frame is still emitted for back-compat; new
@@ -393,8 +388,8 @@ export function registerFixDispatchRoutes(app: Hono): void {
     return streamSSE(c, async (stream) => {
       const agui = new AguiEmitter({
         runId: dispatchId,
-        write: (frame) => stream.write(frame),
-        traceparent: extractInboundTraceparent(c.req.header('traceparent')),
+        write: (frame: string): Promise<void> => stream.write(frame) as unknown as Promise<void>,
+        traceparent: extractInboundTraceparent(c.req.header('traceparent')) ?? undefined,
       });
 
       // ---------------------------------------------------------------
@@ -561,7 +556,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
           ),
         );
       }
-    });
+    }) as unknown as Promise<void>;
   });
 
   function sanitizeForLog(s: string): string {

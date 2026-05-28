@@ -14,13 +14,14 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, getOrgIdFromContext, apiKeyAuth } from '../../_shared/auth.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
-export function registerReleasesRoutes(app: Hono) {
+export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/releases/stats — posture banner + RELEASES SNAPSHOT.
   app.get('/v1/admin/releases/stats', jwtAuth, async (c) => {
     const db = getServiceClient()
@@ -250,10 +251,10 @@ export function registerReleasesRoutes(app: Hono) {
   app.get('/v1/admin/releases/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
     const [releaseRes, creditsRes] = await Promise.all([
-      db.from('releases').select('*').eq('id', c.req.param('id')).single(),
+      db.from('releases').select('*').eq('id', c.req.param('id')!).single(),
       db.from('release_credits')
         .select('id, end_user_id, report_id, contribution_type, display_name_at_time, notified_at')
-        .eq('release_id', c.req.param('id')),
+        .eq('release_id', c.req.param('id')!),
     ])
 
     if (releaseRes.error) return c.json({ ok: false, error: releaseRes.error.message }, 404)
@@ -276,7 +277,7 @@ export function registerReleasesRoutes(app: Hono) {
     const { data, error } = await db
       .from('releases')
       .update(body.data)
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .eq('status', 'draft') // can only edit drafts
       .select()
       .single()
@@ -291,7 +292,7 @@ export function registerReleasesRoutes(app: Hono) {
     const { error } = await db
       .from('releases')
       .delete()
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .eq('status', 'draft')
 
     if (error) return c.json({ ok: false, error: error.message }, 500)
@@ -306,7 +307,7 @@ export function registerReleasesRoutes(app: Hono) {
     const { data: release, error } = await db
       .from('releases')
       .update({ status: 'published', published_at: new Date().toISOString() })
-      .eq('id', c.req.param('id'))
+      .eq('id', c.req.param('id')!)
       .eq('status', 'draft')
       .select()
       .single()

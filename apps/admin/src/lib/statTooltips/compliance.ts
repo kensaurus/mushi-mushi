@@ -90,7 +90,7 @@ export function clusterRegionTooltip(stats: ComplianceStats): MetricTooltipData 
 
   return metricTip(
     'Effective data residency region for the active project or cluster default.',
-    'activeProjectRegion from project.data_region when set; otherwise currentRegion from deployment config.',
+    'activeProjectRegion from project.data_residency_region when set; otherwise currentRegion from deployment config.',
     takeaway,
     !stats.activeProjectRegion
       ? { tone: 'info', text: 'Default deployment region — set project pin for residency compliance.' }

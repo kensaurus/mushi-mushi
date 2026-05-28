@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -43,7 +44,7 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerPublicRoutes(app: Hono): void {
+export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // SDK ROUTES (API key auth)
   // ============================================================
@@ -142,7 +143,7 @@ export function registerPublicRoutes(app: Hono): void {
     if (Number.isFinite(native.minDescriptionLength)) {
       updates.sdk_min_description_length = Math.max(
         0,
-        Math.min(1000, Math.round(native.minDescriptionLength)),
+        Math.min(1000, Math.round(native.minDescriptionLength as number)),
       );
     }
     updates.sdk_config_updated_at = new Date().toISOString();
@@ -440,7 +441,7 @@ export function registerPublicRoutes(app: Hono): void {
     const deliveryId = c.req.header('Sentry-Hook-Resource-Id') ?? null;
     const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
 
-    const auditRow = await audit(c, body, deliveryId);
+    const auditRow = await audit(c as never, body, deliveryId);
     try {
       checkRateLimit(sourceIp);
       await checkReplay(auditRow.id, deliveryId);
@@ -523,24 +524,25 @@ export function registerPublicRoutes(app: Hono): void {
     }
 
     const action = payload?.action;
-    if (action === 'created' && payload?.data?.feedback) {
-      const feedback = payload.data.feedback;
+    const pd = payload?.data as { feedback?: Record<string, unknown>; issue?: Record<string, unknown>; seer_analysis?: unknown } | undefined;
+    if (action === 'created' && pd?.feedback) {
+      const feedback = pd.feedback;
       const reportId = crypto.randomUUID();
 
       await db.from('reports').insert({
         id: reportId,
         project_id: projectId,
-        description: feedback.message ?? '',
+        description: (feedback.message as string) ?? '',
         user_category: 'other',
         category: 'other',
         status: 'new',
-        reporter_token_hash: feedback.email ?? 'sentry-webhook',
-        sentry_issue_url: payload.data.issue?.permalink,
-        sentry_seer_analysis: payload.data.seer_analysis,
+        reporter_token_hash: (feedback.email as string) ?? 'sentry-webhook',
+        sentry_issue_url: (pd.issue as Record<string, unknown> | undefined)?.permalink as string | undefined,
+        sentry_seer_analysis: pd.seer_analysis,
         custom_metadata: {
           source: 'sentry_webhook',
           sentryEventId: feedback.event_id,
-          sentryIssueId: payload.data.issue?.id,
+          sentryIssueId: (pd.issue as Record<string, unknown> | undefined)?.id,
           userName: feedback.name,
           userEmail: feedback.email,
         },
@@ -549,7 +551,7 @@ export function registerPublicRoutes(app: Hono): void {
           platform: '',
           language: '',
           viewport: { width: 0, height: 0 },
-          url: payload.data.issue?.permalink ?? '',
+          url: ((pd.issue as Record<string, unknown> | undefined)?.permalink as string) ?? '',
           referrer: '',
           timestamp: new Date().toISOString(),
           timezone: 'UTC',
@@ -720,7 +722,7 @@ export function registerPublicRoutes(app: Hono): void {
     const body = await c.req.text();
     const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
 
-    const auditRow = await audit(c, body, deliveryId);
+    const auditRow = await audit(c as never, body, deliveryId);
     try {
       checkRateLimit(sourceIp);
       await checkReplay(auditRow.id, deliveryId);
@@ -864,7 +866,7 @@ export function registerPublicRoutes(app: Hono): void {
   // ============================================================
 
   app.get('/v1/reports/:id/status', apiKeyAuth, async (c) => {
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const projectId = c.get('projectId') as string;
     const db = getServiceClient();
 
@@ -1120,7 +1122,7 @@ export function registerPublicRoutes(app: Hono): void {
 
   app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const auth = await resolveReporterTokenHash(c, projectId);
     if (!auth.ok)
       return c.json(
@@ -1151,7 +1153,7 @@ export function registerPublicRoutes(app: Hono): void {
 
   app.post('/v1/reporter/reports/:id/reply', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
-    const reportId = c.req.param('id');
+    const reportId = c.req.param('id')!;
     const auth = await resolveReporterTokenHash(c, projectId);
     if (!auth.ok)
       return c.json(
@@ -1279,7 +1281,7 @@ export function registerPublicRoutes(app: Hono): void {
   });
 
   app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
-    const notifId = c.req.param('id');
+    const notifId = c.req.param('id')!;
     const projectId = c.get('projectId') as string;
     const auth = await resolveReporterTokenHash(c, projectId);
     if (!auth.ok)

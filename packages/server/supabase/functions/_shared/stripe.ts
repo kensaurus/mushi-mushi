@@ -485,4 +485,38 @@ export const createConnectTransfer = async (
   return (await res.json()) as StripeTransfer
 }
 
+export const createCustomerBalanceCredit = async (
+  cfg: StripeConfig,
+  args: {
+    customerId: string
+    amountCents: number
+    currency: string
+    description: string
+    idempotencyKey: string
+  },
+): Promise<void> => {
+  const body = form({
+    amount: -Math.abs(args.amountCents), // negative = credit
+    currency: args.currency,
+    description: args.description,
+  })
+  const res = await fetch(
+    `${STRIPE_API}/customers/${encodeURIComponent(args.customerId)}/balance_transactions`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Stripe-Version': '2025-08-27.basil',
+        'Idempotency-Key': args.idempotencyKey,
+      },
+      body: body.toString(),
+    },
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`stripe /customers/${args.customerId}/balance_transactions -> ${res.status}: ${text}`)
+  }
+}
+
 declare const Deno: { env: { get(name: string): string | undefined } }

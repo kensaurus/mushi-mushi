@@ -36,11 +36,30 @@ const STATUS_TONE: Record<string, string> = {
   failed: 'bg-danger/15 text-danger border border-danger/30',
 }
 
+const VENDOR_OPTIONS = [
+  {
+    value: 'openai:gpt-4o-mini',
+    label: 'OpenAI — gpt-4o-mini (self-service)',
+    description: 'End-to-end fine-tuning via OpenAI API. Requires BYOK OpenAI key.',
+  },
+  {
+    value: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+    label: 'Bedrock — Claude 3 Haiku (requires AWS setup)',
+    description: 'AWS Bedrock fine-tuning. Requires MUSHI_BEDROCK_FINETUNE_ENABLED=1, IAM role, and S3 bucket.',
+  },
+  {
+    value: 'anthropic:contact-required',
+    label: 'Anthropic direct — not publicly available',
+    description: 'Anthropic\'s direct fine-tuning API requires contacting your account team. Use Bedrock for Claude fine-tuning.',
+  },
+] as const
+
 export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) {
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [askingStage, setAskingStage] = useState(false)
+  const [selectedVendor, setSelectedVendor] = useState<string>(VENDOR_OPTIONS[0].value)
   const [promoteTarget, setPromoteTarget] = useState<FineTuningJob | null>(null)
   const [rejectTarget, setRejectTarget] = useState<FineTuningJob | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FineTuningJob | null>(null)
@@ -58,7 +77,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
     setCreating(true)
     const res = await apiFetch<{ jobId: string }>('/v1/admin/fine-tuning', {
       method: 'POST',
-      body: JSON.stringify({ promoteToStage: stage }),
+      body: JSON.stringify({ promoteToStage: stage, baseModel: selectedVendor }),
     })
     setCreating(false)
     setAskingStage(false)
@@ -318,17 +337,55 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
       )}
 
       {askingStage && (
-        <PromptDialog
-          title="New fine-tuning job"
-          body="Pick which stage this job should replace once it passes validation. Most operators promote to stage2 (the deeper classifier) since stage1 changes are usually faster handled in Prompt Lab."
-          label="Promote to stage (stage1 or stage2)"
-          defaultValue="stage2"
-          confirmLabel="Create job"
-          loading={creating}
-          validate={(v) => (v === 'stage1' || v === 'stage2' ? null : 'Type stage1 or stage2 exactly.')}
-          onConfirm={commitCreateJob}
-          onCancel={() => setAskingStage(false)}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-surface rounded-md border border-edge-subtle shadow-xl w-full max-w-sm space-y-3 p-4">
+            <h3 className="text-sm font-semibold text-fg">New fine-tuning job</h3>
+            <div className="space-y-1">
+              <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Vendor / base model</label>
+              <select
+                className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1.5 text-xs"
+                value={selectedVendor}
+                onChange={(e) => setSelectedVendor(e.currentTarget.value)}
+              >
+                {VENDOR_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-2xs text-fg-faint leading-relaxed">
+                {VENDOR_OPTIONS.find((o) => o.value === selectedVendor)?.description ?? ''}
+              </p>
+            </div>
+            <p className="text-2xs text-fg-secondary leading-snug">
+              Pick which stage to promote once it passes validation. Most operators use <span className="font-mono">stage2</span> (the deeper classifier).
+            </p>
+            <div className="space-y-1">
+              <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Promote to stage</label>
+              <input
+                id="ft-stage-input"
+                type="text"
+                defaultValue="stage2"
+                className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1 text-xs font-mono"
+                placeholder="stage1 or stage2"
+              />
+              <p className="text-2xs text-fg-faint">Type stage1 or stage2 exactly.</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Btn size="sm" variant="cancel" onClick={() => setAskingStage(false)} disabled={creating}>Cancel</Btn>
+              <Btn
+                size="sm"
+                loading={creating}
+                onClick={() => {
+                  const input = document.getElementById('ft-stage-input') as HTMLInputElement | null
+                  const stage = input?.value?.trim() ?? ''
+                  if (stage !== 'stage1' && stage !== 'stage2') return
+                  void commitCreateJob(stage)
+                }}
+              >
+                Create job
+              </Btn>
+            </div>
+          </div>
+        </div>
       )}
 
       {promoteTarget && (

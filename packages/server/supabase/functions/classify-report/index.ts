@@ -650,11 +650,9 @@ ${ontologyContext}${inventoryContext}`;
                   external_url: ei.url || null,
                 })),
               )
-              .then(() =>
-                log.info('External issues linked', { count: externalIssues.length, reportId }),
-              )
-              .catch((e: unknown) =>
-                log.error('report_external_issues insert failed', { err: String(e), reportId }),
+              .then(
+                () => log.info('External issues linked', { count: externalIssues.length, reportId }),
+                (e: unknown) => log.error('report_external_issues insert failed', { err: String(e), reportId }),
               );
           })
           .catch((e: unknown) =>

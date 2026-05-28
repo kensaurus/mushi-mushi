@@ -107,7 +107,7 @@ export function ModernizationFindings({
               >
                 Dispatch fix
               </Btn>
-              <Btn size="sm" variant="ghost" onClick={() => onDismiss(f.id)}>
+              <Btn size="sm" variant="cancel" onClick={() => onDismiss(f.id)}>
                 Dismiss
               </Btn>
             </div>

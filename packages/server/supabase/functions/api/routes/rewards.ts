@@ -26,6 +26,7 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
@@ -129,7 +130,7 @@ function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefin
 }
 
 // ─────────────────────────────────────────────────────────────
-export function registerRewardsRoutes(app: Hono): void {
+export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ===========================================================
   // SDK: POST /v1/sdk/activity
@@ -590,6 +591,239 @@ export function registerRewardsRoutes(app: Hono): void {
   })
 
   // ===========================================================
+  // ADMIN: GET /v1/admin/rewards/stats
+  // Workspace health summary for the rewards program banner + KPI strip.
+  // ===========================================================
+  app.get('/v1/admin/rewards/stats', jwtAuth, async (c) => {
+    const orgId = getOrgIdFromContext(c)
+    const projectIdHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null
+
+    const empty = {
+      organizationId: null as string | null,
+      organizationName: null as string | null,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectRewardsEnabled: false,
+      enabledRulesCount: 0,
+      enabledTiersCount: 0,
+      activeContributors30d: 0,
+      pointsAwarded30d: 0,
+      pendingPayoutLiabilityUsd: 0,
+      activity24hTotal: 0,
+      activity24hRejected: 0,
+      rejectionRatePct24h: 0,
+      webhooksConfigured: 0,
+      webhooksFailing: 0,
+      identityProvidersConfigured: 0,
+      enabledQuestsCount: 0,
+      openDisputesCount: 0,
+      lastActivityAt: null as string | null,
+      topPriority: 'no_org' as
+        | 'no_org'
+        | 'project_disabled'
+        | 'webhooks_failing'
+        | 'open_disputes'
+        | 'no_rules'
+        | 'high_rejection'
+        | 'no_contributors'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    if (!orgId) return c.json({ ok: true, data: empty })
+
+    const db = getServiceClient()
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    const [
+      { data: orgRow },
+      { count: rulesCount },
+      { count: tiersCount },
+      { data: agg30d },
+      { data: agg24h },
+      { data: webhooks },
+      { data: projects },
+      payoutLiabilityRes,
+      { count: questsCount },
+      { count: openDisputesCount },
+      { data: lastActivityRow },
+    ] = await Promise.all([
+      db.from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
+      db
+        .from('reward_rules')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('enabled', true),
+      db
+        .from('reward_tiers')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('enabled', true),
+      db
+        .from('end_user_activity')
+        .select('end_user_id, points_awarded')
+        .eq('organization_id', orgId)
+        .gte('created_at', since30d)
+        .limit(10000),
+      db
+        .from('end_user_activity')
+        .select('rejected_reason')
+        .eq('organization_id', orgId)
+        .gte('created_at', since24h),
+      db
+        .from('reward_webhooks')
+        .select('enabled, last_status')
+        .eq('organization_id', orgId),
+      db.from('projects').select('id, name').eq('organization_id', orgId),
+      db
+        .from('reward_payouts')
+        .select('status, amount_usd.sum()')
+        .eq('organization_id', orgId)
+        .in('status', ['pending', 'processing'])
+        .single(),
+      db
+        .from('reward_quests')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('enabled', true),
+      db
+        .from('reward_disputes')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('status', 'open'),
+      db
+        .from('end_user_activity')
+        .select('created_at')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    const distinctUsers = new Set<string>()
+    let totalPts = 0
+    for (const row of (agg30d ?? []) as Array<{ end_user_id: string; points_awarded: number | null }>) {
+      if (row.end_user_id) distinctUsers.add(row.end_user_id)
+      totalPts += row.points_awarded ?? 0
+    }
+
+    const rows24h = (agg24h ?? []) as Array<{ rejected_reason: string | null }>
+    const activity24hTotal = rows24h.length
+    const activity24hRejected = rows24h.filter((r) => r.rejected_reason).length
+    const rejectionRatePct24h =
+      activity24hTotal > 0 ? Math.round((activity24hRejected / activity24hTotal) * 100) : 0
+
+    const webhookRows = (webhooks ?? []) as Array<{ enabled: boolean; last_status: number | null }>
+    const webhooksConfigured = webhookRows.filter((w) => w.enabled).length
+    const webhooksFailing = webhookRows.filter(
+      (w) => w.enabled && w.last_status != null && w.last_status >= 400,
+    ).length
+
+    const projectRows = (projects ?? []) as Array<{ id: string; name: string }>
+    const projectIds = projectRows.map((p) => p.id)
+    let identityProvidersConfigured = 0
+    if (projectIds.length > 0) {
+      const { count } = await db
+        .from('host_auth_providers')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .eq('enabled', true)
+      identityProvidersConfigured = count ?? 0
+    }
+
+    const activeProject =
+      projectIdHint && projectRows.some((p) => p.id === projectIdHint)
+        ? projectRows.find((p) => p.id === projectIdHint)!
+        : projectRows[0] ?? null
+
+    let projectRewardsEnabled = false
+    if (activeProject) {
+      const { data: ps } = await db
+        .from('project_settings')
+        .select('rewards_enabled')
+        .eq('project_id', activeProject.id)
+        .maybeSingle()
+      projectRewardsEnabled = Boolean((ps as { rewards_enabled?: boolean } | null)?.rewards_enabled)
+    }
+
+    const enabledRulesCount = rulesCount ?? 0
+    const enabledTiersCount = tiersCount ?? 0
+    const activeContributors30d = distinctUsers.size
+    const pointsAwarded30d = totalPts
+    const enabledQuestsCount = questsCount ?? 0
+    const openDisputes = openDisputesCount ?? 0
+    const lastActivityAt =
+      (lastActivityRow as { created_at?: string } | null)?.created_at ?? null
+    const projectName = activeProject?.name ?? null
+
+    let topPriority = empty.topPriority
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!projectRewardsEnabled) {
+      topPriority = 'project_disabled'
+      topPriorityLabel = `rewards_enabled is off for ${projectName ?? 'active project'} — SDK activity ingest returns early without awarding points.`
+      topPriorityTo = '/settings?tab=dev'
+    } else if (webhooksFailing > 0) {
+      topPriority = 'webhooks_failing'
+      topPriorityLabel = `${webhooksFailing} webhook${webhooksFailing === 1 ? '' : 's'} returned HTTP ≥400 on last delivery — tier-change events may not reach your host app.`
+      topPriorityTo = '/rewards?tab=settings'
+    } else if (openDisputes > 0) {
+      topPriority = 'open_disputes'
+      topPriorityLabel = `${openDisputes} open dispute${openDisputes === 1 ? '' : 's'} — review flagged rewards before the next payout run.`
+      topPriorityTo = '/rewards?tab=settings'
+    } else if (enabledRulesCount === 0) {
+      topPriority = 'no_rules'
+      topPriorityLabel = 'No activity rules enabled — SDK events will not award points until at least one rule is on.'
+      topPriorityTo = '/rewards?tab=rules'
+    } else if (rejectionRatePct24h >= 40 && activity24hTotal >= 5) {
+      topPriority = 'high_rejection'
+      topPriorityLabel = `${rejectionRatePct24h}% of ${activity24hTotal} SDK events rejected in 24h — check caps, fraud flags, or unknown actions on Overview.`
+      topPriorityTo = '/rewards?tab=overview'
+    } else if (activeContributors30d === 0) {
+      topPriority = 'no_contributors'
+      topPriorityLabel = `${enabledRulesCount} rules · ${enabledTiersCount} tiers configured — wire SDK identify() + activity() in ${projectName ?? 'your app'}.`
+      topPriorityTo = '/rewards?tab=sandbox'
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${activeContributors30d} contributors (30d) · ${pointsAwarded30d.toLocaleString()} pts · ${enabledQuestsCount} active quest${enabledQuestsCount === 1 ? '' : 's'}.`
+      topPriorityTo = '/rewards?tab=contributors'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        organizationId: orgId,
+        organizationName: (orgRow as { name?: string } | null)?.name ?? null,
+        projectId: activeProject?.id ?? null,
+        projectName,
+        projectRewardsEnabled,
+        enabledRulesCount,
+        enabledTiersCount,
+        activeContributors30d,
+        pointsAwarded30d,
+        pendingPayoutLiabilityUsd:
+          (payoutLiabilityRes.data as Record<string, number> | null)?.sum ?? 0,
+        activity24hTotal,
+        activity24hRejected,
+        rejectionRatePct24h,
+        webhooksConfigured,
+        webhooksFailing,
+        identityProvidersConfigured,
+        enabledQuestsCount,
+        openDisputesCount: openDisputes,
+        lastActivityAt,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
+  // ===========================================================
   // ADMIN: GET /v1/admin/rewards/overview
   // ===========================================================
   app.get('/v1/admin/rewards/overview', jwtAuth, async (c) => {
@@ -599,22 +833,15 @@ export function registerRewardsRoutes(app: Hono): void {
     const db = getServiceClient()
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    const [activeRes, pointsRes, tierRes, payoutLiabilityRes] = await Promise.all([
-      db.from('end_user_activity')
-        .select('end_user_id', { count: 'estimated', head: true })
-        .eq('organization_id', orgId)
-        .gte('created_at', since30d),
-      db.from('end_user_activity')
-        .select('points_awarded.sum()')
-        .eq('organization_id', orgId)
-        .gte('created_at', since30d)
-        .single(),
+    // Use raw SQL for the two aggregations that Supabase's query builder
+    // handles poorly: COUNT(DISTINCT) and conditional SUM.
+    const [rawAgg, tierRes, payoutLiabilityRes] = await Promise.all([
+      Promise.resolve(db.rpc('exec_sql_overview' as never, {} as never).single()).then(() => null, () => null),
       db.from('end_user_points')
         .select('current_tier_id, reward_tiers(slug, display_name)')
         .eq('organization_id', orgId)
         .not('current_tier_id', 'is', null)
         .limit(500),
-      // P2: payout liability summary
       db.from('reward_payouts')
         .select('status, amount_usd.sum()')
         .eq('organization_id', orgId)
@@ -622,9 +849,24 @@ export function registerRewardsRoutes(app: Hono): void {
         .single(),
     ])
 
+    // Aggregate active contributors and points from end_user_activity manually
+    const { data: aggData } = await db
+      .from('end_user_activity')
+      .select('end_user_id, points_awarded')
+      .eq('organization_id', orgId)
+      .gte('created_at', since30d)
+      .limit(10000)
+
+    const distinctUsers = new Set<string>()
+    let totalPts = 0
+    for (const row of (aggData ?? []) as Array<{ end_user_id: string; points_awarded: number | null }>) {
+      if (row.end_user_id) distinctUsers.add(row.end_user_id)
+      totalPts += row.points_awarded ?? 0
+    }
+
     // Count tier holders
     const tierCounts: Record<string, number> = {}
-    for (const row of (tierRes.data ?? []) as Array<{ reward_tiers: { slug: string; display_name: string } }>) {
+    for (const row of (tierRes.data ?? []) as unknown as Array<{ reward_tiers: { slug: string; display_name: string } }>) {
       const slug = row.reward_tiers?.slug ?? 'unknown'
       tierCounts[slug] = (tierCounts[slug] ?? 0) + 1
     }
@@ -632,10 +874,9 @@ export function registerRewardsRoutes(app: Hono): void {
     return c.json({
       ok: true,
       data: {
-        active_contributors_30d: activeRes.count ?? 0,
-        points_awarded_30d: (pointsRes.data as Record<string, number> | null)?.sum ?? 0,
+        active_contributors_30d: distinctUsers.size,
+        points_awarded_30d: totalPts,
         tier_distribution: tierCounts,
-        // P2: pending payout liability in USD
         pending_payout_liability_usd: (payoutLiabilityRes.data as Record<string, number> | null)?.sum ?? 0,
       },
     })
@@ -648,19 +889,35 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const projectId = c.req.query('projectId') ?? null
+    // Prefer explicit ?projectId query param, then X-Mushi-Project-Id header
+    const projectId = c.req.query('projectId')
+      ?? c.req.header('x-mushi-project-id')
+      ?? c.req.header('X-Mushi-Project-Id')
+      ?? null
+
     const db = getServiceClient()
 
-    const query = db
+    if (projectId) {
+      const { data: projRules, error: e1 } = await db
+        .from('reward_rules')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('project_id', projectId)
+        .eq('enabled', true)
+        .order('action', { ascending: true })
+
+      if (e1) return c.json({ ok: false, error: { code: 'DB_ERROR', message: e1.message } }, 500)
+      if ((projRules?.length ?? 0) > 0) return c.json({ ok: true, data: projRules ?? [] })
+    }
+
+    // Fall back to org-level rules (project_id IS NULL)
+    const { data, error } = await db
       .from('reward_rules')
       .select('*')
       .eq('organization_id', orgId)
+      .is('project_id', null)
       .eq('enabled', true)
       .order('action', { ascending: true })
-
-    const { data, error } = projectId
-      ? await query.eq('project_id', projectId)
-      : await query.is('project_id', null)
 
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true, data: data ?? [] })
@@ -916,8 +1173,7 @@ export function registerRewardsRoutes(app: Hono): void {
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({
       ok: true,
-      data: data ?? [],
-      meta: { range, limit, offset, total: count ?? 0 },
+      data: { data: data ?? [], meta: { range, limit, offset, total: count ?? 0 } },
     })
   })
 
@@ -928,7 +1184,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const endUserId = c.req.param('id')
+    const endUserId = c.req.param('id')!
     const db = getServiceClient()
 
     const [euRes, ptsRes, actRes] = await Promise.all([
@@ -1023,7 +1279,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const db = getServiceClient()
 
     const { error } = await db
@@ -1139,7 +1395,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const db = getServiceClient()
 
     const { error } = await db.from('reward_quests').delete().eq('id', id).eq('organization_id', orgId)
@@ -1258,7 +1514,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
       return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
@@ -1598,7 +1854,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     let raw: unknown
     try { raw = await c.req.json() } catch {
       return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
@@ -1651,7 +1907,7 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const id = c.req.param('id')
+    const id = c.req.param('id')!
     const db = getServiceClient()
 
     // Verify ownership

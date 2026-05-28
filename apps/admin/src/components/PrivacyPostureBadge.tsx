@@ -18,12 +18,12 @@ import { Tooltip } from './ui'
 
 interface PrivacyStatus {
   byok_configured: boolean
-  llm_provider: 'byok' | 'platform' | string
+  llm_provider?: 'byok' | 'platform' | string
   storage_provider: string | null
   region: string | null
   retention_days: number | null
   last_audit_at: string | null
-  require_byok: boolean
+  require_byok?: boolean
 }
 
 interface Props {
@@ -32,21 +32,27 @@ interface Props {
 }
 
 export function PrivacyPostureBadge({ compact = false }: Props) {
-  const { data, loading } = usePageData<PrivacyStatus>('/v1/admin/privacy-status')
+  const { data, loading, error, reload } = usePageData<PrivacyStatus>('/v1/admin/privacy-status')
 
   const [popoverOpen, setPopoverOpen] = useState(false)
   const badgeRef = useRef<HTMLButtonElement>(null)
 
-  if (loading || !data) return null
+  if (loading) return null
 
-  const isByok = data.byok_configured
-  const label = isByok ? 'All systems BYOK' : 'Platform key in use'
-  const dotClass = isByok ? 'bg-ok' : 'bg-warn'
-  const textClass = isByok ? 'text-ok' : 'text-warn'
+  const isByok = data?.byok_configured ?? false
+  const label = error
+    ? 'Privacy status unavailable'
+    : isByok
+      ? 'All systems BYOK'
+      : 'Platform key in use'
+  const dotClass = error ? 'bg-danger' : isByok ? 'bg-ok' : 'bg-warn'
+  const textClass = error ? 'text-danger' : isByok ? 'text-ok' : 'text-warn'
 
-  const tooltipContent = isByok
-    ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
-    : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account. Click for details.'
+  const tooltipContent = error
+    ? 'Could not load privacy posture. Open BYOK settings or retry.'
+    : isByok
+      ? 'All LLM calls run under your own API key — your data never transits the Mushi platform account.'
+      : 'At least one pipeline is using the Mushi platform API key. Configure BYOK in Settings to keep your data in your own LLM account. Click for details.'
 
   if (compact) {
     return (
@@ -65,7 +71,6 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
   return (
     <div className="relative">
       <Tooltip content={tooltipContent} side="right" portal>
-        {/* Button toggles the detail popover — navigation is inside the popover CTA */}
         <button
           ref={badgeRef}
           type="button"
@@ -86,48 +91,68 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
         >
           <button
             type="button"
-            className="absolute top-1.5 right-1.5 text-fg-faint hover:text-fg text-xs"
+            className="absolute top-1.5 right-1.5 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
             onClick={() => setPopoverOpen(false)}
             aria-label="Close"
-          >✕</button>
+          >
+            ✕
+          </button>
           <p className="font-semibold text-fg text-xs">Privacy posture</p>
 
-          <div className="space-y-1 text-fg-muted">
-            <div className="flex justify-between">
-              <span>LLM provider</span>
-              <span className={`font-mono ${isByok ? 'text-ok' : 'text-warn'}`}>
-                {isByok ? 'BYOK' : 'platform'}
-              </span>
+          {error ? (
+            <p className="text-danger leading-snug">{error}</p>
+          ) : (
+            <div className="space-y-1 text-fg-muted">
+              <div className="flex justify-between">
+                <span>LLM provider</span>
+                <span className={`font-mono ${isByok ? 'text-ok' : 'text-warn'}`}>
+                  {data?.llm_provider === 'byok' || isByok ? 'BYOK' : 'platform'}
+                </span>
+              </div>
+              {data?.storage_provider && (
+                <div className="flex justify-between">
+                  <span>Storage</span>
+                  <span className="font-mono text-fg-secondary">{data.storage_provider}</span>
+                </div>
+              )}
+              {data?.region && (
+                <div className="flex justify-between">
+                  <span>Region</span>
+                  <span className="font-mono text-fg-secondary">{data.region}</span>
+                </div>
+              )}
+              {data?.retention_days != null && (
+                <div className="flex justify-between">
+                  <span>Retention</span>
+                  <span className="font-mono text-fg-secondary">{data.retention_days}d</span>
+                </div>
+              )}
             </div>
-            {data.storage_provider && (
-              <div className="flex justify-between">
-                <span>Storage</span>
-                <span className="font-mono text-fg-secondary">{data.storage_provider}</span>
-              </div>
-            )}
-            {data.region && (
-              <div className="flex justify-between">
-                <span>Region</span>
-                <span className="font-mono text-fg-secondary">{data.region}</span>
-              </div>
-            )}
-            {data.retention_days != null && (
-              <div className="flex justify-between">
-                <span>Retention</span>
-                <span className="font-mono text-fg-secondary">{data.retention_days}d</span>
-              </div>
+          )}
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Link
+              to="/settings?panel=byok"
+              className="text-2xs text-brand underline hover:no-underline"
+              onClick={() => setPopoverOpen(false)}
+            >
+              {isByok ? 'View BYOK settings →' : 'Configure BYOK →'}
+            </Link>
+            {error && (
+              <button
+                type="button"
+                className="text-2xs text-danger underline hover:no-underline"
+                onClick={() => {
+                  reload()
+                  setPopoverOpen(false)
+                }}
+              >
+                Retry
+              </button>
             )}
           </div>
 
-          <Link
-            to="/settings?panel=byok"
-            className="block mt-1 text-2xs text-brand underline hover:no-underline"
-            onClick={() => setPopoverOpen(false)}
-          >
-            {isByok ? 'View BYOK settings →' : 'Configure BYOK →'}
-          </Link>
-
-          {data.last_audit_at && (
+          {data?.last_audit_at && (
             <p className="text-fg-faint text-3xs">
               Last audited {new Date(data.last_audit_at).toLocaleDateString()}
             </p>

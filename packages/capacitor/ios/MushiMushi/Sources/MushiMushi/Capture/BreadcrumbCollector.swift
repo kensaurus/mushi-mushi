@@ -50,7 +50,12 @@ public final class BreadcrumbCollector {
 
     public init(max: Int = 50, maxMessageLength: Int = 500) {
         self.max = Swift.max(1, max)
-        self.maxMessageLength = Swift.max(50, maxMessageLength)
+        // Floor at 1 (matching `max` above) so callers can pass small values
+        // for tests / specialised buffers. The earlier `Swift.max(50, ...)`
+        // clamp silently overrode any caller request below 50, which broke
+        // BreadcrumbCollectorTests.testMessageTruncatedAtMaxLength and was
+        // an undocumented hidden policy.
+        self.maxMessageLength = Swift.max(1, maxMessageLength)
     }
 
     /// Append a breadcrumb to the ring buffer.

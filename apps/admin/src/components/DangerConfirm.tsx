@@ -85,7 +85,7 @@ export function DangerConfirm({
       dismissible={!loading}
       footer={
         <>
-          <Btn variant="ghost" onClick={handleClose} disabled={loading}>
+          <Btn variant="cancel" onClick={handleClose} disabled={loading}>
             {cancelLabel}
           </Btn>
           <Btn

@@ -37,11 +37,36 @@ CI runs `pnpm check:helm-migrations` on every PR; a stale chart fails the build 
 
 If the chart ever exceeds the 1 MiB ConfigMap budget the sync script warns at ~900 KiB. Current footprint is ~535 KiB across 127 files.
 
+## Multi-region deployment
+
+Deploy one chart per region and pass `global.region` + `global.peerRegions`:
+
+```bash
+# Us-east cluster
+helm install mushi-us ./deploy/helm \
+  --namespace mushi \
+  --set global.database.host=postgres-us.internal \
+  --set global.region=us \
+  --set global.peerRegions="eu,jp"
+
+# Eu-west cluster
+helm install mushi-eu ./deploy/helm \
+  --namespace mushi \
+  --set global.database.host=postgres-eu.internal \
+  --set global.region=eu \
+  --set global.peerRegions="us,jp"
+```
+
+The `global.region` and `global.peerRegions` values inject `MUSHI_CLUSTER_REGION` and `MUSHI_PEER_REGIONS` into the API pod — the edge functions use these to tag reports with a residency label and to route cross-region reads.
+
+For logical replication setup and DNS configuration see [`docs/runbooks/region-routing-replication.md`](../../docs/runbooks/region-routing-replication.md).
+
+> **Note:** Full active/active write replication is not automated — `region_routing` replicates read-only; write routing relies on client-side region stickiness today. See the runbook for the roadmap.
+
 ## What is NOT in the chart yet
 
 - Per-release Stripe webhook config (`deploy/helm/templates/stripe-*` PRs welcome).
 - Apache AGE bootstrap. Self-hosters who want the AGE backend run the `20260418001200_age_parallel_write.sql` migration _after_ their cluster has the extension installed; the chart applies it idempotently.
-- Multi-region active/active. The chart targets a single region — for multi-region pin one chart per region and front them with your own DNS.
 
 ## Upgrading
 

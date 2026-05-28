@@ -1368,7 +1368,7 @@ function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
           />
           <p className="text-2xs text-fg-faint">JWKS payloads are cached for 6 hours to avoid rate-limit issues.</p>
           <div className="flex gap-2 justify-end pt-1">
-            <Btn variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
+            <Btn variant="cancel" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
             <Btn variant="primary" size="sm" loading={saving} onClick={saveProvider}>Save</Btn>
           </div>
         </Card>
@@ -1632,7 +1632,7 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
               After saving, set <code className="font-mono text-fg-secondary">MUSHI_REWARD_WEBHOOK_SECRET_&lt;ID&gt;</code> in your Supabase project env.
             </p>
             <div className="flex gap-2 justify-end pt-1">
-              <Btn variant="ghost" size="sm" onClick={() => setShowNewWebhook(false)}>Cancel</Btn>
+              <Btn variant="cancel" size="sm" onClick={() => setShowNewWebhook(false)}>Cancel</Btn>
               <Btn variant="primary" size="sm" loading={saving} onClick={createWebhook}>Save</Btn>
             </div>
           </Card>
@@ -1793,7 +1793,7 @@ function QuestsTab({ canEdit }: { canEdit: boolean }) {
             <Btn variant="ghost" size="sm" onClick={addStep}>+ Add step</Btn>
           </div>
           <div className="flex gap-2 justify-end pt-1">
-            <Btn variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
+            <Btn variant="cancel" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
             <Btn variant="primary" size="sm" loading={saving} onClick={saveQuest}>Save quest</Btn>
           </div>
         </Card>

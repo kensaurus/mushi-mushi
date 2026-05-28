@@ -30,6 +30,7 @@
 // ============================================================
 
 import type { Hono, Context } from 'npm:hono@4'
+import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
@@ -112,7 +113,7 @@ async function resolveTester(
 
 // ─── Route registration ───────────────────────────────────────
 
-export function registerTesterMarketplaceRoutes(app: Hono) {
+export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables }>) {
 
   // ── Public routes ────────────────────────────────────────────
 

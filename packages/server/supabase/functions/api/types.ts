@@ -6,4 +6,6 @@ export interface Variables {
   userId: string
   userEmail: string
   authMethod: 'jwt' | 'api_key'
+  projectId?: string
+  projectName?: string
 }

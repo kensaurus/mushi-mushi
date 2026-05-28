@@ -1,4 +1,5 @@
 import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 
 import { getServiceClient, getUserClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
@@ -235,7 +236,7 @@ function adminUrl(path: string): string {
   return `${base.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-export function registerOrganizationRoutes(app: Hono): void {
+export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/org', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -399,7 +400,7 @@ export function registerOrganizationRoutes(app: Hono): void {
   // gated on `owner` and aware of the URL implications.
   app.patch('/v1/org/:id', jwtAuth, async (c) => {
     const actorId = c.get('userId') as string;
-    const orgId = c.req.param('id');
+    const orgId = c.req.param('id')!;
     if (!UUID_RE.test(orgId)) {
       return c.json({ ok: false, error: { code: 'BAD_ORG' } }, 400);
     }
@@ -443,7 +444,7 @@ export function registerOrganizationRoutes(app: Hono): void {
 
   app.get('/v1/org/:id/members', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const orgId = c.req.param('id');
+    const orgId = c.req.param('id')!;
     if (!UUID_RE.test(orgId)) return c.json({ ok: false, error: { code: 'BAD_ORG' } }, 400);
     const db = getServiceClient();
     const role = await loadMembership(db, orgId, userId);
@@ -544,7 +545,7 @@ export function registerOrganizationRoutes(app: Hono): void {
 
   app.get('/v1/org/:id/members/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const orgId = c.req.param('id');
+    const orgId = c.req.param('id')!;
     if (!UUID_RE.test(orgId)) return c.json({ ok: false, error: { code: 'BAD_ORG' } }, 400);
     const db = getServiceClient();
     const role = await loadMembership(db, orgId, userId);
@@ -632,8 +633,8 @@ export function registerOrganizationRoutes(app: Hono): void {
 
   app.patch('/v1/org/:id/members/:userId', jwtAuth, async (c) => {
     const actorId = c.get('userId') as string;
-    const orgId = c.req.param('id');
-    const targetUserId = c.req.param('userId');
+    const orgId = c.req.param('id')!;
+    const targetUserId = c.req.param('userId')!;
     const body = await c.req.json().catch(() => ({}));
     if (!UUID_RE.test(orgId) || !UUID_RE.test(targetUserId) || !isRole(body.role)) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
@@ -664,8 +665,8 @@ export function registerOrganizationRoutes(app: Hono): void {
 
   app.delete('/v1/org/:id/members/:userId', jwtAuth, async (c) => {
     const actorId = c.get('userId') as string;
-    const orgId = c.req.param('id');
-    const targetUserId = c.req.param('userId');
+    const orgId = c.req.param('id')!;
+    const targetUserId = c.req.param('userId')!;
     if (!UUID_RE.test(orgId) || !UUID_RE.test(targetUserId)) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
     }
@@ -686,7 +687,7 @@ export function registerOrganizationRoutes(app: Hono): void {
 
   app.post('/v1/org/:id/invitations', jwtAuth, requireFeature('teams'), async (c) => {
     const actorId = c.get('userId') as string;
-    const orgId = c.req.param('id');
+    const orgId = c.req.param('id')!;
     const body = await c.req.json().catch(() => ({}));
     const email = normalizeEmail(body.email);
     const role = isInviteRole(body.role) ? body.role : 'member';
@@ -762,8 +763,8 @@ export function registerOrganizationRoutes(app: Hono): void {
 
   app.delete('/v1/org/:id/invitations/:invitationId', jwtAuth, async (c) => {
     const actorId = c.get('userId') as string;
-    const orgId = c.req.param('id');
-    const invitationId = c.req.param('invitationId');
+    const orgId = c.req.param('id')!;
+    const invitationId = c.req.param('invitationId')!;
     if (!UUID_RE.test(orgId) || !UUID_RE.test(invitationId)) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
     }
@@ -835,8 +836,8 @@ export function registerOrganizationRoutes(app: Hono): void {
   // the invite hasn't expired.
   app.post('/v1/org/:id/invitations/:invitationId/resend', jwtAuth, async (c) => {
     const actorId = c.get('userId') as string;
-    const orgId = c.req.param('id');
-    const invitationId = c.req.param('invitationId');
+    const orgId = c.req.param('id')!;
+    const invitationId = c.req.param('invitationId')!;
     if (!UUID_RE.test(orgId) || !UUID_RE.test(invitationId)) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
     }
@@ -978,12 +979,13 @@ export function registerOrganizationRoutes(app: Hono): void {
     // signal rather than a noisy "most recent" one. Best-effort: a
     // failure here doesn't block the response.
     if (status === 'pending' && !invite.last_seen_at) {
-      await db
-        .from('invitations')
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq('id', invite.id)
-        .is('last_seen_at', null)
-        .catch(() => {});
+      await Promise.resolve(
+        db
+          .from('invitations')
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq('id', invite.id)
+          .is('last_seen_at', null),
+      ).then(undefined, () => {});
     }
 
     return c.json({

@@ -732,7 +732,7 @@ function CreateStoryModal({
         </label>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn>
+          <Btn variant="cancel" size="sm" onClick={onClose}>Cancel</Btn>
           <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
             {saving ? 'Creating…' : 'Create story'}
           </Btn>
