@@ -185,7 +185,7 @@ export function registerAnomaliesRoutes(parent: Hono<{ Variables: Variables }>) 
       body: JSON.stringify({ project_id, metric_name, lookback_hours }),
     })
     const json = await res.json()
-    if (!res.ok) return c.json({ ok: false, error: { code: 'UPSTREAM_ERROR', message: JSON.stringify(json) } }, res.status)
+    if (!res.ok) return c.json({ ok: false, error: { code: 'UPSTREAM_ERROR', message: JSON.stringify(json) } }, res.status as 200)
     return c.json({ ok: true, ...json })
   })
 
@@ -196,7 +196,7 @@ export function registerAnomaliesRoutes(parent: Hono<{ Variables: Variables }>) 
     const update: Record<string, unknown> = {}
     if (status) update.status = status
     if (confirmed != null) update.confirmed = confirmed
-    const { error } = await db().from('anomaly_detections').update(update).eq('id', c.req.param('id'))
+    const { error } = await db().from('anomaly_detections').update(update).eq('id', c.req.param('id')!)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true })
   })

@@ -158,6 +158,9 @@ const SEVERITY_STYLE: Record<
 // can stay open while a quiet one (/billing) is collapsed.
 const HERO_COLLAPSE_KEY = 'mushi:pageHero:collapsed:v1'
 
+/** Workhorse list pages — start collapsed so triage tables get vertical space. */
+const DEFAULT_COLLAPSED_SCOPES = new Set(['reports', 'fixes', 'inventory', 'inbox'])
+
 function readCollapsedScopes(): Record<string, boolean> {
   if (typeof window === 'undefined') return {}
   try {
@@ -209,7 +212,7 @@ export function PageHero({
   // only — operators expand "Act" to grab a secondary CTA, not as a long-
   // lived preference, so we don't burn a localStorage write on it.
   const [collapsedScopes, setCollapsedScopes] = useState<Record<string, boolean>>(readCollapsedScopes)
-  const collapsed = collapsedScopes[scope] ?? false
+  const collapsed = collapsedScopes[scope] ?? DEFAULT_COLLAPSED_SCOPES.has(scope)
   const [expandedTile, setExpandedTile] = useState<'decide' | 'act' | 'verify' | null>(null)
   const { spotlight, clearSpotlight } = useDavSpotlight()
   // Ref to the hero section so the detail panel's "Show on page" button

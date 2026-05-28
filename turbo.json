@@ -11,6 +11,11 @@
       "cache": false,
       "persistent": true
     },
+    "@mushi-mushi/admin#dev": {
+      "dependsOn": ["@mushi-mushi/web#build"],
+      "cache": false,
+      "persistent": true
+    },
     "lint": {
       "dependsOn": ["^build"],
       "cache": true

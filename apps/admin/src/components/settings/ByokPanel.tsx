@@ -125,7 +125,11 @@ export function ByokPanel() {
   const { data, loading, error, reload } = usePageData<{ keys: ByokKey[] }>(
     byokLocked ? null : '/v1/admin/byok',
   )
-  const keys = data?.keys ?? null
+  // ByokPanel handles LLM providers only — firecrawl and browserbase have
+  // dedicated tabs (FirecrawlPanel, BrowserbasePanel). Filter here so a
+  // future BYOK_PROVIDERS expansion on the server never breaks this render.
+  const LLM_PROVIDERS = ['anthropic', 'openai'] as const
+  const keys = (data?.keys ?? null)?.filter(k => (LLM_PROVIDERS as readonly string[]).includes(k.provider)) ?? null
 
   const [pending, setPending] = useState<ByokKey['provider'] | null>(null)
   const [testing, setTesting] = useState<ByokKey['provider'] | null>(null)

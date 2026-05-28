@@ -426,7 +426,7 @@ export function CodebaseIndexCard({ projectId }: Props) {
             <ErrorAlert title="Enable failed" message={enableError} />
           )}
           <div className="flex items-center justify-end gap-2">
-            <Btn variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saving}>Cancel</Btn>
+            <Btn variant="cancel" size="sm" onClick={() => setEditing(false)} disabled={saving}>Cancel</Btn>
             <Btn variant="primary" size="sm" onClick={() => void enable()} loading={saving}>
               {enabled ? 'Save & re-sweep' : 'Index now'}
             </Btn>
@@ -563,7 +563,7 @@ function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss:
           label="Copy webhook secret"
           copiedLabel="Webhook secret copied"
         />
-        <Btn variant="ghost" size="sm" onClick={onDismiss}>I&apos;ve stored it {EM_DASH} hide</Btn>
+        <Btn variant="cancel" size="sm" onClick={onDismiss}>I&apos;ve stored it {EM_DASH} hide</Btn>
         <a
           href="https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries"
           target="_blank"

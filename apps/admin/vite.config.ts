@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
@@ -138,9 +138,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      // Workspace link occasionally missing in admin node_modules on Windows;
-      // point Vite at the built SDK so mushi-self dynamic import resolves.
-      '@mushi-mushi/web': path.resolve(__dirname, '../../packages/web/dist/index.js'),
     },
   },
   build: {
@@ -193,6 +190,11 @@ export default defineConfig({
   },
   server: {
     port: 6464,
+    // pnpm workspace packages resolve via symlinks under ../../packages;
+    // without this, Vite 8 refuses to serve/transform @mushi-mushi/web (mushi-self.ts).
+    fs: {
+      allow: [searchForWorkspaceRoot(process.cwd())],
+    },
     proxy: {
       // Forward the testers public marketplace to its own Next.js dev server.
       // Run `pnpm --filter @mushi-mushi/testers dev` on port 3001 separately.

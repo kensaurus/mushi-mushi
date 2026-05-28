@@ -367,7 +367,7 @@ function InnerCanvas({
             <button
               type="button"
               onClick={() => { setHintDismissed(true); window.localStorage.setItem(HINT_KEY, '1') }}
-              className="ml-1 text-fg-faint hover:text-fg leading-none"
+              className="ml-1 rounded-sm px-1 text-danger hover:bg-danger-muted/50 leading-none"
               aria-label="Dismiss hint"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">

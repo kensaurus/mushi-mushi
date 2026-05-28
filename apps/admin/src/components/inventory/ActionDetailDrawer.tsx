@@ -209,7 +209,7 @@ export function ActionDetailDrawer({
           </pre>
         </details>
 
-        <Btn variant="ghost" type="button" onClick={onClose}>
+        <Btn variant="cancel" type="button" onClick={onClose}>
           Close
         </Btn>
       </div>

@@ -78,6 +78,9 @@ interface NavItem {
   superAdmin?: boolean
   /** Plan feature flag — hidden until `useEntitlements().has(flag)` (unless super-admin). */
   requiresFeature?: FeatureFlag
+  /** When true, this item is also gated on Advanced mode being active in addition to any
+   *  plan flag. Aligns with the README's "gated behind Advanced mode" language for Inventory. */
+  requiresAdvancedMode?: boolean
 }
 
 interface NavSection {
@@ -152,6 +155,7 @@ const NAV: NavSection[] = [
         beginner: true,
         quickstartLabel: 'User stories',
         requiresFeature: 'inventory_v2',
+        requiresAdvancedMode: true,
       },
       { label: 'Graph',       path: '/graph',       icon: IconGraph,   beginner: true },
       { label: 'Explore',     path: '/explore',     icon: IconExplore, beginner: true },
@@ -1011,7 +1015,8 @@ export function Layout({ children }: { children: ReactNode }) {
   // flows already trim the surface aggressively, and a Pro pill in
   // quickstart would be more confusing than helpful.
   const visibleByFeature = (i: NavItem) =>
-    !i.requiresFeature || has(i.requiresFeature) || isSuperAdmin
+    (!i.requiresFeature || has(i.requiresFeature) || isSuperAdmin) &&
+    (!i.requiresAdvancedMode || isAdvanced || isSuperAdmin)
 
   let visibleNav: NavSection[]
   if (isQuickstart) {
@@ -1599,7 +1604,9 @@ export function Layout({ children }: { children: ReactNode }) {
               {!focusMode && <NextBestAction />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}
-              {fallbackHero && (
+              {/* Beginner mode uses NextBestAction — skip layout PageHero to avoid
+                  duplicating the same guidance (NN/g #8 Aesthetic & Minimalist). */}
+              {fallbackHero && !isBeginner && (
                 <PageHero
                   scope={fallbackHero.scope}
                   title={fallbackHero.title}

@@ -1,4 +1,5 @@
 import type { Hono, Context } from 'npm:hono@4';
+import type { Variables } from '../types.ts'
 import { streamSSE } from 'npm:hono@4/streaming';
 
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
@@ -31,7 +32,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -42,7 +43,126 @@ import {
   type SdkConfigRow,
 } from '../helpers.ts';
 
-export function registerQueryFixesRepoRoutes(app: Hono): void {
+export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>): void {
+  app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      savedCount: 0,
+      recentCount: 0,
+      teamSavedCount: 0,
+      runs24h: 0,
+      errors24h: 0,
+      nlRuns24h: 0,
+      rawRuns24h: 0,
+      avgLatencyMs: null as number | null,
+      lastRunAt: null as string | null,
+      lastRunPrompt: null as string | null,
+      lastRunError: null as string | null,
+      schemaDegraded: false,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [userHistoryRes, teamCountRes, runs24hRes] = await Promise.all([
+      db
+        .from('nl_query_history')
+        .select('id, is_saved, error, latency_ms, mode, prompt, created_at')
+        .eq('user_id', userId)
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      db
+        .from('nl_query_history')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', await ownedProjectIds(db, userId))
+        .eq('is_saved', true)
+        .neq('user_id', userId),
+      db
+        .from('nl_query_history')
+        .select('error, latency_ms, mode, created_at')
+        .eq('project_id', project.id)
+        .gte('created_at', since24h),
+    ]);
+
+    const schemaDegraded =
+      userHistoryRes.error?.code === '42703' ||
+      teamCountRes.error?.code === '42703' ||
+      runs24hRes.error?.code === '42703';
+
+    if (userHistoryRes.error && userHistoryRes.error.code !== '42703') {
+      return dbError(c, userHistoryRes.error);
+    }
+    if (teamCountRes.error && teamCountRes.error.code !== '42703') {
+      return dbError(c, teamCountRes.error);
+    }
+    if (runs24hRes.error && runs24hRes.error.code !== '42703') {
+      return dbError(c, runs24hRes.error);
+    }
+
+    const userRows = userHistoryRes.data ?? [];
+    let savedCount = 0;
+    let recentCount = 0;
+    for (const row of userRows) {
+      if (row.is_saved) savedCount += 1;
+      else recentCount += 1;
+    }
+
+    const runs24hRows = runs24hRes.data ?? [];
+    let errors24h = 0;
+    let nlRuns24h = 0;
+    let rawRuns24h = 0;
+    let latencySum = 0;
+    let latencyCount = 0;
+    for (const row of runs24hRows) {
+      if (row.error) errors24h += 1;
+      const mode = (row.mode as string | null) ?? 'nl';
+      if (mode === 'raw') rawRuns24h += 1;
+      else nlRuns24h += 1;
+      if (typeof row.latency_ms === 'number') {
+        latencySum += row.latency_ms;
+        latencyCount += 1;
+      }
+    }
+
+    const latest = userRows[0] ?? null;
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        savedCount,
+        recentCount,
+        teamSavedCount: teamCountRes.count ?? 0,
+        runs24h: runs24hRows.length,
+        errors24h,
+        nlRuns24h,
+        rawRuns24h,
+        avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : null,
+        lastRunAt: latest?.created_at ?? null,
+        lastRunPrompt: latest?.prompt ?? null,
+        lastRunError: latest?.error ?? null,
+        schemaDegraded,
+      },
+    });
+  });
+
   app.get('/v1/admin/query/history', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -87,7 +207,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // PATCH the is_saved flag — used by the Query page Saved sidebar.
   app.patch('/v1/admin/query/history/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { is_saved?: boolean };
     if (typeof body.is_saved !== 'boolean') {
       return c.json(
@@ -107,7 +227,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
 
   app.delete('/v1/admin/query/history/:id', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const db = getServiceClient();
     const { error } = await db.from('nl_query_history').delete().eq('id', id).eq('user_id', userId);
     if (error) return dbError(c, error);
@@ -235,7 +355,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   });
 
   app.post('/v1/admin/groups/:id/merge', jwtAuth, async (c) => {
-    const groupId = c.req.param('id');
+    const groupId = c.req.param('id')!;
     const { targetGroupId } = await c.req.json();
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -304,6 +424,155 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // ============================================================
   // PHASE 3: FIX ATTEMPTS
   // ============================================================
+
+  // GET /v1/admin/fixes/stats — FixesStatusBanner posture data.
+  app.get('/v1/admin/fixes/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasGithub: false,
+      codebaseIndexEnabled: false,
+      indexedFiles: 0,
+      totalAttempts: 0,
+      failed: 0,
+      inProgress: 0,
+      completed: 0,
+      prsOpen: 0,
+      prsCiPassing: 0,
+      specWarnings: 0,
+      inflightDispatches: 0,
+      topFailureCategory: null as string | null,
+      topFailureCount: 0,
+      successRatePct: null as number | null,
+      topPriority: 'no_project' as
+        | 'no_project' | 'no_github' | 'no_index' | 'failed'
+        | 'inflight' | 'waiting' | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) return c.json({ ok: true, data: empty })
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: true, data: { ...empty, hasAnyProject: true, projectCount: projectIds.length } }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const since = new Date()
+    since.setUTCDate(since.getUTCDate() - 29)
+    since.setUTCHours(0, 0, 0, 0)
+
+    const [attemptsRes, integrationRes, codebaseRes, inflightRes] = await Promise.all([
+      db.from('fix_attempts')
+        .select('id, status, pr_url, check_run_conclusion, failure_category, spec_validation_warnings')
+        .eq('project_id', pid)
+        .gte('created_at', since.toISOString())
+        .limit(500),
+      db.from('project_integrations')
+        .select('provider, enabled')
+        .eq('project_id', pid)
+        .eq('provider', 'github')
+        .maybeSingle(),
+      db.from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid),
+      db.from('fix_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .in('status', ['queued', 'running', 'pending']),
+    ])
+
+    const attempts = attemptsRes.data ?? []
+    const failed = attempts.filter((a) => a.status === 'failed').length
+    const inProgress = attempts.filter((a) => ['queued', 'running', 'pending'].includes(a.status)).length
+    const completed = attempts.filter((a) => a.status === 'completed').length
+    const prsOpen = attempts.filter((a) => a.pr_url && a.status === 'completed').length
+    const prsCiPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
+    const specWarnings = attempts.filter((a) => {
+      const w = a.spec_validation_warnings as unknown
+      return Array.isArray(w) && w.length > 0
+    }).length
+
+    const failureBuckets = new Map<string, number>()
+    for (const a of attempts) {
+      if (a.status !== 'failed') continue
+      const cat = typeof a.failure_category === 'string' && a.failure_category ? a.failure_category : 'unknown'
+      failureBuckets.set(cat, (failureBuckets.get(cat) ?? 0) + 1)
+    }
+    const topEntry = [...failureBuckets.entries()].sort((a, b) => b[1] - a[1])[0]
+
+    const hasGithub = !!(integrationRes.data?.enabled)
+    const indexedFiles = codebaseRes.count ?? 0
+    const inflightDispatches = inflightRes.count ?? inProgress
+    const successRatePct = completed + failed > 0
+      ? Math.round((completed / (completed + failed)) * 100)
+      : null
+
+    let topPriority: typeof empty.topPriority = 'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!hasGithub) {
+      topPriority = 'no_github'
+      topPriorityLabel = 'Connect GitHub to enable auto-fix PR dispatch.'
+      topPriorityTo = '/integrations/config'
+    } else if (indexedFiles === 0) {
+      topPriority = 'no_index'
+      topPriorityLabel = 'Index your codebase to ground auto-fix in real file context.'
+      topPriorityTo = '/integrations/config'
+    } else if (failed > 0) {
+      topPriority = 'failed'
+      topPriorityLabel = `${failed} fix attempt${failed === 1 ? '' : 's'} failed — retry or inspect the timeline.`
+      topPriorityTo = '/fixes?status=failed'
+    } else if (inflightDispatches > 0) {
+      topPriority = 'inflight'
+      topPriorityLabel = `${inflightDispatches} fix${inflightDispatches === 1 ? '' : 'es'} dispatching — check back shortly.`
+      topPriorityTo = '/fixes?status=running'
+    } else if (prsOpen > 0) {
+      topPriority = 'waiting'
+      topPriorityLabel = `${prsOpen} PR${prsOpen === 1 ? '' : 's'} open — merge or close to advance the loop.`
+      topPriorityTo = '/repo?tab=prs'
+    } else {
+      topPriorityLabel = `${completed} fix${completed === 1 ? '' : 'es'} completed in the last 30 days.`
+      topPriorityTo = '/fixes'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name,
+        projectCount: projectIds.length,
+        hasGithub,
+        codebaseIndexEnabled: indexedFiles > 0,
+        indexedFiles,
+        totalAttempts: attempts.length,
+        failed,
+        inProgress,
+        completed,
+        prsOpen,
+        prsCiPassing,
+        specWarnings,
+        inflightDispatches,
+        topFailureCategory: topEntry?.[0] ?? null,
+        topFailureCount: topEntry?.[1] ?? 0,
+        successRatePct,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
 
   app.get('/v1/admin/fixes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -489,7 +758,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   });
 
   app.get('/v1/admin/fixes/:id', jwtAuth, async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -514,7 +783,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // same sync periodically for every completed attempt.
   // ---------------------------------------------------------------------------
   app.post('/v1/admin/fixes/:id/refresh-ci', jwtAuth, async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -576,7 +845,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // fix_attempts + check-run signals into an ordered event stream so the UI
   // can render a real branch graph.
   app.get('/v1/admin/fixes/:id/timeline', adminOrApiKey(), async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
@@ -783,6 +1052,139 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   // passes `project_id` so multi-project owners can toggle between repos
   // without us guessing.
   // ─────────────────────────────────────────────────────────────────────────
+
+  // GET /v1/admin/repo/stats — RepoStatusBanner posture data.
+  app.get('/v1/admin/repo/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasRepo: false,
+      repoUrl: null as string | null,
+      defaultBranch: null as string | null,
+      hasGithubApp: false,
+      indexingEnabled: false,
+      lastIndexedAt: null as string | null,
+      indexedFiles: 0,
+      totalBranches: 0,
+      prOpen: 0,
+      ciPassing: 0,
+      ciFailed: 0,
+      merged: 0,
+      failedToOpen: 0,
+      topPriority: 'no_project' as
+        | 'no_project' | 'no_repo' | 'no_github_app' | 'ci_failing'
+        | 'stuck' | 'waiting' | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) return c.json({ ok: true, data: empty })
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: true, data: { ...empty, hasAnyProject: true, projectCount: projectIds.length } }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const [integrationRes, attemptsRes, codebaseRes] = await Promise.all([
+      db.from('project_integrations')
+        .select('provider, enabled, config')
+        .eq('project_id', pid)
+        .eq('provider', 'github')
+        .maybeSingle(),
+      db.from('fix_attempts')
+        .select('id, status, pr_url, check_run_conclusion, created_at')
+        .eq('project_id', pid)
+        .not('pr_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      db.from('project_codebase_files')
+        .select('id, updated_at', { count: 'exact', head: false })
+        .eq('project_id', pid)
+        .order('updated_at', { ascending: false })
+        .limit(1),
+    ])
+
+    const integration = integrationRes.data
+    const hasRepo = !!(integration?.config as Record<string, unknown> | null)?.repo_url
+    const repoUrl = (integration?.config as Record<string, unknown> | null)?.repo_url as string | null ?? null
+    const hasGithubApp = !!(integration?.enabled)
+    const indexedFiles = codebaseRes.count ?? 0
+    const lastIndexedAt = codebaseRes.data?.[0]?.updated_at ?? null
+
+    const attempts = attemptsRes.data ?? []
+    const prOpen = attempts.filter((a) => a.pr_url && a.status === 'completed').length
+    const ciPassing = attempts.filter((a) => a.check_run_conclusion === 'success').length
+    const ciFailed = attempts.filter((a) =>
+      a.check_run_conclusion && a.check_run_conclusion !== 'success' && a.check_run_conclusion !== 'neutral'
+    ).length
+    const merged = 0
+    const failedToOpen = attempts.filter((a) => a.status === 'failed').length
+
+    let topPriority: typeof empty.topPriority = 'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!hasRepo) {
+      topPriority = 'no_repo'
+      topPriorityLabel = 'No GitHub repository configured — connect one to start dispatching PRs.'
+      topPriorityTo = '/integrations/config'
+    } else if (!hasGithubApp) {
+      topPriority = 'no_github_app'
+      topPriorityLabel = 'GitHub integration is disconnected — re-enable it to restore PR dispatch.'
+      topPriorityTo = '/integrations/config'
+    } else if (ciFailed > 0) {
+      topPriority = 'ci_failing'
+      topPriorityLabel = `${ciFailed} PR${ciFailed === 1 ? '' : 's'} have failing CI — review before merging.`
+      topPriorityTo = '/repo?tab=prs'
+    } else if (failedToOpen > 0) {
+      topPriority = 'stuck'
+      topPriorityLabel = `${failedToOpen} fix${failedToOpen === 1 ? '' : 'es'} failed to open a PR — retry from Fixes.`
+      topPriorityTo = '/fixes?status=failed'
+    } else if (prOpen > 0) {
+      topPriority = 'waiting'
+      topPriorityLabel = `${prOpen} PR${prOpen === 1 ? '' : 's'} open and awaiting review.`
+      topPriorityTo = '/repo?tab=prs'
+    } else {
+      topPriorityLabel = `${ciPassing} PR${ciPassing === 1 ? '' : 's'} passing CI.`
+      topPriorityTo = '/repo'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name,
+        projectCount: projectIds.length,
+        hasRepo,
+        repoUrl,
+        defaultBranch: null,
+        hasGithubApp,
+        indexingEnabled: indexedFiles > 0,
+        lastIndexedAt,
+        indexedFiles,
+        totalBranches: 0,
+        prOpen,
+        ciPassing,
+        ciFailed,
+        merged,
+        failedToOpen,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   app.get('/v1/admin/repo/overview', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -1042,7 +1444,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   });
 
   app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const fixId = c.req.param('id');
+    const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();

@@ -280,3 +280,40 @@ enable_pwned_passwords = true
 enroll_enabled = true
 verify_enabled = true
 ```
+
+---
+
+## Running multi-region
+
+Deploy one Helm chart per region and configure each with `global.region` and
+`global.peerRegions`. The chart injects `MUSHI_CLUSTER_REGION` and
+`MUSHI_PEER_REGIONS` into the API pod so edge functions can tag reports with
+the correct `data_residency_region`.
+
+```bash
+# Deploy US region
+helm install mushi-us ./deploy/helm \
+  --namespace mushi --create-namespace \
+  --set global.database.host=postgres-us.internal \
+  --set global.region=us \
+  --set global.peerRegions="eu,jp"
+
+# Deploy EU region
+helm install mushi-eu ./deploy/helm \
+  --namespace mushi --create-namespace \
+  --set global.database.host=postgres-eu.internal \
+  --set global.region=eu \
+  --set global.peerRegions="us,jp"
+```
+
+Set up GeoDNS (Route 53 latency routing, Cloudflare load balancer, etc.) to
+route `api.mushimushi.io` to the nearest regional ALB.
+
+For Postgres logical replication setup (publish on source → subscribe on
+target) and DNS configuration details, see
+[`docs/runbooks/region-routing-replication.md`](./docs/runbooks/region-routing-replication.md).
+
+> **Current limitation**: Full active/active write replication is not automated.
+> `region_routing` replicates read-only; write routing relies on client-side
+> GeoDNS stickiness. Cross-region write conflicts are the operator's
+> responsibility.

@@ -142,7 +142,7 @@ export function RevealedKeyCard({ projectId, projectName, apiKey, scopes, onDism
         <Btn size="sm" onClick={copy} data-testid="revealed-key-copy">
           Copy {mode === 'raw' ? 'key' : 'snippet'}
         </Btn>
-        <Btn variant="ghost" size="sm" onClick={onDismiss}>
+        <Btn variant="cancel" size="sm" onClick={onDismiss}>
           I've stored it — hide
         </Btn>
         <Link

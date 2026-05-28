@@ -87,7 +87,7 @@ export interface SetupProject {
   /** Number of source files currently indexed in the codebase RAG index.
    *  0 means the project hasn't run `mushi index` yet — used by ExplorePage
    *  to show the "not indexed" empty state. */
-  indexed_file_count: number
+  indexed_file_count?: number
 }
 
 export interface SetupResponse {
