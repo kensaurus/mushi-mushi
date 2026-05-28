@@ -203,6 +203,6 @@ app.get(
   },
 )
 
-export function registerEvolutionRoutes(parent: Hono<{ Variables: Variables }>) {
+export function registerEvolutionRoutes(parent: Hono): void {
   parent.route('', app)
 }
