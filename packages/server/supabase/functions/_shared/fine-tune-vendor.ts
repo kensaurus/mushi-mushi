@@ -76,8 +76,28 @@ export function resolveVendor(baseModel: string): VendorName {
 export function getAdapter(vendor: VendorName): VendorAdapter {
   switch (vendor) {
     case 'openai': return openaiAdapter
-    case 'anthropic': return makeUnsupportedAdapter('anthropic', 'Anthropic does not expose a public fine-tune API; route via bedrock: or openai: for now.')
-    case 'bedrock': return makeUnsupportedAdapter('bedrock', 'Bedrock fine-tune requires AWS credentials; set MUSHI_BEDROCK_ENABLED=1 and add an IAM role before invoking.')
+    case 'anthropic': return makeUnsupportedAdapter(
+      'anthropic',
+      'Anthropic\'s direct fine-tuning API is not publicly available (May 2026). ' +
+      'To fine-tune a Claude model use Amazon Bedrock (base_model="bedrock:anthropic.claude-3-haiku-20240307-v1:0") — ' +
+      'Bedrock fine-tuning for Claude 3 Haiku is GA. ' +
+      'If you need direct Anthropic fine-tuning, contact your Anthropic account team. ' +
+      'See: https://anthropic.com/news/fine-tune-claude-3-haiku',
+    )
+    case 'bedrock': {
+      if (Deno.env.get('MUSHI_BEDROCK_FINETUNE_ENABLED') !== '1') {
+        return makeUnsupportedAdapter(
+          'bedrock',
+          'AWS Bedrock fine-tuning is not yet activated for this deployment. ' +
+          'Bedrock fine-tuning (CreateModelCustomizationJob) is GA and supports Claude 3 Haiku. ' +
+          'To enable: (1) set MUSHI_BEDROCK_FINETUNE_ENABLED=1, ' +
+          '(2) configure AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (or IAM role) in project BYOK settings, ' +
+          '(3) set BEDROCK_OUTPUT_S3_URI to an S3 bucket path for training outputs. ' +
+          'See: https://docs.aws.amazon.com/bedrock/latest/userguide/model-customization-submit.html',
+        )
+      }
+      return bedrockAdapter
+    }
     case 'stub':
     default:
       // Guard the stub so it never silently powers a real fine-tune job.
@@ -257,4 +277,155 @@ const stubAdapter: VendorAdapter = {
 function makeUnsupportedAdapter(name: VendorName, message: string): VendorAdapter {
   const err = () => { throw new Error(`[fine-tune vendor=${name}] ${message}`) }
   return { submit: err, poll: err, predict: err }
+}
+
+// ---------------------------------------------------------------------------
+// Bedrock adapter — GA as of Nov 2024 (Claude 3 Haiku fine-tuning).
+//
+// Gated behind MUSHI_BEDROCK_FINETUNE_ENABLED=1 because it requires:
+//   - AWS credentials (ACCESS_KEY_ID + SECRET_ACCESS_KEY or IAM role)
+//   - An S3 bucket for training data upload and output (BEDROCK_OUTPUT_S3_URI)
+//   - An IAM role that Bedrock can assume (BEDROCK_ROLE_ARN)
+//
+// Uses the Bedrock REST API directly (no AWS SDK dependency in Deno) via
+// SigV4 signing. Supports customizationType: FINE_TUNING.
+// ---------------------------------------------------------------------------
+
+const BEDROCK_REGION = Deno.env.get('AWS_REGION') ?? Deno.env.get('BEDROCK_REGION') ?? 'us-east-1'
+const BEDROCK_ENDPOINT = `https://bedrock.${BEDROCK_REGION}.amazonaws.com`
+
+async function bedrockFetch(
+  path: string,
+  method: string,
+  body?: unknown,
+): Promise<Response> {
+  const accessKeyId = Deno.env.get('AWS_ACCESS_KEY_ID') ?? ''
+  const secretKey = Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? ''
+  const sessionToken = Deno.env.get('AWS_SESSION_TOKEN')
+
+  if (!accessKeyId || !secretKey) {
+    throw new Error(
+      '[bedrock] AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be set. ' +
+      'For self-hosted deployments, add them to your project BYOK settings or environment.',
+    )
+  }
+
+  const url = `${BEDROCK_ENDPOINT}${path}`
+  const bodyStr = body ? JSON.stringify(body) : ''
+  const now = new Date()
+  const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').slice(0, 15) + 'Z'
+  const dateStamp = amzDate.slice(0, 8)
+  const service = 'bedrock'
+
+  // SigV4 signing (minimal implementation for Deno edge functions).
+  const encoder = new TextEncoder()
+  const hash = async (data: string | Uint8Array) => {
+    const buf = await crypto.subtle.digest('SHA-256', typeof data === 'string' ? encoder.encode(data) : data)
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+  const hmac = async (key: Uint8Array | string, data: string) => {
+    const k = typeof key === 'string' ? encoder.encode(key) : key
+    const cryptoKey = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(data))
+    return new Uint8Array(sig)
+  }
+
+  const payloadHash = await hash(bodyStr)
+  const headers: Record<string, string> = {
+    host: new URL(BEDROCK_ENDPOINT).host,
+    'x-amz-date': amzDate,
+    'content-type': 'application/json',
+    'x-amz-content-sha256': payloadHash,
+  }
+  if (sessionToken) headers['x-amz-security-token'] = sessionToken
+
+  const signedHeaders = Object.keys(headers).sort().join(';')
+  const canonicalHeaders = Object.keys(headers).sort().map(k => `${k}:${headers[k]}`).join('\n') + '\n'
+  const canonicalRequest = [method, path, '', canonicalHeaders, signedHeaders, payloadHash].join('\n')
+  const credScope = `${dateStamp}/${BEDROCK_REGION}/${service}/aws4_request`
+  const strToSign = ['AWS4-HMAC-SHA256', amzDate, credScope, await hash(canonicalRequest)].join('\n')
+
+  const signingKey = await (async () => {
+    let k = await hmac(`AWS4${secretKey}`, dateStamp)
+    k = await hmac(k, BEDROCK_REGION)
+    k = await hmac(k, service)
+    k = await hmac(k, 'aws4_request')
+    return k
+  })()
+  const sigBytes = await hmac(signingKey, strToSign)
+  const signature = Array.from(sigBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+
+  const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+
+  const res = await fetch(url, {
+    method,
+    headers: { ...headers, authorization: authHeader },
+    body: bodyStr || undefined,
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`Bedrock ${method} ${path} ${res.status}: ${txt.slice(0, 400)}`)
+  }
+  return res
+}
+
+const bedrockAdapter: VendorAdapter = {
+  async submit(_db, job) {
+    const roleArn = Deno.env.get('BEDROCK_ROLE_ARN')
+    const outputS3 = Deno.env.get('BEDROCK_OUTPUT_S3_URI')
+    if (!roleArn) throw new Error('[bedrock] BEDROCK_ROLE_ARN not set — Bedrock needs an IAM role to access your S3 data')
+    if (!outputS3) throw new Error('[bedrock] BEDROCK_OUTPUT_S3_URI not set — specify an s3://bucket/prefix/ for model outputs')
+
+    const jobName = `mushi-ft-${job.id.slice(0, 8)}-${Date.now()}`
+    const res = await bedrockFetch('/model-customization-jobs', 'POST', {
+      jobName,
+      customModelName: `mushi-${job.id.slice(0, 8)}`,
+      roleArn,
+      baseModelIdentifier: job.base_model.replace(/^bedrock:/, ''),
+      customizationType: 'FINE_TUNING',
+      trainingDataConfig: {
+        s3Uri: job.export_storage_path
+          ? `s3://${job.export_storage_path}`
+          : (() => { throw new Error('[bedrock] job has no export_storage_path — run export step first') })(),
+      },
+      outputDataConfig: { s3Uri: outputS3 },
+      hyperParameters: { epochCount: '1', batchSize: '8', learningRateMultiplier: '1.0' },
+    })
+    const json = await res.json() as { jobArn?: string }
+    const jobArn = json.jobArn ?? ''
+    return { vendor: 'bedrock', vendorJobId: jobArn, status: 'training' }
+  },
+
+  async poll(_db, job) {
+    if (!job.vendor_job_id) throw new Error('[bedrock] vendor_job_id (jobArn) not set')
+    const jobArnEncoded = encodeURIComponent(job.vendor_job_id)
+    const res = await bedrockFetch(`/model-customization-jobs/${jobArnEncoded}`, 'GET')
+    const json = await res.json() as { status?: string; outputModelArn?: string; failureMessage?: string }
+    const rawStatus = json.status ?? 'Unknown'
+    const succeeded = rawStatus === 'Completed'
+    const failed = rawStatus === 'Failed' || rawStatus === 'Stopped'
+    return {
+      vendor: 'bedrock',
+      status: succeeded ? 'succeeded' : failed ? 'failed' : 'training',
+      fineTunedModelId: json.outputModelArn ?? null,
+      error: json.failureMessage ?? null,
+      rawStatus,
+    }
+  },
+
+  async predict(_db, job, input) {
+    if (!job.fine_tuned_model_id) throw new Error('[bedrock] fine_tuned_model_id not set — poll until succeeded')
+    const modelId = encodeURIComponent(job.fine_tuned_model_id)
+    const res = await bedrockFetch(`/model/${modelId}/invoke`, 'POST', {
+      prompt: `\n\nHuman: ${input.userMessage ?? 'classify'}\n\nAssistant:`,
+      max_tokens_to_sample: 256,
+    })
+    const json = await res.json() as { completion?: string }
+    try {
+      const parsed = JSON.parse(json.completion ?? '{}')
+      return { category: parsed.category, severity: parsed.severity, summary: parsed.summary, component: parsed.component }
+    } catch {
+      return { category: 'unknown', severity: null, summary: json.completion?.slice(0, 200) ?? null, component: null }
+    }
+  },
 }
