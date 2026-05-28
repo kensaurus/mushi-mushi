@@ -22,7 +22,7 @@ export function PromptEditorModal({ prompt, onChange, onClose, onSave, saving }:
       dismissible={!saving}
       footer={
         <>
-          <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
+          <Btn variant="cancel" onClick={onClose} disabled={saving}>Cancel</Btn>
           <Btn onClick={onSave} disabled={saving} loading={saving} data-primary>Save</Btn>
         </>
       }

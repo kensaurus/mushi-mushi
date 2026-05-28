@@ -27,6 +27,7 @@ import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
 import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
+import { registerEvolutionRoutes } from './routes/evolution.ts';
 
 ensureSentry('api');
 
@@ -376,6 +377,7 @@ registerReportsDashboardRoutes(app);
 registerSettingsResearchRoutes(app);
 
 registerModernizationHealthSuperRoutes(app);
+registerEvolutionRoutes(app);
 
 registerBillingProjectsQueueGraphRoutes(app);
 

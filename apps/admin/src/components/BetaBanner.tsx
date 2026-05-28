@@ -67,14 +67,20 @@ export function BetaBanner() {
       <div
         role="region"
         aria-label="Beta announcement"
-        className="border-b border-brand/20 bg-brand/5 text-fg-secondary"
+        className="border-b border-[#39ff14]/35 bg-[#39ff14]/12 text-fg-secondary shadow-[inset_0_1px_0_0_rgba(57,255,20,0.15)]"
       >
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-1.5 text-xs">
           <span className="inline-flex min-w-0 flex-1 items-center gap-1.5">
-            <SignalChip tone="brand" className="font-mono text-[0.6rem] uppercase tracking-[0.18em]">
+            <SignalChip
+              tone="ok"
+              className="font-mono text-[0.6rem] uppercase tracking-[0.18em] border-[#39ff14]/50 bg-[#39ff14]/20 text-[#39ff14] shadow-[0_0_12px_rgba(57,255,20,0.35)]"
+            >
               Beta
             </SignalChip>
-            <ContainedBlock tone="muted" className="inline-block max-w-none border-brand/20 bg-brand/5 px-2 py-0.5">
+            <ContainedBlock
+              tone="ok"
+              className="inline-block max-w-none border-[#39ff14]/25 bg-[#39ff14]/8 px-2 py-0.5"
+            >
               <span className="text-pretty leading-snug text-xs">
                 Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
               </span>
@@ -90,14 +96,9 @@ export function BetaBanner() {
             <ActionPill to="/feedback" tone="neutral">
               My submissions
             </ActionPill>
-            <button
-              type="button"
-              onClick={handleDismiss}
-              aria-label="Dismiss beta announcement for 7 days"
-              className="rounded-sm px-1.5 py-0.5 text-2xs text-fg-faint hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-            >
+            <ActionPill onClick={handleDismiss} tone="danger">
               Dismiss
-            </button>
+            </ActionPill>
           </ActionPillRow>
         </div>
       </div>

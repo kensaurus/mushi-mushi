@@ -188,7 +188,7 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
             <button
               type="button"
               onClick={() => setDismissed(true)}
-              className="shrink-0 mt-0.5 text-amber-500 hover:text-amber-700 dark:text-amber-500 dark:hover:text-amber-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded"
+              className="shrink-0 mt-0.5 text-danger hover:bg-danger-muted/40 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/50"
               aria-label="Dismiss schema repair alert"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">

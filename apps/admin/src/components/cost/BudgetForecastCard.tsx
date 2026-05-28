@@ -134,7 +134,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
                   autoFocus
                 />
                 <Btn size="sm" variant="primary" onClick={handleSave} loading={saving}>Save</Btn>
-                <Btn size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Btn>
+                <Btn size="sm" variant="cancel" onClick={() => setEditing(false)}>Cancel</Btn>
               </>
             ) : (
               <Btn size="sm" variant="ghost" onClick={() => { setEditing(true); setTimeout(() => inputRef.current?.focus(), 50) }}>

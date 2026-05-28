@@ -152,7 +152,7 @@ export function InstalledPluginRow({
           </Btn>
           <Btn
             size="sm"
-            variant="ghost"
+            variant="cancel"
             leadingIcon={<IconClose size={12} />}
             onClick={() => setView('idle')}
           >

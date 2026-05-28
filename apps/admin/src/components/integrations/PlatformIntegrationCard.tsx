@@ -267,7 +267,7 @@ export function PlatformIntegrationCard({
               </Tooltip>
             )}
             {isEditing && (
-              <Btn variant="ghost" onClick={onCancelEdit}>
+              <Btn variant="cancel" onClick={onCancelEdit}>
                 Cancel
               </Btn>
             )}
@@ -339,7 +339,7 @@ export function PlatformIntegrationCard({
             <Btn onClick={onSave} disabled={saving} loading={saving}>
               Save
             </Btn>
-            <Btn variant="ghost" onClick={onCancelEdit}>Cancel</Btn>
+            <Btn variant="cancel" onClick={onCancelEdit}>Cancel</Btn>
           </div>
         </div>
       )}

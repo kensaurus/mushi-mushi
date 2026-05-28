@@ -158,7 +158,7 @@ export function GroupsPanel() {
         dismissible={!merging}
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setMergeSource(null)} disabled={merging}>Cancel</Btn>
+            <Btn variant="cancel" onClick={() => setMergeSource(null)} disabled={merging}>Cancel</Btn>
             <Btn onClick={performMerge} disabled={merging || !mergeTarget} loading={merging} data-primary>
               Merge groups
             </Btn>

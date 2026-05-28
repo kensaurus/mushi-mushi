@@ -228,7 +228,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
               >
                 <Btn size="sm" variant="ghost">View my submissions</Btn>
               </Link>
-              <Btn size="sm" variant="ghost" onClick={onClose}>Close now</Btn>
+              <Btn size="sm" variant="cancel" onClick={onClose}>Close now</Btn>
             </div>
           </div>
         ) : (
@@ -318,7 +318,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                   or email us directly
                 </a>
                 <div className="flex gap-1.5">
-                  <Btn type="button" variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
+                  <Btn type="button" variant="cancel" size="sm" onClick={onClose} disabled={submitting}>
                     Cancel
                   </Btn>
                   <Btn type="submit" size="sm" loading={submitting}>

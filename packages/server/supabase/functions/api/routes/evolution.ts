@@ -56,10 +56,12 @@ async function buildPrivacyStatus(c: Context<{ Variables: Variables }>, pid: str
     ok: true,
     data: {
       byok_configured: byokConfigured,
+      llm_provider: byokConfigured ? 'byok' : 'platform',
       storage_provider: 'supabase',
       region: 'ap-southeast-1',
       retention_days: 90,
       last_audit_at: (row?.byok_status_checked_at as string | null) ?? null,
+      require_byok: false,
     },
   })
 }

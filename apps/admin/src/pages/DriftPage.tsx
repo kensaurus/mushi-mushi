@@ -548,7 +548,7 @@ function FindingsTab({
                     {f.severity === 'critical' && (
                       <Btn size="sm" variant="ghost" onClick={() => onCreateLesson(f.id)}>→ Lesson</Btn>
                     )}
-                    <Btn size="sm" variant="ghost" onClick={() => onDismiss(f.id)}>Dismiss</Btn>
+                    <Btn size="sm" variant="cancel" onClick={() => onDismiss(f.id)}>Dismiss</Btn>
                   </div>
                 </td>
               </tr>
@@ -729,7 +729,7 @@ function FindingDetailDrawer({
               Promote to lesson
             </Btn>
           )}
-          <Btn variant="ghost" size="sm" onClick={() => { onDismiss(finding.id); onClose() }}>
+          <Btn variant="cancel" size="sm" onClick={() => { onDismiss(finding.id); onClose() }}>
             Dismiss
           </Btn>
         </div>

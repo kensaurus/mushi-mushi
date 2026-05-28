@@ -1604,7 +1604,9 @@ export function Layout({ children }: { children: ReactNode }) {
               {!focusMode && <NextBestAction />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}
-              {fallbackHero && (
+              {/* Beginner mode uses NextBestAction — skip layout PageHero to avoid
+                  duplicating the same guidance (NN/g #8 Aesthetic & Minimalist). */}
+              {fallbackHero && !isBeginner && (
                 <PageHero
                   scope={fallbackHero.scope}
                   title={fallbackHero.title}

@@ -64,7 +64,7 @@ export function InstallForm({
         onChange={(e) => onEventsChange(e.target.value)}
       />
       <div className="flex justify-end gap-2">
-        <Btn variant="ghost" size="sm" onClick={onCancel}>
+        <Btn variant="cancel" size="sm" onClick={onCancel}>
           Cancel
         </Btn>
         <Btn size="sm" onClick={onSubmit} disabled={installing} loading={installing}>

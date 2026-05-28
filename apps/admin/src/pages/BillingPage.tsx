@@ -1791,7 +1791,7 @@ function TicketDetailModal({
       }
       footer={
         <>
-          <Btn size="sm" variant="ghost" onClick={onClose}>
+          <Btn size="sm" variant="cancel" onClick={onClose}>
             Close
           </Btn>
           {cancellable && !confirming && (

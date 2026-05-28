@@ -370,7 +370,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
               <p className="text-2xs text-fg-faint">Type stage1 or stage2 exactly.</p>
             </div>
             <div className="flex gap-2 justify-end">
-              <Btn size="sm" variant="ghost" onClick={() => setAskingStage(false)} disabled={creating}>Cancel</Btn>
+              <Btn size="sm" variant="cancel" onClick={() => setAskingStage(false)} disabled={creating}>Cancel</Btn>
               <Btn
                 size="sm"
                 loading={creating}

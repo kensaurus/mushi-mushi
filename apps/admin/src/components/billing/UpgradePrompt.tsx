@@ -243,7 +243,7 @@ export function UpgradePromptHost() {
             <button
               type="button"
               onClick={dismiss}
-              className="text-xs text-fg-muted hover:text-fg"
+              className="rounded-sm border border-danger/40 bg-danger-muted/40 px-2 py-0.5 text-xs font-medium text-danger hover:bg-danger-muted hover:border-danger/50 motion-safe:transition-colors"
             >
               Dismiss
             </button>

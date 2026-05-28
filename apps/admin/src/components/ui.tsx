@@ -2062,16 +2062,17 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /**
    * Visual intent.
    *  - `primary`: default brand action.
-   *  - `ghost`:   neutral / cancel / read-only.
+   *  - `ghost`:   neutral secondary actions (Refresh, Back, View details).
+   *  - `cancel`:  dismiss / cancel / close — red affordance (not destructive-primary).
    *  - `danger`:  destructive / irreversible (Delete, Reject, Revoke,
-   *               Disconnect, Uninstall, Flag, Cancel-subscription).
+   *               Disconnect, Uninstall, Flag, Dismiss report).
    *  - `success`: forward / un-blocking action (Start triage, Complete,
    *               Approve, Retry — anything that progresses the user
    *               through their workflow). Mirrors the `ok` semantic
    *               token so tone is consistent with PageHero severity
    *               and SidebarHealthDot.
    */
-  variant?: 'primary' | 'ghost' | 'danger' | 'success'
+  variant?: 'primary' | 'ghost' | 'cancel' | 'danger' | 'success'
   size?: 'sm' | 'md'
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
@@ -2098,6 +2099,8 @@ const BTN_VARIANTS = {
     'bg-brand text-brand-fg shadow-card hover:bg-brand-hover hover:shadow-raised hover:-translate-y-px',
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge hover:-translate-y-px',
+  cancel:
+    'bg-danger-muted/60 text-danger border border-danger/40 hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px',
   danger:
     'bg-danger-muted text-danger border border-danger/30 hover:bg-danger-muted/80 hover:border-danger/40 hover:-translate-y-px',
   success:
