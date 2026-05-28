@@ -388,7 +388,7 @@ async function crawlAndPersist(db: SupabaseClient, projectId: string, triggeredB
   // safe default; the Gate-3 diff that overrides with a stricter "must
   // be observed at runtime" comparison is opt-in via the
   // `crawler_strict_api_contract` flag we'll ship later.
-  for (const a of project.inventory.dependencies?.apis ?? []) {
+  for (const a of (project.inventory.dependencies?.apis ?? []) as Array<{ method: string; path: string }>) {
     discoveredApiSet.add(`${a.method}:${a.path}`)
   }
 
