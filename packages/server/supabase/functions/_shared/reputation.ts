@@ -328,12 +328,12 @@ export async function awardPointsForEndUser(
         points: pointsAwarded,
         reportId,
       },
-    ).catch((err) => rlog.warn('notification_failed', { error: String(err) }))
+    ).then(undefined, (err: unknown) => rlog.warn('notification_failed', { error: String(err) }))
   }
 
   // 8. Also keep legacy reporter_reputation in sync
   if (reporterTokenHash) {
-    awardPoints(db, projectId, reporterTokenHash, { action }).catch((err) =>
+    awardPoints(db, projectId, reporterTokenHash, { action }).then(undefined, (err: unknown) =>
       rlog.warn('legacy_rep_sync_failed', { error: String(err) }),
     )
   }
