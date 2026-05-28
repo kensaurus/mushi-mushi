@@ -418,11 +418,10 @@ Deno.serve(
               assertion_failures: result.assertion_failures,
               provider_session_url: result.provider_session_url,
             },
-          }).then(() => {
-            rlog.info({ storyId: story.id, runId }, 'a2a push queued')
-          }).catch((err: unknown) => {
-            rlog.warn({ err }, 'a2a push failed — non-fatal')
-          })
+          }).then(
+            () => { rlog.info({ storyId: story.id, runId }, 'a2a push queued') },
+            (err: unknown) => { rlog.warn({ err }, 'a2a push failed — non-fatal') },
+          )
         }
 
         rlog.info({ storyId: story.id, runId, status: result.status }, 'story run complete')
