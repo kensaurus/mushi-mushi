@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createApp, defineComponent, h } from 'vue'
+import { createApp, defineComponent, h, type ComponentPublicInstance } from 'vue'
 
 // `vi.mock` is hoisted ABOVE module-level `const` declarations, so the
 // factory cannot reference closure variables defined below it (TDZ:
@@ -118,7 +118,7 @@ describe('MushiPlugin', () => {
 
     const handler = app.config.errorHandler!
     const err = new Error('boom')
-    handler(err, null as unknown as import('vue').ComponentPublicInstance, 'mounted hook')
+    handler(err, null as unknown as ComponentPublicInstance, 'mounted hook')
 
     expect(upstream).toHaveBeenCalledWith(err, null, 'mounted hook')
     expect(mockCaptureException).toHaveBeenCalled()
