@@ -193,7 +193,8 @@ describe('useMushi', () => {
 
 describe('useMushiReport', () => {
   it('throws when plugin is not installed', async () => {
-    let submitFn: ((data: unknown) => Promise<void>) | undefined
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let submitFn: ((data: any) => Promise<void>) | undefined
     const app = createApp(
       defineComponent({
         setup() {
