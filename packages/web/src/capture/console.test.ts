@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { describe, it, expect, afterEach } from 'vitest';
 import { createConsoleCapture } from './console';
 
