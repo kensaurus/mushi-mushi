@@ -38,6 +38,10 @@ import { registerDriftRoutes } from './routes/drift.ts';
 import { registerExperimentsRoutes } from './routes/experiments.ts';
 import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
+import { registerEvolutionRoutes } from './routes/evolution.ts';
+import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
+import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
+import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 
 ensureSentry('api');
 
@@ -418,6 +422,10 @@ registerDriftRoutes(app);
 registerExperimentsRoutes(app);
 registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
+registerEvolutionRoutes(app);
+registerTesterMarketplaceRoutes(app);
+registerPublishedAppsRoutes(app);
+registerDbAdvisorsRoutes(app);
 
 registerA2ATaskRoutes(app);
 

@@ -821,7 +821,7 @@ function ConfiguratorPanel({
                   {config.trigger === value && <span className="w-1.5 h-1.5 rounded-full bg-brand-fg" />}
                 </span>
                 <span className="font-medium">{label}</span>
-                {value === 'banner' && <span className="ml-auto text-3xs text-ok uppercase tracking-wider font-semibold">Default</span>}
+                {value === 'banner' && <span className="ml-auto text-3xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
               </button>
             ))}
           </div>

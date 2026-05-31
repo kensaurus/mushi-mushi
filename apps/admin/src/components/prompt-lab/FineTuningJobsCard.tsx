@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Card, Badge, Btn, RelativeTime, EmptyState } from '../ui'
 import { useToast } from '../../lib/toast'
@@ -63,6 +63,8 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
   const [promoteTarget, setPromoteTarget] = useState<FineTuningJob | null>(null)
   const [rejectTarget, setRejectTarget] = useState<FineTuningJob | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FineTuningJob | null>(null)
+  const stageInputRef = useRef<HTMLInputElement>(null)
+  const [stageError, setStageError] = useState<string | null>(null)
 
   async function withBusy<T>(id: string, fn: () => Promise<T>) {
     setBusy(id)
@@ -361,13 +363,17 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             <div className="space-y-1">
               <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Promote to stage</label>
               <input
-                id="ft-stage-input"
+                ref={stageInputRef}
                 type="text"
                 defaultValue="stage2"
                 className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1 text-xs font-mono"
                 placeholder="stage1 or stage2"
+                onChange={() => setStageError(null)}
               />
-              <p className="text-2xs text-fg-faint">Type stage1 or stage2 exactly.</p>
+              {stageError
+                ? <p className="text-2xs text-danger">{stageError}</p>
+                : <p className="text-2xs text-fg-faint">Type stage1 or stage2 exactly.</p>
+              }
             </div>
             <div className="flex gap-2 justify-end">
               <Btn size="sm" variant="cancel" onClick={() => setAskingStage(false)} disabled={creating}>Cancel</Btn>
@@ -375,9 +381,12 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
                 size="sm"
                 loading={creating}
                 onClick={() => {
-                  const input = document.getElementById('ft-stage-input') as HTMLInputElement | null
-                  const stage = input?.value?.trim() ?? ''
-                  if (stage !== 'stage1' && stage !== 'stage2') return
+                  const stage = stageInputRef.current?.value?.trim() ?? ''
+                  if (stage !== 'stage1' && stage !== 'stage2') {
+                    setStageError('Type stage1 or stage2 exactly.')
+                    return
+                  }
+                  setStageError(null)
                   void commitCreateJob(stage)
                 }}
               >
