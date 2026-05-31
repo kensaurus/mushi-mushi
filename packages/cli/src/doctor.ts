@@ -73,6 +73,8 @@ export async function checkEndpointReachability(
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<DoctorCheck> {
   try {
+    // Config-file data intentionally used to probe the user's own endpoint.
+    // lgtm[js/file-data-in-outbound-request]
     const res = await doFetch(`${endpoint}/health`, {
       signal: AbortSignal.timeout(5000),
     })
@@ -91,11 +93,12 @@ export async function checkEndpointReachability(
 
 export async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> {
   try {
-    const { readFile, access } = await import('node:fs/promises')
+    const { readFile } = await import('node:fs/promises')
     const { join, resolve } = await import('node:path')
     const root = resolve(cwd)
     const pkgPath = join(root, 'package.json')
-    await access(pkgPath)
+    // Read directly — the catch block handles ENOENT. Skipping the
+    // `access()` pre-check eliminates the TOCTOU race between check and read.
     const pkg = JSON.parse(await readFile(pkgPath, 'utf8')) as {
       dependencies?: Record<string, string>
       devDependencies?: Record<string, string>
@@ -139,6 +142,8 @@ export async function checkServerPreflight(
   }
 
   try {
+    // Config-file values (endpoint, projectId, apiKey) are intentionally
+    // forwarded to the user's own server. lgtm[js/file-data-in-outbound-request]
     const res = await doFetch(
       `${config.endpoint}/v1/admin/projects/${config.projectId}/preflight`,
       {
