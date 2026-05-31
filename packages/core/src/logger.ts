@@ -141,6 +141,7 @@ function formatJson(entry: LogEntry): string {
   return JSON.stringify(entry)
 }
 
+/* eslint-disable no-console */
 function emit(level: LogLevel, formatted: string): void {
   switch (level) {
     case 'error':
@@ -151,9 +152,10 @@ function emit(level: LogLevel, formatted: string): void {
       console.warn(formatted)
       break
     default:
-      console.warn(formatted)
+      console.log(formatted)
   }
 }
+/* eslint-enable no-console */
 
 function buildLogger(
   scope: string,
