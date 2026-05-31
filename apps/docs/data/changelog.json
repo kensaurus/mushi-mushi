@@ -4,6 +4,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.7.1",
       "1.7.0"
     ],
     "highlights": [],
@@ -14,7 +15,7 @@
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.7.0"
+        "version": "1.7.1"
       }
     ]
   },

@@ -1,5 +1,17 @@
 # @mushi-mushi/web
 
+## 1.7.1
+
+### Patch Changes
+
+- fix: pin @mushi-mushi/core to ^1.7.0 in published package.json
+
+  The `workspace:^` protocol was leaking into published tarballs because
+  `changeset publish` does not trigger pnpm's native workspace: rewriting.
+  External consumers using npm/yarn were getting `EUNSUPPORTEDPROTOCOL` on
+  every install. This patch pins the dep to the real semver range and tightens
+  the `check-workspace-protocol` guard to block all `workspace:` variants.
+
 ## 1.7.0
 
 ### Minor Changes

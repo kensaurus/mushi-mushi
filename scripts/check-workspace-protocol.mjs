@@ -23,12 +23,16 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SEARCH_DIRS = ['packages', 'apps']
-// Block ONLY the unsafe specifiers. `workspace:^` and `workspace:~` are the
-// recommended pnpm syntax — pnpm replaces them with a real `^X.Y.Z` / `~X.Y.Z`
-// range in the published tarball at `pnpm publish` time. `workspace:*` and the
-// other protocols (link/file/portal/catalog) DO leak into tarballs and break
-// `npm install` for end users (see CVE-style incident in 2026-04, `ed64f7f`).
-const PROTOCOL_RE = /^(workspace:\*|link:|file:|portal:|catalog:)/
+// Block ALL workspace: specifiers. Although pnpm is supposed to rewrite
+// `workspace:^` and `workspace:~` to real semver ranges at `pnpm publish`
+// time, in practice `changeset publish` bypasses this rewriting and leaks
+// the protocol into the published tarball (observed in @mushi-mushi/web@1.6.0
+// and @mushi-mushi/web@1.7.0). External users running `npm install` get
+// EUNSUPPORTEDPROTOCOL on any workspace: specifier.
+// Source packages should use `workspace:^` but the CHANGELOG/version-packages
+// step must pin real semver before publishing. Enforce this by blocking all
+// workspace: variants here.
+const PROTOCOL_RE = /^workspace:/
 
 async function findPackageManifests(rootDir) {
   const manifests = []

@@ -8,12 +8,12 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## v1.7.x
 
-Latest tag: `v1.7.0`
+Latest tag: `v1.7.1`
 
 ### Packages bumped
 
 - `@mushi-mushi/core` → 1.7.0
-- `@mushi-mushi/web` → 1.7.0
+- `@mushi-mushi/web` → 1.7.1
 
 ## v1.6.x
 
