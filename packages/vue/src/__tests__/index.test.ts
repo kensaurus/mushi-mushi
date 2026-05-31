@@ -118,7 +118,7 @@ describe('MushiPlugin', () => {
 
     const handler = app.config.errorHandler!
     const err = new Error('boom')
-    handler(err, null as any, 'mounted hook')
+    handler(err, null as unknown as import('vue').ComponentPublicInstance, 'mounted hook')
 
     expect(upstream).toHaveBeenCalledWith(err, null, 'mounted hook')
     expect(mockCaptureException).toHaveBeenCalled()
