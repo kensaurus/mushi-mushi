@@ -1324,15 +1324,22 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-banner-dismiss {
       background: transparent !important;
       border: none !important;
-      opacity: 0.55;
+      opacity: 0.65;
       cursor: pointer;
       font-size: 14px;
       line-height: 1;
-      padding: 4px 6px;
+      padding: 4px 8px;
+      margin-left: auto;
       flex-shrink: 0;
       color: inherit;
+      border-radius: 3px;
+      transition: opacity 0.15s, background 0.15s;
     }
-    .mushi-banner-dismiss:hover { opacity: 0.85; }
+    .mushi-banner-dismiss:hover {
+      opacity: 1;
+      background: rgba(0,0,0,0.12) !important;
+    }
+    .mushi-banner.neon .mushi-banner-dismiss:hover { background: rgba(0,0,0,0.18) !important; }
 
     @keyframes mushi-banner-slide-in {
       from { transform: translateY(calc(-1 * 100%)); opacity: 0.5; }

@@ -597,9 +597,46 @@ export class MushiWidget {
     return action !== 'never' && action !== 'manual';
   }
 
+  /** Height of the banner in px — kept in sync with the CSS `.mushi-banner` height (36px). */
+  private static readonly BANNER_HEIGHT = 36;
+
+  /** CSS property applied to document.body so host-app content doesn't slide under the banner. */
+  private static readonly BODY_NUDGE_PROP = '--mushi-banner-offset';
+
+  private applyBodyNudge(position: 'top' | 'bottom'): void {
+    const h = `${MushiWidget.BANNER_HEIGHT}px`;
+    if (position === 'top') {
+      document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
+      // Only nudge if the host hasn't already set an explicit body padding-top
+      // (check inline style only — computed style includes CSS rules we shouldn't clobber).
+      if (!document.body.style.paddingTop) {
+        document.body.style.paddingTop = h;
+        document.body.dataset.mushiBannerNudged = 'top';
+      }
+    } else {
+      document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
+      if (!document.body.style.paddingBottom) {
+        document.body.style.paddingBottom = h;
+        document.body.dataset.mushiBannerNudged = 'bottom';
+      }
+    }
+  }
+
+  private removeBodyNudge(): void {
+    document.documentElement.style.removeProperty(MushiWidget.BODY_NUDGE_PROP);
+    const nudged = document.body.dataset.mushiBannerNudged;
+    if (nudged === 'top') {
+      document.body.style.paddingTop = '';
+      delete document.body.dataset.mushiBannerNudged;
+    } else if (nudged === 'bottom') {
+      document.body.style.paddingBottom = '';
+      delete document.body.dataset.mushiBannerNudged;
+    }
+  }
+
   private renderBanner(): void {
     if (this.config.trigger !== 'banner') return;
-    if (this.bannerDismissed) return;
+    if (this.bannerDismissed) { this.removeBodyNudge(); return; }
     if (!this.triggerVisible) return;
     if (this.isRouteHidden()) return;
 
@@ -627,6 +664,7 @@ export class MushiWidget {
     dismissBtn.setAttribute('aria-label', 'Dismiss feedback banner');
     dismissBtn.addEventListener('click', () => {
       this.bannerDismissed = true;
+      this.removeBodyNudge();
       this.render();
     });
 
@@ -642,6 +680,9 @@ export class MushiWidget {
 
     banner.appendChild(dismissBtn);
     this.shadow.appendChild(banner);
+
+    // Push body content so the banner doesn't overlap the host app's navigation.
+    this.applyBodyNudge(position);
   }
 
   private effectiveTrigger(): NonNullable<MushiWidgetConfig['trigger']> {

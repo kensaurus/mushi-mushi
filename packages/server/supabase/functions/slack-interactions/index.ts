@@ -114,18 +114,30 @@ Deno.serve(
 
     // Kick the dispatch in the background so we can answer Slack within
     // the 3s SLA. The response_url gets the final status.
+    //
+    // `EdgeRuntime.waitUntil` keeps the Deno isolate alive after the response
+    // is returned so the background work actually runs. Without it, Supabase
+    // terminates the isolate as soon as the response is dispatched, which
+    // silently drops the async `finishDispatch` call before the DB insert lands.
     const responseUrl = payload.response_url
     const slackUser = payload.user?.id ?? 'unknown'
 
-    finishDispatch({
+    const dispatchPromise = finishDispatch({
       reportId,
       projectId: report.project_id,
       responseUrl,
       slackUser,
       slackThreadTs: report.slack_message_ts ?? undefined,
+      slackMeta: { source: 'slack', slackUserId: slackUser, triggeredAt: new Date().toISOString() },
     }).catch((err) => {
       log.error('Async dispatch failed', { err: String(err) })
     })
+
+    // Keep the isolate alive for the background work (Supabase Deno runtime).
+    if (typeof (globalThis as Record<string, unknown>).EdgeRuntime !== 'undefined') {
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime.waitUntil(dispatchPromise)
+    }
 
     return ephemeral(':hourglass_flowing_sand: Dispatching fix — PR will land in `/fixes` shortly.')
   }),
@@ -144,12 +156,14 @@ async function finishDispatch(input: {
   responseUrl?: string
   slackUser: string
   slackThreadTs?: string
+  slackMeta?: Record<string, unknown>
 }) {
   const result = await dispatchFixForReport({
     reportId: input.reportId,
     projectId: input.projectId,
-    requestedBy: `slack:${input.slackUser}`,
+    requestedBy: null,
     skipMembershipCheck: true,
+    metadata: input.slackMeta,
   })
 
   // Post a threaded Slack reply via bot if we have the thread timestamp.
