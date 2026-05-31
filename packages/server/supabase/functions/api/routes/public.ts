@@ -53,6 +53,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
   const SDK_SCREENSHOT_MODES = ['on-report', 'auto', 'off'] as const;
   const SDK_NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const;
+  const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'manual', 'hidden'] as const;
+  const SDK_BANNER_VARIANTS = ['neon', 'brand', 'subtle'] as const;
+  const SDK_BANNER_POSITIONS_LOCAL = ['top', 'bottom'] as const;
 
   type SdkWidgetPosition = (typeof SDK_WIDGET_POSITIONS)[number];
   type SdkWidgetTheme = (typeof SDK_WIDGET_THEMES)[number];
@@ -65,6 +68,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     sdk_widget_position?: string | null;
     sdk_widget_theme?: string | null;
     sdk_widget_trigger_text?: string | null;
+    sdk_widget_launcher?: string | null;
+    sdk_banner_variant?: string | null;
+    sdk_banner_position?: string | null;
+    sdk_banner_bug_cta?: string | null;
+    sdk_banner_feature_cta?: boolean | null;
     sdk_capture_console?: boolean | null;
     sdk_capture_network?: boolean | null;
     sdk_capture_performance?: boolean | null;
@@ -99,6 +107,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         position: oneOf(row?.sdk_widget_position, SDK_WIDGET_POSITIONS, 'bottom-right'),
         theme: oneOf(row?.sdk_widget_theme, SDK_WIDGET_THEMES, 'auto'),
         triggerText: row?.sdk_widget_trigger_text ?? null,
+        launcher: oneOf(row?.sdk_widget_launcher, SDK_WIDGET_LAUNCHERS, 'auto'),
+        bannerVariant: oneOf(row?.sdk_banner_variant, SDK_BANNER_VARIANTS, 'brand'),
+        bannerPosition: oneOf(row?.sdk_banner_position, SDK_BANNER_POSITIONS_LOCAL, 'top'),
+        bannerBugCta: row?.sdk_banner_bug_cta ?? null,
+        bannerFeatureCta: row?.sdk_banner_feature_cta ?? true,
       },
       capture: {
         console: row?.sdk_capture_console ?? true,
@@ -230,6 +243,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .from('project_settings')
       .select(
         'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )

@@ -171,6 +171,8 @@ export class MushiWidget {
    *  Drives a different success copy so the user knows the report
    *  hasn't actually reached the console yet. */
   private lastSubmitQueuedOffline = false;
+  /** Whether the user has clicked ✕ on the header banner this session. */
+  private bannerDismissed = false;
 
   constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
     this.config = {
@@ -190,6 +192,7 @@ export class MushiWidget {
       locale: config.locale ?? 'auto',
       zIndex: config.zIndex ?? 99999,
       trigger: config.trigger ?? 'auto',
+      bannerConfig: config.bannerConfig ?? {},
       attachToSelector: config.attachToSelector ?? '',
       inset: config.inset ?? {},
       respectSafeArea: config.respectSafeArea ?? true,
@@ -579,7 +582,12 @@ export class MushiWidget {
   private shouldRenderTrigger(): boolean {
     if (!this.triggerVisible) return false;
     if (this.triggerHiddenByScroll) return false;
-    if (this.config.trigger === 'manual' || this.config.trigger === 'hidden' || this.config.trigger === 'attach') {
+    if (
+      this.config.trigger === 'manual' ||
+      this.config.trigger === 'hidden' ||
+      this.config.trigger === 'attach' ||
+      this.config.trigger === 'banner'
+    ) {
       return false;
     }
     if (this.isMobileSmartHidden()) return false;
@@ -587,6 +595,53 @@ export class MushiWidget {
     if (this.config.hideOnSelector && document.querySelector(this.config.hideOnSelector)) return false;
     const action = this.config.environments[this.detectEnvironment()];
     return action !== 'never' && action !== 'manual';
+  }
+
+  private renderBanner(): void {
+    if (this.config.trigger !== 'banner') return;
+    if (this.bannerDismissed) return;
+    if (!this.triggerVisible) return;
+    if (this.isRouteHidden()) return;
+
+    const bc = this.config.bannerConfig ?? {};
+    const variant  = bc.variant  ?? 'brand';
+    const position = bc.position ?? 'top';
+    const bugLabel = bc.bugCta   ?? '🐛 Report a bug';
+    const showFeat = bc.featureCta !== false;
+    const featLabel = bc.featureCtaLabel ?? '✨ Request feature';
+    const zIdx = bc.zIndex ?? (this.config.zIndex ?? 99999) - 1;
+
+    const banner = document.createElement('div');
+    banner.className = `mushi-banner ${variant} ${position}`;
+    banner.style.setProperty('--mushi-banner-z', String(zIdx));
+    banner.setAttribute('role', 'banner');
+
+    const bugBtn = document.createElement('button');
+    bugBtn.className = 'mushi-banner-btn';
+    bugBtn.textContent = bugLabel;
+    bugBtn.addEventListener('click', () => this.open());
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'mushi-banner-dismiss';
+    dismissBtn.textContent = '✕';
+    dismissBtn.setAttribute('aria-label', 'Dismiss feedback banner');
+    dismissBtn.addEventListener('click', () => {
+      this.bannerDismissed = true;
+      this.render();
+    });
+
+    banner.appendChild(bugBtn);
+
+    if (showFeat) {
+      const featBtn = document.createElement('button');
+      featBtn.className = 'mushi-banner-btn';
+      featBtn.textContent = featLabel;
+      featBtn.addEventListener('click', () => this.open({ featureRequest: true }));
+      banner.appendChild(featBtn);
+    }
+
+    banner.appendChild(dismissBtn);
+    this.shadow.appendChild(banner);
   }
 
   private effectiveTrigger(): NonNullable<MushiWidgetConfig['trigger']> {
@@ -636,6 +691,8 @@ export class MushiWidget {
     const style = document.createElement('style');
     style.textContent = getWidgetStyles(theme);
     this.shadow.appendChild(style);
+
+    this.renderBanner();
 
     if (this.shouldRenderTrigger()) {
       const effectiveTrigger = this.effectiveTrigger();

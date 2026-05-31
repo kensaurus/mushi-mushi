@@ -55,9 +55,17 @@ export interface MushiWidgetConfig {
   zIndex?: number;
   /**
    * Controls how, or whether, the default trigger is injected.
-   * `auto` preserves the historical floating stamp button.
+   * `auto`   — historical floating stamp FAB.
+   * `banner` — slim full-width header strip (recommended default; less obtrusive
+   *            than a FAB and visible even when the SDK launcher is `hide()`'d).
+   *            Pair with `bannerConfig` to customise appearance.
    */
-  trigger?: 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden';
+  trigger?: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden';
+  /**
+   * Configuration for the header-banner launcher mode.
+   * Only applies when `trigger === 'banner'`.
+   */
+  bannerConfig?: MushiBannerConfig;
   /** CSS selector used when `trigger` is `attach`. */
   attachToSelector?: string;
   /**
@@ -117,6 +125,34 @@ export interface MushiWidgetConfig {
   featureRequestDescription?: string;
   /** Minimum description character count before the submit button enables. */
   minDescriptionLength?: number;
+}
+
+/**
+ * Configuration for the `trigger: 'banner'` header-strip launcher.
+ *
+ * The banner renders as a slim, full-width strip pinned to the top of the
+ * viewport (or bottom if `position === 'bottom'`). It is styled to match the
+ * app's brand accent and dismissed per-session via a ✕ button.
+ *
+ * Variants
+ * --------
+ * `neon`   — lime / electric-green strip (high contrast, dev / beta tool feel).
+ * `brand`  — uses the Mushi vermillion accent (editorial, app-quality feel).
+ * `subtle` — near-invisible hairline with muted text (least disruptive).
+ */
+export interface MushiBannerConfig {
+  /** Visual style of the banner strip. Defaults to `'brand'`. */
+  variant?: 'neon' | 'brand' | 'subtle';
+  /** 'top' pins the banner below any existing sticky headers; 'bottom' pins above bottom navs. Defaults to 'top'. */
+  position?: 'top' | 'bottom';
+  /** Override the call-to-action text in the banner. Defaults to 'Report a bug'. */
+  bugCta?: string;
+  /** Show a "✨ Request a feature" button alongside the bug button. Defaults to true. */
+  featureCta?: boolean;
+  /** Override the feature-request button label. */
+  featureCtaLabel?: string;
+  /** CSS z-index of the banner element. Defaults to the widget's configured zIndex. */
+  zIndex?: number;
 }
 
 export interface MushiBetaModeConfig {

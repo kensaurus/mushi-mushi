@@ -170,6 +170,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .from('project_settings')
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -199,6 +200,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )

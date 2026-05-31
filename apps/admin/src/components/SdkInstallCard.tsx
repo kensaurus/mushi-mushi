@@ -41,6 +41,8 @@ import {
   isMobileFramework,
   isServerFramework,
   renderSnippet,
+  type BannerPosition,
+  type BannerVariant,
   type Framework,
   type ScreenshotMode,
   type SdkPreviewConfig,
@@ -89,6 +91,11 @@ interface RemoteSdkConfig {
     trigger?: WidgetTrigger
     triggerText?: string | null
     attachToSelector?: string | null
+    launcher?: WidgetTrigger
+    bannerVariant?: BannerVariant
+    bannerPosition?: BannerPosition
+    bannerBugCta?: string | null
+    bannerFeatureCta?: boolean
   }
   capture?: SdkPreviewConfig['capture']
   native?: SdkPreviewConfig['native']
@@ -98,9 +105,13 @@ function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
   return {
     position: remote.widget?.position ?? DEFAULT_SDK_CONFIG.position,
     theme: remote.widget?.theme ?? DEFAULT_SDK_CONFIG.theme,
-    trigger: remote.widget?.trigger ?? DEFAULT_SDK_CONFIG.trigger,
+    trigger: remote.widget?.launcher ?? remote.widget?.trigger ?? DEFAULT_SDK_CONFIG.trigger,
     triggerText: remote.widget?.triggerText ?? DEFAULT_SDK_CONFIG.triggerText,
     attachToSelector: remote.widget?.attachToSelector ?? DEFAULT_SDK_CONFIG.attachToSelector,
+    bannerVariant: remote.widget?.bannerVariant ?? DEFAULT_SDK_CONFIG.bannerVariant,
+    bannerPosition: remote.widget?.bannerPosition ?? DEFAULT_SDK_CONFIG.bannerPosition,
+    bannerBugCta: remote.widget?.bannerBugCta ?? DEFAULT_SDK_CONFIG.bannerBugCta,
+    bannerFeatureCta: remote.widget?.bannerFeatureCta ?? DEFAULT_SDK_CONFIG.bannerFeatureCta,
     capture: {
       console: remote.capture?.console ?? DEFAULT_SDK_CONFIG.capture.console,
       network: remote.capture?.network ?? DEFAULT_SDK_CONFIG.capture.network,
@@ -122,8 +133,13 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
       position: config.position,
       theme: config.theme,
       trigger: config.trigger,
+      launcher: config.trigger,
       triggerText: config.triggerText.trim() ? config.triggerText : null,
       attachToSelector: config.attachToSelector.trim() || null,
+      bannerVariant: config.bannerVariant,
+      bannerPosition: config.bannerPosition,
+      bannerBugCta: config.bannerBugCta.trim() || null,
+      bannerFeatureCta: config.bannerFeatureCta,
     },
     capture: config.capture,
     native: config.native,
@@ -213,6 +229,10 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
     config.trigger === DEFAULT_SDK_CONFIG.trigger &&
     config.triggerText === DEFAULT_SDK_CONFIG.triggerText &&
     config.attachToSelector === DEFAULT_SDK_CONFIG.attachToSelector &&
+    config.bannerVariant === DEFAULT_SDK_CONFIG.bannerVariant &&
+    config.bannerPosition === DEFAULT_SDK_CONFIG.bannerPosition &&
+    config.bannerBugCta === DEFAULT_SDK_CONFIG.bannerBugCta &&
+    config.bannerFeatureCta === DEFAULT_SDK_CONFIG.bannerFeatureCta &&
     config.capture.console === DEFAULT_SDK_CONFIG.capture.console &&
     config.capture.network === DEFAULT_SDK_CONFIG.capture.network &&
     config.capture.performance === DEFAULT_SDK_CONFIG.capture.performance &&
@@ -584,7 +604,44 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
         <div className="h-2 w-3/4 rounded-sm" style={{ background: tokens.rule, opacity: 0.7 }} />
       </div>
 
-      {(config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
+      {config.trigger === 'banner' ? (
+        /* Banner strip preview */
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            ...(config.bannerPosition === 'bottom' ? { bottom: 0 } : { top: 22 }),
+            height: 22,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingLeft: 8,
+            paddingRight: 8,
+            fontSize: 9,
+            fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
+            background: config.bannerVariant === 'neon'
+              ? '#0FFF50'
+              : config.bannerVariant === 'subtle'
+                ? (isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.04)')
+                : tokens.vermillion,
+            color: config.bannerVariant === 'neon' ? '#0a1a0a' : config.bannerVariant === 'subtle' ? tokens.inkMuted : '#fff',
+            borderBottom: config.bannerPosition !== 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? '#00C43A' : config.bannerVariant === 'subtle' ? tokens.rule : '#B52F1F'}` : 'none',
+            borderTop: config.bannerPosition === 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? '#00C43A' : config.bannerVariant === 'subtle' ? tokens.rule : '#B52F1F'}` : 'none',
+          }}
+        >
+          <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.14)', cursor: 'pointer' }}>
+            {config.bannerBugCta.trim() || '🐛 Report a bug'}
+          </span>
+          {config.bannerFeatureCta && (
+            <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.10)', cursor: 'pointer' }}>
+              ✨ Feature
+            </span>
+          )}
+          <span style={{ opacity: 0.55, marginLeft: 'auto', cursor: 'pointer' }}>✕</span>
+        </div>
+      ) : (config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
         <div
           className="absolute rounded-sm border px-2 py-1 text-[10px]"
           style={{
@@ -743,10 +800,11 @@ function ConfiguratorPanel({
               manual / edge-tab for advanced hosts. */}
           <div className="space-y-1.5">
             {([
-              { value: 'attach',   label: 'Attach to my button',   hint: 'Your button opens the reporter. No floating stamp.' },
-              { value: 'auto',     label: 'Floating stamp',         hint: 'SDK renders a bug-stamp in the chosen corner. Recommended: true.' },
-              { value: 'edge-tab', label: 'Edge tab',              hint: 'A vertical tab on the screen edge.' },
-              { value: 'manual',   label: 'Headless (manual)',      hint: 'Use <MushiTrigger> anywhere in your JSX.' },
+              { value: 'banner',   label: 'Header banner',          hint: 'A slim strip pinned to the top (or bottom) of the viewport. Less obtrusive than a FAB.' },
+              { value: 'attach',   label: 'Attach to my button',    hint: 'Your button opens the reporter. No floating stamp.' },
+              { value: 'auto',     label: 'Floating stamp (FAB)',    hint: 'SDK renders a bug-stamp in the chosen corner.' },
+              { value: 'edge-tab', label: 'Edge tab',               hint: 'A vertical tab on the screen edge.' },
+              { value: 'manual',   label: 'Headless (manual)',       hint: 'Use <MushiTrigger> anywhere in your JSX.' },
             ] as const).map(({ value, label, hint }) => (
               <button
                 key={value}
@@ -763,10 +821,76 @@ function ConfiguratorPanel({
                   {config.trigger === value && <span className="w-1.5 h-1.5 rounded-full bg-brand-fg" />}
                 </span>
                 <span className="font-medium">{label}</span>
-                {value === 'attach' && <span className="ml-auto text-3xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
+                {value === 'banner' && <span className="ml-auto text-3xs text-ok uppercase tracking-wider font-semibold">Default</span>}
               </button>
             ))}
           </div>
+          {config.trigger === 'banner' && (
+            <div className="mt-2 rounded-sm border border-edge-subtle bg-surface-raised/50 p-2 space-y-2">
+              <p className="text-fg-muted font-medium">Banner options</p>
+              {/* Variant */}
+              <fieldset>
+                <legend className="text-fg-faint mb-1">Style</legend>
+                <div className="flex gap-1.5">
+                  {(['brand', 'neon', 'subtle'] as BannerVariant[]).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => onChange({ ...config, bannerVariant: v })}
+                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-colors ${
+                        config.bannerVariant === v
+                          ? 'border-brand bg-brand/15 text-brand'
+                          : 'border-edge-subtle text-fg-muted hover:text-fg'
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              {/* Position */}
+              <fieldset>
+                <legend className="text-fg-faint mb-1">Position</legend>
+                <div className="flex gap-1.5">
+                  {(['top', 'bottom'] as BannerPosition[]).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => onChange({ ...config, bannerPosition: p })}
+                      className={`px-2 py-0.5 rounded-sm border text-2xs capitalize transition-colors ${
+                        config.bannerPosition === p
+                          ? 'border-brand bg-brand/15 text-brand'
+                          : 'border-edge-subtle text-fg-muted hover:text-fg'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              {/* Bug CTA label */}
+              <label className="block">
+                <span className="text-fg-faint">Bug button label</span>
+                <input
+                  type="text"
+                  value={config.bannerBugCta}
+                  onChange={(e) => onChange({ ...config, bannerBugCta: e.target.value })}
+                  placeholder="🐛 Report a bug"
+                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand text-2xs"
+                />
+              </label>
+              {/* Feature CTA toggle */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={config.bannerFeatureCta}
+                  onChange={(e) => onChange({ ...config, bannerFeatureCta: e.target.checked })}
+                  className="h-3 w-3 accent-brand"
+                />
+                <span className="text-fg-muted">Show "Request feature" button</span>
+              </label>
+            </div>
+          )}
           {config.trigger === 'attach' && (
             <label className="block mt-2">
               <span className="text-fg-muted">CSS selector (optional)</span>

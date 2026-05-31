@@ -18,6 +18,7 @@ export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number 
   'claude-sonnet-3-7':           { in: 3.00, out: 15.00 },
   'claude-opus-4-6':             { in: 15.00, out: 75.00 },
   'claude-opus-4-7':             { in: 15.00, out: 75.00 },
+  'claude-opus-4-8':             { in: 5.00,  out: 25.00 },
   // OpenAI — current generation (GPT-5 family, released 2026)
   'gpt-4.1':                     { in: 2.00, out: 8.00 },
   'gpt-4.1-mini':                { in: 0.40, out: 1.60 },

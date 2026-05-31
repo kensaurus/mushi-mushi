@@ -1214,6 +1214,138 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       font-size: 10.5px;
     }
 
+    /* ─── Banner launcher (trigger: 'banner') ─────────────────────────────── */
+
+    .mushi-banner {
+      position: fixed;
+      left: 0;
+      right: 0;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 16px;
+      font-family: ${fontMono};
+      font-size: 11.5px;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      z-index: var(--mushi-banner-z, 99998);
+      animation: mushi-banner-slide-in 0.3s ${easeStamp} both;
+    }
+
+    .mushi-banner.top    { top: 0; }
+    .mushi-banner.bottom { bottom: 0; }
+
+    /* --- neon variant (electric lime — dev / beta tool aesthetic) --- */
+    .mushi-banner.neon {
+      background: #0FFF50;
+      color: #0a1a0a;
+      border-bottom: 1.5px solid #00C43A;
+    }
+    .mushi-banner.neon.bottom {
+      border-top: 1.5px solid #00C43A;
+      border-bottom: none;
+    }
+    .mushi-banner.neon .mushi-banner-btn {
+      background: rgba(0,0,0,0.14);
+      color: #0a1a0a;
+      border: 1px solid rgba(0,0,0,0.22);
+    }
+    .mushi-banner.neon .mushi-banner-btn:hover {
+      background: rgba(0,0,0,0.22);
+    }
+
+    /* --- brand variant (vermillion — editorial, app-quality) --- */
+    .mushi-banner.brand {
+      background: ${vermillion};
+      color: #fff;
+      border-bottom: 1.5px solid ${isDark ? '#C4321E' : '#B52F1F'};
+    }
+    .mushi-banner.brand.bottom {
+      border-top: 1.5px solid ${isDark ? '#C4321E' : '#B52F1F'};
+      border-bottom: none;
+    }
+    .mushi-banner.brand .mushi-banner-btn {
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.32);
+    }
+    .mushi-banner.brand .mushi-banner-btn:hover {
+      background: rgba(255,255,255,0.28);
+    }
+
+    /* --- subtle variant (hairline, muted — least disruptive) --- */
+    .mushi-banner.subtle {
+      background: ${isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.04)'};
+      color: ${inkMuted};
+      border-bottom: 1px solid ${rule};
+    }
+    .mushi-banner.subtle.bottom {
+      border-top: 1px solid ${rule};
+      border-bottom: none;
+    }
+    .mushi-banner.subtle .mushi-banner-btn {
+      background: ${isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.07)'};
+      color: ${ink};
+      border: 1px solid ${rule};
+    }
+    .mushi-banner.subtle .mushi-banner-btn:hover {
+      background: ${isDark ? 'rgba(242,235,221,0.16)' : 'rgba(14,13,11,0.12)'};
+    }
+
+    .mushi-banner-label {
+      flex: 1;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mushi-banner-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font: inherit;
+      letter-spacing: inherit;
+      transition: background 0.15s ease, opacity 0.15s ease;
+      flex-shrink: 0;
+      height: 24px;
+      line-height: 1;
+    }
+    .mushi-banner-btn:focus-visible {
+      outline: 2px solid ${vermillion};
+      outline-offset: 2px;
+    }
+
+    .mushi-banner-dismiss {
+      background: transparent !important;
+      border: none !important;
+      opacity: 0.55;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 4px 6px;
+      flex-shrink: 0;
+      color: inherit;
+    }
+    .mushi-banner-dismiss:hover { opacity: 0.85; }
+
+    @keyframes mushi-banner-slide-in {
+      from { transform: translateY(calc(-1 * 100%)); opacity: 0.5; }
+      to   { transform: translateY(0);               opacity: 1;   }
+    }
+    .mushi-banner.bottom {
+      animation-name: mushi-banner-slide-in-bottom;
+    }
+    @keyframes mushi-banner-slide-in-bottom {
+      from { transform: translateY(100%); opacity: 0.5; }
+      to   { transform: translateY(0);   opacity: 1;   }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
