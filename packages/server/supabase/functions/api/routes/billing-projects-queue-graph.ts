@@ -2594,6 +2594,79 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     return c.json({ ok: true, data: { ready, checks, repoUrl } });
   });
 
+  // ---------------------------------------------------------------------------
+  // Autofix flag — GET /v1/admin/projects/:id/autofix
+  //
+  // Returns the current autofix_enabled flag for the project. Consumed by
+  // CodebaseIndexCard (IntegrationsPage) so the autofix toggle can reflect
+  // the live state without requiring a full settings reload.
+  // ---------------------------------------------------------------------------
+  app.get('/v1/admin/projects/:id/autofix', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    const { data, error } = await db
+      .from('project_settings')
+      .select('autofix_enabled')
+      .eq('project_id', projectId)
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+
+    return c.json({ ok: true, data: { autofix_enabled: Boolean(data?.autofix_enabled) } });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Autofix toggle — POST /v1/admin/projects/:id/autofix/toggle
+  //
+  // Flips the autofix_enabled flag on project_settings. Accepts { enabled: boolean }.
+  // Returns the updated flag so the caller can sync its local state.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/projects/:id/autofix/toggle', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const enabled = Boolean(body.enabled);
+
+    const { error } = await db
+      .from('project_settings')
+      .upsert(
+        { project_id: projectId, autofix_enabled: enabled },
+        { onConflict: 'project_id' },
+      );
+
+    if (error) return dbError(c, error);
+
+    return c.json({ ok: true, data: { autofix_enabled: enabled } });
+  });
+
   // Admin pipeline diagnostic. Exists so the admin console's "Send test report"
   // buttons (DashboardPage.GettingStartedEmpty, SettingsPage.QuickTestSection)
   // can verify the ingest path without copy-pasting an API key — the admin is

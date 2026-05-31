@@ -96,7 +96,7 @@ function buildReportBlocks(payload: SlackReportPayload): unknown[] {
       elements: [
         { type: 'mrkdwn', text: `${severityBadge} *${payload.severity}*` },
         { type: 'mrkdwn', text: `*Page:* \`${truncate(payload.pageUrl || 'unknown', 60)}\`` },
-        { type: 'mrkdwn', text: `*Reporter:* \`${payload.reporterToken.slice(0, 12)}\u2026\`` },
+        { type: 'mrkdwn', text: `*ID:* \`${payload.reportId.slice(0, 8)}\u2026\`` },
       ],
     },
   ]

@@ -538,6 +538,7 @@ export class MushiWidget {
     this.attachedLaunchers = [];
     this.removeSelectorHint();
     this.removeNudge();
+    this.removeBodyNudge();
     this.host.remove();
   }
 
@@ -637,8 +638,10 @@ export class MushiWidget {
   private renderBanner(): void {
     if (this.config.trigger !== 'banner') return;
     if (this.bannerDismissed) { this.removeBodyNudge(); return; }
-    if (!this.triggerVisible) return;
-    if (this.isRouteHidden()) return;
+    // Clear nudge before early returns so sdk.hide() / route suppression don't
+    // leave the host page with permanent padding-top/bottom.
+    if (!this.triggerVisible) { this.removeBodyNudge(); return; }
+    if (this.isRouteHidden()) { this.removeBodyNudge(); return; }
 
     const bc = this.config.bannerConfig ?? {};
     const variant  = bc.variant  ?? 'brand';
