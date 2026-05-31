@@ -1,23 +1,30 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/slack.ts
- * PURPOSE: Slack delivery helper. Two things to know:
+ * PURPOSE: Slack delivery helper. Two delivery paths:
  *
- *   1. Payload drift is real. Four callers exist today — classify-report and
- *      fast-filter pass a structured "report" shape, while judge-batch and
- *      intelligence-report pass a plain `{ text }` shape. A single Slack
- *      function that silently accepts both produced the dreaded "unknown
- *      [Object object]" messages. This file now exposes two explicit
- *      entry points with typed overloads, and the legacy single-function
- *      signature still works for backward compat.
+ *   1. WEBHOOK PATH (legacy, still supported for backwards-compat):
+ *      `sendSlackNotification(webhookUrl, payload)` / `sendSlackText(webhookUrl, text)`
+ *      Uses incoming webhook URLs stored per project in `slack_webhook_url`.
+ *      Pros: simple, no auth. Cons: no thread replies, no `ts` tracking.
  *
- *   2. Rich Block Kit with action buttons. For report notifications we
- *      emit two buttons — `Triage →` opens the report in the admin, and
- *      `Dispatch fix` fires an `action_id=dispatch_fix:<report_id>` back
- *      at our `slack-interactions` Edge Function, which verifies the
- *      Slack signing secret and calls `fix-worker` just like the admin
- *      button does. When `ADMIN_BASE_URL` isn't set the buttons degrade
- *      to a plain link block — we never want Slack delivery to fail
- *      because of a missing env var.
+ *   2. BOT PATH (recommended, new default):
+ *      `sendBotMessage({ channel, blocks, text, threadTs? })`
+ *      Uses `chat.postMessage` with SLACK_BOT_TOKEN (xoxb-).
+ *      Returns `{ ok, ts }` — the `ts` can be stored on the report row
+ *      and used to post threaded follow-up messages (fix dispatched, PR link).
+ *
+ * Threading flow
+ * --------------
+ *   classify-report/fast-filter
+ *     → sendBotMessage → stores ts → reports.slack_message_ts
+ *   slack-interactions (Dispatch fix button)
+ *     → sendBotMessage({ threadTs: report.slack_message_ts })  ← threaded reply
+ *   fix-worker / copilot
+ *     → sendBotMessage({ threadTs }) once PR is opened
+ *
+ * Security note:
+ *   SLACK_BOT_TOKEN must be the Bot User OAuth Token (xoxb-*) for `chat.postMessage`.
+ *   Do NOT put it in the repo or in project_settings — keep it as a Supabase secret.
  */
 
 import { log } from './logger.ts'
@@ -65,7 +72,7 @@ function adminBaseUrl(): string | null {
   return raw.replace(/\/$/, '')
 }
 
-function buildReportBlocks(payload: SlackReportPayload) {
+function buildReportBlocks(payload: SlackReportPayload): unknown[] {
   const base = adminBaseUrl()
   const reportUrl = base ? `${base}/reports/${encodeURIComponent(payload.reportId)}` : null
   const severityBadge = SEVERITY_EMOJI[payload.severity] ?? '\u{26AA}'
@@ -89,7 +96,7 @@ function buildReportBlocks(payload: SlackReportPayload) {
       elements: [
         { type: 'mrkdwn', text: `${severityBadge} *${payload.severity}*` },
         { type: 'mrkdwn', text: `*Page:* \`${truncate(payload.pageUrl || 'unknown', 60)}\`` },
-        { type: 'mrkdwn', text: `*Reporter:* \`${payload.reporterToken.slice(0, 12)}…\`` },
+        { type: 'mrkdwn', text: `*Reporter:* \`${payload.reporterToken.slice(0, 12)}\u2026\`` },
       ],
     },
   ]
@@ -125,6 +132,8 @@ function buildReportBlocks(payload: SlackReportPayload) {
   return blocks
 }
 
+// ─── Legacy webhook path ──────────────────────────────────────────────────────
+
 async function postToSlack(webhookUrl: string, body: object): Promise<void> {
   try {
     const res = await fetch(webhookUrl, {
@@ -151,12 +160,109 @@ export async function sendSlackNotification(webhookUrl: string, payload: SlackPa
   await postToSlack(webhookUrl, { text: payload.text })
 }
 
-/** Typed passthrough for callers that only want to send plain text (judge
- *  drift alerts, weekly intelligence digests). Uses a disambiguated name
- *  so intent is obvious at the call site. */
+/** Typed passthrough for plain-text callers (judge drift alerts, intelligence reports). */
 export async function sendSlackText(webhookUrl: string, text: string): Promise<void> {
   await postToSlack(webhookUrl, { text })
 }
+
+// ─── Bot token path (chat.postMessage) ───────────────────────────────────────
+
+export interface BotMessageOptions {
+  /** Slack channel ID (e.g. C0B82A322RW). Falls back to SLACK_CHANNEL_ID env var. */
+  channel?: string
+  /** Block Kit blocks array. */
+  blocks?: unknown[]
+  /** Plain-text fallback (required by Slack if blocks are provided). */
+  text: string
+  /** When set, posts as a threaded reply to this message timestamp. */
+  threadTs?: string | null
+  /** Override the bot token. Falls back to SLACK_BOT_TOKEN env var. */
+  token?: string
+}
+
+export interface BotMessageResult {
+  ok: boolean
+  /** The Slack message timestamp — store on the report for threading follow-ups. */
+  ts: string | null
+  error?: string
+}
+
+/**
+ * Post a message via the Slack Bot API (`chat.postMessage`).
+ * Returns `{ ok, ts }` — when `ok`, `ts` is the message's unique timestamp
+ * which can be stored on the report row and used to post threaded replies.
+ */
+export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
+  const token = opts.token ?? Deno.env.get('SLACK_BOT_TOKEN')
+  const channel = opts.channel ?? Deno.env.get('SLACK_CHANNEL_ID')
+
+  if (!token) {
+    slackLog.warn('sendBotMessage: SLACK_BOT_TOKEN not set — skipping')
+    return { ok: false, ts: null, error: 'no_bot_token' }
+  }
+  if (!channel) {
+    slackLog.warn('sendBotMessage: no channel — skipping')
+    return { ok: false, ts: null, error: 'no_channel' }
+  }
+
+  const body: Record<string, unknown> = {
+    channel,
+    text: opts.text,
+  }
+  if (opts.blocks?.length) body.blocks = opts.blocks
+  if (opts.threadTs) body.thread_ts = opts.threadTs
+
+  try {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json() as { ok: boolean; ts?: string; error?: string }
+    if (!json.ok) {
+      slackLog.error('chat.postMessage failed', { slackError: json.error })
+      return { ok: false, ts: null, error: json.error }
+    }
+    return { ok: true, ts: json.ts ?? null }
+  } catch (err) {
+    slackLog.error('chat.postMessage exception', { err: String(err) })
+    return { ok: false, ts: null, error: String(err) }
+  }
+}
+
+/**
+ * Convenience wrapper: build report blocks and post via bot.
+ * Falls back to webhook if no bot token is configured.
+ * Returns the Slack message ts for threading (null when falling back to webhook).
+ */
+export async function sendReportNotification(
+  payload: SlackReportPayload,
+  opts: { channelId?: string; webhookUrl?: string },
+): Promise<string | null> {
+  const botToken = Deno.env.get('SLACK_BOT_TOKEN')
+  if (botToken) {
+    const blocks = buildReportBlocks(payload)
+    const fallback = `${CATEGORY_EMOJI[payload.category] ?? '\u{1F41B}'} New ${payload.severity} ${payload.category} in ${payload.projectName}: ${payload.summary}`
+    const result = await sendBotMessage({
+      channel: opts.channelId ?? undefined,
+      blocks,
+      text: fallback,
+    })
+    return result.ts
+  }
+  // Legacy webhook fallback
+  if (opts.webhookUrl) {
+    const blocks = buildReportBlocks(payload)
+    const fallback = `${payload.category} report in ${payload.projectName}: ${payload.summary}`
+    await postToSlack(opts.webhookUrl, { text: fallback, blocks })
+  }
+  return null
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function truncate(input: string, max: number): string {
   if (input.length <= max) return input

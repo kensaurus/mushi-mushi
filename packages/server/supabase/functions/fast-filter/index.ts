@@ -4,7 +4,7 @@ import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { scrubReport } from '../_shared/pii-scrubber.ts'
-import { sendSlackNotification } from '../_shared/slack.ts'
+import { sendSlackNotification, sendReportNotification } from '../_shared/slack.ts'
 import { sendDiscordNotification } from '../_shared/discord.ts'
 import { generateAndStoreEmbedding, suggestGrouping } from '../_shared/embeddings.ts'
 import { createTrace } from '../_shared/observability.ts'
@@ -138,7 +138,7 @@ Deno.serve(withSentry('fast-filter', async (req) => {
 
     const { data: settings } = await db
       .from('project_settings')
-      .select('stage2_model, stage1_confidence_threshold, slack_webhook_url, discord_webhook_url, reporter_notifications_enabled')
+      .select('stage2_model, stage1_confidence_threshold, slack_webhook_url, slack_channel_id, discord_webhook_url, reporter_notifications_enabled')
       .eq('project_id', projectId)
       .single()
 
@@ -359,16 +359,28 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       const { data: project } = await db.from('projects').select('name').eq('id', projectId).single()
       const projectName = project?.name ?? 'Unknown'
 
-      if (settings?.slack_webhook_url) {
+      if (settings?.slack_channel_id || settings?.slack_webhook_url || Deno.env.get('SLACK_BOT_TOKEN')) {
         log.info('Sending Slack notification', { severity: classification.severity })
-      sendSlackNotification(settings.slack_webhook_url, {
-          projectName,
-          category: classification.category,
-          severity: classification.severity,
-          summary,
-          reporterToken: report.reporter_token_hash,
-          pageUrl: env.url ?? '',
-          reportId,
+        sendReportNotification(
+          {
+            projectName,
+            category: classification.category,
+            severity: classification.severity,
+            summary,
+            reporterToken: report.reporter_token_hash,
+            pageUrl: env.url ?? '',
+            reportId,
+          },
+          {
+            channelId: settings?.slack_channel_id ?? undefined,
+            webhookUrl: settings?.slack_webhook_url ?? undefined,
+          },
+        ).then((slackTs) => {
+          if (slackTs) {
+            db.from('reports').update({ slack_message_ts: slackTs }).eq('id', reportId).then(() => {
+              log.debug('Stored slack_message_ts', { reportId, slackTs })
+            })
+          }
         }).catch(e => log.error('Slack notification failed', { err: String(e) }))
       }
 

@@ -31,6 +31,7 @@ import { withSentry, reportMessage } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { dispatchFixForReport } from '../_shared/dispatch.ts'
+import { sendBotMessage } from '../_shared/slack.ts'
 
 const log = rootLog.child('slack-interactions')
 
@@ -102,7 +103,7 @@ Deno.serve(
     const db = getServiceClient()
     const { data: report } = await db
       .from('reports')
-      .select('id, project_id')
+      .select('id, project_id, slack_message_ts')
       .eq('id', reportId)
       .single()
 
@@ -121,6 +122,7 @@ Deno.serve(
       projectId: report.project_id,
       responseUrl,
       slackUser,
+      slackThreadTs: report.slack_message_ts ?? undefined,
     }).catch((err) => {
       log.error('Async dispatch failed', { err: String(err) })
     })
@@ -141,6 +143,7 @@ async function finishDispatch(input: {
   projectId: string
   responseUrl?: string
   slackUser: string
+  slackThreadTs?: string
 }) {
   const result = await dispatchFixForReport({
     reportId: input.reportId,
@@ -148,6 +151,17 @@ async function finishDispatch(input: {
     requestedBy: `slack:${input.slackUser}`,
     skipMembershipCheck: true,
   })
+
+  // Post a threaded Slack reply via bot if we have the thread timestamp.
+  if (input.slackThreadTs) {
+    const threadText = result.ok
+      ? `:white_check_mark: Fix dispatched by <@${input.slackUser}>. A draft PR will appear in \`/fixes\` shortly.`
+      : `:x: Fix dispatch failed — ${result.message ?? result.code ?? 'unknown error'}`
+    await sendBotMessage({
+      text: threadText,
+      threadTs: input.slackThreadTs,
+    }).catch((err) => log.error('Threaded reply failed', { err: String(err) }))
+  }
 
   if (!input.responseUrl) return
 
