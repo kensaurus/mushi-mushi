@@ -134,7 +134,7 @@ describe('MushiPlugin', () => {
     app.use(MushiPlugin, testConfig)
 
     expect(() => {
-      app.config.errorHandler!(new Error('boom'), null as any, 'info')
+      app.config.errorHandler!(new Error('boom'), null as unknown as ComponentPublicInstance, 'info')
     }).not.toThrow()
     expect(mockCaptureException).toHaveBeenCalled()
   })
@@ -193,7 +193,7 @@ describe('useMushi', () => {
 
 describe('useMushiReport', () => {
   it('throws when plugin is not installed', async () => {
-    let submitFn: ((data: any) => Promise<void>) | undefined
+    let submitFn: ((data: unknown) => Promise<void>) | undefined
     const app = createApp(
       defineComponent({
         setup() {
