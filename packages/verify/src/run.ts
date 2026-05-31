@@ -24,5 +24,5 @@ const result = await verifyFix({
   supabaseServiceKey,
 })
 
-console.log(`Verification ${result.status}:`, JSON.stringify(result, null, 2))
+console.warn(`Verification ${result.status}:`, JSON.stringify(result, null, 2))
 process.exit(result.status === 'passed' ? 0 : 1)

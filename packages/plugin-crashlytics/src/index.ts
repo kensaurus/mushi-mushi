@@ -138,7 +138,7 @@ export function createCrashlyticsPlugin(cfg: CrashlyticsPluginConfig) {
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-crashlytics] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-crashlytics] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-crashlytics] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-crashlytics] ${msg}`, meta ?? ''),
     },

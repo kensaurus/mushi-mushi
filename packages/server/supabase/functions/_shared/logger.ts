@@ -54,7 +54,7 @@ function emit(level: LogLevel, formatted: string): void {
       console.warn(formatted)
       break
     default:
-      console.log(formatted)
+      console.warn(formatted)
   }
 }
 
