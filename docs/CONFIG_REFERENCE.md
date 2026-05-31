@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_91 configuration knobs across 18 sections · last regenerated 2026-05-31._
+_92 configuration knobs across 18 sections · last regenerated 2026-05-31._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (7)
+- [Settings → General](#settings-general) (8)
 - [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (3)
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
@@ -31,6 +31,22 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 ## Settings → General
 
 <a id="settings-general"></a>
+
+### Slack Channel ID
+
+<a id="settings-general-slack-channel-id"></a>
+
+`settings.general.slack_channel_id`
+
+**Summary** — Optional Slack channel ID (e.g. C01234ABCDE) for direct @mention routing alongside the webhook.
+
+**How it works** — When provided alongside the webhook URL, Mushi can include a channel-specific link in notification payloads. This field is stored but not currently used by the notifier — reserve it for future direct-message routing.
+
+**Default** — `unset`
+
+**Where it lives** — table `project_settings.slack_channel_id` · endpoint `PATCH /v1/admin/settings` · read by `notify-slack edge function`
+
+**When to change** — Set this if you want Mushi to reference a specific channel in its Slack payloads.
 
 ### Slack Webhook URL
 
