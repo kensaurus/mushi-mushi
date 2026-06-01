@@ -58,7 +58,7 @@ export function OperatorTraceBadge({ lines }: { lines: OperatorTraceLine[] }) {
       : 'bg-warn/15 text-warn border-warn/30'
   return (
     <span
-      className={`ml-1 inline-flex shrink-0 items-center rounded px-1 py-px text-[0.55rem] font-bold uppercase tracking-wide border ${tone} ${summary.errorCount > 0 ? 'motion-safe:animate-pulse' : ''}`}
+      className={`ml-1 inline-flex shrink-0 items-center rounded px-1 py-px text-3xs font-bold uppercase tracking-wide border ${tone} ${summary.errorCount > 0 ? 'motion-safe:animate-pulse' : ''}`}
       title={`Operator trace: ${summary.errorCount} error(s), ${summary.warnCount} warning(s)`}
     >
       {label}
@@ -74,13 +74,14 @@ export function OperatorTracePreview({ lines }: { lines: OperatorTraceLine[] }) 
     ?? lines[lines.length - 1]
   const fullText = lines.map((l) => `${l.level} ${l.source}: ${l.message}`).join('\n')
 
+  // Truncate message to 60 chars max so the pill reads cleanly at node width
+  const msgPreview = preview.message.length > 60 ? `${preview.message.slice(0, 57)}…` : preview.message
+
   const row = (
-    <p className="mt-1 truncate font-mono text-3xs leading-snug text-fg-faint">
-      <span className={LEVEL_CLASS[preview.level]}>{preview.level}</span>
-      <span aria-hidden className="mx-1 text-fg-faint/60">·</span>
-      <span className="text-fg-muted">{preview.source}</span>
-      <span aria-hidden className="mx-0.5">:</span>
-      {preview.message}
+    <p className="mt-1 font-mono text-3xs leading-snug text-fg-faint flex items-center gap-1 min-w-0">
+      <span className={`shrink-0 ${LEVEL_CLASS[preview.level]}`}>{preview.level}</span>
+      <span aria-hidden className="shrink-0 text-fg-faint/60">·</span>
+      <span className="truncate text-fg-muted">{msgPreview}</span>
     </p>
   )
 
@@ -138,7 +139,7 @@ export function OperatorTraceLog({ lines, variant = 'full' }: OperatorTraceLogPr
             Operator trace
           </span>
           {summary.errorCount > 0 && (
-            <span className="rounded bg-err/15 px-1 py-px text-[0.6rem] font-bold text-err">
+            <span className="rounded bg-err/15 px-1 py-px text-3xs font-bold text-err">
               {summary.errorCount} error{summary.errorCount === 1 ? '' : 's'}
             </span>
           )}
@@ -188,7 +189,7 @@ export function OperatorTraceLog({ lines, variant = 'full' }: OperatorTraceLogPr
               {line.ts && (
                 <span className="shrink-0 tabular-nums text-fg-faint/80">{formatTs(line.ts)}</span>
               )}
-              <span className={`shrink-0 rounded px-1 py-px text-[0.6rem] font-bold uppercase ${LEVEL_BADGE[line.level]}`}>
+              <span className={`shrink-0 rounded px-1 py-px text-3xs font-bold uppercase ${LEVEL_BADGE[line.level]}`}>
                 {line.level}
               </span>
               <span className="shrink-0 text-fg-faint">{line.source}</span>

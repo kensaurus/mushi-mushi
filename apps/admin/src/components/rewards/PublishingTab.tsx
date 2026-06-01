@@ -61,11 +61,11 @@ interface BountyStats {
 // ─── Bounty action labels + colours ──────────────────────────
 
 const BOUNTY_ACTIONS = [
-  { action: 'bug_critical', label: 'Critical bug',       pts: 2500, color: 'text-red-400' },
-  { action: 'bug_high',     label: 'High severity bug',  pts: 1000, color: 'text-orange-400' },
-  { action: 'bug_medium',   label: 'Medium severity bug', pts: 500, color: 'text-yellow-400' },
-  { action: 'bug_low',      label: 'Low severity bug',   pts: 100,  color: 'text-gray-400' },
-  { action: 'enhancement',  label: 'Enhancement',        pts: 50,   color: 'text-blue-400' },
+  { action: 'bug_critical', label: 'Critical bug',        pts: 2500, color: 'text-danger' },
+  { action: 'bug_high',     label: 'High severity bug',   pts: 1000, color: 'text-warn' },
+  { action: 'bug_medium',   label: 'Medium severity bug', pts: 500,  color: 'text-warn/70' },
+  { action: 'bug_low',      label: 'Low severity bug',    pts: 100,  color: 'text-fg-muted' },
+  { action: 'enhancement',  label: 'Enhancement',         pts: 50,   color: 'text-info' },
 ]
 
 function statusBadge(visibility: PublishedApp['visibility']) {

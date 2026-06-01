@@ -14,8 +14,6 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import {
-  PageHeader,
-  PageHelp,
   EmptyState,
   ErrorAlert,
   RecommendedAction,
@@ -24,6 +22,7 @@ import {
   Btn,
   FreshnessPill,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
 import { usePageCopy } from '../lib/copy'
@@ -639,10 +638,18 @@ export function ReportsPage() {
 
   return (
     <div>
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Reports'}
         projectScope={projectName}
         description={copy?.description ?? 'User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise.'}
+        helpTitle={copy?.help?.title ?? 'About Reports'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'}
+        helpUseCases={copy?.help?.useCases ?? [
+          'Triage incoming reports — sort by severity, filter by status',
+          'Bulk-dismiss noise or escalate a batch of regressions in one click',
+          'Drill into a single report for the original payload, screenshots, and pipeline timeline',
+        ]}
+        helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
         <span className="text-xs text-fg-muted font-mono tabular-nums">
@@ -658,20 +665,9 @@ export function ReportsPage() {
             <Kbd>?</Kbd>
           </button>
         </Tooltip>
-      </PageHeader>
+      </PageHeaderBar>
 
       <DogfoodNarrativeBanner />
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About Reports'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'}
-        useCases={copy?.help?.useCases ?? [
-          'Triage incoming reports — sort by severity, filter by status',
-          'Bulk-dismiss noise or escalate a batch of regressions in one click',
-          'Drill into a single report for the original payload, screenshots, and pipeline timeline',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
-      />
 
       <ReportsKpiStrip
         activeSeverity={severity}

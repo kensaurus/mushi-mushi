@@ -63,8 +63,8 @@ export async function initMushiSelf(options?: {
 
   _initPromise = (async () => {
     try {
-      // @ts-ignore — dynamic import; @mushi-mushi/web types resolve after the web package is built
-      const { Mushi } = await import('@mushi-mushi/web') as MushiModule;
+      // @ts-ignore — @vite-ignore: dynamic import resolved at runtime via workspace symlink; types resolve after build
+      const { Mushi } = await import(/* @vite-ignore */ '@mushi-mushi/web') as MushiModule;
 
       const endpoint =
         import.meta.env.VITE_MUSHI_SELF_API_ENDPOINT ||

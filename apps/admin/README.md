@@ -57,13 +57,103 @@ The console detects a non-cloud `VITE_SUPABASE_URL` and switches to self-hosted 
 
 Tokens are defined in `src/index.css` using Tailwind v4's `@theme` directive. Shared UI primitives live in `src/components/ui.tsx`. Color maps and status tokens are in `src/lib/tokens.ts`.
 
+### Marketing & Docs surfaces (`packages/marketing-ui`, `apps/docs/components`)
+
+These surfaces use a **different token layer** — `--mushi-*` CSS variables from `@mushi-mushi/brand/editorial.css` rather than the admin `@theme` tokens. The same 11 px type floor and no-raw-palette-color rules apply, but the token vocabulary is different.
+
+#### Available `--mushi-*` tokens
+
+| Token | Value (light) | Dark (auto-flip) | Usage |
+|-------|---------------|------------------|-------|
+| `--mushi-paper` | `#f8f4ed` | `#0f0e0c` | Page background |
+| `--mushi-paper-wash` | `#efe7da` | inherits | Panel / card background |
+| `--mushi-ink` | `#0e0d0b` | `#f2ebdd` | Primary text + foreground |
+| `--mushi-ink-muted` | `#5c5852` | `#928b7e` | Secondary text |
+| `--mushi-ink-faint` | `#9a9489` | inherited | Tertiary / placeholder |
+| `--mushi-rule` | `rgba(14,13,11,0.12)` | `rgba(242,235,221,0.12)` | Dividers / borders |
+| `--mushi-vermillion` | `#e03c2c` | `#ff5a47` | Brand CTA + error indicators |
+| `--mushi-vermillion-wash` | `rgba(224,60,44,0.08)` | `rgba(255,90,71,0.12)` | Alert-wash backgrounds |
+| `--mushi-vermillion-ink` | `#7a1f15` | `#ffe5e0` | Text on vermillion |
+| `--mushi-jade` | `#2d7a55` | `#3a9e6e` | Pass / positive / healthy states only |
+| `--mushi-jade-wash` | `rgba(45,122,85,0.09)` | `rgba(58,158,110,0.12)` | Jade backgrounds |
+
+#### Rules for marketing/docs contributors
+
+1. **Never** use raw Tailwind palette colors (`bg-emerald-500`, `text-gray-600`, etc.) — ESLint `mushi-mushi/no-raw-palette-color` will reject them. Use `bg-[var(--mushi-jade)]`, `text-[var(--mushi-ink-muted)]`, etc.
+2. **Font size floor is 11 px** (`text-[11px]` or `text-xs`). Below-floor sizes (`text-[10px]`, `text-[9px]`, `font-size: 0.625rem`) fail `check-design-tokens.mjs`.
+3. **Jade is strictly semantic** — only for pass/positive/healthy UI states. Never for primary CTAs (use vermillion) or decorative accents.
+4. **Dark mode** is handled automatically by the `--mushi-*` variable flips on `[data-mushi-theme="dark"]` and (in docs) `.dark`. No `dark:` Tailwind utilities are needed when using tokens.
+
+### Design System v2 (2026-06 — compact console-grade UI/UX)
+
+The v2 sweep fixed four systemic patterns across all ~50 routes:
+
+1. **Chrome overload** — stacked `NextBestAction` ribbon + expanded help + `PageHeader` + sub-title + AT-A-GLANCE section consumed ~45% of first-screen real estate. Fixed by the new `PageHeaderBar` primitive (single compact row).
+2. **Monochromatic amber** — brand amber competed with `ok/warn/danger/info` on every page. Fixed by neutral chrome tokens (`--color-chrome`, `--color-chrome-border`) and strict amber-for-CTA-only rule.
+3. **Sub-floor type** — `text-3xs` (10px) and `text-2xs` (11px) used on primary text. Fixed by raising `--text-2xs` to 12px, `--text-3xs` to 11px via token redefinition — zero call-site churn.
+4. **Primitive drift** — hand-rolled `fixed inset-0` drawers in `QaCoveragePage`/`UsersPage` and raw palette colors in `tester/*`. Fixed and guarded by new ESLint rules.
+
+### `PageHeaderBar` — the standard page chrome
+
+`PageHeaderBar` (`src/components/PageHeaderBar.tsx`) replaces the old `PageHeader` + `PageHelp` two-component combo with a single compact row:
+
+```tsx
+<PageHeaderBar
+  title="Reports"
+  projectScope={project?.name}
+  description="All inbound bug reports across this project."
+  helpTitle="About Reports"
+  helpWhatIsIt="..."
+  helpUseCases={['...']}
+  helpHowToUse="..."
+>
+  {/* optional right-side actions */}
+  <Btn variant="primary" size="sm">New report</Btn>
+</PageHeaderBar>
+```
+
+**Rules:**
+- Every admin page starts with exactly one `<PageHeaderBar>`. Never use bare `<PageHeader>` or `<PageHelp>` on new pages.
+- `helpTitle` / `helpWhatIsIt` are optional — if omitted, no `(?)` icon is rendered.
+- Advanced-mode users see the help collapsed by default (via `useAdminMode`); Beginner users get it auto-expanded on first visit.
+- Keep `description` to one sentence — it renders at `text-xs` below the title row.
+
+### Type floor (WCAG minimum)
+
+| Token | Computed | Use for |
+|-------|----------|---------|
+| `text-xs` | 13px | default body, table cells, section text |
+| `text-2xs` | **12px** | table headers, form labels, badge text, helper hints |
+| `text-3xs` | **11px** | micro-meta only (IDs, timestamps, non-interactive) |
+
+**Rules:**
+- **Never use `text-3xs` on interactive or labelling elements** (`button`, `a`, `input`, `label`, `th`, `td`). Enforced by `eslint-plugin-mushi-mushi/no-text-3xs-on-interactive`.
+- **Never hard-code pixel or rem sizes below the floor** (`text-[10px]`, `text-[0.6rem]`, `fontSize: 10`). Flagged by `scripts/check-design-tokens.mjs` (type-floor check).
+
+### De-amber chrome rule
+
+Amber (`brand`) is **reserved** for primary CTAs and the nav active-state. Everywhere else:
+
+| Context | Use |
+|---------|-----|
+| Informational help banners | `bg-chrome border-chrome-border` (neutral zinc tones) |
+| Section frames, inset panels | `bg-surface-raised border-edge-subtle` |
+| Status indicators | `ok` / `warn` / `danger` / `info` semantic tokens |
+| Section labels, `StatCard` headings | `text-fg-muted` — no uppercase amber |
+
+**Never** do `bg-warn/10 border-warn/40` for a help banner — that's semantic colour misuse.
+
 ### Surface hierarchy
 
 `surface-root` (sidebar) → `surface` (main bg) → `surface-raised` (cards) → `surface-overlay` (hover)
 
+### Chrome tokens
+
+`chrome` and `chrome-border` are neutral zinc surfaces for non-semantic UI frames (help banners, "About" panels, info sidebars). They auto-adapt in light/dark mode.
+
 ### Semantic colors
 
-`brand` (amber), `accent` (violet), `ok` (green), `warn` (amber), `danger` (red), `info` (blue)
+`brand` (amber, CTA-only), `accent` (violet), `ok` (green), `warn` (amber), `danger` (red), `info` (blue)
 
 **Retired aliases — never use these.** Tailwind silently drops classes whose `--color-*` variable is undefined, so `bg-success-muted` / `text-error` / `bg-surface-subtle` render **transparently** in production. Map them to the live roots:
 
@@ -73,7 +163,34 @@ Tokens are defined in `src/index.css` using Tailwind v4's `@theme` directive. Sh
 | `error*` | `danger*` (`bg-danger-muted`, `text-danger`, `border-danger`) |
 | `surface-subtle` | `surface-raised/30` (canonical inset-panel pattern) |
 
-Enforced by `scripts/check-design-tokens.mjs`, wired into the pre-commit hook and available as `pnpm --filter @mushi-mushi/admin lint:tokens` or `pnpm check:design-tokens` at the root. The guard extracts every `--color-<root>` from `src/index.css`, scans TSX/TS/CSS for semantic-prefixed Tailwind classes, and fails the build on retired aliases or typos against real namespaces (e.g. `bg-brand-subdued` when no `--color-brand-subdued` exists).
+### ESLint guardrails (`eslint-plugin-mushi-mushi`)
+
+New rules added in v2:
+
+| Rule | Severity | What it catches |
+|------|----------|----------------|
+| `no-raw-palette-color` | warn | `text-gray-400`, `bg-yellow-400`, etc. in `apps/admin/src` — replace with design tokens |
+| `no-text-3xs-on-interactive` | warn | `text-3xs` on `button`/`a`/`input`/`label`/`th`/`td` — use `text-2xs` minimum |
+| `no-hand-rolled-dialog` | error | `fixed inset-0 … role="dialog"` on raw HTML — use `<Modal>` or `<Drawer>` |
+
+Also extended `scripts/check-design-tokens.mjs` with a **type-floor check**: hard-coded pixel/rem sizes below 12px (e.g. `text-[10px]`, `fontSize: '11px'`) fail the build with `[type-floor]` in the output.
+
+Enforced by the pre-commit hook and available as `pnpm --filter @mushi-mushi/admin lint:tokens` or `pnpm check:design-tokens` at the root.
+
+### Console density checklist
+
+Use this checklist before shipping any new page or modal:
+
+- [ ] Page starts with a single `<PageHeaderBar>` — no bare `<PageHeader>` or `<PageHelp>`
+- [ ] Help content provided via `helpTitle`/`helpWhatIsIt` props — not a separate `<PageHelp>` block
+- [ ] No `text-3xs` on buttons, links, inputs, labels, or table headers
+- [ ] No hard-coded pixel sizes (`text-[10px]`, `fontSize: 9`) — use `text-2xs` floor
+- [ ] All colours via design tokens — no `text-gray-400`, `bg-yellow-500`, etc.
+- [ ] Drawers/modals use `<Drawer>` / `<Modal>` — no hand-rolled `fixed inset-0 role="dialog"`
+- [ ] Dense tables routed through `<ResponsiveTable>` or `<DataTable>` with bottom-only dividers
+- [ ] Numeric data in tables is right-aligned with `tabular-nums`
+- [ ] Amber/brand used only for primary CTAs and active-nav — not for info banners or section frames
+- [ ] `eslint`, `lint:tokens`, and `typecheck` all pass before opening a PR
 
 ### Contrast budget (WCAG 2.2)
 
@@ -94,7 +211,8 @@ New pages and any refactor should follow these defaults — every admin page alr
 
 Layout & content:
 
-- `PageHeader`, `PageHelp` — consistent page chrome with collapsible "what / when / how" help block. `PageHeader` accepts an optional `projectScope` prop so list pages can render `Reports · <project name>` and the active project name stays visible across the loop. `PageHelp` defaults open only on the user's first ever visit (single global `mushi:visited` flag in `localStorage`) and persists per-page dismissal in `localStorage[mushi:pagehelp:dismissed:${title}]`, so first-time learners get the explainer but returning admins aren't bombarded with re-opened help on every page they navigate to
+- **`PageHeaderBar`** (`src/components/PageHeaderBar.tsx`) — **v2 standard page chrome**. Single compact row: stage chip · title · optional project scope · optional description · embedded `PageHelpBanner` (collapsed by default for Advanced users). Replaces the old `PageHeader` + `PageHelp` two-component combo. See [Design System v2](#design-system-v2-2026-06--compact-console-grade-uiux) for usage rules.
+- `PageHeader`, `PageHelp` — **legacy**, kept for backward compatibility. New pages must use `PageHeaderBar`. `PageHelp` defaults open only on the user's first ever visit (single `mushi:visited` flag in `localStorage`) and persists dismissal per-page in `localStorage[mushi:pagehelp:dismissed:${title}]`.
 - `Section` — titled section with optional leading `icon` (e.g. `IconUser`, `IconSparkle`, `IconCamera` from `icons.tsx`)
 - `Card`, `Divider`, `Loading`, `Skeleton`, `ErrorAlert`, `StatCard`. Layout-shaped skeletons live in `src/components/skeletons/` (`DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`) and replace 22 page-level `<Loading />` spinners — first paint matches the loaded layout instead of a tiny spinner over an empty page. Each accepts a `label` for `aria-label` and sets `role="status" aria-busy="true"`. `TableSkeleton` accepts `rows / columns / showFilters / showKpiStrip` so callers can shape it for their layout; `PanelSkeleton` accepts `inCard` so settings sub-panels (which already live inside a `<Section>`) don't double-wrap
 - `EmptyState` — NN/G-compliant empty: `title` (status line) + `description` (learning cue) + optional `hints` bullet list + optional `action` (direct path) + optional `icon`. Use this everywhere instead of bespoke "no results" cards so the three legs of empty-state design are always present
@@ -353,7 +471,7 @@ A small set of `src/lib/*` hooks plus `src/components/OfflineBanner.tsx` keep th
 Every analytical page reuses the same visual vocabulary from `src/components/charts.tsx`:
 
 - `KpiRow` + `KpiTile` — clickable KPIs with `accent`, `delta` ({ value, direction, tone }), and optional `to` deep link
-- `LineSparkline`, `BarSparkline`, `Histogram`, `SeverityStackedBars` — minimal SVG/HTML charts that respect the design tokens
+- `LineSparkline`, `BarSparkline`, `Histogram`, `SeverityStackedBars` — minimal SVG/HTML charts that respect the design tokens. **`SeverityStackedBars`** (Report Intake card): renders 14-day stacked bar chart with smart x-axis ticks (5 evenly-spaced date labels via `pickTicks`), y-axis with max + midpoint + 0, value labels suppressed when bar height < 20 % of max to prevent overlap, and ghost dashed bars for zero-report days so the grid stays visually consistent. Each severity segment has `minHeight: 2px` so thin slices always appear. Bars brighten on hover via CSS `brightness-110`
 - `StatusPill`, `HealthPill`, `LegendDot` — semantic status rendering shared between Dashboard, Judge, Queue, Fixes, and Prompt Lab
 - `FixGitGraph` (`src/components/FixGitGraph.tsx`) — inline SVG branch graph for a single fix attempt's PDCA timeline (dispatch → branch → commit → PR → CI → merge). Reused verbatim on `/fixes` (inside expanded `FixCard`), on `/reports/:id` (inside `ReportBranchGraph` below `PdcaReceiptStrip`), and on `/repo` (narrow variant inside each `BranchRow`)
 - **`PageActionBar`** (`src/components/PageActionBar.tsx`) — slim contextual action strip mounted at the top of data-heavy Advanced-mode pages (Audit, Compliance, DLQ, Graph, Health, Intelligence, Judge, Prompt Lab, Query, Storage, Anti-Gaming). Feeds off **`useNextBestAction`** (`src/lib/useNextBestAction.ts`), which reads page state + counters and returns the one or two CTAs that actually move the needle (e.g. "Dispatch next fix", "Clear DLQ", "Export filter to Query"). Renders nothing on pages with no actionable next step, so it never adds noise
@@ -364,7 +482,7 @@ Every analytical page reuses the same visual vocabulary from `src/components/cha
 
 `DashboardPage` is built from focused sub-components in `src/components/dashboard/`:
 
-- **`PdcaFlow`** (`src/components/pdca-flow/`) — the primary loop visualisation at `sm+` viewports: a live React Flow canvas with a fixed diamond topology (P → D → C → A → loop back to P), custom `PdcaStepNode` cards showing the stage letter, title, live count, and bottleneck caption, and `PdcaGradientEdge` bezier edges that gradient-blend from source to target tone. The focus stage's outgoing edge gets a dashed marching-ants animation so the current bottleneck reads at a glance. Pan/zoom/drag are off by default — the diagram is narrative, not an editor — but flipping `interactive` on in props wakes them up for future placements. A second `variant="onboarding"` of the same component ships an outcome-copy explainer on `/onboarding`
+- **`PdcaFlow`** (`src/components/pdca-flow/`) — the primary loop visualisation at `sm+` viewports: a live React Flow canvas with a **horizontal row topology** (Plan → Do → Check → Act), a hand-crafted cubic-bezier loop-back arc (Act→Plan) that sweeps 120 px below the node row, and `fitView` auto-zoom on `onInit` so the entire canvas — including the loop arc — is centred after the first paint. Custom `PdcaStepNode` cards carry hover-lift (`scale-[1.016]`, shadow) and click-press (`mushi-node-press`) microinteractions; the focus stage emits a slow focus-blink ring (`mushi-focus-blink`); the running stage pulses a dual-layer glow. `PdcaGradientEdge` bezier edges gradient-blend from source to target tone; each edge has a 16 px invisible SVG hit-area so hover is easy to trigger — on hover the track, glow, and stroke all brighten (180 ms ease) and the stroke-width expands. All main-stroke paths have `opacity: 1` (previously 88% inactive) so arrows are never transparent. The focus stage's outgoing edge gets dashed marching-ants animation so the bottleneck reads at a glance. Pan/zoom/drag are off by default — the diagram is narrative, not an editor — but flipping `interactive` on in props wakes them up. A second `variant="onboarding"` ships an outcome-copy explainer on `/onboarding`
 - **`PdcaCockpit`** — narrow-viewport fallback for `PdcaFlow`. Renders the same 4 stages as stacked tiles under the heading **"Loop status — Plan, Do, Check, Act"**. Each tile shows one big living number, a stage tone (`ok` / `warn` / `urgent`), a one-line bottleneck caption, a deep-link CTA, and a 7-day momentum spark. Backed by the same `pdcaStages` + `focusStage` block on `GET /v1/admin/dashboard`. The `FirstRunTour` Plan stop anchors to either layout
 - **`LivePdcaPipeline`**— clickable Plan→Do→Check→Act storyboard rendered above the flow on Quickstart / Beginner modes. Each node shows the plain-language outcome (from `lib/pdca.ts > PDCA_STAGE_OUTCOMES`) and deep-links to the page that owns the stage. The header CTA *"Watch a bug travel through Mushi"* fires a real `POST /v1/admin/projects/:id/test-report`, animates the four stages in sequence (~1.1 s/stage), and toasts a `View report` action when the synthetic report lands. Hidden in Advanced mode (`PdcaFlow` covers power-user needs)
 - **`FirstReportHero`** — promoted CTA shown when the SDK is installed but no reports have arrived (driven by `useSetupStatus`). One big "Send a test report" button so the user can close the loop without leaving the dashboard

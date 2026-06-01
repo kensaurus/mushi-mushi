@@ -138,7 +138,16 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Force Vite 8 to resolve the workspace @mushi-mushi/web package to the
+      // built dist rather than failing static import analysis. The package is
+      // always built before starting dev (pnpm --filter @mushi-mushi/web build).
+      '@mushi-mushi/web': path.resolve(__dirname, '../../packages/web/dist/index.js'),
     },
+  },
+  optimizeDeps: {
+    // Pre-bundle workspace packages so Vite doesn't fail when mushi-self.ts
+    // does a lazy import('@mushi-mushi/web').
+    include: ['@mushi-mushi/web'],
   },
   build: {
     // Required for Sentry to symbolicate stack traces. Maps are deleted from

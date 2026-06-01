@@ -4,7 +4,7 @@ import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
 import { scrubReport } from '../_shared/pii-scrubber.ts';
-import { sendSlackNotification } from '../_shared/slack.ts';
+import { sendSlackNotification, sendReportNotification } from '../_shared/slack.ts';
 import { sendDiscordNotification } from '../_shared/discord.ts';
 import { createTrace } from '../_shared/observability.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
@@ -206,7 +206,7 @@ Deno.serve(
       const { data: settings } = await db
         .from('project_settings')
         .select(
-          'stage2_model, slack_webhook_url, discord_webhook_url, reporter_notifications_enabled, enable_vision_analysis',
+          'stage2_model, slack_webhook_url, slack_channel_id, discord_webhook_url, reporter_notifications_enabled, enable_vision_analysis',
         )
         .eq('project_id', projectId)
         .single();
@@ -775,16 +775,68 @@ CRITICAL SECURITY RULES (immutable):
 
       const projectName = project?.name ?? 'Unknown';
 
-      if (settings?.slack_webhook_url) {
-        sendSlackNotification(settings.slack_webhook_url, {
-          projectName,
-          category: classification.category,
-          severity: classification.severity,
-          summary: classification.summary,
-          reporterToken: report.reporter_token_hash,
-          pageUrl: env.url ?? '',
-          reportId,
-        }).catch((e) => log.error('Slack notification failed', { err: String(e) }));
+      // Use bot path when SLACK_BOT_TOKEN is set (posts to channel, returns ts for threading).
+      // Falls back to per-project webhook URL when bot token is absent.
+      if (settings?.slack_channel_id || settings?.slack_webhook_url || Deno.env.get('SLACK_BOT_TOKEN')) {
+        // Resolve reporter identity and preflight data for rich Slack message.
+        // All non-critical — failures are swallowed and fall back to baseline fields.
+        Promise.all([
+          report.end_user_id
+            ? db.from('end_users').select('display_name, jwt_verified_at').eq('id', report.end_user_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          db.from('project_repos').select('github_app_installation_id').eq('project_id', report.project_id).limit(1),
+          db.from('project_settings').select('autofix_enabled').eq('project_id', report.project_id).maybeSingle(),
+        ]).then(([euRes, reposRes, psRes]) => {
+          const identity = euRes.data
+          const hasGithubApp = (reposRes.data ?? []).some((r: { github_app_installation_id: string | null }) => r.github_app_installation_id)
+          sendReportNotification(
+            {
+              projectName,
+              category: classification.category,
+              severity: classification.severity,
+              summary: classification.summary,
+              reporterToken: report.reporter_token_hash,
+              pageUrl: env.url ?? '',
+              reportId,
+              screenshotUrl: report.screenshot_url ?? null,
+              reporterDisplayName: identity?.display_name ?? null,
+              reporterVerified: Boolean(identity?.jwt_verified_at),
+              sessionId: report.session_id ?? null,
+              confidence: classification.confidence ?? null,
+              component: classification.component ?? null,
+              githubAppInstalled: hasGithubApp,
+              autofixEnabled: psRes.data?.autofix_enabled ?? false,
+            },
+            {
+              channelId: settings?.slack_channel_id ?? undefined,
+              webhookUrl: settings?.slack_webhook_url ?? undefined,
+            },
+          ).then((slackTs) => {
+            if (slackTs) {
+              // Store the message ts so finishDispatch can post a threaded reply.
+              db.from('reports').update({ slack_message_ts: slackTs }).eq('id', reportId).then(() => {
+                log.debug('Stored slack_message_ts', { reportId, slackTs })
+              })
+            }
+          }).catch((e) => log.error('Slack notification failed', { err: String(e) }))
+        }).catch((e) => {
+          log.warn('Could not resolve rich Slack context — falling back to baseline', { err: String(e) })
+          sendReportNotification(
+            {
+              projectName,
+              category: classification.category,
+              severity: classification.severity,
+              summary: classification.summary,
+              reporterToken: report.reporter_token_hash,
+              pageUrl: env.url ?? '',
+              reportId,
+            },
+            {
+              channelId: settings?.slack_channel_id ?? undefined,
+              webhookUrl: settings?.slack_webhook_url ?? undefined,
+            },
+          ).catch((e2) => log.error('Slack fallback notification failed', { err: String(e2) }))
+        });
       }
 
       if (settings?.discord_webhook_url) {

@@ -19,9 +19,12 @@
  *  classification, fix-worker, intelligence, synthetic, modernizer. */
 export const ANTHROPIC_SONNET = 'claude-sonnet-4-6'
 
-/** Latest Opus (released 2026-04-16). Reserved for judging + prompt auto-tune
- *  where self-critique on the frontier pays off. */
-export const ANTHROPIC_OPUS = 'claude-opus-4-7'
+/** Latest Opus (4.8, released 2026-05-28). Reserved for judging + prompt
+ *  auto-tune where self-critique on the frontier pays off — but note
+ *  `JUDGE_MODEL`/`PROMPT_TUNE_MODEL` stay pinned to Sonnet because Opus 4.7+
+ *  drops `temperature` and `generateObject` still forces it (see
+ *  `acceptsSamplingKnobs` + MUSHI-MUSHI-SERVER-9 below). */
+export const ANTHROPIC_OPUS = 'claude-opus-4-8'
 
 /** Latest Haiku. Fast path: fast-filter + nl-query summariser. */
 export const ANTHROPIC_HAIKU = 'claude-haiku-4-5-20251001'

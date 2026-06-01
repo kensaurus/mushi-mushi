@@ -25,16 +25,16 @@ const baseChip =
 
 const effortStyles: Record<EffortLevel, string> = {
   Hours:
-    'border-emerald-300/70 bg-emerald-50 text-emerald-900 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-200',
+    'border-[var(--mushi-jade)]/40 bg-[var(--mushi-jade-wash)] text-[var(--mushi-jade)]',
   Days: 'border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200',
   Weeks:
-    'border-rose-300/70 bg-rose-50 text-rose-900 dark:border-rose-700/60 dark:bg-rose-950/40 dark:text-rose-200',
+    'border-[var(--mushi-vermillion)]/40 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion-ink)]',
 }
 
 const riskStyles: Record<RiskLevel, string> = {
-  Low: 'border-emerald-300/70 bg-emerald-50 text-emerald-900 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-200',
+  Low: 'border-[var(--mushi-jade)]/40 bg-[var(--mushi-jade-wash)] text-[var(--mushi-jade)]',
   Med: 'border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200',
-  High: 'border-rose-300/70 bg-rose-50 text-rose-900 dark:border-rose-700/60 dark:bg-rose-950/40 dark:text-rose-200',
+  High: 'border-[var(--mushi-vermillion)]/40 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion-ink)]',
 }
 
 const Dot = ({ filled }: { filled: number }): ReactNode => (

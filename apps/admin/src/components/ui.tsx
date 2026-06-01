@@ -28,6 +28,7 @@ import {
 import { statDestinationLabel } from '../lib/statCardLinks'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../lib/pageHelpRead'
+import { useAdminMode } from '../lib/mode'
 
 /* ── LabelHelp ──────────────────────────────────────────────────────────────
  *
@@ -162,7 +163,7 @@ export function Section({ title, children, className = '', action, icon, freshne
   return (
     <Card className={`p-3 ${className}`}>
       <div className="flex items-center justify-between mb-2 gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider min-w-0">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary min-w-0">
           {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
           <span className="truncate">{title}</span>
         </h3>
@@ -1561,11 +1562,11 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
     <>
       <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0">
         {to && destination ? (
-          <span className="flex-1 min-w-0 font-medium uppercase tracking-wide">
+          <span className="flex-1 min-w-0 font-medium">
             <StatCardSwapLine
               primary={label}
               secondary={`Go to ${destination}`}
-              secondaryClassName="text-brand font-semibold normal-case tracking-normal"
+              secondaryClassName="text-brand font-semibold"
             />
           </span>
         ) : (
@@ -1711,7 +1712,7 @@ function AutoPdcaChip() {
         aria-label={ariaLabel}
       >
         <span
-          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm font-semibold text-[9px] ${meta.badgeBg} ${meta.badgeFg}`}
+          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
           {meta.letter}
@@ -1758,14 +1759,14 @@ export function PageRelatedLinks({ links, className = '' }: { links: PageFlowLin
             key={link.to + link.label}
             to={link.to}
             title={blurb ? `${link.label} — ${blurb}` : link.label}
-            className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
+            className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-chrome-border bg-chrome px-3 py-2 motion-safe:transition-all motion-safe:duration-150 hover:border-brand/35 hover:bg-surface-overlay hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
           >
             {NavIcon ? (
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-muted/25 text-brand motion-safe:transition-colors group-hover/link:bg-brand-muted/40" aria-hidden="true">
-                <NavIcon size={15} />
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-surface-overlay text-fg-muted motion-safe:transition-colors group-hover/link:text-brand" aria-hidden="true">
+                <NavIcon size={14} />
               </span>
             ) : (
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-muted/20 text-brand/80" aria-hidden="true">→</span>
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-surface-overlay text-fg-muted" aria-hidden="true">→</span>
             )}
             <span className="min-w-0 flex-1">
               <span className="block text-xs font-medium text-fg-secondary motion-safe:transition-colors group-hover/link:text-fg">
@@ -1842,6 +1843,7 @@ export function PageHelpBanner({
   flowPath,
 }: PageHelpBannerProps) {
   const { pathname } = useLocation()
+  const { isBeginner } = useAdminMode()
   const routeKey = resolveFlowPath(flowPath ?? pathname)
   const resolvedLinks = relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []
   const [isRead, setIsRead] = useState(() => isPageHelpRead(routeKey))
@@ -1859,6 +1861,10 @@ export function PageHelpBanner({
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
     if (readPageHelpDismissed(title)) return false
+    // Advanced users always start collapsed — the (?) icon in the header is
+    // the affordance. Beginners still auto-open on first visit so they get
+    // the guided experience.
+    if (!isBeginner) return false
     if (!isPageHelpRead(routeKey)) return true
     return !isReturningUser()
   })
@@ -1871,28 +1877,30 @@ export function PageHelpBanner({
     const next = e.currentTarget.open
     setOpen(next)
     writePageHelpDismissed(title, !next)
-    // Auto-open unread panels: mark read when the user collapses after skimming.
     if (!next && !isPageHelpRead(routeKey)) {
       markPageHelpRead(routeKey)
       setIsRead(true)
     }
   }
 
-  const surfaceClass = isRead
-    ? 'border-ok/40 bg-ok/5 open:border-ok/50 open:bg-ok/10'
-    : 'border-warn/40 bg-warn/10 open:border-warn/50 open:bg-warn/15'
+  // Neutral chrome surface — amber was competing with semantic ok/warn/danger
+  // colours that actually mean something. The unread badge is the status signal.
+  const surfaceClass = 'border-chrome-border bg-chrome open:bg-chrome'
   const iconClass = isRead
-    ? 'bg-ok-muted/30 text-ok'
-    : 'bg-warn-muted/30 text-warn'
+    ? 'bg-ok-muted/40 text-ok'
+    : 'bg-brand-subtle text-brand'
   const statusLabel = isRead ? 'Read' : 'New'
+  const statusBadgeClass = isRead
+    ? 'bg-ok-muted/40 text-ok border border-ok/35'
+    : 'bg-brand-subtle text-brand border border-brand/35'
 
   return (
     <details
       open={open}
       onToggle={handleToggle}
-      className={`group mb-4 w-full min-w-0 rounded-lg border motion-safe:transition-colors motion-safe:duration-150 ${surfaceClass}`}
+      className={`group mb-3 w-full min-w-0 rounded-md border motion-safe:transition-colors motion-safe:duration-150 ${surfaceClass}`}
     >
-      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted hover:bg-surface-overlay/30 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
+      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted hover:bg-surface-overlay/30 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
@@ -1904,10 +1912,10 @@ export function PageHelpBanner({
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconClass}`}
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${iconClass}`}
           aria-hidden="true"
         >
-          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z" />
             <path d="M10 2.5V5.5h3" />
             <path d="M5 8h6M5 10.5h4" strokeLinecap="round" />
@@ -1915,13 +1923,13 @@ export function PageHelpBanner({
         </span>
         <span className="font-medium text-fg-secondary group-open:text-fg">{title}</span>
         <span
-          className={`rounded-full px-1.5 py-0.5 text-3xs font-medium ${isRead ? 'bg-ok-muted/30 text-ok' : 'bg-warn-muted/30 text-warn'}`}
+          className={`rounded-full border px-1.5 py-0.5 text-3xs font-semibold ${statusBadgeClass}`}
         >
           {statusLabel}
         </span>
         <span className="ml-auto hidden text-3xs text-fg-faint sm:inline">{open ? 'Click to collapse' : 'Click to expand'}</span>
       </summary>
-      <div className={`w-full min-w-0 border-t px-3 py-3 sm:px-4 ${isRead ? 'border-ok/20' : 'border-warn/20'}`}>
+      <div className="w-full min-w-0 border-t border-chrome-border px-3 py-3 sm:px-4">
         <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2">
           <HelpSection tone="info" title="What it is" className="md:col-span-2">
             <HelpRichText text={whatIsIt} />
@@ -2625,7 +2633,7 @@ export function FilterChip({ label, count, active, onClick, tone = 'default', hi
       <span>{label}</span>
       {typeof count === 'number' && (
         <span
-          className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-[0.6rem] font-semibold leading-tight ${
+          className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${
             active ? 'bg-fg/10' : 'bg-surface-raised/70'
           }`}
           aria-label={`${count} results`}
@@ -2730,10 +2738,10 @@ interface ResultChipProps {
 
 const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
   idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
-  running: 'border-info/30 bg-info-muted/30 text-info',
-  success: 'border-ok/30 bg-ok-muted/30 text-ok',
-  error: 'border-danger/30 bg-danger-muted/30 text-danger',
-  info: 'border-info/30 bg-info-muted/30 text-info',
+  running: 'border-info/35 bg-info/15 text-info font-medium',
+  success: 'border-ok/35 bg-ok/15 text-ok font-medium',
+  error: 'border-danger/35 bg-danger/15 text-danger font-medium',
+  info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
 }
 
 const RESULT_CHIP_GLYPH: Record<ResultChipTone, string> = {
@@ -2754,7 +2762,7 @@ export function ResultChip({ tone, children, at, className = '' }: ResultChipPro
     >
       <span
         aria-hidden="true"
-        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-3xs font-bold ${
           isRunning ? 'motion-safe:animate-spin' : ''
         }`}
       >

@@ -18,7 +18,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { PageHeader, PageHelp, Btn, ErrorAlert, FreshnessPill } from '../components/ui'
+import { Btn, ErrorAlert, FreshnessPill } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
@@ -161,9 +162,18 @@ export function DashboardPage() {
   return (
     <div className="space-y-5">
       <Confetti triggerKey={confettiKey} />
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Dashboard'}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
+        helpTitle={copy?.help?.title ?? 'About the Dashboard'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? '14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it.'}
+        helpUseCases={copy?.help?.useCases ?? [
+          'See whether report intake is rising or falling vs the prior week',
+          'Catch a backlog of un-triaged reports before users complain',
+          'Spot a regression in LLM cost or failure rate after a prompt change',
+          'Jump into the highest-priority report that needs review',
+        ]}
+        helpHowToUse={copy?.help?.howToUse ?? 'Click any KPI or row to drill in. Hover the chart bars for per-day totals.'}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
         <Btn size="sm" variant="ghost" onClick={reload}>
@@ -172,7 +182,7 @@ export function DashboardPage() {
         <Link to="/reports" className="text-xs text-brand hover:text-brand-hover">
           View all reports →
         </Link>
-      </PageHeader>
+      </PageHeaderBar>
 
       <LivePdcaPipeline
         projectId={setup.activeProject?.project_id}
@@ -225,18 +235,6 @@ export function DashboardPage() {
 
       {renderFullDashboard && (
         <>
-          <PageHelp
-            title={copy?.help?.title ?? 'About the Dashboard'}
-            whatIsIt={copy?.help?.whatIsIt ?? '14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it.'}
-            useCases={copy?.help?.useCases ?? [
-              'See whether report intake is rising or falling vs the prior week',
-              'Catch a backlog of un-triaged reports before users complain',
-              'Spot a regression in LLM cost or failure rate after a prompt change',
-              'Jump into the highest-priority report that needs review',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Click any KPI or row to drill in. Hover the chart bars for per-day totals.'}
-          />
-
           <QuotaBanner />
 
           {data.pdcaStages && data.pdcaStages.length > 0 && (

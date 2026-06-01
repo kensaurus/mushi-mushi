@@ -204,7 +204,7 @@
   gap: 0.55rem;
   margin: 0;
   font-family: var(--mushi-font-mono, ui-monospace, monospace);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--mushi-ink-muted);
@@ -261,7 +261,7 @@
 .mushi-stage-preview__chrome-label {
   margin-left: auto;
   font-family: var(--mushi-font-mono, ui-monospace, monospace);
-  font-size: 0.5625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--mushi-ink-muted);
@@ -353,7 +353,7 @@
   gap: 0.35rem;
   margin-top: auto;
   font-family: var(--mushi-font-mono, ui-monospace, monospace);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--mushi-vermillion);
@@ -401,7 +401,7 @@
 .mushi-stage-lightbox__eyebrow {
   margin: 0;
   font-family: var(--mushi-font-mono, ui-monospace, monospace);
-  font-size: 0.5625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--mushi-ink-muted);
@@ -422,7 +422,7 @@
   background: var(--mushi-paper-wash);
   color: var(--mushi-ink);
   font-family: var(--mushi-font-mono, ui-monospace, monospace);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
@@ -447,7 +447,7 @@
 
 .mushi-stage-lightbox__footer a {
   font-family: var(--mushi-font-mono, ui-monospace, monospace);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--mushi-vermillion);

@@ -127,7 +127,7 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
       <SummaryStripe stage={stage} toneBadgeClass={meta.badgeBg} letterClass={meta.badgeFg} />
 
       <section className="mt-3" aria-label="Newest reports waiting for triage">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+        <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
           Newest reports
         </h4>
         {loading ? (
@@ -279,7 +279,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
       ) : (
         <>
           <section className="mt-3" aria-label="Fixes currently in flight">
-            <h4 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+            <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
               In flight · {inFlight.length}
             </h4>
             {inFlight.length === 0 ? (
@@ -338,7 +338,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
 
           {failed.length > 0 && (
             <section className="mt-3" aria-label="Recently failed fixes">
-              <h4 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+              <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
                 Recently failed
               </h4>
               <ul className="space-y-1.5">
@@ -375,7 +375,7 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
 
           {dispatches.some((d) => d.status === 'queued' || d.status === 'running') && (
             <section className="mt-3" aria-label="Queued dispatches">
-              <h4 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+              <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
                 Queue
               </h4>
               <ul className="space-y-1.5">
@@ -472,7 +472,7 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
       </div>
 
       <section className="mt-3" aria-label="Recent judge evaluations">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+        <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
           Recent scores
         </h4>
         {loading ? (
@@ -557,7 +557,7 @@ function ActDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =
       <SummaryStripe stage={stage} toneBadgeClass={meta.badgeBg} letterClass={meta.badgeFg} />
 
       <section className="mt-3" aria-label="Integrations health">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
+        <h4 className="text-3xs font-semibold uppercase tracking-wider text-fg-muted mb-1.5">
           Integrations
         </h4>
         {loading ? (

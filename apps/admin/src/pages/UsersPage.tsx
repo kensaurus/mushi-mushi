@@ -22,8 +22,6 @@ import { useEntitlements } from '../lib/useEntitlements'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import {
-  PageHeader,
-  PageHelp,
   Section,
   Card,
   Badge,
@@ -37,6 +35,8 @@ import {
   RelativeTime,
   IdField,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { Drawer } from '../components/Drawer'
 import { usePageCopy } from '../lib/copy'
 import { EditorialErrorState } from '../components/EditorialErrorState'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -55,8 +55,6 @@ import {
   totalSignupsTooltip,
 } from '../lib/statTooltips/users'
 import { usersLinks } from '../lib/statCardLinks'
-import { ContainedBlock } from '../components/report-detail/ReportSurface'
-
 interface SuperAdminUser {
   user_id: string
   email: string | null
@@ -199,23 +197,17 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" />
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          Operator-only — every signup, current plan, and recent activity. Service-role view, never reachable by non-operators.
-        </p>
-      </ContainedBlock>
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About the user directory'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title="Users"
+        description="Operator-only — every signup, current plan, and recent activity. Service-role view, never reachable by non-operators."
+        helpTitle={copy?.help?.title ?? 'About the user directory'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Look up a specific user to check their plan or recent activity',
           'See how many new users signed up this week',
           'Find accounts that signed up but never submitted a report',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Search by email or filter by plan. Click any row for the full user detail. This page is only visible to super-admins.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Search by email or filter by plan. Click any row for the full user detail. This page is only visible to super-admins.'}
       />
 
       {/* Top metrics row */}
@@ -374,20 +366,14 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
     : 'User detail'
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={drawerLabel}>
-      <div
-        className="absolute inset-0 bg-overlay backdrop-blur-sm"
-        onClick={handleClose}
-        aria-hidden="true"
-      />
-      <aside className="relative w-full max-w-xl h-full bg-surface-root border-l border-edge/60 shadow-raised overflow-y-auto animate-in slide-in-from-right duration-200">
-        <div className="sticky top-0 z-10 bg-surface-root border-b border-edge/60 px-5 py-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">User detail</h2>
-          <Btn variant="ghost" size="sm" onClick={handleClose} aria-keyshortcuts="Escape" aria-label="Close user detail (press Escape)">
-            Close
-          </Btn>
-        </div>
-        <div className="p-5 space-y-5">
+    <Drawer
+      open
+      onClose={handleClose}
+      title="User detail"
+      ariaLabel={drawerLabel}
+      width="lg"
+    >
+      <div className="p-5 space-y-5">
           {loading ? (
             <Loading text="Loading user…" />
           ) : error ? (
@@ -490,8 +476,7 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
               </Section>
             </>
           ) : null}
-        </div>
-      </aside>
-    </div>
+      </div>
+    </Drawer>
   )
 }

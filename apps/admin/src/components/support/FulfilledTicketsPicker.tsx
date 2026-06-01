@@ -115,7 +115,7 @@ export function FulfilledTicketsPicker({
                       <RelativeTime value={t.created_at} />
                     </InlineProof>
                   </span>
-                  <Badge className="shrink-0 text-[0.6rem] capitalize">{t.status.replace('_', ' ')}</Badge>
+                  <Badge className="shrink-0 text-3xs capitalize">{t.status.replace('_', ' ')}</Badge>
                 </label>
               </li>
             )

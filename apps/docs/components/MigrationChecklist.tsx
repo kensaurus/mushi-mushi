@@ -224,21 +224,21 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
   return (
     <section
       aria-label="Migration checklist"
-      className="my-6 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950"
+      className="my-6 overflow-hidden rounded-xl border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)]"
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white/60 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--mushi-rule)] bg-[var(--mushi-paper)]/80 px-4 py-3">
         <div className="flex items-center gap-3">
           <span
             aria-hidden
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-neutral-200 bg-white text-xs font-semibold dark:border-neutral-700 dark:bg-neutral-900"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] text-xs font-semibold text-[var(--mushi-ink)]"
           >
             {hydrated ? `${requiredDone}` : '–'}
           </span>
           <div className="text-sm">
-            <div className="font-medium text-neutral-900 dark:text-neutral-100">
+            <div className="font-medium text-[var(--mushi-ink)]">
               Migration checklist
             </div>
-            <div className="text-xs text-neutral-500 dark:text-neutral-400">
+            <div className="text-xs text-[var(--mushi-ink-muted)]">
               {hydrated
                 ? allDone
                   ? 'All required steps complete'
@@ -252,7 +252,7 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
             type="button"
             onClick={markAll}
             disabled={!hydrated || allDone}
-            className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800"
+            className="rounded-md px-2 py-1 text-xs font-medium text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
           >
             Mark all
           </button>
@@ -260,7 +260,7 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
             type="button"
             onClick={reset}
             disabled={!hydrated || requiredDone === 0}
-            className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800"
+            className="rounded-md px-2 py-1 text-xs font-medium text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
           >
             Reset
           </button>
@@ -268,9 +268,9 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
       </header>
 
       {/* Progress bar */}
-      <div className="h-1 w-full bg-neutral-200 dark:bg-neutral-800">
+      <div className="h-1 w-full bg-[var(--mushi-rule)]">
         <div
-          className="h-full bg-emerald-500 transition-all duration-300 ease-out dark:bg-emerald-400"
+          className="h-full bg-[var(--mushi-jade)] transition-all duration-300 ease-out"
           style={{ width: `${hydrated ? pct : 0}%` }}
           role="progressbar"
           aria-valuenow={pct}
@@ -280,7 +280,7 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
         />
       </div>
 
-      <ol className="divide-y divide-neutral-200 dark:divide-neutral-800">
+      <ol className="divide-y divide-[var(--mushi-rule)]">
         {steps.map((step, index) => {
           const isDone = completed.has(step.id)
           const isOpen = openIds.has(step.id)
@@ -293,21 +293,21 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
                     type="checkbox"
                     checked={isDone}
                     onChange={() => toggle(step.id)}
-                    className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500 dark:border-neutral-600 dark:bg-neutral-800"
+                    className="h-4 w-4 cursor-pointer rounded border-[var(--mushi-rule)] text-[var(--mushi-jade)] accent-[var(--mushi-jade)] focus:ring-[var(--mushi-jade-wash)]"
                     aria-label={`Mark step ${index + 1} complete`}
                   />
                 </label>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <span
-                      className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
-                        isDone ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500 dark:text-neutral-400'
+                      className={`font-mono text-[11px] uppercase tracking-[0.18em] ${
+                        isDone ? 'text-[var(--mushi-jade)]' : 'text-[var(--mushi-ink-muted)]'
                       }`}
                     >
                       Step {String(index + 1).padStart(2, '0')}
                     </span>
                     {step.optional && (
-                      <span className="rounded-full border border-neutral-300 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                      <span className="rounded-full border border-[var(--mushi-rule)] px-1.5 py-0.5 text-[11px] text-[var(--mushi-ink-muted)]">
                         optional
                       </span>
                     )}
@@ -315,14 +315,14 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
                   <div
                     className={`mt-0.5 text-sm ${
                       isDone
-                        ? 'text-neutral-500 line-through dark:text-neutral-500'
-                        : 'text-neutral-900 dark:text-neutral-100'
+                        ? 'text-[var(--mushi-ink-faint)] line-through'
+                        : 'text-[var(--mushi-ink)]'
                     }`}
                   >
                     {step.label}
                   </div>
                   {hasContent && isOpen && (
-                    <div className="mt-2 rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <div className="mt-2 rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] p-3 text-sm text-[var(--mushi-ink)]">
                       {step.content}
                     </div>
                   )}
@@ -333,7 +333,7 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
                     onClick={() => toggleOpen(step.id)}
                     aria-expanded={isOpen}
                     aria-label={isOpen ? 'Hide step details' : 'Show step details'}
-                    className="ml-2 self-start rounded-md p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                    className="ml-2 self-start rounded-md p-1 text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
                   >
                     <svg
                       width="14"
@@ -683,10 +683,10 @@ function SyncCta({
   if (!hasProgress && sync.state.status === 'idle') return null
 
   const baseRow =
-    'flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200 bg-white/40 px-4 py-2 text-[11px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400'
+    'flex flex-wrap items-center justify-between gap-2 border-t border-[var(--mushi-rule)] bg-[var(--mushi-paper)]/60 px-4 py-2 text-[11px] text-[var(--mushi-ink-muted)]'
 
   const linkClass =
-    'font-medium text-emerald-700 hover:underline disabled:cursor-wait disabled:opacity-60 dark:text-emerald-400'
+    'font-medium text-[var(--mushi-jade)] hover:underline disabled:cursor-wait disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm'
 
   switch (sync.state.status) {
     case 'idle':
@@ -735,7 +735,7 @@ function SyncCta({
     case 'error':
       return (
         <footer className={baseRow}>
-          <span className="text-amber-700 dark:text-amber-400">{sync.state.message}</span>
+          <span className="text-[var(--mushi-vermillion)]">{sync.state.message}</span>
           <button type="button" onClick={sync.signIn} className={linkClass}>
             {sync.state.session ? 'Retry' : 'Sign in to sync'}
           </button>

@@ -134,7 +134,7 @@ export function createRollbarPlugin(cfg: RollbarPluginConfig, cache: RollbarItem
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-rollbar] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-rollbar] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-rollbar] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-rollbar] ${msg}`, meta ?? ''),
     },

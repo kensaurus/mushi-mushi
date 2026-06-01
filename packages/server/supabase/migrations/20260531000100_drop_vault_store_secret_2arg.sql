@@ -1,0 +1,33 @@
+-- Migration: drop_vault_store_secret_2arg
+-- PURPOSE: Migration 20260522100000_privacy_hardening_wave5.sql replaced
+--   vault_store_secret(TEXT, TEXT) with a project-scoped 3-argument variant:
+--   vault_store_secret(TEXT, TEXT, UUID DEFAULT NULL).
+--
+--   However, `CREATE OR REPLACE FUNCTION` only replaces a function with the
+--   *exact same signature*. The old 2-argument overload from
+--   20260418001600_byok_key_source.sql still exists as a separate function in
+--   the catalog. PostgreSQL now sees two candidates when a caller passes
+--   exactly two positional TEXT arguments:
+--
+--     vault_store_secret(TEXT, TEXT)            -- old, 2-arg
+--     vault_store_secret(TEXT, TEXT, UUID)      -- new, 3-arg with DEFAULT
+--
+--   PostgREST's type resolver cannot choose between them and returns
+--   HTTP 500: "Could not choose the best candidate function."  This breaks
+--   every BYOK key save (Settings → API Keys) and every vaulted integration
+--   write (Slack, Discord, etc.).
+--
+--   The fix is to drop the old 2-argument overload. All call sites that
+--   previously called vault_store_secret(name, value) will now resolve
+--   unambiguously to the 3-arg function with the project_id defaulting to NULL,
+--   which matches the original 2-arg behaviour exactly.
+--
+-- VERIFICATION:
+--   After this migration:
+--     SELECT pg_get_function_identity_arguments(oid)
+--       FROM pg_proc
+--      WHERE proname = 'vault_store_secret'
+--        AND pronamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public');
+--   Should return exactly one row: "secret_name text, secret_value text, project_id uuid"
+
+DROP FUNCTION IF EXISTS vault_store_secret(TEXT, TEXT);

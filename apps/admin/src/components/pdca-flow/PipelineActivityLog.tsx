@@ -48,7 +48,7 @@ export function PipelineActivityLog({ activity, max = 5, onFocusStage }: Pipelin
       aria-live="polite"
       aria-label="Recent pipeline activity"
     >
-      <p className="font-medium text-fg-muted uppercase tracking-wider text-[9px] mb-0.5">
+      <p className="font-medium text-fg-muted uppercase tracking-wider text-3xs mb-0.5">
         Live activity
       </p>
       <ul className="space-y-0.5">
@@ -62,7 +62,7 @@ export function PipelineActivityLog({ activity, max = 5, onFocusStage }: Pipelin
                 }`}
                 aria-hidden="true"
               />
-              <span className="font-mono text-[10px] text-fg-faint tabular-nums shrink-0">
+              <span className="font-mono text-3xs text-fg-faint tabular-nums shrink-0">
                 {relTime(item.at)}
               </span>
               <span className="text-fg-secondary truncate">{item.label}</span>

@@ -151,8 +151,8 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
           role="alert"
           className={`mb-3 flex items-start gap-2 rounded-md px-3 py-2 text-2xs ${
             isOverBudget100
-              ? 'bg-red-50 border border-red-300/60 text-red-800 dark:bg-red-950/30 dark:border-red-700/50 dark:text-red-300'
-              : 'bg-amber-50 border border-amber-300/60 text-amber-800 dark:bg-amber-950/30 dark:border-amber-700/50 dark:text-amber-300'
+              ? 'bg-danger-muted/20 border border-danger/30 text-danger'
+              : 'bg-warn-muted/20 border border-warn/30 text-warn'
           }`}
         >
           <span aria-hidden="true">{isOverBudget100 ? '🚨' : '⚠️'}</span>

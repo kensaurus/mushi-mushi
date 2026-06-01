@@ -7,14 +7,13 @@ import { usePageCopy } from '../lib/copy'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import {
-  PageHeader,
-  PageHelp,
   SegmentedControl,
   Btn,
   Card,
   ErrorAlert,
   Loading,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageHero } from '../components/PageHero'
 import { PageActionBar } from '../components/PageActionBar'
 import { SetupNudge } from '../components/SetupNudge'
@@ -342,7 +341,7 @@ export function InventoryPage() {
   if (!entLoading && !has('inventory_v2')) {
     return (
       <div className="space-y-4">
-        <PageHeader title="User stories & inventory" projectScope={null} description="Maps specs to verified actions." />
+        <PageHeaderBar title="User stories & inventory" projectScope={null} description="Maps specs to verified actions." />
         <UpgradePrompt flag="inventory_v2" currentPlan={planName} />
       </div>
     )
@@ -362,13 +361,14 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-3" data-testid="mushi-page-inventory">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'User stories · Inventory'}
         projectScope={null}
-        description={
-          copy?.description ??
-          'Positive graph: stories, pages, elements, actions — status derived from gates, crawler, and reconciler.'
-        }
+        description={copy?.description ?? 'Positive graph: stories, pages, elements, actions — status derived from gates, crawler, and reconciler.'}
+        helpTitle={INVENTORY_HELP.title}
+        helpWhatIsIt={INVENTORY_HELP.whatIsIt}
+        helpUseCases={INVENTORY_HELP.useCases}
+        helpHowToUse={INVENTORY_HELP.howToUse}
       >
         <SegmentedControl<Tab>
           size="sm"
@@ -385,7 +385,7 @@ export function InventoryPage() {
             { id: 'yaml', label: 'Yaml' },
           ]}
         />
-      </PageHeader>
+      </PageHeaderBar>
 
       <PageHero
         scope="inventory"
@@ -446,7 +446,7 @@ export function InventoryPage() {
         }
       />
 
-      <PageHelp {...INVENTORY_HELP} />
+{/* PageHelp migrated to PageHeaderBar above */}
 
       {!snapshot && (
         <SetupNudge

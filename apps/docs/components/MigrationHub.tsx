@@ -93,18 +93,18 @@ export function MigrationHub({ guides }: Props) {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setFilter(key)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] ${
                   active
-                    ? 'border-neutral-900 bg-neutral-900 text-neutral-50 dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
-                    : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-100'
+                    ? 'border-[var(--mushi-ink)] bg-[var(--mushi-ink)] text-[var(--mushi-paper)]'
+                    : 'border-[var(--mushi-rule)] bg-[var(--mushi-paper)] text-[var(--mushi-ink-muted)] hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:text-[var(--mushi-ink)]'
                 }`}
               >
                 {FILTER_LABELS[key]}
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] tabular-nums ${
+                  className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${
                     active
-                      ? 'bg-white/15 text-current'
-                      : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
+                      ? 'bg-[var(--mushi-paper)]/20 text-current'
+                      : 'bg-[var(--mushi-paper-wash)] text-[var(--mushi-ink-muted)]'
                   }`}
                 >
                   {counts[key]}
@@ -123,18 +123,18 @@ export function MigrationHub({ guides }: Props) {
             placeholder="Search migrations…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-600 dark:focus:ring-neutral-800"
+            className="w-full rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-3 py-1.5 text-sm text-[var(--mushi-ink)] placeholder:text-[var(--mushi-ink-faint)] focus:border-[color-mix(in_oklch,var(--mushi-ink)_40%,var(--mushi-rule))] focus:outline-none focus:ring-2 focus:ring-[var(--mushi-vermillion-wash)]"
           />
         </div>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-neutral-300 px-6 py-10 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+        <div className="mt-6 rounded-xl border border-dashed border-[var(--mushi-rule)] px-6 py-10 text-center text-sm text-[var(--mushi-ink-muted)]">
           No migration guides match{' '}
           {query ? <>&ldquo;{query}&rdquo;</> : <>this filter</>}.{' '}
           <a
             href="https://github.com/kensaurus/mushi-mushi/issues/new?labels=migration-request"
-            className="underline underline-offset-2 hover:text-neutral-700 dark:hover:text-neutral-200"
+            className="text-[var(--mushi-vermillion)] underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
           >
             Request one →
           </a>
@@ -151,32 +151,32 @@ export function MigrationHub({ guides }: Props) {
                   attributes. */}
               <Link
                 href={`/migrations/${g.slug}`}
-                className={`group block h-full rounded-xl border p-4 transition ${
+                className={`group block h-full rounded-xl border p-4 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] ${
                   g.status === 'draft'
-                    ? 'border-dashed border-neutral-300 bg-neutral-50 hover:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-950'
-                    : 'border-neutral-200 bg-white hover:border-neutral-400 hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-950 dark:hover:border-neutral-600'
+                    ? 'border-dashed border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] hover:border-[color-mix(in_oklch,var(--mushi-ink)_20%,var(--mushi-rule))]'
+                    : 'border-[var(--mushi-rule)] bg-[var(--mushi-paper)] hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:shadow-[0_4px_16px_-8px_rgba(14,13,11,0.15)]'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                  <h3 className="text-base font-semibold text-[var(--mushi-ink)]">
                     {g.title}
                   </h3>
                   {g.status === 'draft' && (
-                    <span className="shrink-0 rounded-full border border-neutral-300 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                    <span className="shrink-0 rounded-full border border-[var(--mushi-rule)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[var(--mushi-ink-muted)]">
                       draft
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 text-sm text-neutral-600 dark:text-neutral-400">
+                <p className="mt-1.5 text-sm text-[var(--mushi-ink-muted)]">
                   {g.summary}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                  <span className="rounded-full bg-[var(--mushi-paper-wash)] px-2 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide text-[var(--mushi-ink-muted)]">
                     {CATEGORY_LABELS[g.category]}
                   </span>
                   <EffortBadge level={g.effort} />
                   <RiskBadge level={g.risk} />
-                  <span className="ml-auto text-xs text-neutral-400 transition group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300">
+                  <span className="ml-auto text-xs text-[var(--mushi-ink-faint)] transition group-hover:text-[var(--mushi-ink-muted)]">
                     Read →
                   </span>
                 </div>

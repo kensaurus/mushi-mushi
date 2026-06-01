@@ -16,17 +16,17 @@ import type { ReactNode } from 'react'
 type HelpTone = 'info' | 'tip' | 'steps' | 'nav'
 
 const TONE_RAIL: Record<HelpTone, string> = {
-  info: 'bg-blue-500/50',
-  tip: 'bg-amber-400/50',
+  info:  'bg-info/50',
+  tip:   'bg-warn/50',
   steps: 'bg-brand/50',
-  nav: 'bg-fg-muted/30',
+  nav:   'bg-fg-muted/30',
 }
 
 const TONE_TITLE: Record<HelpTone, string> = {
-  info: 'text-blue-400',
-  tip: 'text-amber-400',
+  info:  'text-info',
+  tip:   'text-warn',
   steps: 'text-brand',
-  nav: 'text-fg-muted',
+  nav:   'text-fg-muted',
 }
 
 interface HelpSectionProps {

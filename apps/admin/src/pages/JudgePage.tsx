@@ -5,8 +5,6 @@ import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
 import {
-  PageHeader,
-  PageHelp,
   Card,
   ErrorAlert,
   EmptyState,
@@ -21,6 +19,7 @@ import {
   SegmentedControl,
   StatCard,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { JudgeStatusBanner } from '../components/judge/JudgeStatusBanner'
 import {
   ActionPill,
@@ -672,20 +671,18 @@ export function JudgePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-judge">
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Judge'}
-        whatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Judge'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'}
+        helpTitle={copy?.help?.title ?? 'About the Judge'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
+        helpUseCases={copy?.help?.useCases ?? [
           'Detect when the classifier silently degrades after a model or prompt change',
           'Compare prompt versions head-to-head on real reports',
           'Decide whether to roll back, fork, or promote a prompt',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Judge'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
       >
         <Badge
           className={
@@ -735,14 +732,7 @@ export function JudgePage() {
             {runResult.message}
           </ResultChip>
         )}
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'}
-        </p>
-      </ContainedBlock>
+      </PageHeaderBar>
 
       <JudgeStatusBanner
         stats={stats}

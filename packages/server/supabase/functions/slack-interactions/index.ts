@@ -31,6 +31,7 @@ import { withSentry, reportMessage } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { dispatchFixForReport } from '../_shared/dispatch.ts'
+import { sendBotMessage } from '../_shared/slack.ts'
 
 const log = rootLog.child('slack-interactions')
 
@@ -102,7 +103,7 @@ Deno.serve(
     const db = getServiceClient()
     const { data: report } = await db
       .from('reports')
-      .select('id, project_id')
+      .select('id, project_id, slack_message_ts')
       .eq('id', reportId)
       .single()
 
@@ -113,17 +114,30 @@ Deno.serve(
 
     // Kick the dispatch in the background so we can answer Slack within
     // the 3s SLA. The response_url gets the final status.
+    //
+    // `EdgeRuntime.waitUntil` keeps the Deno isolate alive after the response
+    // is returned so the background work actually runs. Without it, Supabase
+    // terminates the isolate as soon as the response is dispatched, which
+    // silently drops the async `finishDispatch` call before the DB insert lands.
     const responseUrl = payload.response_url
     const slackUser = payload.user?.id ?? 'unknown'
 
-    finishDispatch({
+    const dispatchPromise = finishDispatch({
       reportId,
       projectId: report.project_id,
       responseUrl,
       slackUser,
+      slackThreadTs: report.slack_message_ts ?? undefined,
+      slackMeta: { source: 'slack', slackUserId: slackUser, triggeredAt: new Date().toISOString() },
     }).catch((err) => {
       log.error('Async dispatch failed', { err: String(err) })
     })
+
+    // Keep the isolate alive for the background work (Supabase Deno runtime).
+    if (typeof (globalThis as Record<string, unknown>).EdgeRuntime !== 'undefined') {
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime.waitUntil(dispatchPromise)
+    }
 
     return ephemeral(':hourglass_flowing_sand: Dispatching fix — PR will land in `/fixes` shortly.')
   }),
@@ -141,13 +155,27 @@ async function finishDispatch(input: {
   projectId: string
   responseUrl?: string
   slackUser: string
+  slackThreadTs?: string
+  slackMeta?: Record<string, unknown>
 }) {
   const result = await dispatchFixForReport({
     reportId: input.reportId,
     projectId: input.projectId,
-    requestedBy: `slack:${input.slackUser}`,
+    requestedBy: null,
     skipMembershipCheck: true,
+    metadata: input.slackMeta,
   })
+
+  // Post a threaded Slack reply via bot if we have the thread timestamp.
+  if (input.slackThreadTs) {
+    const threadText = result.ok
+      ? `:white_check_mark: Fix dispatched by <@${input.slackUser}>. A draft PR will appear in \`/fixes\` shortly.`
+      : `:x: Fix dispatch failed — ${result.message ?? result.code ?? 'unknown error'}`
+    await sendBotMessage({
+      text: threadText,
+      threadTs: input.slackThreadTs,
+    }).catch((err) => log.error('Threaded reply failed', { err: String(err) }))
+  }
 
   if (!input.responseUrl) return
 

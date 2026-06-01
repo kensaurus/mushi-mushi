@@ -125,7 +125,7 @@ export function createBugsnagPlugin(cfg: BugsnagPluginConfig, cache: BugsnagErro
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-bugsnag] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-bugsnag] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-bugsnag] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-bugsnag] ${msg}`, meta ?? ''),
     },

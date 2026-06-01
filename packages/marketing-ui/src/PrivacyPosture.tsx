@@ -35,13 +35,12 @@ export function PrivacyPosture() {
         <li key={pill.label}>
           <Link
             href={urls.docs(pill.docPath)}
-            className="group flex items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-ink)] hover:text-[var(--mushi-ink)]"
+            className="group flex items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-ink)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
             aria-label={`${pill.label}: ${pill.detail}`}
           >
-            {/* Green check dot */}
             <span
               aria-hidden="true"
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--mushi-jade)]"
             />
             {pill.label}
           </Link>

@@ -84,30 +84,38 @@ const TONE_CLASS: Record<Tone, { dot: string; ring: string; label: string }> = {
 }
 
 const STAGE_TONE: Record<RibbonTile['stage'], string> = {
-  P: 'bg-info-muted text-info',
-  D: 'bg-brand/15 text-brand',
-  C: 'bg-warn-muted text-warn',
-  A: 'bg-ok-muted text-ok',
+  P: 'bg-info/15 text-info border border-info/35',
+  D: 'bg-brand/15 text-brand border border-brand/35',
+  C: 'bg-warn/15 text-warn border border-warn/35',
+  A: 'bg-ok/15 text-ok border border-ok/35',
 }
 
-const STAGE_BORDER_HEX: Record<RibbonTile['stage'], string> = {
-  P: '#60a5fa',
-  D: '#f5b544',
-  C: '#fbbf24',
-  A: '#34d399',
+const STAGE_BORDER: Record<RibbonTile['stage'], string> = {
+  P: 'border-l-info',
+  D: 'border-l-brand',
+  C: 'border-l-warn',
+  A: 'border-l-ok',
 }
 
-function PulseArrow({ fromHex, toHex }: { fromHex: string; toHex: string }) {
-  const gId = `pa-${fromHex.slice(1)}-${toHex.slice(1)}`
-  const animId = `pm-${fromHex.slice(1)}-${toHex.slice(1)}`
+/** Arrow connectors read theme tokens so light/dark stay in sync. */
+const STAGE_ARROW: Record<RibbonTile['stage'], string> = {
+  P: 'var(--color-info)',
+  D: 'var(--color-brand)',
+  C: 'var(--color-warn)',
+  A: 'var(--color-ok)',
+}
+
+function PulseArrow({ fromColor, toColor }: { fromColor: string; toColor: string }) {
+  const gId = `pa-${fromColor.replace(/\W/g, '')}-${toColor.replace(/\W/g, '')}`
+  const animId = `pm-${fromColor.replace(/\W/g, '')}-${toColor.replace(/\W/g, '')}`
   // Marching dashes: same approach as HeroGradientEdge, no blur.
   return (
     <div className="hidden lg:flex items-center justify-center w-6 xl:w-8 shrink-0" aria-hidden="true">
       <svg width="28" height="20" viewBox="0 0 28 20" fill="none" className="w-full h-auto">
         <defs>
           <linearGradient id={gId} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={fromHex} />
-            <stop offset="100%" stopColor={toHex} />
+            <stop offset="0%" stopColor={fromColor} />
+            <stop offset="100%" stopColor={toColor} />
           </linearGradient>
         </defs>
         <style>{`
@@ -117,7 +125,7 @@ function PulseArrow({ fromHex, toHex }: { fromHex: string; toHex: string }) {
           }
         `}</style>
         {/* Faint base rail */}
-        <path d="M2 10 L20 10" stroke={toHex} strokeWidth="1" strokeLinecap="round" opacity="0.25" />
+        <path d="M2 10 L20 10" stroke={toColor} strokeWidth="1" strokeLinecap="round" opacity="0.25" />
         {/* Marching dashes */}
         <path
           d="M2 10 L20 10"
@@ -128,7 +136,7 @@ function PulseArrow({ fromHex, toHex }: { fromHex: string; toHex: string }) {
           style={{ animation: `${animId} 0.9s linear infinite` }}
         />
         {/* Solid filled arrowhead */}
-        <path d="M18 6 L24 10 L18 14 Z" fill={toHex} />
+        <path d="M18 6 L24 10 L18 14 Z" fill={toColor} />
       </svg>
     </div>
   )
@@ -266,7 +274,7 @@ export function PipelineStatusRibbon() {
                 key={t.stage}
                 aria-label={`${t.label}: ${t.summary}`}
                 title={`${t.label}: ${t.summary}`}
-                className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none ${STAGE_TONE[t.stage]} ring-1 ring-inset ${TONE_CLASS[t.tone].ring}`}
+                className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-3xs font-bold leading-none ${STAGE_TONE[t.stage]} ring-1 ring-inset ${TONE_CLASS[t.tone].ring}`}
               >
                 {t.stage}
               </span>
@@ -325,21 +333,16 @@ export function PipelineStatusRibbon() {
       >
         {tiles.map((tile, i) => {
           const tone = TONE_CLASS[tile.tone]
-          const borderHex = STAGE_BORDER_HEX[tile.stage]
           return (
             <div key={tile.stage} className="flex items-stretch min-w-0 lg:flex-1">
               <Link
                 to={tile.to}
-                className="group relative flex w-full items-center gap-2 rounded-sm bg-surface/80 px-2.5 py-2 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0"
+                className={`group relative flex w-full items-center gap-2 rounded-sm border-l-[3px] bg-surface/80 px-2.5 py-2 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 ${STAGE_BORDER[tile.stage]}`}
                 title={tile.summary}
-                style={{
-                  borderLeft: `3px solid ${borderHex}`,
-                  boxShadow: `inset 0 -1px 0 ${borderHex}18`,
-                }}
               >
                 <span
                   aria-hidden
-                  className={`inline-flex items-center justify-center w-5 h-5 rounded-sm text-[0.6rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+                  className={`inline-flex items-center justify-center w-5 h-5 rounded-sm text-3xs font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
                 >
                   {tile.stage}
                 </span>
@@ -369,8 +372,8 @@ export function PipelineStatusRibbon() {
               </Link>
               {i < tiles.length - 1 && (
                 <PulseArrow
-                  fromHex={borderHex}
-                  toHex={STAGE_BORDER_HEX[tiles[i + 1].stage]}
+                  fromColor={STAGE_ARROW[tile.stage]}
+                  toColor={STAGE_ARROW[tiles[i + 1].stage]}
                 />
               )}
             </div>

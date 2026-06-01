@@ -29,17 +29,26 @@ import type { ESLint, Linter, Rule } from 'eslint'
 
 import noDeadHandler from './rules/no-dead-handler.js'
 import noMockLeak from './rules/no-mock-leak.js'
+import noRawPaletteColor from './rules/no-raw-palette-color.js'
+import noText3xsOnInteractive from './rules/no-text-3xs-on-interactive.js'
+import noHandRolledDialog from './rules/no-hand-rolled-dialog.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
 const rules: Record<string, Rule.RuleModule> = {
   'no-dead-handler': noDeadHandler,
   'no-mock-leak': noMockLeak,
+  'no-raw-palette-color': noRawPaletteColor,
+  'no-text-3xs-on-interactive': noText3xsOnInteractive,
+  'no-hand-rolled-dialog': noHandRolledDialog,
 }
 
 const recommendedRules: Linter.RulesRecord = {
   [`${PLUGIN_NAME}/no-dead-handler`]: 'error',
   [`${PLUGIN_NAME}/no-mock-leak`]: 'error',
+  [`${PLUGIN_NAME}/no-raw-palette-color`]: 'warn',
+  [`${PLUGIN_NAME}/no-text-3xs-on-interactive`]: 'warn',
+  [`${PLUGIN_NAME}/no-hand-rolled-dialog`]: 'error',
 }
 
 /**

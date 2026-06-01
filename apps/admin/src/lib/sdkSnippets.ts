@@ -20,7 +20,9 @@ export type WidgetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-
 export type WidgetTheme = 'auto' | 'light' | 'dark'
 
 /** Mirror of `MushiWidgetConfig.trigger`. */
-export type WidgetTrigger = 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+export type WidgetTrigger = 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+export type BannerVariant = 'neon' | 'brand' | 'subtle'
+export type BannerPosition = 'top' | 'bottom'
 
 /** Mirror of `MushiCaptureConfig.screenshot`. */
 export type ScreenshotMode = 'on-report' | 'auto' | 'off'
@@ -39,6 +41,11 @@ export interface SdkPreviewConfig {
   /** CSS selector used when trigger === 'attach'. Only emitted in the
    *  snippet when non-empty. Defaults to '' so omitted = pick at runtime. */
   attachToSelector: string
+  /** Config for the header-banner launcher. Only used when trigger === 'banner'. */
+  bannerVariant: BannerVariant
+  bannerPosition: BannerPosition
+  bannerBugCta: string
+  bannerFeatureCta: boolean
   capture: {
     console: boolean
     network: boolean
@@ -60,6 +67,10 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   trigger: 'auto',
   triggerText: '\u{1F41B}',
   attachToSelector: '',
+  bannerVariant: 'brand',
+  bannerPosition: 'top',
+  bannerBugCta: '',
+  bannerFeatureCta: true,
   capture: {
     console: true,
     network: true,
@@ -196,6 +207,16 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   // surrounding whitespace.
   if (cfg.triggerText.trim() && cfg.triggerText !== d.triggerText) {
     lines.push(`${indent}  triggerText: ${JSON.stringify(cfg.triggerText)},`)
+  }
+  if (cfg.trigger === 'banner') {
+    const bannerLines: string[] = []
+    if (cfg.bannerVariant !== d.bannerVariant) bannerLines.push(`${indent}    variant: '${cfg.bannerVariant}',`)
+    if (cfg.bannerPosition !== d.bannerPosition) bannerLines.push(`${indent}    position: '${cfg.bannerPosition}',`)
+    if (cfg.bannerBugCta.trim()) bannerLines.push(`${indent}    bugCta: ${JSON.stringify(cfg.bannerBugCta.trim())},`)
+    if (!cfg.bannerFeatureCta) bannerLines.push(`${indent}    featureCta: false,`)
+    if (bannerLines.length > 0) {
+      lines.push(`${indent}  bannerConfig: {\n${bannerLines.join('\n')}\n${indent}  },`)
+    }
   }
   if (lines.length === 0) return ''
   return `${indent}widget: {\n${lines.join('\n')}\n${indent}},\n`

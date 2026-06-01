@@ -65,8 +65,8 @@ async function simulate(eventName: string): Promise<void> {
     headers: { 'Content-Type': 'application/json', 'X-Mushi-Signature': sign(raw, secret) },
     body: raw,
   })
-  console.log(`→ ${target}`)
-  console.log(`← ${res.status} ${await res.text()}`)
+  process.stdout.write(`→ ${target}\n`)
+  process.stdout.write(`← ${res.status} ${await res.text()}\n`)
   process.exit(res.ok ? 0 : 1)
 }
 
@@ -77,7 +77,7 @@ function signFile(path: string): void {
     process.exit(1)
   }
   const raw = readFileSync(path, 'utf8')
-  console.log(sign(raw, secret))
+  process.stdout.write(sign(raw, secret) + '\n')
 }
 
 async function verify(): Promise<void> {
@@ -91,7 +91,7 @@ async function verify(): Promise<void> {
   for await (const c of process.stdin) chunks.push(c as Buffer)
   const rawBody = Buffer.concat(chunks).toString('utf8')
   const result = verifySignature({ rawBody, header: sigHeader, secret })
-  if (result.ok) { console.log('ok'); process.exit(0) }
+  if (result.ok) { process.stdout.write('ok\n'); process.exit(0) }
   console.error(`invalid: ${result.reason}`)
   process.exit(1)
 }
@@ -102,6 +102,6 @@ switch (cmd) {
   case 'sign': signFile(args[0] ?? '/dev/stdin'); break
   case 'verify': void verify(); break
   default:
-    console.log('usage: mushi-plugin <simulate|sign|verify> [args]')
+    process.stderr.write('usage: mushi-plugin <simulate|sign|verify> [args]\n')
     process.exit(1)
 }

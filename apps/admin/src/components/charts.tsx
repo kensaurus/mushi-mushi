@@ -525,20 +525,45 @@ export interface SeverityDay {
   unscored?: number
 }
 
+// Picks ~N evenly-spaced tick indices from an array of length `len`,
+// always including first and last.
+function pickTicks(len: number, n = 5): number[] {
+  if (len <= n) return Array.from({ length: len }, (_, i) => i)
+  const step = (len - 1) / (n - 1)
+  return Array.from({ length: n }, (_, i) => Math.round(i * step))
+}
+
 export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
   const max = Math.max(1, ...data.map((d) => d.total))
   const totalReports = data.reduce((sum, d) => sum + d.total, 0)
+  // Y-axis: show 0, mid, max for quick scale reading
+  const yMid = Math.round(max / 2)
+  // X-axis: ~5 evenly distributed tick indices so labels never collide
+  const tickIdx = new Set(pickTicks(data.length, Math.min(5, data.length)))
+  // Only show value labels for bars tall enough that text fits (> 20% of max)
+  const labelThreshold = max * 0.20
+
   return (
     <div>
       <div className="flex gap-1.5">
+        {/* Y-axis labels */}
         <div
-          className="flex flex-col justify-between items-end h-24 text-3xs text-fg-faint font-mono select-none"
+          className="flex flex-col justify-between items-end text-3xs text-fg-faint font-mono select-none shrink-0"
+          style={{ height: '7rem' }}
           aria-hidden="true"
         >
-          <span>{max}</span>
+          <span className="tabular-nums">{max}</span>
+          <span className="tabular-nums">{yMid}</span>
           <span>0</span>
         </div>
-        <div className="flex items-end gap-1 h-24 flex-1" role="group" aria-label={`Daily severity breakdown · ${totalReports} reports across ${data.length} days`}>
+
+        {/* Bar columns */}
+        <div
+          className="flex items-end gap-[2px] flex-1"
+          style={{ height: '7rem' }}
+          role="group"
+          aria-label={`Daily severity breakdown · ${totalReports} reports across ${data.length} days`}
+        >
           {data.map((d) => {
             const totalH = (d.total / max) * 100
             const seg = (n: number) => (d.total > 0 ? (n / d.total) * 100 : 0)
@@ -548,17 +573,29 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
                 day={d}
                 totalH={totalH}
                 seg={seg}
+                showLabel={d.total >= labelThreshold}
               />
             )
           })}
         </div>
       </div>
-      <InlineProof className="flex justify-between font-mono tabular-nums border-0 bg-transparent px-0 py-0 mt-1 pl-5 text-3xs">
-        <span>{shortDay(data[0]?.day ?? '')}</span>
-        <span className="text-fg-faint/70">reports per day</span>
-        <span>{shortDay(data[data.length - 1]?.day ?? '')}</span>
-      </InlineProof>
-      <div className="flex flex-wrap gap-2 mt-2">
+
+      {/* X-axis: show evenly spaced date labels, centred under each column */}
+      <div
+        className="flex mt-1 pl-5 text-3xs font-mono text-fg-faint select-none"
+        aria-hidden="true"
+      >
+        {data.map((d, i) => (
+          <div key={d.day} className="flex-1 flex justify-center">
+            {tickIdx.has(i) ? (
+              <span className="truncate tabular-nums">{shortDay(d.day)}</span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-1.5 mt-2">
         <SignalChip tone="danger">Critical</SignalChip>
         <SignalChip tone="warn">High</SignalChip>
         <SignalChip tone="info">Medium</SignalChip>
@@ -566,6 +603,7 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
         {data.some((d) => d.unscored != null) && (
           <SignalChip tone="neutral">Unscored</SignalChip>
         )}
+        <span className="ml-auto text-fg-faint/70">{totalReports} total</span>
       </div>
     </div>
   )
@@ -575,10 +613,12 @@ function SeverityBarColumn({
   day,
   totalH,
   seg,
+  showLabel,
 }: {
   day: SeverityDay
   totalH: number
   seg: (n: number) => number
+  showLabel: boolean
 }) {
   // Hover surfaces a rich breakdown popover so users can answer "what's in
   // that spike?" without leaving the chart. Round 2 polish — replaces the
@@ -594,7 +634,8 @@ function SeverityBarColumn({
       role="img"
       aria-label={ariaSummary}
     >
-      {day.total > 0 && (
+      {/* Value label — only renders when bar is tall enough to avoid clutter */}
+      {day.total > 0 && showLabel && (
         <span
           className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-0.5 -translate-x-1/2 text-3xs font-mono font-medium tabular-nums text-fg-muted"
           aria-hidden="true"
@@ -631,21 +672,38 @@ function SeverityBarColumn({
           </ul>
         </div>
       )}
-      <button
-        type="button"
-        tabIndex={day.total > 0 ? 0 : -1}
-        aria-label={ariaSummary}
-        className="absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch gap-px focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm cursor-default"
-        style={{ height: `${Math.max(2, totalH)}%` }}
-      >
-        <span aria-hidden="true" className="block bg-danger motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.critical)}%` }} />
-        <span aria-hidden="true" className="block bg-warn motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.high)}%` }} />
-        <span aria-hidden="true" className="block bg-info motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.medium)}%` }} />
-        <span aria-hidden="true" className="block bg-ok motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.low)}%` }} />
-        {day.unscored != null && (
-          <span aria-hidden="true" className="block bg-fg-faint/40" style={{ height: `${seg(day.unscored)}%` }} />
-        )}
-      </button>
+      {day.total === 0 ? (
+        /* Ghost bar for empty days — communicates "data exists, just zero"
+           and keeps the column spacing visually consistent. */
+        <div
+          className="absolute inset-x-0 bottom-0 rounded-sm"
+          style={{ height: '6%', minHeight: '4px' }}
+          aria-hidden="true"
+        >
+          <div className="h-full w-full rounded-sm border border-dashed border-edge/40 opacity-60" />
+        </div>
+      ) : (
+        <button
+          type="button"
+          tabIndex={0}
+          aria-label={ariaSummary}
+          className={[
+            'absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch gap-px',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm',
+            'motion-safe:transition-transform duration-150',
+            'group-hover:brightness-110',
+          ].join(' ')}
+          style={{ height: `${Math.max(4, totalH)}%` }}
+        >
+          <span aria-hidden="true" className="block bg-danger rounded-b-sm motion-safe:transition-opacity" style={{ height: `${seg(day.critical)}%`, minHeight: day.critical > 0 ? '2px' : '0' }} />
+          <span aria-hidden="true" className="block bg-warn motion-safe:transition-opacity" style={{ height: `${seg(day.high)}%`, minHeight: day.high > 0 ? '2px' : '0' }} />
+          <span aria-hidden="true" className="block bg-info motion-safe:transition-opacity" style={{ height: `${seg(day.medium)}%`, minHeight: day.medium > 0 ? '2px' : '0' }} />
+          <span aria-hidden="true" className="block bg-ok rounded-t-sm motion-safe:transition-opacity" style={{ height: `${seg(day.low)}%`, minHeight: day.low > 0 ? '2px' : '0' }} />
+          {day.unscored != null && (
+            <span aria-hidden="true" className="block bg-fg-faint/40" style={{ height: `${seg(day.unscored)}%`, minHeight: day.unscored > 0 ? '2px' : '0' }} />
+          )}
+        </button>
+      )}
     </div>
   )
 }
