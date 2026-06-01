@@ -1436,7 +1436,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `variant: brand · position: top · featureCta: true`
 
-**Where it lives** — table `project_settings.sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta` · endpoint `PATCH /v1/admin/settings` · read by `SDK runtime config pull (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.sdk_banner_variant / sdk_banner_position / sdk_banner_bug_cta / sdk_banner_feature_cta` · endpoint `PATCH /v1/admin/settings` · read by `SDK runtime config pull (GET /v1/sdk/config)`
 
 **When to change** — Use `subtle` when the banner must blend into a polished production UI. Use `neon` for internal beta tools where high visibility matters. Switch `position` to `bottom` when your app has a sticky top header that would collide with the banner.
 

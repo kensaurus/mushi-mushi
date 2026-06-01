@@ -145,6 +145,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'dedup_threshold',
       'embedding_model',
       'graph_backend',
+      // SDK banner config fields — writable so the console Settings panel
+      // can update the banner variant, position, and CTA labels live.
+      'sdk_banner_variant',
+      'sdk_banner_position',
+      'sdk_banner_bug_cta',
+      'sdk_banner_feature_cta',
     ];
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {

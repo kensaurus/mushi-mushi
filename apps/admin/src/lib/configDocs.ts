@@ -1508,7 +1508,7 @@ const SDK_INSTALL: ConfigDoc[] = [
     default: { value: 'variant: brand · position: top · featureCta: true' },
     backend: {
       table: 'project_settings',
-      column: 'sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta',
+      column: 'sdk_banner_variant / sdk_banner_position / sdk_banner_bug_cta / sdk_banner_feature_cta',
       endpoint: 'PATCH /v1/admin/settings',
       readBy: ['SDK runtime config pull (GET /v1/sdk/config)'],
     },
