@@ -1,23 +1,11 @@
 [
   {
-    "majorMinor": "1.7",
-    "headline": null,
-    "pending": false,
-    "versions": [
-      "1.7.1",
-      "1.7.0"
-    ],
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
     "highlights": [],
-    "packages": [
-      {
-        "name": "@mushi-mushi/core",
-        "version": "1.7.0"
-      },
-      {
-        "name": "@mushi-mushi/web",
-        "version": "1.7.1"
-      }
-    ]
+    "packages": []
   },
   {
     "majorMinor": "1.6",
@@ -404,7 +392,6 @@
     "headline": null,
     "pending": false,
     "versions": [
-      "0.11.1",
       "0.11.0"
     ],
     "highlights": [
@@ -452,7 +439,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.11.1"
+        "version": "0.11.0"
       },
       {
         "name": "@mushi-mushi/react-native",
@@ -736,7 +723,7 @@
       },
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.7.2"
+        "version": "0.7.1"
       },
       {
         "name": "@mushi-mushi/cli",

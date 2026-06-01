@@ -725,6 +725,13 @@ function CreateStoryModal({
             <option value="local">Local Playwright — CLI runner only</option>
           </select>
         </label>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Btn variant="cancel" size="sm" onClick={onClose}>Cancel</Btn>
+          <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
+            {saving ? 'Creating…' : 'Create story'}
+          </Btn>
+        </div>
       </div>
     </Modal>
   )
