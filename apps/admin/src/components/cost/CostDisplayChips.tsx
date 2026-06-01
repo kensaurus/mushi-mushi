@@ -33,7 +33,7 @@ export function ModelChip({
 
 export function TokenIn({ value }: { value: number }) {
   return (
-    <span className="tabular-nums text-2xs text-emerald-600 dark:text-emerald-400" title="Input tokens">
+    <span className="tabular-nums text-2xs text-ok" title="Input tokens">
       {value.toLocaleString()}
     </span>
   )
@@ -41,7 +41,7 @@ export function TokenIn({ value }: { value: number }) {
 
 export function TokenOut({ value }: { value: number }) {
   return (
-    <span className="tabular-nums text-2xs text-rose-600 dark:text-rose-400" title="Output tokens">
+    <span className="tabular-nums text-2xs text-rose" title="Output tokens">
       {value.toLocaleString()}
     </span>
   )

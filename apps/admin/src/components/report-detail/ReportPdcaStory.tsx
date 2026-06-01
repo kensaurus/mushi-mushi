@@ -98,7 +98,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           dashed ring, pending pulses, failed is a filled red disc with ✕. */}
       <span
         aria-hidden="true"
-        className={`absolute left-0 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
+        className={`absolute left-0 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-3xs font-bold ${
           isDone
             ? 'bg-ok text-ok-fg mushi-glow-ok'
             : node.state === 'failed'
@@ -112,7 +112,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
       </span>
       <div className="flex items-baseline gap-2 flex-wrap">
         <span
-          className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-[10px] ${meta.badgeBg} ${meta.badgeFg}`}
+          className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
           {meta.letter}

@@ -295,7 +295,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={() => { void handleCopy() }}
-      className="inline-flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-[10px] text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-vermillion)]/40 hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+      className="inline-flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-3xs text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-vermillion)]/40 hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
       title={`Copy: ${text}`}
       aria-label={label}
     >
@@ -347,14 +347,14 @@ function IntegrationTile({ integration }: { integration: Integration }) {
             <p className="font-medium leading-none text-[var(--mushi-ink)]">
               {integration.name}
             </p>
-            <p className="mt-1 font-mono text-[10px] text-[var(--mushi-ink-faint)]">
+            <p className="mt-1 font-mono text-3xs text-[var(--mushi-ink-faint)]">
               {integration.pkg}
             </p>
           </div>
         </div>
         {/* Direction badge */}
         <span
-          className={`shrink-0 self-start rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] ${
+          className={`shrink-0 self-start rounded-full border px-2 py-0.5 font-mono text-3xs uppercase tracking-[0.18em] ${
             isInbound
               ? 'border-[var(--mushi-vermillion)]/30 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)]'
               : isSdk
@@ -378,10 +378,10 @@ function IntegrationTile({ integration }: { integration: Integration }) {
           href={docsHref}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-[10px] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)]"
+          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-3xs text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)]"
         >
           Docs
-          <span aria-hidden className="text-[9px] opacity-50">↗</span>
+          <span aria-hidden className="text-3xs opacity-50">↗</span>
         </a>
       </div>
     </article>
@@ -464,19 +464,19 @@ export function PublicIntegrationsPage() {
                 href={`${DOCS_BASE}/`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
               >
                 Docs
               </a>
               <Link
                 to="/login"
-                className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
               >
                 Sign in
               </Link>
               <Link
                 to="/dashboard"
-                className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+                className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
               >
                 Get started
               </Link>
@@ -488,7 +488,7 @@ export function PublicIntegrationsPage() {
             aria-labelledby="integrations-heading"
             className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
           >
-            <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+            <p className="font-mono text-3xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
               <span className="text-[var(--mushi-ink)]">Ecosystem</span>
               <span className="mx-2 opacity-40">/</span>
               plug in, don&rsquo;t rip out
@@ -520,7 +520,7 @@ export function PublicIntegrationsPage() {
                   <p className="font-serif text-2xl font-semibold leading-none text-[var(--mushi-ink)]">
                     {n}
                   </p>
-                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--mushi-ink-muted)]">
+                  <p className="mt-1 font-mono text-3xs uppercase tracking-[0.16em] text-[var(--mushi-ink-muted)]">
                     {hint ? <span className="opacity-60">{hint} </span> : null}
                     {label}
                   </p>
@@ -541,7 +541,7 @@ export function PublicIntegrationsPage() {
                 type="button"
                 onClick={() => setFilter(cat)}
                 aria-pressed={filter === cat}
-                className={`rounded-full border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.16em] transition ${
+                className={`rounded-full border px-3 py-1.5 font-mono text-3xs uppercase tracking-[0.16em] transition ${
                   filter === cat
                     ? 'border-[var(--mushi-vermillion)]/50 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)]'
                     : 'border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] text-[var(--mushi-ink-muted)] hover:border-[color-mix(in_oklch,var(--mushi-ink)_20%,var(--mushi-rule))] hover:text-[var(--mushi-ink)]'
@@ -626,7 +626,7 @@ export function PublicIntegrationsPage() {
                 'linear-gradient(135deg, color-mix(in oklch, var(--mushi-paper) 94%, white) 0%, var(--mushi-vermillion-wash) 100%)',
             }}
           >
-            <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+            <p className="font-mono text-3xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
               <span className="text-[var(--mushi-vermillion)]">Plugin SDK</span>
               <span className="mx-2 opacity-40">/</span>
               yours in minutes
@@ -647,7 +647,7 @@ export function PublicIntegrationsPage() {
                 href={`${DOCS_BASE}/integrations/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full bg-[var(--mushi-ink)] px-4 py-2 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+                className="rounded-full bg-[var(--mushi-ink)] px-4 py-2 font-mono text-2xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
               >
                 Read the SDK docs
               </a>
@@ -655,7 +655,7 @@ export function PublicIntegrationsPage() {
                 href={`${REPO_BASE}/blob/main/packages/plugin-sdk`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:text-[var(--mushi-ink)]"
+                className="rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-4 py-2 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
               >
                 View on GitHub
               </a>
@@ -680,7 +680,7 @@ function GroupLabel({
 }) {
   return (
     <div className="mb-3 mt-2 flex items-center gap-3">
-      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--mushi-ink)]">
+      <p className="font-mono text-3xs font-semibold uppercase tracking-[0.24em] text-[var(--mushi-ink)]">
         <span
           className={`mr-1.5 ${direction === 'inbound' ? 'text-[var(--mushi-vermillion)]' : 'text-[var(--mushi-ink-muted)]'}`}
           aria-hidden

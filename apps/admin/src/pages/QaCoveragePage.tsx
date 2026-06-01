@@ -28,13 +28,15 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import {
-  PageHeader,
   Card,
   Btn,
   ErrorAlert,
   EmptyState,
   RelativeTime,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { Drawer } from '../components/Drawer'
+import { Modal } from '../components/Modal'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -483,71 +485,56 @@ function StoryDrawer({
     }
   }, [hasActiveRun, reloadRuns])
 
-  return (
-    <div
-      className="fixed inset-0 z-30 flex"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Story details"
-    >
-      <div
-        className="absolute inset-0 bg-overlay backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <aside className="relative ml-auto w-full max-w-xl h-full bg-surface-root border-l border-edge flex flex-col shadow-raised">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-2 px-5 py-4 border-b border-edge-subtle shrink-0">
-          <div className="space-y-1.5 min-w-0">
-            <h2 className="text-sm font-semibold text-fg leading-snug truncate">{story?.name ?? 'Story details'}</h2>
-            {story && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[story.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-                >
-                  {PROVIDER_LABEL[story.browser_provider] ?? story.browser_provider}
-                </span>
-                {story.schedule_cron && (
-                  <span className="inline-flex items-center gap-1 text-3xs font-mono text-fg-faint">
-                    <IconClock className="h-2.5 w-2.5" />
-                    {story.schedule_cron}
-                  </span>
-                )}
-                {!story.enabled && (
-                  <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-sm">
-                    disabled
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {story && (
-              <Btn
-                size="sm"
-                variant="ghost"
-                loading={isQueued}
-                disabled={isQueued || !story.enabled}
-                onClick={() => onRunNow(storyId)}
-                title={isQueued ? 'Run already queued' : 'Trigger manual run'}
-              >
-                {!isQueued && <IconPlay className="h-3 w-3 mr-1" />}
-                {isQueued ? 'Queued…' : 'Run now'}
-              </Btn>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </div>
+  const drawerTitle = (
+    <div className="space-y-1 min-w-0">
+      <div className="text-sm font-semibold text-fg leading-snug truncate">{story?.name ?? 'Story details'}</div>
+      {story && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[story.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+          >
+            {PROVIDER_LABEL[story.browser_provider] ?? story.browser_provider}
+          </span>
+          {story.schedule_cron && (
+            <span className="inline-flex items-center gap-1 text-3xs font-mono text-fg-faint">
+              <IconClock className="h-2.5 w-2.5" />
+              {story.schedule_cron}
+            </span>
+          )}
+          {!story.enabled && (
+            <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-sm">
+              disabled
+            </span>
+          )}
         </div>
+      )}
+    </div>
+  )
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+  const drawerHeaderAction = story ? (
+    <Btn
+      size="sm"
+      variant="ghost"
+      loading={isQueued}
+      disabled={isQueued || !story.enabled}
+      onClick={() => onRunNow(storyId)}
+      title={isQueued ? 'Run already queued' : 'Trigger manual run'}
+    >
+      {!isQueued && <IconPlay className="h-3 w-3 mr-1" />}
+      {isQueued ? 'Queued…' : 'Run now'}
+    </Btn>
+  ) : undefined
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title={drawerTitle}
+      ariaLabel="Story details"
+      headerAction={drawerHeaderAction}
+      width="lg"
+    >
+      <div className="px-5 py-4 space-y-5">
           {story?.prompt && (
             <div className="space-y-1">
               <span className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">Prompt</span>
@@ -644,10 +631,9 @@ function StoryDrawer({
                 )
               })}
             </div>
-          </div>
         </div>
-      </aside>
-    </div>
+      </div>
+    </Drawer>
   )
 }
 
@@ -686,13 +672,22 @@ function CreateStoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-overlay backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative bg-surface-root border border-edge rounded-md shadow-raised w-full max-w-md p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-fg">New QA story</h2>
-          <p className="text-2xs text-fg-muted mt-0.5">Runs on schedule and on demand. Results appear in the run history.</p>
+    <Modal
+      open
+      onClose={onClose}
+      title="New QA story"
+      size="sm"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Btn variant="cancel" size="sm" onClick={onClose}>Cancel</Btn>
+          <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
+            {saving ? 'Creating…' : 'Create story'}
+          </Btn>
         </div>
+      }
+    >
+      <div className="space-y-4 p-4">
+        <p className="text-2xs text-fg-muted">Runs on schedule and on demand. Results appear in the run history.</p>
 
         <label className="block space-y-1">
           <span className="text-2xs font-medium text-fg-muted">Name</span>
@@ -730,15 +725,8 @@ function CreateStoryModal({
             <option value="local">Local Playwright — CLI runner only</option>
           </select>
         </label>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Btn variant="cancel" size="sm" onClick={onClose}>Cancel</Btn>
-          <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
-            {saving ? 'Creating…' : 'Create story'}
-          </Btn>
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -793,15 +781,23 @@ export function QaCoveragePage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
+      <PageHeaderBar
         title="QA Coverage"
         projectScope={null}
         description="Automated user-story tests running on schedule via Playwright, Browserbase, or Firecrawl."
+        helpTitle="About QA Coverage"
+        helpWhatIsIt="Automated user-story tests that run on a schedule via Playwright (local), Browserbase (cloud), or Firecrawl. Each story is a natural-language prompt or a full Playwright script. Results appear in the run history with screenshots and console logs."
+        helpUseCases={[
+          'Catch regressions in critical user flows before a release',
+          'Run a test on demand after a deploy to verify the fix landed',
+          'Use Browserbase for CI-like confidence without managing infrastructure',
+        ]}
+        helpHowToUse="Click + New story to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
       >
         <Btn size="sm" onClick={() => setShowCreate(true)}>
           + New story
         </Btn>
-      </PageHeader>
+      </PageHeaderBar>
 
       {error && <ErrorAlert message={error} onRetry={reload} />}
 

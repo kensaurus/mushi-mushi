@@ -139,6 +139,9 @@ importers:
       '@mushi-mushi/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@theguild/remark-mermaid':
+        specifier: ^0.3.0
+        version: 0.3.0(react@19.2.5)
       next:
         specifier: ^15.5.18
         version: 15.5.18(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)

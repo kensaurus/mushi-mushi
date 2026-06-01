@@ -590,7 +590,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
         <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#D4B158' }} />
         <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#7BA476' }} />
         <span
-          className="ml-2 text-[10px]"
+          className="ml-2 text-3xs"
           style={{ color: tokens.inkMuted, fontFamily: 'ui-monospace, SF Mono, Menlo, monospace' }}
         >
           your-app.com
@@ -619,7 +619,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
             gap: 6,
             paddingLeft: 8,
             paddingRight: 8,
-            fontSize: 9,
+            fontSize: 11,
             fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
             background: config.bannerVariant === 'neon'
               ? '#0FFF50'
@@ -643,7 +643,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
         </div>
       ) : (config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
         <div
-          className="absolute rounded-sm border px-2 py-1 text-[10px]"
+          className="absolute rounded-sm border px-2 py-1 text-3xs"
           style={{
             ...cornerPos[config.position],
             color: tokens.inkMuted,

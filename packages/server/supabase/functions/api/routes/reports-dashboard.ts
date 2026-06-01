@@ -310,7 +310,10 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
         // round-trip. The cost is ~2-5 KB per row of jsonb on average
         // (capped at 100 entries × ≤2 KB by the schema), well under the
         // existing per-row payload from `environment`/`screenshot_url`.
-        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id',
+        // end_user_id + reporter_token_hash: needed to render reporter
+        // display name + verified badge in the list row without an extra
+        // round-trip (batch-fetched below).
+        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id, end_user_id, reporter_token_hash, session_id',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -398,14 +401,39 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       }
     }
 
+    // Batch-fetch end_users for reporter identity (display name + verified badge).
+    // Only fetch for reports that have an end_user_id; one DB round-trip for up
+    // to 200 rows (the list limit) is far cheaper than per-row joins.
+    const endUserIds = Array.from(
+      new Set(
+        (reports ?? [])
+          .map((r) => (r as { end_user_id: string | null }).end_user_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const endUsersMap = new Map<string, { display_name: string | null; jwt_verified_at: string | null }>();
+    if (endUserIds.length > 0) {
+      const { data: endUsers } = await db
+        .from('end_users')
+        .select('id, display_name, jwt_verified_at')
+        .in('id', endUserIds);
+      for (const eu of endUsers ?? []) {
+        endUsersMap.set(eu.id, { display_name: eu.display_name, jwt_verified_at: eu.jwt_verified_at });
+      }
+    }
+
     const enriched = (reports ?? []).map((r) => {
       const gid = (r as { report_group_id: string | null }).report_group_id;
       const stats = gid ? groupStatsMap.get(gid) : undefined;
+      const endUserId = (r as { end_user_id: string | null }).end_user_id;
+      const identity = endUserId ? endUsersMap.get(endUserId) : undefined;
       return {
         ...r,
         dedup_count: stats?.reports ?? 1,
         unique_users: stats?.users ?? 0,
         unique_sessions: stats?.sessions ?? 0,
+        reporter_display_name: identity?.display_name ?? null,
+        reporter_jwt_verified: Boolean(identity?.jwt_verified_at),
       };
     });
 
@@ -530,7 +558,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     // Inventory anchor: walk graph_edges to find the action node this report is
     // filed against (edge type='reports_against') and return its metadata so
     // MCP get_fix_context.inventoryAction is always populated when one exists.
-    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes] = await Promise.all([
+    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes] = await Promise.all([
       db
         .from('llm_invocations')
         .select(
@@ -567,6 +595,15 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       db
         .rpc('get_report_inventory_action', { p_report_id: reportId })
         .maybeSingle(),
+      // Join end_users for display_name + jwt_verified_at (reporter identity).
+      // Only run if the report row has an end_user_id FK.
+      data.end_user_id
+        ? db
+            .from('end_users')
+            .select('id, display_name, email_hash, jwt_verified_at, external_user_id, jwt_provider')
+            .eq('id', data.end_user_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
 
     return c.json({
@@ -577,6 +614,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
         fix_attempts: fixesRes.data ?? [],
         judge_eval: judgeRes.data ?? null,
         inventory_action: inventoryAnchorRes.data ?? null,
+        reporter_identity: endUserRes.data ?? null,
       },
     });
   });

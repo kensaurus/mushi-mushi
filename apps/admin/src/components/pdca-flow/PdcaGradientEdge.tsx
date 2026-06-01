@@ -9,7 +9,7 @@
  *          traveling-dots effect on top — "data is moving right now."
  */
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { EdgeLabelRenderer, getBezierPath } from '@xyflow/react'
 import type { EdgeProps } from '@xyflow/react'
 import type { PdcaEdgeData } from './pdcaFlow.data'
@@ -24,6 +24,9 @@ const ANIMATION_DURATION = '0.6s'
 // more notch. Values are tuned for the canvas's default fitView scale.
 const STROKE_BASE = 2.5   // was 1.75 — too thin at 70% opacity
 const STROKE_ACTIVE = 3.5 // was 2.5
+// The loop-back cubic bezier dips this many flow-px below the node row.
+// Must be < (canvas height − node height) so fitView keeps the arc in frame.
+const LOOP_DEPTH = 120
 
 function PdcaGradientEdgeInner({
   id,
@@ -39,14 +42,21 @@ function PdcaGradientEdgeInner({
   selected,
 }: EdgeProps) {
   const edgeData = (data ?? {}) as PdcaEdgeData
-  const [edgePath, edgeCenterX, edgeCenterY] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  })
+
+  // The loop-back edge (Act→Plan) uses Position.Bottom handles on both ends.
+  // getBezierPath with Bottom→Bottom and equal source/target Y produces zero
+  // curvature offset — the control points land at the same Y as the nodes,
+  // resulting in a flat straight line rather than a proper arc.
+  // We hand-build the cubic bezier so it dips 120px below the node row,
+  // which is clearly a "return" arc and stays within the 380px canvas height.
+  const isLoopBack = sourcePosition === 'bottom' && targetPosition === 'bottom'
+  const [edgePath, edgeCenterX, edgeCenterY] = isLoopBack
+    ? [
+        `M ${sourceX},${sourceY} C ${sourceX},${sourceY + LOOP_DEPTH} ${targetX},${targetY + LOOP_DEPTH} ${targetX},${targetY}`,
+        (sourceX + targetX) / 2,
+        sourceY + LOOP_DEPTH * 0.75,
+      ]
+    : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
 
   // React Flow edge ids use `${source}->${target}` (e.g. `plan->do`), but the
   // `>` character is not valid in CSS `<custom-ident>` — some browsers drop
@@ -67,7 +77,9 @@ function PdcaGradientEdgeInner({
   const strokeValue = isFailing ? DANGER : `url(#${gradientId})`
   const failingDash = '6 3'
 
-  const currentStrokeWidth = isActive || selected ? STROKE_ACTIVE : STROKE_BASE
+  const [isHovered, setIsHovered] = useState(false)
+  const isEmphasised = isActive || selected || isHovered
+  const currentStrokeWidth = isEmphasised ? STROKE_ACTIVE + (isHovered && !isActive ? 0.5 : 0) : STROKE_BASE
 
   return (
     <>
@@ -87,32 +99,34 @@ function PdcaGradientEdgeInner({
         `}</style>
       )}
 
-      {/* Track — always-on wide-but-faint stripe so the loop path is visible
-          even for inactive edges. Rendered first so the gradient sits on top. */}
+      {/* Track — wide stripe behind the main stroke, gives visual weight. */}
       <path
         d={edgePath}
         stroke={strokeValue}
         strokeWidth={currentStrokeWidth + 4}
         fill="none"
-        style={{ opacity: isActive ? 0.18 : 0.12 }}
-      />
-
-      {/* Glow — blur halo. On inactive edges a subtle ambient glow anchors
-          the path without fighting the node content. On active edges it pops. */}
-      <path
-        d={edgePath}
-        stroke={strokeValue}
-        strokeWidth={isActive ? 8 : 6}
-        fill="none"
-        strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
-          opacity: isActive ? (isFailing ? 0.4 : 0.3) : 0.13,
-          filter: 'blur(2.5px)',
-          animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
+          opacity: isEmphasised ? 0.38 : 0.22,
+          transition: 'opacity 180ms ease, stroke-width 180ms ease',
         }}
       />
 
-      {/* Main gradient stroke */}
+      {/* Glow — blur halo. Brightens on hover/active/selected. */}
+      <path
+        d={edgePath}
+        stroke={strokeValue}
+        strokeWidth={isEmphasised ? 10 : 7}
+        fill="none"
+        strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
+        style={{
+          opacity: isEmphasised ? (isFailing ? 0.55 : 0.42) : 0.22,
+          filter: `blur(${isHovered ? '3.5px' : '2.5px'})`,
+          animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
+          transition: 'opacity 180ms ease, filter 180ms ease',
+        }}
+      />
+
+      {/* Main gradient stroke — always fully opaque, transitions stroke-width. */}
       <path
         d={edgePath}
         stroke={strokeValue}
@@ -120,10 +134,23 @@ function PdcaGradientEdgeInner({
         fill="none"
         strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
-          opacity: isActive || selected ? 1 : 0.88,
+          opacity: 1,
           animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
+          transition: 'stroke-width 180ms ease',
         }}
         markerEnd={markerEnd}
+      />
+
+      {/* Invisible hit-area — 16px wide so the edge is easy to hover/click.
+          Must be last so it sits on top and captures pointer events. */}
+      <path
+        d={edgePath}
+        stroke="transparent"
+        strokeWidth={16}
+        fill="none"
+        style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       />
 
       {isFlowing && (
@@ -140,7 +167,7 @@ function PdcaGradientEdgeInner({
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY - 10}px)`,
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: 600,
               color: edgeData.sourceColor ?? '#60a5fa',
               pointerEvents: 'none',

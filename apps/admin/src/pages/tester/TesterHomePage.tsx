@@ -72,19 +72,19 @@ function MilestoneRing({ value, max, label, color }: { value: number; max: numbe
           style={{ transition: 'stroke-dasharray 0.6s ease' }}
         />
       </svg>
-      <p className="text-xs text-gray-400 -mt-1 text-center leading-tight">{label}</p>
+      <p className="text-xs text-fg-muted -mt-1 text-center leading-tight">{label}</p>
     </div>
   )
 }
 
 function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
-  if (!lastAcceptedAt) return <span className="inline-block h-2 w-2 rounded-full bg-gray-600" title="No activity yet" />
+  if (!lastAcceptedAt) return <span className="inline-block h-2 w-2 rounded-full bg-surface-overlay" title="No activity yet" />
   const days = (Date.now() - new Date(lastAcceptedAt).getTime()) / 86_400_000
   const [cls, tip] = days < 7
-    ? ['bg-green-400', 'Active (last accepted < 7d ago)']
+    ? ['bg-ok', 'Active (last accepted < 7d ago)']
     : days < 30
-    ? ['bg-yellow-400', 'Moderate activity (7–30d)']
-    : ['bg-gray-500', 'Low activity (>30d)']
+    ? ['bg-warn', 'Moderate activity (7–30d)']
+    : ['bg-surface-overlay', 'Low activity (>30d)']
   return <span className={`inline-block h-2 w-2 rounded-full ${cls}`} title={tip} />
 }
 
@@ -93,19 +93,19 @@ function RecommendedAppCard({ app }: { app: TesterApp }) {
   return (
     <a
       href="/tester/apps"
-      className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:border-violet-500/40 hover:bg-white/8 transition-all group"
+      className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:border-accent/40 hover:bg-white/8 transition-all group"
     >
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 rounded-lg bg-gray-800 flex items-center justify-center text-xl">
+        <div className="h-10 w-10 shrink-0 rounded-lg bg-surface-root flex items-center justify-center text-xl">
           {app.heroUrl ? <img src={app.heroUrl} alt="" className="h-full w-full rounded-lg object-cover" /> : '📱'}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold group-hover:text-violet-300 transition-colors truncate">{app.name}</p>
+            <p className="text-sm font-semibold group-hover:text-accent transition-colors truncate">{app.name}</p>
             <ActivityDot lastAcceptedAt={app.lastAcceptedAt} />
           </div>
-          {app.tagline && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{app.tagline}</p>}
-          <p className="text-xs text-violet-400 mt-1 font-medium">
+          {app.tagline && <p className="text-xs text-fg-muted mt-0.5 line-clamp-1">{app.tagline}</p>}
+          <p className="text-xs text-accent mt-1 font-medium">
             Up to {maxPts.toLocaleString()} pts · {app.accepted30d} accepted last 30d
           </p>
         </div>
@@ -120,9 +120,9 @@ function PipelineItem({ icon, label, sub, href, badge }: { icon: string; label: 
       <span className="text-xl shrink-0">{icon}</span>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium truncate">{label}</p>
-        <p className="text-xs text-gray-500 truncate">{sub}</p>
+        <p className="text-xs text-fg-faint truncate">{sub}</p>
       </div>
-      {badge && <span className="shrink-0 rounded-full bg-violet-500/20 px-2 py-0.5 text-2xs font-medium text-violet-300">{badge}</span>}
+      {badge && <span className="shrink-0 rounded-full bg-accent/20 px-2 py-0.5 text-2xs font-medium text-accent">{badge}</span>}
     </a>
   )
 }
@@ -131,11 +131,11 @@ function LearnTile({ icon, title, href, description }: { icon: string; title: st
   return (
     <a
       href={href}
-      className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 p-4 hover:border-violet-500/40 hover:bg-violet-500/5 transition-all"
+      className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 p-4 hover:border-accent/40 hover:bg-accent/5 transition-all"
     >
       <span className="text-2xl">{icon}</span>
       <p className="text-sm font-semibold leading-snug">{title}</p>
-      <p className="text-xs text-gray-400 leading-relaxed">{description}</p>
+      <p className="text-xs text-fg-muted leading-relaxed">{description}</p>
     </a>
   )
 }
@@ -202,12 +202,12 @@ export function TesterHomePage() {
               <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${tier.bg} ${tier.color}`}>
                 {tier.name} tester
               </span>
-              <span className="text-sm text-gray-500">{reputation} reputation · {status?.acceptedSubmissions ?? 0} accepted reports</span>
+              <span className="text-sm text-fg-faint">{reputation} reputation · {status?.acceptedSubmissions ?? 0} accepted reports</span>
             </div>
           </div>
           <a
             href="/tester/apps"
-            className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold hover:bg-violet-500 transition-colors"
+            className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-semibold hover:bg-accent-hover transition-colors"
           >
             Browse apps →
           </a>
@@ -222,9 +222,9 @@ export function TesterHomePage() {
             { label: 'Accepted',      value: String(status?.acceptedSubmissions ?? 0), sub: 'all-time reports' },
           ].map(({ label, value, sub }) => (
             <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
-              <p className="text-xl font-bold text-white">{value}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
+              <p className="text-xs text-fg-faint uppercase tracking-wide mb-1">{label}</p>
+              <p className="text-xl font-bold text-fg">{value}</p>
+              <p className="text-xs text-fg-faint mt-0.5">{sub}</p>
             </div>
           ))}
         </div>
@@ -243,11 +243,11 @@ export function TesterHomePage() {
                 />
                 <div>
                   <p className="text-sm font-medium">{nextTier.name} tier</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-fg-muted mt-0.5">
                     {reputation} / {nextTier.min} rep
                     {' '}· {nextTier.min - reputation} more needed
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-fg-faint mt-1">
                     Earn rep by getting reports accepted.
                   </p>
                 </div>
@@ -257,29 +257,29 @@ export function TesterHomePage() {
                 <MilestoneRing value={1} max={1} label="Max tier" color="#67e8f9" />
                 <div>
                   <p className="text-sm font-medium">Platinum — max tier reached</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{reputation} rep · keep it up!</p>
+                  <p className="text-xs text-fg-muted mt-0.5">{reputation} rep · keep it up!</p>
                 </div>
               </div>
             )}
 
             <div className="flex items-center gap-4">
               <div className="w-48">
-                <p className="text-xs text-gray-400 mb-1.5">YTD gift cards</p>
+                <p className="text-xs text-fg-muted mb-1.5">YTD gift cards</p>
                 <div className="h-2 rounded-full bg-white/10 overflow-hidden relative">
                   {/* KYC gate at $400 */}
                   <div
                     className={`h-full rounded-full transition-all ${
-                      ytd >= kycThreshold && !kycCleared ? 'bg-yellow-400' : 'bg-violet-500'
+                      ytd >= kycThreshold && !kycCleared ? 'bg-warn' : 'bg-accent'
                     }`}
                     style={{ width: `${Math.min(100, (ytd / (wallet?.kycCapUsd ?? 599)) * 100)}%` }}
                   />
                   <div
-                    className="absolute top-0 h-full w-px bg-yellow-400/60"
+                    className="absolute top-0 h-full w-px bg-warn/60"
                     style={{ left: `${(kycThreshold / (wallet?.kycCapUsd ?? 599)) * 100}%` }}
                     title="KYC required at this point"
                   />
                 </div>
-                <div className="flex justify-between text-2xs text-gray-500 mt-1">
+                <div className="flex justify-between text-2xs text-fg-faint mt-1">
                   <span>${ytd.toFixed(0)}</span>
                   <span>${kycThreshold} KYC</span>
                   <span>${wallet?.kycCapUsd ?? 599} cap</span>
@@ -288,11 +288,11 @@ export function TesterHomePage() {
               <div>
                 <p className="text-xs font-medium">Gift card cap</p>
                 {ytd >= kycThreshold && !kycCleared ? (
-                  <a href="/tester/settings#kyc" className="text-xs text-yellow-400 hover:underline mt-0.5 block">
+                  <a href="/tester/settings#kyc" className="text-xs text-warn hover:underline mt-0.5 block">
                     Verify identity to continue →
                   </a>
                 ) : (
-                  <p className="text-xs text-gray-400 mt-0.5">${((wallet?.kycCapUsd ?? 599) - ytd).toFixed(0)} remaining</p>
+                  <p className="text-xs text-fg-muted mt-0.5">${((wallet?.kycCapUsd ?? 599) - ytd).toFixed(0)} remaining</p>
                 )}
               </div>
             </div>
@@ -304,7 +304,7 @@ export function TesterHomePage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold">Recommended for you</h2>
-              <a href="/tester/apps" className="text-xs text-violet-400 hover:underline">See all apps →</a>
+              <a href="/tester/apps" className="text-xs text-accent hover:underline">See all apps →</a>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {recommended.map(app => <RecommendedAppCard key={app.id} app={app} />)}
@@ -345,7 +345,7 @@ export function TesterHomePage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold">Learn how Bounties works</h2>
-            <a href="/tester/learn" className="text-xs text-violet-400 hover:underline">Full guide →</a>
+            <a href="/tester/learn" className="text-xs text-accent hover:underline">Full guide →</a>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <LearnTile

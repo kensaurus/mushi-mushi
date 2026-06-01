@@ -14,8 +14,8 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { PageHeader, PageHelp, SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
-import { ContainedBlock } from '../components/report-detail/ReportSurface'
+import { SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
@@ -508,20 +508,18 @@ export function FixesPage() {
 
   return (
     <div className="space-y-3" data-testid="mushi-page-fixes">
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Auto-Fix Pipeline'}
+        projectScope={projectName}
+        description={copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
+        helpTitle={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Track the full PDCA loop — Plan (LLM proposal), Do (PR), Check (CI), Act (review)',
           'Audit cost: every attempt logs the model used, token spend, and a Langfuse trace',
           'Spot patterns of failure so prompts and scope rules can be tightened',
         ]}
-        howToUse={copy?.help?.howToUse ?? "Summary for posture. Pipeline shows dispatches in flight. Attempts lists every draft PR — expand a card for rationale and CI status."}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Auto-Fix Pipeline'}
-        projectScope={projectName}
+        helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Pipeline shows dispatches in flight. Attempts lists every draft PR — expand a card for rationale and CI status.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
@@ -538,13 +536,7 @@ export function FixesPage() {
             {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} failed`}
           </button>
         )}
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
-        </p>
-      </ContainedBlock>
+      </PageHeaderBar>
 
       <FixesStatusBanner
         stats={fixesStats}

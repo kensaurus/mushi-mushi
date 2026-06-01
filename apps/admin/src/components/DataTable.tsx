@@ -67,7 +67,7 @@ const DENSITY_ROW: Record<'default' | 'compact' | 'comfortable', string> = {
 }
 
 const DENSITY_HEAD: Record<'default' | 'compact' | 'comfortable', string> = {
-  compact:     'py-1 text-[0.6rem]',
+  compact:     'py-1 text-3xs',
   default:     'py-1.5 text-2xs',
   comfortable: 'py-2 text-2xs',
 }

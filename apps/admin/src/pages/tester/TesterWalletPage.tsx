@@ -85,7 +85,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>
           <p className="text-sm font-semibold">Gift card milestone</p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-fg-muted mt-0.5">
             ${ytd.toFixed(0)} redeemed this year
             {overThreshold && !kycCleared && ' · identity verification required'}
             {overThreshold && kycCleared && ' · KYC cleared ✓'}
@@ -95,7 +95,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
         {overThreshold && !kycCleared && (
           <a
             href="/tester/settings#kyc"
-            className="shrink-0 rounded-lg bg-yellow-500/20 border border-yellow-500/30 px-3 py-1.5 text-xs font-medium text-yellow-300 hover:bg-yellow-500/30 transition-colors"
+            className="shrink-0 rounded-lg bg-warn/20 border border-warn/30 px-3 py-1.5 text-xs font-medium text-warn hover:bg-warn/30 transition-colors"
           >
             Complete KYC →
           </a>
@@ -106,7 +106,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
         {/* Filled portion */}
         <div
           className={`absolute inset-y-0 left-0 rounded-full transition-all ${
-            overThreshold && !kycCleared ? 'bg-yellow-400' : 'bg-violet-500'
+            overThreshold && !kycCleared ? 'bg-warn' : 'bg-accent'
           }`}
           style={{ width: `${ytdPct}%` }}
         />
@@ -117,9 +117,9 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
           title={`KYC required at $${threshold}`}
         />
       </div>
-      <div className="flex justify-between text-2xs text-gray-500 mt-1.5">
+      <div className="flex justify-between text-2xs text-fg-faint mt-1.5">
         <span>$0</span>
-        <span className="text-yellow-400/80">${threshold} · KYC gate</span>
+        <span className="text-warn/80">${threshold} · KYC gate</span>
         <span>${cap} annual cap</span>
       </div>
     </div>
@@ -136,11 +136,11 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
       <span className="text-xl shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-fg-faint mt-0.5">
           {r.pointsSpent.toLocaleString()} pts · requested {new Date(r.requestedAt).toLocaleDateString()}
         </p>
       </div>
-      <Badge className={`text-2xs ${r.status === 'processing' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' : 'bg-gray-500/15 border-gray-500/30 text-gray-400'} border`}>
+      <Badge className={`text-2xs ${r.status === 'processing' ? 'bg-info/15 border-info/30 text-info' : 'bg-surface-overlay/40 border-edge/30 text-fg-muted'} border`}>
         {r.status === 'processing' ? 'Processing' : 'Pending'}
       </Badge>
     </div>
@@ -199,7 +199,7 @@ export function TesterWalletPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-xl font-bold">Wallet</h1>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-fg-muted mt-1">
             Redeem mushi-points for Mushi Pro credit (1.3× bonus) or gift cards via Tremendous.
           </p>
         </div>
@@ -207,7 +207,7 @@ export function TesterWalletPage() {
         {loading && <TableSkeleton rows={6} />}
 
         {error && (
-          <p className="text-sm text-red-400">
+          <p className="text-sm text-danger">
             {error.includes('not_a_tester')
               ? 'You need a tester account to view your wallet.'
               : `Error: ${error}`}
@@ -225,9 +225,9 @@ export function TesterWalletPage() {
                 { label: 'YTD gift cards',value: '$' + wallet.ytdGiftCardUsd.toFixed(2),                              sub: `of $${wallet.kycCapUsd} annual cap` },
               ].map(({ label, value, sub }) => (
                 <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
+                  <p className="text-xs text-fg-faint uppercase tracking-wide">{label}</p>
                   <p className="text-lg font-bold mt-1">{value}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
+                  <p className="text-xs text-fg-faint mt-0.5">{sub}</p>
                 </div>
               ))}
             </div>
@@ -262,7 +262,7 @@ export function TesterWalletPage() {
                     className={`flex items-center gap-4 rounded-xl border p-4 transition-all ${
                       item.isAvailable
                         ? hoveredItem === item.id
-                          ? 'border-violet-500/40 bg-violet-500/5'
+                          ? 'border-accent/40 bg-accent/5'
                           : 'border-white/10 bg-white/5'
                         : 'border-white/5 bg-white/2 opacity-60'
                     }`}
@@ -274,20 +274,20 @@ export function TesterWalletPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium">{item.name}</p>
                         {item.category === 'pro' && (
-                          <Badge className="bg-violet-500/20 border-violet-500/30 text-violet-300 text-xs border">1.3× premium</Badge>
+                          <Badge className="bg-accent/20 border-accent/30 text-accent text-xs border">1.3× premium</Badge>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{item.description}</p>
+                      <p className="text-xs text-fg-muted mt-0.5">{item.description}</p>
                       {/* Conversion preview — shown on hover */}
                       {hoveredItem === item.id && item.conversionPreview && (
-                        <p className="text-xs text-violet-300/80 mt-1 italic">{item.conversionPreview}</p>
+                        <p className="text-xs text-accent/80 mt-1 italic">{item.conversionPreview}</p>
                       )}
                       {item.unavailableReason && (
-                        <p className="text-xs text-red-400 mt-0.5">{item.unavailableReason}</p>
+                        <p className="text-xs text-danger mt-0.5">{item.unavailableReason}</p>
                       )}
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-xs text-gray-400 mb-1">{item.pointsCost.toLocaleString()} pts</p>
+                      <p className="text-xs text-fg-muted mb-1">{item.pointsCost.toLocaleString()} pts</p>
                       <Btn
                         variant="primary"
                         size="sm"
@@ -301,7 +301,7 @@ export function TesterWalletPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-3">
+              <p className="text-xs text-fg-faint mt-3">
                 1,000 pts = $10 gift card (Tremendous) or $13 Mushi Pro credit (1.3× premium).
                 Gift cards capped at ${wallet.kycCapUsd ?? 599}/yr before KYC required.
                 {wallet.nextRedemptionEtaHours !== null && ` Gift card delivery: ~${wallet.nextRedemptionEtaHours}h based on recent orders.`}
@@ -320,11 +320,11 @@ export function TesterWalletPage() {
                           <p className="text-xs font-medium">
                             {LEDGER_REASON_LABEL[entry.reason] ?? entry.reason}
                           </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
+                          <p className="text-xs text-fg-faint mt-0.5">
                             {new Date(entry.createdAt).toLocaleDateString()}
                           </p>
                         </div>
-                        <p className={`text-sm font-bold ${entry.type === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
+                        <p className={`text-sm font-bold ${entry.type === 'credit' ? 'text-ok' : 'text-danger'}`}>
                           {entry.type === 'credit' ? '+' : '-'}{entry.points.toLocaleString()} pts
                         </p>
                       </div>
@@ -338,10 +338,10 @@ export function TesterWalletPage() {
               <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
                 <p className="text-2xl mb-2">🪙</p>
                 <p className="text-sm font-medium">No points yet</p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-fg-muted mt-1">
                   Join an app and submit a bug to earn your first points.
                 </p>
-                <a href="/tester/apps" className="mt-3 inline-block text-xs text-violet-400 hover:underline">
+                <a href="/tester/apps" className="mt-3 inline-block text-xs text-accent hover:underline">
                   Browse apps →
                 </a>
               </div>

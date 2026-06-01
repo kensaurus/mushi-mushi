@@ -587,7 +587,7 @@ function EventRow({
         className={`absolute -left-3 top-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full bg-surface-root ${meta.tone}`}
         aria-hidden
       >
-        <span className="text-[0.6rem] leading-none">{meta.glyph}</span>
+        <span className="text-3xs leading-none">{meta.glyph}</span>
       </span>
       <div className="flex items-baseline gap-1.5">
         <span className={`text-2xs font-medium ${meta.tone}`}>{meta.caption}</span>

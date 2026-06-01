@@ -116,7 +116,7 @@ function resolveHref(href: string, external?: boolean): string {
 
 function Action({ href, label, external, kind }: ActionProps & { kind: 'primary' | 'secondary' }) {
   const base =
-    'inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] transition motion-safe:hover:-translate-y-0.5'
+    'inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.18em] transition motion-safe:hover:-translate-y-0.5'
   const tone =
     kind === 'primary'
       ? 'bg-[var(--mushi-ink)] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]'
@@ -147,7 +147,7 @@ export function EditorialErrorState({
       <article className="mx-auto w-full max-w-[38rem]">
         <p
           aria-hidden="true"
-          className="mb-5 inline-flex items-center gap-2.5 font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]"
+          className="mb-5 inline-flex items-center gap-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]"
         >
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--mushi-vermillion)]" />
           {eyebrow}

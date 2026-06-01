@@ -18,7 +18,7 @@ export function ClosingCta() {
             page, see docs/marketing/VOICE.md) is now reserved for the footer.
             The replacement names what's actually on offer in concrete nouns
             and sets up the H2 below. */}
-        <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+        <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]" aria-hidden="true">
           <span className="text-[var(--mushi-ink)]">One small SDK</span>
           <span className="mx-2 opacity-40">·</span>
           <span className="text-[var(--mushi-ink)]">one quiet widget</span>
@@ -34,7 +34,7 @@ export function ClosingCta() {
               same page (NN/g consistency #4). */}
           <Link
             href={urls.signup}
-            className="inline-block rounded-sm bg-[var(--mushi-vermillion)] px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5"
+            className="inline-block rounded-sm bg-[var(--mushi-vermillion)] px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
           >
             Start free, no card
           </Link>
@@ -42,7 +42,7 @@ export function ClosingCta() {
             href={urls.repo()}
             target="_blank"
             rel="noreferrer"
-            className="inline-block rounded-sm border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-vermillion)]"
+            className="inline-block rounded-sm border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
           >
             Read the source
           </Link>

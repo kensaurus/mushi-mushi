@@ -62,9 +62,28 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             label="Reporter"
             to={`/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`}
           >
-            <span className="font-mono">{reporterShort}</span>
+            {report.reporter_identity?.display_name ?? report.reporter_display_name ? (
+              <span className="max-w-[12rem] truncate">
+                {report.reporter_identity?.display_name ?? report.reporter_display_name}
+              </span>
+            ) : (
+              <span className="font-mono">{reporterShort}</span>
+            )}
+            {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
+              <span
+                className="text-3xs text-ok font-semibold uppercase tracking-wide"
+                title="Identity verified via signed JWT"
+              >
+                ✓ verified
+              </span>
+            )}
             <span className="text-fg-faint">· view all</span>
           </MetaChip>
+          {report.session_id && (
+            <MetaChip label="Session" title={report.session_id}>
+              <span className="font-mono">{report.session_id.slice(0, 8)}</span>
+            </MetaChip>
+          )}
           <MetaChip label="Report ID" title={report.id}>
             <CodeValue value={report.id} inline tone="id" className="max-w-[min(100%,20rem)]" />
           </MetaChip>

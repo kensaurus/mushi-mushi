@@ -13,8 +13,6 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
 import {
-  PageHeader,
-  PageHelp,
   Card,
   Section,
   Badge,
@@ -70,6 +68,7 @@ import { PageHero } from '../components/PageHero'
 import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { markJudgeBatchSeen } from '../components/PipelineStatusRibbon'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 
 interface LlmRecent {
   function_name: string
@@ -484,20 +483,18 @@ export function HealthPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-health">
-      <PageHelp
-        title={copy?.help?.title ?? 'About System Health'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'System Health'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.'}
+        helpTitle={copy?.help?.title ?? 'About System Health'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Catch when Anthropic rate-limits cause a fallback storm',
           'See if scheduled jobs (cron) are actually running, succeeding, and on time',
           'Spot model-level latency regressions before they impact users',
         ]}
-        howToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'System Health'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
       >
         <Badge
           className={
@@ -544,14 +541,7 @@ export function HealthPage() {
         >
           Refresh
         </Btn>
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.'}
-        </p>
-      </ContainedBlock>
+      </PageHeaderBar>
 
       <HealthStatusBanner
         stats={stats}

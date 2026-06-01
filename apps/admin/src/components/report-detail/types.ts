@@ -155,6 +155,17 @@ export interface ReportDetail {
   status: string
   reporter_token_hash: string
   session_id: string | null
+  end_user_id: string | null
+  reporter_display_name?: string | null
+  reporter_jwt_verified?: boolean
+  reporter_identity?: {
+    id: string
+    display_name: string | null
+    email_hash: string | null
+    jwt_verified_at: string | null
+    external_user_id: string
+    jwt_provider: string | null
+  } | null
   created_at: string
   classified_at: string | null
   processing_error: string | null

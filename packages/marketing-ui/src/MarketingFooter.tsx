@@ -21,7 +21,7 @@ export function MarketingFooter({ apiBaseUrl }: MarketingFooterProps) {
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div className="max-w-sm">
           <div className="flex items-center gap-2 font-serif text-base font-semibold text-[var(--mushi-ink)]">
-            <span aria-hidden="true" className="grid h-6 w-6 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-[10px] text-white">
+            <span aria-hidden="true" className="grid h-6 w-6 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-[11px] text-white">
               虫
             </span>
             Mushi Mushi
@@ -43,15 +43,15 @@ export function MarketingFooter({ apiBaseUrl }: MarketingFooterProps) {
             a new tab so a visitor reading the landing doesn't lose context;
             mailto: stays default. */}
         <nav aria-label="Site" className="flex flex-wrap gap-x-8 gap-y-2 font-mono text-[11px] uppercase tracking-[0.18em]">
-          <Link href={urls.pricing} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">Pricing</Link>
-          <Link href={urls.docs()} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">Docs</Link>
-          <Link href={urls.repo()} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">GitHub</Link>
-          <Link href={urls.repo('/blob/master/CHANGELOG.md')} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">Changelog</Link>
-          <Link href={urls.contact('Mushi Mushi inquiry')} className="hover:text-[var(--mushi-vermillion)]">Contact</Link>
+          <Link href={urls.pricing} target="_blank" rel="noreferrer" className="transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm">Pricing</Link>
+          <Link href={urls.docs()} target="_blank" rel="noreferrer" className="transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm">Docs</Link>
+          <Link href={urls.repo()} target="_blank" rel="noreferrer" className="transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm">GitHub</Link>
+          <Link href={urls.repo('/blob/master/CHANGELOG.md')} target="_blank" rel="noreferrer" className="transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm">Changelog</Link>
+          <Link href={urls.contact('Mushi Mushi inquiry')} className="transition hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)] rounded-sm">Contact</Link>
         </nav>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--mushi-rule)] pt-4 font-mono text-[10px] uppercase tracking-[0.22em]">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--mushi-rule)] pt-4 font-mono text-[11px] uppercase tracking-[0.22em]">
         <p>© Mushi Mushi · Cloud runs the same OSS code, hosted by us.</p>
         <p className="text-[var(--mushi-ink-muted)]" lang="ja">むしむし。</p>
       </div>

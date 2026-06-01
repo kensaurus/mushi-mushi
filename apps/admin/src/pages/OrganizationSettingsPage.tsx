@@ -1116,7 +1116,7 @@ export function OrganizationSettingsPage() {
               />
               <span className="text-2xs text-fg-muted">Show inactive only</span>
               <Tooltip content="Hides anyone seen in the last 30 days. Pairs with sort-by-activity so coasting paid seats surface fast.">
-                <span className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-edge-subtle text-[9px] font-medium text-fg-faint">
+                <span className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-edge-subtle text-3xs font-medium text-fg-faint">
                   ?
                 </span>
               </Tooltip>

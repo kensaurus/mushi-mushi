@@ -33,7 +33,6 @@ import {
   ReactFlowProvider,
   Background,
   BackgroundVariant,
-  MiniMap,
   Panel,
   useReactFlow,
   type Edge,
@@ -52,7 +51,6 @@ import {
 import type { PdcaStage } from '../dashboard/types'
 import type { PdcaStageId } from '../../lib/pdca'
 import { PDCA_STAGES } from '../../lib/pdca'
-import { STAGE_HEX } from '../flow-primitives/flowTokens'
 import { PdcaFlowContext } from './PdcaFlowContext'
 import { StageDrawer } from '../flow-primitives/StageDrawer'
 import { StageDrawerContent } from './StageDrawerContent'
@@ -68,9 +66,11 @@ import type { ActivityItem } from '../dashboard/types'
 const NODE_TYPES = { pdcaStep: PdcaStepNode }
 const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 
+// Horizontal-row layout: nodes (148px tall) + loop-back arc (~110px below)
+// + fitView padding. Keep enough room for the activity-log panel too.
 const VARIANT_HEIGHT: Record<PdcaFlowVariant, string> = {
-  live: 'h-[440px] sm:h-[480px]',
-  onboarding: 'h-[400px] sm:h-[430px]',
+  live:        'h-[360px] sm:h-[380px]',
+  onboarding:  'h-[320px] sm:h-[340px]',
 }
 
 const DRAWER_HASH_PREFIX = '#pdca='
@@ -303,7 +303,16 @@ function PdcaFlowCanvas({
   const onTidy = useCallback(() => {
     // Our layout is fixed (buildNodes sets canonical positions every render),
     // so "tidy" == re-fit the view with a gentle animation.
-    rf.fitView({ duration: 400, padding: 0.2 })
+    rf.fitView({ duration: 400, padding: 0.18 })
+  }, [rf])
+
+  // Re-fit after the first paint so the loop-back arc's bounding box is
+  // included. The `fitView` prop fires before edge paths are measured, so
+  // without this the arc can be clipped on initial load.
+  const onInit = useCallback(() => {
+    requestAnimationFrame(() => {
+      rf.fitView({ duration: 0, padding: 0.18 })
+    })
   }, [rf])
 
   // Imperative focus for the activity-log sync path. When a user clicks an
@@ -344,11 +353,6 @@ function PdcaFlowCanvas({
     }
   }, [logFocusStage])
 
-  const minimapNodeColor = useCallback(
-    (node: Node<PdcaNodeData>) => STAGE_HEX[node.data.stageId] ?? '#60a5fa',
-    [],
-  )
-
   return (
     <div ref={containerRef} className="relative h-full w-full">
       <ReactFlow
@@ -357,7 +361,8 @@ function PdcaFlowCanvas({
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         fitView
-        fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
+        fitViewOptions={{ padding: 0.18, includeHiddenNodes: false }}
+        onInit={onInit}
         proOptions={{ hideAttribution: true }}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
@@ -412,24 +417,6 @@ function PdcaFlowCanvas({
           </Panel>
         )}
 
-        {interactive && (
-          <MiniMap
-            pannable
-            zoomable
-            nodeColor={minimapNodeColor}
-            nodeStrokeWidth={2}
-            maskColor="rgba(0, 0, 0, 0.35)"
-            className="!bg-surface-overlay/90 !border !border-edge/60 !rounded-md !backdrop-blur-sm"
-            style={{ width: 132, height: 88 }}
-            onNodeClick={(_, node) => {
-              const id = (node.data as PdcaNodeData | undefined)?.stageId
-              if (id === 'plan' || id === 'do' || id === 'check' || id === 'act') {
-                focusStageNode(id)
-                if (variant === 'live') onOpenStage(id)
-              }
-            }}
-          />
-        )}
       </ReactFlow>
 
       {selectedEdge && (

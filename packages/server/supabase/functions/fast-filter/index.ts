@@ -361,27 +361,45 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
       if (settings?.slack_channel_id || settings?.slack_webhook_url || Deno.env.get('SLACK_BOT_TOKEN')) {
         log.info('Sending Slack notification', { severity: classification.severity })
-        sendReportNotification(
-          {
-            projectName,
-            category: classification.category,
-            severity: classification.severity,
-            summary,
-            reporterToken: report.reporter_token_hash,
-            pageUrl: env.url ?? '',
-            reportId,
-          },
-          {
-            channelId: settings?.slack_channel_id ?? undefined,
-            webhookUrl: settings?.slack_webhook_url ?? undefined,
-          },
-        ).then((slackTs) => {
-          if (slackTs) {
-            db.from('reports').update({ slack_message_ts: slackTs }).eq('id', reportId).then(() => {
-              log.debug('Stored slack_message_ts', { reportId, slackTs })
-            })
-          }
-        }).catch(e => log.error('Slack notification failed', { err: String(e) }))
+        Promise.all([
+          report.end_user_id
+            ? db.from('end_users').select('display_name, jwt_verified_at').eq('id', report.end_user_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          db.from('project_repos').select('github_app_installation_id').eq('project_id', report.project_id).limit(1),
+          db.from('project_settings').select('autofix_enabled').eq('project_id', report.project_id).maybeSingle(),
+        ]).then(([euRes, reposRes, psRes]) => {
+          const identity = euRes.data
+          const hasGithubApp = (reposRes.data ?? []).some((r: { github_app_installation_id: string | null }) => r.github_app_installation_id)
+          sendReportNotification(
+            {
+              projectName,
+              category: classification.category,
+              severity: classification.severity,
+              summary,
+              reporterToken: report.reporter_token_hash,
+              pageUrl: env.url ?? '',
+              reportId,
+              screenshotUrl: report.screenshot_url ?? null,
+              reporterDisplayName: identity?.display_name ?? null,
+              reporterVerified: Boolean(identity?.jwt_verified_at),
+              sessionId: report.session_id ?? null,
+              confidence: classification.confidence ?? null,
+              component: classification.component ?? null,
+              githubAppInstalled: hasGithubApp,
+              autofixEnabled: psRes.data?.autofix_enabled ?? false,
+            },
+            {
+              channelId: settings?.slack_channel_id ?? undefined,
+              webhookUrl: settings?.slack_webhook_url ?? undefined,
+            },
+          ).then((slackTs) => {
+            if (slackTs) {
+              db.from('reports').update({ slack_message_ts: slackTs }).eq('id', reportId).then(() => {
+                log.debug('Stored slack_message_ts', { reportId, slackTs })
+              })
+            }
+          }).catch(e => log.error('Slack notification failed', { err: String(e) }))
+        }).catch((e) => log.warn('Rich Slack context failed — no message sent', { err: String(e) }))
       }
 
       if (settings?.discord_webhook_url) {

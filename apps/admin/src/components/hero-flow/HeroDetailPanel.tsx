@@ -58,9 +58,9 @@ interface HeroDetailPanelProps {
 // ─── Colour tokens per tile ─────────────────────────────────────────────────
 
 const TILE_COLORS = {
-  decide: { rail: 'border-blue-400/60', heading: 'text-blue-400' },
-  act:    { rail: 'border-amber-400/60', heading: 'text-amber-400' },
-  verify: { rail: 'border-slate-400/60', heading: 'text-slate-400' },
+  decide: { rail: 'border-info/60',     heading: 'text-info' },
+  act:    { rail: 'border-warn/60',     heading: 'text-warn' },
+  verify: { rail: 'border-fg-muted/60', heading: 'text-fg-muted' },
 }
 
 // ─── Tone chip ─────────────────────────────────────────────────────────────

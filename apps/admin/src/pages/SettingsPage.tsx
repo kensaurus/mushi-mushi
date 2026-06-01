@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PageHeader, PageHelp, Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
+import { Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
 import { ByokPanel } from '../components/settings/ByokPanel'
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
@@ -152,7 +153,7 @@ export function SettingsPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Project settings'} />
+        <PageHeaderBar title={copy?.title ?? 'Project settings'} />
 
         <ContainedBlock tone="muted" className="mb-1">
           <p className="text-xs leading-relaxed text-fg-muted">
@@ -178,36 +179,19 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-settings">
-      <PageHelp
-        title={copy?.help?.title ?? 'About Settings'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'Project-level configuration scoped to the header project: BYOK LLM keys, classifier model, dedup threshold, SDK widget, and developer toggles.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
-            'Run Health → Send test report before wiring production SDK traffic',
-            'Tune Stage-2 model and dedup threshold after you see false positives in triage',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'General saves Slack/Sentry + classifier fields. LLM keys tab tests BYOK. Health runs a pipeline smoke test. Changes write to project_settings immediately on Save.'
-        }
-      />
-
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Project settings'}
         projectScope={projectName ?? stats.projectName}
+        description={copy?.description ?? 'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'}
+        helpTitle={copy?.help?.title ?? 'About Settings'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project-level configuration scoped to the header project: BYOK LLM keys, classifier model, dedup threshold, SDK widget, and developer toggles.'}
+        helpUseCases={copy?.help?.useCases ?? [
+          'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
+          'Run Health → Send test report before wiring production SDK traffic',
+          'Tune Stage-2 model and dedup threshold after you see false positives in triage',
+        ]}
+        helpHowToUse={copy?.help?.howToUse ?? 'General saves Slack/Sentry + classifier fields. LLM keys tab tests BYOK. Health runs a pipeline smoke test. Changes write to project_settings immediately on Save.'}
       />
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'}
-        </p>
-      </ContainedBlock>
 
       <SettingsStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
 

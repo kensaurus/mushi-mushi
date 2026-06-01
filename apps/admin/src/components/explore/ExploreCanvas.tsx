@@ -122,7 +122,7 @@ function LayerHeaderNode({
         border: `1px solid ${data.color}50`,
         borderRadius: '5px',
         padding: '3px 10px 3px 8px',
-        fontSize: '11px',
+        fontSize: 'var(--text-3xs)',
         fontWeight: 600,
         whiteSpace: 'nowrap',
         pointerEvents: 'none',
@@ -143,7 +143,7 @@ function LayerHeaderNode({
         aria-hidden="true"
       />
       {data.label}
-      <span style={{ fontWeight: 400, opacity: 0.65, fontSize: '10px', marginLeft: 2 }}>
+      <span style={{ fontWeight: 400, opacity: 0.65, fontSize: 'var(--text-3xs)', marginLeft: 2 }}>
         {data.count}
       </span>
     </div>

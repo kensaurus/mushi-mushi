@@ -198,7 +198,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             Vendor-side fine-tunes for the rare case where prompts alone aren't enough. Workflow: <span className="font-mono">Create → Export → Validate → Promote</span>.
           </p>
         </div>
-        <Btn size="sm" onClick={() => setAskingStage(true)} disabled={creating} loading={creating}>
+        <Btn size="sm" onClick={() => { setAskingStage(true); setStageError(null) }} disabled={creating} loading={creating}>
           New job
         </Btn>
       </div>

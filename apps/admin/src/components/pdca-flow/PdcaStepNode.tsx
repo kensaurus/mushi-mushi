@@ -14,7 +14,7 @@
  *              trigger a celebration ring.
  */
 
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { Link } from 'react-router-dom'
@@ -52,6 +52,7 @@ function PdcaStepNodeInner({ data }: NodeProps) {
   const prevTone = usePrevious(tone)
   const [countPulse, setCountPulse] = useState(false)
   const [celebrate, setCelebrate] = useState(false)
+  const [pressed, setPressed] = useState(false)
   const countKeyRef = useRef(0)
 
   useEffect(() => {
@@ -72,24 +73,32 @@ function PdcaStepNodeInner({ data }: NodeProps) {
     }
   }, [tone, prevTone])
 
-  const openDrawer = () => {
+  const openDrawer = useCallback(() => {
     if (!interactive) return
+    setPressed(true)
+    setTimeout(() => setPressed(false), 220)
     flow.onOpenStage(node.stageId)
-  }
+  }, [interactive, flow, node.stageId])
 
   const hasHealth = typeof node.health === 'number' && Number.isFinite(node.health)
 
   return (
     <div
       className={[
-        'group/pdca relative w-56 rounded-md border bg-surface-raised text-xs shadow-md pointer-events-auto',
+        'group/pdca relative w-[220px] rounded-md border bg-surface-raised text-xs shadow-md pointer-events-auto',
+        // Hover: lift with scale + deeper shadow. transition-[transform…] avoids
+        // layout shifts from border changes. Will-change hints the GPU.
+        'motion-safe:transition-[transform,box-shadow] duration-150 ease-out',
+        interactive ? 'hover:scale-[1.016] hover:shadow-xl hover:border-edge cursor-pointer' : '',
         node.isFocus
-          ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg}`
+          ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg} mushi-focus-blink`
           : 'border-edge/85',
         node.isRunning ? 'mushi-running-glow' : '',
+        pressed ? 'mushi-node-press' : '',
       ].join(' ')}
       data-stage={node.stageId}
     >
+      {/* Standard horizontal handles used by the forward edges (→) */}
       <Handle
         type="target"
         position={Position.Left}
@@ -102,6 +111,24 @@ function PdcaStepNodeInner({ data }: NodeProps) {
         id="out"
         className="!bg-transparent !border-none !w-1.5 !h-1.5"
       />
+      {/* Loop-back handles: Act(bottom) ──arc── Plan(bottom), so the
+          return edge sweeps below all four nodes instead of crossing them. */}
+      {node.stageId === 'plan' && (
+        <Handle
+          type="target"
+          position={Position.Bottom}
+          id="loop-in"
+          className="!bg-transparent !border-none !w-1.5 !h-1.5"
+        />
+      )}
+      {node.stageId === 'act' && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="loop-out"
+          className="!bg-transparent !border-none !w-1.5 !h-1.5"
+        />
+      )}
 
       {celebrate && <span className="mushi-celebrate-ring" aria-hidden="true" />}
 
@@ -127,7 +154,7 @@ function PdcaStepNodeInner({ data }: NodeProps) {
         <button
           type="button"
           onClick={openDrawer}
-          className="nodrag w-full text-left block p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md cursor-pointer"
+          className="nodrag w-full text-left block p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md cursor-pointer motion-safe:active:scale-[0.98] transition-transform"
           aria-label={`Open ${meta.label} stage details`}
         >
           <NodeBody
