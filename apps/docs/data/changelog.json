@@ -1,9 +1,13 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.7",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.7.2",
+      "1.7.1",
+      "1.7.0"
+    ],
     "highlights": [
       {
         "title": "Layout changed from diamond to horizontal row",
@@ -52,31 +56,16 @@
       {
         "title": "Segment min-height",
         "description": "each severity span gets `minHeight: 2px` so a 1-report slice of 100-report day is always visible."
-      },
-      {
-        "title": "Hover brightness",
-        "description": "`group-hover:brightness-110` replaces per-segment `opacity-90` — avoids flattening the stacked colours."
       }
     ],
-    "packages": []
-  },
-  {
-    "majorMinor": "1.7",
-    "headline": null,
-    "pending": false,
-    "versions": [
-      "1.7.1",
-      "1.7.0"
-    ],
-    "highlights": [],
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.7.0"
+        "version": "1.7.2"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.7.1"
+        "version": "1.7.2"
       }
     ]
   },
@@ -465,6 +454,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.11.2",
       "0.11.1",
       "0.11.0"
     ],
@@ -513,7 +503,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.11.1"
+        "version": "0.11.2"
       },
       {
         "name": "@mushi-mushi/react-native",
@@ -797,7 +787,7 @@
       },
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.7.2"
+        "version": "0.7.3"
       },
       {
         "name": "@mushi-mushi/cli",
