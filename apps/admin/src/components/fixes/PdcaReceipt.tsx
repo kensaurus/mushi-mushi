@@ -46,7 +46,7 @@ export function PdcaReceipt({ fix, timeline, className = '' }: PdcaReceiptProps)
             data-stamp={r.stamp}
           >
             <div className="flex items-center gap-1.5 text-2xs uppercase tracking-wider">
-              <span className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-[10px] ${meta.badgeBg} ${meta.badgeFg}`}>
+              <span className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}>
                 {meta.letter}
               </span>
               <span className={r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-muted'}>{meta.label}</span>
@@ -74,10 +74,10 @@ function Stamp({ stamp }: { stamp: StageStamp }) {
   const v = STAMP_VISUAL[stamp]
   return (
     <span
-      className={`ml-auto flex items-center gap-1 text-[10px] font-semibold ${v.copy}`}
+      className={`ml-auto flex items-center gap-1 text-3xs font-semibold ${v.copy}`}
       aria-label={`Status: ${v.label}`}
     >
-      <span aria-hidden="true" className="font-mono text-[11px] leading-none">{v.glyph}</span>
+      <span aria-hidden="true" className="font-mono text-3xs leading-none">{v.glyph}</span>
       {v.label}
     </span>
   )

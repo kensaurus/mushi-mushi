@@ -165,7 +165,7 @@ export function createGithubIssuesPlugin(
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-github-issues] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-github-issues] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-github-issues] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-github-issues] ${msg}`, meta ?? ''),
     },

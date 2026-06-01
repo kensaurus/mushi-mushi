@@ -50,6 +50,7 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
+  const vercelSlug = (routing.find((r) => r.integration_type === 'vercel')?.config?.project_slug as string | null) ?? null
   // gate on the merged loading + error so a failing routing query
   // can't silently leave the platform card half-rendered (and so the user
   // gets one retry button instead of three).
@@ -341,7 +342,14 @@ export function IntegrationsPage() {
           'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
           'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'For each card, click Edit to add credentials, then Test to probe live. Status pills, latency, and a 7-day sparkline live-update with each probe.'}
+        howToUse={copy?.help?.howToUse ?? [
+          'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
+          'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
+          'Step 3 — Sandbox: set Sandbox to e2b, modal, or cloudflare in Settings → Autofix. local-noop generates code but skips the PR in production.',
+          'Step 4 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
+          'Step 5 — Sentry: paste your DSN and auth token. Mushi links Sentry issues to reports and surfaces them on the fix PR.',
+          'Step 6 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
+        ].join('\n')}
       />
 
       <Section title="Core platform">
@@ -387,7 +395,7 @@ export function IntegrationsPage() {
         <DeploymentReadinessCard
           projectId={activeProjectId ?? null}
           githubAppInstalled={Boolean(platform?.github?.has_credentials)}
-          vercelProjectSlug={null}
+          vercelProjectSlug={vercelSlug}
         />
       </Section>
 

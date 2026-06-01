@@ -21,6 +21,8 @@ import { ContainedBlock } from '../report-detail/ReportSurface'
 
 interface ProjectSettings {
   slack_webhook_url?: string
+  slack_channel_id?: string
+  slack_team_id?: string
   sentry_dsn?: string
   sentry_webhook_secret?: string
   sentry_consume_user_feedback?: boolean
@@ -43,9 +45,22 @@ export function GeneralPanel() {
     setDraft({ ...settings, ...patch })
 
   const dirty = draft != null
+  const [testingSlack, setTestingSlack] = useState(false)
+  const [slackTestResult, setSlackTestResult] = useState<'ok' | 'err' | null>(null)
+
+  async function testSlack() {
+    setTestingSlack(true)
+    setSlackTestResult(null)
+    const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
+    setTestingSlack(false)
+    setSlackTestResult(res.ok ? 'ok' : 'err')
+    setTimeout(() => setSlackTestResult(null), 4000)
+  }
+
   const changeCount = dirty
     ? countChangedFields([
         { current: settings.slack_webhook_url ?? '', saved: saved.slack_webhook_url ?? '' },
+        { current: settings.slack_channel_id ?? '', saved: saved.slack_channel_id ?? '' },
         { current: settings.sentry_dsn ?? '', saved: saved.sentry_dsn ?? '' },
         { current: settings.sentry_webhook_secret ?? '', saved: saved.sentry_webhook_secret ?? '' },
         { current: settings.sentry_consume_user_feedback ?? true, saved: saved.sentry_consume_user_feedback ?? true },
@@ -94,23 +109,76 @@ export function GeneralPanel() {
       }
     >
       <div id="slack" className="scroll-mt-6">
-        <Section title="Notifications" className="space-y-3">
-          <div>
-            <Input
-              label="Slack Webhook URL"
-              helpId="settings.general.slack_webhook_url"
-              type="url"
-              value={settings.slack_webhook_url ?? ''}
-              onChange={(e) => update({ slack_webhook_url: e.target.value })}
-              placeholder="https://hooks.slack.com/services/..."
-              validate={slackWebhookUrl()}
-            />
-            <SettingsChangeHint
-              current={settings.slack_webhook_url ?? ''}
-              saved={saved.slack_webhook_url ?? ''}
-              kind="url"
-            />
+        <Section title="Slack Integration" className="space-y-4">
+          {/* Bot channel config (preferred — supports threading) */}
+          <div className="rounded-md border border-edge-subtle bg-surface-raised/50 p-3 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold text-fg">Bot notifications</p>
+                <p className="text-2xs text-fg-muted mt-0.5">
+                  Post to a channel via the Mushi Slack bot. Reports will include <em>Triage →</em> and <em>Dispatch fix</em> buttons, and fix-dispatched status is posted as a threaded reply.
+                </p>
+              </div>
+              {(settings.slack_channel_id || settings.slack_webhook_url) && (
+                <button
+                  type="button"
+                  onClick={() => void testSlack()}
+                  disabled={testingSlack}
+                  className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-colors ${
+                    slackTestResult === 'ok'
+                      ? 'border-ok bg-ok/10 text-ok'
+                      : slackTestResult === 'err'
+                        ? 'border-danger bg-danger-muted text-danger'
+                        : 'border-edge-subtle text-fg-muted hover:text-fg'
+                  }`}
+                >
+                  {testingSlack ? 'Sending…' : slackTestResult === 'ok' ? '✓ Sent' : slackTestResult === 'err' ? '✗ Failed' : 'Send test'}
+                </button>
+              )}
+            </div>
+            <div>
+              <Input
+                label="Channel ID"
+                helpId="settings.general.slack_channel_id"
+                type="text"
+                value={settings.slack_channel_id ?? ''}
+                onChange={(e) => update({ slack_channel_id: e.target.value.trim() })}
+                placeholder="C0B82A322RW"
+              />
+              <p className="text-fg-faint text-3xs mt-0.5">
+                Right-click the channel in Slack → View channel details → Copy channel ID.
+                The bot token is set as a Supabase project secret (SLACK_BOT_TOKEN) — not stored here.
+              </p>
+              <SettingsChangeHint
+                current={settings.slack_channel_id ?? ''}
+                saved={saved.slack_channel_id ?? ''}
+                kind="text"
+              />
+            </div>
           </div>
+          {/* Legacy webhook fallback */}
+          <details className="rounded-md border border-edge-subtle">
+            <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay rounded-md">
+              <span>Incoming Webhook URL <span className="text-3xs text-fg-faint ml-1">(legacy — no threading)</span></span>
+              <span aria-hidden className="text-2xs text-fg-faint">›</span>
+            </summary>
+            <div className="px-3 pb-3 pt-1">
+              <Input
+                label="Webhook URL"
+                helpId="settings.general.slack_webhook_url"
+                type="url"
+                value={settings.slack_webhook_url ?? ''}
+                onChange={(e) => update({ slack_webhook_url: e.target.value })}
+                placeholder="https://hooks.slack.com/services/..."
+                validate={slackWebhookUrl()}
+              />
+              <SettingsChangeHint
+                current={settings.slack_webhook_url ?? ''}
+                saved={saved.slack_webhook_url ?? ''}
+                kind="url"
+              />
+            </div>
+          </details>
         </Section>
       </div>
 

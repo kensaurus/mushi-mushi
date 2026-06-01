@@ -36,13 +36,13 @@ function FixStageNodeInner({ data }: NodeProps) {
   const stageColor = STAGE_HEX[node.pdcaStage]
 
   const content = (
-    <div className={`w-36 rounded-md border px-2 py-1.5 text-[11px] shadow-sm motion-safe:transition-colors pointer-events-auto ${cls}`}>
+    <div className={`w-36 rounded-md border px-2 py-1.5 text-3xs shadow-sm motion-safe:transition-colors pointer-events-auto ${cls}`}>
       <Handle type="target" position={Position.Left} id="in" className="!bg-transparent !border-none !w-1 !h-1" />
       <Handle type="source" position={Position.Right} id="out" className="!bg-transparent !border-none !w-1 !h-1" />
       <div className="flex items-center gap-1.5">
         <span
           aria-hidden="true"
-          className="inline-flex h-4 w-4 items-center justify-center rounded-sm font-bold text-[9px] leading-none shrink-0"
+          className="inline-flex h-4 w-4 items-center justify-center rounded-sm font-bold text-3xs leading-none shrink-0"
           style={{ backgroundColor: stageColor + '33', color: stageColor }}
         >
           {node.letter}
@@ -50,13 +50,13 @@ function FixStageNodeInner({ data }: NodeProps) {
         <span className="font-medium flex-1 truncate">{node.label}</span>
         <span
           aria-hidden="true"
-          className={`text-[10px] font-mono leading-none ${node.status === 'active' ? 'motion-safe:animate-spin' : ''}`}
+          className={`text-3xs font-mono leading-none ${node.status === 'active' ? 'motion-safe:animate-spin' : ''}`}
         >
           {glyph}
         </span>
       </div>
       {node.sublabel && (
-        <div className="mt-0.5 text-[10px] font-mono text-fg-faint truncate">{node.sublabel}</div>
+        <div className="mt-0.5 text-3xs font-mono text-fg-faint truncate">{node.sublabel}</div>
       )}
     </div>
   )

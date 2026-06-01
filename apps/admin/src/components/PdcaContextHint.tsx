@@ -36,7 +36,7 @@ export function PdcaContextHint({ stage: stageProp, compact }: PdcaContextHintPr
       >
         <span
           aria-hidden="true"
-          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm text-[0.55rem] font-bold leading-none ${meta.badgeBg} ${meta.badgeFg}`}
+          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm text-3xs font-bold leading-none ${meta.badgeBg} ${meta.badgeFg}`}
         >
           {meta.letter}
         </span>

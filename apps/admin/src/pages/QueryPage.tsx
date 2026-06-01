@@ -401,7 +401,7 @@ function TeamItem({ row, onRerun }: { row: TeamRow; onRerun: () => void }) {
       <div className="flex items-center justify-between mt-1.5 text-3xs gap-1">
         <span className="flex items-center gap-1 min-w-0">
           <span
-            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-brand/15 text-brand font-medium text-[9px] shrink-0"
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-brand/15 text-brand font-medium text-3xs shrink-0"
             aria-hidden="true"
           >
             {initial}

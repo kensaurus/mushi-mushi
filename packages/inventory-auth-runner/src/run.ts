@@ -39,7 +39,7 @@ if (command !== 'refresh') {
 
 try {
   const result = await refresh({ apiEndpoint: apiEndpoint.replace(/\/$/, ''), apiKey, projectId, debug })
-  console.log(`✓ Auth refreshed: cookie '${result.cookieName}' captured for domain '${result.domain}'.`)
+  console.warn(`✓ Auth refreshed: cookie '${result.cookieName}' captured for domain '${result.domain}'.`)
 } catch (err) {
   console.error('✗ Auth refresh failed:', err instanceof Error ? err.message : String(err))
   process.exit(2)

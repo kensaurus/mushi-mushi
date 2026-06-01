@@ -150,10 +150,10 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
     >
       {/* ── Fix-worker failures ─────────────────────────────────────── */}
       {failures.length > 0 && (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50/80 dark:border-amber-700/50 dark:bg-amber-950/30 px-3.5 py-3">
+        <div className="rounded-md border border-warn/30 bg-warn-muted/20 px-3.5 py-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2 min-w-0">
-              <span className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true">
+              <span className="mt-0.5 shrink-0 text-warn" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M7 2L12.5 12H1.5L7 2Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M7 5.5V8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
@@ -161,19 +161,19 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
                 </svg>
               </span>
               <div className="min-w-0">
-                <p className="text-2xs font-semibold text-amber-800 dark:text-amber-300">
-                  Fix-worker failure{failures.length > 1 ? ` · ${failures.length} retryable failures` : ''} — <span className="font-normal">Do stage bottleneck</span>
+                <p className="text-2xs font-semibold text-warn">
+                  Fix-worker failure{failures.length > 1 ? ` · ${failures.length} retryable failures` : ''} — <span className="font-normal text-fg-secondary">Do stage bottleneck</span>
                 </p>
                 {latest.failure_category && CATEGORY_HINT[latest.failure_category] && (
                   <ContainedBlock tone="warn" className="mt-1">
-                    <p className="text-2xs text-amber-700 dark:text-amber-400 leading-snug">
+                    <p className="text-2xs text-warn/80 leading-snug">
                       {CATEGORY_HINT[latest.failure_category]}
                     </p>
                   </ContainedBlock>
                 )}
                 {latest.failure_diagnostic && (
                   <ContainedBlock tone="warn" className="mt-1">
-                    <p className="text-2xs text-amber-700/70 dark:text-amber-400/70 leading-snug line-clamp-2 font-mono">
+                    <p className="text-2xs text-warn/60 leading-snug line-clamp-2 font-mono">
                       {latest.failure_diagnostic.slice(0, 180)}
                     </p>
                   </ContainedBlock>
@@ -225,26 +225,26 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
 
       {/* ── Supabase MCP advisors ───────────────────────────────────── */}
       {hasAdvisors && (
-        <div className="rounded-md border border-blue-300/50 bg-blue-50/70 dark:border-blue-700/40 dark:bg-blue-950/25 px-3.5 py-3">
+        <div className="rounded-md border border-info/30 bg-info-muted/20 px-3.5 py-3">
           <button
             type="button"
-            className="w-full flex items-start justify-between gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded"
+            className="w-full flex items-start justify-between gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-info/50 rounded"
             onClick={() => setAdvisorsExpanded((v) => !v)}
             aria-expanded={advisorsExpanded}
           >
             <div className="flex items-center gap-2">
-              <span className="text-blue-600 dark:text-blue-400" aria-hidden="true">
+              <span className="text-info" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.4"/>
                   <path d="M7 5v2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                   <circle cx="7" cy="9.5" r="0.65" fill="currentColor"/>
                 </svg>
               </span>
-              <p className="text-2xs font-semibold text-blue-800 dark:text-blue-300">
-                {advisors.length} Supabase advisor{advisors.length !== 1 ? 's' : ''} — <span className="font-normal">from Supabase MCP</span>
+              <p className="text-2xs font-semibold text-info">
+                {advisors.length} Supabase advisor{advisors.length !== 1 ? 's' : ''} — <span className="font-normal text-fg-secondary">from Supabase MCP</span>
               </p>
             </div>
-            <span className={`text-blue-500 transition-transform ${advisorsExpanded ? 'rotate-180' : ''}`} aria-hidden="true">
+            <span className={`text-info/60 transition-transform ${advisorsExpanded ? 'rotate-180' : ''}`} aria-hidden="true">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
@@ -254,15 +254,15 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
             <ul className="mt-2 space-y-1.5">
               {advisors.map((a, i) => (
                 <li key={i}>
-                  <ContainedBlock tone="info" className="border-blue-300/40 bg-blue-50/50 dark:border-blue-700/30 dark:bg-blue-950/20">
+                  <ContainedBlock tone="info" className="border-info/30 bg-info-muted/20">
                     <div className="flex flex-wrap items-center gap-1.5 mb-1">
                       <SignalChip tone={a.level === 'ERROR' ? 'danger' : 'warn'}>
                         {a.level ?? 'INFO'}
                       </SignalChip>
-                      <strong className="text-2xs text-blue-800 dark:text-blue-300">{a.title ?? a.name}</strong>
+                      <strong className="text-2xs text-info">{a.title ?? a.name}</strong>
                     </div>
                     {a.description && (
-                      <p className="text-2xs text-blue-700 dark:text-blue-300 leading-snug">
+                      <p className="text-2xs text-info/80 leading-snug">
                         {a.description.slice(0, 140)}
                       </p>
                     )}

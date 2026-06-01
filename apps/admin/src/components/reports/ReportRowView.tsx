@@ -240,6 +240,16 @@ function ReportRowViewInner({
           <div className="text-2xs text-fg-faint mt-0.5 font-mono truncate">{row.component}</div>
         )}
         <ReportSourceBadge row={row} />
+        {row.reporter_display_name && (
+          <Tooltip content={row.reporter_jwt_verified ? 'Identity verified via signed JWT' : 'Reporter identity (unverified)'}>
+            <span className={`inline-flex items-center gap-1 text-2xs font-mono mt-0.5 ${
+              row.reporter_jwt_verified ? 'text-ok' : 'text-fg-faint'
+            }`}>
+              {row.reporter_jwt_verified && <span aria-hidden="true">✓</span>}
+              <span className="truncate max-w-[12rem]">{row.reporter_display_name}</span>
+            </span>
+          </Tooltip>
+        )}
         {(hasObservability(row) || row.sentry_trace_id) && (
           <ObservabilityStrip row={row} />
         )}

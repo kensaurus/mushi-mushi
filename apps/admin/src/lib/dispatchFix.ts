@@ -11,7 +11,14 @@ import { RESOLVED_API_URL } from './env'
 import { openSseStream } from './sseClient'
 import { withAguiHandler } from './agui'
 
-export type DispatchStatus = 'idle' | 'queueing' | 'queued' | 'running' | 'completed' | 'failed'
+export type DispatchStatus =
+  | 'idle'
+  | 'queueing'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'completed_no_pr'
+  | 'failed'
 
 export interface DispatchState {
   status: DispatchStatus
@@ -22,13 +29,13 @@ export interface DispatchState {
 
 interface DispatchResponse {
   dispatchId: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'completed' | 'completed_no_pr' | 'failed' | 'cancelled'
   pr_url?: string | null
   error?: string | null
 }
 
 interface StatusEventPayload {
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'completed' | 'completed_no_pr' | 'failed' | 'cancelled'
   fixAttemptId?: string
   prUrl?: string | null
   error?: string | null
@@ -66,6 +73,11 @@ export function useDispatchFix(reportId: string, projectId: string) {
     if (res.data.status === 'completed') {
       reachedTerminal.current = true
       setState({ status: 'completed', dispatchId, prUrl: res.data.pr_url ?? undefined })
+      return
+    }
+    if (res.data.status === 'completed_no_pr') {
+      reachedTerminal.current = true
+      setState({ status: 'completed_no_pr', dispatchId, error: res.data.error ?? 'Fix generated — GitHub App not installed' })
       return
     }
     if (res.data.status === 'failed' || res.data.status === 'cancelled') {
@@ -138,6 +150,9 @@ export function useDispatchFix(reportId: string, projectId: string) {
                 if (p.status === 'completed') {
                   reachedTerminal.current = true
                   setState({ status: 'completed', dispatchId, prUrl: p.prUrl ?? undefined })
+                } else if (p.status === 'completed_no_pr') {
+                  reachedTerminal.current = true
+                  setState({ status: 'completed_no_pr', dispatchId, error: p.error ?? 'Fix generated — GitHub App not installed' })
                 } else if (p.status === 'failed' || p.status === 'cancelled') {
                   reachedTerminal.current = true
                   setState({ status: 'failed', dispatchId, error: p.error ?? `Dispatch ${p.status}` })

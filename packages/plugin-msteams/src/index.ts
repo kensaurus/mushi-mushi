@@ -233,7 +233,7 @@ export function createMsteamsPlugin(cfg: MsteamsPluginConfig) {
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-msteams] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-msteams] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-msteams] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-msteams] ${msg}`, meta ?? ''),
     },

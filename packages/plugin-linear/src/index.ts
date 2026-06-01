@@ -98,7 +98,7 @@ export function createLinearPlugin(cfg: LinearPluginConfig, cache: IssueCache = 
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-linear] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-linear] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-linear] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-linear] ${msg}`, meta ?? ''),
     },

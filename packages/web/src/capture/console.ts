@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { MushiConsoleEntry } from '@mushi-mushi/core';
 
 const MAX_ENTRIES = 50;

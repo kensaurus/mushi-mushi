@@ -105,7 +105,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         projectId: project.id,
         projectName: project.name,
         updatedAt: (row.updated_at as string | null) ?? null,
-        slackConfigured: Boolean(row.slack_webhook_url),
+        slackConfigured: Boolean(row.slack_webhook_url) || Boolean(row.slack_channel_id),
         sentryConfigured: Boolean(row.sentry_dsn),
         reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
         stage2Model: (row.stage2_model as string | null) ?? null,
@@ -135,6 +135,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     const allowed = [
       'slack_webhook_url',
+      'slack_channel_id',
+      'slack_team_id',
       'sentry_dsn',
       'sentry_webhook_secret',
       'sentry_consume_user_feedback',
@@ -143,6 +145,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'dedup_threshold',
       'embedding_model',
       'graph_backend',
+      // SDK banner config fields — writable so the console Settings panel
+      // can update the banner variant, position, and CTA labels live.
+      'sdk_banner_variant',
+      'sdk_banner_position',
+      'sdk_banner_bug_cta',
+      'sdk_banner_feature_cta',
     ];
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
@@ -155,6 +163,58 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     if (error) return dbError(c, error);
     return c.json({ ok: true });
+  });
+
+  // ── Slack test endpoint ──────────────────────────────────────────────
+  app.post('/v1/admin/settings/test-slack', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('slack_channel_id, slack_webhook_url')
+      .eq('project_id', project.id)
+      .maybeSingle();
+
+    const channelId = (settings as Record<string, unknown> | null)?.slack_channel_id as string | null;
+    const webhookUrl = (settings as Record<string, unknown> | null)?.slack_webhook_url as string | null;
+    const botToken = Deno.env.get('SLACK_BOT_TOKEN');
+    const globalChannel = Deno.env.get('SLACK_CHANNEL_ID');
+
+    const targetChannel = channelId || globalChannel;
+    if (!targetChannel && !webhookUrl) {
+      return c.json({ ok: false, error: { code: 'NO_SLACK_CONFIG', message: 'Configure a channel ID or webhook URL first.' } }, 400);
+    }
+
+    if (botToken && targetChannel) {
+      const res = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${botToken}` },
+        body: JSON.stringify({
+          channel: targetChannel,
+          text: `🐛 Mushi Mushi test message — your Slack integration is working! Project: *${project.name}*.`,
+        }),
+      });
+      const json = await res.json() as { ok: boolean; error?: string };
+      if (!json.ok) return c.json({ ok: false, error: { code: 'SLACK_API_ERROR', message: json.error ?? 'slack error' } }, 502);
+      return c.json({ ok: true });
+    }
+
+    if (webhookUrl) {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `🐛 Mushi Mushi test — Slack integration working for *${project.name}*.` }),
+      });
+      if (!res.ok) return c.json({ ok: false, error: { code: 'WEBHOOK_ERROR', message: `HTTP ${res.status}` } }, 502);
+      return c.json({ ok: true });
+    }
+
+    return c.json({ ok: false, error: { code: 'NO_SLACK_CONFIG', message: 'SLACK_BOT_TOKEN env var not set.' } }, 500);
   });
 
   app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
@@ -170,6 +230,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .from('project_settings')
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -199,6 +260,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )

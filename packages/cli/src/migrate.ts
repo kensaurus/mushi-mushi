@@ -189,7 +189,7 @@ export function runMigrate(opts: RunMigrateOptions = {}): {
   matches: MigrateMatch[]
 } {
   const cwd = opts.cwd ?? process.cwd()
-  const log = opts.log ?? ((s: string) => console.log(s))
+  const log = opts.log ?? ((s: string) => console.warn(s))
 
   const pkg = readPackageJson(cwd)
   if (!pkg) {

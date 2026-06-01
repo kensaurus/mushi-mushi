@@ -50,7 +50,7 @@ export function SwitchingFromStrip() {
               they could read the section. The page's Japanese budget (one
               phrase max, see docs/marketing/VOICE.md) is spent on the footer
               wink, not here. */}
-          <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]" aria-hidden="true">
             <span className="text-[var(--mushi-ink)]">Coming from</span>
             <span className="mx-2 opacity-40">/</span>
             another tool?

@@ -567,12 +567,12 @@ function TicketRow({
             </span>
             <p className="truncate text-xs font-medium text-fg">{t.subject}</p>
             {reply && (t.status === 'open' || t.status === 'in_progress') && (
-              <Badge className="shrink-0 border border-brand/30 bg-brand/15 text-[0.6rem] text-brand motion-safe:animate-pulse">
+              <Badge className="shrink-0 border border-brand/30 bg-brand/15 text-3xs text-brand motion-safe:animate-pulse">
                 New reply
               </Badge>
             )}
             {shipped && release && (
-              <Badge className="shrink-0 bg-ok-muted font-mono text-[0.6rem] text-ok">v{release.version}</Badge>
+              <Badge className="shrink-0 bg-ok-muted font-mono text-3xs text-ok">v{release.version}</Badge>
             )}
           </div>
           <InlineProof className="truncate border-0 bg-transparent px-0 py-0">

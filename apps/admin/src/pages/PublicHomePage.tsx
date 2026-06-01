@@ -173,7 +173,7 @@ export function PublicHomePage() {
                 href={`${DOCS_BASE}/`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+                className="rounded-full px-3 py-1.5 font-mono text-2xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
               >
                 Docs
               </a>
@@ -287,20 +287,20 @@ function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string
       >
         <span
           aria-hidden
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--mushi-vermillion)] font-mono text-[11px] font-semibold text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.22)]"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--mushi-vermillion)] font-mono text-3xs font-semibold text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.22)]"
         >
           {initial}
         </span>
         {/* Hide the email at narrow widths so the sticky pill doesn't
             wrap. The avatar + the "Open console" CTA still convey the
             signed-in state on mobile. */}
-        <span className="hidden max-w-[12rem] truncate font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--mushi-ink)] md:inline">
+        <span className="hidden max-w-[12rem] truncate font-mono text-3xs uppercase tracking-[0.16em] text-[var(--mushi-ink)] md:inline">
           {user.email ?? displayName}
         </span>
       </Link>
       <Link
         to={consoleHref}
-        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-3xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
       >
         Open console
       </Link>
@@ -308,7 +308,7 @@ function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string
         type="button"
         onClick={handleSignOut}
         disabled={signingOut}
-        className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] disabled:cursor-wait disabled:opacity-60"
+        className="rounded-full px-3 py-1.5 font-mono text-3xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] disabled:cursor-wait disabled:opacity-60"
       >
         {signingOut ? '…' : 'Sign out'}
       </button>
@@ -327,7 +327,7 @@ function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
     <>
       <Link
         to="/login"
-        className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+        className="rounded-full px-3 py-1.5 font-mono text-3xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
       >
         Sign in
       </Link>
@@ -340,7 +340,7 @@ function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
           render it cleanly. */}
       <Link
         to={consoleHref}
-        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-3xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
       >
         Get started
       </Link>
@@ -368,7 +368,7 @@ function SynthesisLayerSection() {
       className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
     >
       {/* Eyebrow */}
-      <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+      <p className="font-mono text-3xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
         <span className="text-[var(--mushi-ink)]">Integrator</span>
         <span className="mx-2 opacity-40">/</span>
         not a replacement
@@ -409,7 +409,7 @@ function SynthesisLayerSection() {
       />
 
       {/* Integration tiles */}
-      <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+      <p className="font-mono text-3xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
         <span className="text-[var(--mushi-ink)]">Ecosystem</span>
         <span className="mx-2 opacity-40">/</span>
         plug in, don&rsquo;t rip out
@@ -473,7 +473,7 @@ function SignalCard({ title, tools, mushi, highlight = false }: Signal) {
       }`}
     >
       <p
-        className={`font-mono text-[10px] uppercase tracking-[0.2em] leading-none ${
+        className={`font-mono text-3xs uppercase tracking-[0.2em] leading-none ${
           highlight ? 'text-[var(--mushi-vermillion)]' : 'text-[var(--mushi-ink-muted)]'
         }`}
       >
@@ -528,7 +528,7 @@ function IntegrationGroup({
     direction === 'inbound' ? 'text-[color-mix(in_oklch,var(--mushi-vermillion)_60%,var(--mushi-ink-muted))]' : 'text-[var(--mushi-ink-muted)]'
   return (
     <div>
-      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)]">
+      <p className="font-mono text-3xs font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)]">
         {label}
       </p>
       <p className="mt-1 text-xs text-[var(--mushi-ink-muted)] leading-relaxed max-w-sm">{hint}</p>
@@ -536,10 +536,10 @@ function IntegrationGroup({
         {tools.map((t) => (
           <li key={t.name}>
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-[11px] text-[var(--mushi-ink-muted)]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-3xs text-[var(--mushi-ink-muted)]"
               title={`via ${t.pkg}`}
             >
-              <span className={`text-[10px] ${arrowColor}`} aria-hidden>
+              <span className={`text-3xs ${arrowColor}`} aria-hidden>
                 {direction === 'inbound' ? '→' : '←'}
               </span>
               {t.name}
@@ -572,7 +572,7 @@ function SignedInBanner({ user, consoleHref }: { user: User; consoleHref: string
       className="border-b border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,var(--mushi-vermillion-wash))]"
     >
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-6 py-2">
-        <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
+        <p className="flex items-center gap-2 font-mono text-3xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
           <span
             aria-hidden
             className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]"
@@ -585,7 +585,7 @@ function SignedInBanner({ user, consoleHref }: { user: User; consoleHref: string
         </p>
         <Link
           to={consoleHref}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--mushi-ink)] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--mushi-ink)] px-3 py-1 font-mono text-3xs font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
         >
           Open console
           <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>

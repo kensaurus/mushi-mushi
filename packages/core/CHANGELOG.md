@@ -1,5 +1,39 @@
 # @mushi-mushi/core
 
+## 1.7.0
+
+### Minor Changes
+
+- 740df06: Add `trigger: 'banner'` — a slim, full-width header strip launcher that replaces the floating action button as the recommended default.
+
+  **@mushi-mushi/core**
+  - New `trigger: 'banner'` value on `MushiWidgetConfig` — renders a full-width strip pinned to the top (or bottom) of the viewport instead of a floating action button.
+  - New `MushiBannerConfig` interface exported for configuring the banner: `variant` (`'neon' | 'brand' | 'subtle'`), `position` (`'top' | 'bottom'`), `bugCta`, `featureCta`, `featureCtaLabel`, `zIndex`.
+  - New `bannerConfig?: MushiBannerConfig` field on `MushiWidgetConfig`.
+
+  **@mushi-mushi/web**
+  - Banner launcher renders inside the widget's Shadow DOM as a `position: fixed` strip — no layout impact on the host page.
+  - Three variants: `neon` (electric lime, high-contrast dev/beta feel), `brand` (vermillion, editorial app-quality feel), `subtle` (hairline muted strip, least disruptive).
+  - Per-session dismiss via ✕ button; re-appears on next page load.
+  - "🐛 Report a bug" and optional "✨ Request feature" buttons open the report panel directly.
+  - Runtime config from the Mushi console (`launcher`, `bannerVariant`, `bannerPosition`, `bannerBugCta`, `bannerFeatureCta`) is applied automatically — no SDK re-init required.
+  - Console configurator: live preview + banner style/position/label controls in `SdkInstallCard`.
+  - Database: new `sdk_widget_launcher`, `sdk_banner_variant`, `sdk_banner_position`, `sdk_banner_bug_cta`, `sdk_banner_feature_cta` columns in `project_settings`.
+
+### Patch Changes
+
+- ef25a84: Fix six edge-case failure paths discovered during the May 27 Copilot code review.
+
+  **@mushi-mushi/core**
+  - Offline queue: permanently evict reports that return HTTP 400, HTTP 422, `INGEST_ERROR`, or `VALIDATION_ERROR` codes — previously one bad report blocked all subsequent retries in the same flush cycle.
+  - API client: improved error message extraction from non-JSON responses so offline-queue eviction logic receives the structured error code instead of a generic string.
+
+  **@mushi-mushi/cli**
+  - `nudge`: numeric flags (`--min-rating`, `--max-rating`, `--limit`) now validate that values are finite integers in valid ranges; previously NaN propagated silently to the API producing unexpected results.
+
+  **@mushi-mushi/capacitor**
+  - iOS `BreadcrumbCollector`: `maxMessageLength` floor corrected from 50 → 1; the old value silently inflated every breadcrumb message to at least 50 chars, breaking exact-match assertions in downstream tests.
+
 ## 1.6.0
 
 ### Minor Changes

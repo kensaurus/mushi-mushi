@@ -136,7 +136,7 @@ export function BreadcrumbPeek({
 
           {tagEntries.length > 0 && (
             <div className="mb-2">
-              <div className="text-[0.625rem] uppercase tracking-wider text-fg-muted mb-1">
+              <div className="text-3xs uppercase tracking-wider text-fg-muted mb-1">
                 Tags
               </div>
               <div className="flex flex-wrap gap-1">
@@ -163,11 +163,11 @@ export function BreadcrumbPeek({
           {trail.length > 0 ? (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <div className="text-[0.625rem] uppercase tracking-wider text-fg-muted">
+                <div className="text-3xs uppercase tracking-wider text-fg-muted">
                   Last {trail.length} breadcrumb{trail.length === 1 ? '' : 's'}
                 </div>
                 {breadcrumbs && breadcrumbs.length > PEEK_LIMIT && (
-                  <span className="text-[0.625rem] text-fg-faint">
+                  <span className="text-3xs text-fg-faint">
                     +{breadcrumbs.length - PEEK_LIMIT} earlier
                   </span>
                 )}

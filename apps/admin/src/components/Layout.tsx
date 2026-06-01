@@ -791,10 +791,10 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
 }
 
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
-  P: 'bg-info-muted text-info',
-  D: 'bg-brand/15 text-brand',
-  C: 'bg-warn-muted text-warn',
-  A: 'bg-ok-muted text-ok',
+  P: 'bg-info/15 text-info border border-info/35',
+  D: 'bg-brand/15 text-brand border border-brand/35',
+  C: 'bg-warn/15 text-warn border border-warn/35',
+  A: 'bg-ok/15 text-ok border border-ok/35',
 }
 
 function isActive(currentPath: string, itemPath: string) {
@@ -977,7 +977,7 @@ export function Layout({ children }: { children: ReactNode }) {
           setFocusMode(false)
         },
       },
-      // `[` toggles the desktop sidebar between full (208px) and an
+      // `[` toggles the desktop sidebar between full (224px) and an
       // icon-only rail (48px). Mirrors Linear's collapsible-sidebar
       // hotkey so muscle memory transfers from there. Mobile is a
       // separate overlay (`mobileOpen`) and isn't touched.
@@ -1421,14 +1421,14 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
 
-      {/* Desktop sidebar — `sidebarCollapsed` toggles between a 208px nav
-          (w-52) and a 48px icon rail (w-12). Toggle button is rendered
+      {/* Desktop sidebar — `sidebarCollapsed` toggles between a 240px nav
+          (w-60) and a 48px icon rail (w-12). Toggle button is rendered
           INSIDE the sidebar (sticky bottom) so it survives both states.
           Hidden entirely in focus mode; the floating exit pill below
           replaces all sidebar affordances when focus mode is on. */}
       {!focusMode && (
         <aside
-          className={`hidden md:flex flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-52'}`}
+          className={`hidden md:flex flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-60'}`}
           data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
           {renderSidebarContent(sidebarCollapsed)}
@@ -1552,7 +1552,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   {activityUnread > 0 && (
                     <span
                       aria-hidden
-                      className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-[0.55rem] font-semibold leading-none motion-safe:animate-pulse"
+                      className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-3xs font-semibold leading-none motion-safe:animate-pulse"
                     >
                       {activityUnread > 9 ? '9+' : activityUnread}
                     </span>
@@ -1673,7 +1673,7 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
       role="radiogroup"
       aria-label="Admin mode"
       data-tour-id="mode-toggle"
-      className="mt-2 inline-flex items-center gap-0 rounded-full border border-edge bg-surface-raised/60 p-0.5"
+      className="mt-2 flex w-full min-w-0 items-center gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
     >
       {MODE_OPTIONS.map((opt) => {
         const active = opt.id === mode
@@ -1684,10 +1684,10 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
               role="radio"
               aria-checked={active}
               onClick={() => onSelect(opt.id)}
-              className={`px-2 py-0.5 text-2xs font-medium rounded-full motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+              className={`min-w-0 flex-1 truncate rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                 active
-                  ? 'bg-brand/15 text-brand shadow-sm'
-                  : 'text-fg-faint hover:text-fg-secondary'
+                  ? 'bg-brand/25 text-brand shadow-sm ring-1 ring-brand/20 font-semibold'
+                  : 'text-fg-muted hover:bg-surface-overlay hover:text-fg-secondary'
               }`}
             >
               {opt.label}
@@ -1772,7 +1772,7 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
     <span className="flex items-center gap-1.5 min-w-0 w-full">
       {section.stage && (
         <span
-          className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[section.stage]}`}
+          className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-3xs font-bold leading-none shrink-0 ${STAGE_TONE[section.stage]}`}
           aria-hidden="true"
         >
           {section.stage}
@@ -1781,7 +1781,7 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
       <span className="truncate flex-1 text-left">{section.title}</span>
       {staleness && (
         <span
-          className={`inline-flex items-center justify-center min-w-[1rem] px-1 h-3.5 rounded-sm text-[0.55rem] font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
+          className={`inline-flex items-center justify-center min-w-[1rem] px-1 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
           aria-label={staleness.label}
           title={staleness.label}
         >

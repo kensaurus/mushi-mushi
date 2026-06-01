@@ -184,9 +184,9 @@ function LessonsTab() {
     <div>
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-fg-muted">
             Promoted learning rules derived from clustered bug reports.
-            Injected into PR review context via the <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1 rounded">lessons.query</code> MCP tool.
+            Injected into PR review context via the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP tool.
           </p>
         </div>
         <SegmentedControl
@@ -214,15 +214,15 @@ function LessonsTab() {
           {lessons.map((lesson) => (
             <div
               key={lesson.id}
-              className="flex items-start gap-3 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+              className="flex items-start gap-3 p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 cursor-pointer motion-safe:transition-colors"
               onClick={() => setSelectedLesson(lesson)}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <SeverityBadge severity={lesson.severity} />
-                  <span className="text-xs text-zinc-400">freq: {lesson.frequency}</span>
+                  <span className="text-xs text-fg-faint">freq: {lesson.frequency}</span>
                   {lesson.mistake_clusters?.name && (
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-fg-faint">
                       cluster: {lesson.mistake_clusters.name}
                     </span>
                   )}
@@ -230,21 +230,21 @@ function LessonsTab() {
                     <Badge className="bg-muted text-muted-foreground">retired</Badge>
                   )}
                 </div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 line-clamp-2">
+                <p className="text-sm font-medium text-fg line-clamp-2">
                   {lesson.rule_text}
                 </p>
                 {lesson.anti_pattern && (
-                  <p className="text-xs text-zinc-500 mt-1 line-clamp-1">
+                  <p className="text-xs text-fg-muted mt-1 line-clamp-1">
                     Anti-pattern: {lesson.anti_pattern}
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-zinc-400 hidden sm:block">
+                <span className="text-xs text-fg-faint hidden sm:block">
                   <RelativeTime value={lesson.last_reinforced_at} />
                 </span>
                 <button
-                  className="text-xs text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 px-2 py-1 rounded border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700"
+                  className="text-xs text-fg-faint hover:text-fg px-2 py-1 rounded border border-transparent hover:border-edge motion-safe:transition-colors"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleRetire(lesson.id, !!lesson.retired_at)
@@ -253,7 +253,7 @@ function LessonsTab() {
                 >
                   {lesson.retired_at ? 'Restore' : 'Retire'}
                 </button>
-                <IconChevronRight className="w-4 h-4 text-zinc-400" />
+                <IconChevronRight className="w-4 h-4 text-fg-faint" />
               </div>
             </div>
           ))}
@@ -269,32 +269,32 @@ function LessonsTab() {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <SeverityBadge severity={selectedLesson.severity} />
-              <span className="text-xs text-zinc-400">frequency: {selectedLesson.frequency}</span>
+              <span className="text-xs text-fg-faint">frequency: {selectedLesson.frequency}</span>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Rule</h3>
-              <pre className="text-sm bg-zinc-50 dark:bg-zinc-800 p-3 rounded-lg whitespace-pre-wrap border border-zinc-200 dark:border-zinc-700">
+              <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Rule</h3>
+              <pre className="text-sm bg-surface-overlay p-3 rounded-lg whitespace-pre-wrap border border-edge">
                 {selectedLesson.rule_text}
               </pre>
             </div>
             {selectedLesson.anti_pattern && (
               <div>
-                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Anti-pattern</h3>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300">{selectedLesson.anti_pattern}</p>
+                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Anti-pattern</h3>
+                <p className="text-sm text-fg-secondary">{selectedLesson.anti_pattern}</p>
               </div>
             )}
             {selectedLesson.summary_paragraph && (
               <div>
-                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Summary</h3>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300">{selectedLesson.summary_paragraph}</p>
+                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Summary</h3>
+                <p className="text-sm text-fg-secondary">{selectedLesson.summary_paragraph}</p>
               </div>
             )}
             {selectedLesson.cluster_id && (
               <div>
-                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Cluster</h3>
-                <p className="text-xs font-mono text-zinc-400">{selectedLesson.cluster_id}</p>
+                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Cluster</h3>
+                <p className="text-xs font-mono text-fg-faint">{selectedLesson.cluster_id}</p>
                 {selectedLesson.mistake_clusters && (
-                  <div className="mt-1 text-xs text-zinc-500">
+                  <div className="mt-1 text-xs text-fg-muted">
                     Coherence: {((selectedLesson.mistake_clusters.judge_coherence_score ?? 0) * 100).toFixed(0)}%
                     · Size: {selectedLesson.mistake_clusters.cluster_size} reports
                   </div>
@@ -357,7 +357,7 @@ function ClustersTab() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-fg-muted">
           Vector-clustered groups of similar bug reports. Candidates with ≥ 3 reports and coherence ≥ 0.75 auto-promote to lessons every 6 hours.
         </p>
         <SegmentedControl
@@ -385,32 +385,32 @@ function ClustersTab() {
         {clusters.map((cluster) => (
           <div
             key={cluster.id}
-            className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+            className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-colors"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <Badge
-                    className={cluster.status === 'promoted' ? 'bg-ok-muted/20 text-ok' : cluster.status === 'candidate' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}
+                    className={cluster.status === 'promoted' ? 'bg-ok-muted/20 text-ok' : cluster.status === 'candidate' ? 'bg-warn-muted text-warn' : 'bg-surface-overlay text-fg-secondary'}
                   >
                     {cluster.status}
                   </Badge>
-                  <span className="text-xs text-zinc-400">{cluster.cluster_size} reports</span>
+                  <span className="text-xs text-fg-muted">{cluster.cluster_size} reports</span>
                   {cluster.judge_coherence_score !== null && (
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-fg-muted">
                       coherence: {(cluster.judge_coherence_score * 100).toFixed(0)}%
                     </span>
                   )}
                 </div>
-                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                  {cluster.name ?? <span className="text-zinc-400 italic">Unnamed cluster</span>}
+                <p className="text-sm font-medium text-fg">
+                  {cluster.name ?? <span className="text-fg-faint italic">Unnamed cluster</span>}
                 </p>
                 {cluster.suggested_rule && (
-                  <p className="text-xs text-zinc-500 mt-1 line-clamp-2">
+                  <p className="text-xs text-fg-muted mt-1 line-clamp-2">
                     Suggested rule: {cluster.suggested_rule}
                   </p>
                 )}
-                <p className="text-xs text-zinc-400 mt-1">
+                <p className="text-xs text-fg-faint mt-1">
                   Last seen: <RelativeTime value={cluster.last_seen_at} />
                 </p>
               </div>
@@ -465,33 +465,33 @@ function QuerySimTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-zinc-500">
-        Simulate the <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1 rounded">lessons.query</code> MCP call.
+      <p className="text-sm text-fg-muted">
+        Simulate the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP call.
         Paste a PR diff or code description and see which lessons would be injected into the review context.
       </p>
 
       <div>
-        <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+        <label className="block text-xs font-medium text-fg-secondary mb-1">
           Code diff or description
         </label>
         <textarea
           value={diffText}
           onChange={(e) => setDiffText(e.target.value)}
           placeholder="Paste a PR diff, file contents, or description of the change..."
-          className="w-full h-40 px-3 py-2 text-sm font-mono border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full h-40 px-3 py-2 text-sm font-mono border border-edge rounded-lg bg-surface-root text-fg resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         />
       </div>
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+          <label className="text-xs font-medium text-fg-secondary whitespace-nowrap">
             Token budget:
           </label>
           <input
             type="number"
             value={maxTokens}
             onChange={(e) => setMaxTokens(Math.min(8000, Math.max(100, parseInt(e.target.value) || 3000)))}
-            className="w-24 px-2 py-1 text-sm border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
+            className="w-24 px-2 py-1 text-sm border border-edge rounded bg-surface-root text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           />
         </div>
         <Btn loading={loading} onClick={handleQuery}>
@@ -503,7 +503,7 @@ function QuerySimTab() {
 
       {result && (
         <div>
-          <div className="flex items-center gap-3 mb-3 text-sm text-zinc-500">
+          <div className="flex items-center gap-3 mb-3 text-sm text-fg-muted">
             <span>{result.lessons.length} lessons returned</span>
             <span>·</span>
             <span>~{result.tokens_used} tokens used</span>
@@ -514,23 +514,23 @@ function QuerySimTab() {
             {result.lessons.map((lesson, i) => (
               <div
                 key={lesson.id}
-                className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30"
+                className="p-3 rounded-lg border border-edge bg-surface-overlay/50"
               >
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-zinc-400">#{i + 1}</span>
+                  <span className="text-xs font-mono text-fg-faint">#{i + 1}</span>
                   <SeverityBadge severity={lesson.severity} />
-                  <span className="text-xs text-zinc-400">
+                  <span className="text-xs text-fg-faint">
                     score: {(lesson.final_score * 100).toFixed(0)}% · similarity: {(lesson.similarity * 100).toFixed(0)}%
                   </span>
                 </div>
-                <p className="text-sm text-zinc-800 dark:text-zinc-200">{lesson.rule_text}</p>
+                <p className="text-sm text-fg">{lesson.rule_text}</p>
                 {lesson.anti_pattern && (
-                  <p className="text-xs text-zinc-500 mt-1">Anti-pattern: {lesson.anti_pattern}</p>
+                  <p className="text-xs text-fg-muted mt-1">Anti-pattern: {lesson.anti_pattern}</p>
                 )}
               </div>
             ))}
             {result.lessons.length === 0 && (
-              <p className="text-sm text-zinc-400 text-center py-4">No matching lessons found. Add more reports to build the lesson library.</p>
+              <p className="text-sm text-fg-faint text-center py-4">No matching lessons found. Add more reports to build the lesson library.</p>
             )}
           </div>
         </div>

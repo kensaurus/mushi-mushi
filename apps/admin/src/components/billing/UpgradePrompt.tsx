@@ -141,9 +141,9 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
   if (!copy) return null
 
   return (
-    <div className="rounded-xl border border-amber-300/40 bg-gradient-to-br from-amber-50/60 via-white to-violet-50/40 dark:from-amber-950/40 dark:via-surface dark:to-violet-950/30 dark:border-amber-700/30 p-6 shadow-sm">
+    <div className="rounded-xl border border-brand/30 bg-brand/5 p-6 shadow-sm">
       <div className="flex flex-col gap-1">
-        <p className="text-2xs uppercase tracking-[0.18em] text-amber-700 dark:text-amber-400 font-semibold">
+        <p className="text-2xs uppercase tracking-[0.18em] text-brand font-semibold">
           Locked on your current plan
         </p>
         <h2 className="text-xl font-semibold text-fg">{copy.title}</h2>
@@ -153,7 +153,7 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
       <ul className="mt-4 grid gap-2 text-sm text-fg">
         {copy.bullets.map((b) => (
           <li key={b} className="flex items-start gap-2">
-            <span aria-hidden className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+            <span aria-hidden className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-brand" />
             <span>{b}</span>
           </li>
         ))}
@@ -219,10 +219,10 @@ export function UpgradePromptHost() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border border-amber-300/40 bg-surface p-4 shadow-lg dark:border-amber-700/30"
+      className="fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border border-brand/30 bg-surface p-4 shadow-lg"
     >
       <div className="flex items-start gap-3">
-        <span aria-hidden className="mt-1 inline-block h-2 w-2 rounded-full bg-amber-500" />
+        <span aria-hidden className="mt-1 inline-block h-2 w-2 rounded-full bg-brand" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-fg">
             {copy?.title ?? blocked.flag} requires a plan upgrade

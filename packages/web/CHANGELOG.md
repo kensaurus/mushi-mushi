@@ -1,5 +1,48 @@
 # @mushi-mushi/web
 
+## 1.7.1
+
+### Patch Changes
+
+- fix: pin @mushi-mushi/core to ^1.7.0 in published package.json
+
+  The `workspace:^` protocol was leaking into published tarballs because
+  `changeset publish` does not trigger pnpm's native workspace: rewriting.
+  External consumers using npm/yarn were getting `EUNSUPPORTEDPROTOCOL` on
+  every install. This patch pins the dep to the real semver range and tightens
+  the `check-workspace-protocol` guard to block all `workspace:` variants.
+
+## 1.7.0
+
+### Minor Changes
+
+- 740df06: Add `trigger: 'banner'` — a slim, full-width header strip launcher that replaces the floating action button as the recommended default.
+
+  **@mushi-mushi/core**
+  - New `trigger: 'banner'` value on `MushiWidgetConfig` — renders a full-width strip pinned to the top (or bottom) of the viewport instead of a floating action button.
+  - New `MushiBannerConfig` interface exported for configuring the banner: `variant` (`'neon' | 'brand' | 'subtle'`), `position` (`'top' | 'bottom'`), `bugCta`, `featureCta`, `featureCtaLabel`, `zIndex`.
+  - New `bannerConfig?: MushiBannerConfig` field on `MushiWidgetConfig`.
+
+  **@mushi-mushi/web**
+  - Banner launcher renders inside the widget's Shadow DOM as a `position: fixed` strip — no layout impact on the host page.
+  - Three variants: `neon` (electric lime, high-contrast dev/beta feel), `brand` (vermillion, editorial app-quality feel), `subtle` (hairline muted strip, least disruptive).
+  - Per-session dismiss via ✕ button; re-appears on next page load.
+  - "🐛 Report a bug" and optional "✨ Request feature" buttons open the report panel directly.
+  - Runtime config from the Mushi console (`launcher`, `bannerVariant`, `bannerPosition`, `bannerBugCta`, `bannerFeatureCta`) is applied automatically — no SDK re-init required.
+  - Console configurator: live preview + banner style/position/label controls in `SdkInstallCard`.
+  - Database: new `sdk_widget_launcher`, `sdk_banner_variant`, `sdk_banner_position`, `sdk_banner_bug_cta`, `sdk_banner_feature_cta` columns in `project_settings`.
+
+### Patch Changes
+
+- 137203b: **Banner & Slack dispatch fixes**
+  - Banner dismiss button is now more visible (increased opacity, padding, hover background).
+  - Body nudge (`paddingTop` / `paddingBottom`) is applied correctly so host-app content doesn't slide under a top- or bottom-positioned banner.
+  - Fixed: `EdgeRuntime.waitUntil` is now used in the Slack interactions handler so the background dispatch promise is not killed when the HTTP response returns. Previously the Deno isolate was terminated before the `fix_dispatch_jobs` insert landed, silently dropping every Slack-triggered fix dispatch.
+
+- Updated dependencies [ef25a84]
+- Updated dependencies [740df06]
+  - @mushi-mushi/core@1.7.0
+
 ## 1.6.0
 
 ### Minor Changes

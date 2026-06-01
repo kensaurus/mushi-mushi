@@ -817,14 +817,18 @@ ${
         await db
           .from('fix_dispatch_jobs')
           .update({
-            status: 'completed',
+            // Use a distinct terminal status so the UI can distinguish "fix
+            // generated but blocked by missing GitHub App" from a genuine
+            // success. The frontend maps this to an amber "setup required"
+            // state rather than a green check.
+            status: 'completed_no_pr',
             finished_at: new Date().toISOString(),
             error:
-              'No GITHUB_TOKEN configured — fix generated but not pushed. Add a GitHub installation token in Integrations.',
+              'No GitHub App installed — fix generated but not pushed. Install the GitHub App in Repo → Connect repo to enable auto-PRs.',
           })
           .eq('id', dispatch.id);
         await trace.end();
-        return new Response(JSON.stringify({ ok: true, fixAttemptId, prUrl: null }), {
+        return new Response(JSON.stringify({ ok: true, fixAttemptId, prUrl: null, blockedSetup: true }), {
           status: 200,
         });
       }

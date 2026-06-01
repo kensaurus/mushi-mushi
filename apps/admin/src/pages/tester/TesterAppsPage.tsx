@@ -72,28 +72,28 @@ function actionLabel(action: string) {
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  bug_critical: 'text-red-400 bg-red-500/10 border-red-500/30',
-  bug_high:     'text-orange-400 bg-orange-500/10 border-orange-500/30',
-  bug_medium:   'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
-  bug_low:      'text-gray-400 bg-gray-500/10 border-gray-500/30',
-  enhancement:  'text-blue-400 bg-blue-500/10 border-blue-500/30',
+  bug_critical: 'text-danger bg-danger/10 border-danger/30',
+  bug_high:     'text-warn bg-warn/10 border-warn/30',
+  bug_medium:   'text-warn bg-warn-muted/20 border-warn/20',
+  bug_low:      'text-fg-muted bg-surface-overlay/40 border-edge/30',
+  enhancement:  'text-info bg-info/10 border-info/30',
 }
 
 function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
   if (!lastAcceptedAt) return (
-    <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-      <span className="h-1.5 w-1.5 rounded-full bg-gray-600 inline-block" />
+    <span className="inline-flex items-center gap-1 text-xs text-fg-faint">
+      <span className="h-1.5 w-1.5 rounded-full bg-surface-overlay inline-block" />
       No activity yet
     </span>
   )
   const days = (Date.now() - new Date(lastAcceptedAt).getTime()) / 86_400_000
   const [cls, text] = days < 7
-    ? ['bg-green-400', `Active — last accepted ${Math.floor(days * 24)}h ago`]
+    ? ['bg-ok', `Active — last accepted ${Math.floor(days * 24)}h ago`]
     : days < 30
-    ? ['bg-yellow-400', `Moderate — last accepted ${Math.floor(days)}d ago`]
-    : ['bg-gray-500', `Last accepted ${Math.floor(days)}d ago`]
+    ? ['bg-warn', `Moderate — last accepted ${Math.floor(days)}d ago`]
+    : ['bg-surface-overlay', `Last accepted ${Math.floor(days)}d ago`]
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+    <span className="inline-flex items-center gap-1 text-xs text-fg-muted">
       <span className={`h-1.5 w-1.5 rounded-full inline-block ${cls}`} />
       {text}
     </span>
@@ -102,15 +102,15 @@ function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
 
 function FitPill({ app }: { app: TesterApp }) {
   if (app.reputationMin === 0 && (!app.targetCountries || app.targetCountries.length === 0)) {
-    return <Badge className="bg-green-500/10 border-green-500/30 text-green-300 text-2xs border">Open to all</Badge>
+    return <Badge className="bg-ok/10 border-ok/30 text-ok text-2xs border">Open to all</Badge>
   }
   if (app.meetsReputationGate) {
-    return <Badge className="bg-green-500/10 border-green-500/30 text-green-300 text-2xs border">✓ You qualify</Badge>
+    return <Badge className="bg-ok/10 border-ok/30 text-ok text-2xs border">✓ You qualify</Badge>
   }
   const needed = app.reputationMin - app.myReputationScore
   return (
     <Badge
-      className="bg-amber-500/10 border-amber-500/30 text-amber-300 text-2xs border"
+      className="bg-warn/10 border-warn/30 text-warn text-2xs border"
       title={`You need ${app.reputationMin} rep; you have ${app.myReputationScore}. Earn ${needed} more by getting reports accepted.`}
     >
       🔒 Needs {app.reputationMin} rep (you: {app.myReputationScore})
@@ -131,10 +131,10 @@ function AppCard({ app, onJoin, onLeave, acting }: {
     : null
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:border-violet-500/30 transition-colors">
+    <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:border-accent/30 transition-colors">
       {/* Header row */}
       <div className="flex items-start gap-4 p-4">
-        <div className="h-14 w-14 shrink-0 rounded-xl bg-gray-800 flex items-center justify-center text-2xl overflow-hidden">
+        <div className="h-14 w-14 shrink-0 rounded-xl bg-surface-root flex items-center justify-center text-2xl overflow-hidden">
           {app.heroUrl
             ? <img src={app.heroUrl} alt={app.name} className="h-full w-full object-cover" />
             : '📱'}
@@ -143,14 +143,14 @@ function AppCard({ app, onJoin, onLeave, acting }: {
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold">{app.name}</p>
             {app.joined && (
-              <Badge className="bg-violet-500/20 border-violet-500/30 text-violet-300 text-2xs border">✓ Joined</Badge>
+              <Badge className="bg-accent/20 border-accent/30 text-accent text-2xs border">✓ Joined</Badge>
             )}
             <FitPill app={app} />
           </div>
-          {app.tagline && <p className="text-sm text-gray-400 mt-0.5 line-clamp-1">{app.tagline}</p>}
+          {app.tagline && <p className="text-sm text-fg-muted mt-0.5 line-clamp-1">{app.tagline}</p>}
           <div className="flex flex-wrap gap-1.5 mt-1.5">
             {app.platforms.map(p => (
-              <span key={p} className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400 capitalize">{p}</span>
+              <span key={p} className="rounded-full bg-surface-root px-2 py-0.5 text-xs text-fg-muted capitalize">{p}</span>
             ))}
           </div>
         </div>
@@ -177,50 +177,50 @@ function AppCard({ app, onJoin, onLeave, acting }: {
       {/* Description */}
       {app.description && (
         <div className="px-4 pb-3">
-          <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{app.description}</p>
+          <p className="text-xs text-fg-muted leading-relaxed line-clamp-2">{app.description}</p>
         </div>
       )}
 
       {/* Data strip */}
       <div className="border-t border-white/5 px-4 py-3 grid grid-cols-1 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs">
         <div>
-          <p className="text-gray-500 mb-0.5">Bounty</p>
-          <p className="text-white font-medium">
+          <p className="text-fg-faint mb-0.5">Bounty</p>
+          <p className="text-fg font-medium">
             Up to {app.maxBountyPoints.toLocaleString()} pts
             {median && ` · median ~${median.toLocaleString()}`}
             {app.bountySchedule.length > 0 && ` · ${app.bountySchedule.length} tiers`}
           </p>
         </div>
         <div>
-          <p className="text-gray-500 mb-0.5">Activity (30d)</p>
+          <p className="text-fg-faint mb-0.5">Activity (30d)</p>
           <div className="flex flex-col gap-0.5">
             <ActivityDot lastAcceptedAt={app.lastAcceptedAt} />
             {app.submitted30d > 0 && (
-              <span className="text-gray-400">
+              <span className="text-fg-muted">
                 {app.accepted30d} accepted / {app.submitted30d} submitted
                 {app.acceptRate30d !== null && ` (${app.acceptRate30d}%)`}
               </span>
             )}
             {app.avgResponseHours !== null && (
-              <span className="text-gray-400">~{app.avgResponseHours}h median review time</span>
+              <span className="text-fg-muted">~{app.avgResponseHours}h median review time</span>
             )}
           </div>
         </div>
         <div>
-          <p className="text-gray-500 mb-0.5">
+          <p className="text-fg-faint mb-0.5">
             {app.joined ? 'My stats' : 'Targeting'}
           </p>
           {app.joined ? (
-            <p className="text-gray-300">
+            <p className="text-fg-secondary">
               {app.mySubmissions} submitted · {app.myAccepted} accepted · {app.myPointsEarned.toLocaleString()} pts
             </p>
           ) : (
             <div className="flex flex-col gap-0.5">
               {app.targetCountries && app.targetCountries.length > 0 && (
-                <span className="text-gray-400">{app.targetCountries.slice(0, 4).join(' · ')}{app.targetCountries.length > 4 ? ' …' : ''}</span>
+                <span className="text-fg-muted">{app.targetCountries.slice(0, 4).join(' · ')}{app.targetCountries.length > 4 ? ' …' : ''}</span>
               )}
               {app.reputationMin > 0 && (
-                <span className={app.meetsReputationGate ? 'text-green-400' : 'text-amber-400'}>
+                <span className={app.meetsReputationGate ? 'text-ok' : 'text-warn'}>
                   {app.meetsReputationGate ? '✓' : '✗'} {app.reputationMin} rep required
                 </span>
               )}
@@ -235,7 +235,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
           <button
             type="button"
             onClick={() => setShowBounties(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-fg-muted hover:text-fg hover:bg-white/5 transition-colors"
           >
             <span>Bounty schedule — {app.bountySchedule.length} active tiers</span>
             <span>{showBounties ? '▲' : '▼'}</span>
@@ -244,18 +244,18 @@ function AppCard({ app, onJoin, onLeave, acting }: {
             <div className="px-4 pb-3 space-y-1.5">
               {app.bountySchedule.map((tier, i) => (
                 <div key={tier.action + i} className="flex items-center justify-between">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${ACTION_COLOR[tier.action] ?? 'text-gray-400 bg-gray-500/10 border-gray-500/30'}`}>
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${ACTION_COLOR[tier.action] ?? 'text-fg-muted bg-surface-overlay/40 border-edge/30'}`}>
                     {actionLabel(tier.action)}
                   </span>
                   <div className="flex items-center gap-3 text-xs text-right">
-                    <span className="font-semibold text-violet-400">{tier.points_per_event.toLocaleString()} pts</span>
+                    <span className="font-semibold text-accent">{tier.points_per_event.toLocaleString()} pts</span>
                     {tier.daily_cap !== null && (
-                      <span className="text-gray-500">max {tier.daily_cap}/day</span>
+                      <span className="text-fg-faint">max {tier.daily_cap}/day</span>
                     )}
                   </div>
                 </div>
               ))}
-              <p className="text-2xs text-gray-600 pt-1">
+              <p className="text-2xs text-fg-faint pt-1">
                 Points awarded after developer review. 1,000 pts = $10 gift card or $13 Mushi Pro credit.
               </p>
             </div>
@@ -266,17 +266,17 @@ function AppCard({ app, onJoin, onLeave, acting }: {
       {/* Footer links */}
       <div className="border-t border-white/5 px-4 py-2.5 flex flex-wrap gap-3">
         {app.webUrl && (
-          <a href={app.webUrl} target="_blank" rel="noreferrer" className="text-xs text-gray-400 hover:text-white transition-colors">
+          <a href={app.webUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
             Open web ↗
           </a>
         )}
         {app.appStoreUrl && (
-          <a href={app.appStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-gray-400 hover:text-white transition-colors">
+          <a href={app.appStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
             App Store ↗
           </a>
         )}
         {app.playStoreUrl && (
-          <a href={app.playStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-gray-400 hover:text-white transition-colors">
+          <a href={app.playStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
             Play Store ↗
           </a>
         )}
@@ -359,7 +359,7 @@ export function TesterAppsPage() {
       <div className="space-y-5">
         <div>
           <h1 className="text-xl font-bold">Apps to test</h1>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-fg-muted mt-1">
             Join a program, find real bugs, and earn mushi-points redeemable for Pro credit or gift cards.
           </p>
         </div>
@@ -367,13 +367,13 @@ export function TesterAppsPage() {
         {/* Filter rail */}
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1 max-w-xs">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm select-none">🔍</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint text-sm select-none">🔍</span>
             <input
               type="search"
               placeholder="Search apps…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 py-2 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+              className="w-full rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-accent/40"
             />
           </div>
           <div className="flex gap-1.5">
@@ -384,8 +384,8 @@ export function TesterAppsPage() {
                 onClick={() => setChip(c)}
                 className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors capitalize ${
                   chip === c
-                    ? 'bg-violet-600 text-white'
-                    : 'border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:border-white/20'
+                    ? 'bg-accent text-fg'
+                    : 'border border-white/10 bg-white/5 text-fg-muted hover:text-fg hover:border-white/20'
                 }`}
               >
                 {c === 'all' ? `All apps (${allApps.length})` : c === 'joined' ? `Joined (${allApps.filter(a => a.joined).length})` : `Eligible (${allApps.filter(a => a.meetsReputationGate && !a.joined).length})`}
@@ -397,7 +397,7 @@ export function TesterAppsPage() {
         {loading && <TableSkeleton rows={3} />}
 
         {error && (
-          <p className="text-sm text-red-400">
+          <p className="text-sm text-danger">
             {error.includes('not_a_tester')
               ? 'You need a tester account. Please sign in via the marketplace.'
               : `Error loading apps: ${error}`}
@@ -408,7 +408,7 @@ export function TesterAppsPage() {
           <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
             <p className="text-3xl mb-3">{search ? '🔍' : '📭'}</p>
             <p className="text-lg font-medium">{search ? 'No apps match your search' : chip === 'joined' ? 'No joined apps yet' : 'No apps yet'}</p>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-fg-muted mt-1">
               {search
                 ? 'Try different keywords.'
                 : chip === 'joined'
@@ -419,13 +419,13 @@ export function TesterAppsPage() {
               <button
                 type="button"
                 onClick={() => { setChip('all'); setSearch('') }}
-                className="mt-3 text-sm text-violet-400 hover:underline"
+                className="mt-3 text-sm text-accent hover:underline"
               >
                 Show all apps →
               </button>
             )}
             <div className="mt-4">
-              <a href="/tester/learn" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+              <a href="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary transition-colors">
                 New to Bounties? Read the guide →
               </a>
             </div>

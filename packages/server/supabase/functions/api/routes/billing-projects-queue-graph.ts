@@ -2497,6 +2497,176 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     return c.json({ ok: true });
   });
 
+  // ---------------------------------------------------------------------------
+  // Dispatch preflight — GET /v1/admin/projects/:id/preflight
+  //
+  // Returns a consolidated "is this project ready to dispatch an auto-fix?"
+  // summary consumed by:
+  //   - DispatchFixPreflight popover on every report row (ReportsPage)
+  //   - DispatchPreflightBanner at the top of ReportsPage
+  //   - The GitHub integration card's Autofix toggle (IntegrationsPage)
+  //
+  // Checks: github (repo configured) | codebase (index enabled) |
+  //         anthropic (BYOK key present) | autofix (feature flag on)
+  // ---------------------------------------------------------------------------
+  app.get('/v1/admin/projects/:id/preflight', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    const [settingsRes, reposRes] = await Promise.all([
+      db
+        .from('project_settings')
+        .select(
+          'github_repo_url, byok_anthropic_key_ref, codebase_index_enabled, autofix_enabled, codebase_repo_url',
+        )
+        .eq('project_id', projectId)
+        .maybeSingle(),
+      db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
+    ]);
+
+    const settings = settingsRes.data;
+    const repos = reposRes.data ?? [];
+
+    const repoUrl =
+      settings?.github_repo_url ??
+      settings?.codebase_repo_url ??
+      (repos.length > 0 ? (repos[0] as { repo_url?: string | null }).repo_url ?? null : null);
+
+    const hasGithub = Boolean(settings?.github_repo_url) || repos.length > 0;
+    const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+    const hasCodebase = Boolean(settings?.codebase_index_enabled);
+    const hasAutofix = Boolean(settings?.autofix_enabled);
+
+    type Check = {
+      key: 'github' | 'codebase' | 'anthropic' | 'autofix';
+      ready: boolean;
+      label: string;
+      hint: string;
+      fixHref: string;
+    };
+
+    const checks: Check[] = [
+      {
+        key: 'github',
+        ready: hasGithub,
+        label: 'GitHub repo connected',
+        hint: 'Connect a GitHub repository so the fix worker can open pull requests.',
+        fixHref: '/integrations/config?tab=github',
+      },
+      {
+        key: 'codebase',
+        ready: hasCodebase,
+        label: 'Codebase indexed',
+        hint: 'Enable codebase indexing so the AI can read your source files.',
+        fixHref: '/integrations/config?tab=codebase',
+      },
+      {
+        key: 'anthropic',
+        ready: hasByok,
+        label: 'Anthropic API key set',
+        hint: 'Add your Anthropic API key (BYOK) to power the fix-generation model.',
+        fixHref: '/settings?tab=byok',
+      },
+      {
+        key: 'autofix',
+        ready: hasAutofix,
+        label: 'Autofix enabled',
+        hint: 'Turn on Autofix in Project Settings to allow the worker to open PRs.',
+        fixHref: '/settings?tab=autofix',
+      },
+    ];
+
+    const ready = checks.every((c) => c.ready);
+
+    return c.json({ ok: true, data: { ready, checks, repoUrl } });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Autofix flag — GET /v1/admin/projects/:id/autofix
+  //
+  // Returns the current autofix_enabled flag for the project. Consumed by
+  // CodebaseIndexCard (IntegrationsPage) so the autofix toggle can reflect
+  // the live state without requiring a full settings reload.
+  // ---------------------------------------------------------------------------
+  app.get('/v1/admin/projects/:id/autofix', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    const { data, error } = await db
+      .from('project_settings')
+      .select('autofix_enabled')
+      .eq('project_id', projectId)
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+
+    return c.json({ ok: true, data: { autofix_enabled: Boolean(data?.autofix_enabled) } });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Autofix toggle — POST /v1/admin/projects/:id/autofix/toggle
+  //
+  // Flips the autofix_enabled flag on project_settings. Accepts { enabled: boolean }.
+  // Returns the updated flag so the caller can sync its local state.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/projects/:id/autofix/toggle', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const enabled = Boolean(body.enabled);
+
+    const { error } = await db
+      .from('project_settings')
+      .upsert(
+        { project_id: projectId, autofix_enabled: enabled },
+        { onConflict: 'project_id' },
+      );
+
+    if (error) return dbError(c, error);
+
+    return c.json({ ok: true, data: { autofix_enabled: enabled } });
+  });
+
   // Admin pipeline diagnostic. Exists so the admin console's "Send test report"
   // buttons (DashboardPage.GettingStartedEmpty, SettingsPage.QuickTestSection)
   // can verify the ingest path without copy-pasting an API key — the admin is

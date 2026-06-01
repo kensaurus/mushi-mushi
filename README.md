@@ -339,7 +339,7 @@ When a user shakes their phone, four things happen in roughly the order you'd ex
 1. **Capture.** The widget grabs the screenshot, the route, the user's note, the last few console + network events, and the device context. Everything they were doing, plus everything that broke.
 2. **Classify.** A two-stage LLM pipeline (Haiku fast-filter → Sonnet deep + vision) tags severity, category, and root-cause hint in plain English. A nightly Sonnet judge scores the classifier's own work and feeds a prompt-A/B loop, so the labels you see come from prompts that have earned their place.
 3. **Connect.** The report embeds into a knowledge graph (Postgres + pgvector). The same broken button reported twenty times shows up as one row, not twenty.
-4. **Fix.** _Optional._ You click _Dispatch fix_ (or wire the same action into Slack, MCP, or CI) and an agent in a sandbox tries the change, runs your tests, and opens a draft PR. You review it like any other PR — and merge, change, or close it.
+4. **Fix.** _Optional._ You click _Dispatch fix_ (or wire the same action from Slack — the bot posts a threaded status reply once the PR is open), MCP, or CI) and an agent in a sandbox tries the change, runs your tests, and opens a draft PR. You review it like any other PR — and merge, change, or close it.
 
 The architecture, sequence diagram, and component-by-component spec live in [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts/architecture.mdx). A condensed wire diagram:
 
@@ -383,9 +383,40 @@ flowchart LR
 
 ---
 
+## Launcher modes
+
+The SDK ships four ways to surface the bug reporter — choose the one that fits your app's layout:
+
+| Mode | `trigger` value | When to use |
+|---|---|---|
+| **Header banner** _(recommended)_ | `banner` | A slim 36 px strip pinned to the top (or bottom) of the viewport. Three visual variants: `neon` (electric-lime), `brand` (vermillion), `subtle` (hairline). Body content is nudged down automatically; the offset is removed on dismiss. |
+| **Floating stamp (FAB)** | `auto` | The default pill button in the bottom-right corner. Good for greenfield apps with no bottom navigation bar. |
+| **Edge tab** | `edge-tab` | A vertical tab on the viewport edge — useful on tablet or dense desktop layouts. |
+| **Attach to your button** | `attach` | Binds to any element you nominate via `attachToSelector`. The SDK renders no launcher of its own. |
+| **Headless / manual** | `manual` / `hidden` | No launcher at all — call `Mushi.open()` programmatically from your own help menu or keyboard shortcut. |
+
+**Banner quick start**
+
+```js
+Mushi.init({
+  apiKey: 'mushi_…',
+  widget: {
+    trigger: 'banner',
+    bannerConfig: {
+      variant: 'brand',   // 'neon' | 'brand' | 'subtle'
+      position: 'top',    // 'top' | 'bottom'
+      bugCta: '🐛 Report a bug',
+      featureCta: true,
+    },
+  },
+})
+```
+
+Configure the launcher and preview the snippet live in the admin console under **SDK Install → Launcher**.
+
 ## Headless SDK integration
 
-By default the SDK injects a floating 🐛 stamp button. If you want the reporter embedded in your own UI instead, use the headless primitives:
+By default the SDK injects a floating 🐛 stamp button. For the `attach` or `manual` modes, use the headless primitives:
 
 ### React — `MushiTrigger`
 
@@ -430,7 +461,7 @@ import { MushiTrigger } from '@mushi-mushi/react-native'
 
 ### SDK Install Card
 
-The admin console's **SDK Install** page (Get started → Configure & install the SDK) has a four-option **Trigger mode** chooser: Attach to my button (recommended), Floating stamp, Edge tab, and Headless (manual). The snippet preview updates in real time to show the correct import and usage pattern.
+The admin console's **SDK Install** page (Get started → Configure & install the SDK) has a five-option **Trigger mode** chooser: Header banner (recommended), Attach to my button, Floating stamp, Edge tab, and Headless (manual). The snippet preview updates in real time to show the correct import and usage pattern.
 
 ---
 

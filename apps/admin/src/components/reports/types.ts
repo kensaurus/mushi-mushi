@@ -67,6 +67,14 @@ export interface ReportRow {
    *  extract `url` / `route` / `origin` (web vs node) without a second
    *  round-trip. Shape mirrors `MushiEnvironment` in the core package. */
   environment?: ReportEnvironmentLite | null
+  /** Resolved display name from end_users.display_name (populated when the
+   *  reporter called Mushi.identify() and the server linked the row). */
+  reporter_display_name?: string | null
+  /** True when end_users.jwt_verified_at is set (identity confirmed via
+   *  signed JWT). Drives the verified shield in the triage row. */
+  reporter_jwt_verified?: boolean
+  session_id?: string | null
+  end_user_id?: string | null
 }
 
 export interface ReportEnvironmentLite {

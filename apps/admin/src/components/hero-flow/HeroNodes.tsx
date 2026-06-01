@@ -95,17 +95,18 @@ const ACTION_BG: Record<PageAction['tone'], string> = {
   idle: 'bg-surface-raised/40',
 }
 
-// Per-node hex used for unique left-border accent and ring on expand.
+// Per-node accent colors — map to CSS custom properties so they stay
+// in sync with light/dark theme rather than burning in a fixed hex.
 const NODE_ACCENT_HEX = {
-  decide: '#60a5fa',
-  act: '#f5b544',
-  verify: '#94a3b8',
+  decide: 'var(--color-info)',
+  act:    'var(--color-brand)',
+  verify: 'var(--color-fg-muted)',
 } as const
 
 const KIND_BADGE: Record<'decide' | 'act' | 'verify', string> = {
-  decide: 'bg-info-muted text-info',
-  act: 'bg-brand/15 text-brand',
-  verify: 'bg-surface-overlay text-fg-muted',
+  decide: 'bg-info/15 text-info border border-info/35',
+  act:    'bg-brand/15 text-brand border border-brand/35',
+  verify: 'bg-surface-overlay text-fg-muted border border-edge',
 }
 
 // ─── Shared body layout (mirrors PipelineStatusRibbon tile rhythm) ───
@@ -129,7 +130,7 @@ function HeroMetric({
   return (
     <span
       title={title}
-      className={`ml-auto shrink-0 max-w-[48%] truncate text-right font-mono tabular-nums leading-none ${sizeClass} ${toneClass}`}
+      className={`ml-auto shrink-0 max-w-[55%] truncate text-right font-mono tabular-nums leading-none ${sizeClass} ${toneClass}`}
     >
       {value}
     </span>
@@ -257,7 +258,7 @@ function NodeShell({
       <header className="flex items-center gap-1.5">
         <span
           aria-hidden
-          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-[0.6rem] font-bold leading-none ${KIND_BADGE[kind]}`}
+          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-3xs font-bold leading-none ${KIND_BADGE[kind]}`}
         >
           {kind === 'decide' ? 'D' : kind === 'act' ? 'A' : 'V'}
         </span>

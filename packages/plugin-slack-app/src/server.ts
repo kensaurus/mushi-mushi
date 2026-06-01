@@ -315,7 +315,7 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
       },
     },
     logger: {
-      info: (msg, meta) => console.info(`[mushi-plugin-slack] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-slack] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-slack] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-slack] ${msg}`, meta ?? ''),
     },
@@ -355,7 +355,7 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
       (interactionPayload['actions'] as Array<{ action_id?: string }> | undefined)?.[0]
         ?.action_id ?? ''
     )
-    console.info(`[mushi-plugin-slack] interaction received`, { actionId })
+    console.warn(`[mushi-plugin-slack] interaction received`, { actionId })
 
     // Acknowledge Slack's 3-second deadline immediately
     return { status: 200, body: { ok: true } }

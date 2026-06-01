@@ -36,7 +36,8 @@ interface PlatformRow {
   reports_24h: number
   critical_24h: number
   high_24h: number
-  sdk_versions: string[]
+  // array_agg() in Postgres returns NULL (not []) when no rows match
+  sdk_versions: string[] | null
 }
 
 interface PlatformRollupData {
@@ -131,12 +132,12 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
                   )}
                 </span>
 
-                {row.sdk_versions.length > 1 && (
-                  <span className="text-3xs text-warn shrink-0" title={`Multiple SDK versions: ${row.sdk_versions.join(', ')}`}>
-                    {row.sdk_versions.length} versions
+                {(row.sdk_versions?.length ?? 0) > 1 && (
+                  <span className="text-3xs text-warn shrink-0" title={`Multiple SDK versions: ${row.sdk_versions!.join(', ')}`}>
+                    {row.sdk_versions!.length} versions
                   </span>
                 )}
-                {row.sdk_versions.length === 1 && (
+                {row.sdk_versions?.length === 1 && (
                   <span className="text-3xs text-fg-faint shrink-0 font-mono">
                     v{row.sdk_versions[0]}
                   </span>

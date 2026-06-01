@@ -184,10 +184,10 @@ export function OrgSwitcher() {
         <span className="text-3xs uppercase tracking-wider text-fg-faint">Team</span>
         <span className="max-w-[12rem] truncate font-medium">{active.name}</span>
         <span
-          className={`rounded px-1 text-3xs uppercase ${
+          className={`rounded px-1.5 text-3xs font-medium uppercase border ${
             active.billing_mode === 'complimentary'
-              ? 'bg-brand-subtle text-brand'
-              : 'bg-surface-overlay text-fg-faint'
+              ? 'bg-brand-subtle text-brand border-brand/35'
+              : 'bg-surface-overlay text-fg-muted border-edge-subtle'
           }`}
           title={
             active.billing_mode === 'complimentary'

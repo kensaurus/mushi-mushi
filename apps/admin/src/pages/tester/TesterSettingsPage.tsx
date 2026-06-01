@@ -6,6 +6,7 @@ import { TesterLayout } from '../../components/tester/TesterLayout'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { Btn } from '../../components/ui'
+import { Modal } from '../../components/Modal'
 import { ContainedBlock } from '../../components/report-detail/ReportSurface'
 import { KycForm } from '../../components/tester/KycForm'
 
@@ -292,29 +293,31 @@ export function TesterSettingsPage() {
               </div>
             </section>
 
-            {showDeleteConfirm && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                <div className="w-full max-w-sm rounded-xl border border-edge bg-surface p-5 space-y-4 shadow-2xl">
-                  <h3 className="text-sm font-semibold text-danger">Delete tester account?</h3>
-                  <p className="text-2xs text-fg-secondary">
-                    This permanently deletes your tester profile, submission history, and unredeemed balance.
-                    This action cannot be undone. Any pending redemptions will be cancelled.
-                  </p>
-                  <div className="flex gap-2">
-                    <Btn variant="ghost" className="flex-1 justify-center" onClick={() => setShowDeleteConfirm(false)}>
-                      Cancel
-                    </Btn>
-                    <Btn
-                      className="flex-1 justify-center bg-danger text-white hover:bg-danger/90"
-                      disabled={deleting}
-                      onClick={handleDelete}
-                    >
-                      {deleting ? 'Deleting…' : 'Delete permanently'}
-                    </Btn>
-                  </div>
+            <Modal
+              open={showDeleteConfirm}
+              onClose={() => setShowDeleteConfirm(false)}
+              title={<span className="text-danger">Delete tester account?</span>}
+              footer={
+                <div className="flex gap-2">
+                  <Btn variant="ghost" className="flex-1 justify-center" onClick={() => setShowDeleteConfirm(false)}>
+                    Cancel
+                  </Btn>
+                  <Btn
+                    variant="danger"
+                    className="flex-1 justify-center"
+                    disabled={deleting}
+                    onClick={handleDelete}
+                  >
+                    {deleting ? 'Deleting…' : 'Delete permanently'}
+                  </Btn>
                 </div>
-              </div>
-            )}
+              }
+            >
+              <p className="text-2xs text-fg-secondary">
+                This permanently deletes your tester profile, submission history, and unredeemed balance.
+                This action cannot be undone. Any pending redemptions will be cancelled.
+              </p>
+            </Modal>
           </>
         )}
       </div>

@@ -156,7 +156,7 @@ export function createDiscordPlugin(cfg: DiscordPluginConfig) {
       },
     },
     logger: {
-      info: (msg, meta) => console.log(`[mushi-plugin-discord] ${msg}`, meta ?? ''),
+      info: (msg, meta) => console.warn(`[mushi-plugin-discord] ${msg}`, meta ?? ''),
       warn: (msg, meta) => console.warn(`[mushi-plugin-discord] ${msg}`, meta ?? ''),
       error: (msg, meta) => console.error(`[mushi-plugin-discord] ${msg}`, meta ?? ''),
     },

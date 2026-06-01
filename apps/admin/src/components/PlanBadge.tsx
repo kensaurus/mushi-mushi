@@ -93,7 +93,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
         <span aria-hidden="true" className="leading-none shrink-0">◆</span>
         <span className={sidebar ? 'truncate' : ''}>Admin</span>
         <span
-          className={`rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-muted shrink-0 ${sidebar ? 'text-[0.55rem] px-0.5 py-px' : 'px-1 py-0.5 text-3xs'}`}
+          className={`rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-muted shrink-0 ${sidebar ? 'text-3xs px-0.5 py-px' : 'px-1 py-0.5 text-3xs'}`}
           aria-hidden="true"
         >
           {plan.displayName}
@@ -123,7 +123,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
       <span className={sidebar ? 'truncate min-w-0' : ''}>{label}</span>
       {plan.overQuota && (
         <span
-          className={`ml-0.5 rounded-sm bg-danger/20 font-semibold text-danger shrink-0 ${sidebar ? 'px-0.5 py-px text-[0.55rem]' : 'px-1 py-0.5 text-3xs'}`}
+          className={`ml-0.5 rounded-sm bg-danger/20 font-semibold text-danger shrink-0 ${sidebar ? 'px-0.5 py-px text-3xs' : 'px-1 py-0.5 text-3xs'}`}
           aria-label="Over quota"
         >
           !
@@ -131,7 +131,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
       )}
       {!plan.overQuota && plan.usagePct != null && plan.usagePct >= 80 && (
         <span
-          className={`ml-0.5 rounded-sm bg-warn/20 font-mono text-warn shrink-0 ${sidebar ? 'px-0.5 py-px text-[0.55rem]' : 'px-1 py-0.5 text-3xs'}`}
+          className={`ml-0.5 rounded-sm bg-warn/20 font-mono text-warn shrink-0 ${sidebar ? 'px-0.5 py-px text-3xs' : 'px-1 py-0.5 text-3xs'}`}
           aria-label={`${plan.usagePct}% used`}
         >
           {plan.usagePct}%
