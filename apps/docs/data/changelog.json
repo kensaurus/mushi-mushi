@@ -4,8 +4,81 @@
     "headline": "pending (pending release)",
     "pending": true,
     "versions": [],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "Layout changed from diamond to horizontal row",
+        "description": "(Plan → Do → Check → Act) for left-to-right reading flow."
+      },
+      {
+        "title": "Act→Plan loop-back arc",
+        "description": "hand-crafted cubic-bezier `M act.bottom C act.bottom+120 plan.bottom+120 plan.bottom` so the return path sweeps 120 px below the node row rather than producing a flat line (the previous `getBezierPath` Bottom→Bottom path with equal source/target Y resolved to zero curvature)."
+      },
+      {
+        "title": "Arrow opacity",
+        "description": "all edge main-stroke paths are now `opacity: 1` unconditionally — inactive edges were previously rendered at 88 % which read as transparent at fitView zoom. Track layer raised from 12 % to 22 %, glow layer from 13 % to 22 %."
+      },
+      {
+        "title": "Auto-fit on init",
+        "description": "added `onInit` callback that defers `rf.fitView()` one animation frame. The `fitView` prop fires before edge paths are measured, so without this the loop arc's bounding box was excluded and the view was clipped on first load."
+      },
+      {
+        "title": "Canvas height",
+        "description": "raised from 320 → 380 px (live variant) to accommodate the loop arc."
+      },
+      {
+        "title": "Minimap removed",
+        "description": "— unnecessary for a fixed 4-node diagram; reclaims ~88 px of vertical canvas."
+      },
+      {
+        "title": "X-axis",
+        "description": "5 evenly-spaced date tick labels (was only first + last)."
+      },
+      {
+        "title": "Y-axis",
+        "description": "max + midpoint + 0 reference lines (was max + 0 only)."
+      },
+      {
+        "title": "Value labels",
+        "description": "suppressed when bar < 20 % of max to prevent overlap on dense data."
+      },
+      {
+        "title": "Ghost bars",
+        "description": "zero-report days now show a 4 px dashed placeholder so the grid is visually consistent."
+      },
+      {
+        "title": "Chart height",
+        "description": "raised from `h-24` (96 px) to `h-[7rem]` (112 px) for better vertical resolution."
+      },
+      {
+        "title": "Segment min-height",
+        "description": "each severity span gets `minHeight: 2px` so a 1-report slice of 100-report day is always visible."
+      },
+      {
+        "title": "Hover brightness",
+        "description": "`group-hover:brightness-110` replaces per-segment `opacity-90` — avoids flattening the stacked colours."
+      }
+    ],
     "packages": []
+  },
+  {
+    "majorMinor": "1.7",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.7.1",
+      "1.7.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.7.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.7.1"
+      }
+    ]
   },
   {
     "majorMinor": "1.6",
@@ -392,6 +465,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.11.1",
       "0.11.0"
     ],
     "highlights": [
@@ -439,7 +513,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.11.0"
+        "version": "0.11.1"
       },
       {
         "name": "@mushi-mushi/react-native",
@@ -723,7 +797,7 @@
       },
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.7.1"
+        "version": "0.7.2"
       },
       {
         "name": "@mushi-mushi/cli",
