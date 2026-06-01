@@ -100,9 +100,9 @@ export function NextBestAction() {
       <aside
         role="status"
         aria-live="polite"
-        className={`mb-4 -mt-2 flex items-center gap-3 rounded-md border ${fromTone.ring} ${fromTone.bg} px-3 py-2 motion-safe:animate-mushi-fade-in`}
+        className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${fromTone.ring} ${fromTone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
       >
-        <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${fromTone.chip} ${fromTone.chipText}`}>
+        <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${fromTone.chip} ${fromTone.chipText}`}>
           <span aria-hidden="true">✓</span>
           Done: {NBA_LABELS[handoff.from]}
         </span>
@@ -134,16 +134,16 @@ export function NextBestAction() {
     <aside
       role="complementary"
       aria-label="Next best action"
-      className={`mb-4 -mt-2 flex items-center gap-3 rounded-md border ${tone.ring} ${tone.bg} px-3 py-2 motion-safe:animate-mushi-fade-in`}
+      className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${tone.ring} ${tone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
     >
-      <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider ${tone.chip} ${tone.chipText}`}>
+      <span className={`inline-flex items-center gap-1 shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${tone.chip} ${tone.chipText}`}>
         <span aria-hidden="true">→</span>
-        Next: {NBA_LABELS[action.tone]}
+        {NBA_LABELS[action.tone]}
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-fg leading-tight truncate">{action.title}</p>
         {action.why && (
-          <p className="text-2xs text-fg-muted mt-0.5 leading-snug truncate">{action.why}</p>
+          <p className="text-3xs text-fg-muted mt-0.5 leading-snug truncate">{action.why}</p>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">

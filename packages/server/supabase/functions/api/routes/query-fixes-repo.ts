@@ -1094,7 +1094,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [integrationRes, attemptsRes, codebaseRes] = await Promise.all([
+    const [integrationRes, attemptsRes, codebaseRes, reposRes, settingsRes] = await Promise.all([
       db.from('project_integrations')
         .select('provider, enabled, config')
         .eq('project_id', pid)
@@ -1111,12 +1111,37 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         .eq('project_id', pid)
         .order('updated_at', { ascending: false })
         .limit(1),
+      // Check project_repos table (multi-repo path, authoritative)
+      db.from('project_repos')
+        .select('repo_url, github_app_installation_id')
+        .eq('project_id', pid)
+        .limit(10),
+      // Legacy fallback: project_settings.github_repo_url
+      db.from('project_settings')
+        .select('github_repo_url')
+        .eq('project_id', pid)
+        .maybeSingle(),
     ])
 
     const integration = integrationRes.data
-    const hasRepo = !!(integration?.config as Record<string, unknown> | null)?.repo_url
-    const repoUrl = (integration?.config as Record<string, unknown> | null)?.repo_url as string | null ?? null
-    const hasGithubApp = !!(integration?.enabled)
+    const repoRows = reposRes.data ?? []
+    const primaryRepo = repoRows.find((r) => r.repo_url) ?? repoRows[0] ?? null
+
+    // hasRepo: check project_repos first (multi-repo), then legacy integration config,
+    // then project_settings. This matches the /repo/overview logic so the banner
+    // and the repo card agree on whether a repo is configured.
+    const hasRepo = Boolean(
+      primaryRepo?.repo_url ||
+      (integration?.config as Record<string, unknown> | null)?.repo_url ||
+      settingsRes.data?.github_repo_url,
+    )
+    const repoUrl =
+      primaryRepo?.repo_url ??
+      ((integration?.config as Record<string, unknown> | null)?.repo_url as string | null) ??
+      settingsRes.data?.github_repo_url ??
+      null
+    // hasGithubApp: GitHub App installation on any linked repo OR the legacy enabled flag
+    const hasGithubApp = repoRows.some((r) => r.github_app_installation_id) || !!(integration?.enabled)
     const indexedFiles = codebaseRes.count ?? 0
     const lastIndexedAt = codebaseRes.data?.[0]?.updated_at ?? null
 
@@ -1554,6 +1579,132 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       }
     }
 
+    return c.json({ ok: true });
+  });
+
+  // ── Multi-repo CRUD (/v1/admin/repo/repos) ─────────────────────────────────
+  // GET  — list all project_repos for the active project
+  // POST — add a new repo (role + path_globs + repo_url)
+  // PUT  — update an existing repo by id
+  // DELETE — remove a repo by id
+
+  app.get('/v1/admin/repo/repos', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectId = c.req.query('project_id');
+    if (!projectId) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400);
+    }
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
+    }
+    const { data, error } = await db
+      .from('project_repos')
+      .select('id, repo_url, default_branch, github_app_installation_id, indexing_enabled, last_indexed_at, role, path_globs, is_primary, created_at, updated_at')
+      .eq('project_id', projectId)
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: true });
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: data ?? [] });
+  });
+
+  app.post('/v1/admin/repo/repos', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const body = (await c.req.json().catch(() => ({}))) as {
+      projectId?: string;
+      repoUrl?: string;
+      role?: string;
+      pathGlobs?: string[];
+      defaultBranch?: string;
+      isPrimary?: boolean;
+    };
+    if (!body.projectId || !body.repoUrl) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'projectId and repoUrl required' } }, 400);
+    }
+    const access = await userCanAccessProject(db, userId, body.projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
+    }
+    // Normalize repo URL (strip trailing .git, trailing slash)
+    const repoUrl = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
+    const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
+    const role = validRoles.includes(body.role ?? '') ? body.role : 'monorepo';
+    const { data, error } = await db
+      .from('project_repos')
+      .insert({
+        project_id: body.projectId,
+        repo_url: repoUrl,
+        role,
+        path_globs: body.pathGlobs ?? null,
+        default_branch: body.defaultBranch ?? 'main',
+        is_primary: body.isPrimary ?? false,
+        indexing_enabled: true,
+      })
+      .select('id, repo_url, role, path_globs, default_branch, is_primary, created_at')
+      .single();
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data });
+  });
+
+  app.put('/v1/admin/repo/repos/:repoId', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const repoId = c.req.param('repoId')!;
+    const db = getServiceClient();
+    const body = (await c.req.json().catch(() => ({}))) as {
+      projectId?: string;
+      repoUrl?: string;
+      role?: string;
+      pathGlobs?: string[];
+      defaultBranch?: string;
+      isPrimary?: boolean;
+      indexingEnabled?: boolean;
+    };
+    if (!body.projectId) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'projectId required' } }, 400);
+    }
+    const access = await userCanAccessProject(db, userId, body.projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
+    }
+    const validRoles = ['frontend', 'backend', 'monorepo', 'library', 'docs', 'other'];
+    const updates: Record<string, unknown> = {};
+    if (body.repoUrl !== undefined) updates.repo_url = body.repoUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
+    if (body.role !== undefined && validRoles.includes(body.role)) updates.role = body.role;
+    if (body.pathGlobs !== undefined) updates.path_globs = body.pathGlobs;
+    if (body.defaultBranch !== undefined) updates.default_branch = body.defaultBranch;
+    if (body.isPrimary !== undefined) updates.is_primary = body.isPrimary;
+    if (body.indexingEnabled !== undefined) updates.indexing_enabled = body.indexingEnabled;
+    const { data, error } = await db
+      .from('project_repos')
+      .update(updates)
+      .eq('id', repoId)
+      .eq('project_id', body.projectId)
+      .select('id, repo_url, role, path_globs, default_branch, is_primary, indexing_enabled, updated_at')
+      .single();
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data });
+  });
+
+  app.delete('/v1/admin/repo/repos/:repoId', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const repoId = c.req.param('repoId')!;
+    const db = getServiceClient();
+    const projectId = c.req.query('project_id');
+    if (!projectId) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400);
+    }
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' } }, 403);
+    }
+    const { error } = await db
+      .from('project_repos')
+      .delete()
+      .eq('id', repoId)
+      .eq('project_id', projectId);
+    if (error) return dbError(c, error);
     return c.json({ ok: true });
   });
 }

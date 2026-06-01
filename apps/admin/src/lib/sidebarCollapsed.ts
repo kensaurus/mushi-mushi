@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/sidebarCollapsed.ts
  * PURPOSE: Persisted desktop-sidebar collapse state. Collapsing the sidebar
- *          drops it from a 208px nav rail to a 48px icon rail so dense
+ *          drops it from a 240px nav rail to a 48px icon rail so dense
  *          worklists (Reports table, Graph, Fixes board) get back the
  *          horizontal real estate without paying the focus-mode tax of
  *          hiding the sub-header + PDCA ribbon entirely.

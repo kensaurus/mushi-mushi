@@ -65,22 +65,19 @@ export interface PdcaEdgeData extends Record<string, unknown> {
   failing?: boolean
 }
 
-// Fixed positions. ReactFlow coordinates — we center each node manually
-// so the diamond reads as P (left) → D (top) → C (right) → A (bottom) → P.
-// The viewBox auto-fits via fitView + padding.
-const POSITIONS: Record<PdcaStageId, { x: number; y: number }> = {
-  plan: { x: 0, y: 120 },
-  do: { x: 240, y: 0 },
-  check: { x: 480, y: 120 },
-  act: { x: 240, y: 240 },
-}
+// Fixed positions — horizontal row: Plan → Do → Check → Act, with a
+// loop-back arc below connecting Act back to Plan via bottom handles.
+// The 48px gap between nodes leaves room for the arrowhead without crowding.
+const GAP = 48
+const NODE_WIDTH = 220
+const NODE_HEIGHT = 148
 
-// React Flow's MiniMap reads dimensions from `node.measured` on the *user*
-// node, which stays `undefined` for custom components. Setting explicit
-// width/height makes the minimap render stage-colored rects at the right
-// scale. ResizeObserver still updates the internal measured dims for layout.
-const NODE_WIDTH = 224
-const NODE_HEIGHT = 155
+const POSITIONS: Record<PdcaStageId, { x: number; y: number }> = {
+  plan:  { x: 0,                             y: 0 },
+  do:    { x: NODE_WIDTH + GAP,               y: 0 },
+  check: { x: (NODE_WIDTH + GAP) * 2,         y: 0 },
+  act:   { x: (NODE_WIDTH + GAP) * 3,         y: 0 },
+}
 
 const STAGE_HREF: Record<PdcaStageId, string> = {
   plan: '/reports',
@@ -110,7 +107,7 @@ function buildLiveNodes(stages: PdcaStage[], opts: LiveNodeOptions): Node<PdcaNo
       id,
       type: 'pdcaStep',
       position: POSITIONS[id],
-      width: NODE_WIDTH,
+      width:  NODE_WIDTH,
       height: NODE_HEIGHT,
       draggable: false,
       connectable: false,
@@ -141,7 +138,7 @@ function buildOnboardingNodes(): Node<PdcaNodeData>[] {
       id,
       type: 'pdcaStep',
       position: POSITIONS[id],
-      width: NODE_WIDTH,
+      width:  NODE_WIDTH,
       height: NODE_HEIGHT,
       draggable: false,
       connectable: false,
@@ -176,18 +173,19 @@ export function buildEdges(
 ): Edge<PdcaEdgeData>[] {
   // P → D → C → A → P. The last edge closes the loop so users see that
   // shipped fixes re-enter the Plan stage as new signal.
-  const pairs: Array<[PdcaStageId, PdcaStageId]> = [
-    ['plan', 'do'],
-    ['do', 'check'],
-    ['check', 'act'],
-    ['act', 'plan'],
+  // Forward edges: right→left handles follow the horizontal row naturally.
+  // Loop-back (act→plan): uses dedicated bottom handles so the arc sweeps
+  // below all four nodes instead of creating an ugly reverse S-curve.
+  const pairs: Array<[PdcaStageId, PdcaStageId, string, string]> = [
+    ['plan',  'do',    'out',      'in'     ],
+    ['do',    'check', 'out',      'in'     ],
+    ['check', 'act',   'out',      'in'     ],
+    ['act',   'plan',  'loop-out', 'loop-in'],
   ]
   const DANGER_HEX = '#ef4444'
   const toneById = new Map(stages.map((s) => [s.id, s.tone]))
-  return pairs.map(([source, target]) => {
-    // Paint the segment red when the *target* stage is urgent — that's
-    // the node where data is piling up, so the arrow into it is the one
-    // the eye should follow.
+  return pairs.map(([source, target, sourceHandle, targetHandle]) => {
+    // Paint the segment red when the *target* stage is urgent.
     const failing = toneById.get(target) === 'urgent'
     const arrowColor = failing ? DANGER_HEX : STAGE_HEX[target]
     return {
@@ -195,12 +193,9 @@ export function buildEdges(
       source,
       target,
       type: 'pdcaGradient',
-      sourceHandle: 'out',
-      targetHandle: 'in',
+      sourceHandle,
+      targetHandle,
       animated: source === focusStage || source === runningStage || failing,
-      // Colored arrowhead matching the target stage so the eye follows the
-      // gradient to its destination. markerEnd is sized larger than the RF
-      // default (10×10) to stay readable at the canvas's default fitView scale.
       markerEnd: {
         type: MarkerType.ArrowClosed,
         width: 18,

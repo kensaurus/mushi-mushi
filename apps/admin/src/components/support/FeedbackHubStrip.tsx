@@ -54,12 +54,12 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs font-medium text-fg">My feedback</p>
             {hasNews && (
-              <Badge className="bg-brand/15 text-brand border border-brand/30 text-[0.6rem]">
+              <Badge className="bg-brand/15 text-brand border border-brand/30 text-3xs">
                 {s.with_reply} {s.with_reply === 1 ? 'reply' : 'replies'} waiting
               </Badge>
             )}
             {s.shipped > 0 && (
-              <Badge className="bg-ok-muted text-ok text-[0.6rem] font-mono">
+              <Badge className="bg-ok-muted text-ok text-3xs font-mono">
                 {s.shipped} shipped
               </Badge>
             )}

@@ -50,6 +50,7 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/repo/RepoStatsTypes'
 import { usePageData } from '../lib/usePageData'
+import { ProjectReposCard } from '../components/repo/ProjectReposCard'
 
 interface RepoBranch {
   id: string
@@ -561,13 +562,19 @@ export function RepoPage() {
     <div className="space-y-3" data-testid="mushi-page-repo">
       <PageHelp
         title={copy?.help?.title ?? 'About the Repo graph'}
-        whatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place."}
+        whatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
         useCases={copy?.help?.useCases ?? [
           'Spot stuck PRs (dispatched but never opened) so auth or agent issues surface fast',
           'Verify that CI is green across the board before scaling dispatch volume',
           'See rollups of activity across every branch without clicking into each fix',
+          'Multi-repo: link a backend repo so fix PRs can span both codebases in a single dispatch',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Summary shows repo connection health. Branches lists every fix PR with CI status. Activity is a chronological log across all branches.'}
+        howToUse={copy?.help?.howToUse ?? [
+          'Connect your primary repo: go to Integrations → GitHub, paste the repo URL, then install the Mushi GitHub App (the "Install Mushi on GitHub" button appears here once the URL is set).',
+          'Add a second repo: click Manage → add the backend/frontend repo, set role=backend, and set path_globs (e.g. src/**) so the fix worker knows which files to target.',
+          'Enable Autofix: Settings → Autofix must be ON and Sandbox must be set to e2b/modal (not local-noop) for PRs to open in production.',
+          'Review: Branches tab lists every fix PR with CI status. Activity tab shows a chronological log of dispatches, commits, and CI conclusions.',
+        ].join('\n')}
       />
 
       <PageHeader title={copy?.title ?? 'Repo graph'} projectScope={projectName}>
@@ -620,6 +627,11 @@ export function RepoPage() {
       {activeTab === 'overview' && (
         <>
           {repoHeaderCard}
+          {/* Multi-repo management: users can add/edit/remove project_repos rows
+              directly from the overview tab without navigating to Integrations. */}
+          {activeProjectId && (
+            <ProjectReposCard projectId={activeProjectId} />
+          )}
           {branches.length === 0 ? emptyBranches : null}
         </>
       )}

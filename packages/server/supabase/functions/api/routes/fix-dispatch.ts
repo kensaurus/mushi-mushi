@@ -65,6 +65,10 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         // calling agent fix an action that hasn't yet been auto-linked
         // by classify-report (e.g. a freshly ingested inventory).
         inventoryActionNodeId?: string;
+        // Agent override: allow callers to specify which agent to use
+        // (e.g. 'claude_code', 'codex'). Validated against the allowed
+        // set; unknown values are treated as 'auto'.
+        agentOverride?: string;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
@@ -157,6 +161,14 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
         );
       }
 
+      // Validate agentOverride to a known set; unknown values are coerced
+      // to null so the worker falls back to the project-level default.
+      const ALLOWED_AGENTS = ['claude_code', 'codex', 'auto'] as const;
+      const agentOverride =
+        body.agentOverride && ALLOWED_AGENTS.includes(body.agentOverride as typeof ALLOWED_AGENTS[number])
+          ? body.agentOverride
+          : null;
+
       const { data: job, error: insertErr } = await db
         .from('fix_dispatch_jobs')
         .insert({
@@ -168,6 +180,9 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
           // so the worker doesn't need to walk the graph for it. NULL =>
           // worker derives from `reports_against`.
           inventory_action_node_id: body.inventoryActionNodeId ?? null,
+          // Agent override persisted into dispatch_metadata so the worker
+          // can honour the caller's preference without a separate round-trip.
+          dispatch_metadata: agentOverride ? { agent_override: agentOverride } : undefined,
         })
         .select('id, status, created_at')
         .single();

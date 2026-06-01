@@ -159,7 +159,7 @@ function createInMemoryDedupStore(maxEntries = 5000): DedupStore {
 }
 
 const consoleLogger: PluginLogger = {
-  info: (msg, meta) => console.log(`[mushi-plugin] ${msg}`, meta ?? ''),
+  info: (msg, meta) => console.warn(`[mushi-plugin] ${msg}`, meta ?? ''),
   warn: (msg, meta) => console.warn(`[mushi-plugin] ${msg}`, meta ?? ''),
   error: (msg, meta) => console.error(`[mushi-plugin] ${msg}`, meta ?? ''),
 }

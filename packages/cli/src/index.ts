@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * FILE: packages/cli/src/index.ts
  * PURPOSE: @mushi-mushi/cli — full CLI for managing Mushi Mushi bug-intelligence

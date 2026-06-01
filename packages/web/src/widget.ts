@@ -171,6 +171,8 @@ export class MushiWidget {
    *  Drives a different success copy so the user knows the report
    *  hasn't actually reached the console yet. */
   private lastSubmitQueuedOffline = false;
+  /** Whether the user has clicked ✕ on the header banner this session. */
+  private bannerDismissed = false;
 
   constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
     this.config = {
@@ -190,6 +192,7 @@ export class MushiWidget {
       locale: config.locale ?? 'auto',
       zIndex: config.zIndex ?? 99999,
       trigger: config.trigger ?? 'auto',
+      bannerConfig: config.bannerConfig ?? {},
       attachToSelector: config.attachToSelector ?? '',
       inset: config.inset ?? {},
       respectSafeArea: config.respectSafeArea ?? true,
@@ -535,6 +538,7 @@ export class MushiWidget {
     this.attachedLaunchers = [];
     this.removeSelectorHint();
     this.removeNudge();
+    this.removeBodyNudge();
     this.host.remove();
   }
 
@@ -579,7 +583,12 @@ export class MushiWidget {
   private shouldRenderTrigger(): boolean {
     if (!this.triggerVisible) return false;
     if (this.triggerHiddenByScroll) return false;
-    if (this.config.trigger === 'manual' || this.config.trigger === 'hidden' || this.config.trigger === 'attach') {
+    if (
+      this.config.trigger === 'manual' ||
+      this.config.trigger === 'hidden' ||
+      this.config.trigger === 'attach' ||
+      this.config.trigger === 'banner'
+    ) {
       return false;
     }
     if (this.isMobileSmartHidden()) return false;
@@ -587,6 +596,96 @@ export class MushiWidget {
     if (this.config.hideOnSelector && document.querySelector(this.config.hideOnSelector)) return false;
     const action = this.config.environments[this.detectEnvironment()];
     return action !== 'never' && action !== 'manual';
+  }
+
+  /** Height of the banner in px — kept in sync with the CSS `.mushi-banner` height (36px). */
+  private static readonly BANNER_HEIGHT = 36;
+
+  /** CSS property applied to document.body so host-app content doesn't slide under the banner. */
+  private static readonly BODY_NUDGE_PROP = '--mushi-banner-offset';
+
+  private applyBodyNudge(position: 'top' | 'bottom'): void {
+    const h = `${MushiWidget.BANNER_HEIGHT}px`;
+    if (position === 'top') {
+      document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
+      // Only nudge if the host hasn't already set an explicit body padding-top
+      // (check inline style only — computed style includes CSS rules we shouldn't clobber).
+      if (!document.body.style.paddingTop) {
+        document.body.style.paddingTop = h;
+        document.body.dataset.mushiBannerNudged = 'top';
+      }
+    } else {
+      document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
+      if (!document.body.style.paddingBottom) {
+        document.body.style.paddingBottom = h;
+        document.body.dataset.mushiBannerNudged = 'bottom';
+      }
+    }
+  }
+
+  private removeBodyNudge(): void {
+    document.documentElement.style.removeProperty(MushiWidget.BODY_NUDGE_PROP);
+    const nudged = document.body.dataset.mushiBannerNudged;
+    if (nudged === 'top') {
+      document.body.style.paddingTop = '';
+      delete document.body.dataset.mushiBannerNudged;
+    } else if (nudged === 'bottom') {
+      document.body.style.paddingBottom = '';
+      delete document.body.dataset.mushiBannerNudged;
+    }
+  }
+
+  private renderBanner(): void {
+    if (this.config.trigger !== 'banner') return;
+    if (this.bannerDismissed) { this.removeBodyNudge(); return; }
+    // Clear nudge before early returns so sdk.hide() / route suppression don't
+    // leave the host page with permanent padding-top/bottom.
+    if (!this.triggerVisible) { this.removeBodyNudge(); return; }
+    if (this.isRouteHidden()) { this.removeBodyNudge(); return; }
+
+    const bc = this.config.bannerConfig ?? {};
+    const variant  = bc.variant  ?? 'brand';
+    const position = bc.position ?? 'top';
+    const bugLabel = bc.bugCta   ?? '🐛 Report a bug';
+    const showFeat = bc.featureCta !== false;
+    const featLabel = bc.featureCtaLabel ?? '✨ Request feature';
+    const zIdx = bc.zIndex ?? (this.config.zIndex ?? 99999) - 1;
+
+    const banner = document.createElement('div');
+    banner.className = `mushi-banner ${variant} ${position}`;
+    banner.style.setProperty('--mushi-banner-z', String(zIdx));
+    banner.setAttribute('role', 'banner');
+
+    const bugBtn = document.createElement('button');
+    bugBtn.className = 'mushi-banner-btn';
+    bugBtn.textContent = bugLabel;
+    bugBtn.addEventListener('click', () => this.open());
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'mushi-banner-dismiss';
+    dismissBtn.textContent = '✕';
+    dismissBtn.setAttribute('aria-label', 'Dismiss feedback banner');
+    dismissBtn.addEventListener('click', () => {
+      this.bannerDismissed = true;
+      this.removeBodyNudge();
+      this.render();
+    });
+
+    banner.appendChild(bugBtn);
+
+    if (showFeat) {
+      const featBtn = document.createElement('button');
+      featBtn.className = 'mushi-banner-btn';
+      featBtn.textContent = featLabel;
+      featBtn.addEventListener('click', () => this.open({ featureRequest: true }));
+      banner.appendChild(featBtn);
+    }
+
+    banner.appendChild(dismissBtn);
+    this.shadow.appendChild(banner);
+
+    // Push body content so the banner doesn't overlap the host app's navigation.
+    this.applyBodyNudge(position);
   }
 
   private effectiveTrigger(): NonNullable<MushiWidgetConfig['trigger']> {
@@ -636,6 +735,8 @@ export class MushiWidget {
     const style = document.createElement('style');
     style.textContent = getWidgetStyles(theme);
     this.shadow.appendChild(style);
+
+    this.renderBanner();
 
     if (this.shouldRenderTrigger()) {
       const effectiveTrigger = this.effectiveTrigger();

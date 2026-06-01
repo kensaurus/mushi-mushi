@@ -15,6 +15,7 @@ import {
   IconJira,
   IconLinear,
   IconPagerDuty,
+  IconGlobe,
 } from '../icons'
 
 /** Narrow union for *platform* integrations — the SDK-feeding services
@@ -26,7 +27,7 @@ export type Kind = 'sentry' | 'langfuse' | 'github' | 'cursor_cloud' | 'claude_c
  *  route. Includes the four routing destinations (Jira / Linear /
  *  GitHub Issues / PagerDuty) so a single Test button on a routing card can
  *  reuse the same probe endpoint. */
-export type ProbeKind = Kind | 'jira' | 'linear' | 'github_issues' | 'pagerduty'
+export type ProbeKind = Kind | 'jira' | 'linear' | 'github_issues' | 'pagerduty' | 'vercel'
 
 export interface PlatformResponse {
   platform: Partial<Record<Kind, Record<string, unknown>>>
@@ -117,10 +118,10 @@ export interface PlatformDef {
 }
 
 export interface RoutingProviderDef {
-  type: 'jira' | 'linear' | 'github' | 'pagerduty'
+  type: 'jira' | 'linear' | 'github' | 'pagerduty' | 'vercel'
   /** The kind key used in integration_health_history. 'github' routing maps to
    *  'github_issues' to avoid colliding with the platform GitHub (code-repo). */
-  healthKind: 'jira' | 'linear' | 'github_issues' | 'pagerduty'
+  healthKind: 'jira' | 'linear' | 'github_issues' | 'pagerduty' | 'vercel'
   label: string
   whyItMatters: string
   capabilitiesOnceConnected: string[]
@@ -488,6 +489,32 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     ],
     fields: [
       { name: 'routingKey', label: 'Routing key', placeholder: '32-char integration key', type: 'password', help: 'Events API v2 integration key from PagerDuty service.', required: true, helpId: 'integrations.routing.pagerduty.routing_key', validator: 'pagerdutyRoutingKey' },
+    ],
+  },
+  {
+    type: 'vercel',
+    healthKind: 'vercel',
+    label: 'Vercel',
+    Icon: IconGlobe,
+    color: 'text-fg',
+    domain: 'vercel.com',
+    externalUrl: 'https://vercel.com',
+    setupSteps: [
+      'Open vercel.com/account/tokens → Create token with full access.',
+      'Find your Vercel Project Slug in the project settings URL: vercel.com/{team}/{project}.',
+      'Paste the project slug and token below, then Save.',
+      'Each Mushi fix PR will now receive a Vercel preview URL as a PR comment.',
+    ],
+    whyItMatters: 'Each auto-fix PR gets a Vercel preview deployment so reviewers can verify the fix in a browser before approving. The preview URL surfaces as a comment on the PR.',
+    capabilitiesOnceConnected: [
+      'Vercel preview URL surfaces on every Mushi fix PR',
+      'Deployment readiness card shows "Connected" instead of a setup prompt',
+      'Health probe confirms token + project are still valid',
+    ],
+    fields: [
+      { name: 'project_slug', label: 'Project slug', placeholder: 'my-app', help: 'The project identifier from vercel.com/{team}/{project}. Used to build deep links.', required: true, validator: 'slug' },
+      { name: 'team_slug', label: 'Team slug', placeholder: 'my-team', help: 'Optional — Vercel team the project belongs to (for team accounts).', validator: 'slug' },
+      { name: 'access_token', label: 'Access token', placeholder: 'vercel_…', type: 'password', help: 'Vercel API token with full access. Only used for health probes.', validator: 'token' },
     ],
   },
 ]

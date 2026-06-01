@@ -70,15 +70,11 @@ const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
 // feeling sticky on accidental hover-outs.
 const CLOSE_DELAY_MS = 120
 
-/** Neon text treatment — SDK = published `@mushi-mushi/web` on npm; ADMIN = this SPA. */
-const NEON_SDK_LABEL =
-  'text-cyan-200 [text-shadow:0_0_10px_oklch(0.82_0.14_205),0_0_22px_oklch(0.55_0.08_205)]'
-const NEON_SDK_VER =
-  'text-cyan-100 [text-shadow:0_0_8px_oklch(0.88_0.12_205),0_0_18px_oklch(0.62_0.09_205)] tabular-nums'
-const NEON_ADMIN_LABEL =
-  'text-fuchsia-200 [text-shadow:0_0_10px_oklch(0.78_0.20_320),0_0_22px_oklch(0.52_0.12_320)]'
-const NEON_ADMIN_VER =
-  'text-fuchsia-100 [text-shadow:0_0_8px_oklch(0.84_0.16_320),0_0_18px_oklch(0.58_0.10_320)] tabular-nums'
+/** Version pill label tones — SDK (info) vs Admin console (accent). */
+const SDK_LABEL = 'text-info font-semibold'
+const SDK_VER = 'text-info tabular-nums'
+const ADMIN_LABEL = 'text-accent font-semibold'
+const ADMIN_VER = 'text-accent tabular-nums'
 
 export function VersionBadge({ whatsNew }: VersionBadgeProps) {
   const [open, setOpen] = useState(false)
@@ -147,8 +143,8 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         aria-haspopup="dialog"
         aria-label={`Versions — SDK (@mushi-mushi/web) ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
         title={`npm @mushi-mushi/web ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}`}
-        className={`group relative inline-flex items-center gap-1.5 h-6 px-2 rounded-full border border-cyan-500/35 bg-gradient-to-r from-cyan-500/10 via-surface-raised/50 to-fuchsia-500/10 shadow-[0_0_18px_oklch(0.55_0.12_260/0.28)] hover:shadow-[0_0_22px_oklch(0.55_0.14_260/0.38)] hover:border-cyan-400/45 motion-safe:transition-[box-shadow,border-color,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-          open ? 'bg-surface-overlay border-fuchsia-400/40' : ''
+        className={`group relative inline-flex items-center gap-1.5 h-6 px-2 rounded-full border border-edge bg-surface-raised hover:bg-surface-overlay motion-safe:transition-[background-color,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+          open ? 'bg-surface-overlay border-edge-subtle' : ''
         }`}
       >
         {/* Compact (md..lg): SDK version only — the figure embedders watch. */}
@@ -157,21 +153,21 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           className="lg:hidden font-mono text-2xs leading-none"
           title="@mushi-mushi/web (browser SDK on npm)"
         >
-          <span className={NEON_SDK_LABEL}>SDK </span>
-          <span className={NEON_SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={SDK_LABEL}>SDK </span>
+          <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
         </span>
         <span
           aria-hidden
           className="hidden lg:inline text-3xs font-semibold uppercase tracking-wider leading-none"
           title="@mushi-mushi/web — browser SDK published to npm"
         >
-          <span className={NEON_SDK_LABEL}>SDK</span>
+          <span className={SDK_LABEL}>SDK</span>
         </span>
         <span
           className="hidden lg:inline font-mono text-2xs leading-none"
           title="@mushi-mushi/web"
         >
-          <span className={NEON_SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
         </span>
         <span aria-hidden className="hidden lg:inline text-fg-faint/80 text-2xs leading-none">
           ·
@@ -181,13 +177,13 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           className="hidden lg:inline text-3xs font-semibold uppercase tracking-wider leading-none"
           title="This admin console (Vite SPA) — not the customer-facing SDK"
         >
-          <span className={NEON_ADMIN_LABEL}>Admin</span>
+          <span className={ADMIN_LABEL}>Admin</span>
         </span>
         <span
           className="hidden lg:inline font-mono text-2xs leading-none"
           title="Admin console build"
         >
-          <span className={NEON_ADMIN_VER}>{__APP_VERSION__}</span>
+          <span className={ADMIN_VER}>{__APP_VERSION__}</span>
         </span>
         {whatsNew.hasUnread && (
           <span
@@ -213,10 +209,10 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               </p>
               <div className="mt-1.5 space-y-0.5">
                 <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
-                  <span className="text-cyan-300 font-medium">SDK</span> = <code className="font-mono text-fg-secondary">@mushi-mushi/web</code> on npm (what you embed).
+                  <span className="text-info font-medium">SDK</span> = <code className="font-mono text-fg-secondary">@mushi-mushi/web</code> on npm (what you embed).
                 </p>
                 <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
-                  <span className="text-fuchsia-300 font-medium">Admin</span> = this dashboard SPA (operator console).
+                  <span className="text-accent font-medium">Admin</span> = this dashboard SPA (operator console).
                 </p>
               </div>
             </div>

@@ -53,7 +53,7 @@ export function PdcaLegendPanel({
       ) : (
         <div className="font-medium text-fg-muted">Pipeline clean</div>
       )}
-      <div className="mt-1 flex items-center gap-2 text-[10px] text-fg-faint">
+      <div className="mt-1 flex items-center gap-2 text-3xs text-fg-faint">
         {PDCA_ORDER.map((id) => (
           <span key={id} className="inline-flex items-center gap-1" aria-label={PDCA_STAGES[id].label}>
             <span
@@ -65,7 +65,7 @@ export function PdcaLegendPanel({
           </span>
         ))}
         {runningMeta && (
-          <span className="ml-auto text-[9px] text-brand font-medium uppercase tracking-wider">
+          <span className="ml-auto text-3xs text-brand font-medium uppercase tracking-wider">
             {runningMeta.letter} running
           </span>
         )}

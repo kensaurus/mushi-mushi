@@ -28,6 +28,9 @@ const SEARCH_DIRS = ['packages', 'apps']
 // range in the published tarball at `pnpm publish` time. `workspace:*` and the
 // other protocols (link/file/portal/catalog) DO leak into tarballs and break
 // `npm install` for end users (see CVE-style incident in 2026-04, `ed64f7f`).
+// NOTE: if `workspace:^` is still leaking into published tarballs, it means
+// `changeset publish` is not calling `pnpm publish` properly. Fix the root
+// cause in the release workflow rather than blocking source package.json files.
 const PROTOCOL_RE = /^(workspace:\*|link:|file:|portal:|catalog:)/
 
 async function findPackageManifests(rootDir) {

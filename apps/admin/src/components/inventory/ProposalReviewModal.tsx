@@ -564,19 +564,19 @@ function PageBlock({ page }: { page: ProposedPage }) {
               </span>
               <span className="text-fg truncate min-w-0 flex-1">{el.action ?? el.id}</span>
               {el.testid && (
-                <code className="hidden sm:inline px-1 py-0.5 rounded bg-info-muted/15 text-info text-[10px] font-mono">
+                <code className="hidden sm:inline px-1 py-0.5 rounded bg-info-muted/15 text-info text-3xs font-mono">
                   {el.testid}
                 </code>
               )}
               {el.backend && el.backend.length > 0 && (
-                <span className="hidden sm:inline text-ok text-[10px]" title={el.backend.map((b) => `${b.method} ${b.path}`).join('\n')}>
+                <span className="hidden sm:inline text-ok text-3xs" title={el.backend.map((b) => `${b.method} ${b.path}`).join('\n')}>
                   {el.backend.length} API
                 </span>
               )}
               {(!el.verified_by || el.verified_by.length === 0) ? (
-                <span className="text-warn text-[10px]" title="No verified_by tests linked">untested</span>
+                <span className="text-warn text-3xs" title="No verified_by tests linked">untested</span>
               ) : (
-                <span className="text-ok text-[10px]" title={el.verified_by.map((t) => `${t.file}::${t.name}`).join('\n')}>
+                <span className="text-ok text-3xs" title={el.verified_by.map((t) => `${t.file}::${t.name}`).join('\n')}>
                   {el.verified_by.length}✓
                 </span>
               )}

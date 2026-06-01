@@ -27,7 +27,7 @@ createServer(async (req, res) => {
     res.end(JSON.stringify(result.body))
   })
 }).listen(port, () => {
-  console.log(`mushi-plugin-linear listening on :${port}`)
+  console.warn(`mushi-plugin-linear listening on :${port}`)
 })
 
 function required(name: string): string {

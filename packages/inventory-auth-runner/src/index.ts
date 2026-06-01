@@ -350,7 +350,7 @@ export async function refresh(opts: RunnerOptions): Promise<{ cookieName: string
       throw new Error(`Failed to write cookie back to project_settings: ${r.error?.message ?? 'unknown'}`)
     }
     if (opts.debug) {
-      console.log(`[mushi-mushi-auth] cookie ${session.name} captured (${session.value.slice(0, 6)}…)`)
+      console.warn(`[mushi-mushi-auth] cookie ${session.name} captured (${session.value.slice(0, 6)}…)`)
     }
     return { cookieName: session.name, domain: session.domain }
   } finally {

@@ -154,10 +154,10 @@ export function UpgradeBanner({
     <div
       role="note"
       aria-label={`${flag} requires a plan upgrade`}
-      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300/40 bg-gradient-to-r from-amber-50/60 to-violet-50/40 dark:from-amber-950/30 dark:to-violet-950/20 dark:border-amber-700/30 px-3 py-2 shadow-sm"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2 shadow-sm"
     >
       <div className="flex items-start gap-2 min-w-0">
-        <span aria-hidden className="mt-0.5 text-amber-600 dark:text-amber-400 shrink-0">
+        <span aria-hidden className="mt-0.5 text-brand shrink-0">
           {/* Tiny key/lock glyph — "this is gated" without yelling. */}
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="3.5" y="7" width="9" height="6.5" rx="1" strokeLinecap="round" strokeLinejoin="round" />
@@ -166,7 +166,7 @@ export function UpgradeBanner({
         </span>
         <div className="min-w-0">
           <p className="text-xs font-medium text-fg leading-snug">
-            <span className="text-amber-700 dark:text-amber-300 font-semibold tracking-wide">
+            <span className="text-brand font-semibold tracking-wide">
               {copy.pillLabel}
             </span>{' '}
             <span aria-hidden className="text-fg-faint">·</span> {tagline}
@@ -213,7 +213,7 @@ interface PillProps {
 }
 
 const PILL_BASE =
-  'inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-bold tracking-wider uppercase border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/50 dark:hover:bg-amber-900/50 motion-safe:transition-colors'
+  'inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-bold tracking-wider uppercase border bg-brand/10 text-brand border-brand/30 hover:bg-brand/20 motion-safe:transition-colors'
 
 export function UpgradePill({ flag, alwaysShow, className = '', as = 'auto' }: PillProps) {
   const ent = useEntitlements()
@@ -299,8 +299,8 @@ export function UpgradeLockOverlay({
         aria-label={`${copy.pillLabel} feature locked`}
         className="absolute inset-0 flex items-center justify-center bg-surface/70 backdrop-blur-[2px] rounded-md"
       >
-        <div className="flex flex-col items-center gap-2 max-w-sm text-center px-4 py-3 rounded-lg border border-amber-300/40 bg-surface/90 shadow-card dark:border-amber-700/30">
-          <span aria-hidden className="text-amber-600 dark:text-amber-400">
+        <div className="flex flex-col items-center gap-2 max-w-sm text-center px-4 py-3 rounded-lg border border-brand/30 bg-surface/90 shadow-card">
+          <span aria-hidden className="text-brand">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
               <rect x="3.5" y="7" width="9" height="6.5" rx="1" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" strokeLinecap="round" strokeLinejoin="round" />

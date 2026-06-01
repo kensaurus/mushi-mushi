@@ -1686,7 +1686,7 @@ function TicketHistory({
                   <div className="flex items-center gap-1.5">
                     <p className="text-fg truncate font-medium">{t.subject}</p>
                     {hasReply && (
-                      <Badge className="bg-brand/15 text-brand border border-brand/30 shrink-0 text-[0.6rem]">
+                      <Badge className="bg-brand/15 text-brand border border-brand/30 shrink-0 text-3xs">
                         Reply
                       </Badge>
                     )}

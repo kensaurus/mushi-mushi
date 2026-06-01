@@ -339,7 +339,7 @@ export function GraphPage() {
           strokeWidth: Math.max(1, Math.min(3, e.weight)),
           opacity: dimmed ? 0.18 : 0.7,
         },
-        labelStyle: { fontSize: 10, fill: 'oklch(0.65 0 0)' },
+        labelStyle: { fontSize: 11, fill: 'oklch(0.65 0 0)' },
         labelBgStyle: { fill: 'oklch(0.18 0 0)' },
       } satisfies Edge
     })

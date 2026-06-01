@@ -108,6 +108,21 @@ export interface ConfigDoc {
 
 const SETTINGS_GENERAL: ConfigDoc[] = [
   {
+    id: 'settings.general.slack_channel_id',
+    label: 'Slack Channel ID',
+    summary: 'Optional Slack channel ID (e.g. C01234ABCDE) for direct @mention routing alongside the webhook.',
+    howItWorks:
+      'The classify-report and fast-filter edge functions read this channel ID and pass it to chat.postMessage (bot token path) so notifications land in your chosen channel. The Slack bot must be invited to the channel first (/invite @mushi in Slack). Pairs with the bot token (SLACK_BOT_TOKEN env secret) — set both for threaded replies when you dispatch a fix from Slack.',
+    default: { value: 'unset' },
+    backend: {
+      table: 'project_settings',
+      column: 'slack_channel_id',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['classify-report edge function', 'fast-filter edge function', 'slack-interactions edge function'],
+    },
+    whenToChange: 'Set to your Slack channel ID (e.g. C0B82A322RW — found in channel Details) whenever you want new report notifications delivered there. Use "Send test" in General Settings to verify.',
+  },
+  {
     id: 'settings.general.slack_webhook_url',
     label: 'Slack Webhook URL',
     summary: 'Mushi posts new high-severity reports and weekly digests to this Slack webhook.',
@@ -1472,16 +1487,33 @@ const SDK_INSTALL: ConfigDoc[] = [
     id: 'sdk-install.trigger_mode',
     label: 'Trigger mode',
     summary:
-      'Controls whether Mushi injects its own launcher, pins a slim edge tab, binds to your button, or stays programmatic-only.',
+      'Controls whether Mushi injects its own launcher, pins a slim header banner, attaches to your button, or stays programmatic-only.',
     howItWorks:
-      '`auto` keeps the default editorial stamp button. `edge-tab` makes the trigger less obstructive on dense apps. `attach` hides the default button and binds to `attachToSelector`, while `manual` / `hidden` render no launcher so host apps can call `Mushi.open()` themselves.',
+      'Five modes: `banner` (recommended) renders a slim 36 px strip pinned to the top or bottom of the viewport — less obtrusive than a FAB and never competes with bottom navigation. `auto` keeps the default editorial stamp button. `edge-tab` pins a vertical tab to the viewport edge. `attach` hides the default button and binds to `attachToSelector`. `manual` / `hidden` render no launcher — call `Mushi.open()` programmatically. The banner\'s body padding is adjusted automatically on mount and removed on dismiss, sdk.hide(), route suppression, or destroy().',
     default: { value: 'auto' },
     whenToChange:
-      'Use `attach` for mature production apps with a help menu. Use `edge-tab` when bottom nav or chat widgets compete with the default corner trigger. Use `manual` on regulated or fullscreen flows.',
+      'Use `banner` for beta apps and user-research builds — maximises discoverability with minimal layout intrusion. Use `attach` for mature production apps with a help menu. Use `edge-tab` on tablet or when bottom nav competes. Use `manual` on regulated or fullscreen flows.',
     learnMore: {
       label: 'Trigger modes',
       href: 'https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes',
     },
+  },
+  {
+    id: 'sdk-install.banner_config',
+    label: 'Banner launcher options',
+    summary:
+      'Customise the header-banner launcher: visual variant, position (top / bottom), and button labels.',
+    howItWorks:
+      'Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.',
+    default: { value: 'variant: brand · position: top · featureCta: true' },
+    backend: {
+      table: 'project_settings',
+      column: 'sdk_banner_variant / sdk_banner_position / sdk_banner_bug_cta / sdk_banner_feature_cta',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['SDK runtime config pull (GET /v1/sdk/config)'],
+    },
+    whenToChange:
+      'Use `subtle` when the banner must blend into a polished production UI. Use `neon` for internal beta tools where high visibility matters. Switch `position` to `bottom` when your app has a sticky top header that would collide with the banner.',
   },
   {
     id: 'sdk-install.smart_hide',

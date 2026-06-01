@@ -49,6 +49,7 @@ export type {
   MushiSentryContext,
   MushiBetaModeConfig,
   MushiBetaChangelogEntry,
+  MushiBannerConfig,
 } from './types';
 
 export {

@@ -118,11 +118,11 @@ function SectionBlock({ section }: { section: Section }) {
       </div>
       <div className="space-y-3 pl-9">
         {section.body.map((para, i) => (
-          <p key={i} className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">{para}</p>
+          <p key={i} className="text-sm text-fg-secondary leading-relaxed whitespace-pre-line">{para}</p>
         ))}
         {section.cta && (
           <div className="pt-1">
-            <a href={section.cta.href} className="text-sm text-violet-400 hover:underline">
+            <a href={section.cta.href} className="text-sm text-accent hover:underline">
               {section.cta.label}
             </a>
           </div>
@@ -140,7 +140,7 @@ export function TesterLearnPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold">How Mushi Bounties works</h1>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-sm text-fg-muted mt-2">
             Everything you need to know — from writing your first report to redeeming your first gift card.
           </p>
         </div>
@@ -148,25 +148,25 @@ export function TesterLearnPage() {
         {/* Quick reference strip */}
         <div className="grid grid-cols-3 gap-3 rounded-xl border border-white/10 bg-white/5 p-5">
           <div className="text-center">
-            <p className="text-xl font-bold text-violet-400">1,000</p>
-            <p className="text-xs text-gray-400 mt-0.5">pts per $10 gift card</p>
+            <p className="text-xl font-bold text-accent">1,000</p>
+            <p className="text-xs text-fg-muted mt-0.5">pts per $10 gift card</p>
           </div>
           <div className="text-center border-x border-white/10">
-            <p className="text-xl font-bold text-violet-400">1.3×</p>
-            <p className="text-xs text-gray-400 mt-0.5">premium for Mushi Pro</p>
+            <p className="text-xl font-bold text-accent">1.3×</p>
+            <p className="text-xs text-fg-muted mt-0.5">premium for Mushi Pro</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-violet-400">$599</p>
-            <p className="text-xs text-gray-400 mt-0.5">annual cap before KYC</p>
+            <p className="text-xl font-bold text-accent">$599</p>
+            <p className="text-xs text-fg-muted mt-0.5">annual cap before KYC</p>
           </div>
         </div>
 
         {/* Quick nav */}
         <nav className="rounded-xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">In this guide</p>
+          <p className="text-xs font-medium text-fg-muted mb-2 uppercase tracking-wide">In this guide</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {SECTIONS.map(s => (
-              <a key={s.id} href={`#${s.id}`} className="text-sm text-violet-400 hover:underline">
+              <a key={s.id} href={`#${s.id}`} className="text-sm text-accent hover:underline">
                 {s.icon} {s.title}
               </a>
             ))}
@@ -179,12 +179,12 @@ export function TesterLearnPage() {
         </div>
 
         {/* Bottom CTA */}
-        <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-6 text-center">
+        <div className="rounded-xl border border-accent/30 bg-accent/5 p-6 text-center">
           <h2 className="text-base font-bold mb-1">Ready to earn your first points?</h2>
-          <p className="text-sm text-gray-400 mb-4">Browse available apps and join a test program.</p>
+          <p className="text-sm text-fg-muted mb-4">Browse available apps and join a test program.</p>
           <a
             href="/tester/apps"
-            className="inline-block rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold hover:bg-violet-500 transition-colors"
+            className="inline-block rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold hover:bg-accent-hover transition-colors"
           >
             Browse apps →
           </a>

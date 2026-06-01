@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { FeedbackModal } from './FeedbackModal'
 import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
-import { ActionPill, ActionPillRow, ContainedBlock, SignalChip } from './report-detail/ReportSurface'
+import { Link } from 'react-router-dom'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DISMISS_KEY = 'mushi-mushi:beta-banner-dismissed-at'
@@ -64,42 +64,58 @@ export function BetaBanner() {
 
   return (
     <>
+      {/* Lime-green beta strip: vivid colour so it reads as "live & rough-edged"
+          even against dark or light themes. Height is intentionally tight (py-0.5)
+          so it steals minimal vertical space while still being unmissably loud. */}
       <div
         role="region"
         aria-label="Beta announcement"
-        className="border-b border-[#39ff14]/35 bg-[#39ff14]/12 text-fg-secondary shadow-[inset_0_1px_0_0_rgba(57,255,20,0.15)]"
+        className="border-b border-lime/40 bg-lime-muted"
       >
-        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-1.5 text-xs">
-          <span className="inline-flex min-w-0 flex-1 items-center gap-1.5">
-            <SignalChip
-              tone="ok"
-              className="font-mono text-[0.6rem] uppercase tracking-[0.18em] border-[#39ff14]/50 bg-[#39ff14]/20 text-[#39ff14] shadow-[0_0_12px_rgba(57,255,20,0.35)]"
-            >
+        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-0.5 text-xs">
+          <span className="inline-flex min-w-0 flex-1 items-center gap-2">
+            {/* BETA pill — high-contrast lime so it pops in both dark + light themes */}
+            <span className="inline-flex shrink-0 items-center rounded border border-lime/60 bg-lime/20 px-1.5 py-px font-mono text-3xs font-bold uppercase tracking-[0.18em] text-lime">
               Beta
-            </SignalChip>
-            <ContainedBlock
-              tone="ok"
-              className="inline-block max-w-none border-[#39ff14]/25 bg-[#39ff14]/8 px-2 py-0.5"
-            >
-              <span className="text-pretty leading-snug text-xs">
-                Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
-              </span>
-            </ContainedBlock>
+            </span>
+            <span className="text-pretty text-xs font-medium leading-snug text-lime/80">
+              Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
+            </span>
           </span>
-          <ActionPillRow className="shrink-0">
-            <ActionPill onClick={() => openFeedback('bug')} tone="brand">
+          {/* Flat text actions — no pills, no borders, just links separated by dividers */}
+          <nav aria-label="Beta banner actions" className="flex shrink-0 items-center gap-0 text-2xs">
+            <button
+              type="button"
+              onClick={() => openFeedback('bug')}
+              className="px-2.5 py-px font-medium text-lime/90 hover:text-lime transition-colors"
+            >
               🐛 Report a bug
-            </ActionPill>
-            <ActionPill onClick={() => openFeedback('feature')} tone="neutral">
-              ✨ Request a feature
-            </ActionPill>
-            <ActionPill to="/feedback" tone="neutral">
+            </button>
+            <span aria-hidden="true" className="text-lime/25 select-none">|</span>
+            <button
+              type="button"
+              onClick={() => openFeedback('feature')}
+              className="px-2.5 py-px font-medium text-lime/70 hover:text-lime transition-colors"
+            >
+              ✨ Feature request
+            </button>
+            <span aria-hidden="true" className="text-lime/25 select-none">|</span>
+            <Link
+              to="/feedback"
+              className="px-2.5 py-px font-medium text-lime/70 hover:text-lime transition-colors"
+            >
               My submissions
-            </ActionPill>
-            <ActionPill onClick={handleDismiss} tone="danger">
-              Dismiss
-            </ActionPill>
-          </ActionPillRow>
+            </Link>
+            <span aria-hidden="true" className="text-lime/25 select-none">|</span>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              aria-label="Dismiss beta banner"
+              className="px-2.5 py-px font-medium text-lime/50 hover:text-lime/80 transition-colors"
+            >
+              ✕
+            </button>
+          </nav>
         </div>
       </div>
 

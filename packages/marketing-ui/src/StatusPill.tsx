@@ -89,16 +89,16 @@ export function StatusPill({ apiBaseUrl }: StatusPillProps) {
 
   const dotClass =
     status === 'healthy'
-      ? 'h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500'
+      ? 'h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-jade)]'
       : status === 'down'
-        ? 'h-1.5 w-1.5 rounded-full bg-red-500/80'
+        ? 'h-1.5 w-1.5 rounded-full bg-[var(--mushi-vermillion)]/80'
         : status === 'checking'
           ? 'h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-ink-faint)]'
           : 'h-1.5 w-1.5 rounded-full bg-[var(--mushi-ink-faint)]/60'
 
   return (
     <p
-      className="mt-3 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]"
+      className="mt-3 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]"
       role="status"
       aria-live="polite"
     >

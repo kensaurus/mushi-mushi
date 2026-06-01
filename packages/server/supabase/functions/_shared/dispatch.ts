@@ -29,7 +29,14 @@ export interface DispatchResult {
 interface DispatchInput {
   projectId: string
   reportId: string
-  requestedBy: string
+  /**
+   * Supabase auth.users UUID of the requester, or NULL / undefined for
+   * non-user dispatches (Slack interactions, cron, library-modernizer).
+   * The `requested_by` column is nullable — the FK was dropped in migration
+   * `slack_dispatch_requested_by_nullable` so system actors can dispatch
+   * without a matching auth.users row.
+   */
+  requestedBy?: string | null
   /** When true, bypasses the membership check — used for trusted
    *  server-initiated dispatches (library-modernizer, Slack interactions
    *  after the signing secret has been validated). */
@@ -37,6 +44,8 @@ interface DispatchInput {
   /** User identity that triggered the dispatch, when the requester is
    *  not a Supabase user_id. Used for audit. */
   userId?: string
+  /** Extra context stored in dispatch_metadata (e.g. { source: 'slack', slackUser: 'U...' }). */
+  metadata?: Record<string, unknown>
 }
 
 export async function dispatchFixForReport(input: DispatchInput): Promise<DispatchResult> {
@@ -108,8 +117,9 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
     .insert({
       project_id: input.projectId,
       report_id: input.reportId,
-      requested_by: input.requestedBy,
+      ...(input.requestedBy ? { requested_by: input.requestedBy } : {}),
       status: 'queued',
+      ...(input.metadata ? { dispatch_metadata: input.metadata } : {}),
     })
     .select('id, status, created_at')
     .single()

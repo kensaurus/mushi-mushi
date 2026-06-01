@@ -55,6 +55,7 @@
   --color-brand: oklch(0.80 0.16 80);
   --color-brand-hover: oklch(0.85 0.14 80);
   --color-brand-fg: oklch(0.18 0.02 80);
+  --color-brand-subtle: oklch(0.28 0.06 80);
 
   /* ── Accent (violet) ───────────────────────────────────────────────── */
   --color-accent: oklch(0.58 0.22 280);
@@ -84,15 +85,34 @@
   /* ── Aliases — older code references these names. Keep them mapped to
        the canonical tokens above so stale class names still render the
        right colour instead of silently dropping out. */
+  --color-err: var(--color-danger);       /* text-err / bg-err / border-err shorthand */
+  --color-err-muted: var(--color-danger-muted);
   --color-warning: var(--color-warn);
   --color-warning-subtle: var(--color-warn-muted);
   --color-danger-subtle: var(--color-danger-muted);
   --color-info-subtle: var(--color-info-muted);
   --color-ok-subtle: var(--color-ok-muted);
+
+  /* Lime-green accent — used exclusively for the beta announcement banner
+     so it reads as "active / live" rather than the teal-ish canonical ok.
+     Hue 128° is more yellow-shifted than ok's 155°, giving a vivid lime
+     at identical chroma. */
+  --color-lime:       oklch(0.83 0.27 128);
+  --color-lime-fg:    oklch(0.16 0.04 128);
+  --color-lime-muted: oklch(0.23 0.09 128);
+
   --color-fg-primary: var(--color-fg);
   --color-fg-on-accent: var(--color-fg);
   --color-border: var(--color-edge);
   --color-border-subtle: var(--color-edge-subtle);
+
+  /* ── Chrome (page-level UI chrome: help banners, info panels, section
+     frames). Distinct from brand-amber so semantic colours (ok/warn/danger)
+     stand out against a neutral chrome background instead of competing with
+     an amber help banner. Callers should use `bg-chrome` / `border-chrome`
+     instead of `bg-warn/10 border-warn/40` for structural page chrome. */
+  --color-chrome: oklch(0.225 0.004 285);
+  --color-chrome-border: oklch(0.38 0.004 285);
 
   /* ── Overlay ──────────────────────────────────────────────────────── */
   --color-overlay: oklch(0 0 0 / 0.6);
@@ -100,8 +120,13 @@
   /* ── Typography ────────────────────────────────────────────────────── */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
-  --text-2xs: 0.6875rem;
-  --text-3xs: 0.625rem;
+  /* 2026-06-01 type-floor pass: raised from 11px/10px so every call site
+     (1550+ usages of text-2xs/text-3xs) lifts to the dev-console legibility
+     floor — Supabase/Linear/Vercel all use 12-13px for metadata copy.
+     Reserve text-3xs (11px) for non-interactive micro-meta (freshness pills,
+     kbd labels, timestamps); text-2xs (12px) for all label/badge copy. */
+  --text-2xs: 0.75rem;
+  --text-3xs: 0.6875rem;
 
   /* ── Border radius ─────────────────────────────────────────────────── */
   --radius-xs: 0.25rem;
@@ -139,9 +164,11 @@
 
   /* Responsive table density tokens. `ResponsiveTable` reads the active
      density off a CSS variable on its wrapper so child rows pick it up via
-     inheritance without prop drilling. */
+     inheritance without prop drilling.
+     2026-06-01: compact tightened from 6px to 4px py → 32-36px row height
+     at 14px base, matching the expert-density standard (AWS Cloudscape, Linear). */
   --row-py-comfy: 0.625rem;
-  --row-py-compact: 0.375rem;
+  --row-py-compact: 0.25rem;
 
   /* ── Card elevation tokens ────────────────────────────────────────────
      `.card-elevated` (used by every KpiTile, Card elevated wrapper, and
@@ -310,6 +337,7 @@ html[data-theme="light"] {
   --color-brand:        var(--mushi-vermillion);
   --color-brand-hover:  color-mix(in oklch, var(--mushi-vermillion) 82%, black);
   --color-brand-fg:     oklch(0.985 0.01 80);
+  --color-brand-subtle: oklch(0.95 0.05 80);
 
   --color-accent:        oklch(0.48 0.22 280);
   --color-accent-hover:  oklch(0.42 0.22 280);
@@ -318,6 +346,9 @@ html[data-theme="light"] {
   --color-ok:            oklch(0.48 0.19 155);
   --color-ok-fg:         oklch(0.99 0.02 155);
   --color-ok-muted:      oklch(0.93 0.06 155);
+  --color-lime:          oklch(0.46 0.22 128);
+  --color-lime-fg:       oklch(0.99 0.01 128);
+  --color-lime-muted:    oklch(0.91 0.09 128);
   --color-warn:          oklch(0.60 0.16 80);
   --color-warn-muted:    oklch(0.95 0.05 80);
   --color-danger:        oklch(0.52 0.22 25);
@@ -331,6 +362,9 @@ html[data-theme="light"] {
   --color-rose-muted:    oklch(0.93 0.06 5);
 
   --color-overlay:       oklch(0.22 0.006 285 / 0.35);
+
+  --color-chrome:        oklch(0.975 0.002 285);
+  --color-chrome-border: oklch(0.80 0.003 285);
 
   --color-nav-active-bg:     oklch(0.95 0.02 80);
   --color-nav-active-border: oklch(0.62 0.16 80);
@@ -487,7 +521,7 @@ select, input, textarea {
     calc(0.625rem * var(--ui-pad, 1))
     calc(0.625rem * var(--ui-pad, 1))
     calc(0.25rem * var(--ui-pad, 1));
-  font-size: 0.625rem;
+  font-size: var(--text-3xs);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1056,12 +1090,38 @@ select, input, textarea {
 }
 
 /* Running-node glow — applied to a node when it's the currently-executing
-   stage (e.g. a dispatch is in flight on Do). */
+   stage (e.g. a dispatch is in flight on Do). Enhanced to be more visible. */
 @keyframes mushi-running-glow {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-brand) 45%, transparent); }
-  50%      { box-shadow: 0 0 0 6px color-mix(in oklch, var(--color-brand) 0%, transparent); }
+  0%   { box-shadow: 0 0 0 0   color-mix(in oklch, var(--color-brand) 55%, transparent),
+                     0 0 12px 0 color-mix(in oklch, var(--color-brand) 20%, transparent); }
+  50%  { box-shadow: 0 0 0 5px color-mix(in oklch, var(--color-brand) 20%, transparent),
+                     0 0 20px 4px color-mix(in oklch, var(--color-brand) 12%, transparent); }
+  100% { box-shadow: 0 0 0 0   color-mix(in oklch, var(--color-brand) 55%, transparent),
+                     0 0 12px 0 color-mix(in oklch, var(--color-brand) 20%, transparent); }
 }
-.mushi-running-glow { animation: mushi-running-glow 1.8s var(--ease-out-expo) infinite; }
+.mushi-running-glow { animation: mushi-running-glow 1.6s ease-in-out infinite; }
+
+/* Focus-ring blink — applied to the currently-focused PDCA node so it
+   catches the eye without being distracting on idle stages. */
+@keyframes mushi-node-focus-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.mushi-focus-blink { animation: mushi-node-focus-pulse 2.2s ease-in-out infinite; }
+
+/* Edge hover flash — used by PdcaGradientEdge when the mouse enters. */
+@keyframes mushi-edge-hover-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Node click press — one-shot scale dip, applied via JS class toggle. */
+@keyframes mushi-node-press {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.mushi-node-press { animation: mushi-node-press 220ms var(--ease-out-expo) both; }
 
 /* React Flow v12 sets `pointer-events: none` on `.react-flow__node` when
    `nodesDraggable && nodesConnectable && selectable` are all false. Our

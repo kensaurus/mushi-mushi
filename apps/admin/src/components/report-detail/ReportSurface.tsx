@@ -53,11 +53,11 @@ type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand'
 
 const CHIP_TONE: Record<ChipTone, string> = {
   neutral: 'bg-surface-overlay text-fg-muted border-edge',
-  ok:      'bg-ok-muted/30 text-ok border-ok/30',
-  warn:    'bg-warn-muted/30 text-warn border-warn/30',
-  danger:  'bg-danger-muted/30 text-danger border-danger/30',
-  info:    'bg-info-muted/30 text-info border-info/30',
-  brand:   'bg-brand/10 text-brand border-brand/30',
+  ok:      'bg-ok/15 text-ok border-ok/35',
+  warn:    'bg-warn/15 text-warn border-warn/35',
+  danger:  'bg-danger/15 text-danger border-danger/35',
+  info:    'bg-info/15 text-info border-info/35',
+  brand:   'bg-brand-subtle text-brand border-brand/35',
 }
 
 interface SignalChipProps {

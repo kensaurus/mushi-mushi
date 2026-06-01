@@ -1,5 +1,6 @@
 import {
   type MushiConfig,
+  type MushiWidgetConfig,
   type MushiReport,
   type MushiReportCategory,
   type MushiRuntimeSdkConfig,
@@ -1121,14 +1122,35 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
 function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig): MushiConfig {
   const nativeTrigger = runtime.native?.triggerMode;
-  const widgetTrigger = runtime.widget?.trigger
-    ?? (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
+  // The server returns `launcher` for the new field (backwards-compat with
+  // the old `trigger` field that only tracked `auto`). Prefer `launcher`.
+  const runtimeLauncher = (runtime.widget as Record<string, unknown>)?.launcher as string | undefined;
+  const widgetTrigger =
+    runtimeLauncher ??
+    runtime.widget?.trigger ??
+    (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
+  // Build bannerConfig from flat runtime fields when present.
+  const runtimeBannerVariant = (runtime.widget as Record<string, unknown>)?.bannerVariant as string | undefined;
+  const runtimeBannerPosition = (runtime.widget as Record<string, unknown>)?.bannerPosition as string | undefined;
+  const runtimeBannerBugCta = (runtime.widget as Record<string, unknown>)?.bannerBugCta as string | null | undefined;
+  const runtimeBannerFeatureCta = (runtime.widget as Record<string, unknown>)?.bannerFeatureCta as boolean | undefined;
+  const derivedBannerConfig =
+    runtimeBannerVariant || runtimeBannerPosition || runtimeBannerBugCta != null || runtimeBannerFeatureCta != null
+      ? {
+          ...(config.widget?.bannerConfig ?? {}),
+          ...(runtimeBannerVariant ? { variant: runtimeBannerVariant as 'neon' | 'brand' | 'subtle' } : {}),
+          ...(runtimeBannerPosition ? { position: runtimeBannerPosition as 'top' | 'bottom' } : {}),
+          ...(runtimeBannerBugCta != null ? { bugCta: runtimeBannerBugCta ?? undefined } : {}),
+          ...(runtimeBannerFeatureCta != null ? { featureCta: runtimeBannerFeatureCta } : {}),
+        }
+      : undefined;
   return {
     ...config,
     widget: {
       ...config.widget,
       ...runtime.widget,
-      ...(widgetTrigger ? { trigger: widgetTrigger } : {}),
+      ...(widgetTrigger ? { trigger: widgetTrigger as MushiWidgetConfig['trigger'] } : {}),
+      ...(derivedBannerConfig ? { bannerConfig: derivedBannerConfig } : {}),
       // betaMode is local-only: set by the host app, not the dashboard.
       // Restore it after the runtime spread so it is never silently cleared.
       ...(config.widget?.betaMode ? { betaMode: config.widget.betaMode } : {}),

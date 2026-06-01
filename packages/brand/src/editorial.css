@@ -24,6 +24,12 @@
   --mushi-vermillion: #e03c2c;
   --mushi-vermillion-wash: rgba(224, 60, 44, 0.08);
   --mushi-vermillion-ink: #7a1f15;
+  /* Jade — muted editorial "pass / positive" green. Sits within the washi
+     palette (desaturated, warm-shifted) so it doesn't scream against the
+     vermillion accent. Use strictly for: judge pass scores, checklist done
+     states, status OK indicators. Never use as a brand or CTA color. */
+  --mushi-jade: #2d7a55;
+  --mushi-jade-wash: rgba(45, 122, 85, 0.09);
   --mushi-dark-paper: #0f0e0c;
   --mushi-dark-ink: #f2ebdd;
   --mushi-dark-ink-muted: #928b7e;
@@ -41,4 +47,6 @@
   --mushi-vermillion: #ff5a47;
   --mushi-vermillion-wash: rgba(255, 90, 71, 0.12);
   --mushi-vermillion-ink: #ffe5e0;
+  --mushi-jade: #3a9e6e;
+  --mushi-jade-wash: rgba(58, 158, 110, 0.12);
 }

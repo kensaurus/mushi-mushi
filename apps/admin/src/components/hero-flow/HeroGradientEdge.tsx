@@ -38,11 +38,11 @@ function HeroEdgeLabelPill({
 
   const pill = (
     <div
-      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-2xs font-semibold leading-none shadow-sm motion-safe:transition-colors hover:brightness-110"
+      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-2xs font-semibold leading-none shadow-card motion-safe:transition-colors"
       style={{
         color: tgt,
-        background: 'rgba(0,0,0,0.82)',
-        border: `1px solid ${tgt}55`,
+        background: 'var(--color-surface-raised)',
+        border: `1px solid ${tgt}50`,
         maxWidth: pillMax,
       }}
       title={truncated ? undefined : full}

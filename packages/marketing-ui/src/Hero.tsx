@@ -38,7 +38,7 @@ export function Hero() {
       <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.95fr] lg:items-center lg:gap-8">
         <div className="max-w-4xl">
           {/* Eyebrow uses the spine sub-tagline from @mushi-mushi/brand MUSHI_TAGLINE.spine */}
-          <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+          <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]" aria-hidden="true">
             <span className="text-[var(--mushi-ink)]">Mushi</span>
             <span className="mx-2 opacity-40">/</span>
             the evolution loop for AI-assisted software
@@ -60,7 +60,7 @@ export function Hero() {
                 type="button"
                 onClick={() => setPersona(p.id)}
                 className={[
-                  'rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition',
+                  'rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]',
                   persona === p.id
                     ? 'border-[var(--mushi-ink)] bg-[var(--mushi-ink)] text-[var(--mushi-paper)]'
                     : 'border-[var(--mushi-rule)] bg-transparent text-[var(--mushi-ink-muted)] hover:border-[var(--mushi-ink)] hover:text-[var(--mushi-ink)]',
@@ -80,20 +80,20 @@ export function Hero() {
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link
               href={urls.signup}
-              className="rounded-sm bg-[var(--mushi-vermillion)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5"
+              className="rounded-sm bg-[var(--mushi-vermillion)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
             >
               Start free, no card
             </Link>
             <Link
               href={urls.loopAnchor}
-              className="group inline-flex items-center gap-2 rounded-sm border border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]"
+              className="group inline-flex items-center gap-2 rounded-sm border border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
             >
               See one walk through
               <span aria-hidden="true" className="transition-transform group-hover:translate-y-0.5 motion-reduce:transition-none">↓</span>
             </Link>
           </div>
 
-          <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
+          <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
             <li>1,000 reports / mo free</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
             <li>8 SDKs, web to native</li>
@@ -115,13 +115,13 @@ function ReportPreview() {
       className="relative overflow-hidden rounded-2xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] p-5 shadow-[0_22px_60px_-40px_rgba(14,13,11,0.55)]"
     >
       <header className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
+        <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
           <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]" />
           <span className="text-[var(--mushi-ink)]">live</span>
           <span className="opacity-40">·</span>
           /reports
         </span>
-        <span className="rounded-sm border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink)]">
+        <span className="rounded-sm border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink)]">
           {reportSample.prNumber}
         </span>
       </header>
@@ -129,7 +129,7 @@ function ReportPreview() {
       <h2 className="mt-3 font-serif text-[1.6rem] leading-[1.12] tracking-[-0.03em] text-[var(--mushi-ink)]">
         {reportSample.title}
       </h2>
-      <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
+      <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
         {reportSample.path}
         <span className="mx-2 opacity-40">·</span>
         {reportSample.browser}
@@ -153,14 +153,14 @@ type PillTone = 'alert' | 'ink' | 'pass'
 const PILL_TONES: Record<PillTone, { bg: string; fg: string; dot: string; border: string }> = {
   alert: { bg: 'var(--mushi-vermillion)', fg: '#ffffff', dot: '#ffffff', border: 'var(--mushi-vermillion)' },
   ink: { bg: 'var(--mushi-ink)', fg: 'var(--mushi-paper)', dot: 'var(--mushi-vermillion)', border: 'var(--mushi-ink)' },
-  pass: { bg: '#10b981', fg: '#ffffff', dot: '#ffffff', border: '#059669' },
+  pass: { bg: 'var(--mushi-jade)', fg: '#ffffff', dot: '#ffffff', border: 'var(--mushi-jade)' },
 }
 
 function DataPill({ label, value, tone, suffix }: { label: string; value: string; tone: PillTone; suffix?: string }) {
   const colors = PILL_TONES[tone]
   return (
     <div className="min-w-0">
-      <dt className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
+      <dt className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
         {label}
       </dt>
       <dd
