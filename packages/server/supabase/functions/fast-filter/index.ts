@@ -384,7 +384,10 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
               reporterVerified: Boolean(identity?.jwt_verified_at),
               sessionId: report.session_id ?? null,
               confidence: classification.confidence ?? null,
-              component: classification.component ?? null,
+              // Stage 1 (fast-filter) does not resolve a component — that is
+              // Stage 2's (classify-report) job, so the Stage 1 classification
+              // schema has no `component` field. Always null here.
+              component: null,
               githubAppInstalled: hasGithubApp,
               autofixEnabled: psRes.data?.autofix_enabled ?? false,
             },
