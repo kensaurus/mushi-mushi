@@ -5,7 +5,7 @@
 // a single new Playwright test file, then opens a draft PR via GitHub REST
 // (same transport pattern as fix-worker — no Octokit in Deno).
 
-import { generateObject, NoObjectGeneratedError } from 'npm:ai@4'
+import { generateObject } from 'npm:ai@4'
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
@@ -394,16 +394,15 @@ async function handler(req: Request): Promise<Response> {
     )
     generated = result
   } catch (err) {
-    const msg = err instanceof LlmFailoverError
-      ? err.message
-      : err instanceof NoObjectGeneratedError
-      ? err.message
-      : err instanceof Error
-      ? err.message
-      : String(err)
-    log.error('LLM test generation failed', { reportId, projectId, msg })
+    // Capture the raw error for the logs, but return a static, non-revealing
+    // message to the client (CodeQL js/stack-trace-exposure).
+    const detail = err instanceof Error ? err.message : String(err)
+    log.error('LLM test generation failed', { reportId, projectId, error: detail })
+    const message = err instanceof LlmFailoverError
+      ? 'All LLM keys exhausted. Add backup keys in Settings → API Key Pool.'
+      : 'Test generation failed. See server logs for details.'
     return new Response(
-      JSON.stringify({ ok: false, error: { code: 'LLM_FAILED', message: msg.slice(0, 500) } }),
+      JSON.stringify({ ok: false, error: { code: 'LLM_FAILED', message } }),
       { status: 502, headers: { 'Content-Type': 'application/json' } },
     )
   }

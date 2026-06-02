@@ -261,9 +261,13 @@ Write a comprehensive Playwright TDD test for this user story.`
       )
       output = result
     } catch (err) {
+      // Log the raw error server-side, but never echo err.message to the
+      // client — raw messages can leak internals (CodeQL js/stack-trace-exposure).
+      const detail = err instanceof Error ? err.message : String(err)
+      log.error('test-gen-from-story LLM failed', { project_id, error: detail })
       const message = err instanceof LlmFailoverError
         ? 'All LLM keys exhausted. Add backup keys in Settings → API Key Pool.'
-        : (err instanceof Error ? err.message : String(err))
+        : 'Test generation failed. See server logs for details.'
       return new Response(
         JSON.stringify({ ok: false, error: { code: 'LLM_FAILED', message } }),
         { status: 503, headers: { 'Content-Type': 'application/json' } },

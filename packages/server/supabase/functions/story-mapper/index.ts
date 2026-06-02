@@ -375,8 +375,11 @@ Deno.serve(
       }).eq('id', run_id)
       if (failErr) log.warn('failed to mark story_map_run failed', { run_id, error: failErr.message })
 
+      // `message` is recorded server-side (log + story_map_runs.error_message)
+      // above; return a generic message so we don't leak internals to the
+      // client (CodeQL js/stack-trace-exposure).
       return new Response(
-        JSON.stringify({ ok: false, error: { code: 'MAPPER_FAILED', message } }),
+        JSON.stringify({ ok: false, error: { code: 'MAPPER_FAILED', message: 'Story mapping failed. Check the run logs for details.' } }),
         { status: 500, headers: { 'Content-Type': 'application/json' } },
       )
     }
