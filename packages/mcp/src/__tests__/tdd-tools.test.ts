@@ -19,7 +19,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
-const API_KEY = 'mushi_test_key_0123456789'
+const API_KEY = 'TEST-FIXTURE-NOT-A-REAL-SECRET'
 const PROJECT_ID = 'proj-test-uuid-1234'
 
 interface FetchCall {

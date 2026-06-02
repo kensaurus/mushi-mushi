@@ -347,14 +347,19 @@ Write a comprehensive Playwright TDD test for this user story.`
       if (prUpdateErr) log.warn('failed to attach PR url to qa_story', { qaStoryId, error: prUpdateErr.message })
     }
 
-    await logAudit(db, {
+    // System actor for automated (non-user) runs. actor_id is NOT NULL with no
+    // FK, so a nil UUID is a safe sentinel that keeps these rows distinguishable
+    // from real users when filtering the audit log.
+    await logAudit(
+      db,
       project_id,
-      action: 'test_gen_from_story',
-      actor_type: 'agent',
-      resource_type: 'qa_story',
-      resource_id: qaStoryId ?? story_node_id,
-      payload: { story_node_id, automation_mode, approval_status: approvalStatus, pr_url: prUrl },
-    })
+      '00000000-0000-0000-0000-000000000000',
+      'inventory.test_gen',
+      'qa_story',
+      qaStoryId ?? story_node_id,
+      { story_node_id, automation_mode, approval_status: approvalStatus, pr_url: prUrl },
+      { actorType: 'agent' },
+    )
 
     log.info('test-gen-from-story complete', { project_id, story_node_id, qaStoryId, prUrl, approvalStatus })
 
