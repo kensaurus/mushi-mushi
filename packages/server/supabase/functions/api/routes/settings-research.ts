@@ -72,9 +72,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .select(
           'updated_at, slack_webhook_url, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
             'sdk_config_enabled, sdk_config_updated_at, ' +
-            'byok_anthropic_key_ref, ' +
-            'byok_openai_key_ref, ' +
-            'byok_firecrawl_key_ref, ' +
+            'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
+            'byok_openai_key_ref, byok_openai_test_status, ' +
+            'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
             'github_repo_url, autofix_enabled, ' +
             'crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day',
         )
@@ -88,9 +88,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     ]);
 
     if (error) return dbError(c, error);
-    // Surface a failed pool query rather than silently reporting 0 keys —
-    // a dropped error here masks real DB issues and misleads operators.
-    if (poolError) return dbError(c, poolError);
+    // Degrade gracefully when the byok_keys table hasn't been synced to the
+    // PostgREST schema cache yet (42P01 = undefined_table; PGRST205 = unknown
+    // column/relation). This window opens during a deploy where the edge
+    // function restarts before the migration + cache flush completes. Treat it
+    // as an empty pool so the Settings UI still renders rather than hard-failing.
+    // All other pool errors (permissions, network, unexpected) are still fatal.
+    const isSchemaNotSynced =
+      poolError !== null &&
+      poolError !== undefined &&
+      (poolError.code === '42P01' ||
+        (typeof (poolError as { message?: string }).message === 'string' &&
+          (poolError as { message: string }).message.includes('PGRST205')));
+    if (poolError && !isSchemaNotSynced) return dbError(c, poolError);
 
     const row = (data as Record<string, unknown> | null) ?? {};
 
@@ -114,14 +124,29 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
     const byokFirecrawlConfigured = poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
 
-    // Count legacy single-key refs whose provider has no pool row yet, so a
+    // Fold in legacy single-key refs whose provider has no pool row yet, so a
     // project that hasn't migrated to the pool still reports its keys as
-    // "configured" instead of 0.
-    const legacyOnlyConfigured =
-      (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref) ? 1 : 0) +
-      (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref) ? 1 : 0) +
-      (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref) ? 1 : 0);
-    byokKeysConfigured += legacyOnlyConfigured;
+    // "configured" instead of 0. Each legacy key MUST also land in exactly one
+    // of passing/failing/untested using its own test-status column — otherwise
+    // the invariant `passing + failing + untested === configured` breaks, the
+    // tooltip reads "0 passing, 0 failing, 0 untested of N configured", and the
+    // SettingsStatusBanner's "untested keys" warning never fires for legacy-
+    // only projects.
+    const classifyByokStatus = (testStatus: string | null | undefined) => {
+      if (testStatus === 'ok') byokKeysPassing += 1;
+      else if (testStatus && testStatus.startsWith('error')) byokKeysFailing += 1;
+      else byokKeysUntested += 1;
+      byokKeysConfigured += 1;
+    };
+    if (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref)) {
+      classifyByokStatus(row.byok_anthropic_test_status as string | null);
+    }
+    if (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref)) {
+      classifyByokStatus(row.byok_openai_test_status as string | null);
+    }
+    if (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref)) {
+      classifyByokStatus(row.byok_firecrawl_test_status as string | null);
+    }
 
     return c.json({
       ok: true,

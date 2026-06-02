@@ -81,7 +81,11 @@ CREATE POLICY "cqi_all_service" ON public.content_quality_issues
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');
 
--- Auto-update updated_at
+-- Auto-update updated_at.
+-- Drop-first makes the migration idempotent: a partial apply (table created,
+-- later step failed) followed by a retry would otherwise hit
+-- "trigger already exists" on the CREATE.
+DROP TRIGGER IF EXISTS set_cqi_updated_at ON public.content_quality_issues;
 CREATE TRIGGER set_cqi_updated_at
   BEFORE UPDATE ON public.content_quality_issues
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

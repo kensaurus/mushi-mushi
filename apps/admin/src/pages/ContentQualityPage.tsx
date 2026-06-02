@@ -239,17 +239,8 @@ export function ContentQualityPage() {
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-surface-overlay focus-visible:bg-surface-overlay focus-visible:outline-none cursor-pointer transition-colors group"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Open ${label}`}
+                        className="hover:bg-surface-overlay cursor-pointer transition-colors group"
                         onClick={() => navigate(`/content/${item.id}`)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            navigate(`/content/${item.id}`)
-                          }
-                        }}
                       >
                         {/* Asset: icon + type + human key */}
                         <td className="px-3 py-3">
@@ -306,9 +297,19 @@ export function ContentQualityPage() {
                           {new Date(item.created_at).toLocaleDateString()}
                         </td>
 
-                        {/* Chevron hint */}
-                        <td className="px-3 py-3 text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity">
-                          →
+                        {/* Chevron — real <button> so keyboard and screen-reader users can
+                            activate the row without the table's row semantics being overridden
+                            by role="button". focus-visible:opacity-100 makes it reappear for
+                            sighted keyboard users; opacity-0 is purely cosmetic for mouse. */}
+                        <td className="px-3 py-3">
+                          <button
+                            className="text-fg-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-current rounded-sm"
+                            tabIndex={0}
+                            aria-label={`Open ${label}`}
+                            onClick={e => { e.stopPropagation(); navigate(`/content/${item.id}`) }}
+                          >
+                            →
+                          </button>
                         </td>
                       </tr>
                     )

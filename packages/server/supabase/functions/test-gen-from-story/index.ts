@@ -131,13 +131,29 @@ async function openGithubPr(opts: {
   // Commit the file via the Contents API (same transport as fix-worker). This
   // sidesteps the blob/tree/commit dance — and the base_tree-must-be-a-tree-SHA
   // pitfall — entirely. `content` must be base64 (utf-8 safe).
-  const putRes = await fetch(`${apiBase}/contents/${path.split('/').map(encodeURIComponent).join('/')}`, {
+  //
+  // The Contents API PUT requires the existing file's blob SHA when the path
+  // already exists on the branch (e.g. the file was present on the default
+  // branch and the new branch inherits it, or a retry runs against a branch
+  // that already has the file). Without the SHA the request returns 422. We
+  // GET first; a 404 means it's a create (no SHA needed), anything else means
+  // it's an update and we include the SHA from the response.
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/')
+  const existingRes = await fetch(`${apiBase}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`, { headers })
+  let existingSha: string | undefined
+  if (existingRes.ok) {
+    const existingData = await existingRes.json() as { sha?: string }
+    existingSha = existingData.sha
+  }
+
+  const putRes = await fetch(`${apiBase}/contents/${encodedPath}`, {
     method: 'PUT',
     headers,
     body: JSON.stringify({
       message: `test: ${title}`,
       content: btoa(unescape(encodeURIComponent(contents))),
       branch,
+      ...(existingSha ? { sha: existingSha } : {}),
     }),
   })
   if (!putRes.ok) return null
