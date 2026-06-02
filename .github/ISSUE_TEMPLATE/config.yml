@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://kensaur.us/mushi-mushi/docs/
+    about: Setup guides, concepts, and the full API reference — most "how do I…?" questions are answered here first.
+  - name: 🚀 Quick start (npx mushi-mushi)
+    url: https://kensaur.us/mushi-mushi/docs/
+    about: New to Mushi? Run `npx mushi-mushi` and follow the wizard before opening an issue.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/kensaurus/mushi-mushi/security/policy
+    about: Please disclose security issues privately via our coordinated-disclosure process — never in a public issue.
+  - name: 💬 Questions & updates
+    url: https://bsky.app/profile/mushimushi.dev
+    about: Follow along and ask quick questions on Bluesky.

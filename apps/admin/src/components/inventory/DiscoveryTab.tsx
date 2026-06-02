@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Btn, Card, Badge, ErrorAlert } from '../ui'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { Btn, Card, Badge, ErrorAlert, Input } from '../ui'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -304,6 +304,15 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
       />
 
       {discovery.error && <ErrorAlert message={discovery.error} onRetry={discovery.reload} />}
+
+      {/* NEW: Map from live app — active crawl path */}
+      <LiveCrawlCard
+        projectId={projectId}
+        onProposalReady={(id) => {
+          setActiveProposalId(id)
+          proposals.reload()
+        }}
+      />
 
       {/* (4) Past proposals (if any beyond the current draft) */}
       {proposalRows.length > 0 && (
@@ -726,5 +735,266 @@ function ClockIcon() {
       <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
       <path d="M8 5V8L10 9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LiveCrawlCard — "Map from live app" active crawl section
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MapRun {
+  id: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  base_url: string
+  provider: string
+  pages_crawled: number | null
+  proposal_id: string | null
+  cursor_pr_url: string | null
+  error_message: string | null
+  crawl_summary: Record<string, unknown> | null
+  started_at: string
+  finished_at: string | null
+}
+
+function LiveCrawlCard({
+  projectId,
+  onProposalReady,
+}: {
+  projectId: string
+  onProposalReady: (proposalId: string) => void
+}) {
+  const toast = useToast()
+  const [expanded, setExpanded] = useState(false)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [maxPages, setMaxPages] = useState(20)
+  const [provider, setProvider] = useState<'firecrawl' | 'browserbase'>('firecrawl')
+  const [cursorRefine, setCursorRefine] = useState(false)
+  const [mapping, setMapping] = useState(false)
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+
+  interface QuotaInfo {
+    runsToday: number
+    pagesToday: number
+    maxRuns: number
+    maxPages: number
+    tddGensToday: number
+    maxTddGens: number
+  }
+  const runsQuery = usePageData<{ runs: MapRun[]; quota?: QuotaInfo }>(
+    `/v1/admin/inventory/${projectId}/map-runs`,
+    { deps: [projectId] },
+  )
+  const runs = runsQuery.data?.runs ?? []
+  const latestRun = runs[0] ?? null
+  const quota = runsQuery.data?.quota ?? null
+  const quotaRunsExhausted = quota ? quota.runsToday >= quota.maxRuns : false
+  const quotaPagesExhausted = quota ? quota.pagesToday + maxPages > quota.maxPages : false
+  const quotaExhausted = quotaRunsExhausted || quotaPagesExhausted
+
+  // Poll while a run is active
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (activeRunId && latestRun?.id === activeRunId && (latestRun.status === 'pending' || latestRun.status === 'running')) {
+      if (!pollRef.current) {
+        pollRef.current = setInterval(() => runsQuery.reload(), 3000)
+      }
+    } else {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      if (activeRunId && latestRun?.id === activeRunId && latestRun.status === 'completed' && latestRun.proposal_id) {
+        setActiveRunId(null)
+        setMapping(false)
+        onProposalReady(latestRun.proposal_id)
+      }
+      if (activeRunId && latestRun?.id === activeRunId && latestRun.status === 'failed') {
+        setActiveRunId(null)
+        setMapping(false)
+        toast.push({ tone: 'error', message: 'Crawl failed', description: latestRun.error_message ?? 'unknown error' })
+      }
+    }
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
+  }, [activeRunId, latestRun, runsQuery, onProposalReady, toast])
+
+  async function startMapping() {
+    if (!baseUrl.trim()) { toast.push({ tone: 'error', message: 'Enter a URL to crawl' }); return }
+    setMapping(true)
+    const res = await apiFetch<{ runId: string }>(`/v1/admin/inventory/${projectId}/map-from-live`, {
+      method: 'POST',
+      body: JSON.stringify({ base_url: baseUrl.trim(), max_pages: maxPages, provider, cursor_cloud_refine: cursorRefine }),
+    })
+    if (res.ok && res.data) {
+      setActiveRunId(res.data.runId)
+      setExpanded(false)
+      runsQuery.reload()
+      toast.success('Crawl started', `Mapping ${baseUrl} — drafting user stories with Claude…`)
+    } else {
+      setMapping(false)
+      if (res.error?.code === 'QUOTA_EXCEEDED') {
+        toast.push({
+          tone: 'warn',
+          message: 'Daily crawl budget reached',
+          description: res.error.message ?? 'Resets at 00:00 UTC or raise the limit in Settings → General.',
+        })
+        runsQuery.reload()
+      } else {
+        toast.push({ tone: 'error', message: 'Failed to start mapping', description: res.error?.message ?? 'unknown' })
+      }
+    }
+  }
+
+  const isActive = latestRun && (latestRun.status === 'pending' || latestRun.status === 'running')
+
+  return (
+    <Card className="p-4 space-y-3" data-testid="mushi-live-crawl-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-fg">Map from live app</span>
+            <SignalChip tone="info" className="text-3xs uppercase tracking-wider">no SDK needed</SignalChip>
+          </div>
+          <p className="text-2xs text-fg-muted mt-0.5">
+            Crawl any live URL with Firecrawl. Claude maps the pages into user stories — no hand-written YAML required.
+          </p>
+        </div>
+        {!isActive && (
+          <Btn type="button" size="sm" variant={expanded ? 'ghost' : 'primary'} onClick={() => setExpanded(e => !e)}>
+            {expanded ? 'Cancel' : '+ Map URL'}
+          </Btn>
+        )}
+      </div>
+
+      {/* Quota meter — always visible when quota data available */}
+      {quota && (
+        <div className="text-2xs text-fg-muted space-y-1">
+          <div className="flex items-center gap-2">
+            <span>Pages today:</span>
+            <span className={quota.pagesToday >= quota.maxPages ? 'text-danger font-semibold' : 'font-mono text-fg-secondary'}>
+              {quota.pagesToday} / {quota.maxPages}
+            </span>
+            <span className="text-fg-faint">·</span>
+            <span>Runs:</span>
+            <span className={quota.runsToday >= quota.maxRuns ? 'text-danger font-semibold' : 'font-mono text-fg-secondary'}>
+              {quota.runsToday} / {quota.maxRuns}
+            </span>
+            <span className="text-fg-faint text-3xs">(resets 00:00 UTC)</span>
+          </div>
+          {quota.maxPages > 0 && (
+            <div className="w-full h-1 rounded-full bg-surface-raised overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${quota.pagesToday >= quota.maxPages ? 'bg-danger' : 'bg-brand'}`}
+                style={{ width: `${Math.min(100, (quota.pagesToday / quota.maxPages) * 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Quota exhausted banner */}
+      {quotaExhausted && (
+        <div className="rounded-md bg-warn-muted border border-warn/30 px-3 py-2 text-2xs text-warn">
+          Daily crawl budget reached — resets at 00:00 UTC, or raise the limit in{' '}
+          <a href="/settings?tab=general" className="underline">Settings → General</a>.
+        </div>
+      )}
+
+      {/* Inline form */}
+      {expanded && !isActive && (
+        <form onSubmit={(e) => { e.preventDefault(); void startMapping() }} className="space-y-3 border-t border-edge/50 pt-3">
+          <div className="space-y-1">
+            <label className="text-2xs text-fg-muted">App URL to crawl *</label>
+            <Input
+              type="url"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://your-app.vercel.app"
+              autoFocus
+            />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-2xs text-fg-muted">
+                Max pages{' '}
+                <span className="text-fg-faint">(budget guard)</span>
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={maxPages}
+                onChange={(e) => setMaxPages(Math.min(50, Math.max(1, Number(e.target.value))))}
+              />
+              <p className="text-2xs text-fg-faint">
+                Firecrawl: ~1 credit/page · Claude: ~$0.01 per story gen · 20 pages ≈ $0.10–0.30 total
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-2xs text-fg-muted">Provider</label>
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as 'firecrawl' | 'browserbase')}
+                className="w-full h-8 rounded-md border border-edge bg-surface text-xs px-2 text-fg"
+              >
+                <option value="firecrawl">Firecrawl (cloud, no setup)</option>
+                <option value="browserbase">Browserbase (BYOK)</option>
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-2xs text-fg-muted">
+            <input
+              type="checkbox"
+              checked={cursorRefine}
+              onChange={(e) => setCursorRefine(e.target.checked)}
+              className="rounded"
+            />
+            Refine with Cursor Cloud Agent (opens a draft PR in your repo)
+          </label>
+          <div className="flex gap-2 pt-1 flex-wrap">
+            <Btn type="submit" size="sm" loading={mapping} disabled={quotaExhausted}>
+              Start mapping
+            </Btn>
+            <span className="text-2xs text-fg-faint self-center">~1-3 min · max {maxPages} pages crawled</span>
+          </div>
+        </form>
+      )}
+
+      {/* Active run status */}
+      {isActive && (
+        <div className="border-t border-edge/50 pt-3 flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-2xs font-medium text-fg">Crawling {latestRun.base_url}…</p>
+            <p className="text-2xs text-fg-muted">
+              {latestRun.status === 'running' && latestRun.pages_crawled != null
+                ? `${latestRun.pages_crawled} pages scraped`
+                : 'Starting crawl…'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Recent runs list */}
+      {runs.length > 0 && !isActive && (
+        <div className="border-t border-edge/50 pt-3 space-y-2">
+          <p className="text-2xs text-fg-faint uppercase tracking-wider">Recent crawls</p>
+          {runs.slice(0, 5).map(run => (
+            <div key={run.id} className="flex items-center gap-3 text-2xs">
+              <span className={`shrink-0 font-mono px-1.5 py-0.5 rounded-sm ${
+                run.status === 'completed' ? 'bg-ok/10 text-ok' :
+                run.status === 'failed' ? 'bg-danger/10 text-danger' :
+                'bg-info/10 text-info'
+              }`}>{run.status}</span>
+              <span className="text-fg-muted truncate flex-1">{run.base_url}</span>
+              {run.status === 'completed' && run.proposal_id && (
+                <Btn size="sm" variant="ghost" type="button" onClick={() => onProposalReady(run.proposal_id!)}>
+                  Review draft →
+                </Btn>
+              )}
+              {run.status === 'failed' && (
+                <span className="text-danger truncate max-w-[160px]">{run.error_message?.slice(0, 60)}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   )
 }

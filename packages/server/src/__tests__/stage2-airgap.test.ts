@@ -20,7 +20,7 @@ interface Stage1Extraction {
   action?: string
   expected?: string
   actual?: string
-  emotion?: string
+  emotion?: string | null
   category?: string
   severity?: string
   confidence?: number | string

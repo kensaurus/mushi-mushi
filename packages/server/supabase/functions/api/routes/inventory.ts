@@ -1446,4 +1446,311 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       return c.json({ ok: true, data: { transitions: data ?? [] } })
     },
   )
+
+  // ============================================================
+  // Phase 1: Story Mapper — "Map from live app"
+  // POST /v1/admin/inventory/:projectId/map-from-live
+  // GET  /v1/admin/inventory/:projectId/map-runs
+  // ============================================================
+
+  app.post(
+    '/v1/admin/inventory/:projectId/map-from-live',
+    adminOrApiKey(),
+    inventoryV2,
+    async (c) => {
+      const projectId = c.req.param('projectId')!
+      const userId = c.get('userId') as string | undefined
+      const db = getServiceClient()
+      const scope = await assertProjectScope(c, projectId, db)
+      if (!scope.ok) return scope.response
+
+      const body = await c.req.json().catch(() => ({})) as {
+        base_url?: string
+        max_pages?: number
+        provider?: 'firecrawl' | 'browserbase'
+        cursor_cloud_refine?: boolean
+      }
+
+      if (!body.base_url) {
+        return c.json({ ok: false, error: { code: 'MISSING_BASE_URL', message: 'base_url is required' } }, 400)
+      }
+
+      // Validate URL
+      try {
+        new URL(body.base_url)
+      } catch {
+        return c.json({ ok: false, error: { code: 'INVALID_URL', message: 'base_url must be a valid https URL' } }, 400)
+      }
+
+      // Quota check: count today's usage and compare against project limits
+      const todayUtc = new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
+      const [
+        { data: quotaSettings },
+        { data: todayRuns },
+      ] = await Promise.all([
+        db
+          .from('project_settings')
+          .select('crawl_max_pages_per_day, crawl_max_runs_per_day')
+          .eq('project_id', projectId)
+          .maybeSingle(),
+        db
+          .from('story_map_runs')
+          .select('max_pages')
+          .eq('project_id', projectId)
+          .gte('started_at', `${todayUtc}T00:00:00Z`)
+          .lt('started_at', `${todayUtc}T23:59:59Z`),
+      ])
+
+      const maxRuns = quotaSettings?.crawl_max_runs_per_day ?? 8
+      const maxPages = quotaSettings?.crawl_max_pages_per_day ?? 150
+      const runsToday = (todayRuns ?? []).length
+      const pagesToday = (todayRuns ?? []).reduce((s: number, r: { max_pages: number }) => s + (r.max_pages ?? 0), 0)
+      const requestedPages = body.max_pages ?? 20
+
+      if (runsToday >= maxRuns) {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'QUOTA_EXCEEDED',
+            message: `Daily crawl run limit reached (${runsToday}/${maxRuns}). Resets at 00:00 UTC or raise it in Settings.`,
+            data: { runsToday, pagesToday, maxRuns, maxPages },
+          },
+        }, 429)
+      }
+      if (pagesToday + requestedPages > maxPages) {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'QUOTA_EXCEEDED',
+            message: `Daily page budget would be exceeded (${pagesToday + requestedPages}/${maxPages}). Reduce max_pages or raise the limit in Settings.`,
+            data: { runsToday, pagesToday, maxRuns, maxPages },
+          },
+        }, 429)
+      }
+
+      // Create the run row
+      const { data: run, error: runErr } = await db
+        .from('story_map_runs')
+        .insert({
+          project_id: projectId,
+          status: 'pending',
+          base_url: body.base_url,
+          max_pages: body.max_pages ?? 20,
+          provider: body.provider ?? 'firecrawl',
+          triggered_by: userId ?? null,
+        })
+        .select('id')
+        .single()
+
+      if (runErr || !run) return dbError(c, runErr ?? new Error('Failed to create run'))
+
+      const runId = run.id
+
+      // Invoke story-mapper edge function fire-and-forget
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      fetch(`${supabaseUrl}/functions/v1/story-mapper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({
+          run_id: runId,
+          project_id: projectId,
+          base_url: body.base_url,
+          max_pages: body.max_pages ?? 20,
+          provider: body.provider ?? 'firecrawl',
+          cursor_cloud_refine: body.cursor_cloud_refine ?? false,
+          triggered_by: userId,
+        }),
+      }).catch((err) => {
+        log.warn('story-mapper invoke failed (fire-and-forget)', { runId, error: String(err) })
+      })
+
+      return c.json({ ok: true, data: { runId, status: 'pending' } })
+    },
+  )
+
+  app.get(
+    '/v1/admin/inventory/:projectId/map-runs',
+    adminOrApiKey(),
+    inventoryV2,
+    async (c) => {
+      const projectId = c.req.param('projectId')!
+      const db = getServiceClient()
+      const scope = await assertProjectScope(c, projectId, db)
+      if (!scope.ok) return scope.response
+
+      const todayUtc = new Date().toISOString().slice(0, 10)
+      const [
+        { data, error },
+        { data: quotaSettings },
+        { data: todayRuns },
+        { data: todayGens },
+      ] = await Promise.all([
+        db
+          .from('story_map_runs')
+          .select('id, status, base_url, provider, pages_crawled, proposal_id, cursor_pr_url, error_message, crawl_summary, started_at, finished_at')
+          .eq('project_id', projectId)
+          .order('started_at', { ascending: false })
+          .limit(20),
+        db
+          .from('project_settings')
+          .select('crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day')
+          .eq('project_id', projectId)
+          .maybeSingle(),
+        db
+          .from('story_map_runs')
+          .select('max_pages')
+          .eq('project_id', projectId)
+          .gte('started_at', `${todayUtc}T00:00:00Z`)
+          .lt('started_at', `${todayUtc}T23:59:59Z`),
+        db
+          .from('qa_stories')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .eq('source', 'tdd')
+          .gte('created_at', `${todayUtc}T00:00:00Z`)
+          .lt('created_at', `${todayUtc}T23:59:59Z`),
+      ])
+
+      if (error) return dbError(c, error)
+
+      const runsToday = (todayRuns ?? []).length
+      const pagesToday = (todayRuns ?? []).reduce((s: number, r: { max_pages: number }) => s + (r.max_pages ?? 0), 0)
+
+      return c.json({
+        ok: true,
+        data: {
+          runs: data ?? [],
+          quota: {
+            runsToday,
+            pagesToday,
+            maxRuns: quotaSettings?.crawl_max_runs_per_day ?? 8,
+            maxPages: quotaSettings?.crawl_max_pages_per_day ?? 150,
+            tddGensToday: (todayGens as unknown as { count: number } | null)?.count ?? 0,
+            maxTddGens: quotaSettings?.tdd_max_gens_per_day ?? 20,
+          },
+        },
+      })
+    },
+  )
+
+  // ============================================================
+  // Phase 2: Generate TDD test from an inventory user story
+  // POST /v1/admin/inventory/:projectId/stories/:storyNodeId/generate-test
+  // GET  /v1/admin/inventory/:projectId/stories/pending-review
+  // ============================================================
+
+  app.post(
+    '/v1/admin/inventory/:projectId/stories/:storyNodeId/generate-test',
+    adminOrApiKey(),
+    inventoryV2,
+    async (c) => {
+      const projectId = c.req.param('projectId')!
+      const storyNodeId = c.req.param('storyNodeId')!
+      const db = getServiceClient()
+      const scope = await assertProjectScope(c, projectId, db)
+      if (!scope.ok) return scope.response
+
+      const body = await c.req.json().catch(() => ({})) as {
+        automation_mode?: 'auto' | 'review' | 'approve'
+        base_url?: string
+        open_pr?: boolean
+      }
+
+      // Quota guard: count TDD tests generated today
+      const todayUtcGen = new Date().toISOString().slice(0, 10)
+      const [{ data: quotaSettingsGen }, { count: tddGensToday }] = await Promise.all([
+        db
+          .from('project_settings')
+          .select('tdd_max_gens_per_day')
+          .eq('project_id', projectId)
+          .maybeSingle(),
+        db
+          .from('qa_stories')
+          .select('*', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .eq('source', 'tdd')
+          .gte('created_at', `${todayUtcGen}T00:00:00Z`)
+          .lt('created_at', `${todayUtcGen}T23:59:59Z`),
+      ])
+      const maxTddGens = quotaSettingsGen?.tdd_max_gens_per_day ?? 20
+      if ((tddGensToday ?? 0) >= maxTddGens) {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'QUOTA_EXCEEDED',
+            message: `Daily TDD generation limit reached (${tddGensToday}/${maxTddGens}). Resets at 00:00 UTC or raise it in Settings.`,
+            data: { tddGensToday, maxTddGens },
+          },
+        }, 429)
+      }
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+      const fnRes = await fetch(`${supabaseUrl}/functions/v1/test-gen-from-story`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({
+          project_id: projectId,
+          story_node_id: storyNodeId,
+          automation_mode: body.automation_mode ?? 'review',
+          base_url: body.base_url,
+          open_pr: body.open_pr ?? true,
+        }),
+      })
+
+      const result = await fnRes.json()
+      return c.json(result, fnRes.ok ? 200 : (fnRes.status as 200))
+    },
+  )
+
+  app.get(
+    '/v1/admin/inventory/:projectId/stories/pending-review',
+    adminOrApiKey(),
+    inventoryV2,
+    async (c) => {
+      const projectId = c.req.param('projectId')!
+      const db = getServiceClient()
+      const scope = await assertProjectScope(c, projectId, db)
+      if (!scope.ok) return scope.response
+
+      const { data, error } = await db
+        .from('qa_stories')
+        .select('id, name, source, origin_story_node_id, automation_mode, approval_status, generated_pr_url, created_at')
+        .eq('project_id', projectId)
+        .eq('approval_status', 'pending_review')
+        .order('created_at', { ascending: false })
+
+      if (error) return dbError(c, error)
+      return c.json({ ok: true, data: { stories: data ?? [] } })
+    },
+  )
+
+  app.patch(
+    '/v1/admin/inventory/:projectId/stories/:qaStoryId/approval',
+    adminOrApiKey(),
+    inventoryV2,
+    async (c) => {
+      const projectId = c.req.param('projectId')!
+      const qaStoryId = c.req.param('qaStoryId')!
+      const db = getServiceClient()
+      const scope = await assertProjectScope(c, projectId, db)
+      if (!scope.ok) return scope.response
+
+      const body = await c.req.json().catch(() => ({})) as { status: 'approved' | 'rejected' }
+      if (!['approved', 'rejected'].includes(body.status)) {
+        return c.json({ ok: false, error: { code: 'INVALID_STATUS', message: 'status must be approved or rejected' } }, 400)
+      }
+
+      const { error } = await db
+        .from('qa_stories')
+        .update({ approval_status: body.status, enabled: body.status === 'approved' })
+        .eq('id', qaStoryId)
+        .eq('project_id', projectId)
+
+      if (error) return dbError(c, error)
+      return c.json({ ok: true, data: { status: body.status } })
+    },
+  )
 }

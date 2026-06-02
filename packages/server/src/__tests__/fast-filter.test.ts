@@ -14,7 +14,7 @@ interface Stage1Result {
   action: string
   expected: string
   actual: string
-  emotion?: string
+  emotion?: string | null
   category: 'bug' | 'slow' | 'visual' | 'confusing' | 'other'
   severity: 'critical' | 'high' | 'medium' | 'low'
   confidence: number

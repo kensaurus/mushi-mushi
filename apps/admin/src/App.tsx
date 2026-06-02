@@ -32,6 +32,8 @@ const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes)
 
 const envStatus = checkEnv()
 
+const ContentQualityPage = lazy(() => import('./pages/ContentQualityPage').then(m => ({ default: m.ContentQualityPage })))
+const ContentQualityDetailPage = lazy(() => import('./pages/ContentQualityDetailPage').then(m => ({ default: m.ContentQualityDetailPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const ReportDetailPage = lazy(() => import('./pages/ReportDetailPage').then(m => ({ default: m.ReportDetailPage })))
@@ -354,6 +356,8 @@ export function App() {
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
+                  <Route path="/content" element={<ContentQualityPage />} />
+                  <Route path="/content/:id" element={<ContentQualityDetailPage />} />
                   <Route path="/projects" element={<ProjectsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/queue" element={<DLQPage />} />

@@ -30,6 +30,9 @@ interface ProjectSettings {
   stage1_confidence_threshold?: number
   dedup_threshold?: number
   embedding_model?: string
+  crawl_max_pages_per_day?: number
+  crawl_max_runs_per_day?: number
+  tdd_max_gens_per_day?: number
 }
 
 export function GeneralPanel() {
@@ -67,6 +70,9 @@ export function GeneralPanel() {
         { current: settings.stage2_model ?? 'claude-sonnet-4-6', saved: saved.stage2_model ?? 'claude-sonnet-4-6' },
         { current: settings.stage1_confidence_threshold ?? 0.85, saved: saved.stage1_confidence_threshold ?? 0.85 },
         { current: settings.dedup_threshold ?? 0.82, saved: saved.dedup_threshold ?? 0.82 },
+        { current: settings.crawl_max_pages_per_day ?? 150, saved: saved.crawl_max_pages_per_day ?? 150 },
+        { current: settings.crawl_max_runs_per_day ?? 8, saved: saved.crawl_max_runs_per_day ?? 8 },
+        { current: settings.tdd_max_gens_per_day ?? 20, saved: saved.tdd_max_gens_per_day ?? 20 },
       ])
     : 0
 
@@ -284,6 +290,85 @@ export function GeneralPanel() {
             saved={saved.dedup_threshold ?? 0.82}
             kind="number"
           />
+        </div>
+      </Section>
+
+      <Section title="Daily Budget Quotas" className="space-y-3">
+        <ContainedBlock tone="muted">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Hard caps on LLM + Firecrawl spend per UTC day. Requests over the limit get a 429 response.
+            Resets at 00:00 UTC. Raise limits here when you need more headroom.
+          </p>
+        </ContainedBlock>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <label className="block">
+            <ContainedBlock tone="muted" className="mb-1">
+              <span className="text-2xs text-fg-muted">
+                Crawl pages / day:{' '}
+                <span className="font-mono text-fg-secondary">{settings.crawl_max_pages_per_day ?? 150}</span>
+              </span>
+            </ContainedBlock>
+            <input
+              type="range"
+              min="10"
+              max="500"
+              step="10"
+              className="w-full accent-brand"
+              value={settings.crawl_max_pages_per_day ?? 150}
+              onChange={(e) => update({ crawl_max_pages_per_day: parseInt(e.target.value, 10) })}
+            />
+            <SettingsChangeHint
+              current={settings.crawl_max_pages_per_day ?? 150}
+              saved={saved.crawl_max_pages_per_day ?? 150}
+              kind="number"
+            />
+          </label>
+
+          <label className="block">
+            <ContainedBlock tone="muted" className="mb-1">
+              <span className="text-2xs text-fg-muted">
+                Crawl runs / day:{' '}
+                <span className="font-mono text-fg-secondary">{settings.crawl_max_runs_per_day ?? 8}</span>
+              </span>
+            </ContainedBlock>
+            <input
+              type="range"
+              min="1"
+              max="50"
+              step="1"
+              className="w-full accent-brand"
+              value={settings.crawl_max_runs_per_day ?? 8}
+              onChange={(e) => update({ crawl_max_runs_per_day: parseInt(e.target.value, 10) })}
+            />
+            <SettingsChangeHint
+              current={settings.crawl_max_runs_per_day ?? 8}
+              saved={saved.crawl_max_runs_per_day ?? 8}
+              kind="number"
+            />
+          </label>
+
+          <label className="block">
+            <ContainedBlock tone="muted" className="mb-1">
+              <span className="text-2xs text-fg-muted">
+                TDD generations / day:{' '}
+                <span className="font-mono text-fg-secondary">{settings.tdd_max_gens_per_day ?? 20}</span>
+              </span>
+            </ContainedBlock>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              step="1"
+              className="w-full accent-brand"
+              value={settings.tdd_max_gens_per_day ?? 20}
+              onChange={(e) => update({ tdd_max_gens_per_day: parseInt(e.target.value, 10) })}
+            />
+            <SettingsChangeHint
+              current={settings.tdd_max_gens_per_day ?? 20}
+              saved={saved.tdd_max_gens_per_day ?? 20}
+              kind="number"
+            />
+          </label>
         </div>
       </Section>
     </SettingsPanelLayout>
