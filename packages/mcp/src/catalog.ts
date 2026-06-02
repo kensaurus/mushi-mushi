@@ -386,3 +386,99 @@ export const PROMPT_CATALOG: PromptSpec[] = [
     useCase: '/triage_next_steps — agent tells you where to start your day.',
   },
 ]
+
+// ── Phase 4: TDD / Story-mapping MCP tools ───────────────────────────────
+
+export const TDD_TOOL_CATALOG: ToolSpec[] = [
+  {
+    name: 'map_user_stories',
+    title: 'Map user stories from live app',
+    description:
+      'Crawl a live application URL with Firecrawl/Browserbase and ask Claude to draft an inventory.yaml with pages and user stories. ' +
+      'Creates a story_map_run row for progress tracking, then writes an inventory_proposals row (source=live_crawl). ' +
+      'Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. ' +
+      'Returns { runId, status: "pending" } immediately — poll get_map_run_status for progress.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Map the user stories in my live app automatically without writing YAML by hand.',
+  },
+  {
+    name: 'get_map_run_status',
+    title: 'Story map run status',
+    description:
+      'Get the status and results of a story_map_run (pending → running → completed/failed). ' +
+      'Returns pages_crawled, proposal_id (once done), and cursor_pr_url if Cursor Cloud refined the draft.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is my story mapping crawl done yet?',
+  },
+  {
+    name: 'generate_tdd_from_story',
+    title: 'Generate TDD test from user story',
+    description:
+      'Given a user story id (from the accepted inventory), ask Claude to write a full Playwright TypeScript test. ' +
+      'Inserts a qa_stories row (source=test_gen_from_story) with approval_status driven by automation_mode. ' +
+      'Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Generate a Playwright test for this user story.',
+  },
+  {
+    name: 'improve_qa_story',
+    title: 'PDCA auto-improve a failing QA story',
+    description:
+      'Trigger the PDCA improver for a specific project. Finds recently failed qa_story_runs and uses Claude to write improved test scripts. ' +
+      'New tests are created with source=pdca and approval gated by the original story\'s automation_mode.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Fix my failing QA tests automatically.',
+  },
+  {
+    name: 'run_qa_story',
+    title: 'Trigger a manual QA story run',
+    description:
+      'Queue a manual run for an enabled + approved qa_story. Returns the run id immediately; ' +
+      'poll qa_story_runs or use get_report_detail for progress. Equivalent to "Run now" in the console.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Run the login flow test right now.',
+  },
+  {
+    name: 'list_byok_keys',
+    title: 'List BYOK API key pool',
+    description:
+      'List all BYOK API keys for the project, grouped by provider. Shows label, priority, status, and cooldown. ' +
+      'Never returns the raw key value — only metadata. Use this to see which keys are active or exhausted.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Which API keys are active and which are rate-limited?',
+  },
+  {
+    name: 'add_byok_key',
+    title: 'Add a BYOK API key',
+    description:
+      'Add a new API key to the project\'s BYOK pool for a given provider (anthropic, openai, firecrawl, browserbase, cursor). ' +
+      'Specify label and priority for ordering. The key is stored encrypted in Supabase Vault.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Add a backup Anthropic key to the pool.',
+  },
+  {
+    name: 'list_pending_review_stories',
+    title: 'List QA stories pending review',
+    description:
+      'Get the queue of TDD tests that were auto-generated and are waiting for human approval before they run in the QA schedule.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What TDD tests need my approval today?',
+  },
+  {
+    name: 'approve_qa_story',
+    title: 'Approve or reject a pending QA story',
+    description:
+      'Approve or reject a qa_story that is in pending_review. Approved stories are enabled in the QA schedule immediately.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Approve this auto-generated test.',
+  },
+]

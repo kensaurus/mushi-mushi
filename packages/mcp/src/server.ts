@@ -17,7 +17,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { TOOL_CATALOG, type McpScope } from './catalog.js'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, type McpScope } from './catalog.js'
 
 /**
  * Every admin endpoint returns `{ ok: boolean; data?: T; error?: { code, message } }`.
@@ -157,8 +157,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
    * `annotations` shape `registerTool` expects. Centralising this here means
    * we never forget to translate `readOnly` → `readOnlyHint` for a new tool.
    */
-  function annotationsFor(name: string): { title: string; readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } {
-    const spec = TOOL_CATALOG.find((t) => t.name === name)
+  const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
+
+  function annotationsFor(name: string, catalog = ALL_TOOL_CATALOG): { title: string; readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } {
+    const spec = catalog.find((t) => t.name === name)
     if (!spec) throw new Error(`[mushi-mcp] tool "${name}" is missing from TOOL_CATALOG`)
     const a: { title: string; readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } = {
       title: spec.title,
@@ -170,14 +172,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     return a
   }
 
-  function descOf(name: string): string {
-    const spec = TOOL_CATALOG.find((t) => t.name === name)
+  function descOf(name: string, catalog = ALL_TOOL_CATALOG): string {
+    const spec = catalog.find((t) => t.name === name)
     if (!spec) throw new Error(`[mushi-mcp] tool "${name}" is missing from TOOL_CATALOG`)
     return spec.description
   }
 
-  function titleOf(name: string): string {
-    const spec = TOOL_CATALOG.find((t) => t.name === name)
+  function titleOf(name: string, catalog = ALL_TOOL_CATALOG): string {
+    const spec = catalog.find((t) => t.name === name)
     if (!spec) throw new Error(`[mushi-mcp] tool "${name}" is missing from TOOL_CATALOG`)
     return spec.title
   }
@@ -943,6 +945,187 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   )
 
+  // ── Phase 4: TDD / Story-mapping tools ──────────────────────────────────
+
+  server.registerTool(
+    'map_user_stories',
+    {
+      title: titleOf('map_user_stories', TDD_TOOL_CATALOG),
+      description: descOf('map_user_stories', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('map_user_stories', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id to map stories for'),
+        baseUrl: z.string().url().describe('Live app URL to crawl'),
+        maxPages: z.number().int().min(1).max(50).optional().describe('Max pages to crawl (default 20)'),
+        provider: z.enum(['firecrawl', 'browserbase']).optional().describe('Crawl provider (default: firecrawl)'),
+        cursorCloudRefine: z.boolean().optional().describe('Dispatch Cursor Cloud agent to refine and open a PR'),
+      },
+    },
+    async ({ projectId, baseUrl, maxPages, provider, cursorCloudRefine }) => {
+      if (!projectId) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required')
+      const data = await apiCall<{ runId: string; status: string }>(
+        `/v1/admin/inventory/${projectId}/map-from-live`,
+        { method: 'POST', body: JSON.stringify({ base_url: baseUrl, max_pages: maxPages, provider, cursor_cloud_refine: cursorCloudRefine }) },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'get_map_run_status',
+    {
+      title: titleOf('get_map_run_status', TDD_TOOL_CATALOG),
+      description: descOf('get_map_run_status', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('get_map_run_status', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+      },
+    },
+    async ({ projectId }) => {
+      const data = await apiCall<{ runs: unknown[] }>(`/v1/admin/inventory/${projectId}/map-runs`)
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'generate_tdd_from_story',
+    {
+      title: titleOf('generate_tdd_from_story', TDD_TOOL_CATALOG),
+      description: descOf('generate_tdd_from_story', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('generate_tdd_from_story', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+        storyNodeId: z.string().describe('User story id slug from the accepted inventory'),
+        automationMode: z.enum(['auto', 'review', 'approve']).optional().describe('Gate mode for the generated test (default: review)'),
+        baseUrl: z.string().url().optional().describe('Override the app base URL'),
+        openPr: z.boolean().optional().describe('Open a draft GitHub PR (default: true)'),
+      },
+    },
+    async ({ projectId, storyNodeId, automationMode, baseUrl, openPr }) => {
+      if (!projectId) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required')
+      const data = await apiCall<unknown>(
+        `/v1/admin/inventory/${projectId}/stories/${storyNodeId}/generate-test`,
+        { method: 'POST', body: JSON.stringify({ automation_mode: automationMode, base_url: baseUrl, open_pr: openPr }) },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'improve_qa_story',
+    {
+      title: titleOf('improve_qa_story', TDD_TOOL_CATALOG),
+      description: descOf('improve_qa_story', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('improve_qa_story', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().optional().describe('Project id (omit to run across all projects)'),
+      },
+    },
+    async ({ projectId }) => {
+      const data = await apiCall<{ improved: number }>(
+        '/v1/admin/pdca/improve-qa-stories',
+        { method: 'POST', body: JSON.stringify({ project_id: projectId }) },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'run_qa_story',
+    {
+      title: titleOf('run_qa_story', TDD_TOOL_CATALOG),
+      description: descOf('run_qa_story', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('run_qa_story', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+        qaStoryId: z.string().describe('qa_story id to run'),
+      },
+    },
+    async ({ projectId, qaStoryId }) => {
+      const data = await apiCall<unknown>(
+        `/v1/admin/projects/${projectId}/qa-stories/${qaStoryId}/run`,
+        { method: 'POST' },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'list_byok_keys',
+    {
+      title: titleOf('list_byok_keys', TDD_TOOL_CATALOG),
+      description: descOf('list_byok_keys', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('list_byok_keys', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+      },
+    },
+    async ({ projectId }) => {
+      const data = await apiCall<unknown>(`/v1/admin/byok/keys?project_id=${encodeURIComponent(projectId)}`)
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'add_byok_key',
+    {
+      title: titleOf('add_byok_key', TDD_TOOL_CATALOG),
+      description: descOf('add_byok_key', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('add_byok_key', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+        provider: z.enum(['anthropic', 'openai', 'firecrawl', 'browserbase', 'cursor']).describe('Provider slug'),
+        key: z.string().min(10).describe('The API key value to add'),
+        label: z.string().optional().describe('Human-readable label for this key'),
+        priority: z.number().int().min(1).max(999).optional().describe('Priority for ordering (lower = higher priority)'),
+      },
+    },
+    async ({ projectId, provider, key, label, priority }) => {
+      const data = await apiCall<unknown>(
+        '/v1/admin/byok/keys',
+        { method: 'POST', body: JSON.stringify({ project_id: projectId, provider_slug: provider, key, label, priority }) },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'list_pending_review_stories',
+    {
+      title: titleOf('list_pending_review_stories', TDD_TOOL_CATALOG),
+      description: descOf('list_pending_review_stories', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('list_pending_review_stories', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+      },
+    },
+    async ({ projectId }) => {
+      const data = await apiCall<unknown>(`/v1/admin/inventory/${projectId}/stories/pending-review`)
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'approve_qa_story',
+    {
+      title: titleOf('approve_qa_story', TDD_TOOL_CATALOG),
+      description: descOf('approve_qa_story', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('approve_qa_story', TDD_TOOL_CATALOG),
+      inputSchema: {
+        projectId: z.string().describe('Project id'),
+        qaStoryId: z.string().describe('QA story id to approve or reject'),
+        status: z.enum(['approved', 'rejected']).describe('New approval status'),
+      },
+    },
+    async ({ projectId, qaStoryId, status }) => {
+      const data = await apiCall<unknown>(
+        `/v1/admin/inventory/${projectId}/stories/${qaStoryId}/approval`,
+        { method: 'PATCH', body: JSON.stringify({ status }) },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
   // Apply scope filtering if granted scopes were provided.
   // All tools are registered above for readability; this block removes the
   // ones the caller's API key does not have access to. When `scopes` is
@@ -957,7 +1140,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     // readable. Cast once, filter, done.
     type ToolRegistry = Record<string, { remove(): void }>
     const toolRegistry = (server as unknown as { _registeredTools: ToolRegistry })._registeredTools
-    for (const spec of TOOL_CATALOG) {
+    const allSpecs = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
+    for (const spec of allSpecs) {
       if (!(grantedScopes as readonly string[]).includes(spec.scope)) {
         toolRegistry[spec.name]?.remove()
       }

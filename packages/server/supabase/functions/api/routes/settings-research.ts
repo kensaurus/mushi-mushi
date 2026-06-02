@@ -66,38 +66,50 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { data, error } = await db
-      .from('project_settings')
-      .select(
-        'updated_at, slack_webhook_url, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
-          'sdk_config_enabled, sdk_config_updated_at, ' +
-          'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
-          'byok_openai_key_ref, byok_openai_test_status, ' +
-          'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
-          'github_repo_url, autofix_enabled',
-      )
-      .eq('project_id', project.id)
-      .maybeSingle();
+    const [{ data, error }, { data: poolKeys }] = await Promise.all([
+      db
+        .from('project_settings')
+        .select(
+          'updated_at, slack_webhook_url, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
+            'sdk_config_enabled, sdk_config_updated_at, ' +
+            'byok_anthropic_key_ref, ' +
+            'byok_openai_key_ref, ' +
+            'byok_firecrawl_key_ref, ' +
+            'github_repo_url, autofix_enabled, ' +
+            'crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day',
+        )
+        .eq('project_id', project.id)
+        .maybeSingle(),
+      db
+        .from('byok_keys')
+        .select('provider_slug, test_status, status')
+        .eq('project_id', project.id)
+        .neq('status', 'disabled'),
+    ]);
 
     if (error) return dbError(c, error);
 
     const row = (data as Record<string, unknown> | null) ?? {};
-    const byokFlags = [
-      { configured: Boolean(row.byok_anthropic_key_ref), status: row.byok_anthropic_test_status as string | null },
-      { configured: Boolean(row.byok_openai_key_ref), status: row.byok_openai_test_status as string | null },
-      { configured: Boolean(row.byok_firecrawl_key_ref), status: row.byok_firecrawl_test_status as string | null },
-    ];
-    let byokKeysConfigured = 0;
+
+    // Derive BYOK counts from the byok_keys pool table (source of truth).
+    // Fall back to legacy key_ref presence so existing single-key setups
+    // continue to show as "configured" until they migrate to the pool.
+    const activePoolKeys = (poolKeys ?? []) as Array<{ provider_slug: string; test_status: string | null; status: string }>;
+    let byokKeysConfigured = activePoolKeys.length;
     let byokKeysPassing = 0;
     let byokKeysFailing = 0;
     let byokKeysUntested = 0;
-    for (const k of byokFlags) {
-      if (!k.configured) continue;
-      byokKeysConfigured += 1;
-      if (k.status === 'ok') byokKeysPassing += 1;
-      else if (k.status && k.status.startsWith('error')) byokKeysFailing += 1;
+    for (const k of activePoolKeys) {
+      if (k.test_status === 'ok') byokKeysPassing += 1;
+      else if (k.test_status && k.test_status.startsWith('error')) byokKeysFailing += 1;
       else byokKeysUntested += 1;
     }
+
+    // Per-provider configured flag: pool has at least one active key OR legacy ref exists
+    const poolProviders = new Set(activePoolKeys.map((k) => k.provider_slug));
+    const byokAnthropicConfigured = poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
+    const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
+    const byokFirecrawlConfigured = poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
 
     return c.json({
       ok: true,
@@ -111,15 +123,18 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         stage2Model: (row.stage2_model as string | null) ?? null,
         sdkConfigEnabled: Boolean(row.sdk_config_enabled),
         sdkConfigUpdatedAt: (row.sdk_config_updated_at as string | null) ?? null,
-        byokAnthropicConfigured: Boolean(row.byok_anthropic_key_ref),
-        byokOpenaiConfigured: Boolean(row.byok_openai_key_ref),
-        byokFirecrawlConfigured: Boolean(row.byok_firecrawl_key_ref),
+        byokAnthropicConfigured,
+        byokOpenaiConfigured,
+        byokFirecrawlConfigured,
         byokKeysConfigured,
         byokKeysPassing,
         byokKeysFailing,
         byokKeysUntested,
         githubRepoConfigured: Boolean(row.github_repo_url),
         autofixEnabled: Boolean(row.autofix_enabled),
+        crawlMaxPagesPerDay: (row.crawl_max_pages_per_day as number | null) ?? 150,
+        crawlMaxRunsPerDay: (row.crawl_max_runs_per_day as number | null) ?? 8,
+        tddMaxGensPerDay: (row.tdd_max_gens_per_day as number | null) ?? 20,
       },
     });
   });
@@ -151,6 +166,10 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sdk_banner_position',
       'sdk_banner_bug_cta',
       'sdk_banner_feature_cta',
+      // Per-project crawl / TDD generation budget quotas
+      'crawl_max_pages_per_day',
+      'crawl_max_runs_per_day',
+      'tdd_max_gens_per_day',
     ];
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
@@ -1229,5 +1248,218 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       reportId,
     }).catch(() => {});
     return c.json({ ok: true });
+  });
+
+  // ============================================================
+  // Phase 0: Multi-key BYOK pool endpoints
+  // ============================================================
+
+  /**
+   * GET /v1/admin/byok/keys
+   * List all BYOK keys for the project, ordered by provider + priority.
+   */
+  app.get('/v1/admin/byok/keys', adminOrApiKey(), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    // API-key callers (CLI/MCP) are bound to a single project; scope to it so
+    // they don't accidentally read a different owned project's pool. JWT
+    // (console) callers keep the header/query/first-project resolution.
+    const apiKeyProjectId = c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { keys: [] } }),
+      ...(apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {}),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data, error } = await db
+      .from('byok_keys')
+      .select('id, provider_slug, label, priority, status, cooldown_until, key_hint, last_tested_at, test_status, created_at, rotated_at')
+      .eq('project_id', project.id)
+      .order('provider_slug', { ascending: true })
+      .order('priority', { ascending: true });
+
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { projectId: project.id, keys: data ?? [] } });
+  });
+
+  /**
+   * POST /v1/admin/byok/keys
+   * Add a key to the pool. Body: { provider, key, label?, priority? }
+   */
+  app.post('/v1/admin/byok/keys', adminOrApiKey({ scope: 'mcp:write' }), requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    // Accept both `provider` (console) and `provider_slug` (CLI/MCP) so the
+    // advertised `mushi keys add` and `add_byok_key` tools work.
+    const body = (await c.req.json().catch(() => ({}))) as {
+      provider?: string;
+      provider_slug?: string;
+      key?: string;
+      label?: string;
+      priority?: number;
+    };
+
+    const provider = body.provider ?? body.provider_slug;
+    const VALID_PROVIDERS = ['anthropic', 'openai', 'firecrawl', 'browserbase', 'cursor'];
+    if (!provider || !VALID_PROVIDERS.includes(provider)) {
+      return c.json({ ok: false, error: { code: 'BAD_PROVIDER', message: `provider must be one of: ${VALID_PROVIDERS.join(', ')}` } }, 400);
+    }
+    const keyVal = typeof body.key === 'string' ? body.key.trim() : '';
+    if (keyVal.length < 8) {
+      return c.json({ ok: false, error: { code: 'KEY_TOO_SHORT', message: 'Provide the full API key.' } }, 400);
+    }
+
+    const db = getServiceClient();
+    const apiKeyProjectId = c.get('authMethod') === 'apiKey' ? (c.get('projectId') as string | undefined) : undefined;
+    const resolvedProject = await resolveOwnedProject(c, db, userId, apiKeyProjectId ? { overrideProjectId: apiKeyProjectId } : {});
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const secretName = `mushi/byok/${project.id}/${provider}/${Date.now()}`;
+    const { data: secretData, error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: secretName,
+      secret_value: keyVal,
+    });
+    if (vaultErr) {
+      log.error('vault_store_secret failed for byok pool key', { provider, error: vaultErr.message });
+      return c.json({ ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } }, 500);
+    }
+
+    const hint = byokKeyHint(keyVal);
+    const { data: row, error: insertErr } = await db
+      .from('byok_keys')
+      .insert({
+        project_id: project.id,
+        provider_slug: provider,
+        vault_secret_id: secretData,
+        key_hint: hint,
+        label: body.label ?? null,
+        priority: body.priority ?? 100,
+        status: 'active',
+        created_by: userId,
+      })
+      .select('id, provider_slug, label, priority, status, key_hint, created_at')
+      .single();
+
+    if (insertErr) return dbError(c, insertErr);
+
+    try {
+      await db.from('byok_audit_log').insert({ project_id: project.id, provider, action: 'added', actor_user_id: userId });
+    } catch { /* best-effort */ }
+
+    return c.json({ ok: true, data: row });
+  });
+
+  /**
+   * PATCH /v1/admin/byok/keys/:keyId
+   * Update label, priority, or status for a specific key row.
+   */
+  app.patch('/v1/admin/byok/keys/:keyId', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const keyId = c.req.param('keyId')!;
+    const body = (await c.req.json().catch(() => ({}))) as {
+      label?: string | null;
+      priority?: number;
+      status?: string;
+    };
+
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const updates: Record<string, unknown> = {};
+    if (body.label !== undefined) updates.label = body.label;
+    if (typeof body.priority === 'number') updates.priority = body.priority;
+    if (body.status && ['active', 'disabled'].includes(body.status)) updates.status = body.status;
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ ok: false, error: { code: 'NO_UPDATES', message: 'No valid fields to update.' } }, 400);
+    }
+
+    const { data, error } = await db
+      .from('byok_keys')
+      .update(updates)
+      .eq('id', keyId)
+      .eq('project_id', project.id)
+      .select('id, provider_slug, label, priority, status, key_hint')
+      .single();
+
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data });
+  });
+
+  /**
+   * DELETE /v1/admin/byok/keys/:keyId
+   * Remove a key from the pool.
+   */
+  app.delete('/v1/admin/byok/keys/:keyId', jwtAuth, requireFeature('byok'), async (c) => {
+    const userId = c.get('userId') as string;
+    const keyId = c.req.param('keyId')!;
+
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: keyRow } = await db
+      .from('byok_keys')
+      .select('provider_slug, vault_secret_id')
+      .eq('id', keyId)
+      .eq('project_id', project.id)
+      .single();
+
+    if (!keyRow) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+
+    try {
+      await db.rpc('vault_delete_secret', { secret_id: keyRow.vault_secret_id });
+    } catch { /* best-effort */ }
+
+    const { error } = await db.from('byok_keys').delete().eq('id', keyId).eq('project_id', project.id);
+    if (error) return dbError(c, error);
+
+    try {
+      await db.from('byok_audit_log').insert({ project_id: project.id, provider: keyRow.provider_slug, action: 'removed', actor_user_id: userId });
+    } catch { /* best-effort */ }
+
+    return c.json({ ok: true });
+  });
+
+  /**
+   * GET /v1/admin/byok/health
+   * Summarise pool health across all providers.
+   */
+  app.get('/v1/admin/byok/health', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { providers: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data } = await db
+      .from('byok_keys')
+      .select('provider_slug, status, test_status, cooldown_until')
+      .eq('project_id', project.id);
+
+    const rows = data ?? [];
+    const byProvider: Record<string, { total: number; active: number; exhausted: number; failed: number }> = {};
+    for (const r of rows) {
+      const p = r.provider_slug as string;
+      if (!byProvider[p]) byProvider[p] = { total: 0, active: 0, exhausted: 0, failed: 0 };
+      byProvider[p]!.total++;
+      if (r.status === 'active') byProvider[p]!.active++;
+      if (r.status === 'quota_exhausted') byProvider[p]!.exhausted++;
+      if (r.status === 'auth_failed') byProvider[p]!.failed++;
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        providers: Object.entries(byProvider).map(([provider, stats]) => ({ provider, ...stats })),
+      },
+    });
   });
 }

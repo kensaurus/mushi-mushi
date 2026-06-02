@@ -17,7 +17,12 @@
  * doesn't fan out N simultaneous tool calls.
  */
 
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+// Import the type from the same npm specifier the rest of the edge functions
+// use (`_shared/db.ts`). Mixing the jsr and npm builds of supabase-js makes
+// their `SupabaseClient` types structurally incompatible (protected
+// `supabaseUrl`), which breaks `deno check` when a npm-typed client is passed
+// to a function typed against the jsr build.
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
 const CACHE_TTL_MS = 60_000

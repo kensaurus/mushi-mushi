@@ -24,3 +24,10 @@
 # scans stop flagging the same already-audited finding.
 cb2768f0fc5b62c34809228937620c61f19a793d:packages/android/src/test/kotlin/dev/mushimushi/sdk/pii/PIIScrubberTest.kt:jwt:16
 cb2768f0fc5b62c34809228937620c61f19a793d:packages/ios/Tests/MushiMushiTests/PIIScrubberTests.swift:jwt:12
+
+# TDD MCP-tools test fixture: stub API key used to assert that the MCP client
+# forwards the `Authorization` header to the mushi API. It never authenticated
+# against any real endpoint (the test stubs `fetch`). Renamed in the working
+# tree to `TEST-FIXTURE-NOT-A-REAL-SECRET`; this fingerprint pins the historical
+# commit fff6f497 so PR-range scans stop flagging the already-audited finding.
+fff6f49793017a556d40670418a0a66809df05ce:packages/mcp/src/__tests__/tdd-tools.test.ts:generic-api-key:22

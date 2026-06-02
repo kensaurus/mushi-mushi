@@ -5,7 +5,7 @@
 // a single new Playwright test file, then opens a draft PR via GitHub REST
 // (same transport pattern as fix-worker — no Octokit in Deno).
 
-import { generateObject, NoObjectGeneratedError } from 'npm:ai@4'
+import { generateObject } from 'npm:ai@4'
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
@@ -14,7 +14,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
 import { STAGE2_FALLBACK, STAGE2_MODEL } from '../_shared/models.ts'
 import { logAudit } from '../_shared/audit.ts'
 
@@ -356,21 +356,6 @@ async function handler(req: Request): Promise<Response> {
     )
   }
 
-  const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic')
-  const openaiResolved = await resolveLlmKey(db, projectId, 'openai')
-  if (!anthropicResolved && !openaiResolved) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: {
-          code: 'NO_LLM',
-          message: 'No Anthropic or OpenAI BYOK key configured for this project',
-        },
-      }),
-      { status: 422, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
   const modelId =
     typeof settings?.stage2_model === 'string' && settings.stage2_model.length > 0
       ? settings.stage2_model
@@ -378,39 +363,46 @@ async function handler(req: Request): Promise<Response> {
 
   let generated: TestGenOutput
   try {
-    if (anthropicResolved) {
-      const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
-      const result = await generateObject({
-        model: anthropic(modelId),
-        schema: testGenSchema,
-        system: SYSTEM_PROMPT,
-        prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
-        maxRetries: 1,
-      })
-      generated = result.object
-    } else {
-      const openai = createOpenAI({
-        apiKey: openaiResolved!.key,
-        ...(openaiResolved!.baseUrl ? { baseURL: openaiResolved!.baseUrl } : {}),
-      })
-      const result = await generateObject({
-        model: openai(STAGE2_FALLBACK),
-        schema: testGenSchema,
-        system: SYSTEM_PROMPT,
-        prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
-        maxRetries: 1,
-      })
-      generated = result.object
-    }
+    const { result } = await withAnthropicOrOpenAi(
+      db,
+      projectId,
+      async (anthropicResolved) => {
+        const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
+        const { object } = await generateObject({
+          model: anthropic(modelId),
+          schema: testGenSchema,
+          system: SYSTEM_PROMPT,
+          prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
+          maxRetries: 1,
+        })
+        return object
+      },
+      async (openaiResolved) => {
+        const openai = createOpenAI({
+          apiKey: openaiResolved.key,
+          ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+        })
+        const { object } = await generateObject({
+          model: openai(STAGE2_FALLBACK),
+          schema: testGenSchema,
+          system: SYSTEM_PROMPT,
+          prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
+          maxRetries: 1,
+        })
+        return object
+      },
+    )
+    generated = result
   } catch (err) {
-    const msg = err instanceof NoObjectGeneratedError
-      ? err.message
-      : err instanceof Error
-      ? err.message
-      : String(err)
-    log.error('LLM test generation failed', { reportId, projectId, msg })
+    // Capture the raw error for the logs, but return a static, non-revealing
+    // message to the client (CodeQL js/stack-trace-exposure).
+    const detail = err instanceof Error ? err.message : String(err)
+    log.error('LLM test generation failed', { reportId, projectId, error: detail })
+    const message = err instanceof LlmFailoverError
+      ? 'All LLM keys exhausted. Add backup keys in Settings → API Key Pool.'
+      : 'Test generation failed. See server logs for details.'
     return new Response(
-      JSON.stringify({ ok: false, error: { code: 'LLM_FAILED', message: msg.slice(0, 500) } }),
+      JSON.stringify({ ok: false, error: { code: 'LLM_FAILED', message } }),
       { status: 502, headers: { 'Content-Type': 'application/json' } },
     )
   }
