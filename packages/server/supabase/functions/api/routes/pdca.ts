@@ -349,6 +349,27 @@ function pdcaRoutes() {
     }
   })
 
+  // Phase 3: Trigger PDCA QA story auto-improve
+  r.post('/improve-qa-stories', async (c) => {
+    const db = getServiceClient()
+    const body = await c.req.json().catch(() => ({})) as { project_id?: string }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/pdca-runner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ mode: 'qa_story_improve', project_id: body.project_id }),
+      })
+      const json = await res.json()
+      if (!res.ok) return c.json({ ok: false, error: json }, res.status as 200)
+      return c.json({ ok: true, ...json })
+    } catch (err) {
+      return c.json({ ok: false, error: { code: 'ERROR', message: String(err) } }, 500)
+    }
+  })
+
   return r
 }
 

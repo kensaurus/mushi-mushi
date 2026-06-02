@@ -108,23 +108,32 @@ describe('MCP protocol handshake', () => {
     const { tools } = await client.listTools()
     const names = tools.map(t => t.name).sort()
     expect(names).toEqual([
+      'add_byok_key',
+      'approve_qa_story',
       'award_bonus_points',
       'dispatch_fix',
       'fix_suggest',
+      'generate_tdd_from_story',
       'get_blast_radius',
       'get_fix_context',
       'get_fix_timeline',
       'get_knowledge_graph',
+      'get_map_run_status',
       'get_recent_reports',
       'get_report_detail',
       'get_similar_bugs',
       'graph_neighborhood',
       'graph_node_status',
+      'improve_qa_story',
       'inventory_diff',
       'inventory_findings',
       'inventory_get',
+      'list_byok_keys',
+      'list_pending_review_stories',
       'list_top_contributors',
+      'map_user_stories',
       'run_nl_query',
+      'run_qa_story',
       'search_reports',
       'set_tier',
       'setup_check',
@@ -151,6 +160,13 @@ describe('MCP protocol handshake', () => {
       'award_bonus_points',
       'set_tier',
       'setup_repo_for_mushi',
+      // Phase 4: TDD write tools
+      'map_user_stories',
+      'generate_tdd_from_story',
+      'improve_qa_story',
+      'run_qa_story',
+      'add_byok_key',
+      'approve_qa_story',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()

@@ -16,7 +16,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
-import { TOOL_CATALOG, type McpScope } from '../catalog.js'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, type McpScope } from '../catalog.js'
+
+const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 /** Fixture only — not a real credential (gitleaks-safe naming). */
@@ -101,7 +103,7 @@ describe('per-scope tool filtering', () => {
     const { client } = await connectClient(fetchStub.stub)
     try {
       const { tools } = await client.listTools()
-      expect(tools).toHaveLength(TOOL_CATALOG.length)
+      expect(tools).toHaveLength(ALL_TOOL_CATALOG.length)
     } finally {
       await client.close()
     }
@@ -112,8 +114,8 @@ describe('per-scope tool filtering', () => {
     try {
       const { tools } = await client.listTools()
       const names = new Set(tools.map(t => t.name))
-      const writeTools = TOOL_CATALOG.filter(t => t.scope === 'mcp:write').map(t => t.name)
-      const readTools = TOOL_CATALOG.filter(t => t.scope === 'mcp:read').map(t => t.name)
+      const writeTools = ALL_TOOL_CATALOG.filter(t => t.scope === 'mcp:write').map(t => t.name)
+      const readTools = ALL_TOOL_CATALOG.filter(t => t.scope === 'mcp:read').map(t => t.name)
       for (const w of writeTools) {
         expect(names.has(w), `write tool ${w} must be filtered out for mcp:read`).toBe(false)
       }
@@ -130,7 +132,7 @@ describe('per-scope tool filtering', () => {
     try {
       const { tools } = await client.listTools()
       const names = new Set(tools.map(t => t.name))
-      const readTools = TOOL_CATALOG.filter(t => t.scope === 'mcp:read').map(t => t.name)
+      const readTools = ALL_TOOL_CATALOG.filter(t => t.scope === 'mcp:read').map(t => t.name)
       for (const r of readTools) {
         expect(names.has(r), `read tool ${r} must be filtered out for mcp:write`).toBe(false)
       }

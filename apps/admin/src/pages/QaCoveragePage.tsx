@@ -739,6 +739,19 @@ function CreateStoryModal({
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
+// ── Pending-review story type ──────────────────────────────────────────────
+
+interface PendingReviewStory {
+  id: string
+  name: string
+  source: string
+  origin_story_node_id: string | null
+  automation_mode: string
+  approval_status: string
+  generated_pr_url: string | null
+  created_at: string
+}
+
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
   const { success: toastSuccess, error: toastError } = useToast()
@@ -746,14 +759,20 @@ export function QaCoveragePage() {
   const highlightId = searchParams.get('highlight') ?? ''
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  // Tracks stories that have a pending/running manual run (optimistic, cleared
-  // after the run exits active status or after 90 s as a safety timeout).
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set())
+  const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set())
+  const [optimisticHiddenIds, setOptimisticHiddenIds] = useState<Set<string>>(new Set())
 
   const { data, loading, error, reload } = usePageData<{ coverage: QaStoryCoverage[] }>(
     `/v1/admin/projects/${projectId}/qa-coverage`,
     { deps: [projectId] },
   )
+
+  const { data: pendingData, reload: reloadPending } = usePageData<{ stories: PendingReviewStory[] }>(
+    `/v1/admin/inventory/${projectId}/stories/pending-review`,
+    { deps: [projectId] },
+  )
+  const pendingReview = (pendingData?.stories ?? []).filter((s) => !optimisticHiddenIds.has(s.id))
 
   const coverage = data?.coverage ?? []
 
@@ -781,6 +800,26 @@ export function QaCoveragePage() {
   const handleClearQueued = useCallback((storyId: string) => {
     setQueuedIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
   }, [])
+
+  const handleApproval = useCallback(async (storyId: string, status: 'approved' | 'rejected') => {
+    setApprovingIds((prev) => new Set(prev).add(storyId))
+    // Optimistic: hide the row immediately so the list updates without waiting for the API
+    setOptimisticHiddenIds((prev) => new Set(prev).add(storyId))
+    const res = await apiFetch(`/v1/admin/inventory/${projectId}/stories/${storyId}/approval`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    })
+    setApprovingIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
+    if (res.ok) {
+      toastSuccess(status === 'approved' ? 'Test approved and enabled' : 'Test rejected')
+      reloadPending()
+      reload()
+    } else {
+      // Rollback: restore the row if the API call failed
+      setOptimisticHiddenIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
+      toastError(res.error?.message ?? 'Failed to update approval')
+    }
+  }, [projectId, reload, reloadPending, toastSuccess, toastError])
 
   const passing = coverage.filter((c) => (c.pass_rate_pct ?? 0) >= 80).length
   const failing = coverage.filter((c) => c.pass_rate_pct !== null && c.pass_rate_pct < 80).length
@@ -829,6 +868,59 @@ export function QaCoveragePage() {
           </Card>
         </div>
       )}
+
+      {/* Pending TDD review queue — always shown so users discover the feature */}
+      <Card className={`p-4 space-y-3 ring-1 ${pendingReview.length > 0 ? 'ring-warn/25 bg-warn/[0.03]' : 'ring-edge-subtle bg-surface-raised/40'}`}>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-fg">🧪 TDD Tests Pending Review</span>
+          {pendingReview.length > 0 && (
+            <span className="text-2xs bg-warn/15 text-warn px-1.5 py-0.5 rounded-full">{pendingReview.length}</span>
+          )}
+        </div>
+        <p className="text-2xs text-fg-muted">
+          Tests generated from your user stories appear here. Approve to add them to your QA schedule, or reject to discard.
+        </p>
+        {pendingReview.length === 0 ? (
+          <p className="text-2xs text-fg-faint italic py-1">
+            No tests awaiting review — generate tests from User Stories → Discovery tab, or wait for the PDCA auto-improver to propose new ones.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {pendingReview.map((story) => (
+              <div key={story.id} className="flex items-center gap-3 p-2.5 rounded-md bg-surface-overlay border border-edge-subtle text-2xs">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-fg truncate">{story.name}</p>
+                  {story.origin_story_node_id && (
+                    <p className="text-fg-muted">story: <code>{story.origin_story_node_id}</code></p>
+                  )}
+                </div>
+                {story.generated_pr_url && (
+                  <a href={story.generated_pr_url} target="_blank" rel="noreferrer" className="text-brand hover:underline flex items-center gap-1">
+                    <IconExternalLink className="h-3 w-3" />
+                    PR
+                  </a>
+                )}
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  loading={approvingIds.has(story.id)}
+                  onClick={() => void handleApproval(story.id, 'approved')}
+                >
+                  ✓ Approve
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  loading={approvingIds.has(story.id)}
+                  onClick={() => void handleApproval(story.id, 'rejected')}
+                >
+                  ✕ Reject
+                </Btn>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Story grid */}
       {loading && (

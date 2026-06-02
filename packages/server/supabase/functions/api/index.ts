@@ -42,6 +42,7 @@ import { registerEvolutionRoutes } from './routes/evolution.ts';
 import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
+import { registerContentQualityRoutes } from './routes/content-quality.ts';
 
 ensureSentry('api');
 
@@ -80,6 +81,10 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
     // MUSHI_ADMIN_ORIGIN_ALLOWLIST for anything else.
     'http://localhost:6464',
     'http://127.0.0.1:6464',
+    'http://localhost:6465',
+    'http://127.0.0.1:6465',
+    'http://localhost:6466',
+    'http://127.0.0.1:6466',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     // Dev-only: paired dogfood app (glot.it) runs on Next.js :3000 and
@@ -426,6 +431,7 @@ registerEvolutionRoutes(app);
 registerTesterMarketplaceRoutes(app);
 registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
+registerContentQualityRoutes(app);
 
 registerA2ATaskRoutes(app);
 

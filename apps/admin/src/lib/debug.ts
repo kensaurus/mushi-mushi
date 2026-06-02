@@ -24,22 +24,29 @@ export function setDebugEnabled(enabled: boolean): void {
 
 const PREFIX = '%c[mushi:debug]'
 const STYLE = 'color: #7c3aed; font-weight: bold;'
+const RESET_STYLE = 'color: inherit;'
+
+// `category` and `message` are passed as `%s` data arguments (never
+// interpolated into the format string) so a value containing `%` console
+// directives can't hijack formatting — see CodeQL js/tainted-format-string.
+const FORMAT = `${PREFIX} %c%s%c %s`
 
 export function debugLog(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
+  const catStyle = 'color: #a78bfa; font-weight: 600;'
   if (data) {
-    console.log(`${PREFIX} %c${category}%c ${message}`, STYLE, 'color: #a78bfa; font-weight: 600;', 'color: inherit;', data)
+    console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message, data)
   } else {
-    console.log(`${PREFIX} %c${category}%c ${message}`, STYLE, 'color: #a78bfa; font-weight: 600;', 'color: inherit;')
+    console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message)
   }
 }
 
 export function debugWarn(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.warn(`${PREFIX} %c${category}%c ${message}`, STYLE, 'color: #f59e0b; font-weight: 600;', 'color: inherit;', data ?? '')
+  console.warn(FORMAT, STYLE, 'color: #f59e0b; font-weight: 600;', category, RESET_STYLE, message, data ?? '')
 }
 
 export function debugError(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.error(`${PREFIX} %c${category}%c ${message}`, STYLE, 'color: #ef4444; font-weight: 600;', 'color: inherit;', data ?? '')
+  console.error(FORMAT, STYLE, 'color: #ef4444; font-weight: 600;', category, RESET_STYLE, message, data ?? '')
 }
