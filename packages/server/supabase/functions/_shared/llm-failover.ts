@@ -55,8 +55,10 @@ function classifyLlmError(err: unknown): 'quota' | 'auth' | 'other' {
     return 'auth'
   }
 
-  // Check for structured error objects from the AI SDK
-  const errObj = err as Record<string, unknown>
+  // Check for structured error objects from the AI SDK. Type the access
+  // explicitly — `Record<string, unknown>` makes `errObj.response` `unknown`,
+  // and reading `.status` off that fails Deno's stricter type check.
+  const errObj = err as { status?: number; statusCode?: number; response?: { status?: number } }
   const statusCode = errObj?.status ?? errObj?.statusCode ?? errObj?.response?.status
   if (statusCode === 429) return 'quota'
   if (statusCode === 401 || statusCode === 403) return 'auth'
