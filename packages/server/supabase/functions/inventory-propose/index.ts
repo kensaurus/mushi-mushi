@@ -44,7 +44,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { withLlmFailover } from '../_shared/llm-failover.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
@@ -335,16 +335,10 @@ async function proposeAndPersist(
   // Defensive: if the project has no `slug`, force a schema-valid id.
   if (!/^[a-z0-9][a-z0-9-_]*$/i.test(app.id)) app.id = 'app'
 
-  const resolved = await resolveLlmKey(db, projectId, 'anthropic')
-  const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') ?? ''
-  if (!apiKey) {
-    throw new Error('No ANTHROPIC_API_KEY available (env or BYOK)')
-  }
   const modelId = modelOverride ?? ANTHROPIC_SONNET
   const prompt = buildUserPrompt(observations, current, app)
 
   // Resolve the managed system prompt from prompt_versions (stage 'inventory-propose').
-  // Falls back to the hardcoded SYSTEM_PROMPT constant when no managed row exists.
   const { promptTemplate: managedSystemPrompt } = await getPromptForStage(db, projectId, 'inventory-propose')
 
   // Up to 3 attempts: first clean, then 2 retries with the schema issues fed back.
@@ -354,7 +348,15 @@ async function proposeAndPersist(
   let lastError: { message: string; summary?: string } | null = null
   while (attempt < 3) {
     try {
-      last = await runProposer({ apiKey, modelId, prompt, previousIssues, systemPrompt: managedSystemPrompt ?? undefined })
+      last = await withLlmFailover(db, projectId, 'anthropic', async (resolved) => {
+        return runProposer({
+          apiKey: resolved.key,
+          modelId,
+          prompt,
+          previousIssues,
+          systemPrompt: managedSystemPrompt ?? undefined,
+        })
+      })
       break
     } catch (err) {
       lastError = {
@@ -362,7 +364,6 @@ async function proposeAndPersist(
         summary: (err as { issuesSummary?: string }).issuesSummary,
       }
       previousIssues = lastError.summary
-      // Surface at INFO so the issue summary is greppable in Edge logs.
       rlog.info('propose attempt failed', {
         attempt,
         projectId,

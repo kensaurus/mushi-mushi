@@ -252,13 +252,26 @@ export function humanizeFixError(
     };
   }
 
-  // LLM: rate limit
-  if (m.includes('rate limit') || m.includes('429') || category === 'llm_rate_limit') {
+  // LLM: rate limit / all keys exhausted
+  if (
+    m.includes('ALL_KEYS_EXHAUSTED') ||
+    m.includes('rate limit') ||
+    m.includes('429') ||
+    category === 'llm_rate_limit'
+  ) {
+    const allExhausted = m.includes('ALL_KEYS_EXHAUSTED');
     return {
-      title: 'The LLM provider rate-limited this request.',
-      hint: 'Retrying in a moment usually works. If it happens repeatedly, check your BYOK API key quota.',
+      title: allExhausted
+        ? 'All configured API keys have hit their quota.'
+        : 'The LLM provider rate-limited this request.',
+      hint: allExhausted
+        ? 'Add a backup key in Settings → API Key Pool to continue without waiting.'
+        : 'Mushi tried all your configured keys. Add a backup key in Settings → API Key Pool, or wait for the cooldown to clear.',
       severity: 'soft',
-      action: { label: 'Retry', target: { kind: 'retry' } },
+      action: {
+        label: allExhausted ? 'Add backup key' : 'Manage keys',
+        target: { kind: 'route', to: '/settings/llm-keys' },
+      },
       raw,
     };
   }

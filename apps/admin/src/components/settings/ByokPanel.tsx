@@ -1,522 +1,346 @@
 /**
  * FILE: apps/admin/src/components/settings/ByokPanel.tsx
- * PURPOSE: Bring-Your-Own-Key management for Anthropic + OpenAI-compatible
- *          providers. Save / rotate / clear / live-test keys, with per-provider
- *          help cards and base-URL presets for OpenAI gateways.
+ * PURPOSE: BYOK key pool — multi-key management for Anthropic, OpenAI, and Cursor.
+ *          Shows per-provider key lists, health chips, and a "switch key" banner
+ *          when any key hits quota/auth failure.
  */
 
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
-import { useHotkeys } from '../../lib/useHotkeys'
-import { Section, Input, Btn, ErrorAlert, ResultChip, type ResultChipTone } from '../ui'
+import { Section, Input, Btn, ErrorAlert, ResultChip } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../ConfirmDialog'
-import { ConfigHelp } from '../ConfigHelp'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { UpgradePrompt } from '../billing/UpgradePrompt'
-import { SettingsChangeHint } from './SettingsChangeHint'
-import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
-import { ConfiguredSecretField } from './ConfiguredSecretField'
+import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 
-interface ByokKey {
-  provider: 'anthropic' | 'openai'
-  configured: boolean
-  keyHint: string | null
-  addedAt: string | null
-  lastUsedAt: string | null
-  testStatus: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null
-  testedAt: string | null
-  baseUrl: string | null
+type PoolKeyStatus = 'active' | 'disabled' | 'quota_exhausted' | 'auth_failed'
+
+interface PoolKey {
+  id: string
+  provider_slug: 'anthropic' | 'openai' | 'cursor' | 'firecrawl' | 'browserbase'
+  label: string | null
+  priority: number
+  status: PoolKeyStatus
+  key_hint: string | null
+  test_status: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null
+  cooldown_until: string | null
+  created_at: string
 }
 
-interface TestResult {
-  status: NonNullable<ByokKey['testStatus']>
-  hint: string
-  source: 'byok' | 'env'
-  baseUrl: string | null
-  httpStatus: number
-  latencyMs: number
-  detail: string
+interface HealthSummary {
+  providers: Array<{ provider: string; total: number; active: number; exhausted: number; failed: number }>
 }
 
-interface TestResultEntry {
-  result: TestResult
-  /** Captured at the moment the test completed; never recomputed on render
-   *  so `<RelativeTime>` reads "X seconds ago", not "just now" forever. */
-  testedAt: string
-}
-
-interface ByokProviderMeta {
-  name: string
-  placeholder: string
-  help: string
-  consoleUrl: string
-  setupSteps: string[]
-}
-
-const BYOK_KEY_PREFIX: Record<ByokKey['provider'], string> = {
-  anthropic: 'sk-ant-api03-',
-  openai: 'sk-',
-}
-
-const BYOK_PROVIDER_LABELS: Record<ByokKey['provider'], ByokProviderMeta> = {
+const PROVIDER_META: Record<string, { name: string; placeholder: string; consoleUrl: string; help: string }> = {
   anthropic: {
     name: 'Anthropic (Claude)',
     placeholder: 'sk-ant-api03-…',
-    help: 'Powers Stage-1 fast-filter (Haiku 4.5), Stage-2 classifier (Sonnet 4.6), vision analysis, and the LLM fix agent. Required for the autofix pipeline.',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
-    setupSteps: [
-      'Sign in to console.anthropic.com → Settings → API Keys.',
-      'Click Create Key, name it "mushi-mushi", grant write access to Models.',
-      'Copy the sk-ant-api03-… string and paste it below. We never see it again — it goes straight into Supabase Vault.',
-    ],
+    help: 'Powers Stage-1 fast-filter (Haiku), Stage-2 classifier (Sonnet), fix agent, test gen, and story mapping.',
   },
   openai: {
-    name: 'OpenAI / OpenRouter (compatible)',
-    placeholder: 'sk-… or sk-or-v1-… (OpenRouter)',
-    help: 'Used as the automatic fallback when Anthropic 5xxs, and as the judge fallback. Set the base URL below to route this same key through OpenRouter, Together, Fireworks, or any other OpenAI-compatible gateway.',
+    name: 'OpenAI / OpenRouter',
+    placeholder: 'sk-… or sk-or-v1-…',
     consoleUrl: 'https://platform.openai.com/api-keys',
-    setupSteps: [
-      'For OpenAI: platform.openai.com → API keys → Create new secret key. Leave Base URL empty.',
-      'For OpenRouter: openrouter.ai/keys → Create Key. Set Base URL to https://openrouter.ai/api/v1 below.',
-      'Click Save, then Test connection — we hit /v1/models with a one-off probe to confirm auth and reachability.',
-    ],
+    help: 'Fallback for any Anthropic operation. Set OpenRouter as base URL to access 300+ models.',
+  },
+  cursor: {
+    name: 'Cursor Cloud Agent',
+    placeholder: 'crsr_…',
+    consoleUrl: 'https://cursor.com/dashboard/integrations',
+    help: 'Used for dispatching Cursor Cloud Agents to generate Playwright tests and fix PRs.',
   },
 }
 
-const TEST_STATUS_LABEL: Record<NonNullable<ByokKey['testStatus']>, { label: string; tone: 'ok' | 'warn' | 'danger' }> = {
-  ok: { label: 'Connection OK', tone: 'ok' },
-  error_auth: { label: 'Auth failed', tone: 'danger' },
-  error_network: { label: 'Network/endpoint error', tone: 'danger' },
-  error_quota: { label: 'Quota / rate limit', tone: 'warn' },
+const STATUS_CHIP: Record<PoolKeyStatus, { label: string; className: string }> = {
+  active: { label: 'active', className: 'bg-ok/10 text-ok' },
+  disabled: { label: 'disabled', className: 'bg-surface-raised text-fg-muted' },
+  quota_exhausted: { label: 'quota exhausted', className: 'bg-warn/10 text-warn' },
+  auth_failed: { label: 'auth failed', className: 'bg-danger/10 text-danger' },
 }
 
-interface BaseUrlPreset {
-  label: string
-  url: string
-  note: string
-}
-
-const OPENAI_BASE_URL_PRESETS: BaseUrlPreset[] = [
-  { label: 'OpenAI (default)', url: '', note: 'Leave empty for api.openai.com' },
-  { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', note: '300+ models via one key' },
-  { label: 'Together', url: 'https://api.together.xyz/v1', note: 'Open-weights models' },
-  { label: 'Fireworks', url: 'https://api.fireworks.ai/inference/v1', note: 'Fast Llama / Mixtral' },
-]
+const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor'] as const
 
 export function ByokPanel() {
-  // Resolve entitlement BEFORE touching `/v1/admin/byok`. The earlier
-  // design rendered an in-panel <ByokEntitlementGuard> banner inside
-  // the success branch of usePageData, but the `if (error) return
-  // <ErrorAlert>` early-return below masked that banner whenever the
-  // listing endpoint failed for ANY reason (network glitch, 5xx, or a
-  // future PR that wraps GET in requireFeature('byok') the way the
-  // 12 write routes already are). Hobby users would then see a
-  // cryptic "Failed to load BYOK status" instead of the contextual
-  // upgrade panel. Short-circuiting at the top guarantees the upsell.
   const entitlements = useEntitlements()
   const byokLocked = !entitlements.loading && !entitlements.has('byok')
 
-  // Skip the fetch when we know the caller can't use BYOK — usePageData
-  // accepts `null` as "no-op" so this is the canonical opt-out and stays
-  // forward-compatible if the GET ever joins the gated set.
-  const { data, loading, error, reload } = usePageData<{ keys: ByokKey[] }>(
-    byokLocked ? null : '/v1/admin/byok',
+  const { data: poolData, loading: poolLoading, error: poolError, reload: reloadPool } = usePageData<{ keys: PoolKey[] }>(
+    byokLocked ? null : '/v1/admin/byok/keys',
   )
-  // ByokPanel handles LLM providers only — firecrawl and browserbase have
-  // dedicated tabs (FirecrawlPanel, BrowserbasePanel). Filter here so a
-  // future BYOK_PROVIDERS expansion on the server never breaks this render.
-  const LLM_PROVIDERS = ['anthropic', 'openai'] as const
-  const keys = (data?.keys ?? null)?.filter(k => (LLM_PROVIDERS as readonly string[]).includes(k.provider)) ?? null
+  const { data: healthData, reload: reloadHealth } = usePageData<HealthSummary>(
+    byokLocked ? null : '/v1/admin/byok/health',
+  )
 
-  const [pending, setPending] = useState<ByokKey['provider'] | null>(null)
-  const [testing, setTesting] = useState<ByokKey['provider'] | null>(null)
-  const [drafts, setDrafts] = useState<Record<ByokKey['provider'], string>>({ anthropic: '', openai: '' })
-  const [baseUrlDraft, setBaseUrlDraft] = useState('')
-  const [feedback, setFeedback] = useState<{ provider: ByokKey['provider']; ok: boolean; message: string } | null>(null)
-  // Capture the wall-clock timestamp when the test completes — deriving
-  // `testedAt` inside render via `new Date()` would reset the chip's
-  // RelativeTime to "just now" on every parent re-render.
-  const [testResults, setTestResults] = useState<Partial<Record<ByokKey['provider'], TestResultEntry>>>({})
-  // Confirm dialog swaps in for the native `confirm()` the rest of the
-  // admin retired. Tracking the target provider here is simpler than a
-  // single boolean because the dialog can target either provider and
-  // needs to remember which one on confirm.
-  const [clearTarget, setClearTarget] = useState<ByokKey['provider'] | null>(null)
-  const [clearing, setClearing] = useState(false)
-  // Restore focus to the Test button after its click so keyboard users
-  // can re-run the probe with Space/Enter without re-tabbing. `Btn`
-  // isn't a forwardRef component — we stamp each provider button with a
-  // stable `id` and focus through the DOM, which survives even across
-  // a remount if Phase 1's SWR hook somehow regresses.
-  const testButtonId = (provider: ByokKey['provider']) => `byok-test-${provider}`
+  const [addProvider, setAddProvider] = useState<string | null>(null)
+  const [newKeyVal, setNewKeyVal] = useState('')
+  const [newKeyLabel, setNewKeyLabel] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [addFeedback, setAddFeedback] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<PoolKey | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [togglePending, setTogglePending] = useState<string | null>(null)
 
-  // Hydrate baseUrl from server data once. Avoid clobbering user typing on
-  // re-renders by only syncing when the openai key changes.
-  const openaiBaseUrl = keys?.find(k => k.provider === 'openai')?.baseUrl ?? null
-  const [baseUrlInitialised, setBaseUrlInitialised] = useState(false)
-  if (!baseUrlInitialised && openaiBaseUrl != null) {
-    setBaseUrlInitialised(true)
-    setBaseUrlDraft(openaiBaseUrl)
+  function reload() {
+    reloadPool()
+    reloadHealth()
   }
 
-  async function save(provider: ByokKey['provider']) {
-    const key = drafts[provider].trim()
-    if (key.length < 8) {
-      setFeedback({ provider, ok: false, message: 'Paste the full provider API key.' })
+  async function addKey(provider: string) {
+    const k = newKeyVal.trim()
+    if (k.length < 8) {
+      setAddFeedback('Paste the full provider API key.')
       return
     }
-    setPending(provider)
-    setFeedback(null)
-    const payload: Record<string, string | null> = { key }
-    if (provider === 'openai') payload.baseUrl = baseUrlDraft.trim() || null
-
-    const res = await apiFetch<{ provider: ByokKey['provider']; addedAt: string; hint: string }>(
-      `/v1/admin/byok/${provider}`,
-      { method: 'PUT', body: JSON.stringify(payload) },
-    )
-    setPending(null)
-    if (res.ok && res.data) {
-      const savedHint = res.data.hint
-      setDrafts((d) => ({ ...d, [provider]: '' }))
-      setTestResults((r) => ({ ...r, [provider]: undefined }))
-      setFeedback({ provider, ok: true, message: `Saved (${savedHint}). Verifying…` })
-      reload()
-      // Auto-probe immediately after save so the user sees a real
-      // "Connection OK · 142 ms" chip without the extra "now click Test"
-      // step that previously left people staring at a green chip that
-      // hadn't actually proven anything. Failures get the same inline
-      // diagnostic the manual Test button surfaces. We swallow exceptions
-      // because the save itself already succeeded — the worst-case is
-      // the user clicks Test manually.
-      try {
-        await testKey(provider)
-      } catch {
-        setFeedback({
-          provider,
-          ok: true,
-          message: `Saved (${savedHint}). Click Test connection to verify.`,
-        })
-      }
-    } else {
-      setFeedback({ provider, ok: false, message: res.error?.message ?? 'Failed to save key.' })
-    }
-  }
-
-  async function confirmClearKey() {
-    const provider = clearTarget
-    if (!provider) return
-    setClearing(true)
-    setFeedback(null)
-    const res = await apiFetch(`/v1/admin/byok/${provider}`, { method: 'DELETE' })
-    setClearing(false)
-    setClearTarget(null)
+    setAdding(true)
+    setAddFeedback(null)
+    const res = await apiFetch('/v1/admin/byok/keys', {
+      method: 'POST',
+      body: JSON.stringify({ provider, key: k, label: newKeyLabel.trim() || null }),
+    })
+    setAdding(false)
     if (res.ok) {
-      setPending(null)
-      setFeedback({ provider, ok: true, message: 'Key cleared.' })
-      if (provider === 'openai') setBaseUrlDraft('')
-      setTestResults((r) => ({ ...r, [provider]: undefined }))
+      setNewKeyVal('')
+      setNewKeyLabel('')
+      setAddProvider(null)
       reload()
     } else {
-      setFeedback({ provider, ok: false, message: res.error?.message ?? 'Failed to clear key.' })
+      setAddFeedback(res.error?.message ?? 'Failed to add key.')
     }
   }
 
-  async function testKey(provider: ByokKey['provider']) {
-    setTesting(provider)
-    // Clear stale "Saved (…)" feedback so the running/result chip is the
-    // single visible status for this provider. Without this, after
-    // saving then testing, two chips briefly fight over the slot.
-    setFeedback(null)
-    const res = await apiFetch<TestResult>(`/v1/admin/byok/${provider}/test`, { method: 'POST' })
-    setTesting(null)
-    if (res.ok && res.data) {
-      setTestResults((r) => ({
-        ...r,
-        [provider]: { result: res.data, testedAt: new Date().toISOString() },
-      }))
-      reload()
-    } else {
-      setFeedback({ provider, ok: false, message: res.error?.message ?? 'Test failed.' })
-    }
-    // Return focus to the Test button so pressing Enter again re-runs
-    // without a tab detour. Wrap in requestAnimationFrame because
-    // setTesting(null) above doesn't re-enable the button synchronously;
-    // `Btn disabled={loading}` only clears on the next render, and a
-    // disabled button silently refuses `.focus()`. Belt-and-braces for
-    // keyboard flow since Phase 1's SWR upgrade means the button no
-    // longer unmounts.
-    if (typeof document !== 'undefined') {
-      requestAnimationFrame(() => {
-        const btn = document.getElementById(testButtonId(provider)) as HTMLButtonElement | null
-        btn?.focus()
-      })
-    }
+  async function confirmRemove() {
+    if (!removeTarget) return
+    setRemoving(true)
+    const res = await apiFetch(`/v1/admin/byok/keys/${removeTarget.id}`, { method: 'DELETE' })
+    setRemoving(false)
+    setRemoveTarget(null)
+    if (res.ok) reload()
   }
 
-  // Keyboard shortcut: `t` tests the first configured provider. Matches
-  // the command-palette convention ("Press a letter, do the thing on
-  // the current page"). Skips when no key is configured — there's
-  // nothing to test against. `allowInInputs: false` so the shortcut
-  // doesn't hijack the user while they're mid-paste into a key field.
-  const firstConfigured = keys?.find((k) => k.configured)?.provider ?? null
-  useHotkeys(
-    [
-      {
-        key: 't',
-        description: 'Test connection for the first configured provider',
-        handler: (e) => {
-          if (!firstConfigured || testing) return
-          e.preventDefault()
-          void testKey(firstConfigured)
-        },
-      },
-    ],
-    !loading && !!firstConfigured,
-  )
+  async function toggleKey(key: PoolKey) {
+    setTogglePending(key.id)
+    const newStatus = key.status === 'active' ? 'disabled' : 'active'
+    await apiFetch(`/v1/admin/byok/keys/${key.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus }),
+    })
+    setTogglePending(null)
+    reload()
+  }
 
-  // Locked tenants get a panel that consists ONLY of the upgrade
-  // prompt — no input fields they can fill in to no effect, no
-  // skeleton flash, no later-fired ErrorAlert. Mirrors the SsoPage /
-  // IntelligencePage pattern.
   if (byokLocked) {
     return (
       <SettingsPanelLayout>
-        <Section title="LLM Keys (BYOK)" className="lg:col-span-2 space-y-3">
+        <Section title="API Key Pool (BYOK)" className="lg:col-span-2 space-y-3">
           <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
         </Section>
       </SettingsPanelLayout>
     )
   }
 
-  if (entitlements.loading || loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
-  if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
+  if (entitlements.loading || poolLoading) return <PanelSkeleton rows={4} label="Loading key pool" inCard={false} />
+  if (poolError) return <ErrorAlert message={`Failed to load key pool: ${poolError}`} onRetry={reload} />
+
+  const allKeys = poolData?.keys ?? []
+
+  // Detect any quota/auth issues for the banner
+  const exhaustedProviders = (healthData?.providers ?? []).filter(p => p.exhausted > 0 || p.failed > 0)
+  const hasExhausted = exhaustedProviders.length > 0
 
   return (
     <SettingsPanelLayout
       fullWidth={
         <ContainedBlock tone="muted">
           <p className="text-2xs leading-relaxed text-fg-muted">
-            <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the LLM keys, you pay your own provider, and you keep full control over which models touch your bug data. Keys live in Supabase Vault; only a <span className="font-mono">vault://&lt;id&gt;</span> reference is stored in project settings.
+            <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the keys, you control which models touch your data. Add multiple keys per provider — if one hits quota, the next one is tried automatically. Keys live in Supabase Vault.
           </p>
         </ContainedBlock>
       }
     >
-      <Section title="LLM Keys (BYOK)" className="lg:col-span-2 space-y-3">
+      <Section title="API Key Pool (BYOK)" className="lg:col-span-2 space-y-4">
 
-      {/* Provider cards — 2-up on xl; each card uses SettingsCard for aligned chrome */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-      {keys?.map((k) => {
-        const meta = BYOK_PROVIDER_LABELS[k.provider]
-        const fb = feedback?.provider === k.provider ? feedback : null
-        const testEntry = testResults[k.provider]
-        const testResult = testEntry?.result
-        const testStatus = testResult?.status ?? k.testStatus
-        const testedAt = testEntry?.testedAt ?? k.testedAt
-        const statusMeta = testStatus ? TEST_STATUS_LABEL[testStatus] : null
-
-        return (
-          <SettingsCard key={k.provider}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-fg-primary inline-flex items-center gap-1">
-                    {meta.name}
-                  </span>
-                  <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${k.configured ? 'bg-ok/10 text-ok' : 'bg-surface-raised text-fg-muted'}`}>
-                    {k.configured ? 'BYOK' : 'platform default'}
-                  </span>
-                  {statusMeta && (
-                    <span
-                      className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${
-                        statusMeta.tone === 'ok' ? 'bg-ok/10 text-ok' :
-                        statusMeta.tone === 'warn' ? 'bg-warn/10 text-warn' :
-                        'bg-danger/10 text-danger'
-                      }`}
-                    >
-                      {statusMeta.label}
-                    </span>
-                  )}
-                </div>
-                <p className="text-2xs text-fg-muted mt-0.5">{meta.help}</p>
-              </div>
-              <a
-                href={meta.consoleUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline whitespace-nowrap shrink-0"
-              >
-                Get key →
-              </a>
+        {/* Quota exhaustion banner */}
+        {hasExhausted && (
+          <div className="flex items-start gap-3 bg-warn/5 border border-warn/20 rounded-md px-3 py-2.5">
+            <span className="text-warn mt-0.5">⚠</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-2xs font-medium text-warn">
+                {exhaustedProviders.map(p => PROVIDER_META[p.provider]?.name ?? p.provider).join(', ')} {exhaustedProviders.length === 1 ? 'has' : 'have'} exhausted keys.
+              </p>
+              <p className="text-2xs text-fg-muted mt-0.5">
+                Add a backup key below — the pipeline will automatically use it instead. No downtime needed.
+              </p>
             </div>
+          </div>
+        )}
 
-            <details className="text-2xs">
-              <summary className="text-fg-muted cursor-pointer hover:text-fg-secondary">Step-by-step setup</summary>
-              <ol className="mt-1.5 ml-4 list-decimal space-y-0.5 text-fg-muted">
-                {meta.setupSteps.map((s, i) => <li key={i}>{s}</li>)}
-              </ol>
-            </details>
+        {/* Per-provider sections */}
+        {DISPLAY_PROVIDERS.map((provider) => {
+          const meta = PROVIDER_META[provider]
+          if (!meta) return null
+          const providerKeys = allKeys.filter(k => k.provider_slug === provider)
+          const healthRow = healthData?.providers.find(p => p.provider === provider)
+          const isOpen = addProvider === provider
 
-            {k.configured && (
-              <div className="text-2xs text-fg-muted">
-                Added {k.addedAt ? new Date(k.addedAt).toLocaleString() : 'unknown'}
-                {k.lastUsedAt && <> · last used {new Date(k.lastUsedAt).toLocaleString()}</>}
-                {testedAt && <> · tested {new Date(testedAt).toLocaleString()}</>}
-                {testResult?.latencyMs != null && <> ({testResult.latencyMs} ms)</>}
-              </div>
-            )}
-
-            {/* Wrap key input + base URL + action buttons in a <form> so the
-                browser password manager can associate the secret field with
-                a submit action and stops emitting the "Password field not
-                contained in a form" advisory. The form has no action/method
-                because everything is handled client-side via apiFetch. */}
-            <form
-              onSubmit={(e) => { e.preventDefault(); void save(k.provider) }}
-              aria-label={`Save ${meta.name} key`}
-            >
-            {k.provider === 'openai' && (
-              <div className="space-y-1.5 mb-3">
-                <label className="text-2xs text-fg-muted flex items-center gap-1">
-                  <span>Base URL <span className="text-fg-faint">(optional — leave empty for OpenAI)</span></span>
-                  <ConfigHelp helpId="settings.byok.openai_base_url" />
-                </label>
-                <Input
-                  type="url"
-                  value={baseUrlDraft}
-                  onChange={(e) => setBaseUrlDraft(e.target.value)}
-                  placeholder="https://openrouter.ai/api/v1"
-                />
-                <SettingsChangeHint
-                  current={baseUrlDraft}
-                  saved={openaiBaseUrl ?? ''}
-                  kind="url"
-                />
-                {baseUrlDraft !== (openaiBaseUrl ?? '') && (
-                  <button
-                    type="button"
-                    onClick={() => setBaseUrlDraft(openaiBaseUrl ?? '')}
+          return (
+            <div key={provider} className="border border-edge rounded-md overflow-hidden">
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 bg-surface-raised/40">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-fg-primary">{meta.name}</span>
+                    {healthRow && (
+                      <>
+                        <span className="text-2xs text-fg-muted">
+                          {healthRow.active} active
+                          {healthRow.exhausted > 0 && <span className="text-warn ml-1">· {healthRow.exhausted} exhausted</span>}
+                          {healthRow.failed > 0 && <span className="text-danger ml-1">· {healthRow.failed} failed auth</span>}
+                        </span>
+                      </>
+                    )}
+                    {providerKeys.length === 0 && (
+                      <span className="text-2xs text-fg-faint italic">no keys — using platform default</span>
+                    )}
+                  </div>
+                  <p className="text-2xs text-fg-muted mt-0.5">{meta.help}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={meta.consoleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
                   >
-                    Reset URL to saved
-                  </button>
-                )}
-                <div className="flex flex-wrap gap-1.5">
-                  {OPENAI_BASE_URL_PRESETS.map((p) => (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => setBaseUrlDraft(p.url)}
-                      className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm border ${
-                        baseUrlDraft === p.url
-                          ? 'border-accent bg-accent/10 text-accent'
-                          : 'border-edge bg-surface-raised text-fg-muted hover:text-fg-secondary'
-                      }`}
-                      title={p.note}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                    Get key →
+                  </a>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    type="button"
+                    onClick={() => {
+                      setAddProvider(isOpen ? null : provider)
+                      setNewKeyVal('')
+                      setNewKeyLabel('')
+                      setAddFeedback(null)
+                    }}
+                  >
+                    {isOpen ? 'Cancel' : '+ Add key'}
+                  </Btn>
                 </div>
               </div>
-            )}
 
-            <ConfiguredSecretField
-              label="API key"
-              helpId={k.provider === 'anthropic' ? 'settings.byok.anthropic_key' : 'settings.byok.openai_key'}
-              configured={k.configured}
-              keyHint={k.keyHint}
-              fallbackPrefix={BYOK_KEY_PREFIX[k.provider]}
-              value={drafts[k.provider]}
-              onChange={(v) => setDrafts((d) => ({ ...d, [k.provider]: v }))}
-              placeholder={meta.placeholder}
-            />
-
-            <div className="flex items-center gap-2 flex-wrap mt-3">
-              <Btn type="submit" size="sm" loading={pending === k.provider}>
-                {k.configured ? 'Rotate key' : 'Save key'}
-              </Btn>
-              {k.configured && (
-                <>
-                  <Btn
-                    id={testButtonId(k.provider)}
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => testKey(k.provider)}
-                    loading={testing === k.provider}
-                  >
-                    Test connection
-                  </Btn>
-                  <Btn
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setClearTarget(k.provider)}
-                    disabled={pending === k.provider}
-                  >
-                    Clear
-                  </Btn>
-                </>
+              {/* Key list */}
+              {providerKeys.length > 0 && (
+                <div className="divide-y divide-edge/50">
+                  {providerKeys.map((k) => {
+                    const chip = STATUS_CHIP[k.status]
+                    const isExpired = k.cooldown_until && new Date(k.cooldown_until) > new Date()
+                    return (
+                      <div key={k.id} className="flex items-center gap-3 px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-2xs text-fg-secondary">{k.key_hint ?? '…****'}</span>
+                            {k.label && <span className="text-2xs text-fg-muted italic">{k.label}</span>}
+                            <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${chip.className}`}>
+                              {chip.label}
+                            </span>
+                            {isExpired && (
+                              <span className="text-2xs text-warn">
+                                cooldown until {new Date(k.cooldown_until!).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-2xs text-fg-faint mt-0.5">
+                            priority {k.priority} · added {new Date(k.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Btn
+                            size="sm"
+                            variant="ghost"
+                            type="button"
+                            loading={togglePending === k.id}
+                            onClick={() => void toggleKey(k)}
+                          >
+                            {k.status === 'active' ? 'Disable' : 'Enable'}
+                          </Btn>
+                          <Btn
+                            size="sm"
+                            variant="ghost"
+                            type="button"
+                            onClick={() => setRemoveTarget(k)}
+                          >
+                            Remove
+                          </Btn>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
-              {(() => {
-                if (fb) {
-                  return (
-                    <ResultChip tone={fb.ok ? 'success' : 'error'}>
-                      {fb.message}
-                    </ResultChip>
-                  )
-                }
-                if (testing === k.provider) {
-                  return <ResultChip tone="running">Testing…</ResultChip>
-                }
-                if (testResult) {
-                  const tone: ResultChipTone =
-                    testResult.status === 'ok'
-                      ? 'success'
-                      : testResult.status === 'error_quota'
-                        ? 'info'
-                        : 'error'
-                  return (
-                    <ResultChip tone={tone} at={testedAt}>
-                      {testResult.hint || statusMeta?.label || testResult.status}
-                    </ResultChip>
-                  )
-                }
-                return null
-              })()}
+
+              {/* Add key inline form */}
+              {isOpen && (
+                <form
+                  onSubmit={(e) => { e.preventDefault(); void addKey(provider) }}
+                  className="px-3 py-3 border-t border-edge/50 space-y-2 bg-surface-overlay/30"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-2xs text-fg-muted">API key *</label>
+                      <Input
+                        type="password"
+                        value={newKeyVal}
+                        onChange={(e) => setNewKeyVal(e.target.value)}
+                        placeholder={meta.placeholder}
+                        autoFocus
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-2xs text-fg-muted">Label (optional)</label>
+                      <Input
+                        type="text"
+                        value={newKeyLabel}
+                        onChange={(e) => setNewKeyLabel(e.target.value)}
+                        placeholder="e.g. personal, team, backup"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Btn type="submit" size="sm" loading={adding}>
+                      Save key
+                    </Btn>
+                    {addFeedback && (
+                      <ResultChip tone="error">{addFeedback}</ResultChip>
+                    )}
+                  </div>
+                  <p className="text-2xs text-fg-faint">
+                    Keys are stored in Supabase Vault. Lower priority = tried first (default 100).
+                    {providerKeys.length > 0 && ' New key will be tried when existing keys are exhausted.'}
+                  </p>
+                </form>
+              )}
             </div>
+          )
+        })}
 
-            {testResult && testResult.status !== 'ok' && (
-              <div className="text-2xs text-danger bg-danger/5 border border-danger/20 rounded-sm px-2 py-1.5">
-                <strong>Why this failed:</strong>{' '}
-                {testResult.status === 'error_auth' && 'The provider rejected the key (HTTP 401/403). Double-check you copied the full key including the prefix.'}
-                {testResult.status === 'error_network' && `Couldn't reach the endpoint. ${testResult.detail || 'Check the base URL and your network.'}`}
-                {testResult.status === 'error_quota' && 'Your account hit a rate limit (HTTP 429). The key works — you just need to top up or wait.'}
-              </div>
-            )}
-            </form>
-          </SettingsCard>
-        )
-      })}
-      </div>
-
-      {clearTarget && (
-        <ConfirmDialog
-          title={`Remove ${BYOK_PROVIDER_LABELS[clearTarget].name} key?`}
-          body="The pipeline will fall back to the platform default (if your plan includes one). This cannot be undone — you'll need to paste the key again to restore BYOK."
-          confirmLabel="Remove key"
-          cancelLabel="Keep key"
-          tone="danger"
-          loading={clearing}
-          onConfirm={() => void confirmClearKey()}
-          onCancel={() => {
-            if (!clearing) setClearTarget(null)
-          }}
-        />
-      )}
+        {/* Remove confirmation */}
+        {removeTarget && (
+          <ConfirmDialog
+            title={`Remove ${PROVIDER_META[removeTarget.provider_slug]?.name ?? removeTarget.provider_slug} key?`}
+            body={`Key ending in ${removeTarget.key_hint ?? '****'} will be permanently deleted from the Vault. The pipeline will fall back to remaining keys or the platform default.`}
+            confirmLabel="Remove key"
+            cancelLabel="Keep key"
+            tone="danger"
+            loading={removing}
+            onConfirm={() => void confirmRemove()}
+            onCancel={() => { if (!removing) setRemoveTarget(null) }}
+          />
+        )}
       </Section>
     </SettingsPanelLayout>
   )

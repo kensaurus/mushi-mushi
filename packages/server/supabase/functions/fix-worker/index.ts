@@ -54,6 +54,7 @@ import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
 import { withSentry } from '../_shared/sentry.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
+import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts';
 import {
   getRelevantCodeWithReason,
   formatCodeContext,
@@ -609,16 +610,10 @@ ${
         });
       }
 
-      // ---- 4. Resolve LLM key (BYOK first, env fallback) --------------------
-      const anthropicResolved = await resolveLlmKey(db, dispatch.project_id, 'anthropic');
-      const openaiResolved = await resolveLlmKey(db, dispatch.project_id, 'openai');
-
-      if (!anthropicResolved && !openaiResolved) {
-        throw new Error(
-          'No LLM key available. Add an Anthropic or OpenAI BYOK key in Settings → LLM Keys, ' +
-            'or contact support to enable the platform default.',
-        );
-      }
+      // ---- 4. Resolve LLM key (BYOK first with multi-key failover) ----------
+      // withAnthropicOrOpenAi tries the full Anthropic key pool first, then
+      // falls back to the OpenAI pool. Quota/auth failures mark the exhausted
+      // key and advance to the next one automatically (Phase 0 multi-key pool).
 
       const userPrompt = buildUserPrompt(
         report,
@@ -639,7 +634,7 @@ ${
       const activeFixSystemPrompt = fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT;
       const fixPromptVersion = fixPromptSelection.promptVersion;
 
-      // ---- 5. Call LLM with structured output -------------------------------
+      // ---- 5. Call LLM with structured output (multi-key failover) ----------
       const llmSpan = trace.span('llm.fix');
       const llmStart = Date.now();
       let fix: FixOutput;
@@ -647,81 +642,65 @@ ${
       let inputTokens = 0;
       let outputTokens = 0;
 
-      // Model defaults come from _shared/models.ts (Wave R, 2026-04-22):
-      // Sonnet 4-6 for Anthropic (upgrade from 4-5-20250929 which had skewed
-      // against the rest of the stack), GPT-5.4 for the OpenAI/OpenRouter
-      // path. Both are strong at structured-output tool use; Sonnet 4-6 also
-      // gets the Anthropic prompt-cache speedup on the system prompt.
       const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
-      const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`; // OpenRouter-friendly slug
+      const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`;
 
       try {
-        if (anthropicResolved) {
-          usedModel = DEFAULT_ANTHROPIC_MODEL;
-          const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
-          // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): pin temperature to 0 so
-          // the structured tool-call output is deterministic. Without it, the
-          // `files[].contents` string would occasionally break the schema's
-          // min/max constraints (e.g. a summary under 10 chars) and throw
-          // AI_NoObjectGeneratedError with no retry path. maxTokens was
-          // already sufficient; temperature was the missing knob.
-          // Wave S (2026-04-23): mark the system prompt as cacheable. The
-          // fix-worker system prompt is ~4 KB of stable guardrails; every
-          // dispatch re-sends it unchanged. Anthropic's ephemeral cache
-          // halves the prompt-tokens bill on the second request within 5
-          // minutes — the judge, classify, and fast-filter functions already
-          // do this, fix-worker was the outlier.
-          const { object, usage } = await generateObject({
-            model: anthropic(usedModel),
-            schema: fixSchema,
-            temperature: 0,
-            messages: [
-              {
-                role: 'system',
-                content: activeFixSystemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
+        const { result, usedProvider } = await withAnthropicOrOpenAi(
+          db,
+          dispatch.project_id,
+          async (anthropicResolved) => {
+            usedModel = DEFAULT_ANTHROPIC_MODEL;
+            const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
+            const { object, usage } = await generateObject({
+              model: anthropic(usedModel),
+              schema: fixSchema,
+              temperature: 0,
+              messages: [
+                {
+                  role: 'system',
+                  content: activeFixSystemPrompt,
+                  experimental_providerMetadata: {
+                    anthropic: { cacheControl: { type: 'ephemeral' } },
+                  },
                 },
-              },
-              { role: 'user', content: userPrompt },
-            ],
-            maxTokens: 8_000,
-          });
-          fix = object;
-          inputTokens = usage?.promptTokens ?? 0;
-          outputTokens = usage?.completionTokens ?? 0;
-        } else {
-          // For OpenRouter the model slug needs the "provider/model" prefix;
-          // for plain OpenAI it's just the bare slug. We use the OpenRouter
-          // form by default since that's what BYOK users are most likely to
-          // configure, and plain OpenAI tolerates stripping the prefix.
-          const openaiKey = openaiResolved!.key;
-          const openaiBaseUrl = openaiResolved!.baseUrl;
-          const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
-          usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
-          const openai = createOpenAI({
-            apiKey: openaiKey,
-            ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
-          });
-          const { object, usage } = await generateObject({
-            model: openai(usedModel),
-            schema: fixSchema,
-            temperature: 0,
-            system: activeFixSystemPrompt,
-            prompt: userPrompt,
-            maxTokens: 8_000,
-          });
-          fix = object;
-          inputTokens = usage?.promptTokens ?? 0;
-          outputTokens = usage?.completionTokens ?? 0;
-        }
+                { role: 'user', content: userPrompt },
+              ],
+              maxTokens: 8_000,
+            });
+            inputTokens = usage?.promptTokens ?? 0;
+            outputTokens = usage?.completionTokens ?? 0;
+            return object;
+          },
+          async (openaiResolved) => {
+            const openaiKey = openaiResolved.key;
+            const openaiBaseUrl = openaiResolved.baseUrl;
+            const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
+            usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
+            const openai = createOpenAI({
+              apiKey: openaiKey,
+              ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
+            });
+            const { object, usage } = await generateObject({
+              model: openai(usedModel),
+              schema: fixSchema,
+              temperature: 0,
+              system: activeFixSystemPrompt,
+              prompt: userPrompt,
+              maxTokens: 8_000,
+            });
+            inputTokens = usage?.promptTokens ?? 0;
+            outputTokens = usage?.completionTokens ?? 0;
+            return object;
+          },
+        );
+        fix = result;
+        void usedProvider; // logged via usedModel
       } catch (llmErr) {
-        // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): preserve diagnostic detail
-        // for NoObjectGeneratedError — otherwise the wrapping Error below loses
-        // `.text` (the raw model output) and `.cause.issues` (the Zod failures)
-        // and the operator sees only "LLM call failed: AI_NoObjectGeneratedError"
-        // with nothing to act on. Log structured fields to Sentry before
-        // re-throwing so the first recurrence is already actionable.
+        if (llmErr instanceof LlmFailoverError) {
+          llmSpan.end({ error: llmErr.message });
+          throw new Error(`LLM call failed: ${llmErr.message}`);
+        }
         if (NoObjectGeneratedError.isInstance(llmErr)) {
           const cause = llmErr.cause as
             | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }

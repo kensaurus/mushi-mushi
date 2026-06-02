@@ -148,6 +148,7 @@ const NAV: NavSection[] = [
     hint: 'Inbound user-felt bugs land here, get classified, deduped, and prioritised.',
     items: [
       { label: 'Reports',     path: '/reports',     icon: IconReports, beginner: true, quickstartLabel: 'Bugs to fix' },
+      { label: 'Content QA',  path: '/content',     icon: IconSparkle },
       {
         label: 'User stories',
         path: '/inventory',

@@ -14,13 +14,16 @@ can execute without additional context.
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
 | `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix |
-| `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from crawl data |
+| `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
+| `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | **NEW** Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
+| `test-gen-from-story` | `supabase/functions/test-gen-from-story/` | POST /stories/:id/generate-test | **NEW** User story → Playwright TypeScript test + Firecrawl YAML + draft GitHub PR + `qa_stories` row; gated by `automation_mode` |
+| `test-gen-from-report` | `supabase/functions/test-gen-from-report/` | manual | LLM generates a Playwright test from a bug report + opens a PR |
+| `pdca-runner` | `supabase/functions/pdca-runner/` | queued runs / cron | Producer/Critic PDCA loop; **mode=qa_story_improve** analyzes failed qa_story_runs and proposes improved tests (source=pdca) |
 | `inventory-crawler` | `supabase/functions/inventory-crawler/` | cron / manual | Crawls app routes to populate `inventory_nodes` |
 | `inventory-gates` | `supabase/functions/inventory-gates/` | manual | Runs gate checks (dead handlers, mock leaks, …) |
-| `test-gen-from-report` | `supabase/functions/test-gen-from-report/` | manual | LLM generates a Playwright test from a report + opens a PR |
 | `judge-batch` | `supabase/functions/judge-batch/` | cron | Grades LLM fix quality; feeds `judge_results` |
 | `generate-synthetic` | `supabase/functions/generate-synthetic/` | cron | Synthetic-monitor smoke tests via Playwright |
-| `qa-story-runner` | `supabase/functions/qa-story-runner/` | cron (every minute) | Executes QA Coverage stories via Firecrawl / Browserbase / local |
+| `qa-story-runner` | `supabase/functions/qa-story-runner/` | cron (every minute) | Executes QA Coverage stories via Firecrawl / Browserbase / local; gates on `approval_status = 'approved'` |
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
 
@@ -101,6 +104,72 @@ calling `PUT /v1/admin/byok/:provider` with a new key value.
 5. Deploy: `npx supabase functions deploy <name> --no-verify-jwt`
 6. Add a cron if needed via `SELECT cron.schedule(...)` or a migration
 7. Update this file and `docs/execplans/PLANS.md`
+
+---
+
+## TDD / PDCA Story Engine
+
+The TDD engine combines story discovery, automated test generation, and PDCA-driven improvement into a closed loop:
+
+```
+Live App URL
+  → story-mapper (Firecrawl/Browserbase crawl → Claude drafts user stories)
+  → inventory_proposals (source='live_crawl', reviewed in Discovery tab)
+  → Accept proposal
+  → [Per story] test-gen-from-story (Claude → Playwright spec + Firecrawl YAML)
+  → qa_stories (source='test_gen_from_story', approval_status by automation_mode)
+  → [Review/Approve in QA Coverage page or CLI/MCP]
+  → qa-story-runner executes on schedule
+  → Failures → pdca-runner (mode='qa_story_improve')
+  → Improved qa_stories (source='pdca', parent_story_id chain)
+  → A2A notification if configured
+```
+
+### Automation Modes
+
+| Mode | Behavior |
+|------|----------|
+| `auto` | Generated tests enabled immediately, no human review |
+| `review` | Test created with `approval_status='pending_review'`, shown in QA Coverage queue |
+| `approve` | Same as review — alias for explicit human approval workflow |
+
+### Key Tables
+
+| Table | Purpose |
+|-------|---------|
+| `story_map_runs` | Tracks live crawl jobs (pending → running → completed/failed) |
+| `inventory_proposals` | Stores drafted inventory.yaml; `source` column: `passive_discovery` / `live_crawl` / `manual` |
+| `qa_stories` | Test scripts; new columns: `source`, `approval_status`, `automation_mode`, `origin_story_node_id`, `parent_story_id`, `pdca_iteration` |
+
+### CLI Quick Reference
+
+```bash
+# Map user stories from live app
+mushi stories map --url https://your-app.com --wait
+
+# Generate Playwright TDD test from a story
+mushi tdd gen user-login --mode review
+
+# Review pending tests
+mushi tdd pending
+
+# Approve a generated test
+mushi tdd approve <qa-story-id>
+
+# Trigger PDCA improvement on failing tests
+mushi tdd improve
+
+# Manage API key pool
+mushi keys list
+# Prefer the env var so the key is not captured in shell history:
+MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup key"
+```
+
+### MCP Tools
+
+New TDD MCP tools available with `mcp:write` or `mcp:read` scope:
+`map_user_stories`, `get_map_run_status`, `generate_tdd_from_story`, `improve_qa_story`,
+`run_qa_story`, `list_byok_keys`, `add_byok_key`, `list_pending_review_stories`, `approve_qa_story`
 
 ---
 

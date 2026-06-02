@@ -24,7 +24,7 @@ const stage1Schema = z.object({
   action: z.string().describe('What the user was doing'),
   expected: z.string().describe('What the user expected'),
   actual: z.string().describe('What actually happened'),
-  emotion: z.string().optional().describe('User emotion/frustration level'),
+  emotion: z.string().nullable().describe('User emotion/frustration level, or null if not detectable'),
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Issue category'),
   severity: z.enum(['critical', 'high', 'medium', 'low']).describe('Impact severity'),
   confidence: z.number().min(0).max(1).describe('Classification confidence'),
@@ -253,7 +253,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
       })
       const { object, usage } = await generateObject({
-        model: openai(FALLBACK_MODEL),
+        model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
         schema: stage1Schema,
         system: activeSystemPrompt,
         prompt: userPrompt,
