@@ -39,3 +39,9 @@ BEGIN
     END;
   END LOOP;
 END $$;
+
+-- Flush PostgREST's schema/config caches so the revoked privileges take effect
+-- on the auto-generated REST surface immediately, without waiting for a pod
+-- restart or periodic refresh (repo convention for privilege/schema changes).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

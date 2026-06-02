@@ -66,7 +66,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const [{ data, error }, { data: poolKeys }] = await Promise.all([
+    const [{ data, error }, { data: poolKeys, error: poolError }] = await Promise.all([
       db
         .from('project_settings')
         .select(
@@ -88,6 +88,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     ]);
 
     if (error) return dbError(c, error);
+    // Surface a failed pool query rather than silently reporting 0 keys —
+    // a dropped error here masks real DB issues and misleads operators.
+    if (poolError) return dbError(c, poolError);
 
     const row = (data as Record<string, unknown> | null) ?? {};
 
@@ -110,6 +113,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokAnthropicConfigured = poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
     const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
     const byokFirecrawlConfigured = poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
+
+    // Count legacy single-key refs whose provider has no pool row yet, so a
+    // project that hasn't migrated to the pool still reports its keys as
+    // "configured" instead of 0.
+    const legacyOnlyConfigured =
+      (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref) ? 1 : 0) +
+      (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref) ? 1 : 0) +
+      (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref) ? 1 : 0);
+    byokKeysConfigured += legacyOnlyConfigured;
 
     return c.json({
       ok: true,

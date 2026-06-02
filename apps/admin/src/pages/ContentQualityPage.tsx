@@ -239,8 +239,17 @@ export function ContentQualityPage() {
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-surface-overlay cursor-pointer transition-colors group"
+                        className="hover:bg-surface-overlay focus-visible:bg-surface-overlay focus-visible:outline-none cursor-pointer transition-colors group"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open ${label}`}
                         onClick={() => navigate(`/content/${item.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            navigate(`/content/${item.id}`)
+                          }
+                        }}
                       >
                         {/* Asset: icon + type + human key */}
                         <td className="px-3 py-3">
