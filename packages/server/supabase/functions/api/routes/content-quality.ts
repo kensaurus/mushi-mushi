@@ -387,6 +387,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
   app.get('/v1/admin/content-quality/:id', jwtAuth, async (c) => {
     const db = getServiceClient();
     const issueId = c.req.param('id');
+    if (!issueId) return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Missing id' } }, 400);
 
     const loaded = await loadAccessibleIssue(c, db, issueId);
     if (!loaded.ok) return loaded.response;
@@ -397,6 +398,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
   app.post('/v1/admin/content-quality/:id/regen', jwtAuth, async (c) => {
     const db = getServiceClient();
     const issueId = c.req.param('id');
+    if (!issueId) return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Missing id' } }, 400);
 
     const loaded = await loadAccessibleIssue(c, db, issueId);
     if (!loaded.ok) return loaded.response;
@@ -447,6 +449,7 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
   app.post('/v1/admin/content-quality/:id/resolve', jwtAuth, async (c) => {
     const db = getServiceClient();
     const issueId = c.req.param('id');
+    if (!issueId) return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Missing id' } }, 400);
 
     const loaded = await loadAccessibleIssue(c, db, issueId);
     if (!loaded.ok) return loaded.response;
