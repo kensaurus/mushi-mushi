@@ -985,11 +985,27 @@ ${
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const failureCategory = categorizeFailure(err, errMsg);
-      log.error('Fix worker failed', {
+      // MUSHI-MUSHI-SERVER-8: expected guardrail outcomes (the agent produced
+      // something we deliberately rejected — out-of-scope file, oversized diff,
+      // token-shaped string — or hit a transient quota) are NOT server bugs.
+      // They are the PDCA loop working as designed and are already recorded on
+      // the fix_attempt + dispatch row and surfaced on the admin Fixes page +
+      // the `fix.failed` plugin event below. Logging them via `log.error`
+      // re-emits them to Sentry (logger.ts forwards error/fatal), which pages
+      // on-call for "Fix worker failed" on every scope_blocked. Log these at
+      // `warn` so they stay in structured logs without tripping the Sentry
+      // error pipeline; genuine infra failures (GitHub/sandbox/LLM/unknown)
+      // still escalate as errors.
+      const logFields = {
         dispatchId: dispatch.id,
         err: errMsg,
         failureCategory,
-      });
+      };
+      if (EXPECTED_FAILURE_CATEGORIES.has(failureCategory)) {
+        log.warn('Fix worker stopped by guardrail', logFields);
+      } else {
+        log.error('Fix worker failed', logFields);
+      }
 
       await db
         .from('fix_attempts')
@@ -1029,6 +1045,33 @@ ${
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Failure categories that represent an EXPECTED, recoverable outcome of the
+ * PDCA loop rather than a server bug:
+ *
+ *   - scope_blocked       — the LLM proposed a file outside the repo's
+ *                           configured scope; the validation gate caught it.
+ *   - validation_rejected — a single file exceeded the circuit-breaker line cap.
+ *   - spec_violation      — token-shaped string / inventory-contract violation.
+ *   - no_relevant_code    — RAG + Firecrawl produced no grounding context.
+ *   - llm_rate_limit      — transient provider quota / 429.
+ *
+ * Each is already persisted on `fix_attempts.failure_category`, surfaced on the
+ * admin Fixes page, and fanned out via the `fix.failed` plugin event. They must
+ * NOT be re-emitted as Sentry errors (see the catch block + logger.ts), or the
+ * fix-worker pages on-call every time a guardrail does its job
+ * (MUSHI-MUSHI-SERVER-8). Anything NOT in this set (github_*, sandbox_*,
+ * llm_other_error, context_assembly_failed, unknown, …) is treated as a real
+ * failure and still logged at `error` → Sentry.
+ */
+const EXPECTED_FAILURE_CATEGORIES = new Set<string>([
+  'scope_blocked',
+  'validation_rejected',
+  'spec_violation',
+  'no_relevant_code',
+  'llm_rate_limit',
+]);
 
 /**
  * Best-effort mapping from a thrown error to one of the
