@@ -50,9 +50,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
   const inkFaint     = isDark ? '#5A5650' : '#9A9489';   // disabled, separators
   const rule         = isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.10)';
   const ruleStrong   = isDark ? 'rgba(242,235,221,0.18)' : 'rgba(14,13,11,0.16)';
-  const vermillion   = isDark ? '#FF5A47' : '#E03C2C';   // 朱 hanko red
-  const vermillionWash = isDark ? 'rgba(255,90,71,0.12)' : 'rgba(224,60,44,0.08)';
-  const vermillionInk  = isDark ? '#FFE5E0' : '#7A1F15'; // text on vermillion wash
+  const vermillion   = isDark ? '#0FFF50' : '#00C43A';   // neon green (dev / beta tool)
+  const vermillionWash = isDark ? 'rgba(15,255,80,0.12)' : 'rgba(0,196,58,0.08)';
+  const vermillionInk  = isDark ? '#e8ffe0' : '#004d16'; // text on green wash (AA on both)
 
   /* Type stacks. Pure system stacks — no web-font fetch — but curated so
      every OS lands on a high-quality serif/mono rather than a generic
@@ -88,8 +88,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       position: fixed;
       width: 52px;
       height: 52px;
-      border: 1px solid ${ruleStrong};
-      border-radius: 4px;
+      border: 1.5px solid ${vermillion};
+      border-radius: 6px;
       background: ${paper};
       color: ${ink};
       cursor: pointer;
@@ -99,52 +99,29 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       font-family: ${fontDisplay};
       font-size: 22px;
       line-height: 1;
-      box-shadow:
-        0 1px 0 ${rule},
-        0 6px 14px -8px rgba(14,13,11,0.35),
-        inset 0 -3px 0 ${vermillion};
-      transition: transform 200ms ${easeStamp}, box-shadow 200ms ${easeStamp};
+      box-shadow: 0 2px 8px -2px rgba(0,196,58,0.25);
+      transition: transform 200ms ${easeStamp}, box-shadow 200ms ${easeStamp}, border-color 200ms ${easeStamp};
       overflow: visible;
       isolation: isolate;
     }
-    .mushi-trigger::after {
-      content: '';
-      position: absolute;
-      top: 6px;
-      right: 6px;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: ${vermillion};
-      box-shadow: 0 0 0 0 ${vermillion};
-      animation: mushi-pulse 2.4s ${easeStamp} infinite;
-    }
     .mushi-trigger:hover {
-      transform: translateY(-2px) rotate(-1.5deg);
-      box-shadow:
-        0 1px 0 ${rule},
-        0 14px 24px -10px rgba(14,13,11,0.45),
-        inset 0 -3px 0 ${vermillion};
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px -4px rgba(0,196,58,0.40);
+      border-color: ${vermillion};
     }
     .mushi-trigger:active {
-      transform: translateY(0) rotate(0);
-      box-shadow:
-        0 1px 0 ${rule},
-        0 2px 4px -2px rgba(14,13,11,0.35),
-        inset 0 -2px 0 ${vermillion};
+      transform: translateY(0);
+      box-shadow: 0 1px 4px -2px rgba(0,196,58,0.25);
     }
     .mushi-trigger:focus-visible {
       outline: 2px solid ${vermillion};
       outline-offset: 3px;
     }
-    /* First-session welcome pulse. Three soft halos at 800ms each, then
-       auto-clear. Uses a box-shadow ring rather than transform/scale so it
-       can compose with the hover transform without fighting it. Respects
-       prefers-reduced-motion. */
+    /* First-session welcome pulse — soft green halos, three times, then done. */
     @keyframes mushi-trigger-pulse {
-      0%   { box-shadow: 0 0 0 0 rgba(212, 67, 50, 0.55), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
-      70%  { box-shadow: 0 0 0 16px rgba(212, 67, 50, 0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
-      100% { box-shadow: 0 0 0 0 rgba(212, 67, 50, 0), 0 1px 0 ${rule}, 0 10px 24px -14px rgba(14,13,11,0.45); }
+      0%   { box-shadow: 0 0 0 0 rgba(0,196,58,0.55), 0 2px 8px -2px rgba(0,196,58,0.25); }
+      70%  { box-shadow: 0 0 0 14px rgba(0,196,58,0), 0 2px 8px -2px rgba(0,196,58,0.25); }
+      100% { box-shadow: 0 0 0 0 rgba(0,196,58,0), 0 2px 8px -2px rgba(0,196,58,0.25); }
     }
     .mushi-trigger-pulse {
       animation: mushi-trigger-pulse 800ms ${easeStamp} 3;

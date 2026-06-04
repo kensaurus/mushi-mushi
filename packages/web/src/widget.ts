@@ -210,6 +210,7 @@ export class MushiWidget {
       featureRequestCard: config.featureRequestCard ?? true,
       featureRequestLabel: config.featureRequestLabel ?? '',
       featureRequestDescription: config.featureRequestDescription ?? '',
+      avoidSelectors: config.avoidSelectors ?? [],
     };
     this.callbacks = callbacks;
     // Passing undefined when locale is 'auto' lets getLocale() resolve via
@@ -785,6 +786,33 @@ export class MushiWidget {
     }
   }
 
+  /**
+   * Queries each `avoidSelectors` element in the host document and returns
+   * the minimum top-offset in px so that a top-anchored element clears all
+   * of them by `gap` pixels. Returns `null` when no selectors are provided
+   * or no matching elements have a non-zero bounding rect.
+   *
+   * Runs in the host document (not shadow DOM) so it can reach fixed headers,
+   * sticky nav bars, and sign-in CTAs.
+   */
+  private computeAvoidTopPx(gap = 8): number | null {
+    const sels = this.config.avoidSelectors;
+    if (!sels?.length) return null;
+    let maxBottom = 0;
+    for (const sel of sels) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        // Only consider elements that are actually rendered (non-zero area)
+        if (r.bottom > maxBottom && r.width > 0 && r.height > 0) {
+          maxBottom = r.bottom;
+        }
+      } catch { /* invalid selector — skip silently */ }
+    }
+    return maxBottom > 0 ? Math.ceil(maxBottom) + gap : null;
+  }
+
   private applyInsetVars(el: HTMLElement): void {
     const { anchor } = this.config;
     if (anchor && Object.keys(anchor).length > 0) {
@@ -793,21 +821,34 @@ export class MushiWidget {
         if (value !== undefined) el.style.setProperty(`--mushi-${edge}`, value);
       });
       el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
-      return;
+    } else {
+      const { inset } = this.config;
+      if (!this.config.respectSafeArea) {
+        (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+          if (inset[edge] === undefined) el.style.setProperty(`--mushi-${edge}`, '24px');
+        });
+      }
+      (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+        const value = inset[edge];
+        if (value === undefined) return;
+        el.style.setProperty(`--mushi-${edge}`, value === 'auto' ? 'auto' : `${value}px`);
+      });
+      el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
     }
 
-    const { inset } = this.config;
-    if (!this.config.respectSafeArea) {
-      (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
-        if (inset[edge] === undefined) el.style.setProperty(`--mushi-${edge}`, '24px');
-      });
+    // Override --mushi-top with measured clearance when avoidSelectors is set.
+    // This runs after anchor/inset so it always wins when an avoided element is present.
+    // Only applies when the element is top-anchored (top CSS var or top-* position class).
+    const isTopAnchored =
+      anchor?.top !== undefined ||
+      this.config.position?.startsWith('top') ||
+      (!this.config.position && !anchor?.bottom); // default position is bottom-right
+    if (isTopAnchored) {
+      const avoidPx = this.computeAvoidTopPx();
+      if (avoidPx !== null) {
+        el.style.setProperty('--mushi-top', `${avoidPx}px`);
+      }
     }
-    (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
-      const value = inset[edge];
-      if (value === undefined) return;
-      el.style.setProperty(`--mushi-${edge}`, value === 'auto' ? 'auto' : `${value}px`);
-    });
-    el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
   }
 
   private renderStep(): string {

@@ -138,7 +138,8 @@ const NAV: NavSection[] = [
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'My feedback', path: '/feedback',   icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'My feedback',    path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'Feature board',  path: '/feature-board', icon: IconSparkle,   beginner: false },
     ],
   },
   {
@@ -255,6 +256,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Closed loop',
       detail: 'Shipped tab shows release version chips — Active tab pulses when the team replies.',
+    },
+  },
+  '/feature-board': {
+    title: 'Feature Board',
+    kicker: 'Start',
+    scope: 'community',
+    decide: {
+      label: 'Vote on ideas',
+      summary: 'Sort by most-voted to see what your project users want most. Your vote is idempotent — click again to remove it.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Shipped = released',
+      detail: 'When a feature is marked shipped, a Standard-Webhooks notification fires to the configured push URL.',
     },
   },
   '/dashboard': {

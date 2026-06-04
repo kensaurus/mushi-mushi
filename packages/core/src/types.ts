@@ -125,6 +125,18 @@ export interface MushiWidgetConfig {
   featureRequestDescription?: string;
   /** Minimum description character count before the submit button enables. */
   minDescriptionLength?: number;
+  /**
+   * CSS selectors of host-app elements that the widget trigger and panel must
+   * never visually overlap. At render time the widget queries each selector,
+   * measures the union bounding rect, and nudges `--mushi-top` / `--mushi-bottom`
+   * so the panel clears every avoided element by at least 8px.
+   *
+   * Typical use: avoid a sticky mobile header or a fixed sign-in CTA.
+   *
+   * @example
+   * avoidSelectors: ['[data-mobile-header]', '#sign-in-cta']
+   */
+  avoidSelectors?: string[];
 }
 
 /**
