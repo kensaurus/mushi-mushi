@@ -15,10 +15,9 @@
  *     • PAPER + INK     — warm cream surface, deep sumi ink type, no flat
  *                          white. Subtle paper grain via a single noise SVG
  *                          background-image to break the digital flatness.
- *     • VERMILLION 朱   — single signature accent (#E03C2C) used as a hanko
- *                          stamp colour. Replaces the generic SaaS purple.
- *                          Used only for: active state, focus underline,
- *                          submit button, and the success stamp animation.
+ *     • VERMILLION 朱   — `widgetAccent` (#E03C2C) used as a hanko stamp colour.
+ *                          Replaces the generic SaaS purple. Used only for:
+ *                          active state, focus underline, submit button, and
  *     • SERIF DISPLAY   — Iowan/Palatino/Georgia stack for headings (a real
  *                          editorial serif on every desktop OS, no web font
  *                          fetch, no FOUT).
@@ -27,7 +26,7 @@
  *     • RULE LINES      — content separators are 1px hairlines, not boxes.
  *                          Categories list looks like a contents page, not a
  *                          card stack.
- *     • STAMP INTERACTIONS — submit button has a vermillion ink-bloom
+ *     • STAMP INTERACTIONS — submit button has a widgetAccent ink-bloom
  *                          animation; the success step shows a 朱印 (red
  *                          stamp) ring with "RECEIVED" in mono caps.
  *
@@ -40,7 +39,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
   const isDark = theme === 'dark';
 
   /* ── Tokens ──────────────────────────────────────────────────────────
-     Named for the material they evoke (paper, ink, rule, vermillion)
+     Named for the material they evoke (paper, ink, rule, widgetAccent)
      rather than the role (background, text, border) so the palette is
      hard to dilute with a generic "primary/secondary" rename later. */
 
@@ -50,9 +49,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
   const inkFaint     = isDark ? '#5A5650' : '#9A9489';   // disabled, separators
   const rule         = isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.10)';
   const ruleStrong   = isDark ? 'rgba(242,235,221,0.18)' : 'rgba(14,13,11,0.16)';
-  const vermillion   = isDark ? '#FF5A47' : '#E03C2C';   // 朱 hanko red
-  const vermillionWash = isDark ? 'rgba(255,90,71,0.12)' : 'rgba(224,60,44,0.08)';
-  const vermillionInk  = isDark ? '#FFE5E0' : '#7A1F15'; // text on vermillion wash
+  const widgetAccent   = isDark ? '#FF5A47' : '#E03C2C';   // 朱 hanko red — signature accent
+  const widgetAccentWash = isDark ? 'rgba(255,90,71,0.12)' : 'rgba(224,60,44,0.08)';
+  const widgetAccentInk  = isDark ? '#FFE5E0' : '#7A1F15'; // text on widgetAccent wash
 
   /* Type stacks. Pure system stacks — no web-font fetch — but curated so
      every OS lands on a high-quality serif/mono rather than a generic
@@ -102,7 +101,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       box-shadow:
         0 1px 0 ${rule},
         0 6px 14px -8px rgba(14,13,11,0.35),
-        inset 0 -3px 0 ${vermillion};
+        inset 0 -3px 0 ${widgetAccent};
       transition: transform 200ms ${easeStamp}, box-shadow 200ms ${easeStamp};
       overflow: visible;
       isolation: isolate;
@@ -115,8 +114,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: ${vermillion};
-      box-shadow: 0 0 0 0 ${vermillion};
+      background: ${widgetAccent};
+      box-shadow: 0 0 0 0 ${widgetAccent};
       animation: mushi-pulse 2.4s ${easeStamp} infinite;
     }
     .mushi-trigger:hover {
@@ -124,17 +123,17 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       box-shadow:
         0 1px 0 ${rule},
         0 14px 24px -10px rgba(14,13,11,0.45),
-        inset 0 -3px 0 ${vermillion};
+        inset 0 -3px 0 ${widgetAccent};
     }
     .mushi-trigger:active {
       transform: translateY(0) rotate(0);
       box-shadow:
         0 1px 0 ${rule},
         0 2px 4px -2px rgba(14,13,11,0.35),
-        inset 0 -2px 0 ${vermillion};
+        inset 0 -2px 0 ${widgetAccent};
     }
     .mushi-trigger:focus-visible {
-      outline: 2px solid ${vermillion};
+      outline: 2px solid ${widgetAccent};
       outline-offset: 3px;
     }
     /* First-session welcome pulse. Three soft halos at 800ms each, then
@@ -178,7 +177,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       box-shadow:
         0 1px 0 ${rule},
         0 10px 24px -14px rgba(14,13,11,0.45),
-        inset -3px 0 0 ${vermillion};
+        inset -3px 0 0 ${widgetAccent};
     }
     .mushi-trigger.edge-tab.bottom-right,
     .mushi-trigger.edge-tab.top-right {
@@ -191,7 +190,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       box-shadow:
         0 1px 0 ${rule},
         0 10px 24px -14px rgba(14,13,11,0.45),
-        inset 3px 0 0 ${vermillion};
+        inset 3px 0 0 ${widgetAccent};
     }
     .mushi-trigger.shrunk {
       width: 36px;
@@ -201,7 +200,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
 
     @keyframes mushi-pulse {
-      0%   { box-shadow: 0 0 0 0 ${vermillion}; opacity: 1; }
+      0%   { box-shadow: 0 0 0 0 ${widgetAccent}; opacity: 1; }
       70%  { box-shadow: 0 0 0 8px rgba(224,60,44,0); opacity: 0.5; }
       100% { box-shadow: 0 0 0 0 rgba(224,60,44,0); opacity: 1; }
     }
@@ -248,9 +247,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-outdated {
       margin: 12px 14px 0;
       padding: 10px 12px;
-      border: 1px solid ${vermillionWash};
-      background: ${vermillionWash};
-      color: ${vermillionInk};
+      border: 1px solid ${widgetAccentWash};
+      background: ${widgetAccentWash};
+      color: ${widgetAccentInk};
       font-family: ${fontBody};
       font-size: 12px;
       line-height: 1.4;
@@ -290,7 +289,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       width: 22px;
       height: 22px;
       border-radius: 3px;
-      background: ${vermillion};
+      background: ${widgetAccent};
       color: #FAF7F0;
       font-family: ${fontDisplay};
       font-size: 14px;
@@ -351,9 +350,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       border-radius: 3px;
       transition: color 150ms ${easeStamp};
     }
-    .mushi-close:hover, .mushi-back:hover { color: ${vermillion}; }
+    .mushi-close:hover, .mushi-back:hover { color: ${widgetAccent}; }
     .mushi-close:focus-visible, .mushi-back:focus-visible {
-      outline: 1.5px solid ${vermillion};
+      outline: 1.5px solid ${widgetAccent};
       outline-offset: 2px;
     }
 
@@ -388,12 +387,12 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       position: relative;
     }
     .mushi-option-btn:last-child { border-bottom: none; }
-    .mushi-option-btn:hover { padding-left: 6px; color: ${vermillion}; }
-    .mushi-option-btn:hover .mushi-option-arrow { opacity: 1; transform: translateX(0); color: ${vermillion}; }
+    .mushi-option-btn:hover { padding-left: 6px; color: ${widgetAccent}; }
+    .mushi-option-btn:hover .mushi-option-arrow { opacity: 1; transform: translateX(0); color: ${widgetAccent}; }
     .mushi-option-btn:focus-visible {
       outline: none;
       padding-left: 6px;
-      box-shadow: inset 2px 0 0 ${vermillion};
+      box-shadow: inset 2px 0 0 ${widgetAccent};
     }
     .mushi-option-icon {
       font-size: 18px;
@@ -435,7 +434,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-feature-entry:hover,
     .mushi-reports-entry:hover {
-      border-left-color: ${vermillion};
+      border-left-color: ${widgetAccent};
       padding-left: 14px;
     }
     .mushi-feature-entry .mushi-option-icon {
@@ -458,7 +457,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-report-status {
       font-family: ${fontMono};
       font-size: 10px;
-      color: ${vermillion};
+      color: ${widgetAccent};
       text-transform: uppercase;
     }
     .mushi-report-title {
@@ -475,7 +474,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-thread-summary span {
       font-family: ${fontMono};
       font-size: 10px;
-      color: ${vermillion};
+      color: ${widgetAccent};
       text-transform: uppercase;
     }
     .mushi-thread {
@@ -491,8 +490,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       background: ${isDark ? 'rgba(242,235,221,0.04)' : 'rgba(14,13,11,0.03)'};
     }
     .mushi-thread-comment.reporter {
-      border-color: ${vermillionWash};
-      background: ${vermillionWash};
+      border-color: ${widgetAccentWash};
+      background: ${widgetAccentWash};
     }
     .mushi-thread-comment strong {
       display: block;
@@ -509,16 +508,16 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       color: ${inkMuted};
       line-height: 1.45;
     }
-    .mushi-error-inline { color: ${vermillion}; }
+    .mushi-error-inline { color: ${widgetAccent}; }
 
     .mushi-selected-category {
       display: inline-flex;
       align-items: center;
       gap: 8px;
       padding: 6px 10px 6px 12px;
-      border-left: 2px solid ${vermillion};
-      background: ${vermillionWash};
-      color: ${vermillionInk};
+      border-left: 2px solid ${widgetAccent};
+      background: ${widgetAccentWash};
+      color: ${widgetAccentInk};
       font-family: ${fontMono};
       font-size: 11px;
       letter-spacing: 0.12em;
@@ -558,12 +557,12 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       transition: opacity 220ms ${easeStamp}, transform 220ms ${easeStamp};
     }
     .mushi-intent-btn:last-child { border-bottom: none; }
-    .mushi-intent-btn:hover { padding-left: 6px; color: ${vermillion}; }
-    .mushi-intent-btn:hover::after { opacity: 1; transform: translateX(0); color: ${vermillion}; }
+    .mushi-intent-btn:hover { padding-left: 6px; color: ${widgetAccent}; }
+    .mushi-intent-btn:hover::after { opacity: 1; transform: translateX(0); color: ${widgetAccent}; }
     .mushi-intent-btn:focus-visible {
       outline: none;
       padding-left: 6px;
-      box-shadow: inset 2px 0 0 ${vermillion};
+      box-shadow: inset 2px 0 0 ${widgetAccent};
     }
 
     /* Example starter chips — reduce first-report activation energy */
@@ -591,7 +590,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       background: ${isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.04)'};
     }
     .mushi-example-chip:focus-visible {
-      outline: 2px solid ${vermillion};
+      outline: 2px solid ${widgetAccent};
       outline-offset: 2px;
     }
 
@@ -630,7 +629,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       color: ${inkFaint};
       font-style: italic;
     }
-    .mushi-textarea:focus { border-bottom-color: ${vermillion}; }
+    .mushi-textarea:focus { border-bottom-color: ${widgetAccent}; }
 
     .mushi-attachments {
       display: flex;
@@ -659,30 +658,30 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       border-color: ${ink};
     }
     .mushi-attach-btn.active {
-      color: ${vermillion};
-      border-color: ${vermillion};
-      background: ${vermillionWash};
+      color: ${widgetAccent};
+      border-color: ${widgetAccent};
+      background: ${widgetAccentWash};
     }
     .mushi-attach-btn.danger {
-      color: ${vermillionInk};
-      border-color: ${vermillionWash};
+      color: ${widgetAccentInk};
+      border-color: ${widgetAccentWash};
       background: transparent;
     }
     .mushi-attach-btn.danger:hover {
-      color: ${vermillion};
-      border-color: ${vermillion};
-      background: ${vermillionWash};
+      color: ${widgetAccent};
+      border-color: ${widgetAccent};
+      background: ${widgetAccentWash};
     }
     .mushi-attach-btn.loading {
       opacity: 0.7;
       cursor: wait;
     }
     .mushi-attach-btn.error {
-      color: ${vermillion};
-      border-color: ${vermillionWash};
+      color: ${widgetAccent};
+      border-color: ${widgetAccentWash};
     }
     .mushi-attach-btn:focus-visible {
-      outline: 2px solid ${vermillion};
+      outline: 2px solid ${widgetAccent};
       outline-offset: 2px;
     }
     @keyframes mushi-spin {
@@ -723,9 +722,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       align-items: center;
       gap: 8px;
       padding: 10px 18px;
-      border: 1px solid ${vermillion};
+      border: 1px solid ${widgetAccent};
       border-radius: 3px;
-      background: ${vermillion};
+      background: ${widgetAccent};
       color: #FAF7F0;
       font-family: ${fontMono};
       font-size: 11px;
@@ -757,7 +756,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       opacity: 0.7;
     }
     .mushi-submit:focus-visible {
-      outline: 2px solid ${vermillion};
+      outline: 2px solid ${widgetAccent};
       outline-offset: 3px;
     }
     .mushi-submit-arrow {
@@ -796,7 +795,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-step-num.done { color: ${inkMuted}; text-decoration: line-through; text-decoration-color: ${inkFaint}; }
     .mushi-step-num.active {
-      color: ${vermillion};
+      color: ${widgetAccent};
       font-family: ${fontDisplay};
       font-size: 14px;
       font-weight: 600;
@@ -825,7 +824,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-success-stamp circle {
       fill: none;
-      stroke: ${vermillion};
+      stroke: ${widgetAccent};
       stroke-width: 3;
       stroke-dasharray: 280;
       stroke-dashoffset: 280;
@@ -837,7 +836,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       font-family: ${fontDisplay};
       font-size: 18px;
       font-weight: 600;
-      color: ${vermillion};
+      color: ${widgetAccent};
       letter-spacing: 0.04em;
       transform: rotate(-6deg);
       opacity: 0;
@@ -905,8 +904,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-success-receipt-id:hover,
     .mushi-success-receipt-id:focus-visible {
       background: rgba(217, 65, 47, 0.06);
-      border-color: ${vermillion};
-      color: ${vermillion};
+      border-color: ${widgetAccent};
+      color: ${widgetAccent};
       outline: none;
     }
     .mushi-success-receipt-copy {
@@ -920,7 +919,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       gap: 4px;
       padding: 6px 10px;
       border-radius: 4px;
-      background: ${vermillion};
+      background: ${widgetAccent};
       color: #fff;
       font-family: ${fontMono};
       font-size: 11px;
@@ -939,7 +938,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       height: 11px;
       border-radius: 50%;
       border: 1.5px solid ${rule};
-      border-top-color: ${vermillion};
+      border-top-color: ${widgetAccent};
       animation: mushi-receipt-spin 0.8s linear infinite;
     }
     @keyframes mushi-receipt-spin {
@@ -950,7 +949,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       font-style: italic;
     }
     .mushi-success-receipt-warn {
-      color: ${vermillion};
+      color: ${widgetAccent};
     }
     .mushi-success-sla {
       margin-top: 2px;
@@ -977,8 +976,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-error {
       margin-top: 10px;
       padding: 8px 0 8px 10px;
-      border-left: 2px solid ${vermillion};
-      color: ${vermillion};
+      border-left: 2px solid ${widgetAccent};
+      color: ${widgetAccent};
       font-size: 12px;
       font-family: ${fontMono};
       letter-spacing: 0.02em;
@@ -1018,7 +1017,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-rewards-pts-earn {
       font-family: ${fontMono};
       font-size: 10px;
-      color: ${vermillion};
+      color: ${widgetAccent};
       letter-spacing: 0.04em;
       white-space: nowrap;
     }
@@ -1031,7 +1030,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-tier-bar-fill {
       height: 100%;
-      background: ${vermillion};
+      background: ${widgetAccent};
       border-radius: 2px;
       transition: width 600ms ${easeStamp};
     }
@@ -1054,7 +1053,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       font-family: ${fontMono};
       font-size: 22px;
       font-weight: 700;
-      color: ${vermillion};
+      color: ${widgetAccent};
       text-align: center;
       letter-spacing: 0.06em;
       margin-bottom: 10px;
@@ -1257,9 +1256,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       background: rgba(0,0,0,0.22);
     }
 
-    /* --- brand variant (vermillion — editorial, app-quality) --- */
+    /* --- brand variant (widgetAccent — editorial, app-quality) --- */
     .mushi-banner.brand {
-      background: ${vermillion};
+      background: ${widgetAccent};
       color: #fff;
       border-bottom: 1.5px solid ${isDark ? '#C4321E' : '#B52F1F'};
     }
@@ -1276,23 +1275,29 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       background: rgba(255,255,255,0.28);
     }
 
-    /* --- subtle variant (hairline, muted — least disruptive) --- */
+    /* --- subtle variant (frosted-glass, muted — least disruptive) ---
+       Uses the widget's own paper colour at high opacity + backdrop-blur so
+       it blends with the host app while remaining legible. The previous 4-6%
+       opacity values were effectively invisible — users could not distinguish
+       the banner from the page content below it. */
     .mushi-banner.subtle {
-      background: ${isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.04)'};
-      color: ${inkMuted};
-      border-bottom: 1px solid ${rule};
+      background: ${isDark ? 'rgba(15,14,12,0.88)' : 'rgba(248,244,237,0.92)'};
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      color: ${ink};
+      border-bottom: 1px solid ${ruleStrong};
     }
     .mushi-banner.subtle.bottom {
-      border-top: 1px solid ${rule};
+      border-top: 1px solid ${ruleStrong};
       border-bottom: none;
     }
     .mushi-banner.subtle .mushi-banner-btn {
-      background: ${isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.07)'};
+      background: ${isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.08)'};
       color: ${ink};
-      border: 1px solid ${rule};
+      border: 1px solid ${ruleStrong};
     }
     .mushi-banner.subtle .mushi-banner-btn:hover {
-      background: ${isDark ? 'rgba(242,235,221,0.16)' : 'rgba(14,13,11,0.12)'};
+      background: ${isDark ? 'rgba(242,235,221,0.18)' : 'rgba(14,13,11,0.14)'};
     }
 
     .mushi-banner-label {
@@ -1317,7 +1322,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       line-height: 1;
     }
     .mushi-banner-btn:focus-visible {
-      outline: 2px solid ${vermillion};
+      outline: 2px solid ${widgetAccent};
       outline-offset: 2px;
     }
 
