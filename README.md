@@ -734,7 +734,7 @@ Other free apps and tools from the same Tokyo studio:
 | App | What it does | iOS | Android |
 |:----|:-------------|:----|:--------|
 | **[glot.it — Learn Thai Free](https://kensaur.us/glot-it/)** | 161 lessons, pitch-contour tone mirror, AI roleplay chat, offline-first. Actually free — not free-to-look-at. | [App Store](https://apps.apple.com/us/app/glot-it/id6761582648) | [Google Play](https://play.google.com/store/apps/details?id=com.glotit.app) |
-| **[yen-yen — Expense Tracker](https://kensaur.us/yen-yen/)** | Kakeibo-style household ledger. No bank password, no ads, no auto-writes. Multi-currency with historical FX. | [App Store](https://kensaur.us/yen-yen/) | [Google Play](https://play.google.com/store/apps/details?id=app.yenyen) |
+| **[yen-yen — Expense Tracker](https://kensaur.us/yen-yen/)** | Kakeibo-style household ledger. No bank password, no ads, no auto-writes. Multi-currency with historical FX. | [App Store](https://apps.apple.com/app/id6764548441) | [Google Play](https://play.google.com/store/apps/details?id=app.yenyen) |
 | **[Help Her Take Photo](https://kensaur.us/help-her-take-photo/)** | Two phones → one remote photo studio. Live preview + remote shutter, no account required. | [App Store](https://apps.apple.com/app/help-her-take-photo/id6762513666) | [Google Play](https://play.google.com/store/apps/details?id=com.kensaurus.helphertakephoto) |
 | **[The Wanting Mind — Free Book](https://kensaur.us/the-wanting-mind/)** | 147,000-word interactive book — 3D knowledge graph, 12 narrators, karaoke highlighting, 22 simulations. EN/JA/ZH/TH. Free, no ads, no paywalls. | [App Store](https://apps.apple.com/us/app/the-wanting-mind/id6761361305) | [Google Play](https://play.google.com/store/apps/details?id=us.kensaur.thewantingmind) |
 
