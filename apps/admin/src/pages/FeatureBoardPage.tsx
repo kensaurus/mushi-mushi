@@ -352,10 +352,13 @@ export function FeatureBoardPage() {
     async (id: string) => {
       if (!projectId) return
       const releaseNote = prompt('Shipped note (shown to requester, optional):')
+      // null means the user clicked Cancel — do not ship.
+      // Empty string means "no note desired" — proceed without a note.
+      if (releaseNote === null) return
       try {
         await apiFetch(`/v1/admin/feature-board/${id}/ship?project_id=${projectId}`, {
           method: 'POST',
-          body: JSON.stringify({ note: releaseNote }),
+          body: JSON.stringify({ note: releaseNote || null }),
         })
         reload()
       } catch (err) {

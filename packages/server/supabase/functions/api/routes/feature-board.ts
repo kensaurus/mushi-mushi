@@ -313,13 +313,9 @@ function featureBoardRoutes() {
       return c.json({ error: 'body must be 1–3000 chars' }, 400)
     }
 
-    // Resolve author email from auth.users.
-    const { data: userRow } = await db()
-      .from('auth.users')
-      .select('email')
-      .eq('id', userId)
-      .maybeSingle()
-    const authorEmail = userRow?.email ?? userId
+    // The auth middleware already sets userEmail on the Hono context; use it
+    // directly instead of querying auth.users (which PostgREST never exposes).
+    const authorEmail = (c.get('userEmail') as string | undefined) ?? userId
 
     // Verify ticket exists and belongs to the project.
     const { data: ticket } = await db()

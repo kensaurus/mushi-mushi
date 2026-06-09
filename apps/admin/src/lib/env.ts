@@ -101,11 +101,16 @@ const stripTrailingSlash = (s: string) => s.replace(/\/+$/, '')
 const _storedAtLoad = getStoredInstanceConfig()
 
 export const RESOLVED_SUPABASE_URL = stripTrailingSlash(
+  // User explicitly chose Mushi Cloud → skip env vars (they may point to a
+  // self-hosted instance) and go straight to the cloud constant.
+  (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_URL) ||
   (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseUrl) ||
   (import.meta.env.VITE_SUPABASE_URL ?? '').trim() ||
   CLOUD_SUPABASE_URL,
 )
 export const RESOLVED_SUPABASE_ANON_KEY =
+  // Same short-circuit: cloud mode must not fall through to env-var overrides.
+  (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_ANON_KEY) ||
   (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseAnonKey) ||
   (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() ||
   CLOUD_SUPABASE_ANON_KEY
