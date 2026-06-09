@@ -25,6 +25,7 @@ import {
   createBreadcrumbBuffer,
   type BreadcrumbBuffer,
   normaliseThrown,
+  newUuid,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -579,7 +580,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       : undefined;
 
     const report: MushiReport = {
-      id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id: newUuid(),
       projectId: config.projectId,
       category,
       description: scrubbedDescription,
@@ -868,7 +869,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           }
         : undefined;
       const report: MushiReport = {
-        id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        id: newUuid(),
         projectId: config.projectId,
         category,
         description,

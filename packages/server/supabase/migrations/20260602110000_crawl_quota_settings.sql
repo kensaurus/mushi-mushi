@@ -12,3 +12,9 @@ comment on column public.project_settings.crawl_max_runs_per_day is
   'Max live-crawl map runs initiated per UTC day.';
 comment on column public.project_settings.tdd_max_gens_per_day is
   'Max TDD test files generated (test-gen-from-story) per UTC day.';
+
+-- Flush PostgREST's schema/config caches so the new project_settings columns
+-- (read immediately by crawl/TDD quota guards) are visible to API callers
+-- right after deploy (repo convention for structural migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

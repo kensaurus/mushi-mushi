@@ -1,18 +1,18 @@
--- Phase 3: PDCA QA story auto-improve cron
--- Runs every 6 hours to find failed qa_story_runs and propose improvements.
--- The pdca-runner edge function handles mode='qa_story_improve'.
+-- Follow-up to 20260602000003_pdca_qa_improve_cron.sql.
 --
--- Implementation notes (matches the Wave T cron pattern — see
--- 20260427010000_retention_sweep_cron.sql):
---   * Idempotent: unschedule any prior job before (re)scheduling so re-runs
---     of this migration don't error on a duplicate jobname.
+-- That migration's body was edited in place after it had already been applied
+-- to the remote (recorded as version 20260602023423), so the edit would never
+-- reach the live database via `supabase db push`. This forward-dated migration
+-- carries the same idempotent rewrite as an append-only entry and matches the
+-- `pdca_qa_improve_cron_runtime_helpers` migration applied via MCP, keeping the
+-- on-disk ledger and the remote in sync.
+--
+--   * Idempotent: unschedule any prior job before (re)scheduling.
 --   * Uses public.mushi_runtime_supabase_url() + public.mushi_internal_auth_header()
---     instead of reading vault.decrypted_secrets directly. pg_cron cannot
---     reliably read SUPABASE_SERVICE_ROLE_KEY, and these helpers keep the job
---     portable on hosted Supabase.
+--     instead of reading vault.decrypted_secrets directly — pg_cron cannot
+--     reliably read SUPABASE_SERVICE_ROLE_KEY on hosted Supabase.
 --   * WHERE guards skip the http_post when runtime config isn't seeded yet,
---     avoiding the http_request_queue.url NOT NULL violation that bricked
---     earlier crons.
+--     avoiding the http_request_queue.url NOT NULL violation.
 --   * Guarded on pg_cron being installed.
 
 DO $$

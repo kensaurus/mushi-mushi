@@ -32,3 +32,9 @@ CREATE INDEX IF NOT EXISTS idx_qa_stories_runnable
 ALTER TABLE public.qa_stories
   ADD COLUMN IF NOT EXISTS parent_story_id uuid REFERENCES public.qa_stories(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS pdca_iteration int NOT NULL DEFAULT 0;
+
+-- Flush PostgREST's schema/config caches so the new qa_stories columns are
+-- visible to API callers immediately after deploy, avoiding transient
+-- "column does not exist" errors (repo convention for structural migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

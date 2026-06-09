@@ -14,6 +14,7 @@ permissions:
 jobs:
   add-to-project:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: ${{ !github.event.issue.pull_request }}
     steps:
       # SUPPLY-CHAIN HARDENING: this workflow uses `pull_request_target`

@@ -10,6 +10,62 @@
  *   3. Otherwise → cloud (uses hardcoded cloud defaults)
  */
 
+const STORAGE_KEY_MODE = 'mushi_admin_instance_mode'
+const STORAGE_KEY_URL  = 'mushi_admin_supabase_url'
+const STORAGE_KEY_KEY  = 'mushi_admin_supabase_anon_key'
+
+/** Read a previously saved instance config from localStorage. Returns null in SSR. */
+export function getStoredInstanceConfig(): {
+  mode: InstanceMode
+  supabaseUrl: string
+  supabaseAnonKey: string
+} | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const mode = localStorage.getItem(STORAGE_KEY_MODE) as InstanceMode | null
+    if (!mode) return null
+    return {
+      mode,
+      supabaseUrl: localStorage.getItem(STORAGE_KEY_URL) ?? '',
+      supabaseAnonKey: localStorage.getItem(STORAGE_KEY_KEY) ?? '',
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Persist an instance config to localStorage and reload so RESOLVED_* take effect. */
+export function saveAndApplyInstanceConfig(config: {
+  mode: InstanceMode
+  supabaseUrl?: string
+  supabaseAnonKey?: string
+}): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_MODE, config.mode)
+    if (config.mode === 'self-hosted' && config.supabaseUrl) {
+      localStorage.setItem(STORAGE_KEY_URL, config.supabaseUrl)
+    }
+    if (config.mode === 'self-hosted' && config.supabaseAnonKey) {
+      localStorage.setItem(STORAGE_KEY_KEY, config.supabaseAnonKey)
+    }
+    if (config.mode === 'cloud') {
+      localStorage.removeItem(STORAGE_KEY_URL)
+      localStorage.removeItem(STORAGE_KEY_KEY)
+    }
+  } catch { /* localStorage blocked (private browsing) — fall through */ }
+  window.location.reload()
+}
+
+/** Clear any stored config override and reload. */
+export function clearStoredInstanceConfig(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_MODE)
+    localStorage.removeItem(STORAGE_KEY_URL)
+    localStorage.removeItem(STORAGE_KEY_KEY)
+  } catch {}
+  window.location.reload()
+}
+
 // Cloud URL is overridable at build time via VITE_CLOUD_SUPABASE_URL so forks,
 // staging clusters, and region replicas can reuse the same dogfood fallback
 // path without patching source. Defaults to the primary production project.
@@ -40,11 +96,24 @@ export const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
 // silently produces broken strings like `"undefined/functions/v1/api"`.
 // Trailing slashes are normalized so `${url}/functions/v1/api` never produces `//`.
 const stripTrailingSlash = (s: string) => s.replace(/\/+$/, '')
+
+// Stored config (runtime override) takes precedence over build-time env vars.
+const _storedAtLoad = getStoredInstanceConfig()
+
 export const RESOLVED_SUPABASE_URL = stripTrailingSlash(
-  (import.meta.env.VITE_SUPABASE_URL ?? '').trim() || CLOUD_SUPABASE_URL,
+  // User explicitly chose Mushi Cloud → skip env vars (they may point to a
+  // self-hosted instance) and go straight to the cloud constant.
+  (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_URL) ||
+  (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseUrl) ||
+  (import.meta.env.VITE_SUPABASE_URL ?? '').trim() ||
+  CLOUD_SUPABASE_URL,
 )
 export const RESOLVED_SUPABASE_ANON_KEY =
-  (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() || CLOUD_SUPABASE_ANON_KEY
+  // Same short-circuit: cloud mode must not fall through to env-var overrides.
+  (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_ANON_KEY) ||
+  (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseAnonKey) ||
+  (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() ||
+  CLOUD_SUPABASE_ANON_KEY
 export const RESOLVED_API_URL = stripTrailingSlash(
   (import.meta.env.VITE_API_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/api`,
 )
@@ -85,8 +154,12 @@ export interface EnvStatus {
 }
 
 function detectMode(supabaseUrl: string): InstanceMode {
+  // 1. Stored runtime preference (highest priority — user explicitly chose this)
+  if (_storedAtLoad?.mode) return _storedAtLoad.mode
+  // 2. Build-time explicit override
   const explicit = (import.meta.env.VITE_INSTANCE_TYPE ?? '').trim().toLowerCase()
   if (explicit === 'self-hosted') return 'self-hosted'
+  // 3. URL differs from cloud — infer self-hosted
   if (supabaseUrl && supabaseUrl !== CLOUD_SUPABASE_URL) return 'self-hosted'
   return 'cloud'
 }

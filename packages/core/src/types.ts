@@ -125,6 +125,18 @@ export interface MushiWidgetConfig {
   featureRequestDescription?: string;
   /** Minimum description character count before the submit button enables. */
   minDescriptionLength?: number;
+  /**
+   * CSS selectors of host-app elements that the widget trigger and panel must
+   * never visually overlap. At render time the widget queries each selector,
+   * measures the union bounding rect, and nudges `--mushi-top` / `--mushi-bottom`
+   * so the panel clears every avoided element by at least 8px.
+   *
+   * Typical use: avoid a sticky mobile header or a fixed sign-in CTA.
+   *
+   * @example
+   * avoidSelectors: ['[data-mobile-header]', '#sign-in-cta']
+   */
+  avoidSelectors?: string[];
 }
 
 /**
@@ -360,6 +372,18 @@ export interface MushiCooldownConfig {
   maxProactivePerSession?: number;
   dismissCooldownHours?: number;
   suppressAfterDismissals?: number;
+  /**
+   * Cross-reload re-show cooldown, in minutes (default 30; `0` disables).
+   *
+   * The `dismissCooldownHours` window only starts after a clean dismissal is
+   * recorded (widget `onClose`). A page reload or crash tears down the JS
+   * context before that, so on a broken/reloading page the proactive panel
+   * would otherwise re-open on every load. When a prompt is shown the SDK
+   * persists a timestamp; a fresh session (new JS context) suppresses prompts
+   * shown within this window. Within a live session the per-session limit
+   * governs instead, so this never blocks a legitimate second trigger.
+   */
+  reshowCooldownMinutes?: number;
 }
 
 export interface MushiPreFilterConfig {

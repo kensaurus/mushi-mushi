@@ -61,3 +61,9 @@ CREATE POLICY byok_keys_member_select ON byok_keys
         AND p.owner_id = (SELECT auth.uid())
     )
   );
+
+-- Flush PostgREST's schema/config caches so the new table/columns/policies are
+-- visible to API callers within seconds, not minutes (repo convention for
+-- structural migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

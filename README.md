@@ -621,22 +621,20 @@ docker compose up -d
 
 ## Cursor & Claude Skills
 
-Install Mushi skills in your Cursor or Claude Code project for one-command setup, debugging, and TDD testing:
+Install Mushi skills in your Cursor or Claude Code project for one-command setup, usage, and debugging:
 
 ```bash
-# Install all three Mushi skills at once
+# Install both Mushi skills at once
 npx skills add kensaurus/mushi-mushi
 
 # Or individually
-npx skills add kensaurus/mushi-mushi/mushi-setup   # Setup guide
+npx skills add kensaurus/mushi-mushi/mushi-mushi   # Setup, config & TDD usage
 npx skills add kensaurus/mushi-mushi/mushi-debug   # Debug & fix issues
-npx skills add kensaurus/mushi-mushi/mushi-test    # TDD test workflow
 ```
 
 Then in Cursor/Claude:
-- `/mushi-setup` — guided setup walkthrough
+- `/mushi-mushi` — guided setup, configuration, and TDD workflow
 - `/mushi-debug` — diagnose and fix issues
-- `/mushi-test` — run the full TDD loop
 
 ## Packages
 

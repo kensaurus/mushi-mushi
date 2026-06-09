@@ -73,10 +73,14 @@ async function runQaStoryImprover(
 ): Promise<Response> {
   const MAX_PER_RUN = 5
 
+  // Only consider failures from the last 24h so the cron doesn't keep
+  // improving stories off stale, long-resolved runs (wasted LLM spend/noise).
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
   // Find failed qa_stories with recent runs (last 24h) whose automation_mode allows PDCA
   let q = db
     .from('qa_stories')
-    .select('id, project_id, name, script, automation_mode, pdca_iteration, origin_story_node_id')
+    .select('id, project_id, name, prompt, script, automation_mode, pdca_iteration, origin_story_node_id')
     .in('automation_mode', ['auto', 'review'])
     .not('script', 'is', null)
     .eq('source', 'test_gen_from_story')
@@ -94,12 +98,13 @@ async function runQaStoryImprover(
 
   let improved = 0
   for (const story of stories) {
-    // Get last 3 failed runs for this story
+    // Get last 3 failed runs for this story within the 24h window
     const { data: failedRuns } = await db
       .from('qa_story_runs')
       .select('status, error_message, summary, assertion_failures')
       .eq('story_id', story.id as string)
       .in('status', ['failed', 'error'])
+      .gte('started_at', since24h)
       .order('started_at', { ascending: false })
       .limit(3)
 
@@ -167,7 +172,9 @@ async function runQaStoryImprover(
       await db.from('qa_stories').insert({
         project_id: story.project_id,
         name: `${story.name as string} (PDCA v${(story.pdca_iteration as number) + 1})`,
-        prompt: story.script,
+        // Preserve the original natural-language prompt so future PDCA
+        // iterations stay interpretable; don't overwrite it with the script.
+        prompt: story.prompt,
         script: result.improved_script,
         script_lang: 'playwright-ts',
         browser_provider: 'local',

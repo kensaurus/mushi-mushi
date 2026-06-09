@@ -1,5 +1,24 @@
 # @mushi-mushi/core
 
+## 1.7.4
+
+### Patch Changes
+
+- fix(web): stop proactive prompts re-opening on every load of a broken/reloading page
+
+  The proactive fatigue guard only persisted its cooldown after a clean widget
+  `onClose` recorded a dismissal. A page reload or crash (e.g. an offline WebView,
+  an API-cascade error state) tears down the JS context before that, so the
+  in-memory session counter reset and the panel re-opened on every subsequent
+  load.
+
+  Proactive shows now persist a `mushi:lastShown` timestamp, and a fresh session
+  (new JS context) suppresses prompts shown within a configurable
+  `reshowCooldownMinutes` window (default 30, `0` disables). Within a live session
+  the existing per-session limit/dedup still governs, so legitimate second
+  triggers are unaffected. `reset()` (explicit teardown / re-init) clears the
+  timestamp. Adds `MushiCooldownConfig.reshowCooldownMinutes`.
+
 ## 1.7.2
 
 ### Patch Changes
