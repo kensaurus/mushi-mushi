@@ -372,6 +372,18 @@ export interface MushiCooldownConfig {
   maxProactivePerSession?: number;
   dismissCooldownHours?: number;
   suppressAfterDismissals?: number;
+  /**
+   * Cross-reload re-show cooldown, in minutes (default 30; `0` disables).
+   *
+   * The `dismissCooldownHours` window only starts after a clean dismissal is
+   * recorded (widget `onClose`). A page reload or crash tears down the JS
+   * context before that, so on a broken/reloading page the proactive panel
+   * would otherwise re-open on every load. When a prompt is shown the SDK
+   * persists a timestamp; a fresh session (new JS context) suppresses prompts
+   * shown within this window. Within a live session the per-session limit
+   * governs instead, so this never blocks a legitimate second trigger.
+   */
+  reshowCooldownMinutes?: number;
 }
 
 export interface MushiPreFilterConfig {
