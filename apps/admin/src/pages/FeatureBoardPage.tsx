@@ -56,10 +56,10 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 }
 
 const STATUS_COLOR: Record<TicketStatus, string> = {
-  open: 'bg-blue-50 text-blue-700 border-blue-200',
-  in_progress: 'bg-amber-50 text-amber-700 border-amber-200',
-  resolved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  closed: 'bg-gray-100 text-gray-500 border-gray-200',
+  open: 'bg-info-muted/60 text-info border-info/30',
+  in_progress: 'bg-warn-muted/60 text-warn border-warn/30',
+  resolved: 'bg-ok-muted/60 text-ok border-ok/30',
+  closed: 'bg-surface-overlay text-fg-faint border-edge-subtle',
 }
 
 // ── Comment thread ────────────────────────────────────────────────────────────
@@ -96,29 +96,29 @@ function CommentThread({
   }, [body, submitting, requestId, projectId, reload])
 
   if (loading && comments.length === 0) {
-    return <div className="text-xs text-gray-400 py-2">Loading comments…</div>
+    return <div className="text-xs text-fg-faint py-2">Loading comments…</div>
   }
 
   return (
-    <div className="mt-3 border-t border-gray-100 pt-3 space-y-2">
+    <div className="mt-3 border-t border-edge-subtle pt-3 space-y-2">
       {comments.map((c) => (
         <div key={c.id} className="flex gap-2 text-sm">
-          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600 flex-shrink-0">
+          <div className="w-6 h-6 rounded-full bg-brand-subtle flex items-center justify-center text-xs font-medium text-brand flex-shrink-0">
             {c.author_email.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1">
             <div className="flex items-baseline gap-2">
-              <span className="font-medium text-gray-800 text-xs">{c.author_email}</span>
-              <RelativeTime value={c.created_at} className="text-xs text-gray-400" />
+              <span className="font-medium text-fg text-xs">{c.author_email}</span>
+              <RelativeTime value={c.created_at} className="text-xs text-fg-faint" />
             </div>
-            <p className="text-gray-700 text-sm mt-0.5 whitespace-pre-wrap">{c.body}</p>
+            <p className="text-fg-secondary text-sm mt-0.5 whitespace-pre-wrap">{c.body}</p>
           </div>
         </div>
       ))}
 
       <div className="flex gap-2 pt-1">
         <textarea
-          className="flex-1 text-sm border border-gray-200 rounded-md px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-blue-400 min-h-[60px]"
+          className="flex-1 text-sm border border-edge rounded-md px-2.5 py-1.5 resize-none bg-surface-raised text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/50 min-h-[60px]"
           placeholder="Add a comment…"
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -192,8 +192,8 @@ function FeatureCard({
           className={[
             'flex flex-col items-center justify-center w-12 h-14 rounded-lg border-2 transition-colors flex-shrink-0',
             ticket.my_vote
-              ? 'border-blue-500 bg-blue-50 text-blue-600'
-              : 'border-gray-200 bg-white text-gray-500 hover:border-blue-300 hover:text-blue-500',
+              ? 'border-brand bg-brand-subtle text-brand'
+              : 'border-edge bg-surface-raised text-fg-muted hover:border-brand/50 hover:text-brand',
             voting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
           ].join(' ')}
           title={ticket.my_vote ? 'Remove your vote' : 'Upvote this request'}
@@ -213,10 +213,10 @@ function FeatureCard({
         {/* Ticket content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-gray-900 text-sm leading-snug">{ticket.subject}</h3>
+            <h3 className="font-semibold text-fg text-sm leading-snug">{ticket.subject}</h3>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {isShipped && (
-                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+                <Badge className="bg-ok-muted/60 text-ok border-ok/30 text-xs">
                   ✓ Shipped
                 </Badge>
               )}
@@ -226,7 +226,7 @@ function FeatureCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+          <div className="flex items-center gap-3 mt-1 text-xs text-fg-muted">
             <span>{ticket.user_email}</span>
             <span>·</span>
             <RelativeTime value={ticket.created_at} />
@@ -234,7 +234,7 @@ function FeatureCard({
               <>
                 <span>·</span>
                 <button
-                  className="hover:text-blue-600 underline underline-offset-2"
+                  className="hover:text-brand underline underline-offset-2"
                   onClick={() => setExpanded((v) => !v)}
                 >
                   {ticket.comment_count} comment{ticket.comment_count !== 1 ? 's' : ''}
@@ -244,13 +244,13 @@ function FeatureCard({
           </div>
 
           {ticket.body && (
-            <p className="mt-2 text-sm text-gray-600 line-clamp-2 whitespace-pre-wrap">
+            <p className="mt-2 text-sm text-fg-secondary line-clamp-2 whitespace-pre-wrap">
               {ticket.body}
             </p>
           )}
 
           {ticket.shipped_note && (
-            <div className="mt-2 p-2 bg-emerald-50 border border-emerald-100 rounded text-xs text-emerald-800">
+            <div className="mt-2 p-2 bg-ok-muted/40 border border-ok/20 rounded text-xs text-ok">
               <span className="font-medium">Shipped note:</span> {ticket.shipped_note}
             </div>
           )}
@@ -271,7 +271,7 @@ function FeatureCard({
                 variant="ghost"
                 onClick={handleShip}
                 disabled={shipping}
-                className="text-xs text-emerald-700 hover:bg-emerald-50"
+                className="text-xs text-ok hover:bg-ok-muted/40"
               >
                 {shipping ? 'Marking…' : '✓ Mark shipped'}
               </Btn>
@@ -388,10 +388,10 @@ export function FeatureBoardPage() {
         ].map(({ label, value }) => (
           <div
             key={label}
-            className="bg-white border border-gray-200 rounded-lg p-3 text-center"
+            className="card-elevated rounded-lg p-3 text-center"
           >
-            <div className="text-2xl font-bold text-gray-900">{value}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+            <div className="text-2xl font-bold text-fg stat-value">{value}</div>
+            <div className="text-xs text-fg-muted mt-0.5 font-mono uppercase tracking-wider">{label}</div>
           </div>
         ))}
       </div>
@@ -403,7 +403,7 @@ export function FeatureBoardPage() {
           placeholder="Search requests…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+          className="flex-1 min-w-[160px] border border-edge rounded-lg px-3 py-1.5 text-sm bg-surface-raised text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/50"
         />
 
         <div className="flex gap-1">
@@ -414,8 +414,8 @@ export function FeatureBoardPage() {
               className={[
                 'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
                 statusFilter === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                  ? 'bg-brand text-brand-fg'
+                  : 'bg-surface-raised text-fg-muted hover:bg-surface-overlay hover:text-fg',
               ].join(' ')}
             >
               {f === 'all' ? 'All' : f === 'open' ? 'Open' : 'Shipped'}
@@ -426,7 +426,7 @@ export function FeatureBoardPage() {
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          className="border border-edge rounded-lg px-2 py-1.5 text-sm bg-surface-raised text-fg focus:outline-none focus:ring-1 focus:ring-brand/50"
         >
           <option value="votes">Most voted</option>
           <option value="newest">Newest</option>
@@ -436,7 +436,7 @@ export function FeatureBoardPage() {
 
       {/* Content */}
       {!projectId && (
-        <div className="text-center py-12 text-gray-500 text-sm">
+        <div className="text-center py-12 text-fg-muted text-sm">
           Select a project to view its feature board.
         </div>
       )}
@@ -446,16 +446,16 @@ export function FeatureBoardPage() {
       {projectId && loading && tickets.length === 0 && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+            <div key={i} className="h-20 bg-surface-raised rounded-lg animate-pulse" />
           ))}
         </div>
       )}
 
       {projectId && !loading && filtered.length === 0 && (
         <Section title="Feature Requests">
-          <div className="text-center py-12 text-gray-500">
+          <div className="text-center py-12 text-fg-muted">
             <div className="text-4xl mb-3">✨</div>
-            <div className="font-medium text-gray-700">
+            <div className="font-medium text-fg">
               {search || statusFilter !== 'all' ? 'No matching requests' : 'No feature requests yet'}
             </div>
             <p className="text-sm mt-1">
@@ -482,7 +482,7 @@ export function FeatureBoardPage() {
       )}
 
       {tickets.length > 0 && (
-        <p className="text-center text-xs text-gray-400 pb-4">
+        <p className="text-center text-xs text-fg-faint pb-4 font-mono">
           {totalVotes} total vote{totalVotes !== 1 ? 's' : ''} across {tickets.length} request
           {tickets.length !== 1 ? 's' : ''}
         </p>

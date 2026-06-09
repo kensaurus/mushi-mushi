@@ -1068,13 +1068,17 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
 
     /* ─── Beta mode strip (category step) ─────────────────────────────── */
+    /* Brand palette: widgetAccent (vermillion) + washi ink for the strip.
+       The previous indigo (#6366f1) is the single most recognisable AI-template
+       colour; replaced with the widget's own vermillion wash so the beta panel
+       reads as a Mushi-native surface rather than a generic SaaS plug-in. */
 
     .mushi-beta-strip {
       margin: 0 16px 2px;
       padding: 9px 12px;
-      background: rgba(99, 102, 241, 0.07);
-      border: 1px solid rgba(99, 102, 241, 0.18);
-      border-radius: 8px;
+      background: ${widgetAccentWash};
+      border: 1px solid ${isDark ? 'rgba(255,90,71,0.22)' : 'rgba(224,60,44,0.16)'};
+      border-radius: 4px;
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -1090,38 +1094,30 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       display: inline-flex;
       align-items: center;
       padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(245, 158, 11, 0.15);
-      border: 1px solid rgba(245, 158, 11, 0.35);
-      color: #b45309;
-      font-family: var(--mushi-font-mono);
+      border-radius: 3px;
+      background: ${widgetAccent};
+      color: #FAF7F0;
+      font-family: ${fontMono};
       font-size: 9px;
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.14em;
       line-height: 1.6;
       white-space: nowrap;
       flex-shrink: 0;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .mushi-beta-tag {
-        background: rgba(245, 158, 11, 0.12);
-        border-color: rgba(245, 158, 11, 0.28);
-        color: #fbbf24;
-      }
+      text-transform: uppercase;
     }
 
     .mushi-beta-msg {
       font-size: 11px;
-      color: var(--mushi-text-dim);
+      color: ${inkMuted};
       line-height: 1.45;
     }
 
     .mushi-beta-contact-hint {
       font-size: 10px;
-      color: var(--mushi-text-dim);
-      opacity: 0.72;
-      font-family: var(--mushi-font-mono);
+      color: ${inkFaint};
+      font-family: ${fontMono};
+      letter-spacing: 0.06em;
     }
 
     .mushi-beta-perks {
@@ -1135,14 +1131,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
 
     .mushi-beta-perks li {
       font-size: 10.5px;
-      color: #4f46e5;
+      color: ${widgetAccentInk};
       font-weight: 500;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .mushi-beta-perks li {
-        color: #818cf8;
-      }
     }
 
     /* ─── Beta changelog (collapsible What's new) ──────────────────────── */
@@ -1193,9 +1183,9 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-beta-success-footer {
       margin-top: 14px;
       padding: 10px 14px;
-      background: rgba(99, 102, 241, 0.06);
-      border: 1px solid rgba(99, 102, 241, 0.14);
-      border-radius: 8px;
+      background: ${widgetAccentWash};
+      border: 1px solid ${isDark ? 'rgba(255,90,71,0.18)' : 'rgba(224,60,44,0.14)'};
+      border-radius: 4px;
       display: flex;
       flex-direction: column;
       gap: 3px;
