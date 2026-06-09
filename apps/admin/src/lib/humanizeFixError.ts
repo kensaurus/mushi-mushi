@@ -270,7 +270,7 @@ export function humanizeFixError(
       severity: 'soft',
       action: {
         label: allExhausted ? 'Add backup key' : 'Manage keys',
-        target: { kind: 'route', to: '/settings/llm-keys' },
+        target: { kind: 'route', to: '/settings?tab=byok' },
       },
       raw,
     };

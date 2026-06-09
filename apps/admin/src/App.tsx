@@ -59,6 +59,7 @@ import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
+const FeatureBoardPage = lazy(() => import('./pages/FeatureBoardPage').then(m => ({ default: m.FeatureBoardPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
 const QaCoveragePage = lazy(() => import('./pages/QaCoveragePage').then(m => ({ default: m.QaCoveragePage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
@@ -380,6 +381,7 @@ export function App() {
                   <Route path="/mcp" element={<McpPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/feedback" element={<FeedbackPage />} />
+                  <Route path="/feature-board" element={<FeatureBoardPage />} />
                   <Route path="/health" element={<HealthPage />} />
                   <Route path="/qa-coverage" element={<QaCoveragePage />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />

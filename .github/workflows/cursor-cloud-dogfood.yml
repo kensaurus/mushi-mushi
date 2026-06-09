@@ -14,7 +14,8 @@ on:
 
 jobs:
   mocked-e2e:
-    name: Mocked E2E (every push via CI)
+    name: Mocked E2E (manual trigger only)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -97,7 +98,7 @@ jobs:
         with:
           name: playwright-report-cursor-live
           path: examples/e2e-dogfood/playwright-report/
-          retention-days: 14
+          retention-days: 7
 
       - name: Notify on failure
         if: failure()

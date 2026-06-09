@@ -138,7 +138,8 @@ const NAV: NavSection[] = [
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'My feedback', path: '/feedback',   icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'My feedback',    path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'Feature board',  path: '/feature-board', icon: IconSparkle,   beginner: false },
     ],
   },
   {
@@ -255,6 +256,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Closed loop',
       detail: 'Shipped tab shows release version chips — Active tab pulses when the team replies.',
+    },
+  },
+  '/feature-board': {
+    title: 'Feature Board',
+    kicker: 'Start',
+    scope: 'community',
+    decide: {
+      label: 'Vote on ideas',
+      summary: 'Sort by most-voted to see what your project users want most. Your vote is idempotent — click again to remove it.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Shipped = released',
+      detail: 'When a feature is marked shipped, a Standard-Webhooks notification fires to the configured push URL.',
     },
   },
   '/dashboard': {
@@ -1674,7 +1689,7 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
       role="radiogroup"
       aria-label="Admin mode"
       data-tour-id="mode-toggle"
-      className="mt-2 flex w-full min-w-0 items-center gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
+      className="mt-2 inline-flex max-w-full min-w-0 items-stretch gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
     >
       {MODE_OPTIONS.map((opt) => {
         const active = opt.id === mode
@@ -1685,7 +1700,7 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
               role="radio"
               aria-checked={active}
               onClick={() => onSelect(opt.id)}
-              className={`min-w-0 flex-1 truncate rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+              className={`shrink-0 rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                 active
                   ? 'bg-brand/25 text-brand shadow-sm ring-1 ring-brand/20 font-semibold'
                   : 'text-fg-muted hover:bg-surface-overlay hover:text-fg-secondary'

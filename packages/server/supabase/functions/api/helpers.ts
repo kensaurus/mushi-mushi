@@ -12,6 +12,7 @@ import { resolveEndUser } from '../_shared/end-user-resolver.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { dbError } from './shared.ts';
+import { isUuid } from './migration-progress-helpers.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 // SEC (Wave 5 Gap-A): PII is now scrubbed at ingest so the at-rest copy in
 // Postgres is already redacted. Previously scrubReport() only ran in
@@ -19,6 +20,52 @@ import { childTraceparent } from '../_shared/trace.ts';
 // API keys were stored unmasked and visible to MCP mcp:read clients and any
 // future data export. Scrubbing at insert time closes that gap.
 import { scrubPii } from '../_shared/pii-scrubber.ts';
+
+// Fixed namespace for deriving deterministic report ids from non-UUID client
+// ids (RFC 4122 §4.3 name-based v5). Arbitrary but stable — it only has to be
+// constant so the same client id always maps to the same uuid.
+const REPORT_ID_NAMESPACE = '7b2f0e1a-2c4d-4e6b-9f81-1d5a6c8e0f93';
+
+function uuidToBytes(uuid: string): Uint8Array {
+  const hex = uuid.replace(/-/g, '');
+  const out = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+/**
+ * Deterministic RFC 4122 v5 (name-based, SHA-1) UUID from an arbitrary string.
+ * Same input → same output, so an SDK retry that resends the same non-UUID
+ * client id collapses onto the existing `reports` row via the PK (23505)
+ * idempotency path instead of failing the uuid cast (22P02).
+ */
+async function uuidV5FromName(name: string): Promise<string> {
+  const ns = uuidToBytes(REPORT_ID_NAMESPACE);
+  const nameBytes = new TextEncoder().encode(name);
+  const input = new Uint8Array(ns.length + nameBytes.length);
+  input.set(ns, 0);
+  input.set(nameBytes, ns.length);
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-1', input)).slice(0, 16);
+  hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
+  hash[8] = (hash[8] & 0x3f) | 0x80; // variant 10xx
+  const hex = Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/**
+ * Resolve the canonical `reports.id` (a Postgres `uuid`) from the client's
+ * supplied report id. Valid UUIDs pass through unchanged. Legacy/native SDKs
+ * that mint ad-hoc ids — React Native `rn-<ts>-<rand>`, the web insecure-
+ * context `mushi_<hex>` fallback, or any non-TS SDK — are mapped
+ * deterministically so the insert never throws 22P02 and drops the report
+ * (Sentry MUSHI-MUSHI-SERVER-D). Absent ids get a fresh random uuid.
+ */
+async function resolveReportId(rawId: unknown): Promise<string> {
+  if (typeof rawId === 'string' && rawId.length > 0) {
+    return isUuid(rawId) ? rawId : await uuidV5FromName(rawId);
+  }
+  return crypto.randomUUID();
+}
 
 const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
 const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
@@ -294,7 +341,7 @@ export async function ingestReport(
     }
   }
 
-  const reportId = report.id || crypto.randomUUID();
+  const reportId = await resolveReportId(report.id);
 
   // Strip null bytes (`\u0000`) from user-supplied TEXT fields: Postgres
   // TEXT columns reject them with 22P05 (invalid_text_representation → 400),
@@ -454,13 +501,43 @@ export async function ingestReport(
   });
 
   if (insertError) {
+    const errCode = (insertError as { code?: string }).code;
+    // 23505 = unique_violation on the PK (reports.id). The SDK sends a stable
+    // UUID per logical attempt and retries on network failure — so a 23505 means
+    // the report was already stored on a previous attempt. Treat it as success
+    // (idempotent semantics) and return the existing reportId to the SDK so it
+    // stops retrying. Before returning, ensure the processing_queue row exists:
+    // the first attempt may have crashed after the reports insert but before
+    // the queue insert, leaving the report permanently un-classified.
+    if (errCode === '23505') {
+      log.info('Duplicate report id — already stored, returning existing', { reportId });
+      const { count: qCount } = await db
+        .from('processing_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('report_id', reportId)
+        .eq('stage', 'stage1')
+        .in('status', ['pending', 'running']);
+      if ((qCount ?? 0) === 0) {
+        // Queue row missing — re-insert to unblock classification on the retry.
+        const { error: reQueueErr } = await db.from('processing_queue').insert({
+          report_id: reportId,
+          project_id: projectId,
+          stage: 'stage1',
+          status: 'pending',
+        });
+        if (reQueueErr && (reQueueErr as { code?: string }).code !== '23505') {
+          log.warn('Re-queue after duplicate report failed', { reportId, errMsg: reQueueErr.message });
+        }
+      }
+      return { ok: true, reportId };
+    }
     log.error('Report insert failed', {
       reportId,
       // Renamed from `error` → `errMsg` so Sentry's default data scrubbers
       // don't mask the actual Postgres failure. Without this we only see
       // `"[Filtered]"` in Sentry and can't triage the root cause.
       errMsg: insertError.message,
-      errCode: (insertError as { code?: string }).code,
+      errCode,
       errDetails: (insertError as { details?: string }).details,
       errHint: (insertError as { hint?: string }).hint,
     });
@@ -507,14 +584,31 @@ export async function ingestReport(
     })();
   }
 
-  // Insert into processing queue
-  const { error: queueError } = await db.from('processing_queue').insert({
-    report_id: reportId,
-    project_id: projectId,
-    stage: 'stage1',
-    status: 'pending',
-  });
-  if (queueError) log.error('Queue insert failed', { reportId, error: queueError.message });
+  // Insert into processing queue. Uses upsert with ignoreDuplicates so
+  // a retry (after a crash between the reports insert and this line) doesn't
+  // create a duplicate stage1 entry. The unique constraint on (report_id, stage)
+  // enforces idempotency; if neither the DB constraint nor the ignoreDuplicates
+  // flag exist yet (legacy schema), the 23505 error is logged as a warning so
+  // the duplicate entry is visible but doesn't fail the ingest.
+  const { error: queueError } = await db.from('processing_queue').upsert(
+    { report_id: reportId, project_id: projectId, stage: 'stage1', status: 'pending' },
+    { onConflict: 'report_id,stage', ignoreDuplicates: true },
+  );
+  if (queueError) {
+    const qErrCode = (queueError as { code?: string }).code;
+    if (qErrCode === '23505') {
+      // Duplicate queue entry — report was already queued on a prior attempt; safe to ignore.
+      log.info('Queue entry already exists (idempotent retry)', { reportId });
+    } else {
+      // Real failure: the report is stored but will not be classified unless the
+      // scheduled reconciler picks it up. Elevated to error so monitoring alerts fire.
+      log.error('Queue insert failed — report stored but not queued for classification', {
+        reportId,
+        errMsg: queueError.message,
+        errCode: qErrCode,
+      });
+    }
+  }
 
   // D5: meter the ingest. Fire-and-forget — billing must never
   // block ingest. The hourly `usage-aggregator` cron rolls these up and
