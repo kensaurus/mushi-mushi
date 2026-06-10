@@ -1,5 +1,12 @@
 # create-mushi-mushi
 
+## 0.5.10
+
+### Patch Changes
+
+- Updated dependencies [be12eae]
+  - @mushi-mushi/cli@0.13.0
+
 ## 0.5.9
 
 ### Patch Changes
