@@ -481,4 +481,13 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Approve this auto-generated test.',
   },
+  {
+    name: 'reply_to_reporter',
+    title: 'Reply to a reporter',
+    description:
+      'Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: false },
+    useCase: 'Reply to a reporter asking for more info or confirming a fix.',
+  },
 ]

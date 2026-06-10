@@ -684,6 +684,37 @@ reports
   })
 
 reports
+  .command('reply <id> <message>')
+  .description('Send a visible reply to the reporter widget for a report')
+  .option('--author <name>', 'Display name for the sender (default: "Mushi Admin")')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi reports reply abc123 "Thanks for reporting — fixing this in the next release."
+  mushi reports reply abc123 "Can you share a screenshot?" --author "Alice"`)
+  .action(async (id: string, message: string, opts: { author?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { message }
+    if (opts.author) body['author_name'] = opts.author
+    const result = await apiCall<{ comment: unknown }>(`/v1/sync/reports/${id}/reply`, config, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Reply sent to reporter for report ${id}`)
+    }
+  })
+
+reports
   .command('search <query>')
   .description('Search reports by keyword in summary and description')
   .option('--limit <n>', 'Max results (1–50)', '10')

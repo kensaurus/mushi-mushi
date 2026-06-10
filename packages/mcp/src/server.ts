@@ -1126,6 +1126,30 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'reply_to_reporter',
+    {
+      title: titleOf('reply_to_reporter', TDD_TOOL_CATALOG),
+      description: descOf('reply_to_reporter', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('reply_to_reporter', TDD_TOOL_CATALOG),
+      inputSchema: {
+        reportId: z.string().describe('Report id to reply to'),
+        message: z.string().min(1).max(10_000).describe('Message text to send to the reporter'),
+        authorName: z.string().optional().describe('Display name for the admin sender (default: "Mushi Admin")'),
+      },
+    },
+    async ({ reportId, message, authorName }) => {
+      const data = await apiCall<unknown>(
+        `/v1/sync/reports/${reportId}/reply`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ message, author_name: authorName }),
+        },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
   // Apply scope filtering if granted scopes were provided.
   // All tools are registered above for readability; this block removes the
   // ones the caller's API key does not have access to. When `scopes` is

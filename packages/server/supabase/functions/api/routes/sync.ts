@@ -11,6 +11,7 @@
 //   GET  /v1/sync/reports             — list reports with filters + search
 //   GET  /v1/sync/reports/:id         — single report detail
 //   PATCH /v1/sync/reports/:id        — triage: status, severity, note
+//   POST /v1/sync/reports/:id/reply   — send a visible reply to the reporter widget
 //   POST /v1/sync/codebase/upload     — upload a source file to the RAG index
 //   GET  /v1/sync/lessons/:id         — single lesson detail
 //
@@ -24,6 +25,7 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
+import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -340,7 +342,103 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       }).then(() => null, () => null)
     }
 
+    // Fire reporter notification when status changes to resolved or dismissed.
+    // Mirrors the same trigger that reports-dashboard.ts fires from the admin UI,
+    // so CLI triage also notifies the end-user widget.
+    if (status && (status === 'resolved' || status === 'dismissed') && existing.status !== status) {
+      const notifType = status === 'resolved' ? 'fixed' : 'dismissed'
+      // reporter_token_hash is not on existing (select was minimal) — re-fetch it.
+      db.from('reports')
+        .select('reporter_token_hash')
+        .eq('id', id)
+        .eq('project_id', projectId)
+        .maybeSingle()
+        .then(({ data: r }) => {
+          if (!r?.reporter_token_hash) return
+          return createNotification(db, projectId, id, r.reporter_token_hash, notifType, {
+            message: buildNotificationMessage(notifType, {}),
+            reportId: id,
+          })
+        })
+        .catch(() => null)
+    }
+
     return c.json({ ok: true, data: updated })
+  })
+
+  // ── POST /v1/sync/reports/:id/reply ──────────────────────────────────────
+  // Send a message to the end-user reporter widget. Creates a comment that is
+  // visible in the widget and fires a reporter_notification for the "New reply"
+  // badge. Used by `mushi reports reply <id> "message"` and the reply_to_reporter
+  // MCP tool so triage can happen from the Cursor IDE without opening the admin UI.
+  app.post('/v1/sync/reports/:id/reply', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+    const id = c.req.param('id')!
+
+    let rawBody: unknown
+    try { rawBody = await c.req.json() } catch {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } }, 400)
+    }
+
+    const ReplyBody = z.object({
+      message: z.string().min(1).max(10_000),
+      author_name: z.string().max(100).optional().default('Mushi Admin'),
+    })
+
+    const parsed = ReplyBody.safeParse(rawBody)
+    if (!parsed.success) {
+      return c.json({
+        ok: false,
+        error: { code: 'VALIDATION_ERROR', message: parsed.error.issues.map((i) => i.message).join('; ') },
+      }, 422)
+    }
+
+    const { message, author_name } = parsed.data
+
+    // Verify report belongs to this project and fetch the reporter token for the notification.
+    const { data: report, error: fetchErr } = await db
+      .from('reports')
+      .select('id, status, reporter_token_hash')
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .maybeSingle()
+
+    if (fetchErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: fetchErr.message } }, 500)
+    if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: `Report ${id} not found` } }, 404)
+
+    const { data: comment, error: insertErr } = await db
+      .from('report_comments')
+      .insert({
+        report_id: id,
+        project_id: projectId,
+        author_kind: 'admin',
+        author_name,
+        body: message,
+        visible_to_reporter: true,
+        created_at: new Date().toISOString(),
+      })
+      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
+      .single()
+
+    if (insertErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: insertErr.message } }, 500)
+
+    // Update last_admin_reply_at on the report — best effort.
+    db.from('reports')
+      .update({ last_admin_reply_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .then(() => null, () => null)
+
+    // Notify the reporter widget so they see the unread badge.
+    if (report.reporter_token_hash) {
+      createNotification(db, projectId, id, report.reporter_token_hash, 'comment_reply', {
+        message: buildNotificationMessage('comment_reply', {}),
+        reportId: id,
+      }).catch(() => null)
+    }
+
+    return c.json({ ok: true, data: { comment } }, 201)
   })
 
   // ── GET /v1/sync/lessons/:id ──────────────────────────────────────────────

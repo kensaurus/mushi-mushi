@@ -20,6 +20,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
+import { sendBotMessage, sendSlackText } from '../_shared/slack.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -418,6 +419,29 @@ Deno.serve(
       exit_reason: exitReason,
       status: finalStatus,
     })
+
+    // Slack notification for completed PDCA runs — non-fatal, no SLACK_BOT_TOKEN = silent.
+    try {
+      const projectId = run.project_id as string | null
+      if (projectId) {
+        const { data: ps } = await db
+          .from('project_settings')
+          .select('slack_channel_id, slack_webhook_url')
+          .eq('project_id', projectId)
+          .single()
+
+        if (ps?.slack_channel_id || ps?.slack_webhook_url) {
+          const scoreLabel = `${Math.round(finalScore * 100)}%`
+          const statusEmoji = finalStatus === 'completed' ? '✅' : '⚠️'
+          const text = `${statusEmoji} PDCA run finished — score: *${scoreLabel}*, exit: \`${exitReason}\`, status: \`${finalStatus}\``
+          if (ps?.slack_channel_id) {
+            await sendBotMessage({ channel: ps.slack_channel_id, text })
+          } else if (ps?.slack_webhook_url) {
+            await sendSlackText(ps.slack_webhook_url, text)
+          }
+        }
+      }
+    } catch { /* Slack notification is best-effort */ }
 
     return new Response(
       JSON.stringify({ ok: true, runId, finalScore, exitReason, status: finalStatus }),
