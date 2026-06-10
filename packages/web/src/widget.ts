@@ -265,6 +265,11 @@ export class MushiWidget {
       ...(config.featureRequestCard !== undefined ? { featureRequestCard: config.featureRequestCard } : {}),
       ...(config.featureRequestLabel !== undefined ? { featureRequestLabel: config.featureRequestLabel } : {}),
       ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription } : {}),
+      // Runtime/dashboard config delivers bannerMessage/bannerLabel via
+      // mergeRuntimeConfig → bannerConfig. The widget is constructed before
+      // that fetch resolves, so this pass-through is what makes server-driven
+      // banner copy actually render.
+      ...(config.bannerConfig !== undefined ? { bannerConfig: config.bannerConfig } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     // Re-sync host chrome in case zIndex changed.
@@ -730,20 +735,17 @@ export class MushiWidget {
     const bc = this.config.bannerConfig ?? {};
     const variant  = bc.variant  ?? 'brand';
     const position = bc.position ?? 'top';
+    const message  = bc.message?.trim() ?? '';
+    const richLayout = message.length > 0;
     const bugLabel = bc.bugCta   ?? '🐛 Report a bug';
     const showFeat = bc.featureCta !== false;
     const featLabel = bc.featureCtaLabel ?? '✨ Request feature';
     const zIdx = bc.zIndex ?? (this.config.zIndex ?? 99999) - 1;
 
     const banner = document.createElement('div');
-    banner.className = `mushi-banner ${variant} ${position}`;
+    banner.className = `mushi-banner ${variant} ${position}${richLayout ? ' mushi-banner--rich' : ''}`;
     banner.style.setProperty('--mushi-banner-z', String(zIdx));
     banner.setAttribute('role', 'banner');
-
-    const bugBtn = document.createElement('button');
-    bugBtn.className = 'mushi-banner-btn';
-    bugBtn.textContent = bugLabel;
-    bugBtn.addEventListener('click', () => this.open());
 
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'mushi-banner-dismiss';
@@ -755,17 +757,102 @@ export class MushiWidget {
       this.render();
     });
 
-    banner.appendChild(bugBtn);
+    if (richLayout) {
+      const body = document.createElement('div');
+      body.className = 'mushi-banner-body';
 
-    if (showFeat) {
-      const featBtn = document.createElement('button');
-      featBtn.className = 'mushi-banner-btn';
-      featBtn.textContent = featLabel;
-      featBtn.addEventListener('click', () => this.open({ featureRequest: true }));
-      banner.appendChild(featBtn);
+      const labelText = bc.label === false ? null : (bc.label ?? 'Beta');
+      if (labelText) {
+        const pill = document.createElement('span');
+        pill.className = 'mushi-banner-pill';
+        pill.textContent = labelText;
+        body.appendChild(pill);
+      }
+
+      const msg = document.createElement('span');
+      msg.className = 'mushi-banner-message';
+      msg.textContent = message;
+      body.appendChild(msg);
+      banner.appendChild(body);
+
+      const nav = document.createElement('nav');
+      nav.className = 'mushi-banner-actions';
+      nav.setAttribute('aria-label', 'Feedback banner actions');
+
+      // `extra` marks secondary actions hidden on narrow viewports so the
+      // primary bug CTA + dismiss always stay reachable on phones.
+      const appendDivider = (extra = false) => {
+        const sep = document.createElement('span');
+        sep.className = `mushi-banner-divider${extra ? ' mushi-banner-extra' : ''}`;
+        sep.setAttribute('aria-hidden', 'true');
+        sep.textContent = '|';
+        nav.appendChild(sep);
+      };
+
+      const appendAction = (label: string, onClick: () => void, extra = false) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `mushi-banner-link${extra ? ' mushi-banner-extra' : ''}`;
+        btn.textContent = label;
+        btn.addEventListener('click', onClick);
+        nav.appendChild(btn);
+      };
+
+      appendAction(bugLabel, () => this.open());
+      if (showFeat) {
+        appendDivider(true);
+        appendAction(featLabel, () => this.open({ featureRequest: true }), true);
+      }
+
+      for (const link of bc.links ?? []) {
+        const linkLabel = link.label?.trim();
+        if (!linkLabel) continue;
+        // Defense-in-depth: only http(s) and same-origin paths may render as
+        // anchors. If banner links ever become remotely configurable, a
+        // `javascript:` href here would be stored XSS in every embedding site.
+        const href = link.href && (/^https?:\/\//i.test(link.href) || link.href.startsWith('/'))
+          ? link.href
+          : undefined;
+        appendDivider(true);
+        if (href) {
+          const anchor = document.createElement('a');
+          anchor.className = 'mushi-banner-link mushi-banner-extra';
+          anchor.href = href;
+          anchor.textContent = linkLabel;
+          anchor.target = '_blank';
+          anchor.rel = 'noopener noreferrer';
+          nav.appendChild(anchor);
+        } else {
+          appendAction(linkLabel, () => {
+            if (link.featureRequest) this.open({ featureRequest: true });
+            else this.open();
+          }, true);
+        }
+      }
+
+      banner.appendChild(nav);
+      // Dismiss lives OUTSIDE the actions <nav>: it isn't navigation, and as
+      // a direct flex child of the banner it can't be clipped off-screen when
+      // the action row overflows on narrow viewports.
+      banner.appendChild(dismissBtn);
+    } else {
+      const bugBtn = document.createElement('button');
+      bugBtn.className = 'mushi-banner-btn';
+      bugBtn.textContent = bugLabel;
+      bugBtn.addEventListener('click', () => this.open());
+      banner.appendChild(bugBtn);
+
+      if (showFeat) {
+        const featBtn = document.createElement('button');
+        featBtn.className = 'mushi-banner-btn';
+        featBtn.textContent = featLabel;
+        featBtn.addEventListener('click', () => this.open({ featureRequest: true }));
+        banner.appendChild(featBtn);
+      }
+
+      banner.appendChild(dismissBtn);
     }
 
-    banner.appendChild(dismissBtn);
     this.shadow.appendChild(banner);
 
     // Push body content so the banner doesn't overlap the host app's navigation.

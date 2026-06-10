@@ -1308,6 +1308,106 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       text-overflow: ellipsis;
     }
 
+    /* Rich layout — pill + message + flat text actions (admin BetaBanner parity) */
+    .mushi-banner--rich {
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 36px;
+      height: auto;
+      padding: 4px 12px 4px 16px;
+      white-space: normal;
+    }
+    .mushi-banner-body {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .mushi-banner-pill {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      padding: 1px 6px;
+      border-radius: 3px;
+      border: 1px solid currentColor;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      opacity: 0.92;
+    }
+    .mushi-banner.neon .mushi-banner-pill {
+      border-color: rgba(10,26,10,0.45);
+      background: rgba(10,26,10,0.12);
+    }
+    .mushi-banner.brand .mushi-banner-pill {
+      border-color: rgba(255,255,255,0.45);
+      background: rgba(255,255,255,0.14);
+    }
+    .mushi-banner.subtle .mushi-banner-pill {
+      border-color: ${ruleStrong};
+      background: ${isDark ? 'rgba(242,235,221,0.08)' : 'rgba(14,13,11,0.06)'};
+    }
+    .mushi-banner-message {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11.5px;
+      font-weight: 500;
+      line-height: 1.3;
+      opacity: 0.9;
+    }
+    .mushi-banner-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      /* Shrinkable + swipe-scrollable so a long action row can never push
+         past the viewport edge (dismiss sits outside this nav). */
+      flex-shrink: 1;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+      font-size: 11px;
+    }
+    .mushi-banner-actions::-webkit-scrollbar { display: none; }
+    @media (max-width: 480px) {
+      /* Phones: keep only the primary bug CTA (+ dismiss outside the nav). */
+      .mushi-banner-actions .mushi-banner-extra { display: none; }
+    }
+    .mushi-banner-link {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      letter-spacing: inherit;
+      text-decoration: none;
+      opacity: 0.88;
+      transition: opacity 0.15s ease;
+      flex-shrink: 0;
+    }
+    .mushi-banner-link:hover { opacity: 1; }
+    .mushi-banner-link:focus-visible {
+      outline: 2px solid ${widgetAccent};
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+    .mushi-banner-divider {
+      opacity: 0.28;
+      padding: 0 1px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .mushi-banner--rich .mushi-banner-dismiss {
+      margin-left: 4px;
+    }
+
     .mushi-banner-btn {
       display: inline-flex;
       align-items: center;

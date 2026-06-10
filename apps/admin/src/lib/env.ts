@@ -165,31 +165,43 @@ function detectMode(supabaseUrl: string): InstanceMode {
 }
 
 export function checkEnv(): EnvStatus {
+  // detectMode needs the raw build-time URL only for the "URL differs from
+  // cloud → infer self-hosted" heuristic (priority 3). Priorities 1 and 2
+  // are independent of the URL value.
   const rawUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
-  const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
-  const rawApi = (import.meta.env.VITE_API_URL ?? '').trim()
 
   const mode = detectMode(rawUrl)
 
   if (mode === 'cloud') {
     return {
-      supabaseUrl: rawUrl || CLOUD_SUPABASE_URL,
-      supabaseAnonKey: rawKey || CLOUD_SUPABASE_ANON_KEY,
-      apiUrl: rawApi || CLOUD_API_URL,
+      supabaseUrl: RESOLVED_SUPABASE_URL,
+      supabaseAnonKey: RESOLVED_SUPABASE_ANON_KEY,
+      apiUrl: RESOLVED_API_URL,
       missing: [],
       ready: true,
       mode,
     }
   }
 
+  // Self-hosted: the operator may have configured credentials at runtime via
+  // BackendModePanel (stored in localStorage) rather than at build time via
+  // .env — stored credentials must count as "present" (validating only the
+  // raw build-time vars was the original lockout bug). But we must validate
+  // the PRE-cloud-fallback chain: RESOLVED_* always terminate in the cloud
+  // constants, so checking them directly makes `missing` permanently empty
+  // and silently routes a credential-less self-hosted instance to the
+  // production cloud project.
+  const storedUrl = (_storedAtLoad?.supabaseUrl ?? '').trim()
+  const storedKey = (_storedAtLoad?.supabaseAnonKey ?? '').trim()
+  const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
   const missing: string[] = []
-  if (!rawUrl) missing.push('VITE_SUPABASE_URL')
-  if (!rawKey) missing.push('VITE_SUPABASE_ANON_KEY')
+  if (!storedUrl && !rawUrl) missing.push('VITE_SUPABASE_URL')
+  if (!storedKey && !rawKey) missing.push('VITE_SUPABASE_ANON_KEY')
 
   return {
-    supabaseUrl: rawUrl,
-    supabaseAnonKey: rawKey,
-    apiUrl: rawApi,
+    supabaseUrl: RESOLVED_SUPABASE_URL,
+    supabaseAnonKey: RESOLVED_SUPABASE_ANON_KEY,
+    apiUrl: RESOLVED_API_URL,
     missing,
     ready: missing.length === 0,
     mode,

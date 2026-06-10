@@ -8,6 +8,17 @@ import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { ComplianceStats, ComplianceTabId } from './types'
 
+/** Green / informational posture is covered by the page hero + snapshot. */
+export function isComplianceStatusBannerCritical(stats: ComplianceStats): boolean {
+  if (!stats.projectId) return true
+  if (!stats.soc2Entitlement) return true
+  if (stats.controlsFail > 0) return true
+  if (stats.overdueDsars > 0) return true
+  if (stats.evidenceNeverGenerated) return true
+  if (stats.controlsWarn > 0 || stats.atRiskDsars > 0) return true
+  return false
+}
+
 interface Props {
   stats: ComplianceStats
   onTab?: (tab: ComplianceTabId) => void

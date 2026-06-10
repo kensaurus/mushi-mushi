@@ -522,6 +522,53 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'ingest_setup_check',
+    {
+      title: titleOf('ingest_setup_check'),
+      description: descOf('ingest_setup_check'),
+      annotations: annotationsFor('ingest_setup_check'),
+      inputSchema: {},
+    },
+    async () => {
+      const data = await apiCall<{
+        ready: boolean
+        required_complete: number
+        required_total: number
+        project_id: string
+        project_name: string
+        steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
+        diagnostic?: {
+          last_sdk_seen_at: string | null
+          last_sdk_endpoint_host: string | null
+          admin_endpoint_host: string | null
+        }
+      }>('/v1/sync/ingest-setup')
+
+      const failed = data.steps.filter((s) => s.required && !s.complete)
+      const summary = data.ready
+        ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
+        : `Ingest incomplete (${data.required_complete}/${data.required_total}) — still need: ${failed.map((s) => s.label).join(', ')}.`
+
+      return jsonText({
+        ready: data.ready,
+        projectId: data.project_id,
+        projectName: data.project_name,
+        requiredComplete: data.required_complete,
+        requiredTotal: data.required_total,
+        steps: data.steps.map((s) => ({
+          id: s.id,
+          label: s.label,
+          passed: s.complete,
+          required: s.required,
+          hint: s.hint,
+        })),
+        diagnostic: data.diagnostic ?? null,
+        summary,
+      })
+    },
+  )
+
   // --- Write / agentic tools -------------------------------------------
 
   server.registerTool(

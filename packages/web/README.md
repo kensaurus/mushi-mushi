@@ -263,6 +263,44 @@ on every hide path.
 > sit at a certain z-index. Use `hideOnSelector` or `Mushi.hide()` for the safest
 > experience in native shells.
 
+### Rich banner layout (1.8+)
+
+With `trigger: 'banner'`, setting `bannerConfig.message` switches the strip from
+button-only CTAs to the rich layout used by the Mushi admin console's beta
+banner — a pill label, body copy, and flat text actions:
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'banner',
+    bannerConfig: {
+      variant: 'brand',          // 'neon' | 'brand' | 'subtle'
+      position: 'top',           // 'top' | 'bottom'
+      message: 'Mushi is in beta — spotted something off? Tell us.',
+      label: 'Beta',             // pill before the message; `false` hides it
+      bugCta: '🐛 Report a bug',
+      featureCta: true,
+      links: [
+        { label: 'My submissions', href: 'https://app.example.com/feedback' },
+        { label: 'Request a feature', featureRequest: true }, // opens widget in feature mode
+      ],
+    },
+  },
+});
+```
+
+- All banner text renders via `textContent` — never HTML — so server- or
+  CMS-sourced copy can't inject markup.
+- `links[].href` opens in a new tab with `rel="noopener noreferrer"`; omit
+  `href` and set `featureRequest: true` to open the widget instead.
+- `message` and `label` can also be driven remotely per-project from the
+  dashboard runtime config (`bannerMessage` / `bannerLabel`), so you can change
+  the copy without a deploy. `links` are local-config only.
+- Without `message`, the banner keeps the original compact button-only layout —
+  existing integrations are unchanged.
+
 ### Presets and widget anchor
 
 ```typescript

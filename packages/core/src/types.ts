@@ -139,6 +139,16 @@ export interface MushiWidgetConfig {
   avoidSelectors?: string[];
 }
 
+/** Optional flat link in the rich banner action row (admin-console BetaBanner style). */
+export interface MushiBannerLink {
+  /** Link label shown in the action row. */
+  label: string;
+  /** External URL — opens in a new tab when set. */
+  href?: string;
+  /** When `href` is absent, opens the widget in feature-request mode. */
+  featureRequest?: boolean;
+}
+
 /**
  * Configuration for the `trigger: 'banner'` header-strip launcher.
  *
@@ -157,12 +167,25 @@ export interface MushiBannerConfig {
   variant?: 'neon' | 'brand' | 'subtle';
   /** 'top' pins the banner below any existing sticky headers; 'bottom' pins above bottom navs. Defaults to 'top'. */
   position?: 'top' | 'bottom';
-  /** Override the call-to-action text in the banner. Defaults to 'Report a bug'. */
+  /**
+   * Body copy on the strip — the lime "Beta" announcement line users see in
+   * the Mushi admin console. When set, the banner switches to the rich layout
+   * (pill + message + flat text actions) instead of button-only CTAs.
+   */
+  message?: string;
+  /**
+   * Pill label shown before `message` (e.g. "Beta"). Defaults to `"Beta"` when
+   * `message` is set. Pass `false` to hide the pill.
+   */
+  label?: string | false;
+  /** Override the call-to-action text in the banner. Defaults to '🐛 Report a bug'. */
   bugCta?: string;
   /** Show a "✨ Request a feature" button alongside the bug button. Defaults to true. */
   featureCta?: boolean;
   /** Override the feature-request button label. */
   featureCtaLabel?: string;
+  /** Extra flat links after the bug/feature CTAs (e.g. "My submissions"). */
+  links?: MushiBannerLink[];
   /** CSS z-index of the banner element. Defaults to the widget's configured zIndex. */
   zIndex?: number;
 }

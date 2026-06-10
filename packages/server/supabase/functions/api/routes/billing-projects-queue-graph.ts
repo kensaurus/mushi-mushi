@@ -7,6 +7,7 @@ import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { reportError, reportMessage } from '../../_shared/sentry.ts';
+import { resolveSdkFreshnessStatus } from '../../_shared/sdk-version-compare.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
   requireFeature,
@@ -1483,16 +1484,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       const sdkPackage = lastSdkPackageMap[p.id] ?? null;
       const sdkVersion = lastSdkVersionMap[p.id] ?? null;
       const latestForPackage = sdkPackage ? latestSdkVersions[sdkPackage] ?? null : null;
-      let sdkStatus: 'up-to-date' | 'outdated' | 'deprecated' | 'unknown' = 'unknown';
-      if (sdkPackage && sdkVersion && latestForPackage) {
-        if (latestForPackage.deprecated) {
-          sdkStatus = 'deprecated';
-        } else if (sdkVersion === latestForPackage.version) {
-          sdkStatus = 'up-to-date';
-        } else {
-          sdkStatus = 'outdated';
-        }
-      }
+      const sdkStatus = resolveSdkFreshnessStatus({
+        sdkPackage,
+        sdkVersion,
+        catalogVersion: latestForPackage?.version ?? null,
+        catalogDeprecated: !!latestForPackage?.deprecated,
+      });
       // Repos for "About this project" surface. Primary first, others
       // trailing. We expose `github_app_connected` as a boolean rather
       // than the installation id so the FE can render a "Connected via
@@ -2508,8 +2505,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   //
   // Checks: github (repo configured) | codebase (index enabled) |
   //         anthropic (BYOK key present) | autofix (feature flag on)
+  //
+  // Auth: adminOrApiKey({ scope: 'mcp:read' }) — JWT admins and mcp:read API
+  // keys. An API key grants preflight reads on every project its owner can
+  // access (userCanAccessProject), not only the key's bound project — same
+  // owner-wide semantics as other adminOrApiKey routes.
   // ---------------------------------------------------------------------------
-  app.get('/v1/admin/projects/:id/preflight', jwtAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/preflight', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();

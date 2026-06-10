@@ -203,14 +203,37 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sdk_banner_position',
       'sdk_banner_bug_cta',
       'sdk_banner_feature_cta',
+      'sdk_banner_message',
+      'sdk_banner_label',
       // Per-project crawl / TDD generation budget quotas
       'crawl_max_pages_per_day',
       'crawl_max_runs_per_day',
       'tdd_max_gens_per_day',
     ];
+    // Free-text banner fields are served verbatim on the UNAUTHENTICATED
+    // public SDK config endpoint — enforce the same caps as
+    // coerceSdkConfigUpdate (helpers.ts) so this generic PATCH path can't
+    // become a public-payload amplification vector.
+    const textCaps: Record<string, number> = {
+      sdk_banner_message: 240,
+      sdk_banner_label: 24,
+      sdk_banner_bug_cta: 60,
+    };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
-      if (allowed.includes(key)) updates[key] = value;
+      if (!allowed.includes(key)) continue;
+      const cap = textCaps[key];
+      if (cap !== undefined) {
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          updates[key] = trimmed ? trimmed.slice(0, cap) : null;
+        } else if (value === null) {
+          updates[key] = null;
+        }
+        // Non-string, non-null values for text fields are dropped.
+        continue;
+      }
+      updates[key] = value;
     }
 
     const { error } = await db
@@ -286,7 +309,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .from('project_settings')
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -316,7 +339,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )

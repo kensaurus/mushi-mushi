@@ -551,4 +551,139 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       },
     })
   })
+
+  // ── GET /v1/sync/ingest-setup ─────────────────────────────────────────────
+  // API-key view of the four **required ingest** steps (key → SDK heartbeat →
+  // first report). Distinct from GET /v1/admin/projects/:id/preflight which
+  // covers dispatch readiness (GitHub, codebase, BYOK, autofix). Powers
+  // `mushi connect --wait`, `mushi doctor --ingest`, and MCP ingest_setup_check.
+  app.get('/v1/sync/ingest-setup', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+    const projectName = c.get('projectName') as string
+
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null
+      } catch {
+        return null
+      }
+    })()
+
+    const [keysRes, reportsRes, projectRes] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+        .eq('project_id', projectId)
+        .eq('is_active', true)
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
+        .limit(1),
+      db
+        .from('reports')
+        .select('id, environment, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      db.from('projects').select('slug').eq('id', projectId).maybeSingle(),
+    ])
+
+    // A failed query must not masquerade as a confident "step incomplete"
+    // diagnosis — pollers would tell the user their SDK isn't installed.
+    if (keysRes.error || reportsRes.error) {
+      const detail = keysRes.error?.message ?? reportsRes.error?.message ?? 'query failed'
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: `ingest-setup lookup failed: ${detail}` } },
+        500,
+      )
+    }
+
+    const heartbeat = keysRes.data?.[0] as {
+      last_seen_at?: string | null
+      last_seen_origin?: string | null
+      last_seen_user_agent?: string | null
+      last_seen_endpoint_host?: string | null
+    } | undefined
+
+    let reportCount = 0
+    let sdkReportSignal = false
+    for (const r of reportsRes.data ?? []) {
+      reportCount += 1
+      const env = (r.environment ?? {}) as Record<string, unknown>
+      const platform = typeof env.platform === 'string' ? env.platform : ''
+      if (platform && platform !== 'mushi-admin') sdkReportSignal = true
+    }
+
+    const hasKey = (keysRes.data?.length ?? 0) > 0
+    const hasSdk = Boolean(heartbeat?.last_seen_at) || sdkReportSignal
+    const hasReport = reportCount > 0
+
+    type Step = {
+      id: 'api_key_generated' | 'sdk_installed' | 'first_report_received' | 'project_created'
+      label: string
+      complete: boolean
+      required: boolean
+      hint: string
+    }
+
+    const steps: Step[] = [
+      {
+        id: 'project_created',
+        label: 'Project exists',
+        complete: true,
+        required: true,
+        hint: 'Project row is provisioned in Mushi.',
+      },
+      {
+        id: 'api_key_generated',
+        label: 'API key active',
+        complete: hasKey,
+        required: true,
+        hint: hasKey
+          ? 'At least one active API key is configured.'
+          : 'Mint an API key in Projects → Generate key.',
+      },
+      {
+        id: 'sdk_installed',
+        label: 'SDK heartbeat',
+        complete: hasSdk,
+        required: true,
+        hint: hasSdk
+          ? 'SDK reached this backend (heartbeat or real report).'
+          : 'Install the snippet, set env vars, restart your dev server.',
+      },
+      {
+        id: 'first_report_received',
+        label: 'First report ingested',
+        complete: hasReport,
+        required: true,
+        hint: hasReport
+          ? 'At least one report row exists for this project.'
+          : 'Send a test report from Projects or open the banner in your app.',
+      },
+    ]
+
+    const requiredSteps = steps.filter((s) => s.required)
+    const requiredComplete = requiredSteps.filter((s) => s.complete).length
+
+    return c.json({
+      ok: true,
+      data: {
+        project_id: projectId,
+        project_name: projectName,
+        project_slug: projectRes.data?.slug ?? null,
+        ready: requiredComplete === requiredSteps.length,
+        required_total: requiredSteps.length,
+        required_complete: requiredComplete,
+        steps,
+        recent_report_count: reportCount,
+        diagnostic: {
+          last_sdk_seen_at: heartbeat?.last_seen_at ?? null,
+          last_sdk_origin: heartbeat?.last_seen_origin ?? null,
+          last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
+          last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
+          admin_endpoint_host: adminHost,
+        },
+      },
+    })
+  })
 }

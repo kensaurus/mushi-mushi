@@ -66,6 +66,9 @@ const CHECKS = [
 
   // Setup wizard — first thing a new user hits.
   { name: 'setup',                 path: '/v1/admin/setup',                             catches: 'projects/api_keys schema' },
+
+  // Home — community feature board (feature_requests_with_stats view).
+  { name: 'feature-board.list',    path: '/v1/admin/feature-board?limit=5',             catches: 'feature_requests_with_stats view' },
 ]
 
 const results = []

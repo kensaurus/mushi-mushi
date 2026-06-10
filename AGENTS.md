@@ -10,7 +10,7 @@ can execute without additional context.
 
 ## Agent Inventory
 
-<sub>14 pipeline agents · 43 edge functions · 234 SQL migrations — verified June 2026 via <code>pnpm docs-stats</code> (<a href="docs/stats.md">docs/stats.md</a>).</sub>
+<sub>14 pipeline agents · 43 edge functions · 236 SQL migrations — verified June 2026 via <code>pnpm docs-stats</code> (<a href="docs/stats.md">docs/stats.md</a>).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|

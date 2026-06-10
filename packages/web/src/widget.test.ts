@@ -345,6 +345,136 @@ describe('MushiWidget hideOnSelector — unified suppression', () => {
   });
 });
 
+// ── banner — rich layout (message / label / links) ────────────────────────────
+
+describe('MushiWidget banner — rich layout', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+
+  it('renders pill, message, and flat actions when message is set', () => {
+    const w = new MushiWidget(
+      {
+        trigger: 'banner',
+        bannerConfig: {
+          variant: 'neon',
+          message: 'App is in active beta — expect rough edges.',
+          label: 'Beta',
+          bugCta: 'Report a bug',
+          featureCta: true,
+          featureCtaLabel: 'Feature request',
+        },
+      },
+      noopCallbacks,
+    );
+    w.mount();
+    const shadow = getShadow(w);
+    expect(shadow.querySelector('.mushi-banner--rich')).not.toBeNull();
+    expect(shadow.querySelector('.mushi-banner-pill')?.textContent).toBe('Beta');
+    expect(shadow.querySelector('.mushi-banner-message')?.textContent).toBe(
+      'App is in active beta — expect rough edges.',
+    );
+    expect(shadow.querySelector('.mushi-banner-link')?.textContent).toBe('Report a bug');
+    w.destroy();
+  });
+
+  it('defaults the pill to "Beta" and hides it with label: false', () => {
+    const withDefault = new MushiWidget(
+      { trigger: 'banner', bannerConfig: { message: 'Hello' } },
+      noopCallbacks,
+    );
+    withDefault.mount();
+    expect(getShadow(withDefault).querySelector('.mushi-banner-pill')?.textContent).toBe('Beta');
+    withDefault.destroy();
+
+    const noPill = new MushiWidget(
+      { trigger: 'banner', bannerConfig: { message: 'Hello', label: false } },
+      noopCallbacks,
+    );
+    noPill.mount();
+    expect(getShadow(noPill).querySelector('.mushi-banner-pill')).toBeNull();
+    noPill.destroy();
+  });
+
+  it('renders href links as safe anchors and featureRequest links as buttons', () => {
+    const w = new MushiWidget(
+      {
+        trigger: 'banner',
+        bannerConfig: {
+          message: 'Hello',
+          links: [
+            { label: 'My submissions', href: 'https://example.com/feedback' },
+            { label: 'Request', featureRequest: true },
+            { label: '', href: 'https://example.com/skipped' },
+            { label: 'Evil', href: 'javascript:alert(1)' },
+          ],
+        },
+      },
+      noopCallbacks,
+    );
+    w.mount();
+    const shadow = getShadow(w);
+    const anchors = Array.from(shadow.querySelectorAll('a.mushi-banner-link'));
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0]?.getAttribute('href')).toBe('https://example.com/feedback');
+    expect(anchors[0]?.getAttribute('target')).toBe('_blank');
+    expect(anchors[0]?.getAttribute('rel')).toBe('noopener noreferrer');
+    // The javascript: link degrades to a widget-opening <button>; the
+    // empty-label link is skipped entirely.
+    const buttons = Array.from(shadow.querySelectorAll('button.mushi-banner-link')).map(
+      (b) => b.textContent,
+    );
+    expect(buttons).toContain('Request');
+    expect(buttons).toContain('Evil');
+    w.destroy();
+  });
+
+  it('keeps the legacy button-only layout when no message is set', () => {
+    const w = new MushiWidget(
+      { trigger: 'banner', bannerConfig: { bugCta: 'Report' } },
+      noopCallbacks,
+    );
+    w.mount();
+    const shadow = getShadow(w);
+    expect(shadow.querySelector('.mushi-banner--rich')).toBeNull();
+    expect(shadow.querySelector('.mushi-banner-btn')?.textContent).toBe('Report');
+    w.destroy();
+  });
+
+  it('keeps the dismiss button a direct banner child so action overflow cannot clip it', () => {
+    const w = new MushiWidget(
+      { trigger: 'banner', bannerConfig: { message: 'Hello' } },
+      noopCallbacks,
+    );
+    w.mount();
+    const dismiss = getShadow(w).querySelector('.mushi-banner-dismiss');
+    expect(dismiss?.parentElement?.classList.contains('mushi-banner')).toBe(true);
+    w.destroy();
+  });
+
+  it('updateConfig({ bannerConfig }) switches an already-mounted widget to the rich layout', () => {
+    // This is the runtime/dashboard-config path: the widget mounts from
+    // bootstrap config before the remote banner copy arrives.
+    const w = new MushiWidget({ trigger: 'banner' }, noopCallbacks);
+    w.mount();
+    expect(getShadow(w).querySelector('.mushi-banner--rich')).toBeNull();
+
+    w.updateConfig({ bannerConfig: { message: 'Server-driven copy' } });
+    expect(getShadow(w).querySelector('.mushi-banner--rich')).not.toBeNull();
+    expect(getShadow(w).querySelector('.mushi-banner-message')?.textContent).toBe(
+      'Server-driven copy',
+    );
+    w.destroy();
+  });
+});
+
 // ── body nudge — cleanup on every suppression / hide / destroy path ───────────
 
 describe('MushiWidget banner body-nudge cleanup', () => {

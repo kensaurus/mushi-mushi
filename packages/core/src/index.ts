@@ -50,6 +50,7 @@ export type {
   MushiBetaModeConfig,
   MushiBetaChangelogEntry,
   MushiBannerConfig,
+  MushiBannerLink,
 } from './types';
 
 export {

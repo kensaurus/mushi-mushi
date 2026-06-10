@@ -9,6 +9,14 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { InboxStats, InboxTabId } from './types'
 
+/** Nominal inbox-zero posture is covered by the page hero + snapshot. */
+export function isInboxStatusBannerCritical(stats: InboxStats): boolean {
+  if (!stats.hasAnyProject || stats.topPriority === 'no_project') return true
+  if (stats.topPriority === 'setup') return true
+  if (stats.topPriority === 'actions') return true
+  return false
+}
+
 interface Props {
   stats: InboxStats
   onTab?: (tab: InboxTabId) => void

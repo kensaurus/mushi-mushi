@@ -8,12 +8,9 @@
 //   POST   /v1/admin/feature-board/:id/comments — add a comment
 //   POST   /v1/admin/feature-board/:id/ship  — mark shipped + fire Standard-Webhooks notification
 //
-// Data-pipeline discipline:
-//   • vote_count is always COUNT(*) — never an incremented integer.
-//   • Votes are idempotent: duplicate insert on (user_id, request_id) is
-//     caught as 23505 (unique_violation) and returned as { voted: true }.
-//   • The "shipped" notification reuses the a2a-push-notify HMAC signer
-//     (Standard-Webhooks v1 format) generalized off fix_dispatch_jobs.
+// Response envelope (matches admin apiFetch contract):
+//   success → { ok: true, data: { … } }
+//   failure → { ok: false, error: { code, message } }
 
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
@@ -30,8 +27,20 @@ const flog = log.child('feature-board')
 const DELIVERY_TIMEOUT_MS = 8_000
 const SHIP_EVENT_TYPE = 'feature_request.shipped'
 
+function jsonOk(c: Context, data: Record<string, unknown>, status = 200) {
+  return c.json({ ok: true, data }, status)
+}
+
+function jsonErr(
+  c: Context,
+  code: string,
+  message: string,
+  status: number,
+) {
+  return c.json({ ok: false, error: { code, message } }, status)
+}
+
 // ── Standard-Webhooks HMAC-SHA256 signer ─────────────────────────────────────
-// Reused from a2a-push-notify/index.ts (same algorithm, different payload).
 async function signHmacBase64(secret: string, payload: string): Promise<string> {
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
@@ -63,7 +72,6 @@ function isHttpsUrl(url: string): boolean {
   }
 }
 
-// ── Notify requester that their feature shipped ───────────────────────────────
 async function fireShippedNotification(
   ticket: {
     id: string
@@ -135,7 +143,6 @@ async function fireShippedNotification(
   }
 }
 
-// ── Helper: resolve caller's project context ─────────────────────────────────
 function projectIdFromRequest(c: Context<{ Variables: Variables }>): string | null {
   return (
     c.req.query('project_id') ??
@@ -145,7 +152,6 @@ function projectIdFromRequest(c: Context<{ Variables: Variables }>): string | nu
   )
 }
 
-// ── Route factory ─────────────────────────────────────────────────────────────
 function featureBoardRoutes() {
   const r = new Hono<{ Variables: Variables }>()
   r.use('*', requireAuth, requireProjectAccess)
@@ -154,13 +160,10 @@ function featureBoardRoutes() {
     return getServiceClient()
   }
 
-  // ── GET /v1/admin/feature-board ────────────────────────────────────────────
-  // Returns all feature tickets for the caller's project, ordered by vote_count
-  // desc. Includes whether the current user has already voted.
   r.get('/', async (c) => {
     const userId = c.get('userId') as string
     const projectId = projectIdFromRequest(c)
-    if (!projectId) return c.json({ error: 'missing project_id' }, 400)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
     const { data: tickets, error } = await db()
       .from('feature_requests_with_stats')
@@ -171,10 +174,9 @@ function featureBoardRoutes() {
 
     if (error) {
       flog.error('Failed to fetch feature requests', { error: error.message })
-      return c.json({ error: error.message }, 500)
+      return jsonErr(c, 'DB_ERROR', error.message, 500)
     }
 
-    // Fetch current user's voted request IDs for this project.
     const { data: myVotes } = await db()
       .from('feature_request_votes')
       .select('request_id')
@@ -183,8 +185,7 @@ function featureBoardRoutes() {
 
     const myVotedIds = new Set((myVotes ?? []).map((v) => v.request_id))
 
-    return c.json({
-      ok: true,
+    return jsonOk(c, {
       tickets: (tickets ?? []).map((t) => ({
         ...t,
         my_vote: myVotedIds.has(t.id),
@@ -192,12 +193,11 @@ function featureBoardRoutes() {
     })
   })
 
-  // ── GET /v1/admin/feature-board/:id ───────────────────────────────────────
   r.get('/:id', async (c) => {
     const userId = c.get('userId') as string
     const projectId = projectIdFromRequest(c)
     const requestId = c.req.param('id')
-    if (!projectId) return c.json({ error: 'missing project_id' }, 400)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
     const { data: ticket, error } = await db()
       .from('feature_requests_with_stats')
@@ -206,8 +206,8 @@ function featureBoardRoutes() {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (error) return c.json({ error: error.message }, 500)
-    if (!ticket) return c.json({ error: 'not_found' }, 404)
+    if (error) return jsonErr(c, 'DB_ERROR', error.message, 500)
+    if (!ticket) return jsonErr(c, 'NOT_FOUND', 'Feature request not found', 404)
 
     const { data: myVote } = await db()
       .from('feature_request_votes')
@@ -216,20 +216,15 @@ function featureBoardRoutes() {
       .eq('request_id', requestId)
       .maybeSingle()
 
-    return c.json({ ok: true, ticket: { ...ticket, my_vote: Boolean(myVote) } })
+    return jsonOk(c, { ticket: { ...ticket, my_vote: Boolean(myVote) } })
   })
 
-  // ── POST /v1/admin/feature-board/:id/vote ────────────────────────────────
-  // Idempotent toggle: if the user already voted this returns { voted: true }
-  // (23505 unique_violation treated as success). If they have voted, this
-  // removes the vote instead (toggle behavior).
   r.post('/:id/vote', async (c) => {
     const userId = c.get('userId') as string
     const projectId = projectIdFromRequest(c)
     const requestId = c.req.param('id')
-    if (!projectId) return c.json({ error: 'missing project_id' }, 400)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
-    // Verify the ticket exists and belongs to the project.
     const { data: ticket, error: fetchErr } = await db()
       .from('support_tickets')
       .select('id, project_id, category')
@@ -237,13 +232,12 @@ function featureBoardRoutes() {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (fetchErr) return c.json({ error: fetchErr.message }, 500)
-    if (!ticket) return c.json({ error: 'not_found' }, 404)
+    if (fetchErr) return jsonErr(c, 'DB_ERROR', fetchErr.message, 500)
+    if (!ticket) return jsonErr(c, 'NOT_FOUND', 'Feature request not found', 404)
     if (ticket.category !== 'feature') {
-      return c.json({ error: 'only feature tickets can be voted on' }, 400)
+      return jsonErr(c, 'INVALID_CATEGORY', 'Only feature tickets can be voted on', 400)
     }
 
-    // Check for existing vote (toggle logic).
     const { data: existing } = await db()
       .from('feature_request_votes')
       .select('id')
@@ -252,16 +246,14 @@ function featureBoardRoutes() {
       .maybeSingle()
 
     if (existing) {
-      // Already voted — remove (toggle off).
       const { error: delErr } = await db()
         .from('feature_request_votes')
         .delete()
         .eq('id', existing.id)
-      if (delErr) return c.json({ error: delErr.message }, 500)
-      return c.json({ ok: true, voted: false, action: 'removed' })
+      if (delErr) return jsonErr(c, 'DB_ERROR', delErr.message, 500)
+      return jsonOk(c, { voted: false, action: 'removed' })
     }
 
-    // Insert new vote. Catch 23505 (race between concurrent toggles).
     const { error: insErr } = await db().from('feature_request_votes').insert({
       request_id: requestId,
       user_id: userId,
@@ -269,23 +261,20 @@ function featureBoardRoutes() {
     })
 
     if (insErr) {
-      // 23505 = unique_violation: another concurrent request already inserted.
-      // Treat as "already voted" — idempotent success.
       if (insErr.code === '23505') {
-        return c.json({ ok: true, voted: true, action: 'already_voted' })
+        return jsonOk(c, { voted: true, action: 'already_voted' })
       }
       flog.error('Vote insert failed', { error: insErr.message })
-      return c.json({ error: insErr.message }, 500)
+      return jsonErr(c, 'DB_ERROR', insErr.message, 500)
     }
 
-    return c.json({ ok: true, voted: true, action: 'added' })
+    return jsonOk(c, { voted: true, action: 'added' })
   })
 
-  // ── GET /v1/admin/feature-board/:id/comments ─────────────────────────────
   r.get('/:id/comments', async (c) => {
     const projectId = projectIdFromRequest(c)
     const requestId = c.req.param('id')
-    if (!projectId) return c.json({ error: 'missing project_id' }, 400)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
     const { data: comments, error } = await db()
       .from('feature_request_comments')
@@ -294,37 +283,33 @@ function featureBoardRoutes() {
       .eq('project_id', projectId)
       .order('created_at', { ascending: true })
 
-    if (error) return c.json({ error: error.message }, 500)
-    return c.json({ ok: true, comments: comments ?? [] })
+    if (error) return jsonErr(c, 'DB_ERROR', error.message, 500)
+    return jsonOk(c, { comments: comments ?? [] })
   })
 
-  // ── POST /v1/admin/feature-board/:id/comments ────────────────────────────
   r.post('/:id/comments', async (c) => {
     const userId = c.get('userId') as string
     const projectId = projectIdFromRequest(c)
     const requestId = c.req.param('id')
-    if (!projectId) return c.json({ error: 'missing project_id' }, 400)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
     const body = await c.req.json().catch(() => null)
     const text = (body?.body ?? '').trim()
     const parentId = body?.parent_id ?? null
 
     if (!text || text.length < 1 || text.length > 3000) {
-      return c.json({ error: 'body must be 1–3000 chars' }, 400)
+      return jsonErr(c, 'INVALID_INPUT', 'body must be 1–3000 chars', 400)
     }
 
-    // The auth middleware already sets userEmail on the Hono context; use it
-    // directly instead of querying auth.users (which PostgREST never exposes).
     const authorEmail = (c.get('userEmail') as string | undefined) ?? userId
 
-    // Verify ticket exists and belongs to the project.
     const { data: ticket } = await db()
       .from('support_tickets')
       .select('id')
       .eq('id', requestId)
       .eq('project_id', projectId)
       .maybeSingle()
-    if (!ticket) return c.json({ error: 'not_found' }, 404)
+    if (!ticket) return jsonErr(c, 'NOT_FOUND', 'Feature request not found', 404)
 
     const { data: comment, error: insErr } = await db()
       .from('feature_request_comments')
@@ -339,23 +324,14 @@ function featureBoardRoutes() {
       .select()
       .single()
 
-    if (insErr) return c.json({ error: insErr.message }, 500)
-    return c.json({ ok: true, comment }, 201)
+    if (insErr) return jsonErr(c, 'DB_ERROR', insErr.message, 500)
+    return jsonOk(c, { comment }, 201)
   })
 
-  // ── POST /v1/admin/feature-board/:id/ship ───────────────────────────────
-  // Marks a feature ticket as shipped and fires a Standard-Webhooks
-  // notification using the same HMAC signer as a2a-push-notify,
-  // generalized off fix_dispatch_jobs to target any configured push URL.
-  // Push URL resolution order:
-  //   1. body.push_url (caller-supplied, per-delivery override)
-  //   2. vault secret `feature-board/push/<projectId>` (project-scoped)
-  //   3. OPERATOR_SLACK_WEBHOOK_URL env var (operator-global fallback)
-  //   4. OPERATOR_DISCORD_WEBHOOK_URL env var (operator-global fallback)
   r.post('/:id/ship', async (c) => {
     const projectId = projectIdFromRequest(c)
     const requestId = c.req.param('id')
-    if (!projectId) return c.json({ error: 'missing project_id' }, 400)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
 
     const body = await c.req.json().catch(() => null)
     const releaseId: string | null = body?.release_id ?? null
@@ -369,13 +345,12 @@ function featureBoardRoutes() {
       .eq('project_id', projectId)
       .maybeSingle()
 
-    if (fetchErr) return c.json({ error: fetchErr.message }, 500)
-    if (!ticket) return c.json({ error: 'not_found' }, 404)
+    if (fetchErr) return jsonErr(c, 'DB_ERROR', fetchErr.message, 500)
+    if (!ticket) return jsonErr(c, 'NOT_FOUND', 'Feature request not found', 404)
     if (ticket.category !== 'feature') {
-      return c.json({ error: 'only feature tickets can be shipped' }, 400)
+      return jsonErr(c, 'INVALID_CATEGORY', 'Only feature tickets can be shipped', 400)
     }
 
-    // Update ticket to shipped state.
     const { error: updateErr } = await db()
       .from('support_tickets')
       .update({
@@ -387,9 +362,8 @@ function featureBoardRoutes() {
       })
       .eq('id', requestId)
 
-    if (updateErr) return c.json({ error: updateErr.message }, 500)
+    if (updateErr) return jsonErr(c, 'DB_ERROR', updateErr.message, 500)
 
-    // Resolve push URL: caller → vault → operator env vars.
     let pushUrl: string | null = callerPushUrl
     if (!pushUrl) {
       const { data: vaultUrl } = await db()
@@ -403,7 +377,6 @@ function featureBoardRoutes() {
         null
     }
 
-    // Resolve signing secret from vault (project-scoped, same namespace as a2a push).
     const { data: vaultSecret } = await db()
       .rpc('vault_lookup', { secret_name: `a2a/push/${projectId}` })
     const pushSecret = typeof vaultSecret === 'string' ? vaultSecret : null
@@ -428,7 +401,7 @@ function featureBoardRoutes() {
       notification: notifResult,
     })
 
-    return c.json({ ok: true, shipped: true, notification: notifResult })
+    return jsonOk(c, { shipped: true, notification: notifResult })
   })
 
   return r

@@ -225,7 +225,7 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 </td>
 <td align="center" width="16%">
 
-**234**
+**236**
 <br/>
 <sub>SQL Migrations</sub>
 
@@ -504,12 +504,20 @@ Mushi.init({
       position: 'top',    // 'top' | 'bottom'
       bugCta: '🐛 Report a bug',
       featureCta: true,
+      // Optional rich layout: pill label + body copy + flat link actions
+      message: 'We are in beta — spotted something off? Tell us.',
+      label: 'Beta', // `false` hides the pill
+      links: [{ label: 'My submissions', href: 'https://app.example.com/feedback' }],
     },
   },
 })
 ```
 
-Configure the launcher and preview the snippet live in the admin console under **SDK Install → Launcher**.
+Setting `message` switches the strip to the rich pill + message + flat-actions
+layout (see [`packages/web`](./packages/web#rich-banner-layout-18) for details);
+`message` and `label` can also be driven remotely per-project from the admin
+console. Configure the launcher and preview the snippet live in the admin
+console under **SDK Install → Launcher**.
 
 ## Headless SDK integration
 
@@ -710,7 +718,7 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 234 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 236 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet — see [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 
@@ -759,7 +767,7 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | Package                                                                  | Purpose                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`@mushi-mushi/core`](./packages/core)                                   | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, **v2.1 `discoverInventory` types**                                                                                                                                                                           |
-| [`@mushi-mushi/cli`](./packages/cli)                                     | CLI for project setup, report listing, triage                                                                                                                                                                                                                                              |
+| [`@mushi-mushi/cli`](./packages/cli)                                     | CLI for project setup (`mushi connect` one-shot wiring + heartbeat wait), report listing, triage, `doctor --ingest` health checks, and `mushi upgrade` SDK bumps                                                                                                                           |
 | [`@mushi-mushi/mcp`](./packages/mcp)                                     | MCP server — Cursor / Copilot / Claude read, triage, classify, dispatch fixes. **Both stdio (local) and Streamable HTTP (`/functions/v1/mcp`, hosted) transports per the 2025-03-26 spec.** Discoverable via `/.well-known/agent-card`, `/openapi.json`, and `/v1/a2a/tasks` (A2A v1.0.0). |
 | [`@mushi-mushi/mcp-ci`](./packages/mcp-ci)                               | GitHub Action — `gates`, `discover-api`, `discovery-status`, `propose`, `auth-bootstrap` (the v2 pre-release suite + new MCP CLI)                                                                                                                                                          |
 | [`@mushi-mushi/inventory-schema`](./packages/inventory-schema)           | **v2 source of truth** — Zod + JSON Schema for `inventory.yaml`, used by the admin ingester, gate runner, LLM proposer, and GitHub Action                                                                                                                                                  |

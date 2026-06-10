@@ -28,7 +28,7 @@ export function PdcaLegendPanel({
   const focusMeta = focusStage ? PDCA_STAGES[focusStage] : null
   const runningMeta = runningStage ? PDCA_STAGES[runningStage] : null
   return (
-    <div className="rounded-md border border-edge/70 bg-surface-overlay/90 shadow-card backdrop-blur-sm px-2 py-1.5 text-2xs max-w-[15rem]">
+    <div className="rounded-md border border-edge bg-surface-overlay/95 shadow-card backdrop-blur-sm px-2.5 py-2 text-2xs max-w-[16rem]">
       {focusMeta ? (
         <div className="flex items-center gap-1.5">
           <span
@@ -53,15 +53,19 @@ export function PdcaLegendPanel({
       ) : (
         <div className="font-medium text-fg-muted">Pipeline clean</div>
       )}
-      <div className="mt-1 flex items-center gap-2 text-3xs text-fg-faint">
+      <div className="mt-1.5 flex items-center gap-1.5 text-3xs text-fg-muted border-t border-edge-subtle/60 pt-1.5">
         {PDCA_ORDER.map((id) => (
-          <span key={id} className="inline-flex items-center gap-1" aria-label={PDCA_STAGES[id].label}>
+          <span
+            key={id}
+            className="inline-flex items-center gap-1 rounded-full border border-edge-subtle/70 bg-surface/60 px-1.5 py-0.5"
+            aria-label={PDCA_STAGES[id].label}
+          >
             <span
-              className="inline-block h-1.5 w-1.5 rounded-full"
+              className="inline-block h-2 w-2 rounded-full"
               style={{ backgroundColor: STAGE_HEX[id] }}
               aria-hidden="true"
             />
-            <span className="font-mono">{PDCA_STAGES[id].letter}</span>
+            <span className="font-mono font-semibold">{PDCA_STAGES[id].letter}</span>
           </span>
         ))}
         {runningMeta && (

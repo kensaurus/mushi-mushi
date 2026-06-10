@@ -133,6 +133,8 @@ interface PageHeroProps {
    *  full-width layout (keeps the hero interesting when there IS a
    *  trending metric worth showing). */
   decideAccessory?: ReactNode
+  /** Fired when the advanced-mode collapse toggle changes (per scope). */
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
 // Severity tokens used by the *beginner* one-line summary card +
@@ -197,6 +199,7 @@ export function PageHero({
   actDebugLines,
   verify,
   decideAccessory,
+  onCollapsedChange,
 }: PageHeroProps) {
   const { isAdvanced } = useAdminMode()
   const severity = decide.severity ?? 'neutral'
@@ -222,6 +225,10 @@ export function PageHero({
   useEffect(() => {
     writeCollapsedScopes(collapsedScopes)
   }, [collapsedScopes])
+
+  useEffect(() => {
+    onCollapsedChange?.(collapsed)
+  }, [collapsed, onCollapsedChange])
 
   const operatorTraces = useMemo(
     () => ({
@@ -326,11 +333,14 @@ export function PageHero({
           aria-expanded={false}
           aria-controls={`hero-${scope}-tiles`}
           className={`group flex items-center gap-2.5 w-full rounded-sm bg-surface-raised/25 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
-          title="Decide → Act → Verify · click to expand"
+          title="This page · Status → Next step → Evidence · click to expand"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
           <span className="text-3xs font-medium text-fg-secondary uppercase tracking-wider shrink-0">
-            Decide → Act → Verify
+            This page
+          </span>
+          <span className="hidden sm:inline text-3xs text-fg-muted shrink-0">
+            Status → Next step → Evidence
           </span>
           <span className={`text-2xs font-medium truncate ${style.text}`}>
             {decide.label}
@@ -374,7 +384,10 @@ export function PageHero({
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
           <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">
-            Decide → Act → Verify
+            This page
+          </span>
+          <span className="hidden sm:inline text-3xs text-fg-muted font-normal normal-case tracking-normal">
+            · Status → Next step → Evidence
           </span>
           {traceAlert.errorCount > 0 && (
             <span className="rounded bg-err/15 px-1.5 py-px text-3xs font-semibold text-err">
@@ -402,7 +415,7 @@ export function PageHero({
           aria-expanded={true}
           aria-controls={`hero-${scope}-flow`}
           className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-          title="Collapse Decide → Act → Verify"
+          title="Collapse page hero"
         >
           Collapse <span aria-hidden>▴</span>
         </button>

@@ -91,6 +91,10 @@ export interface SdkConfigRow {
   sdk_banner_bug_cta?: string | null;
   /** Whether to show the feature-request CTA in the banner. */
   sdk_banner_feature_cta?: boolean | null;
+  /** Rich banner body copy (Beta announcement line). */
+  sdk_banner_message?: string | null;
+  /** Rich banner pill label (e.g. Beta). */
+  sdk_banner_label?: string | null;
   sdk_capture_console?: boolean | null;
   sdk_capture_network?: boolean | null;
   sdk_capture_performance?: boolean | null;
@@ -130,6 +134,8 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null) {
       bannerPosition: oneOf(row?.sdk_banner_position, SDK_BANNER_POSITIONS, 'top'),
       bannerBugCta: row?.sdk_banner_bug_cta ?? null,
       bannerFeatureCta: row?.sdk_banner_feature_cta ?? true,
+      bannerMessage: row?.sdk_banner_message ?? null,
+      bannerLabel: row?.sdk_banner_label ?? null,
     },
     capture: {
       console: row?.sdk_capture_console ?? true,
@@ -168,6 +174,18 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
     updates.sdk_banner_bug_cta = trimmed ? widget.bannerBugCta.slice(0, 60) : null;
   }
   if (typeof widget.bannerFeatureCta === 'boolean') updates.sdk_banner_feature_cta = widget.bannerFeatureCta;
+  if (typeof widget.bannerMessage === 'string') {
+    const trimmed = widget.bannerMessage.trim();
+    updates.sdk_banner_message = trimmed ? trimmed.slice(0, 240) : null;
+  } else if (widget.bannerMessage === null) {
+    updates.sdk_banner_message = null;
+  }
+  if (typeof widget.bannerLabel === 'string') {
+    const trimmed = widget.bannerLabel.trim();
+    updates.sdk_banner_label = trimmed ? trimmed.slice(0, 24) : null;
+  } else if (widget.bannerLabel === null) {
+    updates.sdk_banner_label = null;
+  }
   if (typeof capture.console === 'boolean') updates.sdk_capture_console = capture.console;
   if (typeof capture.network === 'boolean') updates.sdk_capture_network = capture.network;
   if (typeof capture.performance === 'boolean')

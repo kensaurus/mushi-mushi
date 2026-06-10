@@ -150,8 +150,8 @@ export function formatHeroEdgeLabel(
 // sitting in a fixed ~910px band with dead margins on wide screens.
 
 const DEFAULT_NODE_WIDTH = 250
-const DEFAULT_NODE_HEIGHT = 110
-const DEFAULT_NODE_GAP = 80
+const DEFAULT_NODE_HEIGHT = 132
+const DEFAULT_NODE_GAP = 72
 
 export interface HeroLayoutMetrics {
   nodeWidth: number
@@ -175,12 +175,12 @@ export function computeHeroLayout(
 ): HeroLayoutMetrics {
   const padding = 12
   const usable = Math.max(360, containerWidth - padding * 2)
-  const minNode = 140
-  const maxNode = 400
+  const minNode = 168
+  const maxNode = 420
   // Gaps are the "label channels" between nodes — keep them wide enough that
   // edge pills can wrap to 2–3 readable lines instead of one char per line.
-  const minGap = 88
-  const maxGap = 168
+  const minGap = 56
+  const maxGap = 96
 
   let gap = Math.min(maxGap, Math.max(minGap, Math.floor(usable * 0.11)))
   let nodeWidth = Math.floor((usable - 2 * gap) / 3)
@@ -194,8 +194,8 @@ export function computeHeroLayout(
 
   const totalWidth = 3 * nodeWidth + 2 * gap
   const offsetX = padding + Math.max(0, (usable - totalWidth) / 2)
-  const nodeHeight = opts?.expanded ? 132 : DEFAULT_NODE_HEIGHT + 10
-  const labelMaxWidth = Math.max(108, Math.min(200, Math.floor(gap * 0.92)))
+  const nodeHeight = opts?.expanded ? 152 : DEFAULT_NODE_HEIGHT
+  const labelMaxWidth = Math.max(120, Math.min(220, Math.floor(gap * 0.88)))
 
   return {
     nodeWidth,
@@ -310,28 +310,18 @@ export function buildHeroEdges(input: {
   layout: HeroLayoutMetrics
 }): Edge<HeroEdgeData>[] {
   const decideHex = HERO_SEVERITY_HEX[input.decide.severity]
+  // Idle act still reads as amber so the lane doesn't go gray mid-flow.
   const actHex = input.act.action
     ? HERO_ACTION_TONE_HEX[input.act.action.tone]
-    : HERO_ACTION_TONE_HEX.idle
-  const verifyHex = HERO_SEVERITY_HEX.neutral
+    : HERO_ACTION_TONE_HEX.do
+  const verifyHex = HERO_SEVERITY_HEX.ok
 
   const failingFirst = input.decide.severity === 'crit'
   const failingSecond = false
-  const hasAction = Boolean(input.act.action)
-  const flowingFirst = hasAction || failingFirst
-  const flowingSecond = hasAction && Boolean(input.verify.to)
-
-  // Derive real metadata labels from page data. Long action titles are
-  // truncated in the pill; full copy appears on hover (HeroGradientEdge).
-  const firstRaw = hasAction
-    ? input.act.action!.title
-    : input.decide.severity !== 'neutral' && input.decide.severity !== 'ok'
-      ? input.decide.severity
-      : undefined
-  const firstFormatted = firstRaw ? formatHeroEdgeLabel(firstRaw, 30) : null
-  const secondRaw = input.verify.to ? 'evidence' : undefined
-  const secondFormatted = secondRaw ? formatHeroEdgeLabel(secondRaw, 24) : null
-  const labelMaxWidth = Math.min(148, input.layout.labelMaxWidth)
+  const needsAttention =
+    input.decide.severity === 'warn' || input.decide.severity === 'crit'
+  const flowingFirst = needsAttention
+  const flowingSecond = needsAttention && Boolean(input.verify.to)
 
   return [
     {
@@ -346,10 +336,6 @@ export function buildHeroEdges(input: {
         targetColor: actHex,
         flowing: flowingFirst,
         failing: failingFirst,
-        label: firstFormatted?.full,
-        labelDisplay: firstFormatted?.display,
-        labelTruncated: firstFormatted?.truncated,
-        labelMaxWidth,
       },
     },
     {
@@ -364,10 +350,6 @@ export function buildHeroEdges(input: {
         targetColor: verifyHex,
         flowing: flowingSecond,
         failing: failingSecond,
-        label: secondFormatted?.full,
-        labelDisplay: secondFormatted?.display,
-        labelTruncated: secondFormatted?.truncated,
-        labelMaxWidth: Math.min(labelMaxWidth, 88),
       },
     },
   ]

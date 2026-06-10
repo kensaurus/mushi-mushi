@@ -1169,16 +1169,30 @@ function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig)
     runtime.widget?.trigger ??
     (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
   // Build bannerConfig from flat runtime fields when present.
-  const runtimeBannerVariant = (runtime.widget as Record<string, unknown>)?.bannerVariant as string | undefined;
-  const runtimeBannerPosition = (runtime.widget as Record<string, unknown>)?.bannerPosition as string | undefined;
-  const runtimeBannerBugCta = (runtime.widget as Record<string, unknown>)?.bannerBugCta as string | null | undefined;
-  const runtimeBannerFeatureCta = (runtime.widget as Record<string, unknown>)?.bannerFeatureCta as boolean | undefined;
+  const runtimeWidget = runtime.widget as Record<string, unknown> | undefined;
+  const runtimeBannerVariant = runtimeWidget?.bannerVariant as string | undefined;
+  const runtimeBannerPosition = runtimeWidget?.bannerPosition as string | undefined;
+  const runtimeBannerMessage = runtimeWidget?.bannerMessage as string | null | undefined;
+  const runtimeBannerLabel = runtimeWidget?.bannerLabel as string | null | undefined;
+  const runtimeBannerBugCta = runtimeWidget?.bannerBugCta as string | null | undefined;
+  const runtimeBannerFeatureCta = runtimeWidget?.bannerFeatureCta as boolean | undefined;
   const derivedBannerConfig =
-    runtimeBannerVariant || runtimeBannerPosition || runtimeBannerBugCta != null || runtimeBannerFeatureCta != null
+    runtimeBannerVariant ||
+    runtimeBannerPosition ||
+    runtimeBannerMessage != null ||
+    runtimeBannerLabel != null ||
+    runtimeBannerBugCta != null ||
+    runtimeBannerFeatureCta != null
       ? {
           ...(config.widget?.bannerConfig ?? {}),
           ...(runtimeBannerVariant ? { variant: runtimeBannerVariant as 'neon' | 'brand' | 'subtle' } : {}),
           ...(runtimeBannerPosition ? { position: runtimeBannerPosition as 'top' | 'bottom' } : {}),
+          ...(runtimeBannerMessage != null ? { message: runtimeBannerMessage } : {}),
+          // Dashboard sends an empty string to hide the pill (the runtime
+          // payload has no way to express the local-config `label: false`).
+          ...(runtimeBannerLabel != null
+            ? { label: runtimeBannerLabel === '' ? (false as const) : runtimeBannerLabel }
+            : {}),
           ...(runtimeBannerBugCta != null ? { bugCta: runtimeBannerBugCta ?? undefined } : {}),
           ...(runtimeBannerFeatureCta != null ? { featureCta: runtimeBannerFeatureCta } : {}),
         }
