@@ -1,5 +1,49 @@
 # @mushi-mushi/web
 
+## 1.7.8
+
+### Patch Changes
+
+- Strip cross-origin media from screenshot clones and fall back to a degraded viewport receipt when canvas export is tainted.
+
+## 1.7.7
+
+### Patch Changes
+
+- Hide the SDK chrome during screenshot capture and strip `#mushi-mushi-widget` from the DOM clone so `on-report` auto-screenshots reliably produce attachments.
+
+## 1.7.6
+
+### Patch Changes
+
+- Auto-capture screenshots on report submit when `capture.screenshot` is `on-report` or `auto`, and add 15-minute rewards API backoff after permanent 4xx responses to prevent retry storms.
+
+## 1.7.5
+
+### Patch Changes
+
+- fe51f6e: fix(widget): replace generic indigo beta-strip with brand vermillion palette
+
+  The beta-mode strip, beta-tag, and beta-success-footer inside the report panel
+  were using raw `rgba(99, 102, 241)` (generic SaaS indigo/purple) — the single
+  most recognisable AI-template colour. All three surfaces now use the widget's
+  own `widgetAccent` / `widgetAccentWash` / `widgetAccentInk` tokens so the beta
+  panel reads as a Mushi-native surface rather than a plug-in from a different
+  product. The BETA pill is promoted to a solid vermillion stamp (matching the
+  header mark and submit button) rather than a tinted amber chip.
+
+- fix(widget): host pointer-events pass-through so banner never blocks page taps
+
+  The shadow-host element no longer intercepts touches on underlying page content.
+  `:host` is `pointer-events: none` with zero-size fixed positioning; banner, panel,
+  and FAB surfaces opt back into `pointer-events: auto`. Adds `syncHostChromeState`,
+  `isSuppressedByHost`, and `getWidgetDiagnostics` (`widgetHostPointerSafe`,
+  `widgetHostBounds`, `bannerRendered`) for integration health checks. Unifies
+  `hideOnSelector` suppression across trigger and banner paths.
+
+- Updated dependencies
+  - @mushi-mushi/core@1.7.5
+
 ## 1.7.4
 
 ### Patch Changes

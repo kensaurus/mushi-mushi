@@ -202,12 +202,66 @@ Mushi.init({
 const health = await Mushi.diagnose();
 // → { apiEndpointReachable, cspAllowsEndpoint, widgetMounted, shadowDomAvailable,
 //     dialogSupported, runtimeConfigLoaded, captureScreenshotAvailable,
-//     captureNetworkIntercepting, sdkVersion }
+//     captureNetworkIntercepting, sdkVersion,
+//     widgetHostPointerSafe, widgetHostBounds, widgetSuppressed, bannerRendered }
+//
+// widgetHostPointerSafe — true when the host element is zero-sized and
+//   pointer-events:none (i.e. the SDK cannot block any host-app touch targets).
+// widgetSuppressed      — true when hidden by hideOnSelector / hideOnRoutes / hide().
+// bannerRendered        — true when trigger:'banner' and banner is visible.
 ```
 
 `Mushi.diagnose()` works **before** `Mushi.init()` too — call it from a debug
 console or installer wizard to surface CSP / endpoint problems with zero risk
 of accidentally booting the widget.
+
+### Host-element pass-through contract
+
+The Mushi SDK guarantees it will **never block host-app UI** by default. The
+host element (`#mushi-mushi-widget`) is always:
+
+- `position: fixed; top: 0; left: 0`
+- `width: 0; height: 0; overflow: visible` — zero-sized, shadow internals extend outward
+- `pointer-events: none` — clicks and touches pass straight through to the page
+
+Only the visible widget controls (`.mushi-trigger`, `.mushi-banner`, `.mushi-panel`)
+opt back into `pointer-events: auto` inside the Shadow DOM.
+
+If you want to verify this at runtime:
+
+```typescript
+const health = await Mushi.diagnose();
+console.assert(health.widgetHostPointerSafe, 'Mushi host is blocking UI!');
+```
+
+### Suppressing Mushi during fullscreen flows
+
+For fullscreen modals, onboarding, games, video players, or checkout screens where
+you need complete interaction isolation, use `hideOnSelector`. **This suppresses
+both the trigger button and the banner** (they are unified — no surface leaks through):
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'banner',
+    // Hide ALL SDK launcher surfaces while any of these elements are in the DOM.
+    hideOnSelector: '[data-onboarding-flow], [data-fullscreen-modal], [data-game-active]',
+    hideOnRoutes: ['/checkout/payment', '/quiz/'],
+  },
+});
+```
+
+For dynamic route-based suppression you can also call `Mushi.hide()` / `Mushi.show()`
+programmatically; the body-offset nudge from `trigger:'banner'` is removed automatically
+on every hide path.
+
+> **Capacitor / WebView note:** In native WebView shells (iOS WKWebView, Android
+> WebViewClient), `pointer-events:none` alone is not always sufficient — some versions
+> of Chromium-based WebViews still route touch events to `fixed` overlay elements that
+> sit at a certain z-index. Use `hideOnSelector` or `Mushi.hide()` for the safest
+> experience in native shells.
 
 ### Presets and widget anchor
 
@@ -403,3 +457,9 @@ the browser context.
 ## License
 
 MIT
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (June 2026): 43 edge functions · 233 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

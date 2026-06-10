@@ -79,6 +79,17 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       -moz-osx-font-smoothing: grayscale;
       font-feature-settings: 'ss01', 'cv11'; /* nicer system-ui glyphs where supported */
       --mushi-ok: ${isDark ? '#4ade80' : '#16a34a'};
+      /* SDK contract: the host element is always pass-through. Only the
+         interactive surfaces (.mushi-trigger, .mushi-banner, .mushi-panel)
+         opt back into pointer events so the widget never creates an
+         invisible touch blocker over host-app UI. */
+      pointer-events: none;
+    }
+    /* Only actual widget controls receive touch/mouse events. */
+    .mushi-trigger,
+    .mushi-banner,
+    .mushi-panel {
+      pointer-events: auto;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     button { font-family: inherit; }

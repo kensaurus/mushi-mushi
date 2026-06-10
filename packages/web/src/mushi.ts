@@ -294,10 +294,40 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // re-init in HMR'd dev sessions.
   let detachAutoBreadcrumbs: (() => void) | null = null;
   detachAutoBreadcrumbs = installAutoBreadcrumbs(breadcrumbs);
+
+  async function takeScreenshotWithoutChrome(): Promise<string | null> {
+    if (!screenshotCap) return null;
+    const panelWasVisible = widget.getIsOpen();
+    if (panelWasVisible) widget.hidePanel();
+    const host = document.getElementById('mushi-mushi-widget');
+    const prevVisibility = host?.style.visibility ?? '';
+    if (host) host.style.visibility = 'hidden';
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    try {
+      return await screenshotCap.take();
+    } finally {
+      if (host) host.style.visibility = prevVisibility;
+      if (panelWasVisible) widget.showPanel();
+    }
+  }
+
+  async function autoCaptureScreenshot(when: 'open' | 'submit'): Promise<void> {
+    const mode = activeConfig.capture?.screenshot;
+    if (!screenshotCap || mode === 'off' || pendingScreenshot) return;
+    if (when === 'open' && mode !== 'auto') return;
+    if (when === 'submit' && mode !== 'on-report' && mode !== 'auto') return;
+    log.debug('Auto-capturing screenshot', { when, mode });
+    pendingScreenshot = await takeScreenshotWithoutChrome();
+    widget.setScreenshotAttached(pendingScreenshot !== null);
+  }
+
   widget = new MushiWidget(bootstrapConfig.widget, {
     onSubmit: async ({ category, description, intent }) => {
       log.info('Report submitted', { category, intent });
       proactiveManager?.recordSubmission();
+      await autoCaptureScreenshot('submit');
       const outcome = await submitReport(category, description, intent);
       // Surface the server-confirmed id back to the widget so the
       // success step renders a real receipt rather than a fake stamp.
@@ -308,6 +338,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     },
     onOpen: () => {
       log.debug('Widget opened');
+      void autoCaptureScreenshot('open');
       emit('widget:opened');
     },
     onClose: () => {
@@ -324,7 +355,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onScreenshotRequest: async () => {
       if (!screenshotCap || activeConfig.capture?.screenshot === 'off') return;
       log.debug('Taking screenshot');
-      pendingScreenshot = await screenshotCap.take();
+      pendingScreenshot = await takeScreenshotWithoutChrome();
       widget.setScreenshotAttached(pendingScreenshot !== null);
     },
     onScreenshotRemove: () => {
@@ -812,6 +843,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         runtimeConfigLoaded,
         captureScreenshotAvailable: screenshotCap !== null,
         captureNetworkIntercepting: networkCap !== null,
+        widgetDiagnostics: widget.getWidgetDiagnostics(),
       });
     },
 
@@ -1241,6 +1273,12 @@ async function runDiagnostics(options: {
   runtimeConfigLoaded: boolean;
   captureScreenshotAvailable: boolean;
   captureNetworkIntercepting: boolean;
+  widgetDiagnostics?: {
+    widgetHostPointerSafe: boolean;
+    widgetHostBounds: { width: number; height: number } | null;
+    widgetSuppressed: boolean;
+    bannerRendered: boolean;
+  };
 }): Promise<MushiDiagnosticsResult> {
   const endpoint = await probeApiEndpoint(options.apiEndpoint);
   return {
@@ -1253,6 +1291,10 @@ async function runDiagnostics(options: {
     captureScreenshotAvailable: options.captureScreenshotAvailable,
     captureNetworkIntercepting: options.captureNetworkIntercepting,
     sdkVersion: MUSHI_SDK_VERSION,
+    widgetHostPointerSafe: options.widgetDiagnostics?.widgetHostPointerSafe ?? false,
+    widgetHostBounds: options.widgetDiagnostics?.widgetHostBounds ?? null,
+    widgetSuppressed: options.widgetDiagnostics?.widgetSuppressed ?? false,
+    bannerRendered: options.widgetDiagnostics?.bannerRendered ?? false,
   };
 }
 
@@ -1267,6 +1309,10 @@ async function diagnoseWithoutInstance(): Promise<MushiDiagnosticsResult> {
     captureScreenshotAvailable: false,
     captureNetworkIntercepting: false,
     sdkVersion: MUSHI_SDK_VERSION,
+    widgetHostPointerSafe: false,
+    widgetHostBounds: null,
+    widgetSuppressed: false,
+    bannerRendered: false,
   };
 }
 

@@ -1368,6 +1368,7 @@ Examples:
 
     const body: Record<string, unknown> = {
       reportId,
+      projectId: cfg.projectId,
       agent: opts.agent,
     }
     if (opts.agent === 'cursor_cloud') {

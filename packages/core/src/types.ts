@@ -944,6 +944,31 @@ export interface MushiDiagnosticsResult {
   captureScreenshotAvailable: boolean;
   captureNetworkIntercepting: boolean;
   sdkVersion: string;
+  /**
+   * True when the widget host element has `pointer-events: none` and
+   * zero width/height — i.e. it cannot act as a touch blocker over host UI.
+   * False when the SDK has not yet mounted, or when a consumer has overridden
+   * the host styles without restoring the pass-through contract.
+   */
+  widgetHostPointerSafe: boolean;
+  /**
+   * Bounding rect of the widget host element (`offsetWidth × offsetHeight`).
+   * Should be `{ width: 0, height: 0 }` for a healthy SDK — the host is
+   * zero-sized with `overflow: visible` so the shadow internals extend
+   * outward without creating a hit-test surface.  `null` when not mounted.
+   */
+  widgetHostBounds: { width: number; height: number } | null;
+  /**
+   * True when the widget is currently suppressed: `hideOnSelector` matched an
+   * element, `hideOnRoutes` matched the current pathname, or `hide()` was
+   * called.  A suppressed widget renders nothing and removes the body nudge.
+   */
+  widgetSuppressed: boolean;
+  /**
+   * True when `trigger: 'banner'` is active and the banner is currently
+   * rendered in the shadow DOM (not dismissed, not suppressed).
+   */
+  bannerRendered: boolean;
 }
 
 export interface MushiSDKInstance {

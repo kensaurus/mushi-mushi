@@ -1,5 +1,18 @@
 # @mushi-mushi/core
 
+## 1.7.5
+
+### Patch Changes
+
+- fix(widget): host pointer-events pass-through so banner never blocks page taps
+
+  The shadow-host element no longer intercepts touches on underlying page content.
+  `:host` is `pointer-events: none` with zero-size fixed positioning; banner, panel,
+  and FAB surfaces opt back into `pointer-events: auto`. Adds `syncHostChromeState`,
+  `isSuppressedByHost`, and `getWidgetDiagnostics` (`widgetHostPointerSafe`,
+  `widgetHostBounds`, `bannerRendered`) for integration health checks. Unifies
+  `hideOnSelector` suppression across trigger and banner paths.
+
 ## 1.7.4
 
 ### Patch Changes

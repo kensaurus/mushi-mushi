@@ -224,6 +224,7 @@ export class MushiWidget {
 
   mount(): void {
     if (this.host.isConnected) return;
+    this.syncHostChromeState();
     document.body.appendChild(this.host);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
@@ -266,6 +267,8 @@ export class MushiWidget {
       ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
+    // Re-sync host chrome in case zIndex changed.
+    if (this.host.isConnected) this.syncHostChromeState();
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.render();
@@ -543,6 +546,83 @@ export class MushiWidget {
     this.host.remove();
   }
 
+  /* ── Host chrome contract ────────────────────────────────────────────────
+     The host element must never create an invisible full-screen touch blocker.
+     We own these inline styles — consumer CSS can only win with `!important`,
+     which is explicitly banned by the SDK contract. Calling this at mount()
+     and after every zIndex update is the only safe invariant. */
+
+  /**
+   * Apply the SDK-owned pass-through layout to the host element so it is
+   * always zero-sized and click/touch-transparent. Only the shadow-root
+   * internals (`.mushi-trigger`, `.mushi-banner`, `.mushi-panel`) opt back
+   * into pointer events.  This is idempotent and safe to call repeatedly.
+   */
+  private syncHostChromeState(): void {
+    const s = this.host.style;
+    s.setProperty('position', 'fixed');
+    s.setProperty('top', '0');
+    s.setProperty('left', '0');
+    s.setProperty('width', '0');
+    s.setProperty('height', '0');
+    s.setProperty('overflow', 'visible');
+    s.setProperty('pointer-events', 'none');
+    s.setProperty('z-index', String(this.config.zIndex));
+    s.setProperty('margin', '0');
+    s.setProperty('padding', '0');
+    s.setProperty('border', 'none');
+    s.setProperty('background', 'none');
+  }
+
+  /**
+   * Returns true when a DOM element matching `hideOnSelector` is currently
+   * present in the host document.  Used by both the trigger and the banner
+   * so a single selector consistently hides ALL SDK-injected launcher
+   * surfaces.  Invalid selectors are swallowed silently (non-fatal).
+   */
+  private isSuppressedByHost(): boolean {
+    if (!this.config.hideOnSelector || typeof document === 'undefined') return false;
+    try {
+      return Boolean(document.querySelector(this.config.hideOnSelector));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns a snapshot of the widget's host-layer health for use in
+   * `Mushi.diagnose()`.  Callers check this to know whether the widget
+   * could ever block host-app UI without opening a browser devtools.
+   */
+  getWidgetDiagnostics(): {
+    widgetHostPointerSafe: boolean;
+    widgetHostBounds: { width: number; height: number } | null;
+    widgetSuppressed: boolean;
+    bannerRendered: boolean;
+  } {
+    const s = this.host.style;
+    const widgetHostPointerSafe =
+      s.pointerEvents === 'none' &&
+      (s.width === '0' || s.width === '0px') &&
+      (s.height === '0' || s.height === '0px');
+
+    const widgetHostBounds = this.host.isConnected
+      ? { width: this.host.offsetWidth, height: this.host.offsetHeight }
+      : null;
+
+    const widgetSuppressed =
+      this.isSuppressedByHost() || this.isRouteHidden() || !this.triggerVisible;
+
+    const bannerRendered =
+      this.config.trigger === 'banner' &&
+      !this.bannerDismissed &&
+      !this.isSuppressedByHost() &&
+      !this.isRouteHidden() &&
+      this.triggerVisible;
+
+    return { widgetHostPointerSafe, widgetHostBounds, widgetSuppressed, bannerRendered };
+  }
+
   private syncAttachedLaunchers(): void {
     this.attachedLaunchers.forEach((cleanup) => cleanup());
     this.attachedLaunchers = [];
@@ -594,7 +674,7 @@ export class MushiWidget {
     }
     if (this.isMobileSmartHidden()) return false;
     if (this.isRouteHidden()) return false;
-    if (this.config.hideOnSelector && document.querySelector(this.config.hideOnSelector)) return false;
+    if (this.isSuppressedByHost()) return false;
     const action = this.config.environments[this.detectEnvironment()];
     return action !== 'never' && action !== 'manual';
   }
@@ -643,6 +723,9 @@ export class MushiWidget {
     // leave the host page with permanent padding-top/bottom.
     if (!this.triggerVisible) { this.removeBodyNudge(); return; }
     if (this.isRouteHidden()) { this.removeBodyNudge(); return; }
+    // hideOnSelector must suppress the banner too — the trigger check already
+    // uses isSuppressedByHost(), so this keeps both surfaces in sync.
+    if (this.isSuppressedByHost()) { this.removeBodyNudge(); return; }
 
     const bc = this.config.bannerConfig ?? {};
     const variant  = bc.variant  ?? 'brand';
