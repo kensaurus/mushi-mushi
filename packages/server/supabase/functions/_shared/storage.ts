@@ -74,6 +74,15 @@ export interface StorageAdapter {
 
 const settingsCache = new Map<string, { settings: StorageSettings | null; expiresAt: number }>()
 const SETTINGS_TTL_MS = 60 * 1000
+const CLUSTER_DEFAULT_BUCKET = 'screenshots'
+
+/** Normalize legacy / typo bucket names to the cluster default Supabase bucket. */
+function resolveSupabaseBucket(configured?: string | null): string {
+  if (!configured || configured === CLUSTER_DEFAULT_BUCKET) return CLUSTER_DEFAULT_BUCKET
+  // Admin once seeded mushi-screenshots for glot.it; that bucket was never created.
+  if (configured === 'mushi-screenshots') return CLUSTER_DEFAULT_BUCKET
+  return configured
+}
 
 export async function getStorageSettings(projectId: string): Promise<StorageSettings | null> {
   const cached = settingsCache.get(projectId)
@@ -104,7 +113,10 @@ export function invalidateStorageCache(projectId?: string): void {
 export async function getStorageAdapter(projectId: string): Promise<StorageAdapter> {
   const settings = await getStorageSettings(projectId)
   if (!settings || settings.provider === 'supabase') {
-    return new SupabaseStorageAdapter(getServiceClient(), settings?.bucket ?? 'screenshots')
+    return new SupabaseStorageAdapter(
+      getServiceClient(),
+      resolveSupabaseBucket(settings?.bucket),
+    )
   }
   try {
     return await buildExternalAdapter(settings)
@@ -114,7 +126,7 @@ export async function getStorageAdapter(projectId: string): Promise<StorageAdapt
       provider: settings.provider,
       err: String(err),
     })
-    return new SupabaseStorageAdapter(getServiceClient(), 'screenshots')
+    return new SupabaseStorageAdapter(getServiceClient(), CLUSTER_DEFAULT_BUCKET)
   }
 }
 
@@ -142,7 +154,7 @@ export async function getStorageAdapterForHealthCheck(
   })
 
   if (!settings || settings.provider === 'supabase') {
-    const bucket = settings?.bucket ?? 'screenshots'
+    const bucket = resolveSupabaseBucket(settings?.bucket)
     return {
       adapter: new SupabaseStorageAdapter(getServiceClient(), bucket),
       prefixDebug,
