@@ -4,7 +4,6 @@
  */
 
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { CliConfig } from './config.js'
 import { CONFIG_PATH, saveConfig } from './config.js'
@@ -43,11 +42,12 @@ function envKeyPresent(content: string, key: string): boolean {
 /** Returns true when any lines were written (existing keys are never overwritten). */
 async function mergeEnvFile(path: string, lines: string[]): Promise<boolean> {
   const block = `\n# Mushi — added by mushi connect\n${lines.join('\n')}\n`
-  if (existsSync(path)) {
-    const content = await readFile(path, 'utf8')
+  let existing: string | null = null
+  try { existing = await readFile(path, 'utf8') } catch { /* file does not exist yet */ }
+  if (existing !== null) {
     const needs = lines.filter((line) => {
       const key = line.split('=')[0]
-      return !envKeyPresent(content, key)
+      return !envKeyPresent(existing!, key)
     })
     if (needs.length === 0) return false
     await appendFile(path, `\n# Mushi — added by mushi connect\n${needs.join('\n')}\n`, 'utf8')
@@ -61,14 +61,15 @@ async function mergeEnvFile(path: string, lines: string[]): Promise<boolean> {
 async function ensureMcpJsonGitignored(cwd: string, messages: string[]): Promise<void> {
   const gitignorePath = join(cwd, '.gitignore')
   const patterns = ['.cursor/mcp.json', '.cursor/']
-  if (!existsSync(gitignorePath)) {
+  let content: string | null = null
+  try { content = await readFile(gitignorePath, 'utf8') } catch { /* no .gitignore */ }
+  if (content === null) {
     messages.push(
       '⚠ No .gitignore found — .cursor/mcp.json contains your API key. Add `.cursor/mcp.json` before committing.',
     )
     return
   }
-  const content = await readFile(gitignorePath, 'utf8')
-  const covered = patterns.some((p) => content.split('\n').some((line) => line.trim() === p || line.trim() === `${p}/`))
+  const covered = patterns.some((p) => content!.split('\n').some((line) => line.trim() === p || line.trim() === `${p}/`))
   if (covered) return
   await appendFile(gitignorePath, '\n# Mushi — keep MCP credentials out of git\n.cursor/mcp.json\n', 'utf8')
   messages.push('✓ Added .cursor/mcp.json to .gitignore (contains API key)')
@@ -120,11 +121,9 @@ export async function runConnect(
       },
     }
     let merged: Record<string, unknown> = { mcpServers: {} }
-    if (existsSync(mcpPath)) {
-      try {
-        merged = JSON.parse(await readFile(mcpPath, 'utf8')) as Record<string, unknown>
-      } catch { /* fresh */ }
-    }
+    try {
+      merged = JSON.parse(await readFile(mcpPath, 'utf8')) as Record<string, unknown>
+    } catch { /* fresh or unreadable — start with empty config */ }
     const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
     servers[serverName] = mcpServerBlock
     merged.mcpServers = servers

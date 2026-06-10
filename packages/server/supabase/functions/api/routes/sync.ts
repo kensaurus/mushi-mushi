@@ -360,7 +360,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
             reportId: id,
           })
         })
-        .catch(() => null)
+        .then(() => null, () => null)
     }
 
     return c.json({ ok: true, data: updated })

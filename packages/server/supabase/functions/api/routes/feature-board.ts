@@ -14,6 +14,7 @@
 
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
+import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
@@ -28,7 +29,7 @@ const DELIVERY_TIMEOUT_MS = 8_000
 const SHIP_EVENT_TYPE = 'feature_request.shipped'
 
 function jsonOk(c: Context, data: Record<string, unknown>, status = 200) {
-  return c.json({ ok: true, data }, status)
+  return c.json({ ok: true, data }, status as ContentfulStatusCode)
 }
 
 function jsonErr(
@@ -37,7 +38,7 @@ function jsonErr(
   message: string,
   status: number,
 ) {
-  return c.json({ ok: false, error: { code, message } }, status)
+  return c.json({ ok: false, error: { code, message } }, status as ContentfulStatusCode)
 }
 
 // ── Standard-Webhooks HMAC-SHA256 signer ─────────────────────────────────────

@@ -61,10 +61,12 @@ export async function fetchIngestSetup(
   config: { endpoint: string; apiKey: string; projectId?: string },
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<IngestSetupPayload | null> {
+  // Validate the key is safe before embedding in HTTP headers (no newlines/CRLF).
+  const safeKey = config.apiKey.replace(/[\r\n]/g, '')
   const res = await doFetch(`${config.endpoint}/v1/sync/ingest-setup`, {
     headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'X-Mushi-Api-Key': config.apiKey,
+      Authorization: `Bearer ${safeKey}`,
+      'X-Mushi-Api-Key': safeKey,
       ...(config.projectId ? { 'X-Mushi-Project': config.projectId } : {}),
     },
     signal: AbortSignal.timeout(8000),
