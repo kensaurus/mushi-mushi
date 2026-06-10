@@ -125,6 +125,28 @@ export interface MushiWidgetConfig {
   featureRequestDescription?: string;
   /** Minimum description character count before the submit button enables. */
   minDescriptionLength?: number;
+  /**
+   * CSS selectors of host-app elements that the widget trigger and panel must
+   * never visually overlap. At render time the widget queries each selector,
+   * measures the union bounding rect, and nudges `--mushi-top` / `--mushi-bottom`
+   * so the panel clears every avoided element by at least 8px.
+   *
+   * Typical use: avoid a sticky mobile header or a fixed sign-in CTA.
+   *
+   * @example
+   * avoidSelectors: ['[data-mobile-header]', '#sign-in-cta']
+   */
+  avoidSelectors?: string[];
+}
+
+/** Optional flat link in the rich banner action row (admin-console BetaBanner style). */
+export interface MushiBannerLink {
+  /** Link label shown in the action row. */
+  label: string;
+  /** External URL — opens in a new tab when set. */
+  href?: string;
+  /** When `href` is absent, opens the widget in feature-request mode. */
+  featureRequest?: boolean;
 }
 
 /**
@@ -145,12 +167,25 @@ export interface MushiBannerConfig {
   variant?: 'neon' | 'brand' | 'subtle';
   /** 'top' pins the banner below any existing sticky headers; 'bottom' pins above bottom navs. Defaults to 'top'. */
   position?: 'top' | 'bottom';
-  /** Override the call-to-action text in the banner. Defaults to 'Report a bug'. */
+  /**
+   * Body copy on the strip — the lime "Beta" announcement line users see in
+   * the Mushi admin console. When set, the banner switches to the rich layout
+   * (pill + message + flat text actions) instead of button-only CTAs.
+   */
+  message?: string;
+  /**
+   * Pill label shown before `message` (e.g. "Beta"). Defaults to `"Beta"` when
+   * `message` is set. Pass `false` to hide the pill.
+   */
+  label?: string | false;
+  /** Override the call-to-action text in the banner. Defaults to '🐛 Report a bug'. */
   bugCta?: string;
   /** Show a "✨ Request a feature" button alongside the bug button. Defaults to true. */
   featureCta?: boolean;
   /** Override the feature-request button label. */
   featureCtaLabel?: string;
+  /** Extra flat links after the bug/feature CTAs (e.g. "My submissions"). */
+  links?: MushiBannerLink[];
   /** CSS z-index of the banner element. Defaults to the widget's configured zIndex. */
   zIndex?: number;
 }
@@ -360,6 +395,18 @@ export interface MushiCooldownConfig {
   maxProactivePerSession?: number;
   dismissCooldownHours?: number;
   suppressAfterDismissals?: number;
+  /**
+   * Cross-reload re-show cooldown, in minutes (default 30; `0` disables).
+   *
+   * The `dismissCooldownHours` window only starts after a clean dismissal is
+   * recorded (widget `onClose`). A page reload or crash tears down the JS
+   * context before that, so on a broken/reloading page the proactive panel
+   * would otherwise re-open on every load. When a prompt is shown the SDK
+   * persists a timestamp; a fresh session (new JS context) suppresses prompts
+   * shown within this window. Within a live session the per-session limit
+   * governs instead, so this never blocks a legitimate second trigger.
+   */
+  reshowCooldownMinutes?: number;
 }
 
 export interface MushiPreFilterConfig {
@@ -920,6 +967,31 @@ export interface MushiDiagnosticsResult {
   captureScreenshotAvailable: boolean;
   captureNetworkIntercepting: boolean;
   sdkVersion: string;
+  /**
+   * True when the widget host element has `pointer-events: none` and
+   * zero width/height — i.e. it cannot act as a touch blocker over host UI.
+   * False when the SDK has not yet mounted, or when a consumer has overridden
+   * the host styles without restoring the pass-through contract.
+   */
+  widgetHostPointerSafe: boolean;
+  /**
+   * Bounding rect of the widget host element (`offsetWidth × offsetHeight`).
+   * Should be `{ width: 0, height: 0 }` for a healthy SDK — the host is
+   * zero-sized with `overflow: visible` so the shadow internals extend
+   * outward without creating a hit-test surface.  `null` when not mounted.
+   */
+  widgetHostBounds: { width: number; height: number } | null;
+  /**
+   * True when the widget is currently suppressed: `hideOnSelector` matched an
+   * element, `hideOnRoutes` matched the current pathname, or `hide()` was
+   * called.  A suppressed widget renders nothing and removes the body nudge.
+   */
+  widgetSuppressed: boolean;
+  /**
+   * True when `trigger: 'banner'` is active and the banner is currently
+   * rendered in the shadow DOM (not dismissed, not suppressed).
+   */
+  bannerRendered: boolean;
 }
 
 export interface MushiSDKInstance {

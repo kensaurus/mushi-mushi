@@ -124,9 +124,9 @@ export function QuickstartMegaCta() {
 
   const ringTone =
     cta.tone === 'do'
-      ? 'border-brand/50 bg-gradient-to-br from-brand/15 via-brand/5 to-transparent'
+      ? 'border-brand/40 bg-brand-subtle/30'
       : cta.tone === 'plan'
-      ? 'border-info/40 bg-gradient-to-br from-info/15 via-info/5 to-transparent'
+      ? 'border-edge bg-chrome'
       : 'border-edge bg-surface-raised/40'
 
   const buttonTone =

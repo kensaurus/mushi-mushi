@@ -35,6 +35,8 @@ import { runSourcemapsUpload } from './sourcemaps.js'
 import { installSignalHandlers, getAbortSignal } from './signals.js'
 import { renderNudgeSnippet, renderNudgeExplainer, type NudgePhase } from './nudge.js'
 import { runDoctor, formatDoctorResult } from './doctor.js'
+import { runUpgrade } from './upgrade.js'
+import { runConnect } from './connect.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
 // Long-running commands (`mushi index`, `mushi sourcemaps upload`) can
@@ -684,6 +686,37 @@ reports
   })
 
 reports
+  .command('reply <id> <message>')
+  .description('Send a visible reply to the reporter widget for a report')
+  .option('--author <name>', 'Display name for the sender (default: "Mushi Admin")')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi reports reply abc123 "Thanks for reporting — fixing this in the next release."
+  mushi reports reply abc123 "Can you share a screenshot?" --author "Alice"`)
+  .action(async (id: string, message: string, opts: { author?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { message }
+    if (opts.author) body['author_name'] = opts.author
+    const result = await apiCall<{ comment: unknown }>(`/v1/sync/reports/${id}/reply`, config, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Reply sent to reporter for report ${id}`)
+    }
+  })
+
+reports
   .command('search <query>')
   .description('Search reports by keyword in summary and description')
   .option('--limit <n>', 'Max results (1–50)', '10')
@@ -1094,7 +1127,7 @@ Typical first-time flow:
       mcpServers: {
         mushi: {
           command: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp@latest'],
           env: {
             MUSHI_API_ENDPOINT: endpoint,
             MUSHI_PROJECT_ID: projectId,
@@ -1174,7 +1207,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
 
     const mcpServerBlock = {
       command: 'npx',
-      args: ['-y', 'mushi-mcp@latest'],
+      args: ['-y', '@mushi-mushi/mcp@latest'],
       env: {
         MUSHI_API_ENDPOINT: config.endpoint,
         MUSHI_PROJECT_ID: config.projectId ?? '',
@@ -1223,7 +1256,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
       servers[serverName] = {
         command: {
           path: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp@latest'],
           env: {
             MUSHI_API_ENDPOINT: config.endpoint,
             MUSHI_PROJECT_ID: config.projectId ?? '',
@@ -1368,6 +1401,7 @@ Examples:
 
     const body: Record<string, unknown> = {
       reportId,
+      projectId: cfg.projectId,
       agent: opts.agent,
     }
     if (opts.agent === 'cursor_cloud') {
@@ -1483,6 +1517,86 @@ program
   })
 
 program
+  .command('upgrade')
+  .description('Bump installed @mushi-mushi/* packages to the latest stable npm release')
+  .option('--cwd <path>', 'Target repo (default: cwd)')
+  .option('--dry-run', 'Print the install command without running it')
+  .option('--json', 'Machine-readable plan + result')
+  .addHelpText('after', `
+Examples:
+  mushi upgrade
+  mushi upgrade --dry-run
+  mushi upgrade --cwd ../glot.it`)
+  .action(async (opts: { cwd?: string; dryRun?: boolean; json?: boolean }) => {
+    const result = await runUpgrade({ cwd: opts.cwd, dryRun: opts.dryRun, json: opts.json })
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      console.log(result.message)
+      for (const e of result.plan.entries) {
+        const tag = e.willUpgrade && e.latest ? `→ v${e.latest}` : '(current)'
+        console.log(`  ${e.name}@${e.current} ${tag}`)
+      }
+    }
+    if (!result.upgraded && result.plan.entries.some((e) => e.willUpgrade) && !opts.dryRun) {
+      process.exit(1)
+    }
+    if (result.plan.entries.length === 0) process.exit(1)
+  })
+
+program
+  .command('connect')
+  .description('Save credentials, merge env vars, wire Cursor MCP, optionally wait for SDK heartbeat')
+  .option('--api-key <key>', 'Mushi API key (mushi_…) — or set MUSHI_API_KEY to keep it out of shell history')
+  .requiredOption('--project-id <id>', 'Project UUID')
+  .requiredOption('--endpoint <url>', 'Supabase edge function URL')
+  .option('--cwd <path>', 'Target repo')
+  .option('--no-env', 'Skip writing .env.local')
+  .option('--no-ide', 'Skip writing .cursor/mcp.json')
+  .option('--wait', 'Poll ingest-setup until SDK heartbeat lands')
+  .option('--wait-timeout <sec>', 'Max seconds for --wait', '120')
+  .option('--json', 'Machine-readable output')
+  .addHelpText('after', `
+Examples:
+  MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint https://<ref>.supabase.co/functions/v1/api --wait
+  mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --no-ide`)
+  .action(async (opts: {
+    apiKey?: string
+    projectId: string
+    endpoint: string
+    cwd?: string
+    env?: boolean
+    ide?: boolean
+    wait?: boolean
+    waitTimeout: string
+    json?: boolean
+  }) => {
+    // Prefer the env var so the key isn't captured in shell history / `ps`.
+    const apiKey = process.env.MUSHI_API_KEY ?? opts.apiKey
+    if (!apiKey) {
+      console.error('Provide the API key via the MUSHI_API_KEY env var (recommended) or --api-key <key>.')
+      process.exit(1)
+    }
+    const result = await runConnect({
+      apiKey,
+      projectId: opts.projectId,
+      endpoint: opts.endpoint,
+      cwd: opts.cwd,
+      writeEnv: opts.env !== false,
+      wireIde: opts.ide !== false,
+      wait: opts.wait,
+      waitTimeoutSec: parseInt(opts.waitTimeout, 10) || 120,
+      json: opts.json,
+    })
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      for (const line of result.messages) console.log(line)
+    }
+    if (!result.ok) process.exit(1)
+  })
+
+program
   .command('doctor')
   .description(
     'Run pre-flight checks: CLI config, endpoint reachability, API key shape, ' +
@@ -1498,9 +1612,14 @@ program
       'checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled). ' +
       'Requires a configured projectId and API key.',
   )
-  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean }) => {
+  .option(
+    '--ingest',
+    'Also call GET /v1/sync/ingest-setup for the 4 required ingest steps ' +
+      '(API key, SDK heartbeat, first report). Composable with --server.',
+  )
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean }) => {
     const config = loadConfig()
-    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server })
+    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server, ingest: opts.ingest })
     const { checks } = result
 
     if (opts.json) {
@@ -1836,7 +1955,12 @@ keys
     console.log(`✓ Key added — id: ${res.data.id}`)
   })
 
-program.parse()
+// parseAsync so rejections from async command actions surface as clean
+// one-line errors (plain `parse()` leaves them as unhandled rejections).
+program.parseAsync().catch((err: unknown) => {
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`)
+  process.exit(1)
+})
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

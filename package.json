@@ -39,7 +39,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "check:publish": "node scripts/check-workspace-protocol.mjs",
+    "check:publish": "node scripts/check-workspace-protocol.mjs && node scripts/check-packed-tarballs.mjs",
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
@@ -62,6 +62,8 @@
     "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
     "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
+    "docs-stats": "node scripts/docs-stats.mjs --print-markdown",
+    "check:docs-stats": "node scripts/docs-stats.mjs --check",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"

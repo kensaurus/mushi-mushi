@@ -50,6 +50,7 @@ export type {
   MushiBetaModeConfig,
   MushiBetaChangelogEntry,
   MushiBannerConfig,
+  MushiBannerLink,
 } from './types';
 
 export {
@@ -65,6 +66,7 @@ export { createPreFilter, type PreFilterResult } from './pre-filter';
 export { createOfflineQueue, type OfflineQueue } from './queue';
 export { captureEnvironment } from './environment';
 export { getReporterToken } from './reporter-token';
+export { newUuid } from './uuid';
 export { getDeviceFingerprintHash } from './fingerprint';
 export { getSessionId } from './session';
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';

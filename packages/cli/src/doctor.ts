@@ -7,6 +7,8 @@
  * logic can be unit-tested without spawning a child process.
  */
 
+import { fetchIngestSetup } from './heartbeat-wait.js'
+
 export interface DoctorCheck {
   name: string
   ok: boolean
@@ -33,6 +35,11 @@ export interface DoctorOptions {
    */
   server?: boolean
   /**
+   * When true, calls GET /v1/sync/ingest-setup for the 4 required ingest steps
+   * (API key → SDK heartbeat → first report). Mutually composable with `server`.
+   */
+  ingest?: boolean
+  /**
    * Override the fetch implementation (for testing). Defaults to globalThis.fetch.
    */
   fetch?: typeof globalThis.fetch
@@ -47,7 +54,7 @@ export function checkCliConfig(config: DoctorCliConfig): DoctorCheck[] {
       ok: Boolean(config.endpoint),
       detail: config.endpoint
         ? `endpoint=${config.endpoint}`
-        : 'No endpoint in ~/.mushirc — run `mushi init` or `mushi config endpoint <url>`',
+        : 'No endpoint — set MUSHI_API_ENDPOINT, run `mushi connect`, or `mushi config endpoint <url>`',
     },
     {
       name: 'API key configured',
@@ -189,6 +196,57 @@ export async function checkServerPreflight(
   }
 }
 
+// ── Check 5: Ingest setup (API key auth) ─────────────────────────────────────
+
+export async function checkIngestSetup(
+  config: DoctorCliConfig,
+  doFetch: typeof globalThis.fetch = globalThis.fetch,
+): Promise<DoctorCheck[]> {
+  if (!config.apiKey || !config.endpoint) {
+    return [
+      {
+        name: 'Ingest setup',
+        ok: false,
+        detail: 'Need apiKey and endpoint. Run `mushi connect`.',
+      },
+    ]
+  }
+
+  try {
+    const data = await fetchIngestSetup(
+      { endpoint: config.endpoint, apiKey: config.apiKey, projectId: config.projectId },
+      doFetch,
+    )
+
+    if (!data) {
+      return [{ name: 'Ingest setup', ok: false, detail: 'Request to /v1/sync/ingest-setup failed or returned invalid payload' }]
+    }
+
+    const steps = data.steps ?? []
+    const checks = steps
+      .filter((s) => s.required)
+      .map((s) => ({
+        name: `[ingest] ${s.label}`,
+        ok: s.complete,
+        detail: s.hint ?? '',
+      }))
+
+    const diag = data.diagnostic
+    if (diag?.last_sdk_seen_at) {
+      checks.push({
+        name: '[ingest] Last SDK heartbeat',
+        ok: true,
+        detail: `${diag.last_sdk_seen_at}${diag.last_sdk_endpoint_host ? ` @ ${diag.last_sdk_endpoint_host}` : ''}`,
+      })
+    }
+
+    return checks.length > 0 ? checks : [{ name: 'Ingest setup', ok: false, detail: 'Empty response from /v1/sync/ingest-setup' }]
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return [{ name: 'Ingest setup', ok: false, detail: `Fetch failed: ${msg}` }]
+  }
+}
+
 // ── Main doctor runner ───────────────────────────────────────────────────────
 
 export async function runDoctor(
@@ -214,6 +272,12 @@ export async function runDoctor(
   if (options.server) {
     const serverChecks = await checkServerPreflight(config, doFetch)
     checks.push(...serverChecks)
+  }
+
+  // 5. Ingest setup (opt-in)
+  if (options.ingest) {
+    const ingestChecks = await checkIngestSetup(config, doFetch)
+    checks.push(...ingestChecks)
   }
 
   return { checks, ready: checks.every((c) => c.ok) }

@@ -34,7 +34,7 @@ import {
   type HeroSeverity,
   type HeroVerifyNodeData,
 } from './heroFlow.data'
-import { OperatorTraceBadge, OperatorTracePreview } from './OperatorTraceLog'
+import { OperatorTraceBadge } from './OperatorTraceLog'
 import type { OperatorTraceLine } from './operatorTrace'
 
 // ─── Severity tokens (for tint backgrounds — hex tokens drive SVG only)
@@ -100,13 +100,13 @@ const ACTION_BG: Record<PageAction['tone'], string> = {
 const NODE_ACCENT_HEX = {
   decide: 'var(--color-info)',
   act:    'var(--color-brand)',
-  verify: 'var(--color-fg-muted)',
+  verify: 'var(--color-ok)',
 } as const
 
 const KIND_BADGE: Record<'decide' | 'act' | 'verify', string> = {
   decide: 'bg-info/15 text-info border border-info/35',
   act:    'bg-brand/15 text-brand border border-brand/35',
-  verify: 'bg-surface-overlay text-fg-muted border border-edge',
+  verify: 'bg-ok-muted/20 text-ok border border-ok/35',
 }
 
 // ─── Shared body layout (mirrors PipelineStatusRibbon tile rhythm) ───
@@ -134,6 +134,50 @@ function HeroMetric({
     >
       {value}
     </span>
+  )
+}
+
+/** Headline + optional metric — stacked so long copy never fights for width. */
+function HeroStatBlock({
+  dotClass,
+  dotPulse = false,
+  label,
+  labelClass = 'text-fg',
+  value,
+  valueClass,
+  labelTitle,
+}: {
+  dotClass: string
+  dotPulse?: boolean
+  label: string
+  labelClass?: string
+  value?: string
+  valueClass: string
+  labelTitle?: string
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <div className="flex items-start gap-1.5 min-w-0">
+        <span
+          aria-hidden
+          className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass} ${dotPulse ? 'motion-safe:animate-pulse' : ''}`}
+        />
+        <p
+          className={`min-w-0 flex-1 text-xs font-semibold leading-snug line-clamp-1 ${labelClass}`}
+          title={labelTitle ?? label}
+        >
+          {label}
+        </p>
+      </div>
+      {value != null && value !== '' && (
+        <p
+          className={`pl-3 text-2xs font-mono tabular-nums leading-snug line-clamp-1 ${valueClass}`}
+          title={value}
+        >
+          {value}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -179,7 +223,7 @@ interface NodeShellProps {
   /** Tile identity, used for `aria-labelledby` + analytics scope. */
   scope: string
   kind: 'decide' | 'act' | 'verify'
-  eyebrow: 'Decide' | 'Act' | 'Verify'
+  eyebrow: 'Status' | 'Next step' | 'Evidence'
   /** Background tint class. */
   bgClass: string
   /** Foreground accent for the eyebrow dot + ring colour. */
@@ -228,31 +272,37 @@ function NodeShell({
         }
       }}
       className={[
-        'group/hero relative flex h-full w-full flex-col rounded-md px-3 py-1.5 text-xs pointer-events-auto cursor-pointer',
-        'motion-safe:transition-all motion-safe:duration-200',
+        'group/hero relative flex h-full w-full flex-col overflow-hidden rounded-md px-3 py-2 text-xs pointer-events-auto cursor-pointer',
+        'motion-safe:transition-[box-shadow] motion-safe:duration-200',
         bgClass,
-        expanded
-          ? 'ring-1 ring-inset shadow-md scale-[1.01]'
-          : 'shadow-sm hover:shadow-md hover:scale-[1.005]',
+        expanded ? 'ring-1 ring-inset shadow-md' : 'shadow-sm hover:shadow-md',
       ].join(' ')}
       style={{
         borderLeft: `3px solid ${borderHex}`,
-        boxShadow: expanded
-          ? `0 0 0 2px ${accentHex}45, 0 6px 16px ${accentHex}18`
-          : `inset 0 -1px 0 ${borderHex}20`,
       }}
     >
       <Handle
         type="target"
         position={Position.Left}
         id="in"
-        className="!bg-transparent !border-none !w-1.5 !h-1.5"
+        className="!bg-transparent !border-none !w-2 !h-2 !-left-px"
       />
       <Handle
         type="source"
         position={Position.Right}
         id="out"
-        className="!bg-transparent !border-none !w-1.5 !h-1.5"
+        className="!bg-transparent !border-none !w-2 !h-2 !-right-px"
+      />
+      {/* Edge anchor — small dot flush with the border */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-1/2 z-[1] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-[var(--color-surface)]"
+        style={{ backgroundColor: accentHex }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-0 top-1/2 z-[1] h-2 w-2 translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-[var(--color-surface)]"
+        style={{ backgroundColor: accentHex }}
       />
 
       <header className="flex items-center gap-1.5">
@@ -260,7 +310,7 @@ function NodeShell({
           aria-hidden
           className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-3xs font-bold leading-none ${KIND_BADGE[kind]}`}
         >
-          {kind === 'decide' ? 'D' : kind === 'act' ? 'A' : 'V'}
+          {kind === 'decide' ? 'S' : kind === 'act' ? 'N' : 'E'}
         </span>
         <span
           className="relative inline-block h-1.5 w-1.5 shrink-0 rounded-full"
@@ -309,7 +359,7 @@ function NodeShell({
         </button>
       </header>
 
-      <div className="mt-0.5 flex-1 min-h-0">{children}</div>
+      <div className="mt-1 flex-1 min-h-0 overflow-hidden">{children}</div>
 
       {expanded && expandedSlot && (
         <div className="mt-2 border-t border-edge-subtle/60 pt-2 text-2xs text-fg-faint leading-relaxed">
@@ -330,7 +380,7 @@ function DecideInner({ data }: NodeProps) {
     <NodeShell
       scope={node.scope}
       kind="decide"
-      eyebrow="Decide"
+        eyebrow="Status"
       bgClass={SEVERITY_BG[decide.severity]}
       accentHex={accent}
       pulse={decide.severity === 'crit' || decide.severity === 'warn'}
@@ -343,7 +393,7 @@ function DecideInner({ data }: NodeProps) {
         </p>
       }
     >
-      <HeroStatRow
+      <HeroStatBlock
         dotClass={SEVERITY_DOT[decide.severity]}
         dotPulse={decide.severity === 'crit' || decide.severity === 'warn'}
         label={decide.label}
@@ -352,12 +402,9 @@ function DecideInner({ data }: NodeProps) {
         valueClass={SEVERITY_TEXT[decide.severity]}
         labelTitle={decide.label}
       />
-      <p className="mt-0.5 text-3xs text-fg-muted leading-snug line-clamp-2">{decide.summary}</p>
-      {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
-        <OperatorTracePreview lines={node.operatorTrace} />
-      )}
+      <p className="mt-1 text-2xs text-fg-muted leading-snug line-clamp-2">{decide.summary}</p>
       {!node.expanded && (node.accessory as ReactNode | undefined) && (
-        <div className="mt-1.5">{node.accessory as ReactNode}</div>
+        <div className="mt-1">{node.accessory as ReactNode}</div>
       )}
     </NodeShell>
   )
@@ -376,7 +423,7 @@ function ActInner({ data }: NodeProps) {
       <NodeShell
         scope={node.scope}
         kind="act"
-        eyebrow="Act"
+        eyebrow="Next step"
         bgClass={ACTION_BG.idle}
         accentHex={accent}
         glyph={<span className="text-ok">✓</span>}
@@ -391,12 +438,9 @@ function ActInner({ data }: NodeProps) {
           value="0"
           valueClass={ACTION_TEXT.act}
         />
-        <p className="mt-0.5 text-3xs text-fg-muted leading-snug line-clamp-2">
+        <p className="mt-1 text-2xs text-fg-muted leading-snug line-clamp-2">
           Nothing actionable here right now. The next ingest will refresh this tile.
         </p>
-        {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
-          <OperatorTracePreview lines={node.operatorTrace} />
-        )}
       </NodeShell>
     )
   }
@@ -410,7 +454,7 @@ function ActInner({ data }: NodeProps) {
     <NodeShell
       scope={node.scope}
       kind="act"
-      eyebrow="Act"
+      eyebrow="Next step"
       bgClass={ACTION_BG[action.tone]}
       accentHex={accent}
       glyph={<span style={{ color: accent }}>→</span>}
@@ -420,7 +464,7 @@ function ActInner({ data }: NodeProps) {
       operatorTrace={node.operatorTrace}
       expandedSlot={<p className="text-3xs text-fg-faint italic">Operator trace below ↓</p>}
     >
-      <HeroStatRow
+      <HeroStatBlock
         dotClass={ACTION_DOT[action.tone]}
         dotPulse={action.tone === 'check' || action.tone === 'do'}
         label={action.title}
@@ -430,16 +474,15 @@ function ActInner({ data }: NodeProps) {
         labelTitle={action.title}
       />
       {action.reason && (
-        <p className="mt-0.5 text-3xs text-fg-muted leading-snug line-clamp-2">{action.reason}</p>
+        <p className="mt-1 text-2xs text-fg-muted leading-snug line-clamp-2">{action.reason}</p>
       )}
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {action.primary && <HeroCta cta={action.primary} variant="primary" />}
-        {visibleSecondaries.map((s, i) => (
-          <HeroCta key={i} cta={s} variant="ghost" />
-        ))}
-      </div>
-      {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
-        <OperatorTracePreview lines={node.operatorTrace} />
+      {node.expanded && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {action.primary && <HeroCta cta={action.primary} variant="primary" />}
+          {visibleSecondaries.map((s, i) => (
+            <HeroCta key={i} cta={s} variant="ghost" />
+          ))}
+        </div>
       )}
     </NodeShell>
   )
@@ -451,52 +494,49 @@ export const HeroActNode = memo(ActInner)
 
 function VerifyInner({ data }: NodeProps) {
   const node = data as HeroVerifyNodeData
-  const accent = HERO_SEVERITY_HEX.neutral
+  const accent = HERO_SEVERITY_HEX.ok
   return (
     <NodeShell
       scope={node.scope}
       kind="verify"
-      eyebrow="Verify"
-      bgClass="bg-surface-raised/40"
+      eyebrow="Evidence"
+      bgClass="bg-ok-muted/10"
       accentHex={accent}
-      glyph={<span className="text-fg-muted">◎</span>}
+      glyph={<span className="text-ok">◎</span>}
       expanded={node.expanded}
       onToggle={node.onToggle}
       operatorTrace={node.operatorTrace}
       expandedSlot={<p className="text-3xs text-fg-faint italic">Operator trace below ↓</p>}
     >
-      <HeroStatRow
-        dotClass="bg-fg-faint"
+      <HeroStatBlock
+        dotClass="bg-ok/80"
         label={node.verify.label}
         labelClass="text-fg"
         value={node.verify.detail}
         valueClass={node.verify.detail === 'no reports yet' ? 'text-warn' : 'text-fg-muted'}
         labelTitle={node.verify.label}
       />
-      {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
-        <OperatorTracePreview lines={node.operatorTrace} />
-      )}
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {node.verify.to && (
+      {node.verify.to && (
+        <div className={`flex flex-wrap items-center gap-2 ${node.expanded ? 'mt-1.5' : 'mt-1'}`}>
           <Link
             data-hero-verify
             to={node.verify.to}
             onClick={(e) => e.stopPropagation()}
-            className="nodrag inline-flex items-center gap-1 rounded-sm bg-brand/90 px-2.5 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand motion-safe:transition-colors shadow-sm"
+            className="nodrag inline-flex items-center gap-1 rounded-sm border border-edge bg-surface-overlay/80 px-2 py-0.5 text-2xs font-medium text-fg-secondary hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
           >
             Open evidence <span aria-hidden="true">→</span>
           </Link>
-        )}
-        {node.verify.secondaryTo && node.verify.secondaryLabel && (
-          <Link
-            to={node.verify.secondaryTo}
-            onClick={(e) => e.stopPropagation()}
-            className="nodrag inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
-          >
-            {node.verify.secondaryLabel}
-          </Link>
-        )}
-      </div>
+          {node.expanded && node.verify.secondaryTo && node.verify.secondaryLabel && (
+            <Link
+              to={node.verify.secondaryTo}
+              onClick={(e) => e.stopPropagation()}
+              className="nodrag inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
+            >
+              {node.verify.secondaryLabel}
+            </Link>
+          )}
+        </div>
+      )}
     </NodeShell>
   )
 }

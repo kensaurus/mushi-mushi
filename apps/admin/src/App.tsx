@@ -58,7 +58,9 @@ const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m =>
 import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const SetupCopilotPage = lazy(() => import('./pages/SetupCopilotPage').then(m => ({ default: m.SetupCopilotPage })))
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
+const FeatureBoardPage = lazy(() => import('./pages/FeatureBoardPage').then(m => ({ default: m.FeatureBoardPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
 const QaCoveragePage = lazy(() => import('./pages/QaCoveragePage').then(m => ({ default: m.QaCoveragePage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
@@ -165,7 +167,7 @@ function PasswordRecoveryGate({ children }: { children: ReactNode }) {
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   const location = useLocation()
-  if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
+  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading..." /></div>
   if (!session) return <Navigate to={loginPathForLocation(location)} replace state={{ from: location }} />
   return <>{children}</>
 }
@@ -179,11 +181,11 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 function TesterRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   const location = useLocation()
-  if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
+  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading..." /></div>
   // Wave 9 self-host gate: marketplace is cloud-only.
   if (envStatus.mode === 'self-hosted') {
     return (
-      <div className="flex h-screen items-center justify-center p-8">
+      <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto p-8">
         <div className="max-w-md text-center space-y-4">
           <p className="text-2xl">🪲</p>
           <h1 className="text-lg font-semibold">Mushi Bounties requires Mushi Cloud</h1>
@@ -230,13 +232,12 @@ export function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-      {/* BetaBanner mounts above ResilienceLayer so it's the very first
-          row on screen across every route — public landing, login,
-          authenticated app shell. Self-dismissing per device for 7 days
-          so it doesn't nag returning users but reliably resurfaces the
-          "Report a bug" channel for anyone who hits a fresh rough edge
-          (see BetaBanner.tsx for the rationale). */}
+      {/* App shell — one viewport, one primary scroll surface. BetaBanner
+          lives inside the shell (not above a separate h-screen Layout) so
+          we never get body + <main> double scrollbars. */}
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <BetaBanner />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <ResilienceLayer />
       <MushiSelfMount />
       <UpgradePromptHost />
@@ -379,7 +380,9 @@ export function App() {
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route path="/setup-copilot" element={<SetupCopilotPage />} />
                   <Route path="/feedback" element={<FeedbackPage />} />
+                  <Route path="/feature-board" element={<FeatureBoardPage />} />
                   <Route path="/health" element={<HealthPage />} />
                   <Route path="/qa-coverage" element={<QaCoveragePage />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
@@ -410,6 +413,8 @@ export function App() {
       </Routes>
       </ErrorBoundary>
       </PasswordRecoveryGate>
+      </div>
+      </div>
       </ToastProvider>
     </AuthProvider>
   )

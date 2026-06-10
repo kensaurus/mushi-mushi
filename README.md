@@ -6,7 +6,7 @@
 
 Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android.
 
-Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **12 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier) so every tool in your stack stays in the loop.
+Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **13 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier, Cursor Cloud) so every tool in your stack stays in the loop.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
@@ -179,6 +179,103 @@ Your existing monitoring is excellent at one thing: telling you what your code t
 - A feature regressed two deploys ago. Three users emailed support; two just churned.
 
 These never trigger an alert. Your users just leave. Mushi gives them a way to tell you while the moment is still fresh — so the bug your monitoring missed lands in your triage queue, classified, deduped, and (optionally) with a draft PR already open.
+
+---
+
+## At a Glance
+
+<sub>Verified from source — June 2026. Run <code>pnpm docs-stats</code> or <code>pnpm check:docs-stats</code> for live counts.</sub>
+
+<table>
+<tr>
+<td align="center" width="16%">
+
+**~248K**
+<br/>
+<sub>TypeScript Lines</sub>
+
+</td>
+<td align="center" width="16%">
+
+**1,079**
+<br/>
+<sub>Source Files</sub>
+
+</td>
+<td align="center" width="16%">
+
+**41**
+<br/>
+<sub>Workspace Packages</sub>
+
+</td>
+<td align="center" width="16%">
+
+**35**
+<br/>
+<sub>NPM Packages</sub>
+
+</td>
+<td align="center" width="16%">
+
+**43**
+<br/>
+<sub>Edge Functions</sub>
+
+</td>
+<td align="center" width="16%">
+
+**236**
+<br/>
+<sub>SQL Migrations</sub>
+
+</td>
+</tr>
+<tr>
+<td align="center">
+
+**14**
+<br/>
+<sub>Pipeline Agents</sub>
+
+</td>
+<td align="center">
+
+**11**
+<br/>
+<sub>Inbound Adapters</sub>
+
+</td>
+<td align="center">
+
+**13**
+<br/>
+<sub>Outbound Plugins</sub>
+
+</td>
+<td align="center">
+
+**3**
+<br/>
+<sub>Apps</sub>
+
+</td>
+<td align="center">
+
+**3**
+<br/>
+<sub>QA Providers</sub>
+
+</td>
+<td align="center">
+
+**pnpm 10**
+<br/>
+<sub>Monorepo</sub>
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -407,12 +504,20 @@ Mushi.init({
       position: 'top',    // 'top' | 'bottom'
       bugCta: '🐛 Report a bug',
       featureCta: true,
+      // Optional rich layout: pill label + body copy + flat link actions
+      message: 'We are in beta — spotted something off? Tell us.',
+      label: 'Beta', // `false` hides the pill
+      links: [{ label: 'My submissions', href: 'https://app.example.com/feedback' }],
     },
   },
 })
 ```
 
-Configure the launcher and preview the snippet live in the admin console under **SDK Install → Launcher**.
+Setting `message` switches the strip to the rich pill + message + flat-actions
+layout (see [`packages/web`](./packages/web#rich-banner-layout-18) for details);
+`message` and `label` can also be driven remotely per-project from the admin
+console. Configure the launcher and preview the snippet live in the admin
+console under **SDK Install → Launcher**.
 
 ## Headless SDK integration
 
@@ -595,7 +700,7 @@ Mushi is the **synthesis layer**, not a replacement. It adds the one signal that
 | **From your IDE**            | Paste issue ID into Cursor  | —                         | —                       | Cursor reads the report and proposes the diff |
 | **Where it runs**            | Their cloud                 | Their cloud               | Google cloud            | Yours, ours, or both                          |
 
-Mushi is already wired to send signals **back** to the tools you run — 12 outbound plugins covering Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, and Zapier — and to **receive** alerts from 11 inbound sources (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) via [`@mushi-mushi/adapters`](./packages/adapters). You don't replace anything; you add the layer that completes the picture.
+Mushi is already wired to send signals **back** to the tools you run — 13 outbound plugins covering Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier, and Cursor Cloud — and to **receive** alerts from 11 inbound sources (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) via [`@mushi-mushi/adapters`](./packages/adapters). You don't replace anything; you add the layer that completes the picture.
 
 The marketing landing at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) walks the full integration story.
 
@@ -613,7 +718,7 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 138 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 236 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet — see [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 
@@ -621,22 +726,20 @@ docker compose up -d
 
 ## Cursor & Claude Skills
 
-Install Mushi skills in your Cursor or Claude Code project for one-command setup, debugging, and TDD testing:
+Install Mushi skills in your Cursor or Claude Code project for one-command setup, usage, and debugging:
 
 ```bash
-# Install all three Mushi skills at once
+# Install both Mushi skills at once
 npx skills add kensaurus/mushi-mushi
 
 # Or individually
-npx skills add kensaurus/mushi-mushi/mushi-setup   # Setup guide
+npx skills add kensaurus/mushi-mushi/mushi-mushi   # Setup, config & TDD usage
 npx skills add kensaurus/mushi-mushi/mushi-debug   # Debug & fix issues
-npx skills add kensaurus/mushi-mushi/mushi-test    # TDD test workflow
 ```
 
 Then in Cursor/Claude:
-- `/mushi-setup` — guided setup walkthrough
+- `/mushi-mushi` — guided setup, configuration, and TDD workflow
 - `/mushi-debug` — diagnose and fix issues
-- `/mushi-test` — run the full TDD loop
 
 ## Packages
 
@@ -664,7 +767,7 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | Package                                                                  | Purpose                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`@mushi-mushi/core`](./packages/core)                                   | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, **v2.1 `discoverInventory` types**                                                                                                                                                                           |
-| [`@mushi-mushi/cli`](./packages/cli)                                     | CLI for project setup, report listing, triage                                                                                                                                                                                                                                              |
+| [`@mushi-mushi/cli`](./packages/cli)                                     | CLI for project setup (`mushi connect` one-shot wiring + heartbeat wait), report listing, triage, `doctor --ingest` health checks, and `mushi upgrade` SDK bumps                                                                                                                           |
 | [`@mushi-mushi/mcp`](./packages/mcp)                                     | MCP server — Cursor / Copilot / Claude read, triage, classify, dispatch fixes. **Both stdio (local) and Streamable HTTP (`/functions/v1/mcp`, hosted) transports per the 2025-03-26 spec.** Discoverable via `/.well-known/agent-card`, `/openapi.json`, and `/v1/a2a/tasks` (A2A v1.0.0). |
 | [`@mushi-mushi/mcp-ci`](./packages/mcp-ci)                               | GitHub Action — `gates`, `discover-api`, `discovery-status`, `propose`, `auth-bootstrap` (the v2 pre-release suite + new MCP CLI)                                                                                                                                                          |
 | [`@mushi-mushi/inventory-schema`](./packages/inventory-schema)           | **v2 source of truth** — Zod + JSON Schema for `inventory.yaml`, used by the admin ingester, gate runner, LLM proposer, and GitHub Action                                                                                                                                                  |
@@ -683,6 +786,7 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | [`@mushi-mushi/plugin-bugsnag`](./packages/plugin-bugsnag)               | Mirror Mushi reports into Bugsnag projects; close Bugsnag errors when Mushi applies a fix                                                                                                                                                                                                  |
 | [`@mushi-mushi/plugin-rollbar`](./packages/plugin-rollbar)               | Mirror Mushi reports into Rollbar; resolve Rollbar items on fix merge                                                                                                                                                                                                                      |
 | [`@mushi-mushi/plugin-crashlytics`](./packages/plugin-crashlytics)       | Push Mushi reports into Firebase Crashlytics issues; close on fix                                                                                                                                                                                                                          |
+| [`@mushi-mushi/plugin-cursor-cloud`](./packages/plugin-cursor-cloud)     | Dispatch fix jobs to Cursor Cloud agents; opens draft PRs from classified reports                                                                                                                                                                                                            |
 | `@mushi-mushi/server` (BSL 1.1)                                          | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer                                                                                                                                                                                                 |
 | `@mushi-mushi/agents` (BSL 1.1)                                          | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction                                                                                                                                                                                                |
 | `@mushi-mushi/verify` (BSL 1.1)                                          | Playwright fix verification — screenshot visual diff + step interpreter                                                                                                                                                                                                                    |
@@ -702,7 +806,12 @@ pnpm install
 pnpm dev
 ```
 
-Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setup, [`docs/`](./docs/) for handover notes (newest first), and [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md) for the full admin tour.
+Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setup, [`docs/stats.md`](./docs/stats.md) for canonical repo counts, [`docs/`](./docs/) for handover notes (newest first), and [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md) for the full admin tour.
+
+```bash
+pnpm docs-stats        # print canonical README / server / integration stats
+pnpm check:docs-stats  # fail if README counts drift from source
+```
 
 ## License & branding
 
@@ -712,7 +821,7 @@ making it hard for bad actors to ship a malicious copy under our name.
 
 | Surface                                                                                                                                                                                                                                                                                                          | License                              | Permitted                                              | Notes                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| SDK packages — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, `plugin-*` (12 plugins), `adapters` (11 sources), `inventory-schema`, `inventory-auth-runner`, `eslint-plugin-mushi-mushi`, `brand`, `marketing-ui` | [MIT](./LICENSE)                     | Use, fork, sell, embed in proprietary products.        | Trademarks separate — see below.                                                                                                               |
+| SDK packages — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, `plugin-*` (13 plugins), `adapters` (11 sources), `inventory-schema`, `inventory-auth-runner`, `eslint-plugin-mushi-mushi`, `brand`, `marketing-ui` | [MIT](./LICENSE)                     | Use, fork, sell, embed in proprietary products.        | Trademarks separate — see below.                                                                                                               |
 | Server packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`                                                                                                                                                                                                                            | [BSL 1.1](./packages/server/LICENSE) | Self-host for your own org. Modify. Resell embedded.   | Cannot offer as a hosted bug-reporting service to third parties until **2029-04-15**, when it converts to Apache 2.0 automatically.            |
 | Trademarks — "Mushi Mushi", "Mushi", 虫, the bug logo, the visual identity                                                                                                                                                                                                                                       | [Trademark policy](./TRADEMARK.md)   | Refer to the project, build add-ons, link to the repo. | **Forks must rename.** Hosting a service under the Mushi name requires written permission. Use on malware / phishing kits is enforced against. |
 | Third-party attributions                                                                                                                                                                                                                                                                                         | [NOTICE](./NOTICE)                   | —                                                      | One-stop list of upstream projects we depend on and their licenses.                                                                            |
@@ -720,6 +829,29 @@ making it hard for bad actors to ship a malicious copy under our name.
 If you're a security researcher, see [`SECURITY.md`](./SECURITY.md) for
 the threat model, PII commitments, coordinated-disclosure timeline, and
 safe-harbor terms.
+
+---
+
+---
+
+## Also by @kensaurus
+
+Other free apps and tools from the same Tokyo studio:
+
+### Mobile apps
+
+| App | What it does | iOS | Android |
+|:----|:-------------|:----|:--------|
+| **[glot.it — Learn Thai Free](https://kensaur.us/glot-it/)** | 161 lessons, pitch-contour tone mirror, AI roleplay chat, offline-first. Actually free — not free-to-look-at. | [App Store](https://apps.apple.com/us/app/glot-it/id6761582648) | [Google Play](https://play.google.com/store/apps/details?id=com.glotit.app) |
+| **[yen-yen — Expense Tracker](https://kensaur.us/yen-yen/)** | Kakeibo-style household ledger. No bank password, no ads, no auto-writes. Multi-currency with historical FX. | [App Store](https://apps.apple.com/app/id6764548441) | [Google Play](https://play.google.com/store/apps/details?id=app.yenyen) |
+| **[Help Her Take Photo](https://kensaur.us/help-her-take-photo/)** | Two phones → one remote photo studio. Live preview + remote shutter, no account required. | [App Store](https://apps.apple.com/app/help-her-take-photo/id6762513666) | [Google Play](https://play.google.com/store/apps/details?id=com.kensaurus.helphertakephoto) |
+| **[The Wanting Mind — Free Book](https://kensaur.us/the-wanting-mind/)** | 147,000-word interactive book — 3D knowledge graph, 12 narrators, karaoke highlighting, 22 simulations. EN/JA/ZH/TH. Free, no ads, no paywalls. | [App Store](https://apps.apple.com/us/app/the-wanting-mind/id6761361305) | [Google Play](https://play.google.com/store/apps/details?id=us.kensaur.thewantingmind) |
+
+### Developer tools
+
+| Tool | What it does | Install |
+|:-----|:-------------|:--------|
+| **[cursor-kenji](https://github.com/kensaurus/cursor-kenji)** | 58 Cursor AI agent skills for React / Next.js / Supabase development. The deploy-npm skill was built for this monorepo. | `npx skills add kensaurus/cursor-kenji` |
 
 ---
 

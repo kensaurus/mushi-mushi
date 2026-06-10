@@ -30,7 +30,6 @@ import { SetupNudge } from '../components/SetupNudge'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
@@ -431,8 +430,7 @@ export function GraphPage() {
 
   // Hero + NBA derivations. Kept here (above the early returns) so the
   // hook order stays stable across loading/error/success renders. Also
-  // shared between the hero tile and PageActionBar so they can never
-  // disagree on "are we fragile?".
+  // shared with the hero Act tile so they can never disagree on "are we fragile?".
   const componentIds = useMemo(
     () => new Set(rawNodes.filter((n) => n.node_type === 'component').map((n) => n.id)),
     [rawNodes],
@@ -801,6 +799,8 @@ export function GraphPage() {
                       ? 'ok'
                       : 'info',
             }}
+            act={graphAction}
+            actEvidence={graphAction ? { kind: 'rule-trace', why: graphAction.reason ?? graphAction.title } : undefined}
             verify={{
               label: 'Graph backend',
               detail: `${stats.graphBackend}${stats.unsyncedNodes > 0 ? ` · ${stats.unsyncedNodes} unsynced nodes` : ''}`,
@@ -847,8 +847,6 @@ export function GraphPage() {
               </ActionPillRow>
             </Card>
           ) : null}
-
-          {!ux.hideOverviewChrome && <PageActionBar scope="graph" action={graphAction} />}
 
           {!ux.hideOverviewChrome && (
           <ActionPillRow>

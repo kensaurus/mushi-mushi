@@ -53,7 +53,6 @@ import {
 } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -1023,14 +1022,16 @@ export function QueryPage() {
         </p>
       </ContainedBlock>
 
-      <QueryStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onViewErrors={() => {
-          setActiveTab('history')
-          setSidebarTab('recent')
-        }}
-      />
+      {(stats.schemaDegraded || stats.errors24h > 0) && (
+        <QueryStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onViewErrors={() => {
+            setActiveTab('history')
+            setSidebarTab('recent')
+          }}
+        />
+      )}
 
       <SegmentedControl
         value={activeTab}
@@ -1039,6 +1040,63 @@ export function QueryPage() {
         ariaLabel="Query sections"
         size="sm"
       />
+
+      {activeTab === 'overview' && (
+        <PageHero
+          scope="query"
+          title="Ask Your Data"
+          kicker="Natural-language analytics"
+          decide={{
+            label:
+              stats.runs24h === 0 && stats.savedCount === 0
+                ? 'No queries yet'
+                : stats.savedCount === 0
+                  ? 'No saved queries'
+                  : 'Saved queries ready',
+            metric: `${stats.savedCount} saved · ${stats.recentCount} recent · ${stats.teamSavedCount} from team`,
+            summary:
+              stats.runs24h === 0 && stats.savedCount === 0
+                ? 'Ask your first question — the LLM writes the SQL, you see the rows. No setup required.'
+                : stats.savedCount === 0
+                  ? 'Save a useful query so it becomes a one-click tile for your team.'
+                  : 'Rerun any saved query from History or edit the SQL before running.',
+            severity: querySeverity,
+            anchor: 'query:decide',
+            evidence: {
+              kind: 'metric-breakdown',
+              items: [
+                { label: 'Saved', value: stats.savedCount, tone: stats.savedCount > 0 ? 'ok' : 'neutral' },
+                { label: 'Recent', value: stats.recentCount, tone: stats.recentCount > 0 ? 'info' : 'neutral' },
+                { label: 'Team', value: stats.teamSavedCount, tone: stats.teamSavedCount > 0 ? 'info' : 'neutral' },
+                { label: 'Errors 24h', value: stats.errors24h, tone: stats.errors24h > 0 ? 'crit' : 'ok' },
+              ],
+            },
+          }}
+          act={queryAction}
+          actAnchor="query:act"
+          actEvidence={queryAction ? { kind: 'rule-trace', why: queryAction.reason ?? queryAction.title } : undefined}
+          verify={{
+            label: 'Latest activity',
+            detail:
+              lastRunHoursAgo == null
+                ? 'No queries run yet'
+                : lastRunHoursAgo < 1
+                  ? 'Last run less than an hour ago'
+                  : `Last run ${lastRunHoursAgo}h ago`,
+            to: '/query?tab=history',
+            secondaryTo: '/query?tab=ask',
+            secondaryLabel: 'New query',
+            anchor: 'query:verify',
+            evidence: stats.lastRunAt ? {
+              kind: 'last-event',
+              at: stats.lastRunAt,
+              by: 'user',
+              payloadSummary: stats.lastRunPrompt?.slice(0, 60) ?? 'Query run',
+              status: stats.lastRunError ? 'error' : 'ok',
+            } : undefined,
+          }}
+        />
+      )}
 
       <Section title="Query snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <ContainedBlock tone="muted" className="mb-3">
@@ -1081,65 +1139,7 @@ export function QueryPage() {
       </Section>
 
       {activeTab === 'overview' && (
-        <>
-      <PageHero
-        scope="query"
-        title="Ask Your Data"
-        kicker="Natural-language analytics"
-        decide={{
-          label:
-            stats.runs24h === 0 && stats.savedCount === 0
-              ? 'No queries yet'
-              : stats.savedCount === 0
-                ? 'No saved queries'
-                : 'Saved queries ready',
-          metric: `${stats.savedCount} saved · ${stats.recentCount} recent · ${stats.teamSavedCount} from team`,
-          summary:
-            stats.runs24h === 0 && stats.savedCount === 0
-              ? 'Ask your first question — the LLM writes the SQL, you see the rows. No setup required.'
-              : stats.savedCount === 0
-                ? 'Save a useful query so it becomes a one-click tile for your team.'
-                : 'Rerun any saved query from History or edit the SQL before running.',
-          severity: querySeverity,
-          anchor: 'query:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Saved', value: stats.savedCount, tone: stats.savedCount > 0 ? 'ok' : 'neutral' },
-              { label: 'Recent', value: stats.recentCount, tone: stats.recentCount > 0 ? 'info' : 'neutral' },
-              { label: 'Team', value: stats.teamSavedCount, tone: stats.teamSavedCount > 0 ? 'info' : 'neutral' },
-              { label: 'Errors 24h', value: stats.errors24h, tone: stats.errors24h > 0 ? 'crit' : 'ok' },
-            ],
-          },
-        }}
-        act={queryAction}
-        actAnchor="query:act"
-        actEvidence={queryAction ? { kind: 'rule-trace', why: queryAction.reason ?? queryAction.title } : undefined}
-        verify={{
-          label: 'Latest activity',
-          detail:
-            lastRunHoursAgo == null
-              ? 'No queries run yet'
-              : lastRunHoursAgo < 1
-                ? 'Last run less than an hour ago'
-                : `Last run ${lastRunHoursAgo}h ago`,
-          to: '/query?tab=history',
-          secondaryTo: '/query?tab=ask',
-          secondaryLabel: 'New query',
-          anchor: 'query:verify',
-          evidence: stats.lastRunAt ? {
-            kind: 'last-event',
-            at: stats.lastRunAt,
-            by: 'user',
-            payloadSummary: stats.lastRunPrompt?.slice(0, 60) ?? 'Query run',
-            status: stats.lastRunError ? 'error' : 'ok',
-          } : undefined,
-        }}
-      />
-
-      <PageActionBar scope="query" action={queryAction} />
-
-      <PageHelp
+        <PageHelp
         title={copy?.help?.title ?? 'About Ask Your Data'}
         whatIsIt={
           copy?.help?.whatIsIt ??
@@ -1148,7 +1148,6 @@ export function QueryPage() {
         useCases={copy?.help?.useCases ?? []}
         howToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
       />
-        </>
       )}
 
       {activeTab === 'schema' && (

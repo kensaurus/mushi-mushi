@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
 import {
-  Card,
   ErrorAlert,
   EmptyState,
   Btn,
@@ -20,7 +19,7 @@ import {
   StatCard,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { JudgeStatusBanner } from '../components/judge/JudgeStatusBanner'
+import { JudgeStatusBanner, isJudgeStatusBannerCritical } from '../components/judge/JudgeStatusBanner'
 import {
   ActionPill,
   ActionPillRow,
@@ -65,7 +64,6 @@ import {
 } from '../lib/statTooltips/judge'
 import { judgeLinks } from '../lib/statCardLinks'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
@@ -326,6 +324,7 @@ export function JudgePage() {
   }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
+  const [heroCollapsed, setHeroCollapsed] = useState(true)
   // Sticky inline receipt for "Run judge now" — toast disappears, this stays
   // on screen until the next run so the user can see the pending refresh
   // countdown and the dispatched count without scrolling back up.
@@ -386,6 +385,15 @@ export function JudgePage() {
     distQuery.reload()
   }, [reloadStats, weeksQuery, evalsQuery, promptsQuery, distQuery])
 
+  // Post-dispatch refresh timer — cleared on unmount so navigating away
+  // doesn't fire reloads against unmounted queries.
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+    }
+  }, [])
+
   async function runNow() {
     setRunning(true)
     setRunResult({ tone: 'running', message: 'Dispatching judge batch…', at: null })
@@ -397,7 +405,8 @@ export function JudgePage() {
       const message = `Dispatched ${count} project${count === 1 ? '' : 's'} — refreshing in ~30s`
       toast.success('Judge batch dispatched', `${count} project(s). Refreshing in ~30s.`)
       setRunResult({ tone: 'success', message, at })
-      setTimeout(loadAll, 30_000)
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = setTimeout(loadAll, 30_000)
     } else {
       const message = res.error?.message ?? 'Judge batch failed'
       toast.error('Failed to run judge batch', message)
@@ -406,13 +415,17 @@ export function JudgePage() {
   }
 
   const runAction = searchParams.get('action')
+  // Ref guard, not `running` state: setRunning(true) hasn't committed when
+  // StrictMode re-invokes the effect, so state alone double-dispatches.
+  const autoRunFiredRef = useRef(false)
   useEffect(() => {
-    if (runAction !== 'run' || running) return
+    if (runAction !== 'run' || autoRunFiredRef.current) return
+    autoRunFiredRef.current = true
     void runNow()
     const next = new URLSearchParams(searchParams)
     next.delete('action')
     setSearchParams(next, { replace: true })
-  }, [runAction, running, searchParams, setSearchParams])
+  }, [runAction, searchParams, setSearchParams])
 
   // Publish page context so the browser tab reflects the latest judge
   // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
@@ -734,15 +747,17 @@ export function JudgePage() {
         )}
       </PageHeaderBar>
 
-      <JudgeStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={loadAll}
-        refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
-        onRunJudge={runNow}
-        running={running}
-        plainBanner={ux.plainBanner}
-      />
+      {isJudgeStatusBannerCritical(stats) && (
+        <JudgeStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onRefresh={loadAll}
+          refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
+          onRunJudge={runNow}
+          running={running}
+          plainBanner={ux.plainBanner}
+        />
+      )}
 
       {!ux.hideTabs && (
       <SegmentedControl<JudgeTabId>
@@ -752,6 +767,57 @@ export function JudgePage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
+
+      {activeTab === 'overview' && !ux.hideOverviewChrome && (
+        <>
+      <PageHero
+        scope="judge"
+        title={copy?.title ?? 'Judge'}
+        kicker="Independent grading"
+        onCollapsedChange={setHeroCollapsed}
+        decide={{
+          label: overallScore == null ? 'No evaluations yet' : `Overall score ${Math.round(overallScore * 100)}%`,
+          metric: overallScore == null ? '—' : `${Math.round(overallScore * 100)}%`,
+          summary: overallScore == null
+            ? 'Run a judge batch to populate scores. Fresh runs every Mon/Thu are recommended.'
+            : drift >= 0.05
+              ? `Down ${(drift * 100).toFixed(1)}% week-over-week — investigate before shipping prompt changes.`
+              : `Stable across ${totalEvals} evaluations over ${weeks.length} weeks.`,
+          severity: heroSeverity,
+          anchor: 'judge:decide',
+          evidence: overallScore != null ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Avg score', value: `${Math.round(overallScore * 100)}%`, tone: overallScore >= 0.8 ? 'ok' : overallScore >= 0.6 ? 'warn' : 'crit' },
+              { label: 'Evaluations', value: totalEvals, tone: 'neutral' },
+              { label: 'Weeks tracked', value: weeks.length, tone: 'neutral' },
+              ...(disagreementRate != null ? [{ label: 'Disagreement', value: `${(disagreementRate * 100).toFixed(1)}%`, tone: disagreementRate > 0.2 ? 'warn' as const : 'ok' as const }] : []),
+            ],
+          } : undefined,
+        }}
+        act={heroAction}
+        actAnchor="judge:act"
+        actEvidence={heroAction ? { kind: 'rule-trace', why: heroAction.reason ?? heroAction.title, threshold: drift >= 0.05 ? `drift ${(drift * 100).toFixed(1)}%` : undefined } : undefined}
+        verify={{
+          label: lastEval ? `Last eval · ${lastEval.judge_model ?? 'model'}` : 'Awaiting first eval',
+          detail: lastEval
+            ? `${lastEval.id.slice(0, 8)} · ${new Date(lastEval.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
+            : '—',
+          to: lastEval ? `/reports/${lastEval.report_id}` : '/reports',
+          secondaryTo: '/prompt-lab',
+          secondaryLabel: 'Open Prompt Lab',
+          anchor: 'judge:verify',
+          evidence: lastEval ? {
+            kind: 'last-event',
+            at: lastEval.created_at,
+            by: lastEval.judge_model ?? 'judge',
+            payloadSummary: `eval ${lastEval.id.slice(0, 8)} · ${lastEval.classification_agreed === false ? 'disagreement' : 'agreement'}`,
+            status: lastEval.classification_agreed === false ? 'warn' : 'ok',
+          } : undefined,
+        }}
+      />
+        </>
       )}
 
       {!ux.hideJudgeSnapshot && (
@@ -824,103 +890,8 @@ export function JudgePage() {
       </Section>
       )}
 
-      {stats.topPriorityTo && stats.topPriority !== 'healthy' && activeTab === 'overview' && !ux.hideOverviewChrome ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'no_evals'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-warn/30 bg-warn/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
-                ? 'danger'
-                : stats.topPriority === 'no_evals'
-                  ? 'brand'
-                  : 'warn'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock
-            tone={
-              stats.topPriority === 'low_score' || stats.topPriority === 'drifting' ? 'warn' : 'info'
-            }
-          >
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            {stats.topPriority === 'no_evals' || stats.topPriority === 'stale' ? (
-              <ActionPill onClick={runNow} tone="brand" className={running ? 'opacity-60 pointer-events-none' : ''}>
-                {running ? 'Running…' : 'Run judge now'}
-              </ActionPill>
-            ) : (
-              <ActionPill to={stats.topPriorityTo} tone="brand">
-                Take action →
-              </ActionPill>
-            )}
-          </ActionPillRow>
-        </Card>
-      ) : null}
-
-      {activeTab === 'overview' && !ux.hideOverviewChrome && (
+      {activeTab === 'overview' && !ux.hideOverviewChrome && heroCollapsed && (
         <>
-      <PageHero
-        scope="judge"
-        title={copy?.title ?? 'Judge'}
-        kicker="Independent grading"
-        decide={{
-          label: overallScore == null ? 'No evaluations yet' : `Overall score ${Math.round(overallScore * 100)}%`,
-          metric: overallScore == null ? '—' : `${Math.round(overallScore * 100)}%`,
-          summary: overallScore == null
-            ? 'Run a judge batch to populate scores. Fresh runs every Mon/Thu are recommended.'
-            : drift >= 0.05
-              ? `Down ${(drift * 100).toFixed(1)}% week-over-week — investigate before shipping prompt changes.`
-              : `Stable across ${totalEvals} evaluations over ${weeks.length} weeks.`,
-          severity: heroSeverity,
-          anchor: 'judge:decide',
-          evidence: overallScore != null ? {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Avg score', value: `${Math.round(overallScore * 100)}%`, tone: overallScore >= 0.8 ? 'ok' : overallScore >= 0.6 ? 'warn' : 'crit' },
-              { label: 'Evaluations', value: totalEvals, tone: 'neutral' },
-              { label: 'Weeks tracked', value: weeks.length, tone: 'neutral' },
-              ...(disagreementRate != null ? [{ label: 'Disagreement', value: `${(disagreementRate * 100).toFixed(1)}%`, tone: disagreementRate > 0.2 ? 'warn' as const : 'ok' as const }] : []),
-            ],
-          } : undefined,
-        }}
-        act={heroAction}
-        actAnchor="judge:act"
-        actEvidence={heroAction ? { kind: 'rule-trace', why: heroAction.reason ?? heroAction.title, threshold: drift >= 0.05 ? `drift ${(drift * 100).toFixed(1)}%` : undefined } : undefined}
-        verify={{
-          label: lastEval ? `Last eval · ${lastEval.judge_model ?? 'model'}` : 'Awaiting first eval',
-          detail: lastEval
-            ? `${lastEval.id.slice(0, 8)} · ${new Date(lastEval.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
-            : '—',
-          to: lastEval ? `/reports/${lastEval.report_id}` : '/reports',
-          secondaryTo: '/prompt-lab',
-          secondaryLabel: 'Open Prompt Lab',
-          anchor: 'judge:verify',
-          evidence: lastEval ? {
-            kind: 'last-event',
-            at: lastEval.created_at,
-            by: lastEval.judge_model ?? 'judge',
-            payloadSummary: `eval ${lastEval.id.slice(0, 8)} · ${lastEval.classification_agreed === false ? 'disagreement' : 'agreement'}`,
-            status: lastEval.classification_agreed === false ? 'warn' : 'ok',
-          } : undefined,
-        }}
-      />
-
-      {/*
-        Retain the compact PageActionBar below the hero — it's lighter
-        weight and remains the single source of truth for page-level
-        actions in beginner mode (hero collapses to a pill there).
-      */}
-      <PageActionBar scope="judge" action={heroAction} />
-
       <div data-dav-anchor="judge:decide">
       <KpiRow cols={4}>
         <KpiTile

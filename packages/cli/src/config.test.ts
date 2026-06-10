@@ -26,7 +26,7 @@ afterAll(() => {
 
 describe('loadConfig', () => {
   // Save and restore env vars so tests are hermetic.
-  const WATCHED_VARS = ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT'] as const
+  const WATCHED_VARS = ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT', 'MUSHI_ENDPOINT'] as const
   let savedEnv: Partial<Record<typeof WATCHED_VARS[number], string | undefined>> = {}
 
   beforeEach(() => {
@@ -70,6 +70,16 @@ describe('loadConfig', () => {
     expect(config.apiKey).toBe('mushi_envkey123')
     expect(config.projectId).toBe('542b34e0-019e-41fe-b900-7b637717bb86')
     expect(config.endpoint).toBe('https://xyz.supabase.co/functions/v1/api')
+  })
+
+  it('MUSHI_ENDPOINT aliases MUSHI_API_ENDPOINT when the latter is unset', () => {
+    delete process.env['MUSHI_API_ENDPOINT']
+    delete process.env['MUSHI_API_KEY']
+    delete process.env['MUSHI_PROJECT_ID']
+    process.env['MUSHI_ENDPOINT'] = 'https://alias.supabase.co/functions/v1/api'
+    const config = loadConfig('/tmp/nonexistent-mushirc')
+    expect(config.endpoint).toBe('https://alias.supabase.co/functions/v1/api')
+    delete process.env['MUSHI_ENDPOINT']
   })
 
   it('file values survive when env vars are absent', () => {
@@ -199,14 +209,23 @@ describe('migrateLegacyConfig', () => {
 
 describe('loadConfig — legacy migration path', () => {
   let legacyPath: string
+  const WATCHED_VARS = ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT', 'MUSHI_ENDPOINT'] as const
+  let savedEnv: Partial<Record<typeof WATCHED_VARS[number], string | undefined>> = {}
 
   beforeEach(() => {
     legacyPath = join(TEST_DIR, 'auto-legacy')
+    savedEnv = {}
+    for (const v of WATCHED_VARS) savedEnv[v] = process.env[v]
+    for (const v of WATCHED_VARS) delete process.env[v]
   })
 
   afterEach(() => {
     if (existsSync(legacyPath)) unlinkSync(legacyPath)
     rmSync(join(TEST_DIR, 'auto-xdg'), { recursive: true, force: true })
+    for (const v of WATCHED_VARS) {
+      if (savedEnv[v] === undefined) delete process.env[v]
+      else process.env[v] = savedEnv[v]
+    }
   })
 
   it('does NOT migrate when an explicit non-default path is passed', () => {

@@ -13,15 +13,21 @@
  *
  * The SDK is initialised lazily (dynamic import) so the admin's initial
  * bundle stays lean. If the env vars are absent it's a no-op.
+ *
+ * Launcher policy: the lime BetaBanner is the sole visible entry point.
+ * The SDK widget uses `trigger: 'hidden'` + `runtimeConfig: false` so a
+ * remote dashboard default cannot resurrect the FAB or a second banner.
  */
 
 type MushiInitOptions = {
   projectId: string
   apiKey: string
   apiEndpoint: string
+  runtimeConfig?: boolean
   widget?: Record<string, unknown>
   capture?: Record<string, unknown>
   privacy?: Record<string, unknown>
+  proactive?: Record<string, unknown>
   debug?: boolean
   enabled?: boolean
 }
@@ -30,6 +36,8 @@ type MushiInstance = {
   identify: (userId: string, traits: Record<string, unknown>) => void
   setMetadata: (key: string, value: string) => void
   report: (opts?: { category?: string }) => void
+  setTrigger?: (trigger: 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden') => void
+  hide?: () => void
 }
 
 type MushiModule = {
@@ -47,6 +55,11 @@ function isEnabled(): boolean {
     import.meta.env.VITE_MUSHI_SELF_PROJECT_ID &&
     import.meta.env.VITE_MUSHI_SELF_API_KEY,
   );
+}
+
+/** True when the admin console dogfoods the Mushi web SDK (capture only; no FAB). */
+export function isMushiSelfEnabled(): boolean {
+  return isEnabled();
 }
 
 export async function initMushiSelf(options?: {
@@ -74,13 +87,17 @@ export async function initMushiSelf(options?: {
         projectId: import.meta.env.VITE_MUSHI_SELF_PROJECT_ID!,
         apiKey: import.meta.env.VITE_MUSHI_SELF_API_KEY!,
         apiEndpoint: endpoint,
+        // Pin launcher locally — remote runtime config can overwrite trigger to
+        // `auto` and resurrect the FAB (glot.it hit this in Capacitor WebView).
+        runtimeConfig: false,
 
         widget: {
           position: 'bottom-right',
           theme: 'auto',
           mode: 'simple',
           locale: 'auto',
-          // Push above the admin's own bottom chrome.
+          trigger: 'hidden',
+          smartHide: false,
           zIndex: 99999,
           betaMode: {
             enabled: true,
@@ -90,6 +107,15 @@ export async function initMushiSelf(options?: {
           },
           minDescriptionLength: 12,
         } as MushiInitOptions['widget'],
+
+        proactive: {
+          rageClick: false,
+          errorBoundary: false,
+          longTask: false,
+          apiCascade: false,
+          pageDwell: false,
+          firstSession: false,
+        },
 
         capture: {
           console: true,
@@ -108,6 +134,9 @@ export async function initMushiSelf(options?: {
         debug: import.meta.env.DEV,
         enabled: true,
       });
+
+      _sdk.setTrigger?.('hidden');
+      _sdk.hide?.();
 
       // Attach the logged-in user so reports are attributable.
       if (options?.userId) {

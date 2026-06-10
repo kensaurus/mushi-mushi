@@ -66,15 +66,15 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const [{ data, error }, { data: poolKeys }] = await Promise.all([
+    const [{ data, error }, { data: poolKeys, error: poolError }] = await Promise.all([
       db
         .from('project_settings')
         .select(
           'updated_at, slack_webhook_url, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
             'sdk_config_enabled, sdk_config_updated_at, ' +
-            'byok_anthropic_key_ref, ' +
-            'byok_openai_key_ref, ' +
-            'byok_firecrawl_key_ref, ' +
+            'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
+            'byok_openai_key_ref, byok_openai_test_status, ' +
+            'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
             'github_repo_url, autofix_enabled, ' +
             'crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day',
         )
@@ -88,6 +88,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     ]);
 
     if (error) return dbError(c, error);
+    // Degrade gracefully when the byok_keys table hasn't been synced to the
+    // PostgREST schema cache yet (42P01 = undefined_table; PGRST205 = unknown
+    // column/relation). This window opens during a deploy where the edge
+    // function restarts before the migration + cache flush completes. Treat it
+    // as an empty pool so the Settings UI still renders rather than hard-failing.
+    // All other pool errors (permissions, network, unexpected) are still fatal.
+    const isSchemaNotSynced =
+      poolError !== null &&
+      poolError !== undefined &&
+      (poolError.code === '42P01' ||
+        (typeof (poolError as { message?: string }).message === 'string' &&
+          (poolError as { message: string }).message.includes('PGRST205')));
+    if (poolError && !isSchemaNotSynced) return dbError(c, poolError);
 
     const row = (data as Record<string, unknown> | null) ?? {};
 
@@ -110,6 +123,30 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokAnthropicConfigured = poolProviders.has('anthropic') || Boolean(row.byok_anthropic_key_ref);
     const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
     const byokFirecrawlConfigured = poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
+
+    // Fold in legacy single-key refs whose provider has no pool row yet, so a
+    // project that hasn't migrated to the pool still reports its keys as
+    // "configured" instead of 0. Each legacy key MUST also land in exactly one
+    // of passing/failing/untested using its own test-status column — otherwise
+    // the invariant `passing + failing + untested === configured` breaks, the
+    // tooltip reads "0 passing, 0 failing, 0 untested of N configured", and the
+    // SettingsStatusBanner's "untested keys" warning never fires for legacy-
+    // only projects.
+    const classifyByokStatus = (testStatus: string | null | undefined) => {
+      if (testStatus === 'ok') byokKeysPassing += 1;
+      else if (testStatus && testStatus.startsWith('error')) byokKeysFailing += 1;
+      else byokKeysUntested += 1;
+      byokKeysConfigured += 1;
+    };
+    if (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref)) {
+      classifyByokStatus(row.byok_anthropic_test_status as string | null);
+    }
+    if (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref)) {
+      classifyByokStatus(row.byok_openai_test_status as string | null);
+    }
+    if (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref)) {
+      classifyByokStatus(row.byok_firecrawl_test_status as string | null);
+    }
 
     return c.json({
       ok: true,
@@ -166,14 +203,37 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sdk_banner_position',
       'sdk_banner_bug_cta',
       'sdk_banner_feature_cta',
+      'sdk_banner_message',
+      'sdk_banner_label',
       // Per-project crawl / TDD generation budget quotas
       'crawl_max_pages_per_day',
       'crawl_max_runs_per_day',
       'tdd_max_gens_per_day',
     ];
+    // Free-text banner fields are served verbatim on the UNAUTHENTICATED
+    // public SDK config endpoint — enforce the same caps as
+    // coerceSdkConfigUpdate (helpers.ts) so this generic PATCH path can't
+    // become a public-payload amplification vector.
+    const textCaps: Record<string, number> = {
+      sdk_banner_message: 240,
+      sdk_banner_label: 24,
+      sdk_banner_bug_cta: 60,
+    };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
-      if (allowed.includes(key)) updates[key] = value;
+      if (!allowed.includes(key)) continue;
+      const cap = textCaps[key];
+      if (cap !== undefined) {
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          updates[key] = trimmed ? trimmed.slice(0, cap) : null;
+        } else if (value === null) {
+          updates[key] = null;
+        }
+        // Non-string, non-null values for text fields are dropped.
+        continue;
+      }
+      updates[key] = value;
     }
 
     const { error } = await db
@@ -249,7 +309,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .from('project_settings')
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -279,7 +339,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )

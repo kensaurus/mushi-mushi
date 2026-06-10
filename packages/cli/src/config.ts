@@ -84,6 +84,7 @@ export const CONFIG_PATH = resolveXdgConfigPath()
  *   MUSHI_API_KEY       — API key (matches the SDK's env var name)
  *   MUSHI_PROJECT_ID    — Project UUID
  *   MUSHI_API_ENDPOINT  — Backend edge-function URL
+ *   MUSHI_ENDPOINT      — Alias for MUSHI_API_ENDPOINT (connect scripts)
  */
 export function loadConfig(path = CONFIG_PATH): CliConfig {
   let file: CliConfig = {}
@@ -101,10 +102,12 @@ export function loadConfig(path = CONFIG_PATH): CliConfig {
     file = migrateLegacyConfig() ?? {}
   }
   // Env vars overlay the file: a set env var always wins.
+  const endpointFromEnv =
+    process.env['MUSHI_API_ENDPOINT'] ?? process.env['MUSHI_ENDPOINT'] ?? undefined
   const fromEnv: CliConfig = {
     ...(process.env['MUSHI_API_KEY'] ? { apiKey: process.env['MUSHI_API_KEY'] } : {}),
     ...(process.env['MUSHI_PROJECT_ID'] ? { projectId: process.env['MUSHI_PROJECT_ID'] } : {}),
-    ...(process.env['MUSHI_API_ENDPOINT'] ? { endpoint: process.env['MUSHI_API_ENDPOINT'] } : {}),
+    ...(endpointFromEnv ? { endpoint: endpointFromEnv } : {}),
   }
   return { ...file, ...fromEnv }
 }

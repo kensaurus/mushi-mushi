@@ -1,4 +1,4 @@
-# mushi-mcp
+# @mushi-mushi/mcp
 
 > **Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
 
@@ -20,7 +20,7 @@ That command reads `~/.mushirc`, writes `.cursor/mcp.json` with the `mushi` serv
 
 > **What this is, and what it isn't**
 >
-> - **This package** (`mushi-mcp`) is the MCP **server** — runs locally next to your editor, talks to the Mushi API, and presents bug reports as MCP tools/resources to your coding agent. The npm package name is `mushi-mcp`; the scoped alias `@mushi-mushi/mcp` still works.
+> - **This package** (`@mushi-mushi/mcp`) is the MCP **server** — runs locally next to your editor, talks to the Mushi API, and presents bug reports as MCP tools/resources to your coding agent. Always install it by its scoped name (`npx -y @mushi-mushi/mcp@latest`) — the bare `mushi-mcp` name was never published to npm.
 > - **`@mushi-mushi/agents`** ships the MCP **client adapter** — used by the autofix orchestrator when your project's `autofix_agent = 'mcp'`. See `packages/agents/src/adapters/mcp.ts`.
 > - The `generic_mcp` adapter shipped before V5.3 was a misnomer (it spoke plain REST). It is now `RestFixWorkerAgent`; the old export is kept as a deprecated alias for one more minor.
 
@@ -130,6 +130,8 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `get_fix_timeline` | Ordered timeline of a fix attempt (dispatched → started → branch → commit → PR → CI → completed/failed) |
 | `get_blast_radius` | Graph traversal showing other components a bug group touches |
 | `get_knowledge_graph` | Traverse the knowledge graph from a seed component or page |
+| `setup_check` | The 4 **dispatch-readiness** checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled) — run before `dispatch_fix` |
+| `ingest_setup_check` | The 4 **required ingest** checks (project, active API key, SDK heartbeat, first report) + `last_sdk_seen_at` diagnostics — run after wiring env vars to confirm the SDK is reporting |
 
 ### Write / agentic
 
@@ -366,3 +368,9 @@ In Cursor chat, type `/` — you should see the Mushi Mushi slash-prompts (`/sum
 ## License
 
 MIT
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -9,6 +9,18 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { HealthStats, HealthTabId } from './HealthStatsTypes'
 
+/** Nominal/idle posture is covered by the page hero + snapshot — skip the banner. */
+export function isHealthStatusBannerCritical(stats: HealthStats): boolean {
+  if (!stats.hasAnyProject) return true
+  return (
+    stats.topPriority === 'llm_errors' ||
+    stats.topPriority === 'cron_error' ||
+    stats.topPriority === 'llm_fallbacks' ||
+    stats.topPriority === 'cron_stale' ||
+    stats.topPriority === 'cron_warn'
+  )
+}
+
 interface Props {
   stats: HealthStats
   onTab?: (tab: HealthTabId) => void

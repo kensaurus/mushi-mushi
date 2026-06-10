@@ -32,10 +32,8 @@
  */
 
 import { execSync, execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, unlinkSync } from 'node:fs'
-import { join, relative } from 'node:path'
-import { tmpdir } from 'node:os'
-import { randomBytes } from 'node:crypto'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 
 const ROOT = process.cwd()
 const PUBLISH_ROOTS = ['packages']
@@ -95,26 +93,26 @@ for (const { pkg } of newPackages) {
   console.log(`  ${pkg.name}@${pkg.version}`)
 }
 
-// Write a temporary .npmrc with the token.
-const tmpNpmrc = join(tmpdir(), `npmrc-bootstrap-${randomBytes(4).toString('hex')}`)
-writeFileSync(tmpNpmrc, `//registry.npmjs.org/:_authToken=${token}\n`)
-
 let failed = 0
 for (const { pkg, dir } of newPackages) {
   console.log(`\n→ Publishing ${pkg.name}@${pkg.version} (no provenance)...`)
   try {
-    const out = execFileSync(
-      'npm',
-      ['publish', '--access', 'public', '--userconfig', tmpNpmrc],
+    // MUST use `pnpm publish`, not bare `npm publish`. npm does not rewrite
+    // `workspace:^` / `workspace:*` specifiers — @mushi-mushi/mcp@0.10.0 shipped
+    // with `"@mushi-mushi/core": "workspace:^"` and broke `npx @mushi-mushi/mcp`.
+    execFileSync(
+      'pnpm',
+      ['publish', '--access', 'public', '--no-git-checks', '--provenance=false'],
       {
         cwd: dir,
         stdio: 'pipe',
         env: {
           ...process.env,
-          // Explicitly disable provenance for this bootstrap call.
+          NODE_AUTH_TOKEN: token,
           NPM_CONFIG_PROVENANCE: 'false',
         },
-      }
+        shell: true,
+      },
     )
     console.log(`  ✓ Published ${pkg.name}@${pkg.version}`)
     console.log(`    NOTE: set up a Trusted Publisher rule on npmjs.com for ${pkg.name}`)
@@ -127,8 +125,6 @@ for (const { pkg, dir } of newPackages) {
     failed++
   }
 }
-
-try { unlinkSync(tmpNpmrc) } catch { /* ignore */ }
 
 if (failed > 0) {
   console.error(`\nbootstrap-new-packages: ${failed} package(s) failed. Fix and re-run.`)

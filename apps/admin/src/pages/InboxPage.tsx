@@ -25,7 +25,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHero } from '../components/PageHero'
-import { InboxStatusBanner } from '../components/inbox/InboxStatusBanner'
+import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
@@ -318,13 +318,15 @@ export function InboxPage() {
         </p>
       </ContainedBlock>
 
-      <InboxStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating || isValidating}
-        plainBanner={ux.plainBanner}
-      />
+      {isInboxStatusBannerCritical(stats) && (
+        <InboxStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onRefresh={reloadAll}
+          refreshing={statsValidating || isValidating}
+          plainBanner={ux.plainBanner}
+        />
+      )}
 
       {!ux.hideTabs && (
         <SegmentedControl
@@ -334,48 +336,6 @@ export function InboxPage() {
           ariaLabel="Inbox sections"
           size="sm"
         />
-      )}
-
-      {!ux.hideInboxSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label={copy?.statLabels?.open ?? 'Open'}
-            value={stats.openActions}
-            accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
-            tooltip={openTooltip(stats)}
-            detail={openDetail(stats)}
-            to={statLink(inboxLinks.open, stats)}
-          />
-          <StatCard
-            label={copy?.statLabels?.clear ?? 'Clear'}
-            value={stats.clearStages}
-            accent="text-ok"
-            tooltip={clearTooltip(stats, ux.plainStageLabels)}
-            detail={clearDetail(stats, ux.plainStageLabels)}
-            to={inboxLinks.clear}
-          />
-          <StatCard
-            label={copy?.statLabels?.backlog ?? 'Backlog'}
-            value={stats.openBacklog}
-            accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
-            tooltip={backlogTooltip(stats)}
-            detail={backlogDetail(stats)}
-            to={inboxLinks.backlog}
-          />
-          <StatCard
-            label={copy?.statLabels?.critical ?? 'Critical 14d'}
-            value={stats.criticalReports14d}
-            accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
-            tooltip={criticalTooltip(stats)}
-            detail={criticalDetail(stats)}
-            to={inboxLinks.critical}
-          />
-        </div>
-      </Section>
       )}
 
       {activeTab === 'overview' && (
@@ -445,6 +405,48 @@ export function InboxPage() {
             </section>
           ) : null}
         </>
+      )}
+
+      {!ux.hideInboxSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label={copy?.statLabels?.open ?? 'Open'}
+            value={stats.openActions}
+            accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
+            tooltip={openTooltip(stats)}
+            detail={openDetail(stats)}
+            to={statLink(inboxLinks.open, stats)}
+          />
+          <StatCard
+            label={copy?.statLabels?.clear ?? 'Clear'}
+            value={stats.clearStages}
+            accent="text-ok"
+            tooltip={clearTooltip(stats, ux.plainStageLabels)}
+            detail={clearDetail(stats, ux.plainStageLabels)}
+            to={inboxLinks.clear}
+          />
+          <StatCard
+            label={copy?.statLabels?.backlog ?? 'Backlog'}
+            value={stats.openBacklog}
+            accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
+            tooltip={backlogTooltip(stats)}
+            detail={backlogDetail(stats)}
+            to={inboxLinks.backlog}
+          />
+          <StatCard
+            label={copy?.statLabels?.critical ?? 'Critical 14d'}
+            value={stats.criticalReports14d}
+            accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
+            tooltip={criticalTooltip(stats)}
+            detail={criticalDetail(stats)}
+            to={inboxLinks.critical}
+          />
+        </div>
+      </Section>
       )}
 
       {activeTab === 'actions' && (

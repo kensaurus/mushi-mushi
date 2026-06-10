@@ -43,6 +43,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
+import { sendBotMessage, sendSlackText, buildReportBlocks } from '../_shared/slack.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -404,7 +405,7 @@ Deno.serve(
           })
         }
 
-        // A2A push for failures
+        // A2A push + Slack notification for failures
         if (result.status === 'failed' || result.status === 'error') {
           await db.from('a2a_push_deliveries').insert({
             project_id: pid,
@@ -422,6 +423,32 @@ Deno.serve(
             () => { rlog.info('a2a push queued', { storyId: story.id, runId }) },
             (err: unknown) => { rlog.warn('a2a push failed — non-fatal', { err: err as Record<string, unknown> }) },
           )
+
+          // Slack notification for QA story failures — uses the project's configured
+          // slack_channel_id (bot path) or falls back to slack_webhook_url.
+          // Non-fatal: a missing Slack config or delivery error never blocks the runner.
+          try {
+            const { data: ps } = await db
+              .from('project_settings')
+              .select('slack_channel_id, slack_webhook_url')
+              .eq('project_id', pid)
+              .single()
+
+            const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? ''
+            const runUrl = adminBase ? `${adminBase}/projects/${pid}/qa-coverage/${story.id}` : null
+            const failureCount = result.assertion_failures?.length ?? 0
+            const text = `⚠️ QA story *${story.name}* ${result.status === 'error' ? 'errored' : `failed ${failureCount} assertion(s)`}.${runUrl ? ` <${runUrl}|View run>` : ''}`
+
+            if (ps?.slack_channel_id) {
+              await sendBotMessage({ channel: ps.slack_channel_id, text })
+              rlog.info('slack notif sent', { storyId: story.id, runId })
+            } else if (ps?.slack_webhook_url) {
+              await sendSlackText(ps.slack_webhook_url, text)
+              rlog.info('slack webhook notif sent', { storyId: story.id, runId })
+            }
+          } catch (slackErr) {
+            rlog.warn('slack notif failed — non-fatal', { err: String(slackErr) })
+          }
         }
 
         rlog.info('story run complete', { storyId: story.id, runId, status: result.status })

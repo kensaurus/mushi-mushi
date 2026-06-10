@@ -43,6 +43,7 @@ import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts'
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
+import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 
 ensureSentry('api');
 
@@ -432,6 +433,7 @@ registerTesterMarketplaceRoutes(app);
 registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
 registerContentQualityRoutes(app);
+registerFeatureBoardRoutes(app);
 
 registerA2ATaskRoutes(app);
 
