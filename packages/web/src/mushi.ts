@@ -295,8 +295,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let detachAutoBreadcrumbs: (() => void) | null = null;
   detachAutoBreadcrumbs = installAutoBreadcrumbs(breadcrumbs);
 
+  // Reentrance guard: prevents a user tapping the camera icon while
+  // autoCaptureScreenshot is already mid-capture from double-hiding the panel.
+  let screenshotCaptureInFlight = false;
+
   async function takeScreenshotWithoutChrome(): Promise<string | null> {
-    if (!screenshotCap) return null;
+    if (!screenshotCap || screenshotCaptureInFlight) return null;
+    screenshotCaptureInFlight = true;
     const panelWasVisible = widget.getIsOpen();
     if (panelWasVisible) widget.hidePanel();
     const host = document.getElementById('mushi-mushi-widget');
@@ -308,6 +313,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     try {
       return await screenshotCap.take();
     } finally {
+      screenshotCaptureInFlight = false;
       if (host) host.style.visibility = prevVisibility;
       if (panelWasVisible) widget.showPanel();
     }

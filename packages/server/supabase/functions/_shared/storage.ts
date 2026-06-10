@@ -76,7 +76,10 @@ const settingsCache = new Map<string, { settings: StorageSettings | null; expire
 const SETTINGS_TTL_MS = 60 * 1000
 const CLUSTER_DEFAULT_BUCKET = 'screenshots'
 
-/** Normalize legacy / typo bucket names to the cluster default Supabase bucket. */
+/** Normalize legacy / typo bucket names to the cluster default Supabase bucket.
+ * TODO: replace with a pre-flight bucket existence probe so any future
+ * misconfigured name is caught at config-save time rather than silently at upload.
+ */
 function resolveSupabaseBucket(configured?: string | null): string {
   if (!configured || configured === CLUSTER_DEFAULT_BUCKET) return CLUSTER_DEFAULT_BUCKET
   // Admin once seeded mushi-screenshots for glot.it; that bucket was never created.
@@ -149,7 +152,7 @@ export async function getStorageAdapterForHealthCheck(
     ok: settings !== null,
     ms: Date.now() - t0,
     detail: settings
-      ? `provider=${settings.provider} bucket=${settings.bucket}`
+      ? `provider=${settings.provider} bucket=${resolveSupabaseBucket(settings.bucket)}`
       : 'no settings row — using cluster default',
   })
 
