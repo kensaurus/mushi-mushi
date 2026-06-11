@@ -45,12 +45,19 @@
  *   - BillingPage current-plan card (when this-period reports = 0)
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, Btn, Badge, DetailRows } from './ui'
+import { ContainedBlock, SignalChip } from './report-detail/ReportSurface'
+import { IconHealth, IconNetwork, IconGlobe, IconKey } from './icons'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import type { SetupStep } from '../lib/useSetupStatus'
+import {
+  formatEnvVarPair,
+  mushiEnvVarsForProjectSlug,
+  type ProjectMushiEnvVars,
+} from '../lib/projectMushiEnv'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -69,6 +76,8 @@ export interface SdkHealthApiKey {
 export interface SdkHealthSummaryProps {
   projectId: string
   projectName: string
+  /** Project slug drives stack-accurate env-var names in diagnostics. */
+  projectSlug?: string | null
   apiKeys: SdkHealthApiKey[]
   /** Most recent report's `created_at`, used to differentiate
    *  "auth-only heartbeat" from "actually ingesting reports". */
@@ -128,7 +137,10 @@ function absTime(input: string | null | undefined): string {
 export function diagnoseKey(
   k: SdkHealthApiKey,
   adminHost: string | null,
+  env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
 ): KeyDiagnostic {
+  const envPair = formatEnvVarPair(env)
+  const envHint = env.envFileHint ? ` in ${env.envFileHint}` : ' in your build env'
   if (!k.is_active) {
     return {
       status: 'inactive',
@@ -139,9 +151,9 @@ export function diagnoseKey(
   if (!k.last_seen_at) {
     return {
       status: 'never',
-      label: 'Created · never used',
+      label: 'Never used',
       description:
-        'The SDK using this key has not authenticated yet. Most common cause: the public env vars (NEXT_PUBLIC_MUSHI_PROJECT_ID / NEXT_PUBLIC_MUSHI_API_KEY) are missing in the build that serves your users — without them, the SDK tree-shakes out of the bundle entirely.',
+        `The SDK using this key has not authenticated yet. Most common cause: ${envPair} are missing${envHint} (${env.stackLabel}) — without them, isEnabled() returns false and the SDK never heartbeats.`,
     }
   }
   const age = Date.now() - new Date(k.last_seen_at).getTime()
@@ -155,8 +167,8 @@ export function diagnoseKey(
   ) {
     return {
       status: 'endpoint-mismatch',
-      label: 'Wrong backend',
-      description: `Your SDK is reaching ${k.last_seen_endpoint_host}, but this admin reads from ${adminHost}. Check NEXT_PUBLIC_MUSHI_API_ENDPOINT in your build env — a stale staging or localhost endpoint is the most common cause.`,
+      label: 'Mismatch',
+      description: `Your SDK is reaching ${k.last_seen_endpoint_host}, but this admin reads from ${adminHost}. Check ${env.endpointVar ?? 'your Mushi API endpoint env var'} in your build env — a stale staging or localhost endpoint is the most common cause.`,
     }
   }
   if (age < HOUR_MS) {
@@ -185,6 +197,7 @@ export function diagnoseKey(
 export function summarizeCardStatus(
   apiKeys: SdkHealthApiKey[],
   adminHost: string | null,
+  env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
 ): CardStatus {
   const active = apiKeys.filter((k) => k.is_active)
   if (active.length === 0) return 'no-key'
@@ -196,7 +209,7 @@ export function summarizeCardStatus(
   let worst: CardStatus = 'never'
   const seen = new Set<KeyDiagnostic['status']>()
   for (const k of active) {
-    const d = diagnoseKey(k, adminHost)
+    const d = diagnoseKey(k, adminHost, env)
     seen.add(d.status)
   }
   if (seen.has('endpoint-mismatch')) worst = 'endpoint-mismatch'
@@ -212,46 +225,229 @@ export function summarizeCardStatus(
 // product (per enhance-page-ui), so chrome stays neutral.
 // ---------------------------------------------------------------------------
 
+/** Short pill text — one or two words; long copy lives in `description` / tooltips. */
+export const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
+  healthy: 'Connected',
+  'endpoint-mismatch': 'Mismatch',
+  stale: 'Stale',
+  cold: 'Cold',
+  never: 'Never used',
+  'no-key': 'No key',
+}
+
 const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string }> = {
   healthy: {
     dot: 'bg-ok',
     chip: 'bg-ok-muted text-ok border border-ok/30',
-    headline: 'SDK is connected to this backend',
+    headline: 'SDK connected',
   },
   'endpoint-mismatch': {
     dot: 'bg-danger',
     chip: 'bg-danger-muted text-danger border border-danger/30',
-    headline: 'SDK is talking to a different backend',
+    headline: 'Wrong endpoint',
   },
   stale: {
     dot: 'bg-warn',
     chip: 'bg-warn-muted text-warn border border-warn/30',
-    headline: 'SDK was last heard from a while ago',
+    headline: 'Stale heartbeat',
   },
   cold: {
     dot: 'bg-warn',
     chip: 'bg-warn-muted text-warn border border-warn/30',
-    headline: 'SDK has been silent for over 7 days',
+    headline: 'Silent 7d+',
   },
   never: {
     dot: 'bg-danger',
     chip: 'bg-danger-muted text-danger border border-danger/30',
-    headline: 'No SDK has ever connected with this project’s keys',
+    headline: 'Never connected',
   },
   'no-key': {
     dot: 'bg-fg-faint',
     chip: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-    headline: 'No active API key — the SDK has nothing to authenticate with',
+    headline: 'No API key',
   },
 }
 
-const KEY_STATUS_TONE: Record<KeyDiagnostic['status'], string> = {
-  healthy: 'bg-ok-muted text-ok border border-ok/30',
-  'endpoint-mismatch': 'bg-danger-muted text-danger border border-danger/30',
-  stale: 'bg-warn-muted text-warn border border-warn/30',
-  cold: 'bg-warn-muted text-warn border border-warn/30',
-  never: 'bg-danger-muted text-danger border border-danger/30',
-  inactive: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+const KEY_STATUS_CHIP: Record<
+  KeyDiagnostic['status'],
+  'ok' | 'warn' | 'danger' | 'neutral'
+> = {
+  healthy: 'ok',
+  'endpoint-mismatch': 'danger',
+  stale: 'warn',
+  cold: 'warn',
+  never: 'danger',
+  inactive: 'neutral',
+}
+
+const CARD_BLOCK_TONE: Record<
+  CardStatus,
+  'muted' | 'ok' | 'warn' | 'danger'
+> = {
+  healthy: 'ok',
+  'endpoint-mismatch': 'danger',
+  stale: 'warn',
+  cold: 'warn',
+  never: 'danger',
+  'no-key': 'muted',
+}
+
+function SdkKeyCompactTableRow({
+  apiKey: k,
+  adminHost,
+  envVars,
+}: {
+  apiKey: SdkHealthApiKey
+  adminHost: string | null
+  envVars: ProjectMushiEnvVars
+}) {
+  const d = diagnoseKey(k, adminHost, envVars)
+  const endpointMatches =
+    k.last_seen_endpoint_host && adminHost && k.last_seen_endpoint_host === adminHost
+
+  return (
+    <tr className="border-t border-edge-subtle/40">
+      <td className="px-3 py-2.5 align-middle">
+        <div className="flex min-w-0 items-center gap-2">
+          <IconKey className="h-4 w-4 shrink-0 text-warn" aria-hidden />
+          <div className="min-w-0">
+            <code
+              className="block truncate font-mono text-xs font-medium text-fg"
+              title={k.label ?? k.key_prefix}
+            >
+              {k.key_prefix}…
+            </code>
+            {k.label ? (
+              <div className="truncate text-2xs text-fg-muted">{k.label}</div>
+            ) : null}
+          </div>
+        </div>
+      </td>
+      <td className="border-l border-edge-subtle/45 px-3 py-2.5 align-middle">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <IconNetwork className="h-4 w-4 shrink-0 text-info" aria-hidden />
+          {k.last_seen_endpoint_host ? (
+            <code
+              className={`min-w-0 truncate font-mono text-xs ${
+                endpointMatches ? 'text-fg-secondary' : 'text-danger'
+              }`}
+              title={
+                endpointMatches
+                  ? 'Matches this admin backend'
+                  : `Mismatch — admin reads from ${adminHost ?? 'unknown'}`
+              }
+            >
+              {k.last_seen_endpoint_host}
+            </code>
+          ) : (
+            <span className="text-xs text-fg-faint">—</span>
+          )}
+        </div>
+      </td>
+      <td className="border-l border-edge-subtle/45 px-3 py-2.5 align-middle">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <IconGlobe className="h-4 w-4 shrink-0 text-brand" aria-hidden />
+          {k.last_seen_origin ? (
+            <code
+              className="min-w-0 truncate font-mono text-xs text-fg-secondary"
+              title={k.last_seen_origin}
+            >
+              {k.last_seen_origin}
+            </code>
+          ) : (
+            <span className="text-xs text-fg-faint">—</span>
+          )}
+        </div>
+      </td>
+      <td className="border-l border-edge-subtle/45 px-3 py-2.5 align-middle text-right">
+        <span
+          title={
+            k.last_seen_at
+              ? `${d.description} · Last seen ${absTime(k.last_seen_at)}`
+              : d.description
+          }
+        >
+          <SignalChip
+            tone={KEY_STATUS_CHIP[d.status]}
+            className="whitespace-nowrap"
+          >
+            {d.label}
+          </SignalChip>
+        </span>
+      </td>
+    </tr>
+  )
+}
+
+function SdkKeyTableRow({
+  apiKey: k,
+  adminHost,
+  envVars,
+}: {
+  apiKey: SdkHealthApiKey
+  adminHost: string | null
+  envVars: ProjectMushiEnvVars
+}) {
+  const d = diagnoseKey(k, adminHost, envVars)
+  const endpointMatches =
+    k.last_seen_endpoint_host && adminHost && k.last_seen_endpoint_host === adminHost
+
+  return (
+    <tr className="border-t border-edge-subtle/40">
+      <td className="px-2 py-2 align-middle">
+        <code className="font-mono text-2xs text-fg break-all" title={k.label ?? k.key_prefix}>
+          {k.key_prefix}…
+        </code>
+        {k.label && <div className="mt-0.5 text-3xs text-fg-faint break-words">{k.label}</div>}
+      </td>
+      <td className="px-2 py-2 align-middle whitespace-nowrap">
+        <span
+          title={
+            k.last_seen_at
+              ? `${d.description} · Last seen ${absTime(k.last_seen_at)}`
+              : d.description
+          }
+        >
+          <SignalChip tone={KEY_STATUS_CHIP[d.status]}>{d.label}</SignalChip>
+        </span>
+      </td>
+      <td className="px-2 py-2 align-middle whitespace-nowrap text-fg-muted">
+        {k.last_seen_at ? (
+          <span title={absTime(k.last_seen_at)} className="cursor-help text-fg">
+            {relTime(k.last_seen_at)}
+          </span>
+        ) : (
+          <span className="text-fg-faint">—</span>
+        )}
+      </td>
+      <td className="px-2 py-2 align-top">
+        {k.last_seen_endpoint_host ? (
+          <code
+            className={`font-mono text-2xs break-all ${endpointMatches ? 'text-fg-secondary' : 'text-danger'}`}
+            title={
+              endpointMatches
+                ? 'Matches this admin backend'
+                : `MISMATCH — this admin reads from ${adminHost ?? 'unknown'}`
+            }
+          >
+            {endpointMatches ? '✓ ' : '⚠ '}
+            {k.last_seen_endpoint_host}
+          </code>
+        ) : (
+          <span className="text-fg-faint">—</span>
+        )}
+      </td>
+      <td className="px-2 py-2 align-top">
+        {k.last_seen_origin ? (
+          <code className="font-mono text-2xs text-fg-secondary break-all" title={k.last_seen_origin}>
+            {k.last_seen_origin}
+          </code>
+        ) : (
+          <span className="text-fg-faint">—</span>
+        )}
+      </td>
+    </tr>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -260,56 +456,63 @@ const KEY_STATUS_TONE: Record<KeyDiagnostic['status'], string> = {
 // (most likely cause first); the user shouldn't have to read all of them.
 // ---------------------------------------------------------------------------
 
-const PLAYBOOK: Record<CardStatus, { title: string; checks: string[]; cta: string | null }> = {
-  healthy: {
-    title: 'Everything green',
-    checks: [
-      'SDK is authenticating from a recent build.',
-      'Endpoint host matches this admin.',
-      'New reports should appear in /reports within seconds of submission.',
-    ],
-    cta: null,
-  },
-  'endpoint-mismatch': {
-    title: 'Most likely causes',
-    checks: [
-      'A stale NEXT_PUBLIC_MUSHI_API_ENDPOINT is pinned in your .env.local or CI secrets — clear it to fall back to the cloud default.',
-      'A local Supabase stack URL (http://localhost:54321/...) baked into a production build by mistake.',
-      'NEXT_PUBLIC_MUSHI_TARGET=local was set in CI without a matching cloud override.',
-    ],
-    cta: 'Send test report',
-  },
-  never: {
-    title: 'Most likely causes',
-    checks: [
-      'NEXT_PUBLIC_MUSHI_PROJECT_ID or NEXT_PUBLIC_MUSHI_API_KEY are missing in your CI/build env — without them, isEnabled() returns false and the SDK is tree-shaken out of the bundle. View Source on your deployed HTML and grep for "mushi" — zero matches confirms this.',
-      'initMushi() is never called from your app entry — usually `deferWork(() => import("./lib/mushi").then((m) => m.initMushi()))` in providers.',
-      'The widget host element (#mushi-mushi-widget) is being injected but immediately removed by a global cleanup; check console for "[mushi]" warnings.',
-    ],
-    cta: 'Send test report',
-  },
-  stale: {
-    title: 'Diagnostic',
-    checks: [
-      'SDK has been quiet for more than an hour. Normal for low-traffic apps.',
-      'If you deployed recently, the new build may have shipped without the env vars — confirm by checking the deployed HTML for "mushi".',
-    ],
-    cta: 'Send test report',
-  },
-  cold: {
-    title: 'Most likely causes',
-    checks: [
-      'A recent deploy stopped shipping the SDK — confirm the build env still includes NEXT_PUBLIC_MUSHI_*.',
-      'The active key was rotated and the SDK is still using the old one.',
-      'The widget was hidden by a route filter (mushiHideOnRoutes) and your traffic is now concentrated on those routes.',
-    ],
-    cta: 'Send test report',
-  },
-  'no-key': {
-    title: 'Get started',
-    checks: ['Generate an API key above, then drop it into your SDK config.'],
-    cta: null,
-  },
+function buildPlaybook(
+  env: ProjectMushiEnvVars,
+): Record<CardStatus, { title: string; checks: string[]; cta: string | null }> {
+  const envPair = formatEnvVarPair(env)
+  const envWhere = env.envFileHint ?? 'your CI/build env'
+  const endpointVar = env.endpointVar ?? 'your Mushi API endpoint env var'
+  return {
+    healthy: {
+      title: 'Everything green',
+      checks: [
+        'SDK is authenticating from a recent build.',
+        'Endpoint host matches this admin.',
+        'New reports should appear in /reports within seconds of submission.',
+      ],
+      cta: null,
+    },
+    'endpoint-mismatch': {
+      title: 'Most likely causes',
+      checks: [
+        `A stale ${endpointVar} is pinned in ${envWhere} — clear it to fall back to the cloud default.`,
+        'A local Supabase stack URL (http://localhost:54321/…) baked into a production build by mistake.',
+        'A local-only target flag was set in CI without a matching cloud override.',
+      ],
+      cta: 'Send test report',
+    },
+    never: {
+      title: 'Most likely causes',
+      checks: [
+        `${env.projectIdVar} or ${env.apiKeyVar} are missing in ${envWhere} (${env.stackLabel}) — without them, isEnabled() returns false and the SDK never heartbeats.`,
+        'initMushi() is never called from your app entry — usually deferred from providers or app shell after first paint.',
+        'Send test report below proves ingest only — it does not mark SDK installed; you still need a heartbeat from a real app build.',
+      ],
+      cta: 'Send test report',
+    },
+    stale: {
+      title: 'Diagnostic',
+      checks: [
+        'SDK has been quiet for more than an hour. Normal for low-traffic apps.',
+        `If you deployed recently, confirm ${envPair} are still present in ${envWhere}.`,
+      ],
+      cta: 'Send test report',
+    },
+    cold: {
+      title: 'Most likely causes',
+      checks: [
+        `A recent deploy stopped shipping the SDK — confirm ${envPair} are still in ${envWhere}.`,
+        'The active key was rotated and the SDK is still using the old one.',
+        'The widget was hidden by a route filter and your traffic is now concentrated on those routes.',
+      ],
+      cta: 'Send test report',
+    },
+    'no-key': {
+      title: 'Get started',
+      checks: ['Generate an API key above, then drop it into your SDK config.'],
+      cta: null,
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +522,7 @@ const PLAYBOOK: Record<CardStatus, { title: string; checks: string[]; cta: strin
 export function SdkHealthSummary({
   projectId,
   projectName,
+  projectSlug,
   apiKeys,
   lastReportAt,
   adminHost,
@@ -331,11 +535,23 @@ export function SdkHealthSummary({
   // Diagnostic accordion auto-opens when the status is anything OTHER than
   // healthy — i.e. we expand it precisely when the user has come here to
   // troubleshoot. They can still collapse it if they just want the summary.
-  const status = summarizeCardStatus(apiKeys, adminHost)
+  const envVars = mushiEnvVarsForProjectSlug(projectSlug)
+  const status = summarizeCardStatus(apiKeys, adminHost, envVars)
   const [open, setOpen] = useState(status !== 'healthy' && status !== 'no-key')
 
+  // Re-open the diagnostics when a refetch degrades the status while the card
+  // stays mounted (e.g. endpoint-mismatch detected after a test report).
+  const prevStatusRef = useRef(status)
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = status
+    if (prev !== status && status !== 'healthy' && status !== 'no-key') {
+      setOpen(true)
+    }
+  }, [status])
+
   const tone = STATUS_TONE[status]
-  const playbook = PLAYBOOK[status]
+  const playbook = buildPlaybook(envVars)[status]
   const activeKeys = apiKeys.filter((k) => k.is_active)
   const freshest = activeKeys
     .filter((k) => k.last_seen_at)
@@ -351,7 +567,7 @@ export function SdkHealthSummary({
       if (!res.ok) throw new Error(res.error?.message ?? 'Send failed')
       toast.success(
         'Test report sent',
-        'It exercises the same ingest path as the SDK — appears in /reports within seconds.',
+        'Ingest path verified — appears in /reports within seconds. SDK installed still needs a heartbeat from your app build.',
       )
       onTestReportSent?.()
     } catch (err) {
@@ -361,138 +577,131 @@ export function SdkHealthSummary({
     }
   }
 
-  // Compact mode: status row + diagnostic accordion. Used when the parent
-  // (ProjectsPage row) already supplies the project headline and we don't
-  // want to repaint the project name.
-  const Wrapper = compact
-    ? (props: { children: React.ReactNode }) => (
-        <div className="rounded-sm border border-edge-subtle bg-surface-overlay/30 p-4 space-y-3">
-          {props.children}
-        </div>
-      )
-    : (props: { children: React.ReactNode }) => (
-        <Card className="p-5 space-y-4">{props.children}</Card>
-      )
+  const statusChipLabel = SDK_CARD_CHIP_LABEL[status]
 
-  return (
-    <Wrapper>
-      {/* Headline row: status dot, sentence, primary metric. Status comes
-          from the per-key worst-case so the headline matches the row tints
-          below without the user having to scan the whole table. */}
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className={`mt-1 inline-block h-2.5 w-2.5 rounded-full shrink-0 ${tone.dot}`}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-medium text-fg leading-tight">{tone.headline}</p>
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium whitespace-nowrap ${tone.chip}`}>
-              {status === 'healthy' ? 'Healthy' :
-                status === 'endpoint-mismatch' ? 'Mismatch' :
-                status === 'stale' ? 'Stale' :
-                status === 'cold' ? 'Cold' :
-                status === 'never' ? 'Never connected' : 'No key'}
-            </span>
+  const inner = (
+    <>
+      <div
+        className={`flex min-w-0 items-start gap-3 border-b border-edge-subtle/40 px-3 py-2.5 ${
+          compact ? '' : 'space-y-2'
+        }`}
+      >
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-surface-overlay/80 text-fg-faint">
+          <IconHealth className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold leading-snug text-fg">{tone.headline}</p>
+            <SignalChip
+              tone={
+                status === 'healthy'
+                  ? 'ok'
+                  : status === 'endpoint-mismatch' || status === 'never'
+                    ? 'danger'
+                    : status === 'stale' || status === 'cold'
+                      ? 'warn'
+                      : 'neutral'
+              }
+            >
+              {statusChipLabel}
+            </SignalChip>
           </div>
-          <p className="text-fg-muted text-xs mt-1">
-            {projectName} · {reportCount === 0 ? 'no reports yet' : `${reportCount.toLocaleString()} ${reportCount === 1 ? 'report' : 'reports'}`}
-            {lastReportAt && ` · last report ${relTime(lastReportAt)}`}
-            {freshest?.last_seen_at && ` · last SDK ${relTime(freshest.last_seen_at)}`}
-          </p>
+          {!compact && (
+            <p className="mt-1 text-xs text-fg-muted">
+              {projectName} ·{' '}
+              {reportCount === 0
+                ? 'no reports yet'
+                : `${reportCount.toLocaleString()} ${reportCount === 1 ? 'report' : 'reports'}`}
+              {lastReportAt && ` · last report ${relTime(lastReportAt)}`}
+              {freshest?.last_seen_at && ` · last SDK ${relTime(freshest.last_seen_at)}`}
+            </p>
+          )}
+          {adminHost && (
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-fg-secondary">
+              <IconGlobe className="h-4 w-4 shrink-0 text-info" />
+              <span className="shrink-0 font-medium text-fg-muted">Backend</span>
+              <code
+                className="min-w-0 truncate font-mono text-fg"
+                title="Host this admin console reads from"
+              >
+                {adminHost}
+              </code>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Per-key table. Hidden in true zero-key state; otherwise it's the
-          single highest-density block on the card so the user can scan
-          which specific key is or isn't healthy. */}
       {activeKeys.length > 0 && (
-        <div className="overflow-x-auto -mx-1">
-          <table className="w-full text-2xs">
-            <thead>
-              <tr className="text-fg-faint text-left">
-                <th className="px-1 py-1.5 font-medium font-mono uppercase tracking-wide">Key</th>
-                <th className="px-1 py-1.5 font-medium font-mono uppercase tracking-wide">Status</th>
-                <th className="px-1 py-1.5 font-medium font-mono uppercase tracking-wide">Last seen</th>
-                <th className="px-1 py-1.5 font-medium font-mono uppercase tracking-wide">Endpoint</th>
-                <th className="px-1 py-1.5 font-medium font-mono uppercase tracking-wide">Origin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeKeys.map((k) => {
-                const d = diagnoseKey(k, adminHost)
-                const endpointMatches =
-                  k.last_seen_endpoint_host && adminHost && k.last_seen_endpoint_host === adminHost
-                return (
-                  <tr key={k.id} className="border-t border-edge-subtle/40">
-                    <td className="px-1 py-2 align-top">
-                      <div className="font-mono text-fg" title={k.label ?? undefined}>
-                        {k.key_prefix}…
-                      </div>
-                      {k.label && <div className="text-fg-faint text-2xs">{k.label}</div>}
-                    </td>
-                    <td className="px-1 py-2 align-top">
-                      <span
-                        title={d.description}
-                        className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium whitespace-nowrap ${KEY_STATUS_TONE[d.status]}`}
-                      >
-                        {d.label}
-                      </span>
-                    </td>
-                    <td className="px-1 py-2 align-top">
-                      {k.last_seen_at ? (
-                        <span title={absTime(k.last_seen_at)} className="text-fg cursor-help">
-                          {relTime(k.last_seen_at)}
-                        </span>
-                      ) : (
-                        <span className="text-fg-faint">never</span>
-                      )}
-                    </td>
-                    <td className="px-1 py-2 align-top max-w-[12rem]">
-                      {k.last_seen_endpoint_host ? (
-                        <span
-                          className={`font-mono text-2xs truncate inline-flex items-center gap-1 ${endpointMatches ? 'text-fg-muted' : 'text-danger'}`}
-                          title={
-                            endpointMatches
-                              ? 'Matches this admin backend'
-                              : `MISMATCH — this admin reads from ${adminHost ?? 'unknown'}`
-                          }
-                        >
-                          <span aria-hidden="true">{endpointMatches ? '✓' : '⚠'}</span>
-                          <span className="truncate">{k.last_seen_endpoint_host}</span>
-                        </span>
-                      ) : (
-                        <span className="text-fg-faint">—</span>
-                      )}
-                    </td>
-                    <td className="px-1 py-2 align-top max-w-[10rem]">
-                      {k.last_seen_origin ? (
-                        <span className="font-mono text-2xs text-fg-muted truncate block" title={k.last_seen_origin}>
-                          {k.last_seen_origin}
-                        </span>
-                      ) : (
-                        <span className="text-fg-faint">—</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        compact ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem] table-fixed border-collapse text-xs">
+              <colgroup>
+                <col className="w-[28%]" />
+                <col className="w-[30%]" />
+                <col className="w-[26%]" />
+                <col className="w-[16%]" />
+              </colgroup>
+              <thead className="hidden border-b border-edge-subtle/40 bg-surface-overlay/30 lg:table-header-group">
+                <tr>
+                  <th className="px-3 py-2 text-left text-2xs font-semibold text-fg-muted">Key</th>
+                  <th className="border-l border-edge-subtle/45 px-3 py-2 text-left text-2xs font-semibold text-fg-muted">
+                    Endpoint
+                  </th>
+                  <th className="border-l border-edge-subtle/45 px-3 py-2 text-left text-2xs font-semibold text-fg-muted">
+                    Origin
+                  </th>
+                  <th className="border-l border-edge-subtle/45 px-3 py-2 text-right text-2xs font-semibold text-fg-muted">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeKeys.map((k) => (
+                  <SdkKeyCompactTableRow
+                    key={k.id}
+                    apiKey={k}
+                    adminHost={adminHost}
+                    envVars={envVars}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full min-w-[40rem] text-2xs">
+              <thead>
+                <tr className="text-fg-faint text-left">
+                  <th className="px-2 py-1.5 font-medium font-mono uppercase tracking-wide">Key</th>
+                  <th className="px-2 py-1.5 font-medium font-mono uppercase tracking-wide">Status</th>
+                  <th className="px-2 py-1.5 font-medium font-mono uppercase tracking-wide">Last seen</th>
+                  <th className="px-2 py-1.5 font-medium font-mono uppercase tracking-wide">Endpoint</th>
+                  <th className="px-2 py-1.5 font-medium font-mono uppercase tracking-wide">Origin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeKeys.map((k) => (
+                  <SdkKeyTableRow
+                    key={k.id}
+                    apiKey={k}
+                    adminHost={adminHost}
+                    envVars={envVars}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
-      {/* Action row + diagnostic toggle. The "Diagnose" button is muted on
-          healthy projects (the user almost certainly didn't open the card
-          to read a green checklist) and auto-expanded otherwise. */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2 border-t border-edge-subtle/40 px-3 py-2.5">
         {playbook.cta && (
           <Btn
             size="sm"
             variant="primary"
             loading={sending}
             onClick={sendTestReport}
-            title="Sends a synthetic ingest from this admin to exercise quota → schema → queue → classification end-to-end. Tagged source=admin_test_report so you can filter it out."
+            title="Sends a synthetic ingest from this admin (proves first report / pipeline). Does not count as SDK installed — that needs a heartbeat from your app build."
           >
             {playbook.cta}
           </Btn>
@@ -518,7 +727,7 @@ export function SdkHealthSummary({
       {open && (
         <div
           id={`sdk-health-playbook-${projectId}`}
-          className="rounded-sm border border-edge-subtle/60 bg-surface-overlay/40 p-3 space-y-2"
+          className="mx-3 mb-3 space-y-2 rounded-sm border border-edge-subtle/60 bg-surface-overlay/40 p-3"
         >
           <p className="font-medium text-fg-secondary text-xs">{playbook.title}</p>
           <ol className="space-y-1.5 text-xs text-fg-muted">
@@ -562,16 +771,18 @@ export function SdkHealthSummary({
           )}
         </div>
       )}
-
-      {/* Tiny meta row — render only in non-compact mode so the card has a
-          recognisable footer when it's used as a stand-alone empty state. */}
-      {!compact && adminHost && (
-        <p className="text-2xs text-fg-faint font-mono">
-          Backend: <span className="text-fg-muted">{adminHost}</span>
-        </p>
-      )}
-    </Wrapper>
+    </>
   )
+
+  if (compact) {
+    return (
+      <ContainedBlock tone={CARD_BLOCK_TONE[status]} className="!p-0 overflow-hidden">
+        {inner}
+      </ContainedBlock>
+    )
+  }
+
+  return <Card className="overflow-hidden p-0">{inner}</Card>
 }
 
 /**

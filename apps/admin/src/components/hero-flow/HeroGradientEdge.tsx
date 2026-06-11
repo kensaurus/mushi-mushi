@@ -1,84 +1,29 @@
 /**
  * FILE: apps/admin/src/components/hero-flow/HeroGradientEdge.tsx
  *
- * Animated dashed edge between hero nodes. No blur.
- *   1. Faint base line shows the path at all times
- *   2. Bright dashes march along the path (marching-ants, direction = left→right)
- *   3. Filled arrowhead at the target
- *   4. Optional metadata label pill at midpoint (truncated + tooltip on hover)
+ * Gradient connector between hero tiles. Uses the same layered stroke
+ * pattern as PdcaGradientEdge (wide track + glow + main rail) so edges
+ * stay legible in dark mode — no surface-root casing that reads black-on-black.
  */
 import { memo } from 'react'
 
-import { EdgeLabelRenderer, getBezierPath } from '@xyflow/react'
+import { getBezierPath } from '@xyflow/react'
 import type { EdgeProps } from '@xyflow/react'
 
-import { Tooltip } from '../ui'
+import { TravelingDotsEdge } from '../flow-primitives/TravelingDotsEdge'
+import { useTheme } from '../../lib/useTheme'
 import type { HeroEdgeData } from './heroFlow.data'
 
-// Dash geometry
-const DASH = 8    // dash length px
-const GAP  = 6    // gap length px
-const SPEED = '1.2s'  // one full cycle
+const STROKE = 3.25
+const STROKE_ACTIVE = 4.25
+const DASH_LENGTH = 6
+const GAP_LENGTH = 6
 
-function HeroEdgeLabelPill({
-  edgeData,
-  labelX,
-  labelY,
-}: {
-  edgeData: HeroEdgeData
-  labelX: number
-  labelY: number
-}) {
-  const tgt = edgeData.targetColor ?? '#94a3b8'
-  const src = edgeData.sourceColor ?? '#94a3b8'
-  const full = edgeData.label ?? ''
-  const display = edgeData.labelDisplay ?? full
-  const truncated = edgeData.labelTruncated ?? display !== full
-  const pillMax = edgeData.labelMaxWidth ?? 132
-
-  const pill = (
-    <div
-      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-2xs font-semibold leading-none shadow-card motion-safe:transition-colors"
-      style={{
-        color: tgt,
-        background: 'var(--color-surface-raised)',
-        border: `1px solid ${tgt}50`,
-        maxWidth: pillMax,
-      }}
-      title={truncated ? undefined : full}
-    >
-      <span
-        aria-hidden
-        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: src }}
-      />
-      <span className="truncate">{display}</span>
-    </div>
-  )
-
-  const body = truncated ? (
-    <Tooltip content={full} side="top" nowrap={false} portal>
-      {pill}
-    </Tooltip>
-  ) : (
-    pill
-  )
-
-  return (
-    <EdgeLabelRenderer>
-      <div
-        style={{
-          position: 'absolute',
-          transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 18}px)`,
-          pointerEvents: 'all',
-          zIndex: 5,
-        }}
-      >
-        {body}
-      </div>
-    </EdgeLabelRenderer>
-  )
-}
+/** Arrow halo — fixed hex so SVG never falls back to black when CSS vars fail. */
+const ARROW_HALO = {
+  dark: '#2a2a36',
+  light: '#e4e7ec',
+} as const
 
 function HeroGradientEdgeInner({
   id,
@@ -90,8 +35,9 @@ function HeroGradientEdgeInner({
   targetPosition,
   data,
 }: EdgeProps) {
+  const { resolved } = useTheme()
   const edgeData = (data ?? {}) as HeroEdgeData
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -102,72 +48,101 @@ function HeroGradientEdgeInner({
 
   const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '_')
   const gradientId = `hg-${safeId}`
-  const arrowId    = `ha-${safeId}`
-  const animName   = `hm-${safeId}`
+  const arrowId = `ha-${safeId}`
+  const animName = `hm-${safeId}`
 
-  const src  = edgeData.sourceColor ?? '#94a3b8'
-  const tgt  = edgeData.targetColor ?? '#94a3b8'
+  const src = edgeData.sourceColor ?? '#60a5fa'
+  const tgt = edgeData.targetColor ?? '#f5b544'
   const fail = Boolean(edgeData.failing)
-  const DANGER = '#ef4444'
-  const lineColor = fail ? DANGER : `url(#${gradientId})`
-  const arrowColor = fail ? DANGER : tgt
-
-  const dashArray  = `${DASH} ${GAP}`
-  const dashOffset = DASH + GAP   // marches forward
+  const flowing = Boolean(edgeData.flowing)
+  const active = flowing || fail
+  const strokeW = active ? STROKE_ACTIVE : STROKE
+  const danger = '#ef4444'
+  const strokeValue = fail ? danger : `url(#${gradientId})`
+  const arrowColor = fail ? danger : tgt
+  const arrowHalo = ARROW_HALO[resolved]
+  const dashArray = `${DASH_LENGTH} ${GAP_LENGTH}`
 
   return (
     <>
       <defs>
-        <linearGradient id={gradientId}>
-          <stop offset="0%"   stopColor={src} />
+        <linearGradient
+          id={gradientId}
+          gradientUnits="userSpaceOnUse"
+          x1={sourceX}
+          y1={sourceY}
+          x2={targetX}
+          y2={targetY}
+        >
+          <stop offset="0%" stopColor={src} />
           <stop offset="100%" stopColor={tgt} />
         </linearGradient>
         <marker
           id={arrowId}
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="10"
-          markerHeight="10"
+          viewBox="0 0 12 12"
+          refX="10"
+          refY="6"
+          markerWidth="9"
+          markerHeight="9"
           orient="auto-start-reverse"
         >
-          <path d="M 1 2 L 9 5 L 1 8 Z" fill={arrowColor} />
+          {/* Halo so the head separates from dark canvas */}
+          <path d="M 1 2.5 L 10 6 L 1 9.5 Z" fill={arrowHalo} />
+          <path d="M 2 3.5 L 9 6 L 2 8.5 Z" fill={arrowColor} />
         </marker>
       </defs>
 
-      <style>{`
-        @keyframes ${animName} {
-          from { stroke-dashoffset: ${dashOffset}; }
-          to   { stroke-dashoffset: 0; }
-        }
-      `}</style>
+      {active && (
+        <style>{`
+          @keyframes ${animName} {
+            from { stroke-dashoffset: ${DASH_LENGTH + GAP_LENGTH}; }
+            to   { stroke-dashoffset: 0; }
+          }
+        `}</style>
+      )}
 
-      {/* Faint base rail — shows the full path even between dashes */}
+      {/* Wide coloured track — visible at rest on dark backgrounds */}
       <path
         d={edgePath}
-        stroke={tgt}
-        strokeWidth={1}
+        stroke={strokeValue}
+        strokeWidth={strokeW + 5}
         fill="none"
         strokeLinecap="round"
-        style={{ opacity: 0.2 }}
+        style={{ opacity: active ? 0.5 : 0.38 }}
       />
 
-      {/* Marching dashes */}
+      {/* Soft glow */}
       <path
         d={edgePath}
-        stroke={lineColor}
-        strokeWidth={2.5}
+        stroke={strokeValue}
+        strokeWidth={active ? 11 : 9}
         fill="none"
         strokeLinecap="round"
-        strokeDasharray={dashArray}
-        markerEnd={`url(#${arrowId})`}
+        strokeDasharray={active ? dashArray : 'none'}
         style={{
-          animation: `${animName} ${SPEED} linear infinite`,
+          opacity: active ? 0.45 : 0.32,
+          filter: 'blur(3px)',
+          animation: active ? `${animName} 0.9s linear infinite` : undefined,
         }}
       />
 
-      {edgeData.label && (
-        <HeroEdgeLabelPill edgeData={edgeData} labelX={labelX} labelY={labelY} />
+      {/* Main rail */}
+      <path
+        d={edgePath}
+        stroke={strokeValue}
+        strokeWidth={strokeW}
+        fill="none"
+        strokeLinecap="round"
+        strokeDasharray={active ? dashArray : 'none'}
+        markerEnd={`url(#${arrowId})`}
+        style={{
+          opacity: 1,
+          animation: active ? `${animName} 0.9s linear infinite` : undefined,
+        }}
+      />
+
+      {flowing && !fail && (
+        <TravelingDotsEdge path={edgePath} color={tgt} dots={2} strokeWidth={2.5} glowBlur={4} durationMs={2400} />
       )}
     </>
   )

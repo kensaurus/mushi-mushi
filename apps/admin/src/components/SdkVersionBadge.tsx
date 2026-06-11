@@ -1,31 +1,12 @@
 /**
  * FILE: apps/admin/src/components/SdkVersionBadge.tsx
- * PURPOSE: Per-project SDK freshness pill rendered in the ProjectsPage
- *          row. Compares the latest *observed* SDK version (the package
- *          + version from the project's most recent report) against the
- *          latest *published* version in `public.sdk_versions`, and
- *          surfaces one of four states:
- *
- *              up-to-date   — observed === published latest
- *              outdated     — observed != latest (and latest exists)
- *              deprecated   — published latest is flagged deprecated
- *              unknown      — no report has landed yet, so we don't
- *                             know which package the project is running.
- *                             Render nothing (parent handles the empty
- *                             case via the "no reports yet" hint).
- *
- *          The badge is intentionally tiny — it lives in the metadata
- *          row alongside report-count / member-count and shouldn't
- *          out-shout the project name. The real explanation lives in
- *          a hover tooltip with an upgrade hint.
- *
- *          Authoritative data path:
- *              SDK report → reports.sdk_package / reports.sdk_version
- *              admin GET /v1/admin/projects → joins sdk_versions catalog
- *              FE consumes the resulting `sdk_status` field directly.
+ * PURPOSE: Per-project SDK freshness pill with semver-aware labels and
+ *          a rich hover tooltip. Never shows "v1.7.7 → v0.9.0" when the
+ *          catalogue row is stale — only surfaces real upgrade paths.
  */
 
-import { Badge } from './ui'
+import { Badge, MetricTooltipContent, Tooltip, type MetricTooltipData } from './ui'
+import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 
 export type SdkStatus = 'up-to-date' | 'outdated' | 'deprecated' | 'unknown'
 
@@ -34,20 +15,105 @@ interface SdkVersionBadgeProps {
   package_: string | null
   observedVersion: string | null
   latestVersion: string | null
-  /** Catalogue-supplied deprecation message; only shown for `deprecated`. */
   deprecationMessage?: string | null
+  /** Compact switcher rows — shorter label, same tooltip depth. */
+  compact?: boolean
 }
 
-const STATUS_TONE: Record<Exclude<SdkStatus, 'unknown'>, string> = {
+type SdkDisplayResolutionTone =
+  | 'up-to-date'
+  | 'catalog-ahead'
+  | 'upgrade-available'
+  | 'deprecated'
+  | 'unknown'
+
+const STATUS_TONE: Record<Exclude<SdkDisplayResolutionTone, 'unknown'>, string> = {
   'up-to-date': 'bg-ok-muted text-ok border border-ok/30',
-  outdated: 'bg-warn-muted text-warn border border-warn/30',
+  'catalog-ahead': 'bg-info-muted text-info border border-info/30',
+  'upgrade-available': 'bg-warn-muted text-warn border border-warn/30',
   deprecated: 'bg-danger-muted text-danger border border-danger/30',
 }
 
-const STATUS_LABEL: Record<Exclude<SdkStatus, 'unknown'>, string> = {
-  'up-to-date': 'SDK up to date',
-  outdated: 'SDK outdated',
-  deprecated: 'SDK deprecated',
+function shortPackageName(package_: string | null): string {
+  return package_?.replace(/^@mushi-mushi\//, '') ?? 'sdk'
+}
+
+function buildSdkTooltipData(input: {
+  package_: string | null
+  observedVersion: string | null
+  latestVersion: string | null
+  deprecationMessage?: string | null
+  resolution: ReturnType<typeof resolveSdkDisplay>
+}): MetricTooltipData {
+  const pkg = input.package_ ?? '@mushi-mushi/web'
+  const observed = input.observedVersion ?? 'unknown'
+  const catalog = input.latestVersion ?? 'unknown'
+
+  if (input.resolution.kind === 'catalog-ahead') {
+    return {
+      sections: [
+        {
+          kind: 'shows',
+          label: 'Observed in reports',
+          body: `This project last ingested a report from ${pkg} v${observed}. That is newer than our publish catalogue (currently v${catalog} for this package).`,
+        },
+        {
+          kind: 'counted',
+          label: 'Why this happens',
+          body: 'The catalogue row updates when we ship a release — not on every npm publish. Your SDK is fine; the admin chip is waiting for the catalogue upsert.',
+        },
+      ],
+      callout: { tone: 'ok', text: 'No upgrade needed — you are already on a newer SDK than the catalogue lists.' },
+    }
+  }
+
+  if (input.resolution.kind === 'upgrade-available' && input.resolution.upgradeTarget) {
+    return {
+      sections: [
+        {
+          kind: 'shows',
+          label: 'Running now',
+          body: `${pkg} v${observed} — detected on the most recent report for this project.`,
+        },
+        {
+          kind: 'takeaway',
+          label: 'Recommended',
+          body: `Bump to v${input.resolution.upgradeTarget} in your app to pick up the latest fixes and SDK features.`,
+        },
+      ],
+      callout: {
+        tone: 'warn',
+        text: 'Run mushi upgrade in your app repo — or open Setup Copilot for the full connect → heartbeat flow.',
+      },
+    }
+  }
+
+  if (input.resolution.kind === 'deprecated') {
+    const dep = input.deprecationMessage ?? 'This package version has been marked deprecated in the catalogue.'
+    return {
+      sections: [
+        { kind: 'shows', label: 'Running now', body: `${pkg} v${observed}.` },
+        { kind: 'takeaway', label: 'Deprecation', body: dep },
+      ],
+      callout: {
+        tone: 'warn',
+        text: input.resolution.upgradeTarget
+          ? `Migrate to v${input.resolution.upgradeTarget} when you can.`
+          : 'Plan a migration off this SDK version.',
+      },
+    }
+  }
+
+  return {
+    sections: [
+      {
+        kind: 'shows',
+        label: 'SDK version',
+        body: `${pkg} v${observed} matches the latest catalogue entry (v${catalog}).`,
+      },
+    ],
+    callout: { tone: 'ok', text: 'SDK is up to date for this package.' },
+  }
 }
 
 export function SdkVersionBadge({
@@ -56,44 +122,81 @@ export function SdkVersionBadge({
   observedVersion,
   latestVersion,
   deprecationMessage,
+  compact = false,
 }: SdkVersionBadgeProps) {
-  // Quietly render nothing when we have no signal yet — the parent row
-  // already shows "last report never", so a second "unknown" pill would
-  // just be noise.
-  if (status === 'unknown') return null
+  if (status === 'unknown' || !observedVersion) return null
 
-  const shortPackage = package_?.replace(/^@mushi-mushi\//, '') ?? 'sdk'
+  const resolution = resolveSdkDisplay({
+    observedVersion,
+    latestVersion,
+    backendStatus: status,
+    deprecated: status === 'deprecated',
+  })
+  if (resolution.kind === 'unknown') return null
 
-  const title = (() => {
-    if (status === 'up-to-date') {
-      return `Running ${package_ ?? 'the SDK'} v${observedVersion}, which matches the latest published version.`
+  const shortPackage = shortPackageName(package_)
+  const tooltip = buildSdkTooltipData({
+    package_,
+    observedVersion,
+    latestVersion,
+    deprecationMessage,
+    resolution,
+  })
+
+  const toneKey = resolution.kind as SdkDisplayResolutionTone
+  const toneClass =
+    toneKey === 'unknown' ? 'bg-surface-overlay text-fg-muted border border-edge-subtle' : STATUS_TONE[toneKey]
+
+  const label = (() => {
+    const base = `${shortPackage} v${observedVersion}`
+    if (compact) {
+      if (resolution.kind === 'upgrade-available' && resolution.upgradeTarget) {
+        return `↑ v${resolution.upgradeTarget}`
+      }
+      if (resolution.kind === 'deprecated') return 'Deprecated'
+      if (resolution.kind === 'catalog-ahead') return 'Ahead'
+      if (resolution.kind === 'up-to-date') return 'Current'
+      return `v${observedVersion}`
     }
-    if (status === 'outdated') {
-      const left = `Running ${package_ ?? 'the SDK'} v${observedVersion}.`
-      const right = latestVersion
-        ? `Latest is v${latestVersion} — bump your dependency to pick up new fixes and features.`
-        : 'A newer version is available — bump your dependency.'
-      return `${left} ${right}`
+    if (resolution.kind === 'upgrade-available' && resolution.upgradeTarget) {
+      return (
+        <>
+          <span className="font-mono text-2xs">{base}</span>
+          <span className="ml-1 text-2xs opacity-80">→ v{resolution.upgradeTarget}</span>
+        </>
+      )
     }
-    // deprecated
-    const dep = deprecationMessage ?? 'This package version has been deprecated.'
-    return `Running ${package_ ?? 'the SDK'} v${observedVersion}. ${dep}${
-      latestVersion ? ` Migrate to v${latestVersion}.` : ''
-    }`
+    if (resolution.kind === 'catalog-ahead') {
+      return (
+        <>
+          <span className="font-mono text-2xs">{base}</span>
+          <span className="ml-1 text-2xs opacity-80">catalog stale</span>
+        </>
+      )
+    }
+    if (resolution.kind === 'up-to-date') {
+      return <span className="font-mono text-2xs">{base} ✓</span>
+    }
+    if (resolution.kind === 'deprecated') {
+      return <span className="font-mono text-2xs">{base} ⚠</span>
+    }
+    return <span className="font-mono text-2xs">{base}</span>
   })()
 
+  const aria =
+    resolution.kind === 'upgrade-available'
+      ? `SDK upgrade available to v${resolution.upgradeTarget}`
+      : resolution.kind === 'catalog-ahead'
+        ? 'SDK newer than catalogue'
+        : resolution.kind === 'deprecated'
+          ? 'SDK version deprecated'
+          : 'SDK up to date'
+
   return (
-    <Badge className={STATUS_TONE[status]} title={title}>
-      <span aria-hidden="true" className="mr-1">
-        {status === 'up-to-date' ? '✓' : status === 'outdated' ? '↑' : '⚠'}
-      </span>
-      <span className="font-mono text-2xs">
-        {shortPackage} v{observedVersion}
-      </span>
-      {status !== 'up-to-date' && latestVersion && (
-        <span className="ml-1 text-2xs opacity-70">→ v{latestVersion}</span>
-      )}
-      <span className="sr-only">{STATUS_LABEL[status]}</span>
-    </Badge>
+    <Tooltip content={<MetricTooltipContent data={tooltip} />} side="left" nowrap={false} portal>
+      <Badge className={`cursor-help ${toneClass}`} aria-label={aria}>
+        {label}
+      </Badge>
+    </Tooltip>
   )
 }

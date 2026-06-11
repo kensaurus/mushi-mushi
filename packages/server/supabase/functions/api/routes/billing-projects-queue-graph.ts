@@ -7,6 +7,7 @@ import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { reportError, reportMessage } from '../../_shared/sentry.ts';
+import { resolveSdkFreshnessStatus } from '../../_shared/sdk-version-compare.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
   requireFeature,
@@ -791,7 +792,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .eq('is_active', true),
       db
         .from('project_settings')
-        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
+        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref, slack_channel_id, slack_webhook_url')
         .in('project_id', projectIds),
       db
         .from('reports')
@@ -842,6 +843,8 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         github_repo_url: string | null;
         sentry_org_slug: string | null;
         byok_anthropic_key_ref: string | null;
+        slack_channel_id: string | null;
+        slack_webhook_url: string | null;
       }
     >();
     for (const s of settingsRes.data ?? []) settingsByProject.set(s.project_id, s as never);
@@ -895,7 +898,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       | 'github_connected'
       | 'sentry_connected'
       | 'byok_anthropic'
-      | 'first_fix_dispatched';
+      | 'first_fix_dispatched'
+      | 'slack_connected'
+      | 'first_qa_story_passing';
 
     interface Step {
       id: StepId;
@@ -946,6 +951,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       const hasGithub = Boolean(settings?.github_repo_url) || reposByProject.has(p.id);
       const hasSentry = Boolean(settings?.sentry_org_slug);
       const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+      const hasSlack = Boolean(settings?.slack_channel_id) || Boolean(settings?.slack_webhook_url);
       const fixCount = fixesByProject.get(p.id) ?? 0;
       const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0;
 
@@ -1027,6 +1033,24 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
           required: false,
           cta_to: '/reports',
           cta_label: 'Open Reports',
+        },
+        {
+          id: 'slack_connected',
+          label: 'Connect Slack (optional)',
+          description: 'Get instant Slack alerts when a QA story fails or a new report is classified.',
+          complete: hasSlack,
+          required: false,
+          cta_to: '/integrations',
+          cta_label: 'Add to Slack',
+        },
+        {
+          id: 'first_qa_story_passing',
+          label: 'Set up a QA story (optional)',
+          description: 'Write a plain-English test that runs on a schedule — catch regressions before your users do.',
+          complete: false, // Live signal: query qa_stories with last_run_status='passed' in a future pass
+          required: false,
+          cta_to: '/qa-coverage',
+          cta_label: 'Create QA story',
         },
       ];
 
@@ -1483,16 +1507,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       const sdkPackage = lastSdkPackageMap[p.id] ?? null;
       const sdkVersion = lastSdkVersionMap[p.id] ?? null;
       const latestForPackage = sdkPackage ? latestSdkVersions[sdkPackage] ?? null : null;
-      let sdkStatus: 'up-to-date' | 'outdated' | 'deprecated' | 'unknown' = 'unknown';
-      if (sdkPackage && sdkVersion && latestForPackage) {
-        if (latestForPackage.deprecated) {
-          sdkStatus = 'deprecated';
-        } else if (sdkVersion === latestForPackage.version) {
-          sdkStatus = 'up-to-date';
-        } else {
-          sdkStatus = 'outdated';
-        }
-      }
+      const sdkStatus = resolveSdkFreshnessStatus({
+        sdkPackage,
+        sdkVersion,
+        catalogVersion: latestForPackage?.version ?? null,
+        catalogDeprecated: !!latestForPackage?.deprecated,
+      });
       // Repos for "About this project" surface. Primary first, others
       // trailing. We expose `github_app_connected` as a boolean rather
       // than the installation id so the FE can render a "Connected via
@@ -2508,8 +2528,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   //
   // Checks: github (repo configured) | codebase (index enabled) |
   //         anthropic (BYOK key present) | autofix (feature flag on)
+  //
+  // Auth: adminOrApiKey({ scope: 'mcp:read' }) — JWT admins and mcp:read API
+  // keys. An API key grants preflight reads on every project its owner can
+  // access (userCanAccessProject), not only the key's bound project — same
+  // owner-wide semantics as other adminOrApiKey routes.
   // ---------------------------------------------------------------------------
-  app.get('/v1/admin/projects/:id/preflight', jwtAuth, async (c) => {
+  app.get('/v1/admin/projects/:id/preflight', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();

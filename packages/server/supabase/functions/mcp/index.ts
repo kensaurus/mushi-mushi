@@ -500,6 +500,134 @@ const TOOLS: Record<string, ToolDef> = {
       return apiCall(`/v1/admin/lessons?${params}`, { headers: ctx.authHeaders })
     },
   },
+
+  // Setup / admin — mirror of packages/mcp/src/server.ts (setup_check +
+  // ingest_setup_check). Keep both transports in lock-step.
+  setup_check: {
+    scope: 'mcp:read',
+    description:
+      'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
+      '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
+      'Also returns the target repo URL when GitHub is connected. ' +
+      'Use this before calling dispatch_fix to understand why a dispatch might fail. ' +
+      'For SDK ingest health (API key → heartbeat → first report), call ingest_setup_check instead.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project UUID to check. Defaults to the API key\'s project when omitted.',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        ready: { type: 'boolean' },
+        repoUrl: { type: ['string', 'null'] },
+        checks: { type: 'array', items: { type: 'object', additionalProperties: true } },
+        summary: { type: 'string' },
+      },
+      required: ['ready', 'checks', 'summary'],
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const projectId = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!projectId) {
+        throw new McpError(
+          ERR_INVALID_PARAMS,
+          'projectId is required for setup_check when no API-key project context is available',
+        )
+      }
+      const data = await apiCall<{
+        ready: boolean
+        checks: Array<{ key: string; ready: boolean; label: string; hint: string; fixHref: string }>
+        repoUrl: string | null
+      }>(`/v1/admin/projects/${encodeURIComponent(projectId)}/preflight`, {
+        headers: ctx.authHeaders,
+      })
+      const checks = data.checks.map((c) => ({
+        check: c.key,
+        label: c.label,
+        passed: c.ready,
+        hint: c.hint,
+        fixPath: c.fixHref,
+      }))
+      const failed = checks.filter((c) => !c.passed)
+      return {
+        ready: data.ready,
+        repoUrl: data.repoUrl ?? null,
+        checks,
+        summary: data.ready
+          ? `Project ${projectId} is ready to dispatch auto-fixes${data.repoUrl ? ` (target: ${data.repoUrl})` : ''}.`
+          : `Project ${projectId} cannot dispatch yet — ${failed.map((c) => c.label).join(', ')}.`,
+      }
+    },
+  },
+  ingest_setup_check: {
+    scope: 'mcp:read',
+    description:
+      'Run the 4 **required ingest** checks for the project tied to this API key: ' +
+      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report. ' +
+      'Returns per-step pass/fail plus last_sdk_seen_at and endpoint host diagnostics. ' +
+      'Use after wiring env vars or pasting the SDK snippet to confirm the banner will work.',
+    inputSchema: { type: 'object', properties: {} },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        ready: { type: 'boolean' },
+        projectId: { type: 'string' },
+        projectName: { type: 'string' },
+        requiredComplete: { type: 'number' },
+        requiredTotal: { type: 'number' },
+        steps: { type: 'array', items: { type: 'object', additionalProperties: true } },
+        diagnostic: { type: ['object', 'null'], additionalProperties: true },
+        summary: { type: 'string' },
+      },
+      required: ['ready', 'projectId', 'projectName', 'requiredComplete', 'requiredTotal', 'steps', 'summary'],
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (_args, ctx) => {
+      if (!ctx.projectIdHint) {
+        throw new McpError(
+          ERR_INVALID_PARAMS,
+          'ingest_setup_check requires API-key auth (X-Mushi-Api-Key) — JWT sessions should use setup_check',
+        )
+      }
+      const data = await apiCall<{
+        ready: boolean
+        required_complete: number
+        required_total: number
+        project_id: string
+        project_name: string
+        steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
+        diagnostic?: {
+          last_sdk_seen_at: string | null
+          last_sdk_endpoint_host: string | null
+          admin_endpoint_host: string | null
+        }
+      }>('/v1/sync/ingest-setup', { headers: ctx.authHeaders })
+      const failed = data.steps.filter((s) => s.required && !s.complete)
+      return {
+        ready: data.ready,
+        projectId: data.project_id,
+        projectName: data.project_name,
+        requiredComplete: data.required_complete,
+        requiredTotal: data.required_total,
+        steps: data.steps.map((s) => ({
+          id: s.id,
+          label: s.label,
+          passed: s.complete,
+          required: s.required,
+          hint: s.hint,
+        })),
+        diagnostic: data.diagnostic ?? null,
+        summary: data.ready
+          ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
+          : `Ingest incomplete (${data.required_complete}/${data.required_total}) — still need: ${failed.map((s) => s.label).join(', ')}.`,
+      }
+    },
+  },
 }
 
 // ----------------------------------------------------------------------------

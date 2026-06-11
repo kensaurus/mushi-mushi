@@ -96,6 +96,9 @@ export type MushiEventName =
   | 'fix.failed'
   | 'judge.score_recorded'
   | 'sla.breached'
+  // QA Coverage (story monitoring)
+  | 'qa_story.failed'
+  | 'qa_story.recovered'
   // Rewards program (P1+)
   | 'reward.points_awarded'
   | 'reward.tier_changed'

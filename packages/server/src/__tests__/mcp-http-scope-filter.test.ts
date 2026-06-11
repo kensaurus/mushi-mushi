@@ -76,6 +76,24 @@ describe('mcp http edge function — outputSchema parity (B3)', () => {
   })
 })
 
+describe('mcp http edge function — setup tools parity', () => {
+  it('declares setup_check with dispatch preflight description', () => {
+    expect(SOURCE).toMatch(/setup_check:\s*\{[\s\S]*?dispatch-readiness/m)
+  })
+
+  it('declares ingest_setup_check wired to /v1/sync/ingest-setup', () => {
+    expect(SOURCE).toMatch(/ingest_setup_check:\s*\{[\s\S]*?\/v1\/sync\/ingest-setup/m)
+  })
+
+  it('setup_check handler requires or defaults projectId', () => {
+    expect(SOURCE).toMatch(/setup_check:[\s\S]*?projectIdHint/m)
+  })
+
+  it('ingest_setup_check rejects JWT callers without projectIdHint', () => {
+    expect(SOURCE).toMatch(/ingest_setup_check:[\s\S]*?!ctx\.projectIdHint[\s\S]*?ingest_setup_check requires API-key auth/m)
+  })
+})
+
 describe('mcp http edge function — drift detector', () => {
   it('keeps the catalog comment that tells future agents to update both files', () => {
     expect(SOURCE).toMatch(/Mirror of `packages\/mcp\/src\/server\.ts`/)

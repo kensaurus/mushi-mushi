@@ -27,6 +27,7 @@
  *     the right tags.
  */
 
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { withSentry, reportMessage } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getServiceClient } from '../_shared/db.ts'
@@ -90,17 +91,46 @@ Deno.serve(
     const action = payload.actions?.[0]
     if (!action) return ephemeral('No action in payload.')
 
-    const [actionKind, reportId] = (action.action_id ?? '').split(':')
-    if (actionKind !== 'dispatch_fix' || !reportId) {
-      // Link-only buttons like `open_report:<id>` don't round-trip here.
+    const actionId = action.action_id ?? ''
+    const colonIdx = actionId.indexOf(':')
+    const actionKind = colonIdx >= 0 ? actionId.slice(0, colonIdx) : actionId
+    const actionValue = colonIdx >= 0 ? actionId.slice(colonIdx + 1) : (action.value ?? '')
+
+    const db = getServiceClient()
+    const responseUrl = payload.response_url
+    const slackUser = payload.user?.id ?? 'unknown'
+
+    // ── QA story: pause_story ────────────────────────────────────────────────
+    if (actionKind === 'pause_story') {
+      const storyId = actionValue || action.value
+      if (!storyId) return ephemeral('Missing story ID.')
+
+      const bgWork = finishPauseStory({ db, storyId, slackUser, responseUrl }).catch(
+        (err) => log.error('pause_story failed', { err: String(err) }),
+      )
+      waitUntil(bgWork)
+      return ephemeral(':hourglass_flowing_sand: Pausing story…')
+    }
+
+    // ── QA story: improve_story (PDCA) ───────────────────────────────────────
+    if (actionKind === 'improve_story') {
+      const storyId = actionValue || action.value
+      if (!storyId) return ephemeral('Missing story ID.')
+
+      const bgWork = finishImproveStory({ db, storyId, slackUser, responseUrl }).catch(
+        (err) => log.error('improve_story failed', { err: String(err) }),
+      )
+      waitUntil(bgWork)
+      return ephemeral(':hourglass_flowing_sand: Queuing AI improvement…')
+    }
+
+    // ── Report: dispatch_fix ─────────────────────────────────────────────────
+    if (actionKind !== 'dispatch_fix' || !actionValue) {
+      // Link-only buttons like `open_report:<id>` / `open_qa_run:<id>` don't round-trip here.
       return ephemeral('Nothing to do.')
     }
 
-    // Resolve the project from the report_id. This also serves as a
-    // sanity check that the click actually references an existing report
-    // in our system, not an attacker-forged payload that somehow slipped
-    // past signature verification.
-    const db = getServiceClient()
+    const reportId = actionValue
     const { data: report } = await db
       .from('reports')
       .select('id, project_id, slack_message_ts')
@@ -112,16 +142,7 @@ Deno.serve(
       return ephemeral('That report no longer exists.')
     }
 
-    // Kick the dispatch in the background so we can answer Slack within
-    // the 3s SLA. The response_url gets the final status.
-    //
-    // `EdgeRuntime.waitUntil` keeps the Deno isolate alive after the response
-    // is returned so the background work actually runs. Without it, Supabase
-    // terminates the isolate as soon as the response is dispatched, which
-    // silently drops the async `finishDispatch` call before the DB insert lands.
-    const responseUrl = payload.response_url
-    const slackUser = payload.user?.id ?? 'unknown'
-
+    // Kick the dispatch in the background so we can answer Slack within the 3s SLA.
     const dispatchPromise = finishDispatch({
       reportId,
       projectId: report.project_id,
@@ -133,15 +154,77 @@ Deno.serve(
       log.error('Async dispatch failed', { err: String(err) })
     })
 
-    // Keep the isolate alive for the background work (Supabase Deno runtime).
-    if (typeof (globalThis as Record<string, unknown>).EdgeRuntime !== 'undefined') {
-      // deno-lint-ignore no-explicit-any
-      (globalThis as any).EdgeRuntime.waitUntil(dispatchPromise)
-    }
-
+    waitUntil(dispatchPromise)
     return ephemeral(':hourglass_flowing_sand: Dispatching fix — PR will land in `/fixes` shortly.')
   }),
 )
+
+/** Keep the Deno isolate alive for background promises. */
+function waitUntil(p: Promise<unknown>): void {
+  if (typeof (globalThis as Record<string, unknown>).EdgeRuntime !== 'undefined') {
+    // deno-lint-ignore no-explicit-any
+    ;(globalThis as any).EdgeRuntime.waitUntil(p)
+  }
+}
+
+async function finishPauseStory(input: {
+  db: SupabaseClient
+  storyId: string
+  slackUser: string
+  responseUrl?: string
+}): Promise<void> {
+  const { error } = await input.db
+    .from('qa_stories')
+    .update({ enabled: false })
+    .eq('id', input.storyId)
+
+  const text = error
+    ? `:x: Could not pause story — ${error.message}`
+    : `:pause_button: Story paused by Slack user <@${input.slackUser}>. Re-enable it in the Mushi console under QA Coverage.`
+
+  if (input.responseUrl) {
+    await fetch(input.responseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response_type: 'ephemeral', replace_original: false, text }),
+    }).catch((err) => log.error('response_url POST failed', { err: String(err) }))
+  }
+}
+
+async function finishImproveStory(input: {
+  db: SupabaseClient
+  storyId: string
+  slackUser: string
+  responseUrl?: string
+}): Promise<void> {
+  // Invoke the pdca-runner function with mode=qa_story_improve targeting this story
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  let text: string
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/pdca-runner`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ mode: 'qa_story_improve', story_id: input.storyId }),
+    })
+    text = res.ok
+      ? `:robot_face: AI improvement queued for this story. Check back in a few minutes — an improved version will appear in QA Coverage under "Pending review".`
+      : `:x: Could not start improvement — HTTP ${res.status}`
+  } catch (err) {
+    text = `:x: Could not start improvement — ${String(err)}`
+  }
+
+  if (input.responseUrl) {
+    await fetch(input.responseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ response_type: 'ephemeral', replace_original: false, text }),
+    }).catch((err) => log.error('response_url POST failed', { err: String(err) }))
+  }
+}
 
 interface SlackInteractionPayload {
   type?: string

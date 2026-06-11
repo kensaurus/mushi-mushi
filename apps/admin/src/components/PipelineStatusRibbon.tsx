@@ -26,11 +26,16 @@
  *            if the page has never been visited yet, never 5xx.
  */
 
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Fragment, useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { Tooltip } from './ui'
 import { useAdminMode } from '../lib/mode'
 import { useNavCounts } from '../lib/useNavCounts'
+import { useProjectSnapshots } from '../lib/useProjectSnapshots'
+import { useActiveProjectId } from './ProjectSwitcher'
+import { readJudgeStaleHours } from '../lib/judgeFreshness'
+import { hasPageOwnedHero } from '../lib/pageHeroOwnership'
+import type { PdcaStageId } from '../lib/pdca'
 
 type Tone = 'ok' | 'warn' | 'danger' | 'idle'
 
@@ -48,9 +53,18 @@ type Tone = 'ok' | 'warn' | 'danger' | 'idle'
 
 const COLLAPSE_KEY = 'mushi:pipelineRibbon:collapsed:v1'
 
-function readCollapsed(): boolean {
+/** User preference on layout-fallback routes (dashboard, billing, …). */
+function readGlobalRibbonCollapsed(): boolean {
   if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(COLLAPSE_KEY) === '1'
+  const stored = window.localStorage.getItem(COLLAPSE_KEY)
+  if (stored === '1') return true
+  if (stored === '0') return false
+  return false
+}
+
+function readInitialCollapsed(pathname: string): boolean {
+  if (hasPageOwnedHero(pathname)) return true
+  return readGlobalRibbonCollapsed()
 }
 
 function writeCollapsed(value: boolean): void {
@@ -97,6 +111,13 @@ const STAGE_BORDER: Record<RibbonTile['stage'], string> = {
   A: 'border-l-ok',
 }
 
+const BOTTLENECK_TO_RIBBON_STAGE: Record<PdcaStageId, RibbonTile['stage']> = {
+  plan: 'P',
+  do: 'D',
+  check: 'C',
+  act: 'A',
+}
+
 /** Arrow connectors read theme tokens so light/dark stay in sync. */
 const STAGE_ARROW: Record<RibbonTile['stage'], string> = {
   P: 'var(--color-info)',
@@ -105,51 +126,117 @@ const STAGE_ARROW: Record<RibbonTile['stage'], string> = {
   A: 'var(--color-ok)',
 }
 
-function PulseArrow({ fromColor, toColor }: { fromColor: string; toColor: string }) {
+function PulseArrow({
+  fromColor,
+  toColor,
+  fromLabel,
+  toLabel,
+  animated = false,
+}: {
+  fromColor: string
+  toColor: string
+  fromLabel: string
+  toLabel: string
+  /** Marching dashes — only when pipeline needs attention. */
+  animated?: boolean
+}) {
   const gId = `pa-${fromColor.replace(/\W/g, '')}-${toColor.replace(/\W/g, '')}`
   const animId = `pm-${fromColor.replace(/\W/g, '')}-${toColor.replace(/\W/g, '')}`
-  // Marching dashes: same approach as HeroGradientEdge, no blur.
+  const fullLabel = `${fromLabel} → ${toLabel}`
+
   return (
-    <div className="hidden lg:flex items-center justify-center w-6 xl:w-8 shrink-0" aria-hidden="true">
-      <svg width="28" height="20" viewBox="0 0 28 20" fill="none" className="w-full h-auto">
-        <defs>
-          <linearGradient id={gId} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={fromColor} />
-            <stop offset="100%" stopColor={toColor} />
-          </linearGradient>
-        </defs>
-        <style>{`
-          @keyframes ${animId} {
-            from { stroke-dashoffset: 14; }
-            to   { stroke-dashoffset: 0; }
-          }
-        `}</style>
-        {/* Faint base rail */}
-        <path d="M2 10 L20 10" stroke={toColor} strokeWidth="1" strokeLinecap="round" opacity="0.25" />
-        {/* Marching dashes */}
-        <path
-          d="M2 10 L20 10"
-          stroke={`url(#${gId})`}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="5 9"
-          style={{ animation: `${animId} 0.9s linear infinite` }}
-        />
-        {/* Solid filled arrowhead */}
-        <path d="M18 6 L24 10 L18 14 Z" fill={toColor} />
-      </svg>
-    </div>
+    <Tooltip content={fullLabel} side="top" portal>
+      <div
+        className="hidden md:flex items-center justify-center shrink-0 w-12 lg:w-14 xl:w-16 px-0.5 self-center"
+        aria-label={fullLabel}
+        role="img"
+      >
+        <svg width="64" height="32" viewBox="0 0 64 32" fill="none" className="w-full h-auto">
+          <defs>
+            <linearGradient id={gId} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={fromColor} />
+              <stop offset="100%" stopColor={toColor} />
+            </linearGradient>
+          </defs>
+          {animated && (
+            <style>{`
+              @keyframes ${animId} {
+                from { stroke-dashoffset: 18; }
+                to   { stroke-dashoffset: 0; }
+              }
+            `}</style>
+          )}
+          {/* Label lives inside the SVG — one line above the rail, no extra box */}
+          <text
+            x="32"
+            y="8"
+            textAnchor="middle"
+            fill="var(--color-fg-muted)"
+            style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.04em' }}
+          >
+            {fromLabel} → {toLabel}
+          </text>
+          {/* Surface casing */}
+          <path d="M2 20 L42 20" stroke="var(--color-surface-root)" strokeWidth="8" strokeLinecap="round" />
+          {/* Wide track */}
+          <path d="M2 20 L42 20" stroke={toColor} strokeWidth="6" strokeLinecap="round" opacity="0.22" />
+          {/* Base rail */}
+          <path d="M2 20 L42 20" stroke={toColor} strokeWidth="2.5" strokeLinecap="round" opacity="0.6" />
+          {/* Gradient dashes */}
+          <path
+            d="M2 20 L42 20"
+            stroke={`url(#${gId})`}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={animated ? '7 9' : 'none'}
+            style={{ animation: animated ? `${animId} 0.85s linear infinite` : 'none' }}
+          />
+          {/* Arrowhead */}
+          <path d="M38 15 L52 20 L38 25 Z" fill="var(--color-surface-root)" />
+          <path d="M40 16.5 L49 20 L40 23.5 Z" fill={toColor} stroke="var(--color-surface-root)" strokeWidth="0.75" />
+        </svg>
+      </div>
+    </Tooltip>
   )
+}
+
+const STAGE_FLOW_LABEL: Record<RibbonTile['stage'], string> = {
+  P: 'Triage',
+  D: 'Fix',
+  C: 'Judge',
+  A: 'Ship',
 }
 
 export function PipelineStatusRibbon() {
   const { isAdvanced } = useAdminMode()
+  const { pathname } = useLocation()
   const nav = useNavCounts()
-  const [collapsed, setCollapsed] = useState(readCollapsed)
+  const snapshots = useProjectSnapshots()
+  const activeProjectId = useActiveProjectId()
+  const focusBottleneck = activeProjectId
+    ? snapshots.byId.get(activeProjectId)?.pdca_bottleneck ?? null
+    : null
+  const focusRibbonStage = focusBottleneck
+    ? BOTTLENECK_TO_RIBBON_STAGE[focusBottleneck]
+    : null
+  const [collapsed, setCollapsed] = useState(() => readInitialCollapsed(pathname))
+
+  // Page-owned routes always start collapsed so only one DAV strip is expanded.
+  // Manual expand on those routes is session-only — preference persists only on
+  // layout-fallback routes where the ribbon is the sole hero chrome.
+  useEffect(() => {
+    if (hasPageOwnedHero(pathname)) {
+      setCollapsed(true)
+    } else {
+      setCollapsed(readGlobalRibbonCollapsed())
+    }
+  }, [pathname])
 
   useEffect(() => {
-    writeCollapsed(collapsed)
-  }, [collapsed])
+    if (!hasPageOwnedHero(pathname)) {
+      writeCollapsed(collapsed)
+    }
+  }, [collapsed, pathname])
 
   // Only Advanced mode surfaces the ribbon — beginners and quickstart
   // users have the NextBestAction strip which is higher signal for their
@@ -205,9 +292,8 @@ export function PipelineStatusRibbon() {
     to: nav.fixesFailed > 0 ? '/fixes?status=failed' : '/fixes',
   }
 
-  // Check: judge freshness — HealthPage stamps localStorage on each load.
-  // Falls back to 'unknown' so this never crashes on an empty tenant.
-  const check = computeCheckTile()
+  // Check: judge disagreements + freshness — disagreements trump stale batch.
+  const check = computeCheckTile(nav.judgeDisagreements)
 
   // Act: open PRs awaiting review — a non-zero count is *good* (it means
   // the pipeline produced output), but stale PRs (> 7 days) matter too.
@@ -236,6 +322,7 @@ export function PipelineStatusRibbon() {
   // the operator collapsed the strip an hour ago and forgot.
   const worst = tiles.reduce<RibbonTile>((acc, t) => (TONE_RANK[t.tone] > TONE_RANK[acc.tone] ? t : acc), tiles[0])
   const worstTone = TONE_CLASS[worst.tone]
+  const arrowsAnimated = worst.tone === 'warn' || worst.tone === 'danger'
   const collapsedTooltip = tiles
     .map((t) => `${t.label}: ${t.metric} — ${t.summary}`)
     .join('\n')
@@ -263,7 +350,7 @@ export function PipelineStatusRibbon() {
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${worstTone.dot}`} />
           <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider shrink-0">
-            Pipeline
+            Workspace pipeline
           </span>
           {/* Stage glyph row — every stage as a tinted single letter so
               the operator can scan all four tones in one glance even when
@@ -274,7 +361,7 @@ export function PipelineStatusRibbon() {
                 key={t.stage}
                 aria-label={`${t.label}: ${t.summary}`}
                 title={`${t.label}: ${t.summary}`}
-                className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-3xs font-bold leading-none ${STAGE_TONE[t.stage]} ring-1 ring-inset ${TONE_CLASS[t.tone].ring}`}
+                className={`inline-flex items-center justify-center w-5 h-5 rounded-sm text-2xs font-bold leading-none ${STAGE_TONE[t.stage]} ring-1 ring-inset ${TONE_CLASS[t.tone].ring}`}
               >
                 {t.stage}
               </span>
@@ -298,14 +385,17 @@ export function PipelineStatusRibbon() {
       aria-label="Pipeline pulse"
       data-testid="pipeline-status-ribbon"
       data-collapsed="false"
-      className="mb-3 w-full rounded-md bg-surface-raised/20 px-1 py-1"
+      className="mb-3 w-full rounded-md border border-edge-subtle/70 bg-surface-raised/35 px-1 py-1"
     >
       {/* Header strip — provides the collapse affordance + a context label.
           Kept tight (one line) so the ribbon's vertical footprint barely
           grows from the previous version. */}
-      <div className="flex items-center justify-between gap-2 px-2 pb-1">
+      <div className="flex items-center justify-between gap-2 px-2 pb-1 border-b border-edge-subtle/50">
         <span className="flex items-center gap-2 text-3xs font-medium text-fg-faint uppercase tracking-wider">
-          Pipeline pulse
+          Workspace pipeline
+          <span className="hidden sm:inline normal-case text-fg-muted font-normal tracking-normal">
+            · Plan → Do → Check → Act
+          </span>
           {!nav.ready && (
             <span className="inline-block h-1.5 w-8 animate-pulse rounded-full bg-fg-faint/30" aria-label="Loading counts" />
           )}
@@ -326,23 +416,32 @@ export function PipelineStatusRibbon() {
           Collapse <span aria-hidden>▴</span>
         </button>
       </div>
-      {/* Mobile/tablet: 2×2 grid. Desktop: single row with animated arrows. */}
+      {/* Mobile/tablet: 2×2 grid. Desktop: tiles + fixed-width arrow gutters. */}
       <div
         id="pipeline-status-ribbon-tiles"
-        className="grid grid-cols-2 gap-1.5 px-1 pb-1 lg:flex lg:items-stretch lg:gap-0"
+        className="grid grid-cols-2 gap-2 px-1.5 pb-1.5 pt-1.5 md:flex md:items-stretch md:gap-1"
       >
         {tiles.map((tile, i) => {
           const tone = TONE_CLASS[tile.tone]
+          const next = tiles[i + 1]
           return (
-            <div key={tile.stage} className="flex items-stretch min-w-0 lg:flex-1">
+            <Fragment key={tile.stage}>
               <Link
                 to={tile.to}
-                className={`group relative flex w-full items-center gap-2 rounded-sm border-l-[3px] bg-surface/80 px-2.5 py-2 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 ${STAGE_BORDER[tile.stage]}`}
-                title={tile.summary}
+                className={`group relative flex w-full items-center gap-2.5 rounded-md border border-edge-subtle/80 border-l-[4px] bg-surface-raised/80 px-2.5 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
+                  focusRibbonStage === tile.stage
+                    ? 'ring-2 ring-brand/40 shadow-sm'
+                    : ''
+                }`}
+                title={
+                  focusRibbonStage === tile.stage
+                    ? `${tile.summary} — active project bottleneck`
+                    : tile.summary
+                }
               >
                 <span
                   aria-hidden
-                  className={`inline-flex items-center justify-center w-5 h-5 rounded-sm text-3xs font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+                  className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-xs font-bold leading-none shrink-0 shadow-sm ${STAGE_TONE[tile.stage]}`}
                 >
                   {tile.stage}
                 </span>
@@ -350,12 +449,12 @@ export function PipelineStatusRibbon() {
                   <span className="flex items-center gap-1.5">
                     <span
                       aria-hidden
-                      className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot} ${tile.tone === 'danger' ? 'motion-safe:animate-pulse' : ''}`}
+                      className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot} ${tile.tone === 'danger' ? 'motion-safe:animate-pulse' : ''}`}
                     />
-                    <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider">
+                    <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider shrink-0">
                       {tile.label}
                     </span>
-                    <span className={`ml-auto text-sm font-mono font-bold tabular-nums tracking-tight leading-none ${tone.label} ${tile.tone === 'danger' ? 'motion-safe:animate-pulse' : ''}`}>
+                    <span className={`ml-auto text-sm font-mono font-bold tabular-nums tracking-tight leading-none shrink-0 ${tone.label} ${tile.tone === 'danger' ? 'motion-safe:animate-pulse' : ''}`}>
                       {!nav.ready && tile.metric === '—' ? (
                         <span className="inline-block h-3 w-6 animate-pulse rounded bg-fg-faint/25" aria-hidden />
                       ) : (
@@ -363,20 +462,21 @@ export function PipelineStatusRibbon() {
                       )}
                     </span>
                   </span>
-                  <Tooltip content={tile.summary} side="bottom" nowrap={false} portal>
-                    <span className="block text-3xs text-fg-muted leading-snug mt-0.5 line-clamp-2 lg:truncate cursor-help">
-                      {tile.summary}
-                    </span>
-                  </Tooltip>
+                  <span className="block text-xs text-fg-muted leading-snug mt-1 line-clamp-2" title={tile.summary}>
+                    {tile.summary}
+                  </span>
                 </span>
               </Link>
-              {i < tiles.length - 1 && (
+              {next && (
                 <PulseArrow
                   fromColor={STAGE_ARROW[tile.stage]}
-                  toColor={STAGE_ARROW[tiles[i + 1].stage]}
+                  toColor={STAGE_ARROW[next.stage]}
+                  fromLabel={STAGE_FLOW_LABEL[tile.stage]}
+                  toLabel={STAGE_FLOW_LABEL[next.stage]}
+                  animated={arrowsAnimated}
                 />
               )}
-            </div>
+            </Fragment>
           )
         })}
       </div>
@@ -384,28 +484,23 @@ export function PipelineStatusRibbon() {
   )
 }
 
-const JUDGE_FRESHNESS_KEY = 'mushi:health:judge-freshness-ts'
-
 /**
- * Check tile reads a "last judge batch ran at" timestamp that HealthPage
- * writes to localStorage on every load. This keeps the ribbon honest
- * without the cost of its own poll — if the user never visits Health,
- * the tile stays on 'unknown' and simply encourages them to click it.
+ * Check tile reads judge disagreements first, then a "last judge batch ran
+ * at" timestamp that HealthPage writes to localStorage on every load.
  */
-function computeCheckTile(): RibbonTile {
-  if (typeof window === 'undefined') {
+function computeCheckTile(disagreements: number): RibbonTile {
+  if (disagreements > 0) {
     return {
       stage: 'C',
       label: 'Check',
-      tone: 'idle',
-      metric: '—',
-      summary: 'Loading…',
-      to: '/health',
+      tone: disagreements > 3 ? 'danger' : 'warn',
+      metric: String(disagreements),
+      summary: `${disagreements} classifier vs judge ${disagreements === 1 ? 'disagreement' : 'disagreements'}`,
+      to: '/judge?tab=evaluations&filter=disagreement',
     }
   }
-  const raw = window.localStorage.getItem(JUDGE_FRESHNESS_KEY)
-  const ts = raw ? Number(raw) : NaN
-  if (!Number.isFinite(ts)) {
+  const hoursAgo = readJudgeStaleHours()
+  if (hoursAgo == null) {
     return {
       stage: 'C',
       label: 'Check',
@@ -415,31 +510,13 @@ function computeCheckTile(): RibbonTile {
       to: '/health',
     }
   }
-  const hoursAgo = (Date.now() - ts) / 3_600_000
   const tone: Tone = hoursAgo > 48 ? 'warn' : 'ok'
   return {
     stage: 'C',
     label: 'Check',
     tone,
     metric: hoursAgo < 1 ? '<1h' : `${Math.floor(hoursAgo)}h`,
-    summary:
-      hoursAgo > 48
-        ? 'Judge batch is overdue'
-        : 'Judge batch is fresh',
+    summary: hoursAgo > 48 ? 'Judge batch is overdue' : 'Judge batch is fresh',
     to: '/health',
-  }
-}
-
-/**
- * Public helper — HealthPage calls this after every successful judge
- * freshness load. Kept next to the ribbon so the key is co-located with
- * its reader.
- */
-export function markJudgeBatchSeen(ts: number = Date.now()) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(JUDGE_FRESHNESS_KEY, String(ts))
-  } catch {
-    // localStorage write can fail in private mode; non-fatal.
   }
 }

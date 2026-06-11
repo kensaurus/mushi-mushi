@@ -44,6 +44,8 @@ export interface SdkPreviewConfig {
   /** Config for the header-banner launcher. Only used when trigger === 'banner'. */
   bannerVariant: BannerVariant
   bannerPosition: BannerPosition
+  bannerMessage: string
+  bannerLabel: string
   bannerBugCta: string
   bannerFeatureCta: boolean
   capture: {
@@ -69,6 +71,8 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   attachToSelector: '',
   bannerVariant: 'brand',
   bannerPosition: 'top',
+  bannerMessage: '',
+  bannerLabel: '',
   bannerBugCta: '',
   bannerFeatureCta: true,
   capture: {
@@ -212,6 +216,8 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
     const bannerLines: string[] = []
     if (cfg.bannerVariant !== d.bannerVariant) bannerLines.push(`${indent}    variant: '${cfg.bannerVariant}',`)
     if (cfg.bannerPosition !== d.bannerPosition) bannerLines.push(`${indent}    position: '${cfg.bannerPosition}',`)
+    if (cfg.bannerMessage.trim()) bannerLines.push(`${indent}    message: ${JSON.stringify(cfg.bannerMessage.trim())},`)
+    if (cfg.bannerLabel.trim()) bannerLines.push(`${indent}    label: ${JSON.stringify(cfg.bannerLabel.trim())},`)
     if (cfg.bannerBugCta.trim()) bannerLines.push(`${indent}    bugCta: ${JSON.stringify(cfg.bannerBugCta.trim())},`)
     if (!cfg.bannerFeatureCta) bannerLines.push(`${indent}    featureCta: false,`)
     if (bannerLines.length > 0) {

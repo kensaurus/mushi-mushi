@@ -73,6 +73,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     sdk_banner_position?: string | null;
     sdk_banner_bug_cta?: string | null;
     sdk_banner_feature_cta?: boolean | null;
+    sdk_banner_message?: string | null;
+    sdk_banner_label?: string | null;
     sdk_capture_console?: boolean | null;
     sdk_capture_network?: boolean | null;
     sdk_capture_performance?: boolean | null;
@@ -112,6 +114,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         bannerPosition: oneOf(row?.sdk_banner_position, SDK_BANNER_POSITIONS_LOCAL, 'top'),
         bannerBugCta: row?.sdk_banner_bug_cta ?? null,
         bannerFeatureCta: row?.sdk_banner_feature_cta ?? true,
+        bannerMessage: row?.sdk_banner_message ?? null,
+        bannerLabel: row?.sdk_banner_label ?? null,
       },
       capture: {
         console: row?.sdk_capture_console ?? true,
@@ -243,7 +247,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .from('project_settings')
       .select(
         'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -355,6 +359,36 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       const ipAddress =
         c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');
       const userAgent = c.req.header('user-agent');
+
+      // Per-project burst rate limit: default 120 reports/minute.
+      // Reads the configurable cap from project_settings.report_ingest_max_per_minute
+      // (null = use the default). Raises P0001 on breach.
+      try {
+        const { data: burstCap } = await db
+          .from('project_settings')
+          .select('report_ingest_max_per_minute')
+          .eq('project_id', projectId)
+          .maybeSingle();
+        const cap = (burstCap as { report_ingest_max_per_minute?: number | null } | null)
+          ?.report_ingest_max_per_minute ?? 120;
+        await db.rpc('report_ingest_rate_limit_claim', {
+          p_project_id: projectId,
+          p_max_per_minute: cap,
+        });
+      } catch (rateErr) {
+        const msg = (rateErr instanceof Error ? rateErr.message : String(rateErr));
+        if (msg.includes('rate_limit_exceeded')) {
+          c.header('Retry-After', '60');
+          return c.json(
+            { ok: false, error: { code: 'RATE_LIMITED', message: 'Report ingest rate limit exceeded. Retry in 60 seconds.' } },
+            429,
+          );
+        }
+        // Non-rate-limit errors from the RPC (e.g. function missing during migration)
+        // are non-fatal: log and continue so SDK ingestion is not blocked by a
+        // missing migration window.
+        log.warn('report_ingest_rate_limit_claim failed (non-fatal)', { err: msg });
+      }
 
       const quota = await checkIngestQuota(db, projectId);
       if (!quota.allowed) {
@@ -1294,6 +1328,67 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     });
   });
 
+  // ── GitHub App installation OAuth callback (public — GitHub redirects here) ─
+  // After a user clicks "Install" on the GitHub App, GitHub redirects to this
+  // URL with ?installation_id=<id>&setup_action=install&state=<projectId>.
+  // We store the installation ID on the repo and enable codebase indexing,
+  // then redirect back to the console integrations page.
+  app.get('/v1/webhooks/github/app-installation', async (c) => {
+    const installationId = Number(c.req.query('installation_id'))
+    const setupAction = c.req.query('setup_action') // 'install' | 'update' | 'request'
+    const stateRaw = c.req.query('state') ?? ''
+    const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? ''
+
+    if (!installationId || !Number.isFinite(installationId) || installationId <= 0) {
+      return c.redirect(`${adminBase}/integrations/config?github_error=missing_installation_id`, 302)
+    }
+
+    // State is the projectId (passed when building the install URL in GitHubAppInstallButton)
+    const projectId = stateRaw.trim()
+    if (!projectId || projectId.length < 10) {
+      // No project context — log the installation and redirect to the dashboard root
+      console.info('[github-app-callback] Installation received without project context', { installationId, setupAction })
+      return c.redirect(`${adminBase}/?github_installed=1`, 302)
+    }
+
+    const db = getServiceClient()
+
+    // Find the primary repo for this project and link the installation ID
+    const { data: repos } = await db
+      .from('repos')
+      .select('id, github_app_installation_id, repo_url')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .limit(1)
+      .maybeSingle()
+
+    if (repos) {
+      await db.from('repos').update({
+        github_app_installation_id: installationId,
+        indexing_enabled: true,
+      }).eq('id', repos.id)
+      console.info('[github-app-callback] Linked installation to repo', { installationId, repoId: repos.id, projectId })
+    } else {
+      // No primary repo yet — store on project_settings for pickup when user adds a repo
+      await db.from('project_settings').upsert({
+        project_id: projectId,
+        github_app_installation_id_pending: installationId,
+      } as Record<string, unknown>, { onConflict: 'project_id' })
+      console.info('[github-app-callback] No primary repo — stored pending installation', { installationId, projectId })
+    }
+
+    // Auto-register the webhook on the repo using the installation token
+    // (best-effort; skip if GitHub_APP credentials are not available server-side)
+    const appId = Deno.env.get('GITHUB_APP_ID')
+    const privateKeyPem = Deno.env.get('GITHUB_APP_PRIVATE_KEY_PEM')
+    if (appId && privateKeyPem && repos?.repo_url) {
+      void autoRegisterWebhook({ appId, privateKeyPem, installationId, repoUrl: repos.repo_url, adminBase })
+        .catch((err: unknown) => console.warn('[github-app-callback] webhook auto-register failed (non-fatal)', String(err)))
+    }
+
+    return c.redirect(`${adminBase}/integrations/config?github_connected=1&installation_id=${installationId}`, 302)
+  })
+
   app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
     const notifId = c.req.param('id')!;
     const projectId = c.get('projectId') as string;
@@ -1314,4 +1409,155 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     if (error) return dbError(c, error);
     return c.json({ ok: true });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // POST /v1/ingest/spans — OTel trace-context span ingest (Phase 4)
+  //
+  // Called by the mushi Node SDK middleware to store backend spans keyed by
+  // the W3C trace_id propagated from the web SDK.  The admin console uses
+  // these to correlate a bug-report's failed network entry ("500 from /api/foo")
+  // with the backend span that handled that request.
+  //
+  // Auth: SDK API key (same key as POST /v1/reports).
+  // Rate: hard-capped at 500 spans/minute per project; individual span objects
+  //       must not exceed 8 KB.
+  // PII: span_json is scrubbed of known PII fields before storage.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  app.post('/v1/ingest/spans', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const db = getServiceClient();
+
+    // Burst cap: 500 spans/minute per project.
+    try {
+      await db.rpc('report_ingest_rate_limit_claim', {
+        p_project_id: projectId,
+        p_max_per_minute: 500,
+      });
+    } catch (rateErr) {
+      const msg = rateErr instanceof Error ? rateErr.message : String(rateErr);
+      if (msg.includes('rate_limit_exceeded')) {
+        c.header('Retry-After', '60');
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Span ingest rate limit exceeded.' } }, 429);
+      }
+      log.warn('span ingest rate limit check failed (non-fatal)', { err: msg });
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'Body must be valid JSON' } }, 400);
+    }
+
+    const spans = Array.isArray(body.spans) ? body.spans : [body];
+    if (!spans.length || spans.length > 100) {
+      return c.json({ ok: false, error: { code: 'INVALID_PAYLOAD', message: 'spans must be an array of 1–100 entries' } }, 400);
+    }
+
+    // Scrub common PII fields before storing.
+    const PII_KEYS = ['password', 'token', 'authorization', 'cookie', 'email', 'phone', 'ssn'];
+    function scrubSpan(span: Record<string, unknown>): Record<string, unknown> {
+      const out = { ...span };
+      if (out.attributes && typeof out.attributes === 'object') {
+        const attrs = { ...(out.attributes as Record<string, unknown>) };
+        for (const key of Object.keys(attrs)) {
+          if (PII_KEYS.some((p) => key.toLowerCase().includes(p))) {
+            attrs[key] = '[redacted]';
+          }
+        }
+        out.attributes = attrs;
+      }
+      return out;
+    }
+
+    let inserted = 0;
+    for (const raw of spans) {
+      const span = scrubSpan(raw as Record<string, unknown>);
+      const traceId = typeof span.traceId === 'string' ? span.traceId : null;
+      if (!traceId || !/^[0-9a-f]{32}$/i.test(traceId)) continue;
+
+      const sessionId = typeof span.sessionId === 'string' ? span.sessionId : null;
+      const { error } = await db.from('backend_spans').insert({
+        project_id: projectId,
+        trace_id: traceId.toLowerCase(),
+        session_id: sessionId,
+        span_json: span,
+      });
+      if (!error) inserted++;
+    }
+
+    return c.json({ ok: true, data: { inserted, total: spans.length } }, 201);
+  });
+}
+
+// ── GitHub App: auto-register repo webhook via installation token ────────────
+// Called best-effort after the app-installation OAuth callback. Fetches a
+// short-lived installation access token (JWT → token exchange) and uses it to
+// create a webhook on the repository so check-run events flow back without
+// requiring the user to manually add the webhook in GitHub settings.
+async function autoRegisterWebhook(opts: {
+  appId: string
+  privateKeyPem: string
+  installationId: number
+  repoUrl: string
+  adminBase: string
+}): Promise<void> {
+  // Parse owner/repo from the URL
+  const match = opts.repoUrl.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) throw new Error(`Unrecognisable repo URL: ${opts.repoUrl}`)
+  const [, owner, repo] = match
+
+  // Create a GitHub App JWT (RS256, 10-minute validity)
+  const jwt = await createGitHubAppJwt(opts.appId, opts.privateKeyPem)
+
+  // Exchange for an installation token
+  const tokenRes = await fetch(
+    `https://api.github.com/app/installations/${opts.installationId}/access_tokens`,
+    { method: 'POST', headers: { Authorization: `Bearer ${jwt}`, Accept: 'application/vnd.github+json' } },
+  )
+  if (!tokenRes.ok) throw new Error(`Installation token exchange failed: ${tokenRes.status}`)
+  const { token } = await tokenRes.json() as { token: string }
+
+  // Create the webhook (idempotent — GitHub returns 422 if already exists; we ignore it)
+  const hookUrl = `${opts.adminBase}/api/v1/webhooks/github`
+  const hookRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/hooks`, {
+    method: 'POST',
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'web',
+      active: true,
+      events: ['check_run', 'check_suite', 'push'],
+      config: { url: hookUrl, content_type: 'json', insecure_ssl: '0' },
+    }),
+  })
+  if (hookRes.status === 422) {
+    console.info('[autoRegisterWebhook] Webhook already exists on repo', { owner, repo })
+    return
+  }
+  if (!hookRes.ok) throw new Error(`Create webhook failed: ${hookRes.status}`)
+  console.info('[autoRegisterWebhook] Webhook registered', { owner, repo, hookUrl })
+}
+
+async function createGitHubAppJwt(appId: string, pemKey: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+  const header = { alg: 'RS256', typ: 'JWT' }
+  const payload = { iat: now - 60, exp: now + 600, iss: appId }
+
+  const encode = (obj: unknown) =>
+    btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+  const signingInput = `${encode(header)}.${encode(payload)}`
+
+  // Import the PEM private key
+  const pemBody = pemKey.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '')
+  const keyBytes = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0))
+  const key = await crypto.subtle.importKey(
+    'pkcs8', keyBytes,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign'],
+  )
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signingInput))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return `${signingInput}.${sigB64}`
 }

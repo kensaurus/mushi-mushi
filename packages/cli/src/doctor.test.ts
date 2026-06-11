@@ -50,7 +50,7 @@ describe('checkCliConfig', () => {
     const checks = checkCliConfig(makeConfig({ endpoint: undefined }))
     const endpointCheck = checks.find((c) => c.name === 'CLI config file')
     expect(endpointCheck?.ok).toBe(false)
-    expect(endpointCheck?.detail).toContain('mushi init')
+    expect(endpointCheck?.detail).toContain('MUSHI_API_ENDPOINT')
   })
 
   it('apiKey check fails when apiKey is missing', () => {

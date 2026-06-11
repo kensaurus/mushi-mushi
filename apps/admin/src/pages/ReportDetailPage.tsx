@@ -383,7 +383,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
         </Section>
 
         <Section title="Network requests" icon={<IconNetwork />}>
-          <NetworkLogs logs={report.network_logs} />
+          <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
         </Section>
 
         <Section title="Repro timeline" icon={<IconTerminal />}>

@@ -114,24 +114,30 @@ describe('MCP protocol handshake', () => {
       'dispatch_fix',
       'fix_suggest',
       'generate_tdd_from_story',
+      'get_backend_health',
       'get_blast_radius',
       'get_fix_context',
       'get_fix_timeline',
       'get_knowledge_graph',
       'get_map_run_status',
+      'get_qa_story_run',
       'get_recent_reports',
       'get_report_detail',
       'get_similar_bugs',
       'graph_neighborhood',
       'graph_node_status',
       'improve_qa_story',
+      'ingest_setup_check',
       'inventory_diff',
       'inventory_findings',
       'inventory_get',
       'list_byok_keys',
       'list_pending_review_stories',
+      'list_qa_story_runs',
       'list_top_contributors',
       'map_user_stories',
+      'reply_to_reporter',
+      'run_fullstack_audit',
       'run_nl_query',
       'run_qa_story',
       'search_reports',
@@ -140,6 +146,7 @@ describe('MCP protocol handshake', () => {
       'setup_repo_for_mushi',
       'submit_fix_result',
       'test_gen_from_report',
+      'test_notification_channel',
       'transition_status',
       'trigger_judge',
     ])
@@ -167,6 +174,10 @@ describe('MCP protocol handshake', () => {
       'run_qa_story',
       'add_byok_key',
       'approve_qa_story',
+      'reply_to_reporter',
+      // Phase 5: notification + full-stack audit write tools
+      'test_notification_channel',
+      'run_fullstack_audit',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()
@@ -355,6 +366,36 @@ describe('tool → REST contract', () => {
     await client.callTool({ name: 'inventory_get', arguments: {} })
     expect(fetchStub.calls[0].method).toBe('GET')
     expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`)
+  })
+
+  it('ingest_setup_check calls GET /v1/sync/ingest-setup with auth', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: {
+        ready: true,
+        required_complete: 4,
+        required_total: 4,
+        project_id: PROJECT_ID,
+        project_name: 'glot.it',
+        steps: [{ id: 'sdk_installed', label: 'SDK heartbeat', complete: true, required: true, hint: '' }],
+      },
+    })
+
+    const res = await client.callTool({ name: 'ingest_setup_check', arguments: {} })
+
+    expect(fetchStub.calls).toHaveLength(1)
+    const call = fetchStub.calls[0]
+    expect(call.method).toBe('GET')
+    expect(call.url).toBe(`${API_ENDPOINT}/v1/sync/ingest-setup`)
+    expect(call.headers['authorization']).toBe(`Bearer ${API_KEY}`)
+    expect(call.headers['x-mushi-api-key']).toBe(API_KEY)
+    expect(call.headers['x-mushi-project']).toBe(PROJECT_ID)
+
+    expect(res.isError).toBeFalsy()
+    const content = res.content as Array<{ type: string; text: string }>
+    const parsed = JSON.parse(content[0].text)
+    expect(parsed.ready).toBe(true)
+    expect(parsed.projectId).toBe(PROJECT_ID)
   })
 
   it('test_gen_from_report POSTs to inventory test-gen route', async () => {

@@ -33,10 +33,9 @@ import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
-import { PageActionBar } from '../components/PageActionBar'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { PageHero } from '../components/PageHero'
-import { ComplianceStatusBanner } from '../components/compliance/ComplianceStatusBanner'
+import { ComplianceStatusBanner, isComplianceStatusBannerCritical } from '../components/compliance/ComplianceStatusBanner'
 import {
   EMPTY_COMPLIANCE_STATS,
   type ComplianceStats,
@@ -606,13 +605,15 @@ export function CompliancePage() {
         </p>
       </ContainedBlock>
 
-      <ComplianceStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onFilter={setFilterFromBanner}
-        onRefreshEvidence={refreshEvidence}
-        refreshing={refreshing}
-      />
+      {isComplianceStatusBannerCritical(stats) && (
+        <ComplianceStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onFilter={setFilterFromBanner}
+          onRefreshEvidence={refreshEvidence}
+          refreshing={refreshing}
+        />
+      )}
 
       <SegmentedControl
         value={activeTab}
@@ -622,48 +623,7 @@ export function CompliancePage() {
         size="sm"
       />
 
-      <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Controls"
-            value={`${stats.controlsPass}/${stats.controlsTotal}`}
-            accent={stats.controlsFail > 0 ? 'text-danger' : stats.controlsWarn > 0 ? 'text-warn' : stats.controlsTotal > 0 ? 'text-ok' : undefined}
-            tooltip={controlsTooltip(stats)}
-            detail={controlsDetail(stats)}
-            to={complianceLinks.controls}
-          />
-          <StatCard
-            label="Open DSARs"
-            value={stats.openDsars}
-            accent={stats.overdueDsars > 0 ? 'text-danger' : stats.atRiskDsars > 0 ? 'text-warn' : undefined}
-            tooltip={openDsarsTooltip(stats)}
-            detail={openDsarsDetail(stats)}
-            to={complianceLinks.openDsars}
-          />
-          <StatCard
-            label="Legal holds"
-            value={stats.legalHoldCount}
-            accent={stats.legalHoldCount > 0 ? 'text-info' : undefined}
-            tooltip={legalHoldsTooltip(stats)}
-            detail={legalHoldsDetail(stats)}
-            to={complianceLinks.legalHolds}
-          />
-          <StatCard
-            label="Cluster"
-            value={(stats.activeProjectRegion ?? stats.currentRegion).toUpperCase()}
-            accent="text-brand"
-            tooltip={clusterRegionTooltip(stats)}
-            detail={clusterRegionDetail(stats)}
-            to={complianceLinks.cluster}
-          />
-        </div>
-      </Section>
-
       {activeTab === 'overview' && (
-      <>
       <PageHero
         scope="compliance"
         title="Compliance"
@@ -731,9 +691,50 @@ export function CompliancePage() {
           } : undefined,
         }}
       />
+      )}
 
-      <PageActionBar scope="compliance" action={complianceAction} />
+      <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Controls"
+            value={`${stats.controlsPass}/${stats.controlsTotal}`}
+            accent={stats.controlsFail > 0 ? 'text-danger' : stats.controlsWarn > 0 ? 'text-warn' : stats.controlsTotal > 0 ? 'text-ok' : undefined}
+            tooltip={controlsTooltip(stats)}
+            detail={controlsDetail(stats)}
+            to={complianceLinks.controls}
+          />
+          <StatCard
+            label="Open DSARs"
+            value={stats.openDsars}
+            accent={stats.overdueDsars > 0 ? 'text-danger' : stats.atRiskDsars > 0 ? 'text-warn' : undefined}
+            tooltip={openDsarsTooltip(stats)}
+            detail={openDsarsDetail(stats)}
+            to={complianceLinks.openDsars}
+          />
+          <StatCard
+            label="Legal holds"
+            value={stats.legalHoldCount}
+            accent={stats.legalHoldCount > 0 ? 'text-info' : undefined}
+            tooltip={legalHoldsTooltip(stats)}
+            detail={legalHoldsDetail(stats)}
+            to={complianceLinks.legalHolds}
+          />
+          <StatCard
+            label="Cluster"
+            value={(stats.activeProjectRegion ?? stats.currentRegion).toUpperCase()}
+            accent="text-brand"
+            tooltip={clusterRegionTooltip(stats)}
+            detail={clusterRegionDetail(stats)}
+            to={complianceLinks.cluster}
+          />
+        </div>
+      </Section>
 
+      {activeTab === 'overview' && (
+      <>
       <PageHelp
         title={copy?.help?.title ?? 'About Compliance'}
         whatIsIt={

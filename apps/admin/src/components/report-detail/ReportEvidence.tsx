@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   CodeValue,
   DefinitionChips,
@@ -20,6 +20,7 @@ import {
   platformPillClass,
   type ConsoleLevel,
 } from './reportLogFormat'
+import { apiFetch } from '../../lib/supabase'
 
 function statusBadge(status: number): string {
   if (status >= 500) return 'bg-danger-muted text-danger border border-danger/25'
@@ -317,7 +318,118 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
   )
 }
 
-export function NetworkLogs({ logs }: { logs: ReportDetail['network_logs'] }) {
+interface BackendSpan {
+  id: string
+  trace_id: string
+  session_id: string | null
+  span_json: {
+    name?: string
+    status?: string
+    httpMethod?: string
+    httpUrl?: string
+    httpStatusCode?: number
+    duration_ms?: number
+    attributes?: Record<string, unknown>
+  }
+  ingested_at: string
+}
+
+function BackendSpanCorrelation({
+  traceId,
+  projectId,
+}: {
+  traceId: string
+  projectId: string
+}) {
+  const [spans, setSpans] = useState<BackendSpan[] | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let ignore = false
+    setLoading(true)
+    apiFetch<{ spans: BackendSpan[] }>(
+      `/v1/admin/projects/${projectId}/backend-spans?trace_id=${traceId}`,
+    )
+      .then((res) => {
+        if (!ignore) setSpans(res.ok && res.data ? res.data.spans : [])
+      })
+      .catch(() => {
+        if (!ignore) setSpans([])
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [traceId, projectId])
+
+  if (loading) {
+    return (
+      <div className="mt-1 rounded-sm border border-edge-subtle/50 bg-surface-overlay/30 px-2 py-1.5">
+        <span className="text-3xs text-fg-faint">Loading backend spans…</span>
+      </div>
+    )
+  }
+
+  if (!spans || spans.length === 0) {
+    return (
+      <div className="mt-1 rounded-sm border border-edge-subtle/50 bg-surface-overlay/30 px-2 py-1.5">
+        <span className="text-3xs text-fg-faint">
+          No backend spans found for trace{' '}
+          <code className="font-mono text-3xs">{traceId.slice(0, 8)}…</code>.
+          Install the mushi node SDK middleware to capture backend spans.
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      {spans.map((span) => {
+        const sc = span.span_json.httpStatusCode ?? 0
+        const statusCls = sc >= 500 ? 'text-danger' : sc >= 400 ? 'text-warn' : 'text-ok'
+        const durationMs = span.span_json.duration_ms
+        return (
+          <div
+            key={span.id}
+            className="flex items-center gap-1.5 rounded-sm border border-edge-subtle/40 bg-[var(--mushi-paper-wash)] px-2 py-1"
+          >
+            <span className="shrink-0 rounded-sm bg-accent/10 px-1 py-0.5 font-mono text-3xs font-semibold text-accent">
+              backend
+            </span>
+            <code
+              className="min-w-0 flex-1 truncate font-mono text-2xs text-fg-secondary"
+              title={span.span_json.name ?? span.span_json.httpUrl}
+            >
+              {span.span_json.name ?? span.span_json.httpUrl ?? 'span'}
+            </code>
+            {sc > 0 && (
+              <span className={`shrink-0 font-mono text-3xs font-semibold ${statusCls}`}>
+                {sc}
+              </span>
+            )}
+            {durationMs != null && (
+              <span className="shrink-0 font-mono text-3xs tabular-nums text-fg-faint">
+                {durationMs}ms
+              </span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export function NetworkLogs({
+  logs,
+  projectId,
+}: {
+  logs: ReportDetail['network_logs']
+  projectId?: string
+}) {
+  const [expandedTraceIdx, setExpandedTraceIdx] = useState<number | null>(null)
+
   if (!logs || logs.length === 0) {
     return (
       <EmptySectionMessage
@@ -327,29 +439,53 @@ export function NetworkLogs({ logs }: { logs: ReportDetail['network_logs'] }) {
     )
   }
   return (
-    <div className="max-h-56 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40">
+    <div className="max-h-72 overflow-y-auto rounded-sm border border-edge-subtle bg-surface-overlay/40">
       {logs.map((req, i) => {
         const methodCls = httpMethodPillClass(req.method)
         const slow = req.duration >= 1000
+        const hasTrace = Boolean((req as { traceId?: string }).traceId)
+        const isExpanded = expandedTraceIdx === i
+        const traceId = (req as { traceId?: string }).traceId
         return (
           <div
             key={i}
-            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-1.5 border-b border-edge-subtle/30 px-2 py-1 last:border-b-0"
+            className="border-b border-edge-subtle/30 last:border-b-0"
           >
-            <span className={`shrink-0 ${methodCls}`}>{req.method}</span>
-            <code className="min-w-0 truncate font-mono text-2xs text-fg-secondary" title={req.url}>
-              {req.url}
-            </code>
-            <span
-              className={`inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold tabular-nums ${statusBadge(req.status)}`}
+            <div
+              className={`grid items-center gap-1.5 px-2 py-1 ${hasTrace ? 'grid-cols-[auto_1fr_auto_auto_auto] cursor-pointer hover:bg-surface-overlay/60' : 'grid-cols-[auto_1fr_auto_auto]'}`}
+              onClick={hasTrace ? () => setExpandedTraceIdx(isExpanded ? null : i) : undefined}
+              role={hasTrace ? 'button' : undefined}
+              tabIndex={hasTrace ? 0 : undefined}
+              onKeyDown={hasTrace ? (e) => e.key === 'Enter' && setExpandedTraceIdx(isExpanded ? null : i) : undefined}
             >
-              {req.status}
-            </span>
-            <span
-              className={`shrink-0 font-mono text-3xs tabular-nums ${slow ? 'font-semibold text-warn' : 'text-fg-faint'}`}
-            >
-              {req.duration}ms
-            </span>
+              <span className={`shrink-0 ${methodCls}`}>{req.method}</span>
+              <code className="min-w-0 truncate font-mono text-2xs text-fg-secondary" title={req.url}>
+                {req.url}
+              </code>
+              <span
+                className={`inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold tabular-nums ${statusBadge(req.status)}`}
+              >
+                {req.status}
+              </span>
+              <span
+                className={`shrink-0 font-mono text-3xs tabular-nums ${slow ? 'font-semibold text-warn' : 'text-fg-faint'}`}
+              >
+                {req.duration}ms
+              </span>
+              {hasTrace && (
+                <span
+                  className="shrink-0 rounded-sm bg-accent/15 px-1 py-0.5 font-mono text-3xs font-semibold text-accent"
+                  title={`W3C trace: ${traceId}`}
+                >
+                  {isExpanded ? '▲ trace' : '▼ trace'}
+                </span>
+              )}
+            </div>
+            {isExpanded && hasTrace && projectId && traceId && (
+              <div className="px-2 pb-1.5">
+                <BackendSpanCorrelation traceId={traceId} projectId={projectId} />
+              </div>
+            )}
           </div>
         )
       })}

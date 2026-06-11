@@ -31,8 +31,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
-  Background,
-  BackgroundVariant,
   Panel,
   useReactFlow,
   type Edge,
@@ -61,6 +59,7 @@ import { PipelineActionPanel } from './PipelineActionPanel'
 import { EdgeInspector } from './EdgeInspector'
 import { NodeContextMenu } from './NodeContextMenu'
 import { useFlowKeyboardNav } from '../flow-primitives/useFlowKeyboardNav'
+import { FlowCanvasBackground } from '../flow-primitives/FlowCanvasBackground'
 import type { ActivityItem } from '../dashboard/types'
 
 const NODE_TYPES = { pdcaStep: PdcaStepNode }
@@ -69,8 +68,8 @@ const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 // Horizontal-row layout: nodes (148px tall) + loop-back arc (~110px below)
 // + fitView padding. Keep enough room for the activity-log panel too.
 const VARIANT_HEIGHT: Record<PdcaFlowVariant, string> = {
-  live:        'h-[360px] sm:h-[380px]',
-  onboarding:  'h-[320px] sm:h-[340px]',
+  live:        'h-[380px] sm:h-[400px]',
+  onboarding:  'h-[340px] sm:h-[360px]',
 }
 
 const DRAWER_HASH_PREFIX = '#pdca='
@@ -161,7 +160,7 @@ export function PdcaFlow(props: PdcaFlowProps) {
   return (
     <PdcaFlowContext.Provider value={ctxValue}>
       <div
-        className={`relative w-full ${VARIANT_HEIGHT[variant]} rounded-md border border-edge/60 bg-surface-raised/30 overflow-hidden ${className}`.trim()}
+        className={`flow-canvas-chrome relative w-full ${VARIANT_HEIGHT[variant]} overflow-hidden ${className}`.trim()}
         role="region"
         aria-label={ariaLabel ?? 'Plan, Do, Check, Act loop diagram'}
         data-tour-id="pdca-flow"
@@ -303,7 +302,7 @@ function PdcaFlowCanvas({
   const onTidy = useCallback(() => {
     // Our layout is fixed (buildNodes sets canonical positions every render),
     // so "tidy" == re-fit the view with a gentle animation.
-    rf.fitView({ duration: 400, padding: 0.18 })
+    rf.fitView({ duration: 400, padding: 0.14 })
   }, [rf])
 
   // Re-fit after the first paint so the loop-back arc's bounding box is
@@ -311,7 +310,7 @@ function PdcaFlowCanvas({
   // without this the arc can be clipped on initial load.
   const onInit = useCallback(() => {
     requestAnimationFrame(() => {
-      rf.fitView({ duration: 0, padding: 0.18 })
+      rf.fitView({ duration: 0, padding: 0.14 })
     })
   }, [rf])
 
@@ -361,7 +360,7 @@ function PdcaFlowCanvas({
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         fitView
-        fitViewOptions={{ padding: 0.18, includeHiddenNodes: false }}
+        fitViewOptions={{ padding: 0.14, includeHiddenNodes: false }}
         onInit={onInit}
         proOptions={{ hideAttribution: true }}
         onNodeClick={onNodeClick}
@@ -377,16 +376,11 @@ function PdcaFlowCanvas({
         zoomOnPinch={interactive}
         zoomOnDoubleClick={false}
         preventScrolling={false}
-        minZoom={0.6}
-        maxZoom={1.4}
+        minZoom={0.72}
+        maxZoom={1.35}
         defaultEdgeOptions={{ type: 'pdcaGradient' }}
       >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={18}
-          size={1.5}
-          color="var(--color-edge-subtle)"
-        />
+        <FlowCanvasBackground density="pipeline" />
 
         {variant === 'live' && (
           <Panel position="top-left">

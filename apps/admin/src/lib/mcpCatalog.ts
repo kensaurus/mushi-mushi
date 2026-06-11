@@ -195,14 +195,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'setup_check',
     title: 'Dispatch preflight check',
     description:
-      'Run the 4 dispatch-readiness checks for a project and return their pass/fail status ' +
+      'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
       '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
       'Also returns the target repo URL when GitHub is connected. ' +
-      'Use this before calling dispatch_fix to understand why a dispatch might fail — ' +
-      'or to validate that the onboarding wizard is complete.',
+      'Use this before calling dispatch_fix to understand why a dispatch might fail. ' +
+      'For SDK ingest health (API key → heartbeat → first report), call ingest_setup_check instead.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'Is this project ready to auto-fix bugs? What is blocking me?',
+    useCase: 'Is this project ready to auto-fix bugs? What is blocking dispatch?',
+  },
+  {
+    name: 'ingest_setup_check',
+    title: 'Ingest setup check',
+    description:
+      'Run the 4 **required ingest** checks for the project tied to this API key: ' +
+      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report. ' +
+      'Returns per-step pass/fail plus last_sdk_seen_at and endpoint host diagnostics. ' +
+      'Use after wiring env vars or pasting the SDK snippet to confirm the banner will work.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is the SDK installed and ingesting reports? Why is my banner still missing?',
   },
   // --- Write / agentic ----------------------------------------------------
   {

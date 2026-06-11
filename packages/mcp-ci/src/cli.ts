@@ -129,12 +129,65 @@ async function main(): Promise<void> {
       handleResult(persist, failOnQuota)
       break
     }
-    case 'gates': {
-      // Mushi v2: run all five pre-release gates against the current
-      // commit and post a single composite GitHub status.
+    case 'spec-drift': {
+      // Mushi v2 Gate 6 — oasdiff spec drift detection.
       //
-      // Gates 1 + 2 (lint) run inside this Action's checkout; Gates 3
-      // + 4 + 5 are server-side and reachable via /v1/admin/inventory.
+      // Downloads the oasdiff binary (Go static binary, cross-platform), runs
+      // `oasdiff breaking <base> <head>` against two OpenAPI spec versions, and
+      // POSTs the findings to the inventory-gates endpoint as a `spec_drift` gate run.
+      //
+      // Inputs:
+      //   base-spec  — path or URL to the base OpenAPI spec (previous version).
+      //   head-spec  — path or URL to the head OpenAPI spec (current PR version).
+      //   fail-on-breaking — whether breaking changes fail the build (default: true).
+      const baseSpec = core.getInput('base-spec', { required: true })
+      const headSpec = core.getInput('head-spec', { required: true })
+      const failOnBreaking = core.getInput('fail-on-breaking') !== 'false'
+      const commitSha = core.getInput('commit-sha') || process.env.GITHUB_SHA || undefined
+      const prNumber = core.getInput('pr-number') ? Number(core.getInput('pr-number')) : undefined
+
+      const { runSpecDrift } = await import('./spec-drift.js')
+      const diffFindings = await runSpecDrift({ baseSpec, headSpec })
+
+      core.info(`oasdiff found ${diffFindings.length} change(s)`)
+      core.setOutput('findings', JSON.stringify(diffFindings))
+
+      const breaking = diffFindings.filter((f) => f.severity === 'error')
+      const warnings = diffFindings.filter((f) => f.severity === 'warn')
+
+      // Post findings to the gates API.
+      const gateBody = {
+        gates: ['spec_drift'],
+        spec_diff_findings: diffFindings,
+        commit_sha: commitSha,
+        pr_number: prNumber,
+      }
+      await api(
+        endpoint,
+        apiKey,
+        projectId,
+        `/v1/admin/inventory/${projectId}/gates/run`,
+        { method: 'POST', body: JSON.stringify(gateBody) },
+      )
+
+      if (breaking.length > 0 && failOnBreaking) {
+        core.setFailed(
+          `Mushi Gate 6 (spec_drift): ${breaking.length} breaking change(s) detected. ` +
+          `Review in the admin console → Inventory → Gates.`,
+        )
+      } else if (warnings.length > 0) {
+        core.warning(`Mushi Gate 6 (spec_drift): ${warnings.length} potentially-breaking change(s).`)
+      } else {
+        core.info('Mushi Gate 6 (spec_drift): no breaking changes.')
+      }
+      break
+    }
+    case 'gates': {
+      // Mushi v2: run all gates against the current commit and post a single
+      // composite GitHub status.
+      //
+      // Gates 1 + 2 (lint) run inside this Action's checkout; Gates 3–8
+      // are server-side and reachable via /v1/admin/inventory.
       // The Action then reads back the consolidated gate_runs and
       // sets a single pass/fail on the calling workflow.
       const commitSha = core.getInput('commit-sha') || process.env.GITHUB_SHA || ''
@@ -142,7 +195,7 @@ async function main(): Promise<void> {
       const gatesArg = core.getInput('gates') || 'all'
       const gates =
         gatesArg === 'all'
-          ? ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim']
+          ? ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim', 'orphan_endpoint', 'unknown_call']
           : gatesArg.split(',').map((g) => g.trim()).filter(Boolean)
 
       const body = {

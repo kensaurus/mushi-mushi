@@ -17,12 +17,15 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Badge } from './ui'
 import { useToast } from '../lib/toast'
+import { RESOLVED_API_URL } from '../lib/env'
+import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
 
-type Mode = 'raw' | 'env' | 'cursor'
+type Mode = 'raw' | 'env' | 'cursor' | 'admin'
 
 interface Props {
   projectId: string
   projectName: string
+  projectSlug?: string | null
   apiKey: string
   scopes: string[]
   onDismiss: () => void
@@ -31,8 +34,8 @@ interface Props {
 }
 
 /**
- * Build the `.cursor/mcp.json` snippet. We use `npx -y mushi-mcp@latest` so
- * users don't have to `pnpm add` the package globally — one less step on
+ * Build the `.cursor/mcp.json` snippet. We use `npx -y @mushi-mushi/mcp@latest`
+ * so users don't have to `pnpm add` the package globally — one less step on
  * day one, and they'll upgrade automatically.
  */
 function buildCursorJson(projectId: string, projectName: string, apiKey: string): string {
@@ -41,9 +44,11 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
       mcpServers: {
         [`mushi-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32)}`]: {
           command: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp@latest'],
           env: {
-            MUSHI_API_ENDPOINT: 'https://api.mushimushi.dev',
+            // The same endpoint this console talks to — keeps the MCP server
+            // and the admin on one host (self-hosted instances included).
+            MUSHI_API_ENDPOINT: RESOLVED_API_URL,
             MUSHI_API_KEY: apiKey,
             MUSHI_PROJECT_ID: projectId,
           },
@@ -58,11 +63,26 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
 function buildEnvLocal(projectId: string, apiKey: string): string {
   return [
     '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
-    'MUSHI_API_ENDPOINT=https://api.mushimushi.dev',
+    `MUSHI_API_ENDPOINT=${RESOLVED_API_URL}`,
     `MUSHI_API_KEY=${apiKey}`,
     `MUSHI_PROJECT_ID=${projectId}`,
     '',
   ].join('\n')
+}
+
+function buildAdminDogfoodEnv(projectId: string, apiKey: string, slug: string | null | undefined): string {
+  const env = mushiEnvVarsForProjectSlug(slug)
+  const file = env.envFileHint ?? 'apps/admin/.env.local'
+  const lines = [
+    `# Mushi admin dogfood — paste into ${file} and restart the Vite dev server.`,
+    `${env.projectIdVar}=${projectId}`,
+    `${env.apiKeyVar}=${apiKey}`,
+  ]
+  if (env.endpointVar) {
+    lines.push(`# ${env.endpointVar}=${RESOLVED_API_URL}  # optional override`)
+  }
+  lines.push('')
+  return lines.join('\n')
 }
 
 function scopeBadgeTone(scope: string): string {
@@ -71,13 +91,30 @@ function scopeBadgeTone(scope: string): string {
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
 
-export function RevealedKeyCard({ projectId, projectName, apiKey, scopes, onDismiss, testIdPrefix }: Props) {
+export function RevealedKeyCard({
+  projectId,
+  projectName,
+  projectSlug,
+  apiKey,
+  scopes,
+  onDismiss,
+  testIdPrefix,
+}: Props) {
   const [mode, setMode] = useState<Mode>('env')
   const toast = useToast()
 
   const envSnippet = buildEnvLocal(projectId, apiKey)
   const cursorSnippet = buildCursorJson(projectId, projectName, apiKey)
-  const payload = mode === 'raw' ? apiKey : mode === 'env' ? envSnippet : cursorSnippet
+  const adminSnippet = buildAdminDogfoodEnv(projectId, apiKey, projectSlug)
+  const showAdminTab = mushiEnvVarsForProjectSlug(projectSlug).apiKeyVar.startsWith('VITE_MUSHI_SELF_')
+  const payload =
+    mode === 'raw'
+      ? apiKey
+      : mode === 'env'
+        ? envSnippet
+        : mode === 'admin'
+          ? adminSnippet
+          : cursorSnippet
 
   async function copy() {
     try {
@@ -87,7 +124,9 @@ export function RevealedKeyCard({ projectId, projectName, apiKey, scopes, onDism
           ? 'Key copied.'
           : mode === 'env'
             ? '.env.local block copied — paste into your repo\'s .env.local.'
-            : '.cursor/mcp.json block copied — paste into your IDE\'s MCP config.',
+            : mode === 'admin'
+              ? 'Admin dogfood env copied — paste into apps/admin/.env.local and restart Vite.'
+              : '.cursor/mcp.json block copied — paste into your IDE\'s MCP config.',
       )
     } catch {
       toast.error('Clipboard blocked — select the text and copy manually.')
@@ -95,9 +134,18 @@ export function RevealedKeyCard({ projectId, projectName, apiKey, scopes, onDism
   }
 
   const tabs: Array<{ id: Mode; label: string; hint: string }> = [
-    { id: 'env',    label: '.env.local',       hint: 'For the MCP binary, CI, or any tool that reads env vars.' },
+    { id: 'env', label: '.env.local', hint: 'For the MCP binary, CI, or any tool that reads env vars.' },
+    ...(showAdminTab
+      ? [
+          {
+            id: 'admin' as const,
+            label: 'Admin dogfood',
+            hint: 'For this console\'s VITE_MUSHI_SELF_* self-reporting SDK.',
+          },
+        ]
+      : []),
     { id: 'cursor', label: '.cursor/mcp.json', hint: 'For Cursor / Claude Desktop / Windsurf.' },
-    { id: 'raw',    label: 'Raw key',          hint: 'Just the key string.' },
+    { id: 'raw', label: 'Raw key', hint: 'Just the key string.' },
   ]
 
   return (

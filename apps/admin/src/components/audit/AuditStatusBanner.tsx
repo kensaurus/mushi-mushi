@@ -8,6 +8,15 @@ import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { AuditStats, AuditTabId } from './types'
 
+/** Nominal audit activity is covered by the page hero + snapshot — skip the banner. */
+export function isAuditStatusBannerCritical(stats: AuditStats): boolean {
+  if (!stats.projectId) return true
+  if (!stats.auditLogEntitlement) return true
+  if (stats.failCount24h > 0) return true
+  if (stats.warnCount24h > 0) return true
+  return false
+}
+
 interface Props {
   stats: AuditStats
   onTab?: (tab: AuditTabId) => void

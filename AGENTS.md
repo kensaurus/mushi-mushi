@@ -10,6 +10,8 @@ can execute without additional context.
 
 ## Agent Inventory
 
+<sub>15 pipeline agents · 44 edge functions · 240 SQL migrations — updated Jun 11 2026 (wave s: backend-drift-scanner + 4 new migrations).</sub>
+
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
@@ -26,6 +28,7 @@ can execute without additional context.
 | `qa-story-runner` | `supabase/functions/qa-story-runner/` | cron (every minute) | Executes QA Coverage stories via Firecrawl / Browserbase / local; gates on `approval_status = 'approved'` |
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
+| `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | **NEW** Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
 
 ---
 
@@ -56,9 +59,17 @@ User creates story (NL prompt or Playwright script)
   → execute via provider (inline HTTP or Browserbase REST)
   → write qa_story_runs (status, latency_ms, provider_session_url, assertion_failures)
   → write qa_story_evidence (screenshots, console logs, HAR, video, traces)
+  → update qa_stories state columns (last_run_status, consecutive_failures, slack_failure_ts, last_notified_at)
   → qa_story_coverage_24h MV refreshed by separate pg_cron (every 15 min)
-  → if status = failed + A2A endpoint configured: push notification via a2a-push-notify
+  → Slack notification policy (transition-aware):
+      • pass→fail or error: post new Block Kit message to project's Slack channel (store thread ts)
+      • consecutive failures: threaded reply with backoff (1st, 3rd, 10th, then daily)
+      • fail→pass: threaded "recovered after N failures" message, state reset
+  → dispatchPluginEvent('qa_story.failed' | 'qa_story.recovered') for fan-out to Discord, Teams, etc.
+  → Discord: direct webhook post to project_settings.discord_webhook_url (no relay plugin required)
 ```
+
+**Important correction (Jun 2026):** The `a2a-push-notify` agent is listed in the agent inventory but is NOT invoked on QA story failure. The previous `a2a_push_deliveries` insert in `qa-story-runner` and `notifyA2A` in `pdca-runner` were schema-mismatched and silently failing; they have been removed. QA failure notification now routes through the Slack Block Kit policy and `dispatchPluginEvent`.
 
 ### Manual run trigger
 
@@ -139,11 +150,42 @@ Live App URL
 |-------|---------|
 | `story_map_runs` | Tracks live crawl jobs (pending → running → completed/failed) |
 | `inventory_proposals` | Stores drafted inventory.yaml; `source` column: `passive_discovery` / `live_crawl` / `manual` |
-| `qa_stories` | Test scripts; new columns: `source`, `approval_status`, `automation_mode`, `origin_story_node_id`, `parent_story_id`, `pdca_iteration` |
+| `qa_stories` | Test scripts; notable columns: `source`, `approval_status`, `automation_mode`, `origin_story_node_id`, `parent_story_id`, `pdca_iteration`, `target_url`, `last_run_status`, `consecutive_failures`, `slack_failure_ts`, `last_notified_at` |
 
 ### CLI Quick Reference
 
 ```bash
+# ── Integrations ──────────────────────────────────────────────────────────
+# List all configured integrations and their health status
+mushi integrations list
+
+# Run a health probe for a specific integration
+mushi integrations test slack
+mushi integrations test sentry
+mushi integrations test github
+
+# ── Slack ─────────────────────────────────────────────────────────────────
+# Check whether Slack is connected
+mushi slack status
+
+# Send a test Slack message to verify the channel works
+mushi slack test
+
+# ── QA Stories ────────────────────────────────────────────────────────────
+# List all QA stories and their last run status
+mushi qa stories
+
+# Show recent runs for a story (with error heads)
+mushi qa runs <story-id>
+
+# Manually trigger a QA story run
+mushi qa run <story-id>
+
+# ── Doctor checks ─────────────────────────────────────────────────────────
+# Full pre-flight + server + QA story health check
+mushi doctor --server --qa-stories
+
+# ── TDD / Story mapping ───────────────────────────────────────────────────
 # Map user stories from live app
 mushi stories map --url https://your-app.com --wait
 
@@ -167,9 +209,17 @@ MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup ke
 
 ### MCP Tools
 
-New TDD MCP tools available with `mcp:write` or `mcp:read` scope:
-`map_user_stories`, `get_map_run_status`, `generate_tdd_from_story`, `improve_qa_story`,
+Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_lessons`, `list_qa_story_runs`, `get_qa_story_run`
+
+Notification tools (`mcp:write` scope): `test_notification_channel`
+
+TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_story`, `improve_qa_story`,
 `run_qa_story`, `list_byok_keys`, `add_byok_key`, `list_pending_review_stories`, `approve_qa_story`
+
+**New in Jun 2026 Slack overhaul:**
+- `list_qa_story_runs` — recent runs for a story with error heads
+- `get_qa_story_run` — full run detail with screenshots and assertion failures
+- `test_notification_channel` — send a test ping to verify Slack or Discord is wired up
 
 ---
 

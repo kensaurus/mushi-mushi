@@ -7,7 +7,7 @@
  *          copy-pasting an API key.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -43,6 +43,7 @@ import { useCreateProject } from '../lib/useCreateProject'
 import { useUpdateProject } from '../lib/useUpdateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
+import { ProjectFolderTabRail } from '../components/projects/ProjectFolderTabRail'
 import {
   EMPTY_PROJECTS_STATS,
   type ProjectsStats,
@@ -62,6 +63,12 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
+import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
+import { VerifySetupPanel } from '../components/VerifySetupPanel'
+import { CodeInline } from '../components/CodePanel'
+import { ProjectFavicon } from '../components/ProjectFavicon'
+import { sdkOriginFromApiKeys } from '../lib/resolveProjectDomain'
+import { PDCA_BOTTLENECK_TONE, bottleneckDeepLink } from '../lib/pdcaBottleneck'
 import {
   IconCheck,
   IconClose,
@@ -69,7 +76,6 @@ import {
   IconTrash,
   IconGit,
   IconExternalLink,
-  IconAlertTriangle,
   IconStorage,
   IconReports,
   IconIntegrations,
@@ -78,6 +84,10 @@ import {
   IconKey,
   IconCopy,
   IconExplore,
+  IconClock,
+  IconUser,
+  IconGauge,
+  IconTerminal,
 } from '../components/icons'
 
 // Undo window for soft-delete operations on this page (project delete,
@@ -266,20 +276,6 @@ function canDeleteProject(project: Project): boolean {
   return project.organization_role === 'owner' || project.organization_role === 'admin'
 }
 
-const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
-  plan: 'bg-info-muted text-info border border-info/30',
-  do: 'bg-warn-muted text-warn border border-warn/30',
-  check: 'bg-warn-muted text-warn border border-warn/30',
-  act: 'bg-danger-muted text-danger border border-danger/30',
-}
-
-const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
-  plan: '/reports?status=new',
-  do: '/fixes',
-  check: '/judge',
-  act: '/integrations/config',
-}
-
 const LINK_CHIP_CLASS =
   'inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-sm gap-1.5 ' +
   'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg ' +
@@ -342,17 +338,17 @@ function indexHealth(repo: ProjectRepoLite): IndexHealth {
 const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
   ok: 'Indexed',
   stale: 'Stale',
-  failed: 'Index failed',
-  off: 'Indexing off',
-  never: 'Not indexed',
+  failed: 'Failed',
+  off: 'Off',
+  never: 'Pending',
 }
 
-const INDEX_HEALTH_TONE: Record<IndexHealth, string> = {
-  ok: 'bg-ok-muted text-ok border border-ok/30',
-  stale: 'bg-warn-muted text-warn border border-warn/30',
-  failed: 'bg-danger-muted text-danger border border-danger/30',
-  off: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-  never: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger' | 'neutral'> = {
+  ok: 'ok',
+  stale: 'warn',
+  failed: 'danger',
+  off: 'neutral',
+  never: 'neutral',
 }
 
 export function ProjectsPage() {
@@ -458,6 +454,10 @@ export function ProjectsPage() {
   const projects = useMemo(
     () => (data?.projects ?? []).filter((p) => !pendingDeleteIds.has(p.id)),
     [data, pendingDeleteIds],
+  )
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? projects[0] ?? null,
+    [projects, activeProjectId],
   )
   // Captured once per response and threaded into every SdkHealthSummary so
   // each card can compare the SDK's last-seen endpoint against the host
@@ -1062,38 +1062,40 @@ export function ProjectsPage() {
               cta={{ label: 'View projects', to: '/projects?tab=list' }}
             />
           )}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <ContainedBlock tone="muted" className="p-3">
-              <SignalChip tone="neutral" className="uppercase tracking-wide">Ingest coverage</SignalChip>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-ok">
-                {stats.projectCount > 0
-                  ? `${Math.round((stats.projectsWithReports / stats.projectCount) * 100)}%`
-                  : '—'}
-              </p>
-              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
-                {stats.projectsWithReports}/{stats.projectCount} projects with reports
-              </InlineProof>
-            </ContainedBlock>
-            <ContainedBlock tone="muted" className="p-3">
-              <SignalChip tone="neutral" className="uppercase tracking-wide">SDK heartbeats</SignalChip>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.sdkConnectedCount}</p>
-              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
-                {stats.staleKeyCount} active keys never seen
-              </InlineProof>
-            </ContainedBlock>
-            <ContainedBlock tone="muted" className="p-3">
-              <SignalChip tone="neutral" className="uppercase tracking-wide">Active context</SignalChip>
-              <p className="mt-1 text-sm font-semibold text-fg-primary truncate">
-                {stats.activeProjectName ?? 'None selected'}
-              </p>
-              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
-                {stats.activeProjectId
-                  ? stats.activeProjectHasReports
-                    ? 'Receiving reports'
-                    : 'No reports yet'
-                  : 'Switch on list tab'}
-              </InlineProof>
-            </ContainedBlock>
+          <div className="overflow-hidden rounded-md border border-edge-subtle/60 bg-surface-root/30">
+            <div className="grid grid-cols-1 gap-px bg-edge-subtle/40 sm:grid-cols-3">
+              <ContainedBlock tone="ok" className="rounded-none border-0 bg-surface-root/80 p-3">
+                <SignalChip tone="ok" className="uppercase tracking-wide">Ingest coverage</SignalChip>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-ok">
+                  {stats.projectCount > 0
+                    ? `${Math.round((stats.projectsWithReports / stats.projectCount) * 100)}%`
+                    : '—'}
+                </p>
+                <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
+                  {stats.projectsWithReports}/{stats.projectCount} projects with reports
+                </InlineProof>
+              </ContainedBlock>
+              <ContainedBlock tone="info" className="rounded-none border-0 bg-surface-root/80 p-3">
+                <SignalChip tone="info" className="uppercase tracking-wide">SDK heartbeats</SignalChip>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.sdkConnectedCount}</p>
+                <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
+                  {stats.staleKeyCount} active keys never seen
+                </InlineProof>
+              </ContainedBlock>
+              <ContainedBlock tone="brand" className="rounded-none border-0 bg-surface-root/80 p-3">
+                <SignalChip tone="brand" className="uppercase tracking-wide">Active context</SignalChip>
+                <p className="mt-1 text-sm font-semibold text-fg-primary truncate">
+                  {stats.activeProjectName ?? 'None selected'}
+                </p>
+                <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
+                  {stats.activeProjectId
+                    ? stats.activeProjectHasReports
+                      ? 'Receiving reports'
+                      : 'No reports yet'
+                    : 'Switch on list tab'}
+                </InlineProof>
+              </ContainedBlock>
+            </div>
           </div>
         </div>
       )}
@@ -1134,14 +1136,24 @@ export function ProjectsPage() {
               }
             />
           ) : (
-            <div className="space-y-2">
-          {projects.map((project) => {
-            const isActive = activeProjectId === project.id
+            <div className="flex min-h-0 flex-col lg:flex-row lg:items-start lg:rounded-md lg:border lg:border-edge-subtle">
+              <ProjectFolderTabRail
+                projects={projects}
+                activeId={selectedProject?.id ?? null}
+                onSelect={setActive}
+              />
+              <div
+                className="min-w-0 flex-1 lg:border-l lg:border-edge-subtle lg:bg-surface-raised/20"
+                role="tabpanel"
+                aria-label={selectedProject ? `Details for ${selectedProject.name}` : 'Project details'}
+              >
+                {selectedProject && (() => {
+            const project = selectedProject
             const isBusy = busyProject === project.id
             const revealed = revealedKeys[project.id]
             return (
-              <Card key={project.id} className={`p-3 ${isActive ? 'ring-1 ring-brand/40' : ''}`}>
-                <div className="flex items-start justify-between gap-3 flex-wrap">
+              <Card key={project.id} className="overflow-hidden rounded-none border-0 p-0 shadow-none lg:min-h-full">
+                <div className="flex flex-col gap-2 border-b border-edge-subtle/50 bg-surface-root/35 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       {renamingId === project.id ? (
@@ -1202,79 +1214,40 @@ export function ProjectsPage() {
                           </Btn>
                         </form>
                       ) : (
-                        <h3 className="text-sm font-medium text-fg">{project.name}</h3>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ProjectFavicon
+                            project_id={project.id}
+                            project_name={project.name}
+                            project_slug={project.slug}
+                            sdk_origin={sdkOriginFromApiKeys(project.api_keys)}
+                            size={16}
+                          />
+                          <h3 className="truncate text-base font-semibold text-fg">{project.name}</h3>
+                        </div>
                       )}
-                      {isActive && (
-                        <Badge
-                          className="bg-brand/15 text-brand"
-                          title="The admin console pages (Reports, Fixes, Dashboard, etc.) are currently filtered to this project. All your other projects are still live and ingesting reports — this is just which one the UI is focused on."
-                        >
-                          Viewing
-                        </Badge>
-                      )}
+                      <span className="inline-flex items-center gap-1">
+                        <span title="Reports, Fixes, Dashboard, and other pages are filtered to this project.">
+                          <SignalChip tone="brand" className="normal-case tracking-normal">
+                            Active
+                          </SignalChip>
+                        </span>
+                        <ConfigHelp helpId="projects.active_project" />
+                      </span>
                       <SignalChip tone="neutral" className="font-mono text-2xs">
                         {project.slug}
                       </SignalChip>
-                    </div>
-                    <InlineProof className="mt-0.5 border-0 bg-transparent px-0 py-0 text-2xs">
-                      Created {new Date(project.created_at).toLocaleDateString()} · last report{' '}
-                      {relativeTime(project.last_report_at)}
-                    </InlineProof>
-                    {/* Project ID chip — MUSHI_PROJECT_ID value, copyable in one click.
-                        Answers the #1 support question: "where do I find my project ID?" */}
-                    <ProjectIdChip projectId={project.id} />
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      <SignalChip tone="neutral" className="font-mono tabular-nums">
-                        {project.report_count} {pluralize(project.report_count, 'report')}
-                      </SignalChip>
-                      <SignalChip tone="neutral" className="font-mono tabular-nums">
-                        {project.active_key_count} active {pluralize(project.active_key_count, 'key')}
-                      </SignalChip>
-                      <SignalChip tone="neutral" className="font-mono tabular-nums">
-                        {project.member_count} {pluralize(project.member_count, 'member')}
-                      </SignalChip>
-                      {/* SDK freshness — silently absent when the project
-                          has never ingested a report (status === 'unknown'),
-                          so quiet projects don't pick up cosmetic chrome
-                          before they have a real signal. The badge itself
-                          is hover-rich (versions, deprecation message) so
-                          the row stays scannable. */}
-                      {project.sdk_status && project.sdk_status !== 'unknown' && (
-                        <SdkVersionBadge
-                          status={project.sdk_status}
-                          package_={project.sdk_package ?? null}
-                          observedVersion={project.sdk_version ?? null}
-                          latestVersion={project.sdk_latest_version ?? null}
-                          deprecationMessage={project.sdk_deprecation_message ?? null}
-                        />
-                      )}
                       {project.pdca_bottleneck && project.pdca_bottleneck_label && (
                         <Link
-                          to={`${PDCA_BOTTLENECK_DEEP_LINK[project.pdca_bottleneck]}&project=${project.id}`}
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs font-medium hover:opacity-90 motion-safe:transition-opacity ${PDCA_BOTTLENECK_TONE[project.pdca_bottleneck]}`}
-                          title="Where this project is stuck — click to jump to that stage"
+                          to={bottleneckDeepLink(project.pdca_bottleneck, project.id)}
+                          className={`inline-flex max-w-full min-w-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-2xs font-medium hover:opacity-90 motion-safe:transition-opacity ${PDCA_BOTTLENECK_TONE[project.pdca_bottleneck]}`}
+                          title={`${project.pdca_bottleneck_label} — jump to this PDCA stage`}
                         >
-                          <span className="font-mono uppercase">{project.pdca_bottleneck}</span>
-                          <span>{project.pdca_bottleneck_label}</span>
+                          <span className="shrink-0 font-mono uppercase">{project.pdca_bottleneck}</span>
                         </Link>
                       )}
                     </div>
-                    <ProjectContextStrip project={project} />
                   </div>
-                  <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                    {!isActive && (
-                      <span className="inline-flex items-center gap-1">
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setActive(project.id, project.name)}
-                          title="Switch the admin console UI to focus on this project. Your other projects keep ingesting reports either way — this is just which one Reports / Fixes / Dashboard etc. show by default."
-                        >
-                          Switch to
-                        </Btn>
-                        <ConfigHelp helpId="projects.active_project" />
-                      </span>
-                    )}
+                  <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
                     {canDeleteProject(project) && renamingId !== project.id && (
                       <Btn
                         variant="ghost"
@@ -1315,7 +1288,7 @@ export function ProjectsPage() {
                         <IconSettings />
                       </Link>
                     </Tooltip>
-                    <Tooltip content="Send test report">
+                    <Tooltip content="Send test report (ingest only — does not mark SDK installed)">
                       <Btn
                         variant="ghost"
                         size="sm"
@@ -1395,19 +1368,27 @@ export function ProjectsPage() {
                   </div>
                 </div>
 
+                <div className="space-y-3 px-3 py-3">
+                  <ProjectMetricsRail project={project} />
+                  <ProjectContextRail project={project} />
+                </div>
+
                 {revealed && (
-                  <RevealedKeyCard
-                    projectId={project.id}
-                    projectName={project.name}
-                    apiKey={revealed.key}
-                    scopes={revealed.scopes}
-                    onDismiss={() =>
-                      setRevealedKeys((prev) => {
-                        const { [project.id]: _, ...rest } = prev
-                        return rest
-                      })
-                    }
-                  />
+                  <div className="px-3 pb-3">
+                    <RevealedKeyCard
+                      projectId={project.id}
+                      projectName={project.name}
+                      projectSlug={project.slug}
+                      apiKey={revealed.key}
+                      scopes={revealed.scopes}
+                      onDismiss={() =>
+                        setRevealedKeys((prev) => {
+                          const { [project.id]: _, ...rest } = prev
+                          return rest
+                        })
+                      }
+                    />
+                  </div>
                 )}
 
                 {/* SDK CONNECTIVITY HEALTH — primary diagnostic surface for
@@ -1416,15 +1397,33 @@ export function ProjectsPage() {
                     state already has the "Generate key" CTA above; before
                     that the card would just say "no key" and double up. */}
                 {project.api_keys.length > 0 && (
-                  <div className="mt-3">
+                  <div className="px-3 pb-3 space-y-3">
                     <SdkHealthSummary
                       projectId={project.id}
                       projectName={project.name}
+                      projectSlug={project.slug}
                       apiKeys={project.api_keys}
                       lastReportAt={project.last_report_at}
                       adminHost={adminHost}
                       reportCount={project.report_count}
+                      compact
                       onTestReportSent={reload}
+                    />
+                    {project.sdk_status && project.sdk_version && (
+                      <SdkUpgradeCTA
+                        status={project.sdk_status}
+                        package_={project.sdk_package ?? null}
+                        observedVersion={project.sdk_version}
+                        latestVersion={project.sdk_latest_version ?? null}
+                        stackLabel={project.slug}
+                        compact
+                      />
+                    )}
+                    <VerifySetupPanel
+                      projectId={project.id}
+                      projectName={project.name}
+                      adminHost={adminHost}
+                      compact
                     />
                   </div>
                 )}
@@ -1443,12 +1442,13 @@ export function ProjectsPage() {
                     (k) => !k.revoked,
                   ).length
                   return (
-                    <details className="mt-3 pt-2 border-t border-edge-subtle">
+                    <details className="mx-3 mb-3 mt-0 border-t border-edge-subtle pt-2">
                       <summary className="cursor-pointer select-none list-none">
-                        <SignalChip tone="neutral" className="hover:text-fg">
-                          Manage keys ({pluralizeWithCount(visibleKeys.length, 'key')},{' '}
-                          {visibleActiveCount} active)
-                        </SignalChip>
+                        <span title={`${visibleKeys.length} keys · ${visibleActiveCount} active`}>
+                          <SignalChip tone="neutral" className="hover:text-fg">
+                            Keys ({visibleActiveCount})
+                          </SignalChip>
+                        </span>
                       </summary>
                       <div className="mt-2 space-y-1">
                         {visibleKeys.map((key) => (
@@ -1501,25 +1501,17 @@ export function ProjectsPage() {
                     sub-line so the eye actually catches it (the previous
                     tiny "SDK install snippet" link looked identical to
                     the keys row above and was getting missed). */}
-                {/* Open the configurator for whichever project the user is
-                    currently viewing; collapse it for the others so the rows
-                    stay scannable. Open state is `override ?? isActive`, so
-                    a user-toggled value wins on re-renders (project data
-                    refetches won't snap it back), but the override map is
-                    cleared whenever `activeProjectId` changes (see the
-                    `useEffect` above) — that way clicking Switch to on
-                    another row collapses the previous one and opens the new
-                    one with no leftover override fighting the new default. */}
+                {/* SDK configurator defaults open in the folder-tab panel.
+                    Override map clears when activeProjectId changes so tab
+                    switches reset manual collapse state. */}
                 <details
-                  className="mt-3 pt-3 border-t border-edge-subtle group"
+                  className="mt-3 border-t border-edge-subtle px-3 pt-3 group"
                   data-testid={`sdk-configurator-${project.id}`}
-                  open={sdkOpenOverride[project.id] ?? isActive}
+                  open={sdkOpenOverride[project.id] ?? true}
                   onToggle={(e) => {
                     const nextOpen = (e.currentTarget as HTMLDetailsElement).open
                     setSdkOpenOverride((prev) => {
-                      // No-op: matches what the default would be anyway, so
-                      // don't grow the override map unnecessarily.
-                      if (nextOpen === isActive && !(project.id in prev)) return prev
+                      if (nextOpen === true && !(project.id in prev)) return prev
                       return { ...prev, [project.id]: nextOpen }
                     })
                   }}
@@ -1563,8 +1555,9 @@ export function ProjectsPage() {
                 </details>
               </Card>
             )
-          })}
-        </div>
+          })()}
+              </div>
+            </div>
           )}
         </Section>
       ) : null}
@@ -1612,21 +1605,168 @@ export function ProjectsPage() {
   )
 }
 
+type MetricTone = 'reports' | 'keys' | 'members' | 'activity' | 'created' | 'sdk'
+
+const METRIC_TONE: Record<
+  MetricTone,
+  { cell: string; icon: string; value: string }
+> = {
+  reports: {
+    cell: 'bg-info-muted/30',
+    icon: 'bg-info/20 text-info',
+    value: 'text-info',
+  },
+  keys: {
+    cell: 'bg-warn-muted/25',
+    icon: 'bg-warn/20 text-warn',
+    value: 'text-warn',
+  },
+  members: {
+    cell: 'bg-brand/8',
+    icon: 'bg-brand/15 text-brand',
+    value: 'text-brand',
+  },
+  activity: {
+    cell: 'bg-ok-muted/25',
+    icon: 'bg-ok/20 text-ok',
+    value: 'text-ok',
+  },
+  created: {
+    cell: 'bg-surface-overlay/40',
+    icon: 'bg-surface-overlay text-fg-muted',
+    value: 'text-fg',
+  },
+  sdk: {
+    cell: 'bg-accent/10',
+    icon: 'bg-accent/15 text-accent',
+    value: 'text-fg',
+  },
+}
+
+/** Compact KPI strip — one row, color-accent values, dividers between tiles. */
+function ProjectMetricsRail({ project }: { project: Project }) {
+  const hasSdk = project.sdk_status && project.sdk_status !== 'unknown'
+
+  return (
+    <div className="overflow-hidden rounded-md border border-edge-subtle/60 bg-surface-root/30">
+      <div
+        className={`grid grid-cols-2 gap-px bg-edge-subtle/40 sm:grid-cols-3 ${
+          hasSdk ? 'lg:grid-cols-6' : 'lg:grid-cols-5'
+        }`}
+      >
+        <MetricTile
+          tone="reports"
+          icon={<IconReports className="h-3.5 w-3.5" />}
+          label="Reports"
+          value={project.report_count.toLocaleString()}
+        />
+        <MetricTile
+          tone="keys"
+          icon={<IconKey className="h-3.5 w-3.5" />}
+          label="Keys"
+          value={String(project.active_key_count)}
+          hint="Active API keys"
+        />
+        <MetricTile
+          tone="members"
+          icon={<IconUser className="h-3.5 w-3.5" />}
+          label="Members"
+          value={String(project.member_count)}
+        />
+        <MetricTile
+          tone="activity"
+          icon={<IconClock className="h-3.5 w-3.5" />}
+          label="Last report"
+          value={relativeTime(project.last_report_at)}
+          title={project.last_report_at ? new Date(project.last_report_at).toLocaleString() : 'No reports yet'}
+        />
+        <MetricTile
+          tone="created"
+          icon={<IconClock className="h-3.5 w-3.5" />}
+          label="Created"
+          value={new Date(project.created_at).toLocaleDateString()}
+        />
+        {hasSdk && (
+          <MetricTile
+            tone="sdk"
+            icon={<IconGauge className="h-3.5 w-3.5" />}
+            label="SDK"
+            value={
+              <SdkVersionBadge
+                status={project.sdk_status!}
+                package_={project.sdk_package ?? null}
+                observedVersion={project.sdk_version ?? null}
+                latestVersion={project.sdk_latest_version ?? null}
+                deprecationMessage={project.sdk_deprecation_message ?? null}
+                compact
+              />
+            }
+            compactValue
+          />
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle/50 bg-surface-overlay/25 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
+        <span
+          className="inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium text-fg-muted"
+          title="Paste as MUSHI_PROJECT_ID in .env.local or CI"
+        >
+          <IconTerminal className="h-4 w-4 text-fg-faint" />
+          Project ID
+        </span>
+        <ProjectIdCopy projectId={project.id} />
+      </div>
+    </div>
+  )
+}
+
+function MetricTile({
+  tone,
+  icon,
+  label,
+  value,
+  hint,
+  title,
+  compactValue,
+}: {
+  tone: MetricTone
+  icon: ReactNode
+  label: string
+  value: ReactNode
+  hint?: string
+  title?: string
+  compactValue?: boolean
+}) {
+  const styles = METRIC_TONE[tone]
+  return (
+    <div
+      className={`flex min-w-0 flex-col gap-0.5 bg-surface-root/80 px-3 py-2.5 ${styles.cell}`}
+      title={title ?? hint}
+    >
+      <div className="inline-flex min-w-0 items-center gap-1.5 text-2xs font-medium text-fg-muted">
+        <span className={`inline-flex shrink-0 items-center justify-center rounded p-0.5 ${styles.icon}`}>
+          {icon}
+        </span>
+        <span className="truncate">{label}</span>
+      </div>
+      <div
+        className={
+          compactValue
+            ? 'mt-0.5 min-w-0'
+            : `truncate font-mono text-lg font-semibold tabular-nums leading-tight ${styles.value}`
+        }
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
+
 /**
- * Per-project "About this project" strip — a single horizontally-laid-out
- * row of chips showing the connected repo (with default branch + a live
- * indexing-health pill), the codebase index footprint, the plan tier,
- * the data residency region, and a 30-day severity rollup. We render
- * the chips inline rather than as a side panel so the strip stays
- * scannable next to the existing metadata row above it — eyes flow
- * left-to-right, top-to-bottom and read both lines as one block.
- *
- * Every section is conditional: a project with no repo and no reports
- * yet renders nothing, so quiet projects don't pick up cosmetic chrome.
- * The whole strip only appears when at least one of (repo, indexed
- * files, plan, region, severity rollup) has a value worth showing.
+ * Per-project context rail — repo, index, trend, severity, and integrations
+ * in one horizontal strip inside a ContainedBlock. Icon-led items use the
+ * full card width instead of a left-piled grid of gray boxes.
  */
-function ProjectContextStrip({ project }: { project: Project }) {
+function ProjectContextRail({ project }: { project: Project }) {
   const repo = project.primary_repo
   const repoLabel = shortRepoLabel(repo?.repo_url ?? null)
   const sev = project.severity_breakdown_30d
@@ -1672,183 +1812,188 @@ function ProjectContextStrip({ project }: { project: Project }) {
   })()
 
   return (
-    <div className="flex items-center gap-2 mt-1.5 text-2xs text-fg-secondary flex-wrap">
+    <div className="overflow-hidden rounded-md border border-edge-subtle/60 bg-surface-root/25 text-xs">
       {repo && repoLabel && (
-        <span className="inline-flex items-center gap-1.5">
-          <IconGit className="w-3.5 h-3.5 text-fg-faint" />
-          {repo.repo_url ? (
-            <a
-              href={repo.repo_url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="font-mono text-fg hover:underline inline-flex items-center gap-1"
-              title={`Open ${repoLabel} on GitHub`}
-            >
-              {repoLabel}
-              <IconExternalLink className="w-3 h-3 text-fg-faint" />
-            </a>
-          ) : (
-            <span className="font-mono text-fg">{repoLabel}</span>
-          )}
-          {repo.default_branch && (
-            <SignalChip tone="neutral" className="font-mono uppercase">
-              {repo.default_branch}
-            </SignalChip>
-          )}
-          {health && (
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs font-medium ${INDEX_HEALTH_TONE[health]}`}
-              title={indexHint}
-            >
-              {health === 'failed' && <IconAlertTriangle className="w-3 h-3" />}
-              {INDEX_HEALTH_LABEL[health]}
-              {health === 'ok' && repo.last_indexed_at && (
-                <span className="text-fg-faint font-normal">
-                  · {relativeTime(repo.last_indexed_at)}
-                </span>
+        <ContextDetailRow label="Repository" icon={<IconGit className="h-4 w-4" />}>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              {repo.repo_url ? (
+                <a
+                  href={repo.repo_url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="truncate font-mono text-sm text-fg hover:underline"
+                  title={`Open ${repoLabel} on GitHub`}
+                >
+                  {repoLabel}
+                </a>
+              ) : (
+                <span className="truncate font-mono text-sm text-fg">{repoLabel}</span>
               )}
+              {repo.repo_url && <IconExternalLink className="h-3.5 w-3.5 shrink-0 text-fg-faint" />}
             </span>
-          )}
-          {extraRepos > 0 && (
-            <span
-              className="text-fg-faint"
-              title="This project has additional connected repos. Open the SDK / repo settings to see all of them."
-            >
-              +{extraRepos} {extraRepos === 1 ? 'repo' : 'repos'}
-            </span>
-          )}
-          {repo.github_app_connected && (
-            <Badge
-              className="bg-info-muted text-info border border-info/20"
-              title="The Mushi GitHub App is installed on this repo, so the Fix worker can open PRs without a personal token."
-            >
-              GitHub App
-            </Badge>
-          )}
-        </span>
+            {repo.default_branch && (
+              <>
+                <ContextDivider />
+                <SignalChip tone="neutral" className="font-mono uppercase">
+                  {repo.default_branch}
+                </SignalChip>
+              </>
+            )}
+            {health && (
+              <>
+                <ContextDivider />
+                <span
+                  title={
+                    health === 'ok' && repo.last_indexed_at
+                      ? `${indexHint ?? ''} · ${relativeTime(repo.last_indexed_at)}`
+                      : indexHint
+                  }
+                >
+                  <SignalChip tone={INDEX_HEALTH_CHIP_TONE[health]}>
+                    {INDEX_HEALTH_LABEL[health]}
+                  </SignalChip>
+                </span>
+              </>
+            )}
+            {extraRepos > 0 && (
+              <>
+                <ContextDivider />
+                <span className="shrink-0 text-fg-muted">
+                  +{extraRepos} {extraRepos === 1 ? 'repo' : 'repos'}
+                </span>
+              </>
+            )}
+            {repo.github_app_connected && (
+              <>
+                <ContextDivider />
+                <SignalChip tone="info">GitHub</SignalChip>
+              </>
+            )}
+          </div>
+        </ContextDetailRow>
       )}
 
       {indexedFiles > 0 && (
-        <span
-          className="inline-flex items-center gap-1"
-          title={`${indexedFiles.toLocaleString()} indexed source files. The codebase index powers RAG-augmented triage and fix suggestions.`}
-        >
-          <IconStorage className="w-3.5 h-3.5 text-fg-faint" />
-          <span className="font-mono text-fg">{indexedFiles.toLocaleString()}</span>{' '}
-          {pluralize(indexedFiles, 'file')}
-        </span>
-      )}
-      {indexedFiles > 0 && (
-        <Link
-          to={`/explore?project=${project.id}`}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border border-edge-subtle bg-surface-overlay hover:bg-surface-raised hover:border-edge text-fg-secondary hover:text-fg transition-colors text-2xs"
-          title="Open codebase atlas — visual map of indexed source files"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <IconExplore className="w-3 h-3" />
-          Explore
-        </Link>
+        <ContextDetailRow label="Code index" icon={<IconStorage className="h-4 w-4" />}>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span title={`${indexedFiles.toLocaleString()} indexed source files`}>
+              <span className="font-mono text-sm text-fg">{indexedFiles.toLocaleString()}</span>{' '}
+              <span className="text-fg-secondary">{pluralize(indexedFiles, 'file')}</span>
+            </span>
+            <ContextDivider />
+            <Link
+              to={`/explore?project=${project.id}`}
+              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary transition-colors hover:border-edge hover:bg-surface-raised hover:text-fg"
+              title="Open codebase atlas"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <IconExplore className="h-3 w-3" />
+              Explore
+            </Link>
+          </div>
+        </ContextDetailRow>
       )}
 
       {showTrend && trend && (
-        <span
-          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border text-2xs font-mono ${
-            trend.direction === 'up'
-              ? 'bg-warn-muted text-warn border-warn/30'
-              : 'bg-ok-muted text-ok border-ok/30'
-          }`}
-          title={
-            trend.direction === 'up'
-              ? `Reports trending up: ${trend.last7d} in the last 7d vs ${trend.prev7d} in the prior 7d. Worth investigating.`
-              : `Reports trending down: ${trend.last7d} in the last 7d vs ${trend.prev7d} in the prior 7d. Looks like a fix is sticking.`
-          }
-        >
-          <span aria-hidden>{trend.direction === 'up' ? '↑' : '↓'}</span>
-          {trend.direction === 'up' ? '+' : ''}
-          {trend.delta} 7d
-        </span>
+        <ContextDetailRow label="7-day trend" icon={<IconGauge className="h-4 w-4" />}>
+          <span title={`${trend.last7d} reports last 7d vs ${trend.prev7d} prior week`}>
+            <SignalChip
+              tone={trend.direction === 'up' ? 'warn' : 'ok'}
+              className="font-mono tabular-nums"
+            >
+              {trend.direction === 'up' ? '↑' : '↓'} {Math.abs(trend.delta)}
+            </SignalChip>
+          </span>
+        </ContextDetailRow>
       )}
 
       {sevTotal > 0 && sev && (
-        <span
-          className="inline-flex items-center gap-1"
-          title="Severity breakdown over the last 30 days. Click 'Reports' to filter by severity."
-        >
-          <span className="text-fg-faint">last 30d</span>
-          {sev.critical > 0 && (
-            <Badge className="bg-danger-muted text-danger border border-danger/30">
-              {sev.critical} critical
-            </Badge>
-          )}
-          {sev.major > 0 && (
-            <Badge className="bg-warn-muted text-warn border border-warn/30">
-              {sev.major} major
-            </Badge>
-          )}
-          {sev.minor > 0 && (
-            <Badge className="bg-info-muted text-info border border-info/20">
-              {sev.minor} minor
-            </Badge>
-          )}
-          {sev.trivial > 0 && (
-            <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle">
-              {sev.trivial} trivial
-            </Badge>
-          )}
-        </span>
+        <ContextDetailRow label="Last 30 days" icon={<IconReports className="h-4 w-4" />}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {sev.critical > 0 && (
+              <span title={`${sev.critical} critical reports (30d)`}>
+                <SignalChip tone="danger">Crit {sev.critical}</SignalChip>
+              </span>
+            )}
+            {sev.major > 0 && (
+              <span title={`${sev.major} major reports (30d)`}>
+                <SignalChip tone="warn">Major {sev.major}</SignalChip>
+              </span>
+            )}
+            {sev.minor > 0 && (
+              <span title={`${sev.minor} minor reports (30d)`}>
+                <SignalChip tone="info">Minor {sev.minor}</SignalChip>
+              </span>
+            )}
+            {sev.trivial > 0 && (
+              <span title={`${sev.trivial} trivial reports (30d)`}>
+                <SignalChip tone="neutral">Low {sev.trivial}</SignalChip>
+              </span>
+            )}
+          </div>
+        </ContextDetailRow>
       )}
 
-      {planTier && planTier !== 'free' && (
-        <Badge
-          className="bg-brand/10 text-brand border border-brand/20 capitalize"
-          title="Project-level plan tier (separate from the org plan, used for legacy per-project billing)."
-        >
-          {planTier}
-        </Badge>
-      )}
-
-      {region && (
-        <Badge
-          className="bg-surface-overlay text-fg-muted border border-edge-subtle uppercase"
-          title="Data residency region. Reports for this project are stored in this region."
-        >
-          {region}
-        </Badge>
-      )}
-
-      {sentryConnected && (
-        <Badge
-          className="bg-accent/10 text-accent border border-accent/30 inline-flex items-center gap-1"
-          title={
-            sentryReports > 0
-              ? `Sentry is wired up — ${sentryReports} report${sentryReports === 1 ? '' : 's'} in the last 30 days carried a Sentry trace id. Open any of them to jump to the same trace in Sentry.`
-              : 'Sentry SDK is detected on the host app.'
-          }
-        >
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            aria-hidden
-          >
-            <path d="M8 1l6 11H2L8 1z" strokeLinejoin="round" />
-            <path d="M8 5l3 5.5H5L8 5z" strokeLinejoin="round" fill="currentColor" />
-          </svg>
-          Sentry
-        </Badge>
+      {(planTier || region || sentryConnected) && (
+        <ContextDetailRow label="Integrations" icon={<IconIntegrations className="h-4 w-4" />}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {planTier && planTier !== 'free' && (
+              <Badge className="border border-brand/20 bg-brand/10 capitalize text-brand">
+                {planTier}
+              </Badge>
+            )}
+            {region && (
+              <Badge className="border border-edge-subtle bg-surface-overlay uppercase text-fg-muted">
+                {region}
+              </Badge>
+            )}
+            {sentryConnected && (
+              <Badge
+                className="inline-flex items-center gap-1 border border-accent/30 bg-accent/10 text-accent"
+                title={
+                  sentryReports > 0
+                    ? `${sentryReports} report${sentryReports === 1 ? '' : 's'} with Sentry trace in the last 30 days`
+                    : 'Sentry SDK detected on the host app'
+                }
+              >
+                Sentry
+              </Badge>
+            )}
+          </div>
+        </ContextDetailRow>
       )}
     </div>
   )
 }
 
-// ─── Project ID chip ──────────────────────────────────────────────────────────
-// Surfaced inline under the project header so users know exactly what value
-// goes in MUSHI_PROJECT_ID without having to generate a key or open Settings.
+function ContextDivider() {
+  return <span className="hidden h-4 w-px shrink-0 bg-edge-subtle sm:inline-block" aria-hidden />
+}
 
-function ProjectIdChip({ projectId }: { projectId: string }) {
+function ContextDetailRow({
+  label,
+  icon,
+  children,
+}: {
+  label: string
+  icon: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle/50 px-3 py-2.5 first:border-t-0 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-4">
+      <div className="inline-flex min-w-0 items-center gap-2 text-2xs font-semibold text-fg-muted">
+        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-overlay text-fg-muted">
+          {icon}
+        </span>
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="min-w-0 text-fg-secondary">{children}</div>
+    </div>
+  )
+}
+
+function ProjectIdCopy({ projectId }: { projectId: string }) {
   const toast = useToast()
   const [copied, setCopied] = useState(false)
 
@@ -1864,29 +2009,23 @@ function ProjectIdChip({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-      <SignalChip tone="neutral" className="uppercase tracking-wider select-none">
-        Project ID
-      </SignalChip>
-      <button
-        type="button"
-        onClick={copy}
-        className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5 font-mono text-3xs text-fg-secondary hover:bg-surface-overlay hover:border-edge hover:text-fg transition-colors group"
-        title="Copy project ID — paste as MUSHI_PROJECT_ID in .env.local or .cursor/mcp.json"
-        data-testid={`project-id-chip-${projectId}`}
-        aria-label={`Copy project ID: ${projectId}`}
-      >
+    <button
+      type="button"
+      onClick={copy}
+      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm transition-colors group hover:opacity-95"
+      title="Copy project ID — paste as MUSHI_PROJECT_ID in .env.local or .cursor/mcp.json"
+      data-testid={`project-id-chip-${projectId}`}
+      aria-label={`Copy project ID: ${projectId}`}
+    >
+      <CodeInline className="min-w-0 max-w-full cursor-pointer break-all group-hover:border-edge">
         <span className="tabular-nums">{projectId}</span>
-        <span className="ml-0.5 opacity-50 group-hover:opacity-100 transition-opacity" aria-hidden="true">
-          {copied
-            ? <IconCheck className="h-2.5 w-2.5 text-ok" />
-            : <IconCopy className="h-2.5 w-2.5" />
-          }
-        </span>
-      </button>
-      <InlineProof className="hidden sm:inline border-0 bg-transparent px-0 py-0 text-3xs">
-        = <code className="font-mono">MUSHI_PROJECT_ID</code>
-      </InlineProof>
-    </div>
+      </CodeInline>
+      <span className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" aria-hidden="true">
+        {copied
+          ? <IconCheck className="h-2.5 w-2.5 text-ok" />
+          : <IconCopy className="h-2.5 w-2.5 text-fg-faint" />
+        }
+      </span>
+    </button>
   )
 }

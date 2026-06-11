@@ -34,6 +34,7 @@ export type IntegrationKind =
   | 'reward_webhook'
   | 'claude_code_agent'
   | 'cursor_cloud'
+  | 'slack'
 
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty', 'reward_webhook']
@@ -55,6 +56,8 @@ export interface PlatformSettings {
   langfuse_secret_key_ref?: string | null
   github_repo_url?: string | null
   github_installation_token_ref?: string | null
+  /** UUID of vault secret containing the per-project Slack bot token (xoxb-*). */
+  slack_bot_token_ref?: string | null
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -95,6 +98,7 @@ export async function probeIntegration(
   db: SupabaseClient,
   settings: PlatformSettings,
   routingConfig: Record<string, unknown> = {},
+  projectId?: string,
 ): Promise<ProbeResult> {
   const start = Date.now()
   let status: ProbeResult['status'] = 'unknown'
@@ -389,6 +393,108 @@ export async function probeIntegration(
       } catch (err) {
         status = 'down'
         detail = `Connection failed: ${String(err)}`
+      }
+    }
+  }
+
+  // ── cursor_cloud ──────────────────────────────────────────────────────────
+  if (kind === 'cursor_cloud') {
+    const apiKey = await dereferenceMaybeVault(db, Deno.env.get('CURSOR_API_KEY') ?? null)
+      ?? Deno.env.get('CURSOR_API_KEY')
+    if (!apiKey) {
+      status = 'unknown'
+      detail = 'No Cursor API key configured. Add CURSOR_API_KEY to your environment or under Settings → API Keys.'
+    } else {
+      try {
+        const res = await fetch('https://api.cursor.com/v1/me', {
+          headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'mushi-mushi-health-probe/1.0' },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        if (res.ok) {
+          const data = await res.json() as { email?: string; username?: string }
+          status = 'ok'
+          detail = `Connected as ${data.email ?? data.username ?? '?'}`
+        } else if (res.status === 401 || res.status === 403) {
+          status = 'down'
+          detail = 'API key invalid or revoked. Regenerate in Cursor Settings → Advanced.'
+        } else {
+          status = 'degraded'
+          detail = `HTTP ${res.status}`
+        }
+      } catch (err) {
+        status = 'down'
+        detail = String(err)
+      }
+    }
+  }
+
+  // ── claude_code_agent ─────────────────────────────────────────────────────
+  if (kind === 'claude_code_agent') {
+    const apiKey = await dereferenceMaybeVault(db, Deno.env.get('ANTHROPIC_API_KEY') ?? null)
+      ?? Deno.env.get('ANTHROPIC_API_KEY')
+    if (!apiKey) {
+      status = 'unknown'
+      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → API Keys.'
+    } else {
+      try {
+        // Minimal models list call — cheapest probe with no tokens consumed
+        const res = await fetch('https://api.anthropic.com/v1/models', {
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'User-Agent': 'mushi-mushi-health-probe/1.0',
+          },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        if (res.ok) {
+          status = 'ok'
+          detail = 'Anthropic API key valid — Claude Code agent can connect.'
+        } else if (res.status === 401 || res.status === 403) {
+          status = 'down'
+          detail = 'API key invalid or revoked. Generate a new key at console.anthropic.com.'
+        } else {
+          status = 'degraded'
+          detail = `HTTP ${res.status}`
+        }
+      } catch (err) {
+        status = 'down'
+        detail = String(err)
+      }
+    }
+  }
+
+  // ── slack ─────────────────────────────────────────────────────────────────
+  if (kind === 'slack') {
+    // Try per-project vaulted token (from settings), then env fallback
+    const ref = settings.slack_bot_token_ref
+      ? `vault://${settings.slack_bot_token_ref}`
+      : null
+    let botToken: string | null = await dereferenceMaybeVault(db, ref)
+    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null
+
+    if (!botToken) {
+      status = 'unknown'
+      detail = 'No Slack bot token configured. Click "Add to Slack" to connect.'
+    } else {
+      try {
+        const t0 = Date.now()
+        const res = await fetch('https://slack.com/api/auth.test', {
+          headers: { Authorization: `Bearer ${botToken}` },
+        })
+        httpStatus = res.status
+        const data = await res.json() as { ok: boolean; team?: string; bot_id?: string; error?: string }
+        if (data.ok) {
+          status = 'ok'
+          detail = `Connected to workspace "${data.team ?? '?'}" as bot ${data.bot_id ?? '?'} (${Date.now() - t0}ms)`
+        } else {
+          status = 'down'
+          detail = `Slack auth.test error: ${data.error ?? 'unknown'}`
+        }
+      } catch (err) {
+        status = 'down'
+        detail = String(err)
       }
     }
   }

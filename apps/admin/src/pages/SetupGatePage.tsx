@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import type { EnvStatus } from '../lib/env'
-import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from '../lib/env'
+import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY, saveAndApplyInstanceConfig } from '../lib/env'
 import { PageHelp, Btn, CopyButton } from '../components/ui'
 import { ContainedBlock, InlineProof, SignalChip, ActionPill } from '../components/report-detail/ReportSurface'
 
@@ -167,14 +167,27 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
             </div>
           )}
 
-          {/* Refresh */}
-          <div className="flex items-center justify-between pt-2 border-t border-edge-subtle">
+          {/* Refresh + escape hatch */}
+          <div className="flex items-center justify-between pt-2 border-t border-edge-subtle gap-3 flex-wrap">
             <InlineProof>
               After creating <code className="bg-surface-raised px-1 py-0.5 rounded">.env</code>, restart the dev server.
             </InlineProof>
-            <Btn variant="primary" onClick={() => window.location.reload()}>
-              Refresh
-            </Btn>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Escape hatch: switch to cloud via localStorage so the user
+                  doesn't need devtools to recover from an accidental self-hosted
+                  selection when no env vars are set. saveAndApplyInstanceConfig
+                  stores mode=cloud, clears any stored URL/key, and reloads. */}
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => saveAndApplyInstanceConfig({ mode: 'cloud' })}
+              >
+                Use Mushi Cloud instead
+              </Btn>
+              <Btn variant="primary" onClick={() => window.location.reload()}>
+                Refresh
+              </Btn>
+            </div>
           </div>
         </div>
       </div>

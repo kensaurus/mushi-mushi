@@ -22,8 +22,8 @@ const ANIMATION_DURATION = '0.6s'
 // Stroke widths: inactive edges are now clearly visible at rest so the user
 // can follow the loop without hovering. Active/selected edges jump up one
 // more notch. Values are tuned for the canvas's default fitView scale.
-const STROKE_BASE = 2.5   // was 1.75 — too thin at 70% opacity
-const STROKE_ACTIVE = 3.5 // was 2.5
+const STROKE_BASE = 3.25
+const STROKE_ACTIVE = 4.5
 // The loop-back cubic bezier dips this many flow-px below the node row.
 // Must be < (canvas height − node height) so fitView keeps the arc in frame.
 const LOOP_DEPTH = 120
@@ -84,7 +84,14 @@ function PdcaGradientEdgeInner({
   return (
     <>
       <defs>
-        <linearGradient id={gradientId}>
+        <linearGradient
+          id={gradientId}
+          gradientUnits="userSpaceOnUse"
+          x1={sourceX}
+          y1={sourceY}
+          x2={targetX}
+          y2={targetY}
+        >
           <stop offset="0%" stopColor={edgeData.sourceColor ?? '#60a5fa'} />
           <stop offset="100%" stopColor={edgeData.targetColor ?? '#f5b544'} />
         </linearGradient>
@@ -106,7 +113,7 @@ function PdcaGradientEdgeInner({
         strokeWidth={currentStrokeWidth + 4}
         fill="none"
         style={{
-          opacity: isEmphasised ? 0.38 : 0.22,
+          opacity: isEmphasised ? 0.45 : 0.3,
           transition: 'opacity 180ms ease, stroke-width 180ms ease',
         }}
       />
@@ -119,8 +126,8 @@ function PdcaGradientEdgeInner({
         fill="none"
         strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
-          opacity: isEmphasised ? (isFailing ? 0.55 : 0.42) : 0.22,
-          filter: `blur(${isHovered ? '3.5px' : '2.5px'})`,
+          opacity: isEmphasised ? (isFailing ? 0.6 : 0.48) : 0.32,
+          filter: `blur(${isHovered ? '4px' : '3px'})`,
           animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
           transition: 'opacity 180ms ease, filter 180ms ease',
         }}
@@ -166,14 +173,12 @@ function PdcaGradientEdgeInner({
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY - 10}px)`,
-              fontSize: 11,
-              fontWeight: 600,
-              color: edgeData.sourceColor ?? '#60a5fa',
+              transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY - 12}px)`,
               pointerEvents: 'none',
             }}
+            className="rounded-full border border-edge/70 bg-surface-overlay/95 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wider shadow-sm"
           >
-            {edgeData.edgeLabel}
+            <span style={{ color: edgeData.targetColor ?? '#60a5fa' }}>{edgeData.edgeLabel}</span>
           </div>
         </EdgeLabelRenderer>
       )}

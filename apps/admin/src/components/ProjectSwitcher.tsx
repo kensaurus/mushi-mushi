@@ -18,9 +18,18 @@ import {
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { useCreateProject } from '../lib/useCreateProject'
+import { ProjectFavicon } from './ProjectFavicon'
+import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
+import { ProjectSnapshotMeta } from './ProjectSnapshotMeta'
+import { ActiveProjectStatusChip } from './ActiveProjectStatusChip'
+import { sdkOriginFromSetupProject } from '../lib/resolveProjectDomain'
+import { useProjectSnapshots } from '../lib/useProjectSnapshots'
+import { buildProjectSetupTooltip } from '../lib/projectMetaTooltips'
+import { MetricTooltipContent, Tooltip } from './ui'
 
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
+  const snapshots = useProjectSnapshots()
   const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
   // Inline "create new project" affordance — exposed in the dropdown
@@ -123,8 +132,16 @@ export function ProjectSwitcher() {
         aria-expanded={open}
         className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
       >
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">Project</span>
+        <ProjectFavicon
+          project_id={active.project_id}
+          project_name={active.project_name}
+          project_slug={active.project_slug}
+          sdk_origin={sdkOriginFromSetupProject(active)}
+          size={14}
+        />
+        <span className="text-3xs uppercase tracking-wider text-fg-faint hidden sm:inline">Project</span>
         <span className="font-medium truncate max-w-[12rem]">{active.project_name}</span>
+        <ActiveProjectStatusChip snapshot={snapshots.byId.get(active.project_id)} />
         <svg
           width="9"
           height="9"
@@ -139,9 +156,9 @@ export function ProjectSwitcher() {
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
+          className="absolute right-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
         >
-          <ul role="listbox" className="max-h-72 overflow-y-auto">
+          <ul role="listbox" className="max-h-80 overflow-y-auto divide-y divide-edge-subtle/60">
             {projects.map((p) => {
               const isActive = p.project_id === active.project_id
               return (
@@ -151,15 +168,39 @@ export function ProjectSwitcher() {
                     role="option"
                     aria-selected={isActive}
                     onClick={() => pick(p.project_id)}
-                    className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
+                    className={`flex w-full items-start justify-between gap-2 px-2.5 py-2 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
                       isActive ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
                     }`}
                   >
+                    <ProjectFavicon
+                      project_id={p.project_id}
+                      project_name={p.project_name}
+                      project_slug={p.project_slug}
+                      sdk_origin={sdkOriginFromSetupProject(p)}
+                      size={16}
+                      className="mt-0.5"
+                    />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate">{p.project_name}</div>
-                      <div className="mt-0.5 truncate text-3xs font-mono text-fg-faint">
-                        {p.report_count} reports · {p.required_complete}/{p.required_total} setup
-                      </div>
+                      <div className="truncate font-medium">{p.project_name}</div>
+                      <Tooltip
+                        content={<MetricTooltipContent data={buildProjectSetupTooltip(p)} />}
+                        side="left"
+                        nowrap={false}
+                        portal
+                      >
+                        <div className="mt-0.5 cursor-help truncate text-3xs text-fg-faint">
+                          {p.report_count} reports · {p.required_complete}/{p.required_total} setup
+                        </div>
+                      </Tooltip>
+                      <ProjectHeartbeatStrip
+                        project={p}
+                        adminEndpointHost={setup.data?.admin_endpoint_host}
+                      />
+                      <ProjectSnapshotMeta
+                        snapshot={snapshots.byId.get(p.project_id)}
+                        compact
+                        linkless
+                      />
                     </div>
                     {isActive && <span className="text-2xs text-brand">✓</span>}
                   </button>

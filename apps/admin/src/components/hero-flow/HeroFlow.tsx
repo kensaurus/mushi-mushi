@@ -21,7 +21,12 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
-import { ReactFlow, ReactFlowProvider, type Edge, type Node } from '@xyflow/react'
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  type Edge,
+  type Node,
+} from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { HeroActNode, HeroDecideNode, HeroVerifyNode } from './HeroNodes'
@@ -46,8 +51,8 @@ const NODE_TYPES = {
 }
 const EDGE_TYPES = { heroGradient: HeroGradientEdge }
 
-// Extra top slack so edge pills (stacked above the bezier) don't clip.
-const CANVAS_PADDING_Y = 18
+// Vertical padding around the node row.
+const CANVAS_PADDING_Y = 16
 
 export interface HeroFlowProps {
   scope: string
@@ -136,7 +141,7 @@ export function HeroFlow(props: HeroFlowProps) {
     <div
       ref={containerRef}
       data-hero-flow
-      className="relative w-full overflow-x-clip overflow-y-visible"
+      className="flow-canvas-chrome flow-canvas-chrome--hero relative w-full overflow-x-clip overflow-y-visible"
       style={{ height: canvasHeight }}
     >
       {containerWidth > 0 && (

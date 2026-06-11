@@ -85,14 +85,14 @@ function PdcaStepNodeInner({ data }: NodeProps) {
   return (
     <div
       className={[
-        'group/pdca relative w-[220px] rounded-md border bg-surface-raised text-xs shadow-md pointer-events-auto',
+        'group/pdca relative w-[220px] rounded-md border border-edge bg-surface-raised text-xs shadow-md pointer-events-auto',
         // Hover: lift with scale + deeper shadow. transition-[transform…] avoids
         // layout shifts from border changes. Will-change hints the GPU.
         'motion-safe:transition-[transform,box-shadow] duration-150 ease-out',
         interactive ? 'hover:scale-[1.016] hover:shadow-xl hover:border-edge cursor-pointer' : '',
         node.isFocus
           ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg} mushi-focus-blink`
-          : 'border-edge/85',
+          : '',
         node.isRunning ? 'mushi-running-glow' : '',
         pressed ? 'mushi-node-press' : '',
       ].join(' ')}
@@ -218,7 +218,7 @@ function NodeBody({
       <header className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className={`inline-flex items-center justify-center w-6 h-6 rounded-sm font-bold text-[0.7rem] leading-none shrink-0 ${meta.badgeBg} ${meta.badgeFg}`}
+          className={`inline-flex items-center justify-center w-7 h-7 rounded-md font-bold text-xs leading-none shrink-0 shadow-sm ${meta.badgeBg} ${meta.badgeFg}`}
         >
           {node.letter}
         </span>

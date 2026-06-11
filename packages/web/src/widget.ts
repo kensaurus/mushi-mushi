@@ -210,6 +210,7 @@ export class MushiWidget {
       featureRequestCard: config.featureRequestCard ?? true,
       featureRequestLabel: config.featureRequestLabel ?? '',
       featureRequestDescription: config.featureRequestDescription ?? '',
+      avoidSelectors: config.avoidSelectors ?? [],
     };
     this.callbacks = callbacks;
     // Passing undefined when locale is 'auto' lets getLocale() resolve via
@@ -223,6 +224,7 @@ export class MushiWidget {
 
   mount(): void {
     if (this.host.isConnected) return;
+    this.syncHostChromeState();
     document.body.appendChild(this.host);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
@@ -263,8 +265,15 @@ export class MushiWidget {
       ...(config.featureRequestCard !== undefined ? { featureRequestCard: config.featureRequestCard } : {}),
       ...(config.featureRequestLabel !== undefined ? { featureRequestLabel: config.featureRequestLabel } : {}),
       ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription } : {}),
+      // Runtime/dashboard config delivers bannerMessage/bannerLabel via
+      // mergeRuntimeConfig → bannerConfig. The widget is constructed before
+      // that fetch resolves, so this pass-through is what makes server-driven
+      // banner copy actually render.
+      ...(config.bannerConfig !== undefined ? { bannerConfig: config.bannerConfig } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
+    // Re-sync host chrome in case zIndex changed.
+    if (this.host.isConnected) this.syncHostChromeState();
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.render();
@@ -542,6 +551,83 @@ export class MushiWidget {
     this.host.remove();
   }
 
+  /* ── Host chrome contract ────────────────────────────────────────────────
+     The host element must never create an invisible full-screen touch blocker.
+     We own these inline styles — consumer CSS can only win with `!important`,
+     which is explicitly banned by the SDK contract. Calling this at mount()
+     and after every zIndex update is the only safe invariant. */
+
+  /**
+   * Apply the SDK-owned pass-through layout to the host element so it is
+   * always zero-sized and click/touch-transparent. Only the shadow-root
+   * internals (`.mushi-trigger`, `.mushi-banner`, `.mushi-panel`) opt back
+   * into pointer events.  This is idempotent and safe to call repeatedly.
+   */
+  private syncHostChromeState(): void {
+    const s = this.host.style;
+    s.setProperty('position', 'fixed');
+    s.setProperty('top', '0');
+    s.setProperty('left', '0');
+    s.setProperty('width', '0');
+    s.setProperty('height', '0');
+    s.setProperty('overflow', 'visible');
+    s.setProperty('pointer-events', 'none');
+    s.setProperty('z-index', String(this.config.zIndex));
+    s.setProperty('margin', '0');
+    s.setProperty('padding', '0');
+    s.setProperty('border', 'none');
+    s.setProperty('background', 'none');
+  }
+
+  /**
+   * Returns true when a DOM element matching `hideOnSelector` is currently
+   * present in the host document.  Used by both the trigger and the banner
+   * so a single selector consistently hides ALL SDK-injected launcher
+   * surfaces.  Invalid selectors are swallowed silently (non-fatal).
+   */
+  private isSuppressedByHost(): boolean {
+    if (!this.config.hideOnSelector || typeof document === 'undefined') return false;
+    try {
+      return Boolean(document.querySelector(this.config.hideOnSelector));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns a snapshot of the widget's host-layer health for use in
+   * `Mushi.diagnose()`.  Callers check this to know whether the widget
+   * could ever block host-app UI without opening a browser devtools.
+   */
+  getWidgetDiagnostics(): {
+    widgetHostPointerSafe: boolean;
+    widgetHostBounds: { width: number; height: number } | null;
+    widgetSuppressed: boolean;
+    bannerRendered: boolean;
+  } {
+    const s = this.host.style;
+    const widgetHostPointerSafe =
+      s.pointerEvents === 'none' &&
+      (s.width === '0' || s.width === '0px') &&
+      (s.height === '0' || s.height === '0px');
+
+    const widgetHostBounds = this.host.isConnected
+      ? { width: this.host.offsetWidth, height: this.host.offsetHeight }
+      : null;
+
+    const widgetSuppressed =
+      this.isSuppressedByHost() || this.isRouteHidden() || !this.triggerVisible;
+
+    const bannerRendered =
+      this.config.trigger === 'banner' &&
+      !this.bannerDismissed &&
+      !this.isSuppressedByHost() &&
+      !this.isRouteHidden() &&
+      this.triggerVisible;
+
+    return { widgetHostPointerSafe, widgetHostBounds, widgetSuppressed, bannerRendered };
+  }
+
   private syncAttachedLaunchers(): void {
     this.attachedLaunchers.forEach((cleanup) => cleanup());
     this.attachedLaunchers = [];
@@ -593,7 +679,7 @@ export class MushiWidget {
     }
     if (this.isMobileSmartHidden()) return false;
     if (this.isRouteHidden()) return false;
-    if (this.config.hideOnSelector && document.querySelector(this.config.hideOnSelector)) return false;
+    if (this.isSuppressedByHost()) return false;
     const action = this.config.environments[this.detectEnvironment()];
     return action !== 'never' && action !== 'manual';
   }
@@ -642,24 +728,24 @@ export class MushiWidget {
     // leave the host page with permanent padding-top/bottom.
     if (!this.triggerVisible) { this.removeBodyNudge(); return; }
     if (this.isRouteHidden()) { this.removeBodyNudge(); return; }
+    // hideOnSelector must suppress the banner too — the trigger check already
+    // uses isSuppressedByHost(), so this keeps both surfaces in sync.
+    if (this.isSuppressedByHost()) { this.removeBodyNudge(); return; }
 
     const bc = this.config.bannerConfig ?? {};
     const variant  = bc.variant  ?? 'brand';
     const position = bc.position ?? 'top';
+    const message  = bc.message?.trim() ?? '';
+    const richLayout = message.length > 0;
     const bugLabel = bc.bugCta   ?? '🐛 Report a bug';
     const showFeat = bc.featureCta !== false;
     const featLabel = bc.featureCtaLabel ?? '✨ Request feature';
     const zIdx = bc.zIndex ?? (this.config.zIndex ?? 99999) - 1;
 
     const banner = document.createElement('div');
-    banner.className = `mushi-banner ${variant} ${position}`;
+    banner.className = `mushi-banner ${variant} ${position}${richLayout ? ' mushi-banner--rich' : ''}`;
     banner.style.setProperty('--mushi-banner-z', String(zIdx));
     banner.setAttribute('role', 'banner');
-
-    const bugBtn = document.createElement('button');
-    bugBtn.className = 'mushi-banner-btn';
-    bugBtn.textContent = bugLabel;
-    bugBtn.addEventListener('click', () => this.open());
 
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'mushi-banner-dismiss';
@@ -671,17 +757,102 @@ export class MushiWidget {
       this.render();
     });
 
-    banner.appendChild(bugBtn);
+    if (richLayout) {
+      const body = document.createElement('div');
+      body.className = 'mushi-banner-body';
 
-    if (showFeat) {
-      const featBtn = document.createElement('button');
-      featBtn.className = 'mushi-banner-btn';
-      featBtn.textContent = featLabel;
-      featBtn.addEventListener('click', () => this.open({ featureRequest: true }));
-      banner.appendChild(featBtn);
+      const labelText = bc.label === false ? null : (bc.label ?? 'Beta');
+      if (labelText) {
+        const pill = document.createElement('span');
+        pill.className = 'mushi-banner-pill';
+        pill.textContent = labelText;
+        body.appendChild(pill);
+      }
+
+      const msg = document.createElement('span');
+      msg.className = 'mushi-banner-message';
+      msg.textContent = message;
+      body.appendChild(msg);
+      banner.appendChild(body);
+
+      const nav = document.createElement('nav');
+      nav.className = 'mushi-banner-actions';
+      nav.setAttribute('aria-label', 'Feedback banner actions');
+
+      // `extra` marks secondary actions hidden on narrow viewports so the
+      // primary bug CTA + dismiss always stay reachable on phones.
+      const appendDivider = (extra = false) => {
+        const sep = document.createElement('span');
+        sep.className = `mushi-banner-divider${extra ? ' mushi-banner-extra' : ''}`;
+        sep.setAttribute('aria-hidden', 'true');
+        sep.textContent = '|';
+        nav.appendChild(sep);
+      };
+
+      const appendAction = (label: string, onClick: () => void, extra = false) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `mushi-banner-link${extra ? ' mushi-banner-extra' : ''}`;
+        btn.textContent = label;
+        btn.addEventListener('click', onClick);
+        nav.appendChild(btn);
+      };
+
+      appendAction(bugLabel, () => this.open());
+      if (showFeat) {
+        appendDivider(true);
+        appendAction(featLabel, () => this.open({ featureRequest: true }), true);
+      }
+
+      for (const link of bc.links ?? []) {
+        const linkLabel = link.label?.trim();
+        if (!linkLabel) continue;
+        // Defense-in-depth: only http(s) and same-origin paths may render as
+        // anchors. If banner links ever become remotely configurable, a
+        // `javascript:` href here would be stored XSS in every embedding site.
+        const href = link.href && (/^https?:\/\//i.test(link.href) || link.href.startsWith('/'))
+          ? link.href
+          : undefined;
+        appendDivider(true);
+        if (href) {
+          const anchor = document.createElement('a');
+          anchor.className = 'mushi-banner-link mushi-banner-extra';
+          anchor.href = href;
+          anchor.textContent = linkLabel;
+          anchor.target = '_blank';
+          anchor.rel = 'noopener noreferrer';
+          nav.appendChild(anchor);
+        } else {
+          appendAction(linkLabel, () => {
+            if (link.featureRequest) this.open({ featureRequest: true });
+            else this.open();
+          }, true);
+        }
+      }
+
+      banner.appendChild(nav);
+      // Dismiss lives OUTSIDE the actions <nav>: it isn't navigation, and as
+      // a direct flex child of the banner it can't be clipped off-screen when
+      // the action row overflows on narrow viewports.
+      banner.appendChild(dismissBtn);
+    } else {
+      const bugBtn = document.createElement('button');
+      bugBtn.className = 'mushi-banner-btn';
+      bugBtn.textContent = bugLabel;
+      bugBtn.addEventListener('click', () => this.open());
+      banner.appendChild(bugBtn);
+
+      if (showFeat) {
+        const featBtn = document.createElement('button');
+        featBtn.className = 'mushi-banner-btn';
+        featBtn.textContent = featLabel;
+        featBtn.addEventListener('click', () => this.open({ featureRequest: true }));
+        banner.appendChild(featBtn);
+      }
+
+      banner.appendChild(dismissBtn);
     }
 
-    banner.appendChild(dismissBtn);
     this.shadow.appendChild(banner);
 
     // Push body content so the banner doesn't overlap the host app's navigation.
@@ -785,6 +956,33 @@ export class MushiWidget {
     }
   }
 
+  /**
+   * Queries each `avoidSelectors` element in the host document and returns
+   * the minimum top-offset in px so that a top-anchored element clears all
+   * of them by `gap` pixels. Returns `null` when no selectors are provided
+   * or no matching elements have a non-zero bounding rect.
+   *
+   * Runs in the host document (not shadow DOM) so it can reach fixed headers,
+   * sticky nav bars, and sign-in CTAs.
+   */
+  private computeAvoidTopPx(gap = 8): number | null {
+    const sels = this.config.avoidSelectors;
+    if (!sels?.length) return null;
+    let maxBottom = 0;
+    for (const sel of sels) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        // Only consider elements that are actually rendered (non-zero area)
+        if (r.bottom > maxBottom && r.width > 0 && r.height > 0) {
+          maxBottom = r.bottom;
+        }
+      } catch { /* invalid selector — skip silently */ }
+    }
+    return maxBottom > 0 ? Math.ceil(maxBottom) + gap : null;
+  }
+
   private applyInsetVars(el: HTMLElement): void {
     const { anchor } = this.config;
     if (anchor && Object.keys(anchor).length > 0) {
@@ -793,21 +991,34 @@ export class MushiWidget {
         if (value !== undefined) el.style.setProperty(`--mushi-${edge}`, value);
       });
       el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
-      return;
+    } else {
+      const { inset } = this.config;
+      if (!this.config.respectSafeArea) {
+        (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+          if (inset[edge] === undefined) el.style.setProperty(`--mushi-${edge}`, '24px');
+        });
+      }
+      (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+        const value = inset[edge];
+        if (value === undefined) return;
+        el.style.setProperty(`--mushi-${edge}`, value === 'auto' ? 'auto' : `${value}px`);
+      });
+      el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
     }
 
-    const { inset } = this.config;
-    if (!this.config.respectSafeArea) {
-      (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
-        if (inset[edge] === undefined) el.style.setProperty(`--mushi-${edge}`, '24px');
-      });
+    // Override --mushi-top with measured clearance when avoidSelectors is set.
+    // This runs after anchor/inset so it always wins when an avoided element is present.
+    // Only applies when the element is top-anchored (top CSS var or top-* position class).
+    const isTopAnchored =
+      anchor?.top !== undefined ||
+      this.config.position?.startsWith('top') ||
+      (!this.config.position && !anchor?.bottom); // default position is bottom-right
+    if (isTopAnchored) {
+      const avoidPx = this.computeAvoidTopPx();
+      if (avoidPx !== null) {
+        el.style.setProperty('--mushi-top', `${avoidPx}px`);
+      }
     }
-    (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
-      const value = inset[edge];
-      if (value === undefined) return;
-      el.style.setProperty(`--mushi-${edge}`, value === 'auto' ? 'auto' : `${value}px`);
-    });
-    el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
   }
 
   private renderStep(): string {

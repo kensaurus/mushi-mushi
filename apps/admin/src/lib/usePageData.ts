@@ -142,7 +142,9 @@ export function usePageData<T>(
           setLastFetchedAt(new Date().toISOString())
           hasLoadedOnce.current = true
         } else {
-          setError(res.error?.message ?? 'Request failed')
+          const code = res.error?.code
+          const message = res.error?.message ?? 'Request failed'
+          setError(code && code !== 'ERROR' ? `${message} (${code})` : message)
         }
       } catch (err) {
         if (aborted.current) return
