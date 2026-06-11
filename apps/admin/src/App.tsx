@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
@@ -150,6 +150,23 @@ function NotFoundPage() {
         label: 'Open docs',
         external: true,
       }}
+    />
+  )
+}
+
+/**
+ * QaCoverageRedirect — handles legacy Slack notification URLs that used the
+ * old path format `/projects/:pid/qa-coverage/:storyId`. Slack notifications
+ * sent before Jun 11 2026 used this format; we now redirect to the canonical
+ * query-param deep-link `/qa-coverage?project=:pid&story=:storyId` so the
+ * QA Coverage page can auto-switch the project and open the story drawer.
+ */
+function QaCoverageRedirect() {
+  const { pid, storyId } = useParams<{ pid: string; storyId: string }>()
+  return (
+    <Navigate
+      to={`/qa-coverage?project=${pid ?? ''}&story=${storyId ?? ''}`}
+      replace
     />
   )
 }
@@ -387,6 +404,8 @@ export function App() {
                   <Route path="/feature-board" element={<FeatureBoardPage />} />
                   <Route path="/health" element={<HealthPage />} />
                   <Route path="/qa-coverage" element={<QaCoveragePage />} />
+                  {/* Legacy Slack notification link format → redirect to query-param deep-link */}
+                  <Route path="/projects/:pid/qa-coverage/:storyId" element={<QaCoverageRedirect />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/rewards" element={<RewardsPage />} />
                   <Route path="/lessons" element={<LessonsPage />} />
