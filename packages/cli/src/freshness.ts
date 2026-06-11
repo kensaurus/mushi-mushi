@@ -23,9 +23,11 @@ export interface FreshnessResult {
 export async function checkFreshness(
   packageName: string,
   currentVersion: string,
-  opts: { timeoutMs?: number; registry?: string } = {},
+  opts: { timeoutMs?: number; registry?: string; ignoreOptOut?: boolean } = {},
 ): Promise<FreshnessResult | null> {
-  if (process.env.MUSHI_NO_UPDATE_CHECK === '1') return null
+  // MUSHI_NO_UPDATE_CHECK silences the passive wizard nag; an explicit
+  // `mushi upgrade` invocation (ignoreOptOut) must still reach the registry.
+  if (!opts.ignoreOptOut && process.env.MUSHI_NO_UPDATE_CHECK === '1') return null
 
   const registry = opts.registry ?? REGISTRY
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -74,13 +76,18 @@ export function isNewerStableVersion(latest: string, current: string): boolean {
   return lc > cc
 }
 
+/** Drop pre-release AND build-metadata suffixes ("1.7.8-rc.1+build.5" → "1.7.8"). */
 function stripPreRelease(version: string): string {
-  const idx = version.indexOf('-')
+  const idx = version.search(/[-+]/)
   return idx === -1 ? version : version.slice(0, idx)
 }
 
 function hasPreReleaseTag(version: string): boolean {
-  return version.includes('-')
+  // A hyphen only marks a pre-release when it appears before any build
+  // metadata separator ("1.7.8+exp-sha" is a stable release).
+  const plus = version.indexOf('+')
+  const hyphen = version.indexOf('-')
+  return hyphen !== -1 && (plus === -1 || hyphen < plus)
 }
 
 function parse(version: string): [number, number, number] {

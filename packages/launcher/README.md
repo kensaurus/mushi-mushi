@@ -105,7 +105,7 @@ Mushi is a **companion** to Sentry/Datadog, not a replacement. It sees the bugs 
 
 ## Integrates with
 
-**12 outbound plugins** — Mushi sends signals to whatever your team already lives in:
+**13 outbound plugins** — Mushi sends signals to whatever your team already lives in:
 
 <table>
   <tr>
@@ -126,7 +126,7 @@ Mushi is a **companion** to Sentry/Datadog, not a replacement. It sees the bugs 
   </tr>
   <tr>
     <td align="center" width="110"><b>Zapier</b><br/><sub>Generic<br/>webhook fan-out</sub></td>
-    <td align="center" width="110"><b>Langfuse</b><br/><sub>LLM trace<br/>deeplinks</sub></td>
+    <td align="center" width="110"><b>Cursor Cloud</b><br/><sub>Agentic draft<br/>PR dispatch</sub></td>
     <td align="center" width="110"><b>Cursor</b><br/><sub>via MCP<br/>server</sub></td>
     <td align="center" width="110"><b>Claude Code</b><br/><sub>via MCP<br/>server</sub></td>
     <td align="center" width="110"><b>OpenAI Agents</b><br/><sub>via A2A<br/>tasks</sub></td>
@@ -301,3 +301,9 @@ Or skip the CLI entirely and drive it from your AI agent via [`@mushi-mushi/mcp`
 ## License
 
 MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mushi-mushi/server`, `agents`, `verify`) are [BSL 1.1](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) — converts to Apache 2.0 on April 15, 2029.
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

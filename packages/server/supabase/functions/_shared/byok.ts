@@ -87,7 +87,7 @@ export async function resolveLlmKeys(
   projectId: string,
   provider: LlmProvider,
 ): Promise<ResolvedKey[]> {
-  const now = new Date().toISOString()
+  const nowMs = Date.now()
 
   // Step 1: byok_keys table — ordered candidates, skip cooled-down entries.
   // Include 'quota_exhausted' so a key that hit a 429 can re-enter the pool
@@ -107,8 +107,11 @@ export async function resolveLlmKeys(
 
   if (keyRows && keyRows.length > 0) {
     for (const row of keyRows) {
-      // Skip keys still inside their cooldown window.
-      if (row.cooldown_until && row.cooldown_until > now) continue
+      // Skip keys still inside their cooldown window. Compare as epoch
+      // milliseconds — Supabase can return timestamps with varying offset /
+      // millisecond precision, so lexical string comparison is unreliable.
+      // An unparseable timestamp yields NaN (never > nowMs) → key stays usable.
+      if (row.cooldown_until && new Date(row.cooldown_until).getTime() > nowMs) continue
       if (!row.vault_secret_id) continue
 
       const ref = `vault://${row.vault_secret_id}`

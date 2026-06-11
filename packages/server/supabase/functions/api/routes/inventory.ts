@@ -1475,11 +1475,16 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         return c.json({ ok: false, error: { code: 'MISSING_BASE_URL', message: 'base_url is required' } }, 400)
       }
 
-      // Validate URL
+      // Validate URL — must parse AND use an http(s) scheme. Without the
+      // protocol check, `ftp://` / `file:` would pass `new URL()` yet the
+      // message promises an http(s) URL and the crawler can't use them.
       try {
-        new URL(body.base_url)
+        const parsed = new URL(body.base_url)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return c.json({ ok: false, error: { code: 'INVALID_URL', message: 'base_url must be a valid http(s) URL' } }, 400)
+        }
       } catch {
-        return c.json({ ok: false, error: { code: 'INVALID_URL', message: 'base_url must be a valid https URL' } }, 400)
+        return c.json({ ok: false, error: { code: 'INVALID_URL', message: 'base_url must be a valid http(s) URL' } }, 400)
       }
 
       // Quota check: count today's usage and compare against project limits
@@ -1505,7 +1510,13 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const maxPages = quotaSettings?.crawl_max_pages_per_day ?? 150
       const runsToday = (todayRuns ?? []).length
       const pagesToday = (todayRuns ?? []).reduce((s: number, r: { max_pages: number }) => s + (r.max_pages ?? 0), 0)
-      const requestedPages = body.max_pages ?? 20
+      // Clamp requested pages to a sane finite range. A NaN / negative / huge
+      // body.max_pages must not bypass the quota math (pagesToday + requested)
+      // or get persisted / passed to the crawler as-is.
+      const rawRequested = typeof body.max_pages === 'number' ? body.max_pages : 20
+      const requestedPages = Number.isFinite(rawRequested)
+        ? Math.min(Math.max(Math.floor(rawRequested), 1), maxPages)
+        : 20
 
       if (runsToday >= maxRuns) {
         return c.json({
@@ -1535,7 +1546,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           project_id: projectId,
           status: 'pending',
           base_url: body.base_url,
-          max_pages: body.max_pages ?? 20,
+          max_pages: requestedPages,
           provider: body.provider ?? 'firecrawl',
           triggered_by: userId ?? null,
         })
@@ -1556,7 +1567,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           run_id: runId,
           project_id: projectId,
           base_url: body.base_url,
-          max_pages: body.max_pages ?? 20,
+          max_pages: requestedPages,
           provider: body.provider ?? 'firecrawl',
           cursor_cloud_refine: body.cursor_cloud_refine ?? false,
           triggered_by: userId,
@@ -1607,7 +1618,10 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           .from('qa_stories')
           .select('id', { count: 'exact', head: true })
           .eq('project_id', projectId)
-          .eq('source', 'tdd')
+          // TDD-generated stories use source 'test_gen_from_story' (initial)
+          // and 'pdca' (auto-improvements); the migration has no 'tdd' value,
+          // so the old filter always counted 0. Count both LLM-spending kinds.
+          .in('source', ['test_gen_from_story', 'pdca'])
           .gte('created_at', `${todayUtc}T00:00:00Z`)
           .lt('created_at', `${todayUtc}T23:59:59Z`),
       ])
@@ -1669,7 +1683,9 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           .from('qa_stories')
           .select('*', { count: 'exact', head: true })
           .eq('project_id', projectId)
-          .eq('source', 'tdd')
+          // Match the map-runs meter: count TDD-engine generations
+          // ('test_gen_from_story' + 'pdca'), not the non-existent 'tdd'.
+          .in('source', ['test_gen_from_story', 'pdca'])
           .gte('created_at', `${todayUtcGen}T00:00:00Z`)
           .lt('created_at', `${todayUtcGen}T23:59:59Z`),
       ])

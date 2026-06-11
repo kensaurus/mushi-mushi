@@ -24,6 +24,8 @@ import { RoutingProviderCard } from '../components/integrations/RoutingProviderC
 import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
 import { DryRunPanel } from '../components/integrations/DryRunPanel'
 import { DeploymentReadinessCard } from '../components/integrations/DeploymentReadinessCard'
+import { SlackIntegrationCard } from '../components/integrations/SlackIntegrationCard'
+import { NotificationPrefsMatrix } from '../components/integrations/NotificationPrefsMatrix'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   PLATFORM_DEFS,
@@ -46,6 +48,9 @@ export function IntegrationsPage() {
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   const historyQuery = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
+  const settingsQuery = usePageData<{ slackConfigured?: boolean; slackTeamName?: string | null }>(
+    '/v1/admin/settings',
+  )
 
   const platform = platformQuery.data?.platform ?? null
   const history = historyQuery.data?.history ?? []
@@ -351,6 +356,23 @@ export function IntegrationsPage() {
           'Step 6 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
         ].join('\n')}
       />
+
+      <Section title="Slack notifications">
+        <SlackIntegrationCard
+          projectId={activeProjectId ?? null}
+          slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
+          teamName={settingsQuery.data?.slackTeamName ?? null}
+          latestProbe={latestByKind['slack']}
+          sparkline={sparklineByKind['slack'] ?? []}
+        />
+        {activeProjectId && (
+          <div className="mt-4 rounded-xl border border-border bg-surface px-5 py-4">
+            <h4 className="text-sm font-semibold text-fg mb-1">Notification events</h4>
+            <p className="text-xs text-fg-secondary mb-4">Choose which events trigger a Slack (or Discord) message for this project.</p>
+            <NotificationPrefsMatrix projectId={activeProjectId} />
+          </div>
+        )}
+      </Section>
 
       <Section title="Core platform">
         <div className="space-y-2" data-dav-anchor="integrations:decide">

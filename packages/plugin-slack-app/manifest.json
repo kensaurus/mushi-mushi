@@ -32,11 +32,33 @@
   },
   "settings": {
     "event_subscriptions": {
+      "request_url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/slack/events",
       "bot_events": ["app_home_opened", "app_mention"]
     },
-    "interactivity": { "is_enabled": true },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/slack-interactions"
+    },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
-    "token_rotation_enabled": true
+    "token_rotation_enabled": false
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/webhooks/slack/oauth-callback"
+    ],
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "chat:write.public",
+        "channels:read",
+        "commands",
+        "im:history",
+        "im:read",
+        "im:write",
+        "users:read",
+        "users:read.email"
+      ]
+    }
   }
 }

@@ -37,12 +37,15 @@
 // run row with the reason.
 // ============================================================
 
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
+import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
+import { dispatchPluginEvent } from '../_shared/plugins.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -64,6 +67,13 @@ interface QaStory {
   enabled: boolean
   capture_video: boolean
   byok_provider: string | null
+  /** Explicit scrape target set by the user in the console. Takes precedence over prompt/env. */
+  target_url: string | null
+  /** Notification state — updated at end of each run */
+  last_run_status: string | null
+  consecutive_failures: number
+  slack_failure_ts: string | null
+  last_notified_at: string | null
 }
 
 interface RunResult {
@@ -102,14 +112,87 @@ function cronMatches(expression: string, now: Date): boolean {
   )
 }
 
+// ── Target URL resolution ─────────────────────────────────────────────────
+// Priority: story.target_url → URL in script → first https:// in prompt →
+//           project_settings.crawler_base_url / synthetic_monitor_target_url →
+//           DEFAULT_BASE_URL env. Returns null if nothing found (caller writes error).
+async function resolveTargetUrl(
+  db: SupabaseClient,
+  story: QaStory,
+  projectId: string,
+): Promise<string | null> {
+  // 1. Explicit target set in console
+  if (story.target_url) return story.target_url
+
+  // 2. Script field starts with a URL
+  if (story.script?.startsWith('http')) return story.script
+
+  // 3. First https:// URL extracted from prompt
+  if (story.prompt) {
+    const match = story.prompt.match(/https?:\/\/[^\s"']+/)
+    if (match) return match[0].replace(/[.,;)]+$/, '') // strip trailing punctuation
+  }
+
+  // 4. Project-level base URLs from project_settings
+  const { data: ps } = await db
+    .from('project_settings')
+    .select('crawler_base_url, synthetic_monitor_target_url')
+    .eq('project_id', projectId)
+    .maybeSingle()
+
+  if (ps?.crawler_base_url) return ps.crawler_base_url
+  if (ps?.synthetic_monitor_target_url) return ps.synthetic_monitor_target_url
+
+  // 5. Env fallback
+  const envUrl = Deno.env.get('DEFAULT_BASE_URL')
+  if (envUrl && !envUrl.includes('localhost')) return envUrl
+
+  return null
+}
+
+// ── BYOK key resolution ────────────────────────────────────────────────────
+// Always derive the provider from browser_provider (not story.byok_provider).
+// story.byok_provider is an optional override when a story needs a different
+// key pool than the default for its provider.
+const BROWSER_PROVIDER_TO_BYOK: Record<string, 'firecrawl' | 'browserbase'> = {
+  firecrawl_actions: 'firecrawl',
+  browserbase: 'browserbase',
+}
+
+async function resolveStoryApiKey(
+  db: SupabaseClient,
+  story: QaStory,
+  projectId: string,
+): Promise<string | undefined> {
+  // story.byok_provider is an explicit override; otherwise derive from browser_provider
+  const slug = (story.byok_provider ?? BROWSER_PROVIDER_TO_BYOK[story.browser_provider]) as
+    | 'firecrawl' | 'browserbase' | undefined
+
+  if (!slug) return undefined
+
+  try {
+    const result = await resolveLlmKey(db, projectId, slug)
+    if (result) return result.key
+    rlog.warn('no_byok_key_configured — story will fail; add key via Settings → API Keys', {
+      provider: slug,
+      storyId: story.id,
+    })
+  } catch (err) {
+    rlog.warn('byok_resolution_error — continuing without key', {
+      err: String(err),
+      storyId: story.id,
+    })
+  }
+  return undefined
+}
+
 // ── Firecrawl inline runner (Deno-compatible) ─────────────────────────────
-async function runFirecrawl(story: QaStory, apiKey: string, baseUrl: string): Promise<RunResult> {
+async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): Promise<RunResult> {
   const start = Date.now()
   const assertionFailures: RunResult['assertion_failures'] = []
   const evidence: RunResult['evidence'] = []
 
   try {
-    const targetUrl = story.script?.startsWith('http') ? story.script : baseUrl
 
     // Parse script as JSON actions array, or use simple GET + screenshot
     let actions: Array<Record<string, unknown>> = [{ type: 'screenshot' }]
@@ -249,6 +332,121 @@ async function runBrowserbase(story: QaStory, apiKey: string): Promise<RunResult
   }
 }
 
+// ── Manual run helper ─────────────────────────────────────────────────────
+// Executes a single story run for an *existing* pending run row (created by
+// the POST /qa-stories/:sid/run API route). Updates that row in-place rather
+// than inserting a new one, so the CLI / UI see the result immediately.
+async function executeManualRun(
+  db: SupabaseClient,
+  storyId: string,
+  runId: string,
+): Promise<Response> {
+  rlog.info('manual_run_start', { storyId, runId })
+
+  // Mark the existing pending row as 'running'
+  await db.from('qa_story_runs').update({ status: 'running' }).eq('id', runId)
+
+  const { data: story, error: storyErr } = await db
+    .from('qa_stories')
+    .select('*')
+    .eq('id', storyId)
+    .single()
+
+  if (storyErr || !story) {
+    await db.from('qa_story_runs').update({
+      status: 'error',
+      error_message: 'story_not_found',
+      finished_at: new Date().toISOString(),
+    }).eq('id', runId)
+    return new Response(JSON.stringify({ error: 'story_not_found' }), { status: 404 })
+  }
+
+  const pid = story.project_id
+  const resolvedApiKey = await resolveStoryApiKey(db, story, pid)
+  const resolvedTargetUrl = await resolveTargetUrl(db, story, pid)
+
+  let result: RunResult
+  const provider = story.browser_provider
+
+  if (!resolvedTargetUrl && (provider === 'firecrawl_actions' || provider === 'browserbase')) {
+    result = {
+      status: 'error',
+      latency_ms: 0,
+      summary: 'No target URL — set a Target URL on this story or configure crawler_base_url in project settings.',
+      assertion_failures: [],
+      provider_session_url: null,
+      error_message: 'no_target_url',
+      evidence: [],
+    }
+  } else if (provider === 'firecrawl_actions') {
+    const key = resolvedApiKey ?? Deno.env.get('FIRECRAWL_API_KEY') ?? ''
+    if (!key) {
+      result = {
+        status: 'error',
+        latency_ms: 0,
+        summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
+        assertion_failures: [],
+        provider_session_url: null,
+              error_message: 'No Firecrawl key. Run: mushi keys add --provider firecrawl',
+              evidence: [],
+            }
+          } else {
+            result = await runFirecrawl(story, key, resolvedTargetUrl!)
+          }
+        } else if (provider === 'browserbase') {
+          const key = resolvedApiKey ?? Deno.env.get('BROWSERBASE_API_KEY') ?? ''
+          if (!key) {
+            result = {
+              status: 'error',
+              latency_ms: 0,
+              summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+              assertion_failures: [],
+              provider_session_url: null,
+              error_message: 'No Browserbase key. Add via Settings → API Keys → Browserbase.',
+              evidence: [],
+            }
+          } else {
+            result = await runBrowserbase(story, key)
+          }
+        } else {
+          result = {
+            status: 'skipped',
+            latency_ms: 0,
+            summary: 'Local provider stories must be run via the mushi CLI.',
+            assertion_failures: [],
+            provider_session_url: null,
+            error_message: null,
+            evidence: [],
+          }
+        }
+
+  await db.from('qa_story_runs').update({
+    status: result.status,
+    latency_ms: result.latency_ms,
+    summary: result.summary,
+    assertion_failures: result.assertion_failures,
+    provider_session_url: result.provider_session_url,
+    error_message: result.error_message,
+    finished_at: new Date().toISOString(),
+  }).eq('id', runId)
+
+  // Save evidence artefacts
+  if (result.evidence?.length) {
+    const evidenceRows = result.evidence.map((e) => ({
+      run_id: runId,
+      story_id: storyId,
+      kind: e.kind,
+      data: e.data,
+      mime_type: e.mime,
+      step_label: e.step_label,
+    }))
+    await db.from('qa_story_evidence').insert(evidenceRows)
+  }
+
+  rlog.info('manual_run_complete', { storyId, runId, status: result.status })
+  return new Response(JSON.stringify({ ok: true, status: result.status }), { status: 200 })
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────
 Deno.serve(
   withSentry('qa-story-runner', async (req: Request) => {
@@ -257,6 +455,23 @@ Deno.serve(
 
     const db = getServiceClient()
     const now = new Date()
+
+    // Check if this is a manual trigger with a specific story_id + run_id.
+    // Manual triggers come from POST /qa-stories/:sid/run in the API route.
+    // They create a pending run row and call us with the run_id so we can
+    // update that row in-place instead of inserting a new cron run row.
+    let body: { trigger?: string; story_id?: string; run_id?: string } = {}
+    try {
+      if (req.headers.get('content-type')?.includes('application/json')) {
+        body = await req.json() as typeof body
+      }
+    } catch {
+      // Non-JSON body (e.g. cron ping) — continue as cron
+    }
+
+    if (body.trigger === 'manual' && body.story_id && body.run_id) {
+      return await executeManualRun(db, body.story_id, body.run_id)
+    }
 
     // 2026-05-24: previous code called `startCronRun('qa-story-runner')` —
     // missing the `db` first argument and destructuring `cronRunId` instead
@@ -329,44 +544,58 @@ Deno.serve(
 
         const runId: string = runRow.id
 
-        // Resolve BYOK key if configured.
-        // Maps story.byok_provider (e.g. 'firecrawl', 'browserbase') to the
-        // correct resolveLlmKey provider slug. Stories with an unknown slug
-        // get no key and rely on the env-var fallback inside the runner.
-        let resolvedApiKey: string | undefined
-        if (story.byok_provider) {
-          const knownProviders = ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const
-          type KnownProvider = typeof knownProviders[number]
-          const byokSlug = knownProviders.includes(story.byok_provider as KnownProvider)
-            ? (story.byok_provider as KnownProvider)
-            : null
-          if (byokSlug) {
-            try {
-              const byokResult = await resolveLlmKey(db, pid, byokSlug)
-              resolvedApiKey = byokResult?.key
-              if (!byokResult) {
-                rlog.warn('no_key_configured — story will use env fallback or fail')
-              }
-            } catch (err) {
-              rlog.warn('BYOK resolution error — continuing without key')
-            }
-          } else {
-            rlog.warn('unknown byok_provider slug — skipping BYOK lookup')
-          }
-        }
+        // Resolve API key: always derived from browser_provider (byok_provider is
+        // an optional override for non-default key pools).
+        const resolvedApiKey = await resolveStoryApiKey(db, story, pid)
 
-        // Default base URL from project settings
-        const baseUrl = Deno.env.get('DEFAULT_BASE_URL') ?? 'https://localhost:3000'
+        // Resolve the target URL: story.target_url → prompt URL → project settings → env.
+        // Fail the run explicitly if nothing resolves — this surfaces a clear error
+        // instead of silently scraping localhost.
+        const resolvedTargetUrl = await resolveTargetUrl(db, story, pid)
 
         let result: RunResult
         const provider = story.browser_provider
 
-        if (provider === 'firecrawl_actions') {
+        if (!resolvedTargetUrl && (provider === 'firecrawl_actions' || provider === 'browserbase')) {
+          result = {
+            status: 'error',
+            latency_ms: 0,
+            summary: 'No target URL — set a Target URL on this story or configure crawler_base_url in project settings.',
+            assertion_failures: [],
+            provider_session_url: null,
+            error_message: 'no_target_url',
+            evidence: [],
+          }
+        } else if (provider === 'firecrawl_actions') {
           const key = resolvedApiKey ?? Deno.env.get('FIRECRAWL_API_KEY') ?? ''
-          result = await runFirecrawl(story, key, baseUrl)
+          if (!key) {
+            result = {
+              status: 'error',
+              latency_ms: 0,
+              summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
+              assertion_failures: [],
+              provider_session_url: null,
+              error_message: 'firecrawl_key_missing: Add a Firecrawl API key via Settings → API Keys in the Mushi console, or run: mushi keys add --provider firecrawl',
+              evidence: [],
+            }
+          } else {
+            result = await runFirecrawl(story, key, resolvedTargetUrl!)
+          }
         } else if (provider === 'browserbase') {
           const key = resolvedApiKey ?? Deno.env.get('BROWSERBASE_API_KEY') ?? ''
-          result = await runBrowserbase(story, key)
+          if (!key) {
+            result = {
+              status: 'error',
+              latency_ms: 0,
+              summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+              assertion_failures: [],
+              provider_session_url: null,
+              error_message: 'browserbase_key_missing: Add a Browserbase API key via Settings → API Keys in the Mushi console.',
+              evidence: [],
+            }
+          } else {
+            result = await runBrowserbase(story, key)
+          }
         } else {
           // 'local' provider — must be run by CLI
           result = {
@@ -404,24 +633,168 @@ Deno.serve(
           })
         }
 
-        // A2A push for failures
-        if (result.status === 'failed' || result.status === 'error') {
-          await db.from('a2a_push_deliveries').insert({
-            project_id: pid,
-            event_type: 'qa_story_failed',
-            payload: {
-              story_id: story.id,
-              story_name: story.name,
-              run_id: runId,
-              status: result.status,
-              summary: result.summary,
-              assertion_failures: result.assertion_failures,
-              provider_session_url: result.provider_session_url,
-            },
-          }).then(
-            () => { rlog.info('a2a push queued', { storyId: story.id, runId }) },
-            (err: unknown) => { rlog.warn('a2a push failed — non-fatal', { err: err as Record<string, unknown> }) },
-          )
+        // ── Transition-aware, threaded Slack notifications ──────────────────
+        // Policy (prevents hourly spam on persistent failures):
+        //   pass→fail/error  : post a new rich Block Kit message, store thread ts
+        //   consecutive fail : threaded reply on 1st, 3rd, 10th, then once/day
+        //   fail→pass        : threaded "recovered after N failures" + reset state
+        // Non-fatal: a missing Slack config never blocks the runner.
+        const prevStatus = story.last_run_status
+        const newStatus = result.status
+        const isNowFailing = newStatus === 'failed' || newStatus === 'error'
+        const wasFailingBefore = prevStatus === 'failed' || prevStatus === 'error'
+        const isRecovery = !isNowFailing && wasFailingBefore
+
+        // Update story state columns regardless of Slack config
+        const newConsecutive = isNowFailing ? (story.consecutive_failures + 1) : 0
+        const stateUpdate: Record<string, unknown> = {
+          last_run_status: newStatus,
+          consecutive_failures: newConsecutive,
+        }
+
+        try {
+          const { data: ps } = await db
+            .from('project_settings')
+            .select('slack_channel_id, slack_webhook_url, discord_webhook_url, notification_prefs')
+            .eq('project_id', pid)
+            .maybeSingle()
+
+          // Check notification preference for this event type
+          const prefs = (ps as Record<string, unknown> | null)?.notification_prefs as Record<string, unknown> | null ?? {}
+          const prefKey = isRecovery ? 'qa_story.recovered' : 'qa_story.failed'
+          if (prefs[prefKey] === false) {
+            rlog.info('slack notif suppressed by notification_prefs', { storyId: story.id, prefKey })
+            // Still persist state but skip the message
+            await db.from('qa_stories').update(stateUpdate).eq('id', story.id)
+            continue
+          }
+
+          const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? ''
+          const runUrl = adminBase
+            ? `${adminBase}/qa-coverage?story=${story.id}&run=${runId}`
+            : null
+          const channelId = ps?.slack_channel_id ?? null
+          const webhookUrl = ps?.slack_webhook_url ?? null
+          const discordWebhookUrl = (ps as Record<string, unknown> | null)?.discord_webhook_url as string | null ?? null
+          const hasSlack = !!(channelId || webhookUrl)
+
+          if (hasSlack) {
+            const { data: proj } = await db
+              .from('projects')
+              .select('name')
+              .eq('id', pid)
+              .maybeSingle()
+            const projectName = (proj as { name?: string } | null)?.name ?? 'Unknown project'
+
+            // Determine whether to notify and what kind
+            const isNewFailure = isNowFailing && !wasFailingBefore
+            const now = new Date()
+            const lastNotified = story.last_notified_at ? new Date(story.last_notified_at) : null
+            const hoursSinceLast = lastNotified
+              ? (now.getTime() - lastNotified.getTime()) / 3_600_000
+              : Infinity
+
+            // For consecutive failures: notify on 1st, 3rd, 10th, then once/day
+            const shouldNotifyRepeat = isNowFailing && wasFailingBefore && (
+              newConsecutive === 3 ||
+              newConsecutive === 10 ||
+              hoursSinceLast >= 24
+            )
+
+            if (isNewFailure || shouldNotifyRepeat || isRecovery) {
+              // Fetch first screenshot from evidence for thumbnail
+              const { data: evRows } = await db
+                .from('qa_story_evidence')
+                .select('storage_path')
+                .eq('run_id', runId)
+                .eq('kind', 'screenshot')
+                .limit(1)
+              const hasScreenshot = (evRows?.length ?? 0) > 0
+
+              if (isRecovery) {
+                // Post a threaded recovery message
+                const recoveryText = `\u{1F7E2} QA story *${story.name}* recovered after ${story.consecutive_failures} consecutive failure(s).${runUrl ? ` <${runUrl}|View run>` : ''}`
+                if (channelId && story.slack_failure_ts) {
+                  await sendBotMessage({ channel: channelId, text: recoveryText, threadTs: story.slack_failure_ts, db, projectId: pid })
+                } else if (channelId) {
+                  await sendBotMessage({ channel: channelId, text: recoveryText, db, projectId: pid })
+                } else if (webhookUrl) {
+                  await sendSlackText(webhookUrl, recoveryText)
+                }
+                if (discordWebhookUrl) {
+                  await sendDiscordNotification(discordWebhookUrl, recoveryText.replace(/\*/g, '**'), { title: 'QA Story Recovered', color: 0x57f287 })
+                }
+                stateUpdate.slack_failure_ts = null
+                stateUpdate.last_notified_at = now.toISOString()
+              } else {
+                // Failure notification — rich Block Kit for new failures, threaded reply for repeats
+                const blocks = buildQaStoryRunBlocks({
+                  storyId: story.id,
+                  storyName: story.name,
+                  projectName,
+                  runId,
+                  status: newStatus as 'failed' | 'error',
+                  provider: provider,
+                  latencyMs: result.latency_ms,
+                  summary: result.summary,
+                  errorMessage: result.error_message,
+                  assertionFailures: result.assertion_failures,
+                  consecutiveFailures: newConsecutive,
+                  screenshotBase64: hasScreenshot ? 'present' : null,
+                  runUrl,
+                })
+                const failCount = result.assertion_failures?.length ?? 0
+                const fallbackText = `\u26A0\uFE0F QA story *${story.name}* ${newStatus === 'error' ? 'errored' : `failed ${failCount} assertion(s)`} (run ${newConsecutive}).${runUrl ? ` <${runUrl}|View run>` : ''}`
+
+                if (channelId) {
+                  const threadTs = isNewFailure ? null : (story.slack_failure_ts ?? null)
+                  const r = await sendBotMessage({ channel: channelId, blocks, text: fallbackText, threadTs, db, projectId: pid })
+                  // Store thread ts from first failure so we can thread follow-ups
+                  if (isNewFailure && r.ok && r.ts) {
+                    stateUpdate.slack_failure_ts = r.ts
+                  }
+                } else if (webhookUrl) {
+                  await sendSlackText(webhookUrl, fallbackText)
+                }
+                if (discordWebhookUrl) {
+                  const discordText = fallbackText.replace(/\*/g, '**').replace(/<([^|]+)\|([^>]+)>/g, '[$2]($1)')
+                  await sendDiscordNotification(discordWebhookUrl, discordText, { title: 'QA Story Failed', color: 0xed4245 })
+                }
+                stateUpdate.last_notified_at = now.toISOString()
+                rlog.info('slack notif sent', { storyId: story.id, runId, consecutive: newConsecutive, isNew: isNewFailure })
+              }
+            } else {
+              rlog.info('slack notif skipped (backoff)', { storyId: story.id, consecutive: newConsecutive, hoursSinceLast })
+            }
+          }
+        } catch (slackErr) {
+          rlog.warn('slack notif failed — non-fatal', { err: String(slackErr) })
+        }
+
+        // Persist notification state to qa_stories
+        await db.from('qa_stories').update(stateUpdate).eq('id', story.id)
+
+        // Fan-out to subscribed plugins (Discord, Teams, Cursor, Zapier…).
+        // Best-effort — a plugin delivery failure never blocks the runner.
+        const isNowFailingForFanout = result.status === 'failed' || result.status === 'error'
+        const wasFailingForFanout = story.last_run_status === 'failed' || story.last_run_status === 'error'
+        const fanoutEvent = isNowFailingForFanout
+          ? 'qa_story.failed' as const
+          : (!isNowFailingForFanout && wasFailingForFanout)
+            ? 'qa_story.recovered' as const
+            : null
+
+        if (fanoutEvent) {
+          void dispatchPluginEvent(db, pid, fanoutEvent, {
+            story_id: story.id,
+            story_name: story.name,
+            run_id: runId,
+            status: result.status,
+            summary: result.summary,
+            consecutive_failures: (stateUpdate.consecutive_failures as number | undefined) ?? 0,
+          }).catch((err: unknown) => {
+            rlog.warn('plugin fanout failed — non-fatal', { err: String(err) })
+          })
         }
 
         rlog.info('story run complete', { storyId: story.id, runId, status: result.status })

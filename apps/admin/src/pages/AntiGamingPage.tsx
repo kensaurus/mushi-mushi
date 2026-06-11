@@ -30,7 +30,6 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { PromptDialog } from '../components/ConfirmDialog'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { IconEye, IconChevronUp, IconFlag, IconFlagOff } from '../components/icons'
@@ -444,9 +443,7 @@ export function AntiGamingPage() {
                 } : undefined,
               }}
             />
-            <div data-dav-anchor="anti-gaming:act">
-              <PageActionBar scope="anti-gaming" action={antiGamingAction} />
-            </div>
+            <div data-dav-anchor="anti-gaming:act" />
 
             {(stats.crossAccount > 0 || stats.flagged > 0) && (
               <Card

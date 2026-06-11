@@ -138,3 +138,9 @@ The test suite covers:
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

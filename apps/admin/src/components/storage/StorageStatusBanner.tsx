@@ -8,6 +8,16 @@ import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { StorageStats, StorageTabId } from './types'
 
+/** Healthy / default posture is covered by the page hero + snapshot. */
+export function isStorageStatusBannerCritical(stats: StorageStats): boolean {
+  if (!stats.projectId) return true
+  if (stats.activeProjectHealthStatus === 'failing') return true
+  if (stats.activeProjectHealthStatus === 'degraded') return true
+  if (!stats.lastHealthCheckAt && stats.activeProjectConfigured) return true
+  if (stats.failingCount > 0 && stats.activeProjectHealthStatus === 'healthy') return true
+  return false
+}
+
 interface Props {
   stats: StorageStats
   onTab?: (tab: StorageTabId) => void

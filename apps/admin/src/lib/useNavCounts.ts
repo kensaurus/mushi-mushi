@@ -46,6 +46,8 @@ export interface NavCounts {
   flaggedDevices: number
   /** Active My feedback tickets with a team reply (sidebar nudge). */
   feedbackWithReply: number
+  /** Classifier vs judge disagreements (14d window) for Check-stage badges. */
+  judgeDisagreements: number
   /** Whether the hook has loaded once; consumers can skip rendering
    *  dots in the undefined state. */
   ready: boolean
@@ -63,6 +65,7 @@ const INITIAL: NavCounts = {
   healthIssues: 0,
   flaggedDevices: 0,
   feedbackWithReply: 0,
+  judgeDisagreements: 0,
   ready: false,
 }
 
@@ -96,6 +99,10 @@ interface FeedbackSummaryResp {
   with_reply?: number
 }
 
+interface JudgeStatsResp {
+  disagreementCount?: number
+}
+
 function countHealthIssues(dashboard: DashboardData | undefined): number {
   const integrations = dashboard?.integrations
   if (!Array.isArray(integrations)) return 0
@@ -122,6 +129,7 @@ export function useNavCounts(): NavCounts {
       queueRes,
       flaggedRes,
       feedbackRes,
+      judgeRes,
     ] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
@@ -136,6 +144,7 @@ export function useNavCounts(): NavCounts {
       // every page navigation just to render a 1-character badge.
       apiFetch<DeviceCountResp>('/v1/admin/anti-gaming/devices?flagged=true&count_only=1'),
       apiFetch<FeedbackSummaryResp>('/v1/admin/support/tickets/summary'),
+      apiFetch<JudgeStatsResp>('/v1/admin/judge/stats'),
     ])
     const summary = summaryRes.ok ? summaryRes.data : null
     const reports = reportsRes.ok ? reportsRes.data : null
@@ -149,6 +158,7 @@ export function useNavCounts(): NavCounts {
     const queueFailed = (queueByStatus.dead_letter ?? 0) + (queueByStatus.failed ?? 0)
     const flaggedDevices = flaggedRes.ok ? (flaggedRes.data?.count ?? 0) : 0
     const feedbackWithReply = feedbackRes.ok ? (feedbackRes.data?.with_reply ?? 0) : 0
+    const judgeDisagreements = judgeRes.ok ? (judgeRes.data?.disagreementCount ?? 0) : 0
     setCounts({
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
@@ -161,6 +171,7 @@ export function useNavCounts(): NavCounts {
       healthIssues: countHealthIssues(dashboard),
       flaggedDevices,
       feedbackWithReply,
+      judgeDisagreements,
       ready: true,
     })
   }, [])
@@ -184,6 +195,7 @@ export function useNavCounts(): NavCounts {
       // the rail update without a manual reload.
       'reporter_devices',
       'support_tickets',
+      'classification_evaluations',
     ],
     () => { void load() },
     { debounceMs: 1500 },

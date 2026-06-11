@@ -122,7 +122,7 @@ export function PublicHomePage() {
 
   return (
     <MarketingProvider value={theme}>
-      <main className="mushi-marketing-surface min-h-screen">
+      <main className="mushi-marketing-surface min-h-full overflow-y-auto">
         {/* Authenticated bar — non-sticky strip above the sticky-nav that
             tells a returning visitor "yes, you're still signed in" before
             they even read the H1. Two reasons we keep this AND the sticky-

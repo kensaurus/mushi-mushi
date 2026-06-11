@@ -37,6 +37,7 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 | `MushiSentryContext`           | 1.0+ — rich Sentry handshake the SDK captures via `@sentry/browser` v7/v8/v9: `eventId`, `replayId`, `traceId`, `spanId`, `transaction`, `release`, `environment`, `user`, `tags`, `breadcrumbs`, `issueUrl`, `mushiReportId` (bidirectional). |
 | `MushiCaptureExceptionOptions` | 1.0+ — options for `Mushi.captureException(err, opts)`: `level`, `tags`, `extras`, `category`, `userIntent` overrides for the structured report. |
 | `NormalisedException`          | 1.0+ — return type of `normaliseThrown(err)` (`{ name, message, stack?, cause? }`); used internally by `captureException` and exposed for adapters that want to ship their own thin wrappers. |
+| `MushiBannerLink`              | 1.8+ — flat action on the rich banner layout: `{ label, href? }` opens an external URL in a new tab, `{ label, featureRequest: true }` opens the widget in feature-request mode. Consumed via `MushiBannerConfig.links`. |
 
 Constants: `MUSHI_INTERNAL_HEADER` (`'X-Mushi-Internal'`),
 `MUSHI_INTERNAL_INIT_MARKER`, and the `MushiInternalRequestKind` literal union
@@ -63,3 +64,9 @@ This package is used internally by `@mushi-mushi/web` and `@mushi-mushi/react`. 
 ## License
 
 MIT
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

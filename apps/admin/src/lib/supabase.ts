@@ -12,6 +12,7 @@ import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
 import { getActiveProjectIdSnapshot } from './activeProject'
 import { getActiveOrgIdSnapshot } from './activeOrg'
+import { coerceApiResult, type ApiResult } from './apiEnvelope'
 
 const authOptions = {
   // Web defaults are true today, but making them explicit documents the
@@ -61,7 +62,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   })
 })
 
-export type ApiResult<T> = { ok: boolean; data?: T; error?: { code: string; message: string } }
+export type { ApiResult } from './apiEnvelope'
 
 // ─── Request dedup + micro-cache ────────────────────────────────────────────
 //
@@ -282,7 +283,16 @@ async function doFetch<T>(
         }
       }
       try {
-        return JSON.parse(body)
+        const coerced = coerceApiResult<T>(JSON.parse(body))
+        // A non-2xx body without an explicit error envelope (e.g. a proxy's
+        // `{ "message": "..." }`) must never coerce into a success.
+        if (coerced.ok) {
+          return {
+            ok: false,
+            error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
+          }
+        }
+        return coerced
       } catch {
         return {
           ok: false,
@@ -291,7 +301,7 @@ async function doFetch<T>(
       }
     }
 
-    const result = (await res.json()) as ApiResult<T>
+    const result = coerceApiResult<T>(await res.json())
     debugLog('api', `${method} ${path} → ${res.status} (${ms}ms)`)
 
     // FE-API-1: opt-in Zod validation. We only validate the `data` slice —

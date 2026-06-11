@@ -40,6 +40,7 @@ import {
 import {
   createApiClient,
   DEFAULT_API_ENDPOINT,
+  newUuid,
   type MushiReport,
   type MushiApiClient,
   type MushiRewardsConfig,
@@ -230,7 +231,7 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     async (data: { description: string; category: string }) => {
       const deviceInfo = getDeviceInfo()
       const report: MushiReport = {
-        id: `rn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: newUuid(),
         projectId: config.projectId,
         category: data.category as MushiReport['category'],
         description: data.description,

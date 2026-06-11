@@ -69,9 +69,9 @@ interface SignalChipProps {
 export function SignalChip({ children, tone = 'neutral', className = '' }: SignalChipProps) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-medium ${CHIP_TONE[tone]} ${className}`}
+      className={`inline-flex max-w-full min-w-0 items-center rounded-full border px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${CHIP_TONE[tone]} ${className}`}
     >
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
     </span>
   )
 }
@@ -140,11 +140,13 @@ export function ActionPill({ children, tone = 'neutral', className = '', onClick
 interface ActionPillRowProps {
   children: ReactNode
   className?: string
+  /** Spotlight/coachmark anchor — must be forwarded to the DOM to be targetable. */
+  'data-dav-anchor'?: string
 }
 
-export function ActionPillRow({ children, className = '' }: ActionPillRowProps) {
+export function ActionPillRow({ children, className = '', ...rest }: ActionPillRowProps) {
   return (
-    <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+    <div className={`flex flex-wrap items-center gap-1.5 ${className}`} {...rest}>
       {children}
     </div>
   )

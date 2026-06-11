@@ -106,7 +106,7 @@ jobs:
         with:
           name: nightly-prod-pdca-report
           path: examples/e2e-dogfood/playwright-report/
-          retention-days: 14
+          retention-days: 7
 
       - name: Open / update regression issue on failure
         if: failure()

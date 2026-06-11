@@ -15,7 +15,7 @@ import {
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageHero } from '../components/PageHero'
-import { PageActionBar } from '../components/PageActionBar'
+import { ActionPill, ActionPillRow } from '../components/report-detail/ReportSurface'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
@@ -390,7 +390,7 @@ export function InventoryPage() {
       <PageHero
         scope="inventory"
         title="Truth layer snapshot"
-        kicker="Plan → Act → Verify"
+        kicker="User story truth layer"
         decide={{
           label: total ? `${verified} / ${total} actions verified` : 'No actions ingested',
           metric: `${stub} stub · ${regressed} regressed`,
@@ -431,20 +431,14 @@ export function InventoryPage() {
           } : undefined,
         }}
       />
-      <PageActionBar
-        scope="inventory"
-        action={nba}
-        trailing={
-          <div className="flex flex-wrap gap-2" data-dav-anchor="inventory:act">
-            <Btn type="button" size="sm" variant="ghost" onClick={() => void runGates()}>
-              Run gates
-            </Btn>
-            <Btn type="button" size="sm" variant="ghost" onClick={() => void reconcile()}>
-              Run crawler
-            </Btn>
-          </div>
-        }
-      />
+      <ActionPillRow className="mb-2" data-dav-anchor="inventory:act">
+        <ActionPill tone="neutral" onClick={() => void runGates()}>
+          Run gates
+        </ActionPill>
+        <ActionPill tone="neutral" onClick={() => void reconcile()}>
+          Run crawler
+        </ActionPill>
+      </ActionPillRow>
 
 {/* PageHelp migrated to PageHeaderBar above */}
 

@@ -8,11 +8,11 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Section, Btn, ResultChip, type ResultChipTone } from '../ui'
-import { ConnectionStatus } from '../ConnectionStatus'
 import { RESOLVED_API_URL } from '../../lib/env'
 import { SdkInstallCard } from '../SdkInstallCard'
-import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
+import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { ContainedBlock } from '../report-detail/ReportSurface'
+import { BackendModePanel } from './BackendModePanel'
 
 interface HealthPanelProps {
   projectId: string
@@ -24,11 +24,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
 
   return (
     <SettingsPanelLayout
-      fullWidth={
-        <SettingsCard className="p-4">
-          <ConnectionStatus />
-        </SettingsCard>
-      }
+      fullWidth={<BackendModePanel />}
     >
       <Section title="SDK Configuration Reference">
         <ContainedBlock tone="muted" className="mb-2">

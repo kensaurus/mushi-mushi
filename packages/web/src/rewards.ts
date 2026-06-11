@@ -41,6 +41,19 @@ let tierCache: MushiTierResult | null = null;
 let tierCacheTime = 0;
 const TIER_CACHE_TTL = 5 * 60 * 1000; // 5 min
 
+/** After a permanent 4xx, pause rewards API calls to avoid retry storms. */
+let rewardsApiBackoffUntil = 0;
+const REWARDS_4XX_BACKOFF_MS = 15 * 60 * 1000; // 15 min
+
+function isRewardsApiBackedOff(): boolean {
+  return Date.now() < rewardsApiBackoffUntil;
+}
+
+function noteRewardsApiFailure(code?: string): void {
+  if (!code?.startsWith('HTTP_4')) return;
+  rewardsApiBackoffUntil = Date.now() + REWARDS_4XX_BACKOFF_MS;
+}
+
 // Track seen routes to avoid duplicate screen_view_unique_per_day
 const seenRoutes = new Set<string>();
 
@@ -198,14 +211,24 @@ export async function flush(ctx: RewardsContext): Promise<void> {
     }
   }
 
+  if (isRewardsApiBackedOff()) return;
+
   const batch = pendingEvents.splice(0, 100);
   try {
-    await ctx.client.submitActivity(currentUserId, batch, {
+    const result = await ctx.client.submitActivity(currentUserId, batch, {
       userTraits: currentUserTraits ?? undefined,
       reporterTokenHash: reporterTokenHash ?? undefined,
       optedIn: true,
       hostJwt: hostJwt ?? undefined,
     });
+    if (!result.ok) {
+      noteRewardsApiFailure(result.error?.code);
+      // Transient 5xx / network — re-queue; permanent 4xx drops the batch.
+      const permanent = result.error?.code?.startsWith('HTTP_4');
+      if (!permanent) {
+        pendingEvents.unshift(...batch.slice(0, 50));
+      }
+    }
   } catch {
     // On failure, re-queue for next flush (simplified offline; full
     // IndexedDB queue is left for a follow-up to keep this file focussed)
@@ -220,13 +243,14 @@ export async function getTier(userId: string): Promise<MushiTierResult | null> {
 }
 
 async function fetchAndCacheTier(userId: string): Promise<MushiTierResult | null> {
-  if (!apiClient) return null;
+  if (!apiClient || isRewardsApiBackedOff()) return null;
   const res = await apiClient.getMyTier(userId);
   if (res.ok && res.data) {
     tierCache = res.data as MushiTierResult;
     tierCacheTime = Date.now();
     return tierCache;
   }
+  noteRewardsApiFailure(res.error?.code);
   return null;
 }
 
@@ -241,6 +265,7 @@ export function teardown(): void {
   apiClient = null;
   optedIn = false;
   tierCache = null;
+  rewardsApiBackoffUntil = 0;
 }
 
 // ──────────────────────────────────────────────────────────────

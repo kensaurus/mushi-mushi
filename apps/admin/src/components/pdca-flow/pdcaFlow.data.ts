@@ -176,6 +176,12 @@ export function buildEdges(
   // Forward edges: right→left handles follow the horizontal row naturally.
   // Loop-back (act→plan): uses dedicated bottom handles so the arc sweeps
   // below all four nodes instead of creating an ugly reverse S-curve.
+  const EDGE_LABEL: Partial<Record<`${PdcaStageId}->${PdcaStageId}`, string>> = {
+    'plan->do': 'Triage',
+    'do->check': 'Draft',
+    'check->act': 'Score',
+    'act->plan': 'Loop',
+  }
   const pairs: Array<[PdcaStageId, PdcaStageId, string, string]> = [
     ['plan',  'do',    'out',      'in'     ],
     ['do',    'check', 'out',      'in'     ],
@@ -198,13 +204,14 @@ export function buildEdges(
       animated: source === focusStage || source === runningStage || failing,
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: 18,
-        height: 18,
+        width: 22,
+        height: 22,
         color: arrowColor,
       },
       data: {
         sourceColor: STAGE_HEX[source],
         targetColor: STAGE_HEX[target],
+        edgeLabel: EDGE_LABEL[`${source}->${target}`],
         sourceStageId: source,
         targetStageId: target,
         flowing: source === runningStage,

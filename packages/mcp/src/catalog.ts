@@ -195,14 +195,26 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'setup_check',
     title: 'Dispatch preflight check',
     description:
-      'Run the 4 dispatch-readiness checks for a project and return their pass/fail status ' +
+      'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
       '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
       'Also returns the target repo URL when GitHub is connected. ' +
-      'Use this before calling dispatch_fix to understand why a dispatch might fail — ' +
-      'or to validate that the onboarding wizard is complete.',
+      'Use this before calling dispatch_fix to understand why a dispatch might fail. ' +
+      'For SDK ingest health (API key → heartbeat → first report), call ingest_setup_check instead.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'Is this project ready to auto-fix bugs? What is blocking me?',
+    useCase: 'Is this project ready to auto-fix bugs? What is blocking dispatch?',
+  },
+  {
+    name: 'ingest_setup_check',
+    title: 'Ingest setup check',
+    description:
+      'Run the 4 **required ingest** checks for the project tied to this API key: ' +
+      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report. ' +
+      'Returns per-step pass/fail plus last_sdk_seen_at and endpoint host diagnostics. ' +
+      'Use after wiring env vars or pasting the SDK snippet to confirm the banner will work.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is the SDK installed and ingesting reports? Why is my banner still missing?',
   },
   // --- Write / agentic ----------------------------------------------------
   {
@@ -480,5 +492,86 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Approve this auto-generated test.',
+  },
+  {
+    name: 'reply_to_reporter',
+    title: 'Reply to a reporter',
+    description:
+      'Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: false },
+    useCase: 'Reply to a reporter asking for more info or confirming a fix.',
+  },
+  {
+    name: 'list_qa_story_runs',
+    title: 'Recent QA story runs',
+    description:
+      'Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), ' +
+      'latency_ms, created_at, error_message headline, and assertion_failures (up to 10). ' +
+      'Use this to understand whether a story is currently healthy, what the last failure was, ' +
+      'and whether a manual run has completed.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Show me the last 10 runs for the "home page loads" story and why they failed.',
+  },
+  {
+    name: 'get_qa_story_run',
+    title: 'QA story run detail',
+    description:
+      'Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, ' +
+      'latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. ' +
+      'Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What exactly happened in this failed QA run? Show me the error and screenshots.',
+  },
+  {
+    name: 'test_notification_channel',
+    title: 'Send a test notification',
+    description:
+      'Send a test notification to a configured notification channel for the project. ' +
+      'Supported channel kinds: "slack" (posts a test Block Kit message to the configured channel), ' +
+      '"discord" (posts to the project discord_webhook_url). ' +
+      'Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Did "Add to Slack" work? Send a test ping to confirm.',
+  },
+
+  // ── Full-Stack Audit tools (Phase 5) ────────────────────────────────────────
+
+  {
+    name: 'run_fullstack_audit',
+    title: 'Run a full-stack health audit',
+    description:
+      'Fan out a full-stack health audit for the current project: DB schema + advisors, ' +
+      'API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. ' +
+      'Returns a PM-readable scorecard with severity-ranked findings and fix hints. ' +
+      'Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) ' +
+      'and supabase_project_ref set in project settings for backend analysis. ' +
+      'The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint ' +
+      'and unknown_call gates if they have not run today.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase:
+      'Is this project healthy? Run a one-click full-stack audit to find API contract mismatches, ' +
+      'unlinked backend features, schema drift, and security gaps.',
+  },
+
+  {
+    name: 'get_backend_health',
+    title: 'Get backend health for a project',
+    description:
+      'Return the current backend health state for a linked Supabase project: ' +
+      'table list (with RLS enabled status), recent API and Postgres error logs, ' +
+      'and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. ' +
+      'Returns { tables, logs, advisors, projectRef } when the backend is linked, ' +
+      'or { reason: "no_supabase_pat" | "no_project_ref" } when it is not configured. ' +
+      'This is the read-only fast path — use run_fullstack_audit for the full scorecard ' +
+      'including gate results.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase:
+      'Are there any tables without RLS? Show me recent backend errors for this project.',
   },
 ]

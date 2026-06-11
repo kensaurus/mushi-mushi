@@ -17,7 +17,7 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { StorageStatusBanner } from '../components/storage/StorageStatusBanner'
+import { StorageStatusBanner, isStorageStatusBannerCritical } from '../components/storage/StorageStatusBanner'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
 import {
   healthyCountDetail,
@@ -32,8 +32,6 @@ import {
 import { storageLinks } from '../lib/statCardLinks'
 import { PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -41,7 +39,6 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
@@ -680,12 +677,14 @@ export function StoragePage() {
         </p>
       </ContainedBlock>
 
-      <StorageStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
-        checking={checkingId === activeProjectId}
-      />
+      {isStorageStatusBannerCritical(stats) && (
+        <StorageStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
+          checking={checkingId === activeProjectId}
+        />
+      )}
 
       <SegmentedControl
         value={activeTab}
@@ -695,92 +694,7 @@ export function StoragePage() {
         size="sm"
       />
 
-      <Section title="Storage snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Healthy"
-            value={`${stats.healthyCount}/${stats.configuredCount}`}
-            accent={stats.failingCount > 0 ? 'text-danger' : stats.healthyCount > 0 ? 'text-ok' : undefined}
-            tooltip={healthyCountTooltip(stats)}
-            detail={healthyCountDetail(stats)}
-            to={storageLinks.healthy}
-          />
-          <StatCard
-            label="Screenshots"
-            value={stats.activeProjectObjects.toLocaleString()}
-            accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
-            tooltip={screenshotsTooltip(stats)}
-            detail={screenshotsDetail(stats)}
-            to={storageLinks.screenshots}
-          />
-          <StatCard
-            label="Provider"
-            value={stats.activeProjectProvider}
-            accent="text-info"
-            tooltip={providerTooltip(stats)}
-            detail={providerDetail(stats)}
-            to={storageLinks.provider}
-          />
-          <StatCard
-            label="Unconfigured"
-            value={stats.unconfiguredCount}
-            accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={unconfiguredCountTooltip(stats)}
-            detail={unconfiguredCountDetail(stats)}
-            to={storageLinks.unconfigured}
-          />
-        </div>
-      </Section>
-
-      {(stats.failingCount > 0 || stats.degradedCount > 0 || !stats.activeProjectConfigured) && activeTab === 'overview' && (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.failingCount > 0
-              ? 'border-danger/30 bg-danger/5'
-              : stats.degradedCount > 0
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={stats.failingCount > 0 ? 'danger' : stats.degradedCount > 0 ? 'warn' : 'brand'}
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.failingCount > 0 ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">
-              {stats.failingCount > 0
-                ? `${stats.failingCount} bucket${stats.failingCount === 1 ? '' : 's'} failing uploads${stats.latestFailureError ? ` — ${stats.latestFailureError}` : ''}.`
-                : stats.degradedCount > 0
-                  ? `${stats.degradedCount} bucket${stats.degradedCount === 1 ? '' : 's'} degraded — probe before users hit errors.`
-                  : 'Active project uses cluster defaults — save a BYO override on Configure.'}
-            </p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill
-              onClick={() => {
-                const next = new URLSearchParams(searchParams)
-                next.set('tab', 'configure')
-                setSearchParams(next, { replace: true })
-              }}
-              tone="brand"
-            >
-              Open Configure →
-            </ActionPill>
-            {stats.failingCount > 0 && (
-              <ActionPill to="/health?fn=storage-probe" tone="neutral">
-                Run health probe
-              </ActionPill>
-            )}
-          </ActionPillRow>
-        </Card>
-      )}
-
       {activeTab === 'overview' && (
-        <>
           <PageHero
             scope="storage"
             title="Storage"
@@ -852,9 +766,50 @@ export function StoragePage() {
                   : undefined,
             }}
           />
+      )}
 
-          <PageActionBar scope="storage" action={storageAction} />
+      <Section title="Storage snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Healthy"
+            value={`${stats.healthyCount}/${stats.configuredCount}`}
+            accent={stats.failingCount > 0 ? 'text-danger' : stats.healthyCount > 0 ? 'text-ok' : undefined}
+            tooltip={healthyCountTooltip(stats)}
+            detail={healthyCountDetail(stats)}
+            to={storageLinks.healthy}
+          />
+          <StatCard
+            label="Screenshots"
+            value={stats.activeProjectObjects.toLocaleString()}
+            accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
+            tooltip={screenshotsTooltip(stats)}
+            detail={screenshotsDetail(stats)}
+            to={storageLinks.screenshots}
+          />
+          <StatCard
+            label="Provider"
+            value={stats.activeProjectProvider}
+            accent="text-info"
+            tooltip={providerTooltip(stats)}
+            detail={providerDetail(stats)}
+            to={storageLinks.provider}
+          />
+          <StatCard
+            label="Unconfigured"
+            value={stats.unconfiguredCount}
+            accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
+            tooltip={unconfiguredCountTooltip(stats)}
+            detail={unconfiguredCountDetail(stats)}
+            to={storageLinks.unconfigured}
+          />
+        </div>
+      </Section>
 
+      {activeTab === 'overview' && (
+        <>
           <PageHelp
             title={copy?.help?.title ?? 'About BYO Storage'}
             whatIsIt={

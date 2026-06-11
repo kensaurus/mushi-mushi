@@ -351,7 +351,6 @@ function pdcaRoutes() {
 
   // Phase 3: Trigger PDCA QA story auto-improve
   r.post('/improve-qa-stories', async (c) => {
-    const db = getServiceClient()
     const body = await c.req.json().catch(() => ({})) as { project_id?: string }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!

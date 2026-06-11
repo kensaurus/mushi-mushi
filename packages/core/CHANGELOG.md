@@ -1,5 +1,45 @@
 # @mushi-mushi/core
 
+## 1.8.0
+
+### Minor Changes
+
+- be12eae: feat(web,core): rich banner layout — `message`, `label`, and flat `links`
+
+  `MushiBannerConfig` gains `message` (body copy on the strip), `label` (pill label before the message, `false` to hide), and `links` (extra flat actions after the bug/feature CTAs, each opening an external URL or the feature-request widget). When `message` is set the banner switches to the rich pill + message + flat-actions layout used by the Mushi admin console's beta banner. `MushiBannerLink` is exported from `@mushi-mushi/core`.
+
+## 1.7.5
+
+### Patch Changes
+
+- fix(widget): host pointer-events pass-through so banner never blocks page taps
+
+  The shadow-host element no longer intercepts touches on underlying page content.
+  `:host` is `pointer-events: none` with zero-size fixed positioning; banner, panel,
+  and FAB surfaces opt back into `pointer-events: auto`. Adds `syncHostChromeState`,
+  `isSuppressedByHost`, and `getWidgetDiagnostics` (`widgetHostPointerSafe`,
+  `widgetHostBounds`, `bannerRendered`) for integration health checks. Unifies
+  `hideOnSelector` suppression across trigger and banner paths.
+
+## 1.7.4
+
+### Patch Changes
+
+- fix(web): stop proactive prompts re-opening on every load of a broken/reloading page
+
+  The proactive fatigue guard only persisted its cooldown after a clean widget
+  `onClose` recorded a dismissal. A page reload or crash (e.g. an offline WebView,
+  an API-cascade error state) tears down the JS context before that, so the
+  in-memory session counter reset and the panel re-opened on every subsequent
+  load.
+
+  Proactive shows now persist a `mushi:lastShown` timestamp, and a fresh session
+  (new JS context) suppresses prompts shown within a configurable
+  `reshowCooldownMinutes` window (default 30, `0` disables). Within a live session
+  the existing per-session limit/dedup still governs, so legitimate second
+  triggers are unaffected. `reset()` (explicit teardown / re-init) clears the
+  timestamp. Adds `MushiCooldownConfig.reshowCooldownMinutes`.
+
 ## 1.7.2
 
 ### Patch Changes

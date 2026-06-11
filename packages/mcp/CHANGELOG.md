@@ -1,5 +1,12 @@
 # @mushi-mushi/mcp
 
+## 0.10.1
+
+### Patch Changes
+
+- Fix `npx @mushi-mushi/mcp` install failure (`EUNSUPPORTEDPROTOCOL` on `workspace:^`): publish `@mushi-mushi/core` as a real semver range and bootstrap new packages via `pnpm publish` so workspace specifiers are rewritten in tarballs.
+- Add `ingest_setup_check` MCP tool (GET `/v1/sync/ingest-setup`) for SDK ingest health verification.
+
 ## 0.10.0
 
 ### Minor Changes

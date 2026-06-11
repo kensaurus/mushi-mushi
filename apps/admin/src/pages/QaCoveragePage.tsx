@@ -445,12 +445,14 @@ function StoryDrawer({
   onClose,
   onRunNow,
   isQueued,
+  initialRunId,
 }: {
   storyId: string
   projectId: string
   onClose: () => void
   onRunNow: (id: string) => void
   isQueued: boolean
+  initialRunId?: string
 }) {
   const { data: story } = usePageData<QaStoryFull>(
     `/v1/admin/projects/${projectId}/qa-stories/${storyId}`,
@@ -463,9 +465,10 @@ function StoryDrawer({
 
   const recentRuns = runs?.runs ?? []
   const hasActiveRun = isQueued || recentRuns.some((r) => ACTIVE_STATUSES.has(r.status))
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+  // initialRunId from ?run= URL param preselects a specific run (e.g. from Slack deep links)
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(initialRunId ?? null)
 
-  // Auto-expand the most recent run when the drawer opens
+  // Auto-expand: prefer initialRunId, then fall back to most recent run
   useEffect(() => {
     if (recentRuns.length > 0 && expandedRunId === null) {
       setExpandedRunId(recentRuns[0].id)
@@ -639,6 +642,21 @@ function StoryDrawer({
 
 // ── Create story form ──────────────────────────────────────────────────────
 
+const SCHEDULE_PRESETS = [
+  { label: 'Every hour', value: '0 * * * *' },
+  { label: 'Every 6 hours', value: '0 */6 * * *' },
+  { label: 'Daily at midnight UTC', value: '0 0 * * *' },
+  { label: 'Daily at 9 AM UTC', value: '0 9 * * *' },
+  { label: 'Weekly (Mon 9 AM UTC)', value: '0 9 * * 1' },
+  { label: 'Custom cron…', value: 'custom' },
+]
+
+const PROVIDER_EXPLAINERS: Record<string, string> = {
+  firecrawl_actions: 'Runs in Firecrawl cloud — no browser setup needed. Add a Firecrawl API key under Settings → API Keys.',
+  browserbase: 'Runs in a Browserbase cloud Chromium instance — add a Browserbase API key under Settings → API Keys.',
+  local: 'Runs on your machine via the Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
+}
+
 function CreateStoryModal({
   projectId,
   onClose,
@@ -651,15 +669,30 @@ function CreateStoryModal({
   const { success: toastSuccess, error: toastError } = useToast()
   const [name, setName] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [targetUrl, setTargetUrl] = useState('')
   const [provider, setProvider] = useState<'local' | 'browserbase' | 'firecrawl_actions'>('firecrawl_actions')
+  const [schedulePreset, setSchedulePreset] = useState(SCHEDULE_PRESETS[0].value)
+  const [customCron, setCustomCron] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const scheduleCron = schedulePreset === 'custom' ? customCron : schedulePreset
 
   async function handleCreate() {
     if (!name.trim()) { toastError('Name is required'); return }
+    if (!targetUrl.trim() && provider !== 'local') {
+      toastError('Target URL is required so the runner knows which page to test.')
+      return
+    }
     setSaving(true)
     const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories`, {
       method: 'POST',
-      body: JSON.stringify({ name: name.trim(), prompt: prompt.trim() || null, browser_provider: provider }),
+      body: JSON.stringify({
+        name: name.trim(),
+        prompt: prompt.trim() || null,
+        target_url: targetUrl.trim() || null,
+        browser_provider: provider,
+        schedule_cron: scheduleCron || '0 * * * *',
+      }),
     })
     setSaving(false)
     if (res.ok) {
@@ -667,7 +700,7 @@ function CreateStoryModal({
       onCreated()
       onClose()
     } else {
-      toastError(res.error?.message ?? 'Failed to create story')
+      toastError((res as { error?: { message?: string } }).error?.message ?? 'Failed to create story')
     }
   }
 
@@ -687,7 +720,7 @@ function CreateStoryModal({
       }
     >
       <div className="space-y-4 p-4">
-        <p className="text-2xs text-fg-muted">Runs on schedule and on demand. Results appear in the run history.</p>
+        <p className="text-2xs text-fg-muted">Runs on schedule and on demand. Failures send a Slack notification (if configured) and appear in run history.</p>
 
         <label className="block space-y-1">
           <span className="text-2xs font-medium text-fg-muted">Name</span>
@@ -700,6 +733,22 @@ function CreateStoryModal({
             autoFocus
             className="w-full px-2.5 py-1.5 bg-surface-raised border border-edge-subtle rounded-sm text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand"
           />
+        </label>
+
+        {/* Target URL — required for cloud providers */}
+        <label className="block space-y-1">
+          <span className="text-2xs font-medium text-fg-muted">
+            Target URL
+            {provider !== 'local' && <span className="ml-1 text-danger">*</span>}
+          </span>
+          <input
+            type="url"
+            value={targetUrl}
+            onChange={(e) => setTargetUrl(e.target.value)}
+            placeholder="https://yourapp.com/pricing"
+            className="w-full px-2.5 py-1.5 bg-surface-raised border border-edge-subtle rounded-sm text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand font-mono"
+          />
+          <p className="text-2xs text-fg-faint">The URL the runner will navigate to before verifying your prompt.</p>
         </label>
 
         <label className="block space-y-1">
@@ -720,10 +769,35 @@ function CreateStoryModal({
             onChange={(e) => setProvider(e.target.value as typeof provider)}
             className="w-full px-2.5 py-1.5 bg-surface-raised border border-edge-subtle rounded-sm text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
           >
-            <option value="firecrawl_actions">Firecrawl Actions — cloud, no setup needed</option>
-            <option value="browserbase">Browserbase — BYOK, add key in Settings</option>
-            <option value="local">Local Playwright — CLI runner only</option>
+            <option value="firecrawl_actions">Firecrawl Actions (recommended)</option>
+            <option value="browserbase">Browserbase</option>
+            <option value="local">Local Playwright (CLI only)</option>
           </select>
+          {PROVIDER_EXPLAINERS[provider] && (
+            <p className="text-2xs text-fg-faint">{PROVIDER_EXPLAINERS[provider]}</p>
+          )}
+        </label>
+
+        <label className="block space-y-1">
+          <span className="text-2xs font-medium text-fg-muted">Run schedule</span>
+          <select
+            value={schedulePreset}
+            onChange={(e) => setSchedulePreset(e.target.value)}
+            className="w-full px-2.5 py-1.5 bg-surface-raised border border-edge-subtle rounded-sm text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+          >
+            {SCHEDULE_PRESETS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+          {schedulePreset === 'custom' && (
+            <input
+              type="text"
+              value={customCron}
+              onChange={(e) => setCustomCron(e.target.value)}
+              placeholder="*/30 * * * * (every 30 minutes)"
+              className="w-full mt-1 px-2.5 py-1.5 bg-surface-raised border border-edge-subtle rounded-sm text-sm text-fg font-mono placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+          )}
         </label>
 
         <div className="flex justify-end gap-2 pt-1">
@@ -755,9 +829,12 @@ interface PendingReviewStory {
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
   const { success: toastSuccess, error: toastError } = useToast()
-  const [searchParams] = useSearchParams()
-  const highlightId = searchParams.get('highlight') ?? ''
-  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const highlightId = searchParams.get('highlight') ?? searchParams.get('story') ?? ''
+  // ?story= opens the drawer directly (e.g. from Slack "View run" links).
+  // ?run= can preselect a specific run inside the drawer (handled in StoryDrawer).
+  const initialStoryId = searchParams.get('story') ?? null
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(initialStoryId)
   const [showCreate, setShowCreate] = useState(false)
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set())
   const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set())
@@ -966,9 +1043,17 @@ export function QaCoveragePage() {
           projectId={projectId}
           isQueued={queuedIds.has(selectedStoryId)}
           onRunNow={handleRunNow}
+          initialRunId={searchParams.get('run') ?? undefined}
           onClose={() => {
             handleClearQueued(selectedStoryId)
             setSelectedStoryId(null)
+            // Clean up URL params so back-button / sharing don't re-open drawer
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev)
+              next.delete('story')
+              next.delete('run')
+              return next
+            }, { replace: true })
           }}
         />
       )}

@@ -49,3 +49,9 @@ ALTER TABLE public.inventory_proposals
 -- Add qa_coverage_enabled flag to inventory_proposals for opt-in TDD generation
 ALTER TABLE public.inventory_proposals
   ADD COLUMN IF NOT EXISTS qa_coverage_enabled boolean DEFAULT false;
+
+-- Flush PostgREST's schema/config caches so the new table + the new
+-- inventory_proposals column are visible to API callers immediately after
+-- deploy (repo convention for structural migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

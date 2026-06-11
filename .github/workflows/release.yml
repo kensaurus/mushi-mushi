@@ -64,6 +64,7 @@ jobs:
   ci:
     name: Build & Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -148,6 +149,7 @@ jobs:
     name: Version & Publish
     needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       # See note on the `ci` job above. Harden-Runner is doubly important
       # on the publish job because this is where NPM_TOKEN and the OIDC

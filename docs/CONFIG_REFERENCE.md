@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_93 configuration knobs across 18 sections · last regenerated 2026-06-02._
+_93 configuration knobs across 18 sections · last regenerated 2026-06-11._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1430,13 +1430,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `sdk-install.banner_config`
 
-**Summary** — Customise the header-banner launcher: visual variant, position (top / bottom), and button labels.
+**Summary** — Customise the header-banner launcher: visual variant, position (top / bottom), announcement copy, and button labels.
 
-**How it works** — Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.
+**How it works** — Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bannerMessage` + `bannerLabel` switch the strip to the rich admin-console layout (Beta pill + announcement line + flat text CTAs). `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.
 
 **Default** — `variant: brand · position: top · featureCta: true`
 
-**Where it lives** — table `project_settings.sdk_banner_variant / sdk_banner_position / sdk_banner_bug_cta / sdk_banner_feature_cta` · endpoint `PATCH /v1/admin/settings` · read by `SDK runtime config pull (GET /v1/sdk/config)`
+**Where it lives** — table `project_settings.sdk_banner_variant / sdk_banner_position / sdk_banner_message / sdk_banner_label / sdk_banner_bug_cta / sdk_banner_feature_cta` · endpoint `PATCH /v1/admin/settings` · read by `SDK runtime config pull (GET /v1/sdk/config)`
 
 **When to change** — Use `subtle` when the banner must blend into a polished production UI. Use `neon` for internal beta tools where high visibility matters. Switch `position` to `bottom` when your app has a sticky top header that would collide with the banner.
 

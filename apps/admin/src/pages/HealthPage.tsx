@@ -28,10 +28,9 @@ import {
   FreshnessPill,
   SegmentedControl,
 } from '../components/ui'
-import { HealthStatusBanner } from '../components/health/HealthStatusBanner'
+import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import {
   ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -63,11 +62,10 @@ import {
   totalCallsTooltip,
 } from '../lib/statTooltips/health'
 import { healthLinks } from '../lib/statCardLinks'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
-import { markJudgeBatchSeen } from '../components/PipelineStatusRibbon'
+import { markJudgeBatchSeen } from '../lib/judgeFreshness'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 
 interface LlmRecent {
@@ -543,13 +541,15 @@ export function HealthPage() {
         </Btn>
       </PageHeaderBar>
 
-      <HealthStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
-        plainBanner={ux.plainBanner}
-      />
+      {isHealthStatusBannerCritical(stats) && (
+        <HealthStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onRefresh={reloadAll}
+          refreshing={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
+          plainBanner={ux.plainBanner}
+        />
+      )}
 
       {!ux.hideTabs && (
       <SegmentedControl<HealthTabId>
@@ -559,6 +559,66 @@ export function HealthPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
+
+      {activeTab === 'overview' && !ux.hideOverviewChrome && (
+        <>
+          <PageHero
+            scope="health"
+            title={copy?.title ?? 'System Health'}
+            kicker="Pipeline vitals"
+            decide={{
+              label: stats.redCount > 0
+                ? 'Critical probes failing'
+                : stats.amberCount > 0
+                  ? 'Degraded probes'
+                  : 'All systems nominal',
+              metric: `${llm.totalCalls} calls · ${errorPct}% err`,
+              summary: stats.redCount > 0
+                ? `${stats.redCount} red probe${stats.redCount === 1 ? '' : 's'} — blocking the pipeline. Act now.`
+                : stats.amberCount > 0
+                  ? `${stats.amberCount} amber probe${stats.amberCount === 1 ? '' : 's'} — fallbacks or slow jobs, not yet blocking.`
+                  : `Fallback rate ${fallbackPct}% · avg ${Math.round(llm.avgLatencyMs)}ms (${window}).`,
+              severity: healthSeverity,
+              anchor: 'health:decide',
+              evidence: {
+                kind: 'metric-breakdown',
+                whyNow: stats.redCount > 0
+                  ? `${stats.redCount} red probe${stats.redCount === 1 ? '' : 's'} are blocking the pipeline — error rate ${errorPct}% exceeds the 5% threshold.`
+                  : `Pipeline is nominal: ${errorPct}% errors · ${fallbackPct}% fallbacks · ${Math.round(llm.avgLatencyMs)}ms avg latency.`,
+                items: [
+                  { label: 'Total calls', value: llm.totalCalls, tone: 'neutral' },
+                  { label: 'Error rate', value: `${errorPct}%`, tone: llm.errorRate > 0.05 ? 'crit' : llm.errorRate > 0 ? 'warn' : 'ok' },
+                  { label: 'Fallback rate', value: `${fallbackPct}%`, tone: llm.fallbackRate > 0.1 ? 'crit' : llm.fallbackRate > 0 ? 'warn' : 'ok' },
+                  { label: 'Avg latency', value: `${Math.round(llm.avgLatencyMs)}ms`, tone: 'neutral' },
+                ],
+              },
+              debugLines: healthDebugLines,
+            }}
+            act={healthAction}
+            actAnchor="health:act"
+            actEvidence={healthAction ? { kind: 'rule-trace', why: healthAction.reason ?? healthAction.title, threshold: stats.redCount > 0 ? 'errorRate > 5% or probes failing' : undefined } : undefined}
+            verify={{
+              label: lastLlmCall ? `Last LLM call · ${lastLlmCall.used_model}` : 'Awaiting first call',
+              detail: lastLlmCall
+                ? `${lastLlmCall.function_name} · ${new Date(lastLlmCall.created_at).toISOString().slice(11, 19)}Z`
+                : '—',
+              to: lastLlmCall?.report_id ? `/reports/${lastLlmCall.report_id}` : '/reports',
+              secondaryTo: '/audit',
+              secondaryLabel: 'Open audit log',
+              anchor: 'health:verify',
+              evidence: lastLlmCall ? {
+                kind: 'last-event',
+                at: lastLlmCall.created_at,
+                by: lastLlmCall.used_model ?? 'unknown',
+                payloadSummary: lastLlmCall.function_name ?? 'llm call',
+                status: lastLlmCall.status === 'success' ? 'ok' : 'warn',
+              } : undefined,
+            }}
+          />
+
+          {recommendedAction}
+        </>
       )}
 
       {!ux.hideHealthSnapshot && (
@@ -616,104 +676,6 @@ export function HealthPage() {
           />
         </div>
       </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' && !ux.hideOverviewChrome ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'idle'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-warn/30 bg-warn/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
-                ? 'danger'
-                : stats.topPriority === 'idle'
-                  ? 'brand'
-                  : 'warn'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock
-            tone={
-              stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error' ? 'warn' : 'info'
-            }
-          >
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
-
-      {activeTab === 'overview' && !ux.hideOverviewChrome && (
-        <>
-          <PageHero
-            scope="health"
-            title={copy?.title ?? 'System Health'}
-            kicker="Pipeline pulse"
-            decide={{
-              label: stats.redCount > 0
-                ? 'Critical probes failing'
-                : stats.amberCount > 0
-                  ? 'Degraded probes'
-                  : 'All systems nominal',
-              metric: `${llm.totalCalls} calls · ${errorPct}% err`,
-              summary: stats.redCount > 0
-                ? `${stats.redCount} red probe${stats.redCount === 1 ? '' : 's'} — blocking the pipeline. Act now.`
-                : stats.amberCount > 0
-                  ? `${stats.amberCount} amber probe${stats.amberCount === 1 ? '' : 's'} — fallbacks or slow jobs, not yet blocking.`
-                  : `Fallback rate ${fallbackPct}% · avg ${Math.round(llm.avgLatencyMs)}ms (${window}).`,
-              severity: healthSeverity,
-              anchor: 'health:decide',
-              evidence: {
-                kind: 'metric-breakdown',
-                whyNow: stats.redCount > 0
-                  ? `${stats.redCount} red probe${stats.redCount === 1 ? '' : 's'} are blocking the pipeline — error rate ${errorPct}% exceeds the 5% threshold.`
-                  : `Pipeline is nominal: ${errorPct}% errors · ${fallbackPct}% fallbacks · ${Math.round(llm.avgLatencyMs)}ms avg latency.`,
-                items: [
-                  { label: 'Total calls', value: llm.totalCalls, tone: 'neutral' },
-                  { label: 'Error rate', value: `${errorPct}%`, tone: llm.errorRate > 0.05 ? 'crit' : llm.errorRate > 0 ? 'warn' : 'ok' },
-                  { label: 'Fallback rate', value: `${fallbackPct}%`, tone: llm.fallbackRate > 0.1 ? 'crit' : llm.fallbackRate > 0 ? 'warn' : 'ok' },
-                  { label: 'Avg latency', value: `${Math.round(llm.avgLatencyMs)}ms`, tone: 'neutral' },
-                ],
-              },
-              debugLines: healthDebugLines,
-            }}
-            act={healthAction}
-            actAnchor="health:act"
-            actEvidence={healthAction ? { kind: 'rule-trace', why: healthAction.reason ?? healthAction.title, threshold: stats.redCount > 0 ? 'errorRate > 5% or probes failing' : undefined } : undefined}
-            verify={{
-              label: lastLlmCall ? `Last LLM call · ${lastLlmCall.used_model}` : 'Awaiting first call',
-              detail: lastLlmCall
-                ? `${lastLlmCall.function_name} · ${new Date(lastLlmCall.created_at).toISOString().slice(11, 19)}Z`
-                : '—',
-              to: lastLlmCall?.report_id ? `/reports/${lastLlmCall.report_id}` : '/reports',
-              secondaryTo: '/audit',
-              secondaryLabel: 'Open audit log',
-              anchor: 'health:verify',
-              evidence: lastLlmCall ? {
-                kind: 'last-event',
-                at: lastLlmCall.created_at,
-                by: lastLlmCall.used_model ?? 'unknown',
-                payloadSummary: lastLlmCall.function_name ?? 'llm call',
-                status: lastLlmCall.status === 'success' ? 'ok' : 'warn',
-              } : undefined,
-            }}
-          />
-
-          <PageActionBar scope="health" action={healthAction} />
-
-          {recommendedAction}
-        </>
       )}
 
       {activeTab === 'llm' && (

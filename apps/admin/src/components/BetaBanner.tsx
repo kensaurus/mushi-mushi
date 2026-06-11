@@ -70,7 +70,7 @@ export function BetaBanner() {
       <div
         role="region"
         aria-label="Beta announcement"
-        className="border-b border-lime/40 bg-lime-muted"
+        className="sticky top-0 z-[100] shrink-0 border-b border-lime/40 bg-lime-muted"
       >
         <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-0.5 text-xs">
           <span className="inline-flex min-w-0 flex-1 items-center gap-2">

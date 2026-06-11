@@ -112,10 +112,28 @@ Add to your MCP config:
 
 Key TDD MCP tools: `map_user_stories`, `generate_tdd_from_story`, `run_qa_story`, `list_pending_review_stories`, `approve_qa_story`.
 
+QA + notification MCP tools: `list_qa_story_runs`, `get_qa_story_run`, `test_notification_channel`.
+
+## Connect Slack (1-click)
+
+In the console: **Integrations → Slack → Add to Slack** (OAuth flow — no manual token pasting).
+
+```bash
+# Verify the connection works
+mushi slack status
+
+# Send a test notification
+mushi slack test
+```
+
 ## Verify Setup
 
 ```bash
-mushi doctor
+# Full pre-flight including QA story health
+mushi doctor --server --qa-stories
 ```
 
-Should show: SDK pings ✓, API reachable ✓, story map ready ✓.
+Flags for common issues:
+- ✗ `[qa] Firecrawl API key configured` → add your key at **Integrations → BYOK Keys**
+- ✗ `[qa] Stories with a target URL` → set Target URL in **QA Coverage → Edit story**
+- ✗ `[qa] Slack notifications configured` → click **Integrations → Add to Slack**

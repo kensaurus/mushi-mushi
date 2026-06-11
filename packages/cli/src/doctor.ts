@@ -7,6 +7,8 @@
  * logic can be unit-tested without spawning a child process.
  */
 
+import { fetchIngestSetup } from './heartbeat-wait.js'
+
 export interface DoctorCheck {
   name: string
   ok: boolean
@@ -33,6 +35,18 @@ export interface DoctorOptions {
    */
   server?: boolean
   /**
+   * When true, calls GET /v1/sync/ingest-setup for the 4 required ingest steps
+   * (API key → SDK heartbeat → first report). Mutually composable with `server`.
+   */
+  ingest?: boolean
+  /**
+   * When true, queries the backend for enabled QA stories and flags:
+   *   - firecrawl stories with no resolvable Firecrawl key
+   *   - stories with no target URL
+   *   - Slack unconfigured (no webhook or bot token)
+   */
+  qaStories?: boolean
+  /**
    * Override the fetch implementation (for testing). Defaults to globalThis.fetch.
    */
   fetch?: typeof globalThis.fetch
@@ -47,7 +61,7 @@ export function checkCliConfig(config: DoctorCliConfig): DoctorCheck[] {
       ok: Boolean(config.endpoint),
       detail: config.endpoint
         ? `endpoint=${config.endpoint}`
-        : 'No endpoint in ~/.mushirc — run `mushi init` or `mushi config endpoint <url>`',
+        : 'No endpoint — set MUSHI_API_ENDPOINT, run `mushi connect`, or `mushi config endpoint <url>`',
     },
     {
       name: 'API key configured',
@@ -171,7 +185,7 @@ export async function checkServerPreflight(
       return serverChecks.map((sc) => ({
         name: `[server] ${sc.label}`,
         ok: sc.ready,
-        detail: sc.hint,
+        detail: sc.ready ? '' : sc.hint,
       }))
     }
 
@@ -187,6 +201,177 @@ export async function checkServerPreflight(
     const msg = err instanceof Error ? err.message : String(err)
     return [{ name: 'Server preflight', ok: false, detail: `Fetch failed: ${msg}` }]
   }
+}
+
+// ── Check 5: Ingest setup (API key auth) ─────────────────────────────────────
+
+export async function checkIngestSetup(
+  config: DoctorCliConfig,
+  doFetch: typeof globalThis.fetch = globalThis.fetch,
+): Promise<DoctorCheck[]> {
+  if (!config.apiKey || !config.endpoint) {
+    return [
+      {
+        name: 'Ingest setup',
+        ok: false,
+        detail: 'Need apiKey and endpoint. Run `mushi connect`.',
+      },
+    ]
+  }
+
+  try {
+    const data = await fetchIngestSetup(
+      { endpoint: config.endpoint, apiKey: config.apiKey, projectId: config.projectId },
+      doFetch,
+    )
+
+    if (!data) {
+      return [{ name: 'Ingest setup', ok: false, detail: 'Request to /v1/sync/ingest-setup failed or returned invalid payload' }]
+    }
+
+    const steps = data.steps ?? []
+    const checks = steps
+      .filter((s) => s.required)
+      .map((s) => ({
+        name: `[ingest] ${s.label}`,
+        ok: s.complete,
+        detail: s.complete ? '' : (s.hint ?? ''),
+      }))
+
+    const diag = data.diagnostic
+    if (diag?.last_sdk_seen_at) {
+      checks.push({
+        name: '[ingest] Last SDK heartbeat',
+        ok: true,
+        detail: `${diag.last_sdk_seen_at}${diag.last_sdk_endpoint_host ? ` @ ${diag.last_sdk_endpoint_host}` : ''}`,
+      })
+    }
+
+    return checks.length > 0 ? checks : [{ name: 'Ingest setup', ok: false, detail: 'Empty response from /v1/sync/ingest-setup' }]
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return [{ name: 'Ingest setup', ok: false, detail: `Fetch failed: ${msg}` }]
+  }
+}
+
+// ── Check 6: QA story health ─────────────────────────────────────────────────
+
+export async function checkQaStoriesHealth(
+  config: DoctorCliConfig,
+  doFetch: typeof globalThis.fetch = globalThis.fetch,
+): Promise<DoctorCheck[]> {
+  if (!config.projectId || !config.apiKey || !config.endpoint) {
+    return [
+      {
+        name: 'QA stories health',
+        ok: false,
+        detail: 'Need projectId, apiKey, and endpoint for QA story checks.',
+      },
+    ]
+  }
+
+  const checks: DoctorCheck[] = []
+
+  try {
+    // QA story list — the coverage endpoint is the canonical list surface and
+    // is one of the few routes that accepts an API key (jwtOrApiKey), which is
+    // how the CLI authenticates. There is no GET /qa-stories list route.
+    const storiesRes = await doFetch(
+      `${config.endpoint}/v1/admin/projects/${config.projectId}/qa-coverage`,
+      {
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'X-Mushi-Api-Key': config.apiKey,
+          'X-Mushi-Project': config.projectId,
+        },
+        signal: AbortSignal.timeout(8000),
+      },
+    )
+    if (!storiesRes.ok) {
+      checks.push({ name: '[qa] Fetch QA stories', ok: false, detail: `HTTP ${storiesRes.status}` })
+      return checks
+    }
+
+    const storiesBody = (await storiesRes.json()) as {
+      data?: {
+        coverage?: Array<{
+          story_id: string
+          name: string
+          enabled: boolean
+          browser_provider?: string | null
+        }>
+      }
+    }
+    const stories = storiesBody.data?.coverage ?? []
+    const enabled = stories.filter((s) => s.enabled)
+
+    if (enabled.length === 0) {
+      checks.push({ name: '[qa] Enabled QA stories', ok: true, detail: 'No enabled stories — create one at /qa-coverage' })
+      return checks
+    }
+
+    checks.push({
+      name: '[qa] Enabled QA stories',
+      ok: true,
+      detail: `${enabled.length} enabled story/stories configured`,
+    })
+
+    // Probe the Slack integration to warn if unconfigured
+    const slackRes = await doFetch(
+      `${config.endpoint}/v1/admin/projects/${config.projectId}/integrations/probe/slack`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'X-Mushi-Api-Key': config.apiKey,
+          'X-Mushi-Project': config.projectId,
+        },
+        signal: AbortSignal.timeout(6000),
+      },
+    )
+    const slackBody = slackRes.ok ? (await slackRes.json() as { status?: string }) : null
+    const slackOk = slackBody?.status === 'ok'
+    checks.push({
+      name: '[qa] Slack notifications configured',
+      ok: slackOk,
+      detail: slackOk
+        ? 'Slack connected — failures will notify your channel'
+        : 'Slack not connected — you won\'t be notified when stories fail. Visit /integrations → Add to Slack.',
+    })
+
+    // Probe Firecrawl key availability (via integration probe endpoint)
+    const fcRes = await doFetch(
+      `${config.endpoint}/v1/admin/projects/${config.projectId}/integrations/probe/firecrawl`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'X-Mushi-Api-Key': config.apiKey,
+          'X-Mushi-Project': config.projectId,
+        },
+        signal: AbortSignal.timeout(6000),
+      },
+    )
+    const fcBody = fcRes.ok ? (await fcRes.json() as { status?: string }) : null
+    const hasFirecrawlStories = enabled.some(
+      (s) => !s.browser_provider || s.browser_provider === 'firecrawl_actions',
+    )
+    if (hasFirecrawlStories) {
+      const fcOk = fcBody?.status === 'ok'
+      checks.push({
+        name: '[qa] Firecrawl API key configured',
+        ok: fcOk,
+        detail: fcOk
+          ? 'Firecrawl key is resolvable — stories will run without Unauthorized errors'
+          : 'No Firecrawl key found — enabled stories using firecrawl_actions will 401. Add a key at /integrations → BYOK keys.',
+      })
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    checks.push({ name: '[qa] QA stories health', ok: false, detail: `Fetch failed: ${msg}` })
+  }
+
+  return checks
 }
 
 // ── Main doctor runner ───────────────────────────────────────────────────────
@@ -216,6 +401,18 @@ export async function runDoctor(
     checks.push(...serverChecks)
   }
 
+  // 5. Ingest setup (opt-in)
+  if (options.ingest) {
+    const ingestChecks = await checkIngestSetup(config, doFetch)
+    checks.push(...ingestChecks)
+  }
+
+  // 6. QA story health (opt-in)
+  if (options.qaStories) {
+    const qaChecks = await checkQaStoriesHealth(config, doFetch)
+    checks.push(...qaChecks)
+  }
+
   return { checks, ready: checks.every((c) => c.ok) }
 }
 
@@ -228,7 +425,7 @@ export function formatDoctorResult(result: DoctorResult): string {
 
   for (const c of result.checks) {
     lines.push(`${c.ok ? PASS : FAIL} ${c.name}`)
-    lines.push(`  ${c.detail}`)
+    if (c.detail) lines.push(`  ${c.detail}`)
   }
 
   const failed = result.checks.filter((c) => !c.ok)

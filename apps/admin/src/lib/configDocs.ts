@@ -1502,13 +1502,13 @@ const SDK_INSTALL: ConfigDoc[] = [
     id: 'sdk-install.banner_config',
     label: 'Banner launcher options',
     summary:
-      'Customise the header-banner launcher: visual variant, position (top / bottom), and button labels.',
+      'Customise the header-banner launcher: visual variant, position (top / bottom), announcement copy, and button labels.',
     howItWorks:
-      'Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.',
+      'Only applies when `trigger_mode` is `banner`. `variant`: `neon` = electric-lime dev/beta aesthetic; `brand` = vermillion editorial feel; `subtle` = hairline muted strip. `position`: `top` pushes the page down; `bottom` lifts content up. `bannerMessage` + `bannerLabel` switch the strip to the rich admin-console layout (Beta pill + announcement line + flat text CTAs). `bugCta` / `featureCta` / `featureCtaLabel` let you relabel the buttons for your audience. Configure live in the console — the SDK picks up changes without re-init via the same runtime config pull that handles all other settings.',
     default: { value: 'variant: brand · position: top · featureCta: true' },
     backend: {
       table: 'project_settings',
-      column: 'sdk_banner_variant / sdk_banner_position / sdk_banner_bug_cta / sdk_banner_feature_cta',
+      column: 'sdk_banner_variant / sdk_banner_position / sdk_banner_message / sdk_banner_label / sdk_banner_bug_cta / sdk_banner_feature_cta',
       endpoint: 'PATCH /v1/admin/settings',
       readBy: ['SDK runtime config pull (GET /v1/sdk/config)'],
     },

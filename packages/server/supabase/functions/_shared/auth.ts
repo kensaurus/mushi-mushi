@@ -295,13 +295,20 @@ export async function apiKeyAuth(c: Context, next: Next) {
     return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
   }
 
-  recordSdkHeartbeat({
-    db,
-    keyHash,
-    origin: c.req.header('Origin') ?? c.req.header('Referer') ?? null,
-    userAgent: c.req.header('User-Agent') ?? null,
-    endpointHost: extractEndpointHost(c.req.url),
-  })
+  // Skip the heartbeat stamp for the ingest-setup diagnostic route: its
+  // pollers (`mushi connect --wait`, `mushi doctor --ingest`, MCP
+  // ingest_setup_check) authenticate with the same SDK key but are NOT the
+  // SDK — stamping last_seen_at here would make the route's own
+  // "SDK heartbeat" step self-satisfy from the second poll onward.
+  if (!c.req.path.endsWith('/ingest-setup')) {
+    recordSdkHeartbeat({
+      db,
+      keyHash,
+      origin: c.req.header('Origin') ?? c.req.header('Referer') ?? null,
+      userAgent: c.req.header('User-Agent') ?? null,
+      endpointHost: extractEndpointHost(c.req.url),
+    })
+  }
 
   c.set('projectId', keyRow.project_id)
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')
