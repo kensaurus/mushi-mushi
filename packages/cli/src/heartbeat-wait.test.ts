@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fetchIngestSetup, waitForIngestReady } from './heartbeat-wait.js'
 
+const TEST_API_KEY = 'mushi_test_key_1234567890abcdef'
+
 describe('heartbeat-wait', () => {
   it('fetchIngestSetup unwraps ok envelope', async () => {
     const fetch = vi.fn().mockResolvedValue({
@@ -17,13 +19,13 @@ describe('heartbeat-wait', () => {
     })
 
     const payload = await fetchIngestSetup(
-      { endpoint: 'https://api.test', apiKey: 'mushi_test' },
+      { endpoint: 'https://api.test', apiKey: TEST_API_KEY },
       fetch as typeof fetch,
     )
     expect(payload?.required_complete).toBe(2)
     expect(fetch).toHaveBeenCalledWith(
       'https://api.test/v1/sync/ingest-setup',
-      expect.objectContaining({ headers: expect.objectContaining({ 'X-Mushi-Api-Key': 'mushi_test' }) }),
+      expect.objectContaining({ headers: expect.objectContaining({ 'X-Mushi-Api-Key': TEST_API_KEY }) }),
     )
   })
 
@@ -50,7 +52,7 @@ describe('heartbeat-wait', () => {
 
     const result = await waitForIngestReady({
       endpoint: 'https://api.test',
-      apiKey: 'mushi_test',
+      apiKey: TEST_API_KEY,
       maxAttempts: 3,
       intervalMs: 1,
       fetch: fetch as typeof fetch,
@@ -66,7 +68,7 @@ describe('heartbeat-wait', () => {
 
     const result = await waitForIngestReady({
       endpoint: 'https://api.test',
-      apiKey: 'mushi_bad',
+      apiKey: 'mushi_invalid_key_1234567890',
       maxAttempts: 10,
       intervalMs: 1,
       fetch: fetch as typeof fetch,
@@ -99,7 +101,7 @@ describe('heartbeat-wait', () => {
 
     const result = await waitForIngestReady({
       endpoint: 'https://api.test',
-      apiKey: 'mushi_test',
+      apiKey: TEST_API_KEY,
       maxAttempts: 3,
       intervalMs: 1,
       fetch: fetch as typeof fetch,
@@ -128,7 +130,7 @@ describe('heartbeat-wait', () => {
 
     const result = await waitForIngestReady({
       endpoint: 'https://api.test',
-      apiKey: 'mushi_test',
+      apiKey: TEST_API_KEY,
       maxAttempts: 1,
       intervalMs: 1,
       fetch: fetch as typeof fetch,

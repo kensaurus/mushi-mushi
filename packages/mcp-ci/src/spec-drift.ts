@@ -10,8 +10,8 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, chmodSync, writeFileSync } from 'node:fs'
-import { tmpdir, homedir } from 'node:os'
+import { existsSync, mkdirSync, chmodSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
@@ -47,23 +47,32 @@ async function downloadOasdiff(): Promise<string> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to download oasdiff: HTTP ${res.status} from ${url}`)
 
-  const tgzPath = join(tmpdir(), `oasdiff-${createHash('md5').update(url).digest('hex')}.tar.gz`)
   const buf = Buffer.from(await res.arrayBuffer())
+  const maxBytes = 64 * 1024 * 1024
+  if (buf.length > maxBytes) {
+    throw new Error(`oasdiff download too large (${buf.length} bytes) — aborting`)
+  }
+
+  // Store under ~/.mushi/tools (mode 0700 dir) instead of the world-readable
+  // system temp dir — avoids CodeQL insecure-temp-file + keeps cache reusable.
+  const tgzPath = join(cacheDir, `oasdiff-${createHash('md5').update(url).digest('hex')}.tar.gz`)
   writeFileSync(tgzPath, buf)
 
-  // Extract the binary from the tarball using the system tar.
-  const extractDir = join(tmpdir(), `oasdiff-extract-${Date.now()}`)
-  mkdirSync(extractDir, { recursive: true })
-  execFileSync('tar', ['-xzf', tgzPath, '-C', extractDir])
+  const extractDir = mkdtempSync(join(cacheDir, 'oasdiff-extract-'))
+  try {
+    execFileSync('tar', ['-xzf', tgzPath, '-C', extractDir])
 
-  // Find the binary inside the extracted dir.
-  const { readdirSync, copyFileSync } = await import('node:fs')
-  const files = readdirSync(extractDir)
-  const binName = process.platform === 'win32' ? 'oasdiff.exe' : 'oasdiff'
-  const found = files.find((f) => f === binName || f.startsWith('oasdiff'))
-  if (!found) throw new Error(`oasdiff binary not found in archive. Files: ${files.join(', ')}`)
-  copyFileSync(join(extractDir, found), binPath)
-  if (process.platform !== 'win32') chmodSync(binPath, 0o755)
+    const { readdirSync, copyFileSync } = await import('node:fs')
+    const files = readdirSync(extractDir)
+    const binName = process.platform === 'win32' ? 'oasdiff.exe' : 'oasdiff'
+    const found = files.find((f) => f === binName || f.startsWith('oasdiff'))
+    if (!found) throw new Error(`oasdiff binary not found in archive. Files: ${files.join(', ')}`)
+    copyFileSync(join(extractDir, found), binPath)
+    if (process.platform !== 'win32') chmodSync(binPath, 0o755)
+  } finally {
+    rmSync(extractDir, { recursive: true, force: true })
+    rmSync(tgzPath, { force: true })
+  }
   return binPath
 }
 

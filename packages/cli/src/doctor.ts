@@ -8,6 +8,7 @@
  */
 
 import { fetchIngestSetup } from './heartbeat-wait.js'
+import { apiKeyHeaders, sanitizeCliCredentials, sanitizeEndpoint } from './sanitize-config.js'
 
 export interface DoctorCheck {
   name: string
@@ -87,15 +88,14 @@ export async function checkEndpointReachability(
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<DoctorCheck> {
   try {
-    // Config-file data intentionally used to probe the user's own endpoint.
-    // lgtm[js/file-data-in-outbound-request]
-    const res = await doFetch(`${endpoint}/health`, {
+    const safeEndpoint = sanitizeEndpoint(endpoint)
+    const res = await doFetch(`${safeEndpoint}/health`, {
       signal: AbortSignal.timeout(5000),
     })
     return {
       name: 'Endpoint reachable',
       ok: res.status === 200,
-      detail: `GET ${endpoint}/health → ${res.status}`,
+      detail: `GET ${safeEndpoint}/health → ${res.status}`,
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -156,16 +156,11 @@ export async function checkServerPreflight(
   }
 
   try {
-    // Config-file values (endpoint, projectId, apiKey) are intentionally
-    // forwarded to the user's own server. lgtm[js/file-data-in-outbound-request]
+    const { endpoint, apiKey, projectId } = sanitizeCliCredentials(config)
     const res = await doFetch(
-      `${config.endpoint}/v1/admin/projects/${config.projectId}/preflight`,
+      `${endpoint}/v1/admin/projects/${projectId}/preflight`,
       {
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'X-Mushi-Api-Key': config.apiKey,
-          'X-Mushi-Project': config.projectId,
-        },
+        headers: apiKeyHeaders(apiKey, projectId),
         signal: AbortSignal.timeout(8000),
       },
     )
@@ -273,17 +268,16 @@ export async function checkQaStoriesHealth(
   const checks: DoctorCheck[] = []
 
   try {
+    const { endpoint, apiKey, projectId } = sanitizeCliCredentials(config)
+    const headers = apiKeyHeaders(apiKey, projectId)
+
     // QA story list — the coverage endpoint is the canonical list surface and
     // is one of the few routes that accepts an API key (jwtOrApiKey), which is
     // how the CLI authenticates. There is no GET /qa-stories list route.
     const storiesRes = await doFetch(
-      `${config.endpoint}/v1/admin/projects/${config.projectId}/qa-coverage`,
+      `${endpoint}/v1/admin/projects/${projectId}/qa-coverage`,
       {
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'X-Mushi-Api-Key': config.apiKey,
-          'X-Mushi-Project': config.projectId,
-        },
+        headers,
         signal: AbortSignal.timeout(8000),
       },
     )
@@ -318,14 +312,10 @@ export async function checkQaStoriesHealth(
 
     // Probe the Slack integration to warn if unconfigured
     const slackRes = await doFetch(
-      `${config.endpoint}/v1/admin/projects/${config.projectId}/integrations/probe/slack`,
+      `${endpoint}/v1/admin/projects/${projectId}/integrations/probe/slack`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'X-Mushi-Api-Key': config.apiKey,
-          'X-Mushi-Project': config.projectId,
-        },
+        headers,
         signal: AbortSignal.timeout(6000),
       },
     )
@@ -341,14 +331,10 @@ export async function checkQaStoriesHealth(
 
     // Probe Firecrawl key availability (via integration probe endpoint)
     const fcRes = await doFetch(
-      `${config.endpoint}/v1/admin/projects/${config.projectId}/integrations/probe/firecrawl`,
+      `${endpoint}/v1/admin/projects/${projectId}/integrations/probe/firecrawl`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'X-Mushi-Api-Key': config.apiKey,
-          'X-Mushi-Project': config.projectId,
-        },
+        headers,
         signal: AbortSignal.timeout(6000),
       },
     )

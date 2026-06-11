@@ -163,9 +163,13 @@ function NotFoundPage() {
  */
 function QaCoverageRedirect() {
   const { pid, storyId } = useParams<{ pid: string; storyId: string }>()
+  const query = new URLSearchParams({
+    project: pid ?? '',
+    story: storyId ?? '',
+  }).toString()
   return (
     <Navigate
-      to={`/qa-coverage?project=${pid ?? ''}&story=${storyId ?? ''}`}
+      to={`/qa-coverage?${query}`}
       replace
     />
   )
