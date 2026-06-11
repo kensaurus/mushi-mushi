@@ -28,6 +28,14 @@ import { jwtAuth, apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function assertUuid(c: Context, value: string, name: string) {
+  if (!UUID_RE.test(value)) {
+    return c.json({ ok: false, error: { code: 'INVALID_UUID', message: `${name} must be a full UUID (got: "${value}"). Use 'mushi qa stories' to get the complete story ID.` } }, 400);
+  }
+  return null;
+}
+
 // Dual-auth middleware for CLI + browser: accepts either a Supabase JWT (browser)
 // or a project API key (X-Mushi-Api-Key). The API key must belong to the same project.
 async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
@@ -410,6 +418,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
     const sid = c.req.param('sid')!;
+    const uuidErr = assertUuid(c, sid, 'story_id') ?? assertUuid(c, pid, 'project_id');
+    if (uuidErr) return uuidErr;
     const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
     const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
@@ -477,6 +487,8 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
     const sid = c.req.param('sid')!;
+    const uuidErr = assertUuid(c, sid, 'story_id') ?? assertUuid(c, pid, 'project_id');
+    if (uuidErr) return uuidErr;
     const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);

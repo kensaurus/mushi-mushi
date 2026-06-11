@@ -544,7 +544,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
       const { probeIntegration } = await import('../../_shared/integration-probes.ts');
       const result = await probeIntegration(
-        kind as 'slack' | 'sentry' | 'langfuse' | 'github' | 'firecrawl' | 'browserbase' | 'cursor_cloud' | 'claude_code_agent',
+        kind as Parameters<typeof probeIntegration>[0],
         db,
         settings,
       );
@@ -632,7 +632,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
       projectId = project.id;
-      projectName = (project as Record<string, unknown>).name as string ?? 'your project';
+      projectName = project.name ?? 'your project';
     }
 
     const { data: settings } = await db
@@ -695,7 +695,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if ('response' in resolvedProject) return resolvedProject.response;
       const project = resolvedProject.project;
       projectId = project.id;
-      displayName = (project as Record<string, unknown>).name as string ?? pid;
+      displayName = project.name ?? pid;
     }
 
     const { data: settings } = await db

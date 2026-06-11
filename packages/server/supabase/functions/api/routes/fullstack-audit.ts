@@ -229,7 +229,7 @@ export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables
 
     const result: AuditResult = {
       project_id: projectId,
-      project_name: project.name,
+      project_name: project.name ?? '',
       audit_at: new Date().toISOString(),
       backend_linked: backendLinked,
       summary: { error_count: errorCount, warn_count: warnCount, info_count: infoCount, overall },

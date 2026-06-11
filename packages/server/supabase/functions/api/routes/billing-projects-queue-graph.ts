@@ -792,7 +792,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .eq('is_active', true),
       db
         .from('project_settings')
-        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
+        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref, slack_channel_id, slack_webhook_url')
         .in('project_id', projectIds),
       db
         .from('reports')
@@ -843,6 +843,8 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         github_repo_url: string | null;
         sentry_org_slug: string | null;
         byok_anthropic_key_ref: string | null;
+        slack_channel_id: string | null;
+        slack_webhook_url: string | null;
       }
     >();
     for (const s of settingsRes.data ?? []) settingsByProject.set(s.project_id, s as never);
