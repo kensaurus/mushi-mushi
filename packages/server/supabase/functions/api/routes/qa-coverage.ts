@@ -22,15 +22,48 @@
  */
 
 import type { Hono } from 'npm:hono@4';
+import type { Context, Next } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
-import { jwtAuth } from '../../_shared/auth.ts';
+import { jwtAuth, apiKeyAuth } from '../../_shared/auth.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
+
+// Dual-auth middleware for CLI + browser: accepts either a Supabase JWT (browser)
+// or a project API key (X-Mushi-Api-Key). The API key must belong to the same project.
+async function jwtOrApiKey(c: Context<{ Variables: Variables }>, next: Next) {
+  const apiKey = c.req.header('X-Mushi-Api-Key');
+  if (apiKey) {
+    // Delegate to apiKeyAuth to validate and set projectId
+    let called = false;
+    await apiKeyAuth(c as never, async () => { called = true; });
+    if (!called) return; // apiKeyAuth rejected — response already set
+    // Verify the route's :pid matches the key's project
+    const keyProjectId = c.get('projectId' as keyof Variables) as string | undefined;
+    const routePid = c.req.param('pid');
+    if (keyProjectId && routePid && keyProjectId !== routePid) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+    }
+    // Set userId to empty string so downstream handlers don't crash
+    c.set('userId' as keyof Variables, '' as never);
+    await next();
+    return;
+  }
+  // Fall back to Supabase JWT auth
+  await jwtAuth(c as never, next);
+}
 
 export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): void {
 
   // ── helper ────────────────────────────────────────────────────────────────
-  async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string) {
+  // When authenticated via API key, userId is '' and projectId is already validated
+  // by the middleware above. When authenticated via JWT, userId is a real UUID and
+  // we check project ownership the normal way.
+  async function resolveProject(db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, contextProjectId?: string) {
+    // API key path: middleware already validated project ownership
+    if (!userId && contextProjectId === projectId) return projectId;
+    if (!userId && contextProjectId && contextProjectId !== projectId) return null;
+    if (!userId) return null;
+    // JWT path: check via ownership table
     const ids = await ownedProjectIds(db, userId);
     if (!ids.includes(projectId)) return null;
     return projectId;
@@ -189,11 +222,12 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   });
 
   // ── List stories + 24h coverage stats ────────────────────────────────────
-  app.get('/v1/admin/projects/:pid/qa-coverage', jwtAuth, async (c) => {
+  app.get('/v1/admin/projects/:pid/qa-coverage', jwtOrApiKey, async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
+    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
+    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
 
     // Left-join stories against MV to get live 24h stats
     const { data, error } = await db.rpc('get_qa_coverage', { p_project_id: pid });
@@ -372,13 +406,14 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   });
 
   // ── List runs for a story ─────────────────────────────────────────────────
-  app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', jwtAuth, async (c) => {
+  app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', jwtOrApiKey, async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
     const sid = c.req.param('sid')!;
     const limit = Math.min(Number(c.req.query('limit')) || 20, 50);
+    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
+    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
 
     const { data, error } = await db
       .from('qa_story_runs')
@@ -438,12 +473,13 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   });
 
   // ── Manual run trigger ────────────────────────────────────────────────────
-  app.post('/v1/admin/projects/:pid/qa-stories/:sid/run', jwtAuth, async (c) => {
+  app.post('/v1/admin/projects/:pid/qa-stories/:sid/run', jwtOrApiKey, async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
     const sid = c.req.param('sid')!;
+    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
+    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
 
     // Verify story exists, belongs to project, and is enabled
     const { data: story, error: storyErr } = await db

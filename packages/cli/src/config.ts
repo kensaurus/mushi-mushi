@@ -26,6 +26,8 @@ export interface CliConfig {
   apiKey?: string
   endpoint?: string
   projectId?: string
+  /** URL of the Mushi admin console (e.g. http://localhost:6464 for local dev). */
+  consoleUrl?: string
 }
 
 const SECURE_FILE_MODE = 0o600

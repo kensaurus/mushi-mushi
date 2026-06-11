@@ -280,6 +280,40 @@ export interface MushiCaptureConfig {
    * Nothing else. No DOM beyond the summary, no query values, no PII.
    */
   discoverInventory?: boolean | MushiDiscoverInventoryConfig;
+  /**
+   * W3C trace-context propagation for OTel-style frontend→backend correlation.
+   *
+   * When enabled, the SDK injects a W3C `traceparent` header and an
+   * `x-mushi-session` header into every fetch/XHR request whose URL matches
+   * the `corsUrls` allowlist. The generated trace_id is recorded on each
+   * captured network entry so a bug report can be correlated with the
+   * backend span that handled the failing request.
+   *
+   * Default: disabled. Enable only for origins you control to avoid CORS issues.
+   * The backend (node SDK or Supabase edge function) must include
+   * `traceparent` and `x-mushi-session` in `Access-Control-Allow-Headers`.
+   *
+   * @example
+   * capture: {
+   *   tracePropagation: {
+   *     enabled: true,
+   *     corsUrls: [/api\.myapp\.com/, /localhost:3000/],
+   *   }
+   * }
+   */
+  tracePropagation?: MushiTracePropagationConfig;
+}
+
+export interface MushiTracePropagationConfig {
+  /** Enable W3C traceparent injection. Defaults to false. */
+  enabled?: boolean;
+  /**
+   * URL patterns for which the SDK injects `traceparent` + `x-mushi-session`
+   * headers. Only requests matching at least one pattern are instrumented.
+   * Strings are substring-matched; RegExp values are tested against the full URL.
+   * Required when `enabled` is true — an empty allowlist silently disables propagation.
+   */
+  corsUrls?: Array<string | RegExp>;
 }
 
 /**
@@ -892,6 +926,13 @@ export interface MushiNetworkEntry {
   requestHeaders?: Record<string, string>;
   responseHeaders?: Record<string, string>;
   error?: string;
+  /**
+   * W3C trace ID (32-char lowercase hex) injected by the SDK's trace propagation
+   * feature. Present only when `capture.tracePropagation.enabled` is true AND
+   * the request URL matched the `corsUrls` allowlist.
+   * Used to correlate this network entry with a backend span in the admin console.
+   */
+  traceId?: string;
 }
 
 export interface MushiPerformanceMetrics {

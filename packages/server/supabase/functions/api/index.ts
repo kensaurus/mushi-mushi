@@ -44,6 +44,8 @@ import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
+import { registerBackendRoutes } from './routes/backend.ts';
+import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 
 ensureSentry('api');
 
@@ -127,6 +129,23 @@ app.use(
       'X-Sentry-Hook-Signature',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  }),
+);
+// Span ingest endpoint (OTel trace correlation). Accepts traceparent/tracestate
+// so the node SDK can forward W3C headers along with span payloads.
+app.use(
+  '/v1/ingest/*',
+  cors({
+    origin: '*',
+    allowHeaders: [
+      'Content-Type',
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+      'traceparent',
+      'tracestate',
+    ],
+    allowMethods: ['POST', 'OPTIONS'],
   }),
 );
 app.use(
@@ -434,6 +453,8 @@ registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
 registerContentQualityRoutes(app);
 registerFeatureBoardRoutes(app);
+registerBackendRoutes(app);
+registerFullstackAuditRoutes(app);
 
 registerA2ATaskRoutes(app);
 

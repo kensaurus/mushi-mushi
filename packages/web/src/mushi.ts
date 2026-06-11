@@ -168,6 +168,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const networkOptions = {
         apiEndpoint: resolveApiEndpoint(activeConfig),
         ignoreUrls: activeConfig.capture?.ignoreUrls,
+        tracePropagation: activeConfig.capture?.tracePropagation,
+        sessionId: getSessionId(),
       };
       if (networkCap) {
         networkCap.updateOptions(networkOptions);

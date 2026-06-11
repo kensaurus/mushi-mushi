@@ -896,7 +896,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       | 'github_connected'
       | 'sentry_connected'
       | 'byok_anthropic'
-      | 'first_fix_dispatched';
+      | 'first_fix_dispatched'
+      | 'slack_connected'
+      | 'first_qa_story_passing';
 
     interface Step {
       id: StepId;
@@ -947,6 +949,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       const hasGithub = Boolean(settings?.github_repo_url) || reposByProject.has(p.id);
       const hasSentry = Boolean(settings?.sentry_org_slug);
       const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+      const hasSlack = Boolean(settings?.slack_channel_id) || Boolean(settings?.slack_webhook_url);
       const fixCount = fixesByProject.get(p.id) ?? 0;
       const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0;
 
@@ -1028,6 +1031,24 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
           required: false,
           cta_to: '/reports',
           cta_label: 'Open Reports',
+        },
+        {
+          id: 'slack_connected',
+          label: 'Connect Slack (optional)',
+          description: 'Get instant Slack alerts when a QA story fails or a new report is classified.',
+          complete: hasSlack,
+          required: false,
+          cta_to: '/integrations',
+          cta_label: 'Add to Slack',
+        },
+        {
+          id: 'first_qa_story_passing',
+          label: 'Set up a QA story (optional)',
+          description: 'Write a plain-English test that runs on a schedule — catch regressions before your users do.',
+          complete: false, // Live signal: query qa_stories with last_run_status='passed' in a future pass
+          required: false,
+          cta_to: '/qa-coverage',
+          cta_label: 'Create QA story',
         },
       ];
 

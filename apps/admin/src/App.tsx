@@ -49,6 +49,7 @@ const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m
 const RepoPage = lazy(() => import('./pages/RepoPage').then(m => ({ default: m.RepoPage })))
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
+const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
 const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
@@ -371,6 +372,7 @@ export function App() {
                   <Route path="/repo" element={<RepoPage />} />
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
+                  <Route path="/fullstack-audit" element={<FullStackAuditPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
                   <Route path="/intelligence" element={<IntelligencePage />} />

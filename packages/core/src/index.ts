@@ -51,6 +51,7 @@ export type {
   MushiBetaChangelogEntry,
   MushiBannerConfig,
   MushiBannerLink,
+  MushiTracePropagationConfig,
 } from './types';
 
 export {

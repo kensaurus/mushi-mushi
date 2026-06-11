@@ -44,6 +44,50 @@ In the console: **Settings → API Key Pool** → keys in `quota_exhausted` stat
 3. Check the console: **Inventory → Discovery → Recent crawls** for the error message.
 4. Try with fewer pages: `mushi stories map --url <url> --max-pages 5 --wait`
 
+## QA Story Failing Hourly
+
+**Symptoms**: Slack message every hour — `:warning: QA story <name> errored` — or `Firecrawl 401`.
+
+Most common root causes and fixes:
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Firecrawl 401 Unauthorized: Token missing` | No Firecrawl BYOK key in project | `mushi integrations test firecrawl` → if fails, add key: `mushi keys add --provider firecrawl --key fc-...` |
+| `no_target_url: set a Target URL on this story` | Story has no `target_url` and prompt doesn't contain a URL | Edit story in **QA Coverage → Edit → Target URL** |
+| Link in Slack opens wrong page | Old story created before Jun 2026 deep-link fix | Links now go to `/qa-coverage?story=<id>&run=<run-id>` — verify admin console URL is correct |
+
+```bash
+# Check all QA health in one command
+mushi doctor --server --qa-stories
+
+# See recent run errors
+mushi qa runs <story-id>
+
+# Manually trigger a run to verify the fix
+mushi qa run <story-id>
+```
+
+## Slack Not Receiving Notifications
+
+**Symptoms**: No Slack message when a QA story fails or a report is classified.
+
+```bash
+# Check connection
+mushi slack status
+
+# Send test message
+mushi slack test
+```
+
+If `slack status` shows "not connected":
+1. Go to **Integrations → Slack → Add to Slack** (OAuth flow)
+2. Select the channel and click Save
+3. Re-run `mushi slack test`
+
+If connected but no notifications for QA failures:
+- Check **Integrations → Notification Preferences** — `qa_story.failed` must be enabled
+- Verify the story's `browser_provider` is set (not null)
+
 ## TDD Test Not Running
 
 **Symptoms**: Generated test stays in `pending_review`, doesn't appear in QA schedule.
@@ -54,7 +98,7 @@ In the console: **Settings → API Key Pool** → keys in `quota_exhausted` stat
    ```
 2. Approve the test: `mushi tdd approve <id>`
 3. Verify `enabled=true` in the console: **QA Coverage** page.
-4. Manual run: `mushi tdd run <qa-story-id>`
+4. Manual run: `mushi qa run <qa-story-id>`
 
 ## Edge Function Errors
 
@@ -67,6 +111,7 @@ Or in Supabase dashboard: Functions → Logs → filter by function name.
 
 Common edge function errors:
 - `FIRECRAWL_API_KEY not set` → Add key: `mushi keys add --provider firecrawl --key fc-...`
+- `no_target_url: set a Target URL on this story` → Edit story in QA Coverage and set Target URL
 - `No accepted inventory` → Accept a proposal in Inventory → Discovery first
 - `story not found` → The story id must match an `id` in the accepted inventory's `user_stories[]`
 

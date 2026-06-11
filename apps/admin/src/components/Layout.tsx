@@ -188,6 +188,7 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
       { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
+      { label: 'Full-Stack Audit', path: '/fullstack-audit', icon: IconAudit,  beginner: true },
       { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconQaCoverage,   beginner: true },
       { label: 'Lessons',      path: '/lessons',      icon: IconLessons,      beginner: true },
       { label: 'Drift',        path: '/drift',        icon: IconDrift,        beginner: true },

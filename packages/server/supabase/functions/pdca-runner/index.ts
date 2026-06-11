@@ -201,17 +201,10 @@ async function runQaStoryImprover(
   )
 }
 
-async function notifyA2A(db: ReturnType<typeof getServiceClient>, event: string, payload: unknown) {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    await fetch(`${supabaseUrl}/functions/v1/a2a-push-notify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-      body: JSON.stringify({ event, payload }),
-    })
-  } catch { /* A2A is best-effort */ }
-}
+// notifyA2A was removed: the a2a-push-notify function expects a Standard-Webhooks
+// TaskId UUID which PDCA runs don't have. PDCA completion is surfaced via the
+// direct Slack notification below and the plugin fan-out path.
+function _unused_notifyA2A(_db: unknown, _event: string, _payload: unknown) { /* no-op */ }
 
 Deno.serve(
   withSentry(async (req: Request) => {
@@ -263,7 +256,7 @@ Deno.serve(
       })
     }
 
-    await notifyA2A(db, 'pdca.run.started', { run_id: runId, target_url: run.target_url })
+    console.info('[pdca-runner] run.started', { runId })
 
     // Load persona
     const { data: personaData } = await db
@@ -413,12 +406,7 @@ Deno.serve(
       finished_at: new Date().toISOString(),
     }).eq('id', runId)
 
-    await notifyA2A(db, 'pdca.run.finished', {
-      run_id: runId,
-      final_score: finalScore,
-      exit_reason: exitReason,
-      status: finalStatus,
-    })
+    console.info('[pdca-runner] run.finished', { runId, finalScore, exitReason, status: finalStatus })
 
     // Slack notification for completed PDCA runs — non-fatal, no SLACK_BOT_TOKEN = silent.
     try {

@@ -114,11 +114,13 @@ describe('MCP protocol handshake', () => {
       'dispatch_fix',
       'fix_suggest',
       'generate_tdd_from_story',
+      'get_backend_health',
       'get_blast_radius',
       'get_fix_context',
       'get_fix_timeline',
       'get_knowledge_graph',
       'get_map_run_status',
+      'get_qa_story_run',
       'get_recent_reports',
       'get_report_detail',
       'get_similar_bugs',
@@ -131,9 +133,11 @@ describe('MCP protocol handshake', () => {
       'inventory_get',
       'list_byok_keys',
       'list_pending_review_stories',
+      'list_qa_story_runs',
       'list_top_contributors',
       'map_user_stories',
       'reply_to_reporter',
+      'run_fullstack_audit',
       'run_nl_query',
       'run_qa_story',
       'search_reports',
@@ -142,6 +146,7 @@ describe('MCP protocol handshake', () => {
       'setup_repo_for_mushi',
       'submit_fix_result',
       'test_gen_from_report',
+      'test_notification_channel',
       'transition_status',
       'trigger_judge',
     ])
@@ -170,6 +175,9 @@ describe('MCP protocol handshake', () => {
       'add_byok_key',
       'approve_qa_story',
       'reply_to_reporter',
+      // Phase 5: notification + full-stack audit write tools
+      'test_notification_channel',
+      'run_fullstack_audit',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()

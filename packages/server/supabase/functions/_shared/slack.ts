@@ -243,6 +243,151 @@ export function severityAttachmentColor(severity: string): string {
   return SEVERITY_COLOR[severity] ?? '#64748B'
 }
 
+// ─── QA story run Block Kit builder ───────────────────────────────────────────
+
+export interface QaRunPayload {
+  storyId: string
+  storyName: string
+  projectName: string
+  runId: string
+  status: 'failed' | 'error'
+  provider: string
+  latencyMs: number
+  summary: string | null
+  errorMessage: string | null
+  assertionFailures: Array<{ step: string; expected: string | null; actual: string | null }>
+  consecutiveFailures: number
+  screenshotBase64?: string | null
+  runUrl: string | null
+}
+
+const STATUS_EMOJI: Record<string, string> = {
+  failed: '\u274C', // ❌
+  error: '\u26A0\uFE0F', // ⚠️
+  passed: '\u2705', // ✅
+  recovered: '\u{1F7E2}', // 🟢
+}
+
+export function buildQaStoryRunBlocks(payload: QaRunPayload): unknown[] {
+  const statusEmoji = STATUS_EMOJI[payload.status] ?? '\u26AA'
+  const isError = payload.status === 'error'
+  const base = adminBaseUrl()
+
+  const blocks: unknown[] = [
+    // Header
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `${statusEmoji} QA ${isError ? 'Error' : 'Failure'} · ${payload.storyName}`,
+        emoji: true,
+      },
+    },
+    // Context: project / provider / latency / consecutive count
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: [
+            `:file_folder: *${payload.projectName}*`,
+            `:gear: ${payload.provider}`,
+            `:stopwatch: ${(payload.latencyMs / 1000).toFixed(1)}s`,
+            payload.consecutiveFailures > 1
+              ? `:repeat: *${payload.consecutiveFailures}× consecutive failures*`
+              : null,
+          ]
+            .filter(Boolean)
+            .join('  ·  '),
+        },
+      ],
+    },
+  ]
+
+  // Summary / error message
+  const bodyText = payload.errorMessage
+    ? `*${payload.summary ?? 'Error'}*\n\`\`\`${payload.errorMessage.slice(0, 300)}\`\`\``
+    : `*${payload.summary ?? 'QA story failed'}*`
+
+  const summaryBlock: Record<string, unknown> = {
+    type: 'section',
+    text: { type: 'mrkdwn', text: bodyText },
+  }
+
+  // Attach screenshot thumbnail if available
+  if (payload.screenshotBase64) {
+    const screenshotUrl = base
+      ? `${base}/api/qa-evidence/${payload.runId}/screenshot`
+      : null
+    if (screenshotUrl) {
+      summaryBlock.accessory = {
+        type: 'image',
+        image_url: screenshotUrl,
+        alt_text: 'Screenshot from failed run',
+      }
+    }
+  }
+  blocks.push(summaryBlock)
+
+  // Assertion failures (up to 5)
+  if (payload.assertionFailures.length > 0) {
+    const failLines = payload.assertionFailures.slice(0, 5).map(
+      (f) => `• *${f.step}* — expected \`${f.expected ?? '?'}\`, got \`${f.actual ?? '(not found)'}\``,
+    )
+    if (payload.assertionFailures.length > 5) {
+      failLines.push(`…and ${payload.assertionFailures.length - 5} more`)
+    }
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: failLines.join('\n') },
+    })
+  }
+
+  // Actions
+  const actionElements: unknown[] = []
+
+  if (payload.runUrl) {
+    actionElements.push({
+      type: 'button',
+      style: 'primary',
+      text: { type: 'plain_text', text: 'View run \u2192', emoji: true },
+      url: payload.runUrl,
+      action_id: `open_qa_run:${payload.runId}`,
+    })
+  }
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: ':pause_button: Pause story', emoji: true },
+    action_id: `pause_story:${payload.storyId}`,
+    value: payload.storyId,
+    confirm: {
+      title: { type: 'plain_text', text: 'Pause this story?' },
+      text: {
+        type: 'mrkdwn',
+        text: `*${payload.storyName}* will stop running on its schedule until you re-enable it in the console.`,
+      },
+      confirm: { type: 'plain_text', text: 'Pause' },
+      deny: { type: 'plain_text', text: 'Cancel' },
+    },
+  })
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: ':robot_face: Improve with AI', emoji: true },
+    action_id: `improve_story:${payload.storyId}`,
+    value: payload.storyId,
+  })
+
+  blocks.push({
+    type: 'actions',
+    block_id: `mushi_qa_${payload.storyId}`,
+    elements: actionElements,
+  })
+
+  return blocks
+}
+
 // ─── Legacy webhook path ──────────────────────────────────────────────────────
 
 async function postToSlack(webhookUrl: string, body: object): Promise<void> {
@@ -287,8 +432,15 @@ export interface BotMessageOptions {
   text: string
   /** When set, posts as a threaded reply to this message timestamp. */
   threadTs?: string | null
-  /** Override the bot token. Falls back to SLACK_BOT_TOKEN env var. */
+  /** Override the bot token. Falls back to per-project vault, then SLACK_BOT_TOKEN env var. */
   token?: string
+  /**
+   * Optional Supabase client + projectId for per-project token resolution.
+   * When provided, the vaulted `slack_bot_token_ref` from `project_settings` is
+   * tried before the global SLACK_BOT_TOKEN env var.
+   */
+  db?: unknown
+  projectId?: string
 }
 
 export interface BotMessageResult {
@@ -302,13 +454,35 @@ export interface BotMessageResult {
  * Post a message via the Slack Bot API (`chat.postMessage`).
  * Returns `{ ok, ts }` — when `ok`, `ts` is the message's unique timestamp
  * which can be stored on the report row and used to post threaded replies.
+ *
+ * Token resolution order:
+ *   1. `opts.token` (explicit override)
+ *   2. Per-project vaulted token via `opts.db` + `opts.projectId`
+ *   3. Global `SLACK_BOT_TOKEN` env var
  */
 export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessageResult> {
-  const token = opts.token ?? Deno.env.get('SLACK_BOT_TOKEN')
+  let token = opts.token ?? null
+  // Resolve per-project vaulted token if db + projectId are provided
+  if (!token && opts.db && opts.projectId) {
+    try {
+      const { data: ps } = await (opts.db as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: unknown }> } } } })
+        .from('project_settings')
+        .select('slack_bot_token_ref')
+        .eq('project_id', opts.projectId)
+        .maybeSingle()
+      const ref = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null
+      if (ref) {
+        const { data: secret } = await (opts.db as { rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }> })
+          .rpc('vault_get_secret', { secret_id: ref })
+        if (typeof secret === 'string') token = secret
+      }
+    } catch { /* fall through to env */ }
+  }
+  if (!token) token = Deno.env.get('SLACK_BOT_TOKEN') ?? null
   const channel = opts.channel ?? Deno.env.get('SLACK_CHANNEL_ID')
 
   if (!token) {
-    slackLog.warn('sendBotMessage: SLACK_BOT_TOKEN not set — skipping')
+    slackLog.warn('sendBotMessage: no bot token available (set SLACK_BOT_TOKEN or connect via OAuth) — skipping')
     return { ok: false, ts: null, error: 'no_bot_token' }
   }
   if (!channel) {
@@ -378,4 +552,33 @@ export async function sendReportNotification(
 function truncate(input: string, max: number): string {
   if (input.length <= max) return input
   return input.slice(0, max - 1) + '\u2026'
+}
+
+// ─── Discord webhook helper ───────────────────────────────────────────────────
+// Posts a plain text or embed message directly to a Discord webhook URL.
+// Converts a Slack-style `text` string into a Discord message. No library needed.
+
+export async function sendDiscordNotification(
+  webhookUrl: string,
+  text: string,
+  opts: { title?: string; color?: number } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  if (!webhookUrl) return { ok: false, error: 'no_webhook_url' }
+  try {
+    const payload: Record<string, unknown> = opts.title
+      ? { embeds: [{ title: opts.title, description: text, color: opts.color ?? 0x57f287 }] }
+      : { content: text }
+
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.status === 204 || res.ok) return { ok: true }
+    const body = await res.text().catch(() => '')
+    slackLog.warn('discord webhook error', { status: res.status, body: body.slice(0, 200) })
+    return { ok: false, error: `HTTP ${res.status}` }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
 }
