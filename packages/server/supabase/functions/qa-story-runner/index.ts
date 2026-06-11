@@ -671,7 +671,7 @@ Deno.serve(
 
           const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? ''
           const runUrl = adminBase
-            ? `${adminBase}/qa-coverage?story=${story.id}&run=${runId}`
+            ? `${adminBase}/qa-coverage?project=${pid}&story=${story.id}&run=${runId}`
             : null
           const channelId = ps?.slack_channel_id ?? null
           const webhookUrl = ps?.slack_webhook_url ?? null
