@@ -3,6 +3,8 @@
  * lands — used by `mushi connect --wait` and CI smoke gates.
  */
 
+import { apiKeyHeaders, sanitizeApiKey, sanitizeEndpoint, sanitizeProjectId } from './sanitize-config.js'
+
 export interface IngestSetupStep {
   id: string
   label: string
@@ -61,14 +63,11 @@ export async function fetchIngestSetup(
   config: { endpoint: string; apiKey: string; projectId?: string },
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<IngestSetupPayload | null> {
-  // Validate the key is safe before embedding in HTTP headers (no newlines/CRLF).
-  const safeKey = config.apiKey.replace(/[\r\n]/g, '')
-  const res = await doFetch(`${config.endpoint}/v1/sync/ingest-setup`, {
-    headers: {
-      Authorization: `Bearer ${safeKey}`,
-      'X-Mushi-Api-Key': safeKey,
-      ...(config.projectId ? { 'X-Mushi-Project': config.projectId } : {}),
-    },
+  const endpoint = sanitizeEndpoint(config.endpoint)
+  const apiKey = sanitizeApiKey(config.apiKey)
+  const projectId = config.projectId ? sanitizeProjectId(config.projectId) : undefined
+  const res = await doFetch(`${endpoint}/v1/sync/ingest-setup`, {
+    headers: apiKeyHeaders(apiKey, projectId),
     signal: AbortSignal.timeout(8000),
   })
   if (!res.ok) {

@@ -31,6 +31,7 @@ import { runMigrate } from './migrate.js'
 import type { FrameworkId } from './detect.js'
 import { MUSHI_CLI_VERSION } from './version.js'
 import { assertEndpoint } from './endpoint.js'
+import { sanitizeApiKey, sanitizeEndpoint, sanitizeProjectId } from './sanitize-config.js'
 import { runSourcemapsUpload } from './sourcemaps.js'
 import { installSignalHandlers, getAbortSignal } from './signals.js'
 import { renderNudgeSnippet, renderNudgeExplainer, type NudgePhase } from './nudge.js'
@@ -2209,10 +2210,21 @@ Examples:
   mushi audit --project-id abc123`)
   .action(async (opts: { json?: boolean; projectId?: string }) => {
     const config = requireConfig()
-    const projectId = opts.projectId ?? config.projectId
-    if (!projectId) {
+    const rawProjectId = opts.projectId ?? config.projectId
+    if (!rawProjectId) {
       process.stderr.write('error: project ID required. Run `mushi login` or pass --project-id\n')
       process.exit(1)
+    }
+
+    let endpoint: string
+    let projectId: string
+    try {
+      endpoint = sanitizeEndpoint(config.endpoint)
+      projectId = sanitizeProjectId(rawProjectId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`error: ${msg}\n`)
+      process.exit(2)
     }
 
     // Admin JWT auth is required for the audit endpoint. The CLI uses the
@@ -2224,9 +2236,9 @@ Examples:
     const jwt = (config as unknown as Record<string, unknown>).jwt as string | undefined ?? null
     const apiKey = config.apiKey ?? null
     if (jwt) {
-      headers['Authorization'] = `Bearer ${jwt}`
+      headers['Authorization'] = `Bearer ${jwt.replace(/[\r\n\0]/g, '')}`
     } else if (apiKey) {
-      headers['X-Mushi-Api-Key'] = apiKey
+      headers['X-Mushi-Api-Key'] = sanitizeApiKey(apiKey)
     } else {
       process.stderr.write('error: no credentials found. Run `mushi login` first.\n')
       process.exit(1)
@@ -2238,7 +2250,7 @@ Examples:
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 30_000)
       const res = await fetch(
-        `${config.endpoint}/v1/admin/projects/${projectId}/audit`,
+        `${endpoint}/v1/admin/projects/${projectId}/audit`,
         { method: 'POST', headers, body: '{}', signal: controller.signal },
       )
       clearTimeout(timer)
