@@ -38,7 +38,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && pnpm install --lockfile-only",
     "check:publish": "node scripts/check-workspace-protocol.mjs && node scripts/check-packed-tarballs.mjs",
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
