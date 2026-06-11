@@ -1,11 +1,22 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.9",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.9.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.9.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.9.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.8",
@@ -409,6 +420,21 @@
     ]
   },
   {
+    "majorMinor": "0.14",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.14.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.14.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.13",
     "headline": null,
     "pending": false,
@@ -544,6 +570,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.11.2"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.11.0"
       },
       {
         "name": "@mushi-mushi/react-native",
@@ -778,6 +808,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.6",
       "0.7.5",
       "0.7.4",
       "0.7.3",
@@ -870,7 +901,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.5"
+        "version": "0.7.6"
       }
     ]
   },
@@ -938,6 +969,10 @@
         "version": "0.6.0"
       },
       {
+        "name": "@mushi-mushi/node",
+        "version": "0.6.0"
+      },
+      {
         "name": "@mushi-mushi/plugin-sdk",
         "version": "0.6.0"
       },
@@ -952,6 +987,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.11",
       "0.5.10",
       "0.5.9",
       "0.5.8",
@@ -1032,6 +1068,10 @@
         "version": "0.5.0"
       },
       {
+        "name": "@mushi-mushi/mcp-ci",
+        "version": "0.5.0"
+      },
+      {
         "name": "@mushi-mushi/node",
         "version": "0.5.1"
       },
@@ -1049,7 +1089,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.10"
+        "version": "0.5.11"
       },
       {
         "name": "mushi-mushi",
@@ -1414,7 +1454,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
