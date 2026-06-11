@@ -227,7 +227,11 @@ export function ContentQualityDetailPage() {
     if (!id) return
     setRegenerating(true)
     try {
-      await apiFetch(`/v1/admin/content-quality/${id}/regen`, { method: 'POST' })
+      const res = await apiFetch(`/v1/admin/content-quality/${id}/regen`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error(res.error?.message ?? 'Failed to trigger regeneration')
+        return
+      }
       toast.success('Regeneration queued — the source project will generate a candidate and promote it if the score improves.')
       reload()
     } catch (err) {
@@ -240,10 +244,14 @@ export function ContentQualityDetailPage() {
   async function handleResolve(newStatus: 'resolved' | 'dismissed') {
     if (!id) return
     try {
-      await apiFetch(`/v1/admin/content-quality/${id}/resolve`, {
+      const res = await apiFetch(`/v1/admin/content-quality/${id}/resolve`, {
         method: 'POST',
         body: JSON.stringify({ status: newStatus }),
       })
+      if (!res.ok) {
+        toast.error(res.error?.message ?? 'Failed to update')
+        return
+      }
       toast.success(`Issue ${newStatus}`)
       reload()
     } catch (err) {

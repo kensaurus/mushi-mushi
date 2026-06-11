@@ -522,6 +522,53 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'ingest_setup_check',
+    {
+      title: titleOf('ingest_setup_check'),
+      description: descOf('ingest_setup_check'),
+      annotations: annotationsFor('ingest_setup_check'),
+      inputSchema: {},
+    },
+    async () => {
+      const data = await apiCall<{
+        ready: boolean
+        required_complete: number
+        required_total: number
+        project_id: string
+        project_name: string
+        steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
+        diagnostic?: {
+          last_sdk_seen_at: string | null
+          last_sdk_endpoint_host: string | null
+          admin_endpoint_host: string | null
+        }
+      }>('/v1/sync/ingest-setup')
+
+      const failed = data.steps.filter((s) => s.required && !s.complete)
+      const summary = data.ready
+        ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
+        : `Ingest incomplete (${data.required_complete}/${data.required_total}) — still need: ${failed.map((s) => s.label).join(', ')}.`
+
+      return jsonText({
+        ready: data.ready,
+        projectId: data.project_id,
+        projectName: data.project_name,
+        requiredComplete: data.required_complete,
+        requiredTotal: data.required_total,
+        steps: data.steps.map((s) => ({
+          id: s.id,
+          label: s.label,
+          passed: s.complete,
+          required: s.required,
+          hint: s.hint,
+        })),
+        diagnostic: data.diagnostic ?? null,
+        summary,
+      })
+    },
+  )
+
   // --- Write / agentic tools -------------------------------------------
 
   server.registerTool(
@@ -1123,6 +1170,152 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         { method: 'PATCH', body: JSON.stringify({ status }) },
       )
       return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'reply_to_reporter',
+    {
+      title: titleOf('reply_to_reporter', TDD_TOOL_CATALOG),
+      description: descOf('reply_to_reporter', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('reply_to_reporter', TDD_TOOL_CATALOG),
+      inputSchema: {
+        reportId: z.string().describe('Report id to reply to'),
+        message: z.string().min(1).max(10_000).describe('Message text to send to the reporter'),
+        authorName: z.string().optional().describe('Display name for the admin sender (default: "Mushi Admin")'),
+      },
+    },
+    async ({ reportId, message, authorName }) => {
+      const data = await apiCall<unknown>(
+        `/v1/sync/reports/${reportId}/reply`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ message, author_name: authorName }),
+        },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'list_qa_story_runs',
+    {
+      title: titleOf('list_qa_story_runs', TDD_TOOL_CATALOG),
+      description: descOf('list_qa_story_runs', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('list_qa_story_runs', TDD_TOOL_CATALOG),
+      inputSchema: {
+        storyId: z.string().describe('QA story id (uuid)'),
+        limit: z.number().int().min(1).max(50).optional().default(10).describe('Max runs to return (default 10)'),
+      },
+    },
+    async ({ storyId, limit }) => {
+      const data = await apiCall<unknown>(
+        `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=${limit ?? 10}`,
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'get_qa_story_run',
+    {
+      title: titleOf('get_qa_story_run', TDD_TOOL_CATALOG),
+      description: descOf('get_qa_story_run', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('get_qa_story_run', TDD_TOOL_CATALOG),
+      inputSchema: {
+        storyId: z.string().describe('QA story id (uuid)'),
+        runId: z.string().describe('Run id (uuid) to fetch detail for'),
+      },
+    },
+    async ({ storyId, runId }) => {
+      // There is no single-run detail route that accepts an API key (the
+      // evidence route is JWT-only), so fetch the recent runs list and select
+      // the requested run — the list rows already include summary, assertion
+      // failures, error message, and the provider session URL.
+      const data = await apiCall<{ data?: { runs?: Array<{ id: string }> } }>(
+        `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=50`,
+      )
+      const run = data?.data?.runs?.find((r) => r.id === runId) ?? null
+      if (!run) {
+        throw new MushiApiError(
+          404,
+          'RUN_NOT_FOUND',
+          `Run ${runId} not found in the 50 most recent runs for story ${storyId}`,
+        )
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(run, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'test_notification_channel',
+    {
+      title: titleOf('test_notification_channel', TDD_TOOL_CATALOG),
+      description: descOf('test_notification_channel', TDD_TOOL_CATALOG),
+      annotations: annotationsFor('test_notification_channel', TDD_TOOL_CATALOG),
+      inputSchema: {
+        kind: z.enum(['slack', 'discord']).describe('Notification channel kind to test'),
+      },
+    },
+    async ({ kind }) => {
+      const data = await apiCall<unknown>(
+        `/v1/admin/projects/${config.projectId}/integrations/${kind}/test`,
+        { method: 'POST' },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  // ── Full-Stack Audit tools (Phase 5) ───────────────────────────────────────
+
+  server.registerTool(
+    'run_fullstack_audit',
+    {
+      title: titleOf('run_fullstack_audit'),
+      description: descOf('run_fullstack_audit'),
+      annotations: annotationsFor('run_fullstack_audit'),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project ID to audit. Defaults to the configured project.'),
+      },
+    },
+    async ({ project_id }) => {
+      const pid = project_id ?? config.projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required')
+      const data = await apiCall<unknown>(
+        `/v1/admin/projects/${pid}/audit`,
+        { method: 'POST', body: '{}' },
+      )
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }
+    },
+  )
+
+  server.registerTool(
+    'get_backend_health',
+    {
+      title: titleOf('get_backend_health'),
+      description: descOf('get_backend_health'),
+      annotations: annotationsFor('get_backend_health'),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project ID. Defaults to the configured project.'),
+        include_logs: z.boolean().optional().describe('Whether to include recent backend error logs (default: true).'),
+      },
+    },
+    async ({ project_id, include_logs = true }) => {
+      const pid = project_id ?? config.projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required')
+
+      const [schemaRes, advisorsRes, logsRes] = await Promise.allSettled([
+        apiCall<unknown>(`/v1/admin/projects/${pid}/backend/schema`),
+        apiCall<unknown>(`/v1/admin/projects/${pid}/db-advisors`),
+        include_logs ? apiCall<unknown>(`/v1/admin/projects/${pid}/backend/logs?service=api`) : Promise.resolve(null),
+      ])
+
+      const result = {
+        schema: schemaRes.status === 'fulfilled' ? schemaRes.value : { error: String(schemaRes.reason) },
+        advisors: advisorsRes.status === 'fulfilled' ? advisorsRes.value : { error: String(advisorsRes.reason) },
+        logs: logsRes.status === 'fulfilled' ? logsRes.value : include_logs ? { error: String(logsRes.reason) } : null,
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     },
   )
 

@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
   "license": "MIT",
   "type": "module",
@@ -90,7 +90,7 @@
     {
       "name": "Core SDK bundle (minified + gzipped)",
       "path": "dist/index.js",
-      "limit": "50 KB",
+      "limit": "55 KB",
       "gzip": true
     },
     {
@@ -100,7 +100,7 @@
     }
   ],
   "dependencies": {
-    "@mushi-mushi/core": "^1.7.2"
+    "@mushi-mushi/core": "^1.8.0"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",

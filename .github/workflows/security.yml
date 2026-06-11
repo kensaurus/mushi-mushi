@@ -17,7 +17,19 @@ name: Security
 on:
   push:
     branches: [master]
+    paths:
+      - 'packages/**'
+      - 'apps/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   pull_request:
+    paths:
+      - 'packages/**'
+      - 'apps/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   schedule:
     # Mondays 06:00 UTC — catch newly-disclosed CVEs weekly.
     - cron: '0 6 * * 1'

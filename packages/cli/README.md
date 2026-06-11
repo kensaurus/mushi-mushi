@@ -52,6 +52,9 @@ mushi --version
 
 ```bash
 mushi login --api-key mushi_xxx     # store credentials in ~/.mushirc (mode 0o600)
+mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --wait
+                                     # one-shot wiring: ~/.mushirc + .env.local + .cursor/mcp.json + heartbeat wait
+mushi upgrade                        # bump installed @mushi-mushi/* packages to latest stable
 mushi status                         # project overview
 mushi reports list                   # recent reports
 mushi reports show <id>              # one report
@@ -64,6 +67,51 @@ mushi migrate --json                 # machine-readable JSON for CI
 mushi config endpoint https://...    # set API endpoint (https:// required outside localhost)
 mushi sourcemaps upload --release <ver> --dir <dist>   # upload .js.map / .css.map (sha256-idempotent)
 ```
+
+### `mushi connect`
+
+Non-interactive equivalent of `mushi init` for agents and scripts — wires a
+repo to an existing project in one shot:
+
+1. Saves credentials to `~/.mushirc` (mode `0o600`).
+2. Merges `MUSHI_*` / framework-prefixed env vars into `.env.local` —
+   existing keys are never overwritten (skip with `--no-env`).
+3. Writes the `@mushi-mushi/mcp` server block into `.cursor/mcp.json` and
+   ensures that file is gitignored, since it embeds the API key (skip with
+   `--no-ide`).
+4. With `--wait`, polls `GET /v1/sync/ingest-setup` every 3 s until the SDK
+   heartbeat (or first report) lands, up to `--wait-timeout <sec>`
+   (default 120). Rejected credentials (401/403/404) fail fast instead of
+   polling out the timeout.
+
+```bash
+# Recommended: pass the key via env so it stays out of shell history
+MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> \
+  --endpoint https://<ref>.supabase.co/functions/v1/api --wait
+mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --no-ide --json
+```
+
+Exits non-zero when `--wait` times out or credentials are rejected, so it
+composes in setup scripts and CI.
+
+### `mushi upgrade`
+
+Reads `package.json`, checks the npm registry for each installed
+`@mushi-mushi/*` package, and runs the right install command for your package
+manager (npm / pnpm / yarn / bun) to bump them to the latest stable release.
+
+```bash
+mushi upgrade               # plan + install
+mushi upgrade --dry-run     # print the install command without running it
+mushi upgrade --json        # machine-readable plan + result
+mushi upgrade --cwd ../app  # target another repo
+```
+
+Pre-release versions are never auto-selected, registry versions are validated
+against strict semver before being interpolated into the install command, and
+non-registry specifiers (`workspace:`, `file:`, git URLs, dist-tags) are left
+untouched. Legacy `@mushi-mushi/react` installs get a migration note pointing
+at `@mushi-mushi/web`.
 
 ### `mushi sourcemaps upload`
 
@@ -110,6 +158,7 @@ reachability only.
 ```bash
 mushi doctor                  # local checks only
 mushi doctor --server         # + calls /preflight on the backend (all 4 dispatch checks)
+mushi doctor --ingest         # + calls /v1/sync/ingest-setup (API key → heartbeat → first report)
 mushi doctor --json           # machine-readable JSON output (exits 1 if any check fails)
 ```
 
@@ -134,6 +183,13 @@ server checks (`key` values returned by the endpoint):
 
 `--server` requires `adminOrApiKey` credentials — set `MUSHI_API_KEY` to an
 admin key (not a public SDK key).
+
+With `--ingest`, also calls `GET /v1/sync/ingest-setup` (authenticated with the
+SDK API key) and reports each **required ingest step** — project exists, active
+API key, SDK heartbeat, at least one ingested report — plus a
+`Last SDK heartbeat` diagnostic with the timestamp and endpoint host. This is
+the same payload `mushi connect --wait` polls, so a failing step here tells you
+exactly why the banner isn't showing up.
 
 ### `mushi reset <projectId>`
 
@@ -169,3 +225,9 @@ Exits automatically when the job reaches a terminal status (`completed`,
 ## License
 
 MIT
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -9,6 +9,12 @@ import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { JudgeStats, JudgeTabId } from './JudgeStatsTypes'
 
+/** Healthy posture is covered by the page hero + snapshot — skip the banner. */
+export function isJudgeStatusBannerCritical(stats: JudgeStats): boolean {
+  if (!stats.hasAnyProject) return true
+  return stats.topPriority !== 'healthy'
+}
+
 interface Props {
   stats: JudgeStats
   onTab?: (tab: JudgeTabId) => void

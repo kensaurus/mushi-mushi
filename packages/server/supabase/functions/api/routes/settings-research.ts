@@ -3,7 +3,7 @@ import type { Variables } from '../types.ts'
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
+import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { dbError, resolveOwnedProject, ownedProjectIds } from '../shared.ts';
@@ -13,6 +13,92 @@ import {
   normalizeSdkConfig,
   type SdkConfigRow,
 } from '../helpers.ts';
+
+// ── Slack OAuth state signing ────────────────────────────────────────────────
+// The OAuth `state` parameter is round-tripped through the user's browser and
+// Slack, so it MUST be tamper-proof: without a signature an attacker could craft
+// `state` carrying a victim's projectId and bind their own Slack workspace token
+// to the victim's project (cross-tenant token write / notification hijack).
+// We HMAC-sign `projectId:nonce:exp` and verify (constant-time) on callback.
+const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function b64urlEncode(bytes: Uint8Array): string {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(s: string): Uint8Array {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function slackStateSecret(): string | null {
+  // Dedicated secret if provided, else fall back to the OAuth client secret
+  // (already required for the flow and never leaves the server).
+  return Deno.env.get('SLACK_STATE_SECRET') ?? Deno.env.get('SLACK_CLIENT_SECRET') ?? null;
+}
+
+// The Slack OAuth callback lives on the `api` edge function (this router), so
+// the redirect_uri must point at the Supabase functions host — NOT ADMIN_BASE_URL.
+// It must be byte-identical at /authorize and at the token exchange, and must
+// match the redirect URL registered in the Slack app manifest
+// (…/functions/v1/api/v1/webhooks/slack/oauth-callback). Allow an explicit
+// override for non-standard deployments (custom domains / regional hosts).
+function slackRedirectUri(): string {
+  const override = Deno.env.get('SLACK_REDIRECT_URI');
+  if (override) return override;
+  const base = Deno.env.get('SUPABASE_URL')?.replace(/\/$/, '') ?? '';
+  return `${base}/functions/v1/api/v1/webhooks/slack/oauth-callback`;
+}
+
+async function hmacSign(payload: string, secret: string): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  return new Uint8Array(sig);
+}
+
+function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function signSlackState(projectId: string, secret: string): Promise<string> {
+  const payload = `${projectId}:${crypto.randomUUID()}:${Date.now() + STATE_TTL_MS}`;
+  const sig = await hmacSign(payload, secret);
+  return `${b64urlEncode(new TextEncoder().encode(payload))}.${b64urlEncode(sig)}`;
+}
+
+async function verifySlackState(state: string, secret: string): Promise<string | null> {
+  const dot = state.indexOf('.');
+  if (dot < 0) return null;
+  const payloadPart = state.slice(0, dot);
+  const sigPart = state.slice(dot + 1);
+  let payload: string;
+  let providedSig: Uint8Array;
+  try {
+    payload = new TextDecoder().decode(b64urlDecode(payloadPart));
+    providedSig = b64urlDecode(sigPart);
+  } catch {
+    return null;
+  }
+  const expectedSig = await hmacSign(payload, secret);
+  if (!timingSafeEqual(providedSig, expectedSig)) return null;
+  const [projectId, , expStr] = payload.split(':');
+  const exp = Number(expStr);
+  if (!projectId || !Number.isFinite(exp) || Date.now() > exp) return null;
+  return projectId;
+}
 
 export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables }>): void {
   // Settings admin endpoints
@@ -66,15 +152,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const [{ data, error }, { data: poolKeys }] = await Promise.all([
+    const [{ data, error }, { data: poolKeys, error: poolError }] = await Promise.all([
       db
         .from('project_settings')
         .select(
-          'updated_at, slack_webhook_url, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
+          'updated_at, slack_webhook_url, slack_channel_id, slack_bot_token_ref, slack_team_name, ' +
+            'discord_webhook_url, notification_prefs, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
             'sdk_config_enabled, sdk_config_updated_at, ' +
-            'byok_anthropic_key_ref, ' +
-            'byok_openai_key_ref, ' +
-            'byok_firecrawl_key_ref, ' +
+            'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
+            'byok_openai_key_ref, byok_openai_test_status, ' +
+            'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
             'github_repo_url, autofix_enabled, ' +
             'crawl_max_pages_per_day, crawl_max_runs_per_day, tdd_max_gens_per_day',
         )
@@ -88,6 +175,19 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     ]);
 
     if (error) return dbError(c, error);
+    // Degrade gracefully when the byok_keys table hasn't been synced to the
+    // PostgREST schema cache yet (42P01 = undefined_table; PGRST205 = unknown
+    // column/relation). This window opens during a deploy where the edge
+    // function restarts before the migration + cache flush completes. Treat it
+    // as an empty pool so the Settings UI still renders rather than hard-failing.
+    // All other pool errors (permissions, network, unexpected) are still fatal.
+    const isSchemaNotSynced =
+      poolError !== null &&
+      poolError !== undefined &&
+      (poolError.code === '42P01' ||
+        (typeof (poolError as { message?: string }).message === 'string' &&
+          (poolError as { message: string }).message.includes('PGRST205')));
+    if (poolError && !isSchemaNotSynced) return dbError(c, poolError);
 
     const row = (data as Record<string, unknown> | null) ?? {};
 
@@ -111,13 +211,43 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokOpenaiConfigured = poolProviders.has('openai') || Boolean(row.byok_openai_key_ref);
     const byokFirecrawlConfigured = poolProviders.has('firecrawl') || Boolean(row.byok_firecrawl_key_ref);
 
+    // Fold in legacy single-key refs whose provider has no pool row yet, so a
+    // project that hasn't migrated to the pool still reports its keys as
+    // "configured" instead of 0. Each legacy key MUST also land in exactly one
+    // of passing/failing/untested using its own test-status column — otherwise
+    // the invariant `passing + failing + untested === configured` breaks, the
+    // tooltip reads "0 passing, 0 failing, 0 untested of N configured", and the
+    // SettingsStatusBanner's "untested keys" warning never fires for legacy-
+    // only projects.
+    const classifyByokStatus = (testStatus: string | null | undefined) => {
+      if (testStatus === 'ok') byokKeysPassing += 1;
+      else if (testStatus && testStatus.startsWith('error')) byokKeysFailing += 1;
+      else byokKeysUntested += 1;
+      byokKeysConfigured += 1;
+    };
+    if (!poolProviders.has('anthropic') && Boolean(row.byok_anthropic_key_ref)) {
+      classifyByokStatus(row.byok_anthropic_test_status as string | null);
+    }
+    if (!poolProviders.has('openai') && Boolean(row.byok_openai_key_ref)) {
+      classifyByokStatus(row.byok_openai_test_status as string | null);
+    }
+    if (!poolProviders.has('firecrawl') && Boolean(row.byok_firecrawl_key_ref)) {
+      classifyByokStatus(row.byok_firecrawl_test_status as string | null);
+    }
+
     return c.json({
       ok: true,
       data: {
         projectId: project.id,
         projectName: project.name,
         updatedAt: (row.updated_at as string | null) ?? null,
-        slackConfigured: Boolean(row.slack_webhook_url) || Boolean(row.slack_channel_id),
+        slackConfigured:
+          Boolean(row.slack_webhook_url) ||
+          Boolean(row.slack_channel_id) ||
+          Boolean(row.slack_bot_token_ref),
+        slackTeamName: (row.slack_team_name as string | null) ?? null,
+        discordConfigured: Boolean(row.discord_webhook_url),
+        notificationPrefs: (row.notification_prefs as Record<string, unknown> | null) ?? null,
         sentryConfigured: Boolean(row.sentry_dsn),
         reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
         stage2Model: (row.stage2_model as string | null) ?? null,
@@ -152,6 +282,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'slack_webhook_url',
       'slack_channel_id',
       'slack_team_id',
+      'discord_webhook_url',
+      'notification_prefs',
       'sentry_dsn',
       'sentry_webhook_secret',
       'sentry_consume_user_feedback',
@@ -166,14 +298,37 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sdk_banner_position',
       'sdk_banner_bug_cta',
       'sdk_banner_feature_cta',
+      'sdk_banner_message',
+      'sdk_banner_label',
       // Per-project crawl / TDD generation budget quotas
       'crawl_max_pages_per_day',
       'crawl_max_runs_per_day',
       'tdd_max_gens_per_day',
     ];
+    // Free-text banner fields are served verbatim on the UNAUTHENTICATED
+    // public SDK config endpoint — enforce the same caps as
+    // coerceSdkConfigUpdate (helpers.ts) so this generic PATCH path can't
+    // become a public-payload amplification vector.
+    const textCaps: Record<string, number> = {
+      sdk_banner_message: 240,
+      sdk_banner_label: 24,
+      sdk_banner_bug_cta: 60,
+    };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
-      if (allowed.includes(key)) updates[key] = value;
+      if (!allowed.includes(key)) continue;
+      const cap = textCaps[key];
+      if (cap !== undefined) {
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          updates[key] = trimmed ? trimmed.slice(0, cap) : null;
+        } else if (value === null) {
+          updates[key] = null;
+        }
+        // Non-string, non-null values for text fields are dropped.
+        continue;
+      }
+      updates[key] = value;
     }
 
     const { error } = await db
@@ -236,6 +391,326 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     return c.json({ ok: false, error: { code: 'NO_SLACK_CONFIG', message: 'SLACK_BOT_TOKEN env var not set.' } }, 500);
   });
 
+  // ── Slack OAuth install flow ──────────────────────────────────────────────
+  // GET /v1/admin/integrations/slack/install?project_id=<uuid>
+  // Redirects the user to Slack's OAuth authorize URL.
+  // The `state` encodes the project ID + a random nonce (HMAC-verified on callback).
+  app.get('/v1/admin/integrations/slack/install', jwtAuth, async (c) => {
+    const clientId = Deno.env.get('SLACK_CLIENT_ID');
+    if (!clientId) return c.json({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'SLACK_CLIENT_ID is not set on this server.' } }, 500);
+    const stateSecret = slackStateSecret();
+    if (!stateSecret) return c.json({ ok: false, error: { code: 'NOT_CONFIGURED', message: 'SLACK_CLIENT_SECRET is not set on this server.' } }, 500);
+
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const projectId = resolvedProject.project.id;
+
+    // state = b64url(projectId:nonce:exp).b64url(HMAC) — verified on callback
+    const state = await signSlackState(projectId, stateSecret);
+    const redirectUri = slackRedirectUri();
+    const scopes = ['chat:write', 'chat:write.public', 'commands', 'channels:read', 'users:read'].join(',');
+    const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
+    return c.redirect(url, 302);
+  });
+
+  // GET /v1/webhooks/slack/oauth-callback  (public — Slack redirects here after install)
+  // Exchanges code for bot token, vaults it, writes project_settings, redirects to console.
+  app.get('/v1/webhooks/slack/oauth-callback', async (c) => {
+    const code = c.req.query('code');
+    const state = c.req.query('state');
+    const error = c.req.query('error');
+    const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? '';
+    const failRedirect = `${adminBase}/integrations/config?slack_error=`;
+
+    if (error) return c.redirect(`${failRedirect}${encodeURIComponent(error)}`, 302);
+    if (!code || !state) return c.redirect(`${failRedirect}missing_params`, 302);
+
+    const clientId = Deno.env.get('SLACK_CLIENT_ID');
+    const clientSecret = Deno.env.get('SLACK_CLIENT_SECRET');
+    if (!clientId || !clientSecret) return c.redirect(`${failRedirect}server_misconfigured`, 302);
+
+    // Verify the HMAC-signed state and extract the project ID. A forged or
+    // expired state is rejected here — this is what prevents an attacker from
+    // binding their Slack workspace token to another tenant's project.
+    const stateSecret = slackStateSecret();
+    if (!stateSecret) return c.redirect(`${failRedirect}server_misconfigured`, 302);
+    const projectId = await verifySlackState(state, stateSecret);
+    if (!projectId) return c.redirect(`${failRedirect}invalid_state`, 302);
+
+    const redirectUri = slackRedirectUri();
+    const form = new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri });
+
+    let tokens: { botToken: string; teamId: string; teamName: string };
+    try {
+      const res = await fetch('https://slack.com/api/oauth.v2.access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form,
+      });
+      const data = await res.json() as { ok: boolean; error?: string; access_token: string; team: { id: string; name: string }; bot_user_id: string };
+      if (!data.ok) throw new Error(data.error ?? 'slack_error');
+      tokens = { botToken: data.access_token, teamId: data.team.id, teamName: data.team.name };
+    } catch (err) {
+      return c.redirect(`${failRedirect}${encodeURIComponent(String(err))}`, 302);
+    }
+
+    // Vault the bot token and write project_settings
+    const db = getServiceClient();
+    const { data: secretRow } = await db.rpc('vault_store_secret', {
+      secret: tokens.botToken,
+      name: `slack_bot_${projectId}`,
+      description: `Slack bot token for project ${projectId}`,
+    });
+    const vaultId = secretRow as string | null;
+
+    await db.from('project_settings').upsert({
+      project_id: projectId,
+      slack_bot_token_ref: vaultId ?? undefined,
+      slack_team_id: tokens.teamId,
+      slack_team_name: tokens.teamName,
+    } as Record<string, unknown>, { onConflict: 'project_id' });
+
+    return c.redirect(`${adminBase}/integrations/config?slack_connected=1`, 302);
+  });
+
+  // GET /v1/admin/integrations/slack/channels — proxy Slack conversations.list for channel picker
+  app.get('/v1/admin/integrations/slack/channels', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const projectId = resolvedProject.project.id;
+
+    // Resolve bot token: per-project vault ref first, then env fallback
+    let botToken: string | null = null;
+    const { data: ps } = await db.from('project_settings').select('slack_bot_token_ref').eq('project_id', projectId).maybeSingle();
+    const tokenRef = (ps as Record<string, unknown> | null)?.slack_bot_token_ref as string | null;
+    if (tokenRef) {
+      const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
+      botToken = typeof data === 'string' ? data : null;
+    }
+    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
+    if (!botToken) return c.json({ ok: false, error: { code: 'NO_BOT_TOKEN', message: 'Add to Slack first.' } }, 400);
+
+    const res = await fetch('https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200&exclude_archived=true', {
+      headers: { Authorization: `Bearer ${botToken}` },
+    });
+    const data = await res.json() as { ok: boolean; channels?: Array<{ id: string; name: string; is_private: boolean }> };
+    if (!data.ok) return c.json({ ok: false }, 502);
+    return c.json({ channels: (data.channels ?? []).map((ch) => ({ id: ch.id, name: ch.name, private: ch.is_private })) });
+  });
+
+  // ── Per-project integration probe endpoint ─────────────────────────────────
+  // POST /v1/admin/projects/:pid/integrations/probe/:kind
+  // adminOrApiKey() accepts: Supabase JWT (browser console) OR project API key with mcp:read scope (CLI/MCP).
+  app.post('/v1/admin/projects/:pid/integrations/probe/:kind', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const pid = c.req.param('pid')!;
+    const kind = c.req.param('kind')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    // Verify project access:
+    // - API key path: adminOrApiKey set projectId on the context; check it matches :pid
+    // - JWT path: projectId is not set; fall through to ownership check
+    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+    if (contextPid) {
+      // API key auth — project is bound to the key; reject mismatch
+      if (contextPid !== pid) return c.json({ error: 'API key does not belong to this project' }, 403);
+    } else {
+      // JWT auth — verify the user owns the project
+      const ids = await ownedProjectIds(db, userId);
+      if (!ids.includes(pid)) return c.json({ error: 'Project not found or access denied' }, 403);
+    }
+
+    try {
+      // Fetch project_settings — may be null if no settings saved yet
+      const { data: settingsRow } = await db
+        .from('project_settings')
+        .select('slack_bot_token_ref, slack_channel_id, slack_webhook_url, sentry_auth_token_ref, sentry_org_slug, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref')
+        .eq('project_id', pid)
+        .maybeSingle();
+
+      const settings = (settingsRow ?? {}) as {
+        slack_bot_token_ref?: string | null;
+        sentry_auth_token_ref?: string | null;
+        sentry_org_slug?: string | null;
+        langfuse_public_key_ref?: string | null;
+        langfuse_secret_key_ref?: string | null;
+        github_repo_url?: string | null;
+        github_installation_token_ref?: string | null;
+      };
+
+      const { probeIntegration } = await import('../../_shared/integration-probes.ts');
+      const result = await probeIntegration(
+        kind as Parameters<typeof probeIntegration>[0],
+        db,
+        settings,
+      );
+      return c.json({ ok: true, data: { status: result.status, detail: result.detail ?? null } });
+    } catch (err) {
+      console.error('[probe] unhandled error:', String(err));
+      return c.json({ ok: false, error: { code: 'PROBE_ERROR', message: String(err) } }, 500);
+    }
+  });
+
+  // ── Per-project integration list ───────────────────────────────────────────
+  // GET /v1/admin/projects/:pid/integrations — surfaces configured integrations from project_settings.
+  // Used by `mushi integrations list`. Both JWT and API key paths via shared helper.
+  async function handleIntegrationsList(pid: string, db: ReturnType<typeof getServiceClient>) {
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref, discord_webhook_url')
+      .eq('project_id', pid)
+      .maybeSingle();
+    const ps = settings as Record<string, unknown> | null;
+
+    // Check Slack: per-project vault ref OR server-wide env var fallback
+    const slackConfigured = !!(ps?.slack_channel_id || ps?.slack_webhook_url || ps?.slack_bot_token_ref || Deno.env.get('SLACK_BOT_TOKEN'));
+
+    const integrations: Array<{ kind: string; status: string; detail: string | null }> = [
+      {
+        kind: 'slack',
+        status: slackConfigured ? 'ok' : 'unknown',
+        detail: slackConfigured
+          ? 'Slack configured — run `mushi slack status` to verify the live connection'
+          : 'Not connected — visit /integrations → Add to Slack',
+      },
+      {
+        kind: 'discord',
+        status: ps?.discord_webhook_url ? 'ok' : 'unknown',
+        detail: ps?.discord_webhook_url ? 'Discord webhook configured' : null,
+      },
+    ];
+
+    return integrations;
+  }
+
+  // Combined route: accepts JWT (browser) or API key (CLI/MCP)
+  app.get('/v1/admin/projects/:pid/integrations', async (c, next) => {
+    const hasApiKey = !!(c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project'));
+    if (hasApiKey) return apiKeyAuth(c as never, next);
+    return jwtAuth(c as never, next);
+  }, async (c) => {
+    const pid = c.req.param('pid')!;
+    const db = getServiceClient();
+
+    // For API key auth: validate the project matches
+    const contextPid = c.get('projectId' as keyof typeof c.var) as string | undefined;
+    if (contextPid && contextPid !== pid) return c.json({ error: 'Forbidden' }, 403);
+
+    // For JWT auth: validate project ownership
+    if (!contextPid) {
+      const userId = c.get('userId') as string;
+      const resolvedProject = await resolveOwnedProject(c, db, userId);
+      if ('response' in resolvedProject) return resolvedProject.response;
+    }
+
+    const integrations = await handleIntegrationsList(pid, db);
+    return c.json({ integrations });
+  });
+
+  // ── Per-project Slack test endpoint ────────────────────────────────────────
+  // POST /v1/admin/projects/:pid/integrations/slack/test
+  // Used by `mushi slack test` and the console Send test button. JWT or API key (mcp:read).
+  app.post('/v1/admin/projects/:pid/integrations/slack/test', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const pid = c.req.param('pid')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    // Resolve project: API key path uses contextPid; JWT path uses ownership check
+    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+    let projectId: string;
+    let projectName: string;
+    if (contextPid) {
+      if (contextPid !== pid) return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
+      projectId = pid;
+      projectName = (c.get as (k: string) => string | undefined)('projectName') ?? 'your project';
+    } else {
+      const resolvedProject = await resolveOwnedProject(c, db, userId);
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+      projectId = project.id;
+      projectName = project.name ?? 'your project';
+    }
+
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    const ps = settings as Record<string, unknown> | null;
+    const channelId = (ps?.slack_channel_id as string | null) || Deno.env.get('SLACK_CHANNEL_ID') || null;
+    const webhookUrl = (ps?.slack_webhook_url as string | null) || null;
+
+    let botToken: string | null = null;
+    const tokenRef = ps?.slack_bot_token_ref as string | null;
+    if (tokenRef) {
+      const { data } = await db.rpc('vault_get_secret', { secret_id: tokenRef });
+      botToken = typeof data === 'string' ? data : null;
+    }
+    if (!botToken) botToken = Deno.env.get('SLACK_BOT_TOKEN') ?? null;
+
+    if (botToken && channelId) {
+      const res = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${botToken}` },
+        body: JSON.stringify({ channel: channelId, text: `🐛 Mushi test — Slack is wired up for *${projectName}*.` }),
+      });
+      const json = await res.json() as { ok: boolean; error?: string };
+      if (!json.ok) return c.json({ ok: true, data: { ok: false, error: json.error ?? 'Slack API error' } });
+      return c.json({ ok: true, data: { ok: true } });
+    }
+    if (webhookUrl) {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `🐛 Mushi test — Slack is wired up for *${projectName}*.` }),
+      });
+      if (!res.ok) return c.json({ ok: true, data: { ok: false, error: `Webhook HTTP ${res.status}` } });
+      return c.json({ ok: true, data: { ok: true } });
+    }
+
+    return c.json({ ok: true, data: { ok: false, error: 'No Slack channel or bot token configured. Use `mushi slack status` to check or visit /integrations → Add to Slack.' } });
+  });
+
+  // ── Per-project Discord test endpoint ──────────────────────────────────────
+  // POST /v1/admin/projects/:pid/integrations/discord/test
+  // JWT or API key (mcp:read) so CLI can call it.
+  app.post('/v1/admin/projects/:pid/integrations/discord/test', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const pid = c.req.param('pid')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+    let projectId: string;
+    let displayName: string;
+    if (contextPid) {
+      if (contextPid !== pid) return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
+      projectId = pid;
+      displayName = (c.get as (k: string) => string | undefined)('projectName') ?? pid;
+    } else {
+      const resolvedProject = await resolveOwnedProject(c, db, userId);
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+      projectId = project.id;
+      displayName = project.name ?? pid;
+    }
+
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('discord_webhook_url')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    const webhookUrl = (settings as Record<string, unknown> | null)?.discord_webhook_url as string | null;
+    if (!webhookUrl) return c.json({ ok: false, error: 'No Discord webhook URL configured. Set one in Integrations → Discord.' }, 400);
+
+    const { sendDiscordNotification } = await import('../../_shared/slack.ts');
+    await sendDiscordNotification(webhookUrl, `🐛 Mushi test — Discord is wired up for **${displayName}**.`);
+    return c.json({ ok: true });
+  });
+
   app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
@@ -249,7 +724,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .from('project_settings')
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -279,7 +754,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
       .select(
         'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, ' +
+          'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
       )
@@ -547,7 +1022,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
 
     // Reuse the same resolver path the LLM pipeline takes. If this returns null
     // the user has no BYOK and no env fallback — surface that as 'untested'.
-    const { resolveLlmKey } = await import('../_shared/byok.ts');
+    const { resolveLlmKey } = await import('../../_shared/byok.ts');
     const resolved = await resolveLlmKey(db, project.id, provider);
     if (!resolved) {
       return c.json(
@@ -829,7 +1304,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { probeFirecrawl } = await import('../_shared/firecrawl.ts');
+    const { probeFirecrawl } = await import('../../_shared/firecrawl.ts');
     const probe = await probeFirecrawl(db, project.id);
 
     const now = new Date().toISOString();
@@ -899,7 +1374,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { firecrawlSearch } = await import('../_shared/firecrawl.ts');
+    const { firecrawlSearch } = await import('../../_shared/firecrawl.ts');
 
     let results: Array<{ url: string; title: string; snippet: string; markdown?: string }> = [];
     let errCode: string | null = null;

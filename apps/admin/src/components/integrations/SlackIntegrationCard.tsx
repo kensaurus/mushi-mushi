@@ -1,0 +1,218 @@
+/**
+ * FILE: apps/admin/src/components/integrations/SlackIntegrationCard.tsx
+ *
+ * First-class Slack integration card with:
+ * - "Add to Slack" OAuth button (per-project bot token flow)
+ * - Channel picker (proxied conversations.list)
+ * - Send-test button
+ * - Health sparkline (slack probe from integration-probes)
+ * - Legacy webhook URL fallback behind a <details>
+ */
+
+import { useState, useEffect } from 'react'
+import { apiFetch } from '../../lib/supabase'
+import { useToast } from '../../lib/toast'
+import { HealthSparkline } from './HealthSparkline'
+import type { HealthRow } from './types'
+
+interface Props {
+  projectId: string | null
+  slackConfigured: boolean
+  teamName: string | null
+  latestProbe?: HealthRow
+  sparkline?: HealthRow[]
+}
+
+interface SlackChannel {
+  id: string
+  name: string
+  private: boolean
+}
+
+export function SlackIntegrationCard({ projectId, slackConfigured, teamName, latestProbe, sparkline = [] }: Props) {
+  const toast = useToast()
+  const [channels, setChannels] = useState<SlackChannel[]>([])
+  const [loadingChannels, setLoadingChannels] = useState(false)
+  const [selectedChannel, setSelectedChannel] = useState('')
+  const [testingSlack, setTestingSlack] = useState(false)
+  const [savingChannel, setSavingChannel] = useState(false)
+  const [webhookUrl, setWebhookUrl] = useState('')
+
+  const probeStatus = latestProbe?.status
+
+  // Load channel list when connected
+  useEffect(() => {
+    if (!slackConfigured || !projectId) return
+    setLoadingChannels(true)
+    apiFetch<{ channels?: SlackChannel[] }>('/v1/admin/integrations/slack/channels')
+      .then((res) => setChannels(res.ok ? (res.data?.channels ?? []) : []))
+      .catch(() => { /* non-fatal */ })
+      .finally(() => setLoadingChannels(false))
+  }, [slackConfigured, projectId])
+
+  const handleAddToSlack = () => {
+    if (!projectId) return
+    // Navigate to the OAuth install route — Slack redirects back after auth
+    window.location.href = `/api/v1/admin/integrations/slack/install?project_id=${projectId}`
+  }
+
+  const handleSaveChannel = async () => {
+    if (!selectedChannel || !projectId) return
+    setSavingChannel(true)
+    try {
+      const res = await apiFetch('/v1/admin/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ slack_channel_id: selectedChannel }),
+      })
+      if (res.ok) {
+        toast.success('Channel saved — Slack notifications will go here.')
+      } else {
+        toast.error('Could not save channel.')
+      }
+    } finally {
+      setSavingChannel(false)
+    }
+  }
+
+  const handleTest = async () => {
+    setTestingSlack(true)
+    try {
+      const res = await apiFetch('/v1/admin/settings/test-slack', { method: 'POST' })
+      if (res.ok) toast.success('Test message sent to Slack!')
+      else toast.error(res.error?.message ?? 'Slack test failed.')
+    } catch {
+      toast.error('Could not reach Slack.')
+    } finally {
+      setTestingSlack(false)
+    }
+  }
+
+  const handleSaveWebhook = async () => {
+    if (!webhookUrl) return
+    const res = await apiFetch('/v1/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ slack_webhook_url: webhookUrl }),
+    })
+    if (res.ok) toast.success('Webhook URL saved.')
+    else toast.error('Could not save webhook URL.')
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-[#4A154B] flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="#E01E5A"/>
+              <path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="#36C5F0"/>
+              <path d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z" fill="#2EB67D"/>
+              <path d="M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="#ECB22E"/>
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-fg truncate">Slack</h3>
+            {slackConfigured ? (
+              <p className="text-xs text-ok truncate">{teamName ? `Connected to ${teamName}` : 'Connected'}</p>
+            ) : (
+              <p className="text-xs text-fg-secondary truncate">Not connected — add to a workspace to receive notifications</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {sparkline.length > 0 && (
+            <span
+              className="hidden sm:flex"
+              title={probeStatus ? `Slack health: ${probeStatus}` : undefined}
+            >
+              <HealthSparkline rows={sparkline} />
+            </span>
+          )}
+          {slackConfigured ? (
+            <button
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-hover transition-colors"
+              onClick={handleTest}
+              disabled={testingSlack}
+            >
+              {testingSlack ? 'Sending…' : 'Send test'}
+            </button>
+          ) : (
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-[#4A154B] text-white px-4 py-2 text-sm font-medium hover:bg-[#3d1140] transition-colors"
+              onClick={handleAddToSlack}
+              disabled={!projectId}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white" className="opacity-90">
+                <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
+              </svg>
+              Add to Slack
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Channel picker (shown when connected) */}
+      {slackConfigured && (
+        <div className="pt-1 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-fg-secondary mb-1.5">Notification channel</label>
+            {loadingChannels ? (
+              <div className="h-9 rounded-lg bg-surface-hover animate-pulse" />
+            ) : channels.length > 0 ? (
+              <div className="flex gap-2">
+                <select
+                  className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                  value={selectedChannel}
+                  onChange={(e) => setSelectedChannel(e.target.value)}
+                >
+                  <option value="">Pick a channel…</option>
+                  {channels.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.private ? '🔒 ' : '#'}{ch.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:bg-brand/90 disabled:opacity-50 transition-colors"
+                  disabled={!selectedChannel || savingChannel}
+                  onClick={handleSaveChannel}
+                >
+                  {savingChannel ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-fg-tertiary">No channels found — make sure the Mushi app is added to at least one channel.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Legacy webhook fallback */}
+      <details className="group">
+        <summary className="cursor-pointer text-xs text-fg-tertiary hover:text-fg-secondary transition-colors list-none flex items-center gap-1">
+          <span className="group-open:rotate-90 transition-transform inline-block">›</span>
+          Use incoming webhook URL instead (legacy)
+        </summary>
+        <div className="mt-3 flex gap-2">
+          <input
+            type="url"
+            placeholder="https://hooks.slack.com/services/…"
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-brand/30 focus:border-brand"
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+          />
+          <button
+            className="rounded-lg border border-border px-4 py-2 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
+            disabled={!webhookUrl}
+            onClick={handleSaveWebhook}
+          >
+            Save
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-fg-tertiary">
+          Webhook URL sends to a fixed channel; it cannot be changed per-project or thread replies. Use "Add to Slack" for the full experience.
+        </p>
+      </details>
+    </div>
+  )
+}

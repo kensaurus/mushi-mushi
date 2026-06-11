@@ -11,6 +11,7 @@
 //   GET  /v1/sync/reports             — list reports with filters + search
 //   GET  /v1/sync/reports/:id         — single report detail
 //   PATCH /v1/sync/reports/:id        — triage: status, severity, note
+//   POST /v1/sync/reports/:id/reply   — send a visible reply to the reporter widget
 //   POST /v1/sync/codebase/upload     — upload a source file to the RAG index
 //   GET  /v1/sync/lessons/:id         — single lesson detail
 //
@@ -24,6 +25,7 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
+import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -340,7 +342,103 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
       }).then(() => null, () => null)
     }
 
+    // Fire reporter notification when status changes to resolved or dismissed.
+    // Mirrors the same trigger that reports-dashboard.ts fires from the admin UI,
+    // so CLI triage also notifies the end-user widget.
+    if (status && (status === 'resolved' || status === 'dismissed') && existing.status !== status) {
+      const notifType = status === 'resolved' ? 'fixed' : 'dismissed'
+      // reporter_token_hash is not on existing (select was minimal) — re-fetch it.
+      db.from('reports')
+        .select('reporter_token_hash')
+        .eq('id', id)
+        .eq('project_id', projectId)
+        .maybeSingle()
+        .then(({ data: r }) => {
+          if (!r?.reporter_token_hash) return
+          return createNotification(db, projectId, id, r.reporter_token_hash, notifType, {
+            message: buildNotificationMessage(notifType, {}),
+            reportId: id,
+          })
+        })
+        .then(() => null, () => null)
+    }
+
     return c.json({ ok: true, data: updated })
+  })
+
+  // ── POST /v1/sync/reports/:id/reply ──────────────────────────────────────
+  // Send a message to the end-user reporter widget. Creates a comment that is
+  // visible in the widget and fires a reporter_notification for the "New reply"
+  // badge. Used by `mushi reports reply <id> "message"` and the reply_to_reporter
+  // MCP tool so triage can happen from the Cursor IDE without opening the admin UI.
+  app.post('/v1/sync/reports/:id/reply', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+    const id = c.req.param('id')!
+
+    let rawBody: unknown
+    try { rawBody = await c.req.json() } catch {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } }, 400)
+    }
+
+    const ReplyBody = z.object({
+      message: z.string().min(1).max(10_000),
+      author_name: z.string().max(100).optional().default('Mushi Admin'),
+    })
+
+    const parsed = ReplyBody.safeParse(rawBody)
+    if (!parsed.success) {
+      return c.json({
+        ok: false,
+        error: { code: 'VALIDATION_ERROR', message: parsed.error.issues.map((i) => i.message).join('; ') },
+      }, 422)
+    }
+
+    const { message, author_name } = parsed.data
+
+    // Verify report belongs to this project and fetch the reporter token for the notification.
+    const { data: report, error: fetchErr } = await db
+      .from('reports')
+      .select('id, status, reporter_token_hash')
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .maybeSingle()
+
+    if (fetchErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: fetchErr.message } }, 500)
+    if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: `Report ${id} not found` } }, 404)
+
+    const { data: comment, error: insertErr } = await db
+      .from('report_comments')
+      .insert({
+        report_id: id,
+        project_id: projectId,
+        author_kind: 'admin',
+        author_name,
+        body: message,
+        visible_to_reporter: true,
+        created_at: new Date().toISOString(),
+      })
+      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
+      .single()
+
+    if (insertErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: insertErr.message } }, 500)
+
+    // Update last_admin_reply_at on the report — best effort.
+    db.from('reports')
+      .update({ last_admin_reply_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .then(() => null, () => null)
+
+    // Notify the reporter widget so they see the unread badge.
+    if (report.reporter_token_hash) {
+      createNotification(db, projectId, id, report.reporter_token_hash, 'comment_reply', {
+        message: buildNotificationMessage('comment_reply', {}),
+        reportId: id,
+      }).catch(() => null)
+    }
+
+    return c.json({ ok: true, data: { comment } }, 201)
   })
 
   // ── GET /v1/sync/lessons/:id ──────────────────────────────────────────────
@@ -450,6 +548,141 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         chunks: inserted,
         file_path: filePath,
         ...(chunkErrors.length > 0 ? { chunk_errors: chunkErrors } : {}),
+      },
+    })
+  })
+
+  // ── GET /v1/sync/ingest-setup ─────────────────────────────────────────────
+  // API-key view of the four **required ingest** steps (key → SDK heartbeat →
+  // first report). Distinct from GET /v1/admin/projects/:id/preflight which
+  // covers dispatch readiness (GitHub, codebase, BYOK, autofix). Powers
+  // `mushi connect --wait`, `mushi doctor --ingest`, and MCP ingest_setup_check.
+  app.get('/v1/sync/ingest-setup', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+    const projectName = c.get('projectName') as string
+
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null
+      } catch {
+        return null
+      }
+    })()
+
+    const [keysRes, reportsRes, projectRes] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host')
+        .eq('project_id', projectId)
+        .eq('is_active', true)
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
+        .limit(1),
+      db
+        .from('reports')
+        .select('id, environment, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      db.from('projects').select('slug').eq('id', projectId).maybeSingle(),
+    ])
+
+    // A failed query must not masquerade as a confident "step incomplete"
+    // diagnosis — pollers would tell the user their SDK isn't installed.
+    if (keysRes.error || reportsRes.error) {
+      const detail = keysRes.error?.message ?? reportsRes.error?.message ?? 'query failed'
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: `ingest-setup lookup failed: ${detail}` } },
+        500,
+      )
+    }
+
+    const heartbeat = keysRes.data?.[0] as {
+      last_seen_at?: string | null
+      last_seen_origin?: string | null
+      last_seen_user_agent?: string | null
+      last_seen_endpoint_host?: string | null
+    } | undefined
+
+    let reportCount = 0
+    let sdkReportSignal = false
+    for (const r of reportsRes.data ?? []) {
+      reportCount += 1
+      const env = (r.environment ?? {}) as Record<string, unknown>
+      const platform = typeof env.platform === 'string' ? env.platform : ''
+      if (platform && platform !== 'mushi-admin') sdkReportSignal = true
+    }
+
+    const hasKey = (keysRes.data?.length ?? 0) > 0
+    const hasSdk = Boolean(heartbeat?.last_seen_at) || sdkReportSignal
+    const hasReport = reportCount > 0
+
+    type Step = {
+      id: 'api_key_generated' | 'sdk_installed' | 'first_report_received' | 'project_created'
+      label: string
+      complete: boolean
+      required: boolean
+      hint: string
+    }
+
+    const steps: Step[] = [
+      {
+        id: 'project_created',
+        label: 'Project exists',
+        complete: true,
+        required: true,
+        hint: 'Project row is provisioned in Mushi.',
+      },
+      {
+        id: 'api_key_generated',
+        label: 'API key active',
+        complete: hasKey,
+        required: true,
+        hint: hasKey
+          ? 'At least one active API key is configured.'
+          : 'Mint an API key in Projects → Generate key.',
+      },
+      {
+        id: 'sdk_installed',
+        label: 'SDK heartbeat',
+        complete: hasSdk,
+        required: true,
+        hint: hasSdk
+          ? 'SDK reached this backend (heartbeat or real report).'
+          : 'Install the snippet, set env vars, restart your dev server.',
+      },
+      {
+        id: 'first_report_received',
+        label: 'First report ingested',
+        complete: hasReport,
+        required: true,
+        hint: hasReport
+          ? 'At least one report row exists for this project.'
+          : 'Send a test report from Projects or open the banner in your app.',
+      },
+    ]
+
+    const requiredSteps = steps.filter((s) => s.required)
+    const requiredComplete = requiredSteps.filter((s) => s.complete).length
+
+    return c.json({
+      ok: true,
+      data: {
+        project_id: projectId,
+        project_name: projectName,
+        project_slug: projectRes.data?.slug ?? null,
+        ready: requiredComplete === requiredSteps.length,
+        required_total: requiredSteps.length,
+        required_complete: requiredComplete,
+        steps,
+        recent_report_count: reportCount,
+        diagnostic: {
+          last_sdk_seen_at: heartbeat?.last_seen_at ?? null,
+          last_sdk_origin: heartbeat?.last_seen_origin ?? null,
+          last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
+          last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
+          admin_endpoint_host: adminHost,
+        },
       },
     })
   })

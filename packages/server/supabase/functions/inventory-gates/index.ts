@@ -38,7 +38,15 @@ declare const Deno: {
 
 const rlog = log.child('inventory-gates')
 
-type GateName = 'dead_handler' | 'mock_leak' | 'api_contract' | 'crawl' | 'status_claim'
+type GateName =
+  | 'dead_handler'
+  | 'mock_leak'
+  | 'api_contract'
+  | 'crawl'
+  | 'status_claim'
+  | 'orphan_endpoint'
+  | 'unknown_call'
+  | 'spec_drift'
 type GateStatus = 'pass' | 'fail' | 'warn' | 'skipped' | 'error'
 
 interface GateOutcome {
@@ -77,6 +85,17 @@ interface RequestBody {
    * authoritative source when present (avoids a second slow crawl).
    */
   discovered_apis?: string[]
+  /**
+   * For spec_drift: oasdiff diff output from the mcp-ci Gate 6 Action.
+   * Pre-computed by the CI runner; we just persist the findings here.
+   */
+  spec_diff_findings?: Array<{
+    severity: 'info' | 'warn' | 'error'
+    rule_id?: string
+    message: string
+    path?: string
+    method?: string
+  }>
 }
 
 async function startGateRun(
@@ -267,6 +286,265 @@ async function runApiContractGate(
 }
 
 /**
+ * Gate 7 — Orphan Endpoint Detection.
+ *
+ * Compares the declared + discovered API surface against 30-day SDK-observed
+ * network paths. Backend routes that are never called by any frontend session
+ * are likely orphaned (dead code, unlinked features, or deprecated endpoints).
+ *
+ * Source of truth:
+ *   - Discovered routes: latest crawl run summary + declared api_dep nodes.
+ *   - Observed calls: discovery_observed_inventory (30-day rolling window).
+ *
+ * Finding severity: warn (not fail) — a backend route may be called from
+ * a non-SDK surface (e.g. mobile, webhook). This is a signal, not a blocker.
+ */
+async function runOrphanEndpointGate(
+  db: SupabaseClient,
+  body: RequestBody,
+): Promise<GateOutcome> {
+  const runId = await startGateRun(db, body, 'orphan_endpoint')
+
+  // Collect discovered routes from the latest crawl + declared api_deps.
+  const discovered: Set<string> = new Set(body.discovered_apis ?? [])
+
+  const { data: apiDeps } = await db
+    .from('graph_nodes')
+    .select('label')
+    .eq('project_id', body.project_id!)
+    .eq('node_type', 'api_dep')
+    .returns<Array<{ label: string }>>()
+
+  for (const dep of apiDeps ?? []) discovered.add(dep.label)
+
+  if (discovered.size === 0) {
+    await finishGateRun(db, runId, 'skipped', { reason: 'no discovered routes' }, 0)
+    return { gate: 'orphan_endpoint', status: 'skipped', summary: { reason: 'no discovered routes' }, findings_count: 0, run_id: runId }
+  }
+
+  // Collect observed paths from discovery_observed_inventory (last 30 days).
+  const { data: observed } = await db
+    .from('discovery_events')
+    .select('network_paths')
+    .eq('project_id', body.project_id!)
+    .gte('observed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .returns<Array<{ network_paths: string[] }>>()
+
+  const observedSet = new Set<string>()
+  for (const row of observed ?? []) {
+    for (const p of row.network_paths ?? []) {
+      // Normalise: strip query params and trailing slashes for fuzzy match.
+      try {
+        const url = new URL(p, 'https://placeholder')
+        observedSet.add(url.pathname.replace(/\/$/, ''))
+      } catch {
+        observedSet.add(p.split('?')[0]?.replace(/\/$/, '') ?? p)
+      }
+    }
+  }
+
+  if (observedSet.size === 0) {
+    await finishGateRun(db, runId, 'skipped', { reason: 'no SDK discovery data yet' }, 0)
+    return { gate: 'orphan_endpoint', status: 'skipped', summary: { reason: 'no SDK discovery data yet' }, findings_count: 0, run_id: runId }
+  }
+
+  let inserted = 0
+  const orphans: string[] = []
+  for (const route of discovered) {
+    // Normalise the declared route for comparison.
+    const normRoute = route.split('?')[0]?.replace(/\/$/, '') ?? route
+    // Check for fuzzy path match (allow for route params like /api/users/:id).
+    const isObserved = [...observedSet].some((obs) => {
+      if (obs === normRoute) return true
+      // Simple param-strip: replace path segments that look like IDs with :param.
+      const obsGeneric = obs.replace(/\/[0-9a-f-]{8,}/gi, '/:id').replace(/\/\d+/g, '/:id')
+      const routeGeneric = normRoute.replace(/\/:?[\w]+/g, '/:param').replace(/\/\{[\w]+\}/g, '/:param')
+      return obsGeneric === routeGeneric || obs.startsWith(normRoute)
+    })
+    if (!isObserved) {
+      orphans.push(route)
+      const { error } = await db.from('gate_findings').insert({
+        gate_run_id: runId,
+        project_id: body.project_id!,
+        severity: 'warn',
+        rule_id: 'orphan-endpoint',
+        message: `Backend route "${route}" has no observed frontend calls in the past 30 days. It may be an orphaned feature, dead code, or only called from a non-SDK surface.`,
+        suggested_fix: {
+          explanation:
+            'If this endpoint is intentional (webhook, mobile-only, admin-only), add it to inventory.yaml with a note. If it is dead code, consider removing it.',
+          route,
+        },
+      })
+      if (!error) inserted++
+    }
+  }
+
+  const status: GateStatus = orphans.length === 0 ? 'pass' : 'warn'
+  await finishGateRun(db, runId, status, {
+    total_routes: discovered.size,
+    observed_routes: discovered.size - orphans.length,
+    orphan_count: orphans.length,
+    sample: orphans.slice(0, 5),
+  }, inserted)
+
+  return {
+    gate: 'orphan_endpoint',
+    status,
+    summary: { total_routes: discovered.size, orphan_count: orphans.length, sample: orphans.slice(0, 5) },
+    findings_count: inserted,
+    run_id: runId,
+  }
+}
+
+/**
+ * Gate 8 — Unknown Call Detection.
+ *
+ * The inverse of Gate 7: SDK-observed network calls that match neither a
+ * declared api_dep nor a discovered backend route. This catches the classic
+ * "frontend calling an endpoint that was never deployed" bug class.
+ *
+ * Finding severity: error when the path looks like a new/undeployed API
+ * (e.g. /api/v2/*), warn for paths that may be third-party services.
+ */
+async function runUnknownCallGate(
+  db: SupabaseClient,
+  body: RequestBody,
+): Promise<GateOutcome> {
+  const runId = await startGateRun(db, body, 'unknown_call')
+
+  // Known-good: declared api_deps + discovered routes from latest crawl.
+  const known = new Set<string>(body.discovered_apis ?? [])
+  const { data: apiDeps } = await db
+    .from('graph_nodes')
+    .select('label')
+    .eq('project_id', body.project_id!)
+    .eq('node_type', 'api_dep')
+    .returns<Array<{ label: string }>>()
+  for (const dep of apiDeps ?? []) known.add(dep.label)
+
+  // Get project base URL to filter out third-party calls.
+  const { data: settings } = await db
+    .from('project_settings')
+    .select('crawler_base_url')
+    .eq('project_id', body.project_id!)
+    .maybeSingle()
+  const baseUrl = (settings as { crawler_base_url?: string } | null)?.crawler_base_url ?? ''
+
+  // Observed network paths from discovery events in the last 30 days.
+  const { data: observed } = await db
+    .from('discovery_events')
+    .select('network_paths')
+    .eq('project_id', body.project_id!)
+    .gte('observed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+    .returns<Array<{ network_paths: string[] }>>()
+
+  const allObserved = new Set<string>()
+  for (const row of observed ?? []) {
+    for (const p of row.network_paths ?? []) {
+      allObserved.add(p)
+    }
+  }
+
+  if (allObserved.size === 0 || known.size === 0) {
+    await finishGateRun(db, runId, 'skipped', { reason: 'insufficient data for comparison' }, 0)
+    return { gate: 'unknown_call', status: 'skipped', summary: { reason: 'insufficient data' }, findings_count: 0, run_id: runId }
+  }
+
+  let inserted = 0
+  const unknowns: string[] = []
+
+  for (const path of allObserved) {
+    // Skip third-party calls (different origin from base URL).
+    if (baseUrl) {
+      try {
+        const pathUrl = new URL(path, 'https://placeholder')
+        const base = new URL(baseUrl)
+        if (!path.startsWith('/') && pathUrl.hostname !== base.hostname) continue
+      } catch { /* keep */ }
+    }
+
+    // Normalise for comparison (same logic as Gate 7).
+    const normPath = path.split('?')[0]?.replace(/\/$/, '') ?? path
+    const isKnown = [...known].some((k) => {
+      const normK = k.split('?')[0]?.replace(/\/$/, '') ?? k
+      return normK === normPath || normPath.startsWith(normK) || normK.startsWith(normPath)
+    })
+
+    if (!isKnown) {
+      unknowns.push(path)
+      const isLikelyApi = /\/api\//i.test(path) || /\/v\d+\//i.test(path) || /\/rpc\//i.test(path)
+      const { error } = await db.from('gate_findings').insert({
+        gate_run_id: runId,
+        project_id: body.project_id!,
+        severity: isLikelyApi ? 'error' : 'warn',
+        rule_id: 'unknown-call',
+        message: `SDK-observed network path "${path}" has no matching backend declaration or crawled route. This may indicate a 404, a missing migration, or an undeclared API endpoint.`,
+        suggested_fix: {
+          explanation: isLikelyApi
+            ? 'This looks like an API call. Check if the backend endpoint is deployed and declared in inventory.yaml as an ApiDep.'
+            : 'This may be a third-party service call. If it belongs to your API, add it to inventory.yaml.',
+          path,
+        },
+      })
+      if (!error) inserted++
+    }
+  }
+
+  const hasFails = unknowns.some((u) => /\/api\//i.test(u) || /\/v\d+\//i.test(u))
+  const status: GateStatus = unknowns.length === 0 ? 'pass' : hasFails ? 'fail' : 'warn'
+  await finishGateRun(db, runId, status, {
+    observed_paths: allObserved.size,
+    known_paths: known.size,
+    unknown_count: unknowns.length,
+    sample: unknowns.slice(0, 5),
+  }, inserted)
+
+  return {
+    gate: 'unknown_call',
+    status,
+    summary: { observed_paths: allObserved.size, unknown_count: unknowns.length, sample: unknowns.slice(0, 5) },
+    findings_count: inserted,
+    run_id: runId,
+  }
+}
+
+/**
+ * Gate 6 — OpenAPI Spec Drift (CI-side, server-side recording).
+ *
+ * The mpc-ci `spec-drift` command runs oasdiff locally in the CI job,
+ * then POSTs the findings here via spec_diff_findings in the request body.
+ * We persist the run and findings exactly as the caller delivers them.
+ */
+async function recordSpecDriftGate(
+  db: SupabaseClient,
+  body: RequestBody,
+): Promise<GateOutcome> {
+  const runId = await startGateRun(db, body, 'spec_drift')
+  const findings = body.spec_diff_findings ?? []
+  let inserted = 0
+  for (const f of findings) {
+    const { error } = await db.from('gate_findings').insert({
+      gate_run_id: runId,
+      project_id: body.project_id!,
+      severity: f.severity,
+      rule_id: f.rule_id ?? 'spec-drift',
+      message: f.message,
+      file_path: f.path ?? null,
+      suggested_fix: f.method
+        ? { method: f.method, path: f.path }
+        : null,
+    })
+    if (!error) inserted++
+  }
+  const status: GateStatus =
+    findings.length === 0 ? 'pass'
+    : findings.some((f) => f.severity === 'error') ? 'fail'
+    : 'warn'
+  await finishGateRun(db, runId, status, { provided_findings: findings.length }, inserted)
+  return { gate: 'spec_drift', status, summary: { provided_findings: findings.length }, findings_count: inserted, run_id: runId }
+}
+
+/**
  * Helper for Gates 1 + 2 — the eslint plugin forwards findings here so
  * they show up alongside the server-side gates. We just record the run
  * and persist whatever findings the caller delivered.
@@ -327,13 +605,16 @@ async function handler(req: Request): Promise<Response> {
   }
 
   const db = getServiceClient()
-  const requested = body.gates ?? ['status_claim', 'api_contract']
+  const requested = body.gates ?? ['status_claim', 'api_contract', 'orphan_endpoint', 'unknown_call']
   const outcomes: GateOutcome[] = []
 
   for (const gate of requested) {
     try {
       if (gate === 'status_claim') outcomes.push(await runStatusClaimGate(db, body))
       else if (gate === 'api_contract') outcomes.push(await runApiContractGate(db, body))
+      else if (gate === 'orphan_endpoint') outcomes.push(await runOrphanEndpointGate(db, body))
+      else if (gate === 'unknown_call') outcomes.push(await runUnknownCallGate(db, body))
+      else if (gate === 'spec_drift') outcomes.push(await recordSpecDriftGate(db, body))
       else if (gate === 'dead_handler' || gate === 'mock_leak') {
         outcomes.push(await recordLintGate(db, body, gate))
       } else if (gate === 'crawl') {

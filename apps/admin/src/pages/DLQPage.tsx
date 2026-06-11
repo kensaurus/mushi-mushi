@@ -24,7 +24,6 @@ import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
 import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
@@ -208,15 +207,6 @@ export function DLQPage() {
     pendingCount,
     oldestPendingMinutes: null,
   })
-  // Queue-scoped action is kept around so the PageActionBar continues to
-  // mirror the older "stalled vs running" phrasing operators have muscle
-  // memory for. PageHero.Act is strictly better — it handles poisoned
-  // rows separately — but we don't want to rip the ActionBar today.
-  const queueAction = useNextBestAction({
-    scope: 'queue',
-    stalledCount: deadLetter + failedCount,
-    runningCount,
-  })
   const latestThroughput = throughput.at(-1)
 
   const dlqDebugLines: OperatorTraceLine[] = [
@@ -345,8 +335,6 @@ export function DLQPage() {
           } : undefined,
         }}
       />
-
-      <PageActionBar scope="queue" action={queueAction} />
 
       {(deadLetter > 0 || failedCount > 0) && (
         <Card

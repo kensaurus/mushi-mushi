@@ -35,6 +35,8 @@ import { runSourcemapsUpload } from './sourcemaps.js'
 import { installSignalHandlers, getAbortSignal } from './signals.js'
 import { renderNudgeSnippet, renderNudgeExplainer, type NudgePhase } from './nudge.js'
 import { runDoctor, formatDoctorResult } from './doctor.js'
+import { runUpgrade } from './upgrade.js'
+import { runConnect } from './connect.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
 // Long-running commands (`mushi index`, `mushi sourcemaps upload`) can
@@ -419,7 +421,7 @@ Examples:
   mushi config projectId <uuid>       # set project`)
   .action((key: string | undefined, value: string | undefined) => {
     const config = loadConfig()
-    const ALLOWED_KEYS = new Set(['apiKey', 'endpoint', 'projectId'])
+    const ALLOWED_KEYS = new Set(['apiKey', 'endpoint', 'projectId', 'consoleUrl'])
     if (key && value) {
       if (!ALLOWED_KEYS.has(key)) {
         process.stderr.write(`error: unknown config key "${key}". Allowed: ${[...ALLOWED_KEYS].join(', ')}\n`)
@@ -680,6 +682,37 @@ reports
       console.log(JSON.stringify(result.data, null, 2))
     } else {
       console.log(`✓ Dismissed report ${id}`)
+    }
+  })
+
+reports
+  .command('reply <id> <message>')
+  .description('Send a visible reply to the reporter widget for a report')
+  .option('--author <name>', 'Display name for the sender (default: "Mushi Admin")')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi reports reply abc123 "Thanks for reporting — fixing this in the next release."
+  mushi reports reply abc123 "Can you share a screenshot?" --author "Alice"`)
+  .action(async (id: string, message: string, opts: { author?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { message }
+    if (opts.author) body['author_name'] = opts.author
+    const result = await apiCall<{ comment: unknown }>(`/v1/sync/reports/${id}/reply`, config, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Reply sent to reporter for report ${id}`)
     }
   })
 
@@ -1094,7 +1127,7 @@ Typical first-time flow:
       mcpServers: {
         mushi: {
           command: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp@latest'],
           env: {
             MUSHI_API_ENDPOINT: endpoint,
             MUSHI_PROJECT_ID: projectId,
@@ -1174,7 +1207,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
 
     const mcpServerBlock = {
       command: 'npx',
-      args: ['-y', 'mushi-mcp@latest'],
+      args: ['-y', '@mushi-mushi/mcp@latest'],
       env: {
         MUSHI_API_ENDPOINT: config.endpoint,
         MUSHI_PROJECT_ID: config.projectId ?? '',
@@ -1223,7 +1256,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
       servers[serverName] = {
         command: {
           path: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp@latest'],
           env: {
             MUSHI_API_ENDPOINT: config.endpoint,
             MUSHI_PROJECT_ID: config.projectId ?? '',
@@ -1368,6 +1401,7 @@ Examples:
 
     const body: Record<string, unknown> = {
       reportId,
+      projectId: cfg.projectId,
       agent: opts.agent,
     }
     if (opts.agent === 'cursor_cloud') {
@@ -1483,6 +1517,86 @@ program
   })
 
 program
+  .command('upgrade')
+  .description('Bump installed @mushi-mushi/* packages to the latest stable npm release')
+  .option('--cwd <path>', 'Target repo (default: cwd)')
+  .option('--dry-run', 'Print the install command without running it')
+  .option('--json', 'Machine-readable plan + result')
+  .addHelpText('after', `
+Examples:
+  mushi upgrade
+  mushi upgrade --dry-run
+  mushi upgrade --cwd ../glot.it`)
+  .action(async (opts: { cwd?: string; dryRun?: boolean; json?: boolean }) => {
+    const result = await runUpgrade({ cwd: opts.cwd, dryRun: opts.dryRun, json: opts.json })
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      console.log(result.message)
+      for (const e of result.plan.entries) {
+        const tag = e.willUpgrade && e.latest ? `→ v${e.latest}` : '(current)'
+        console.log(`  ${e.name}@${e.current} ${tag}`)
+      }
+    }
+    if (!result.upgraded && result.plan.entries.some((e) => e.willUpgrade) && !opts.dryRun) {
+      process.exit(1)
+    }
+    if (result.plan.entries.length === 0) process.exit(1)
+  })
+
+program
+  .command('connect')
+  .description('Save credentials, merge env vars, wire Cursor MCP, optionally wait for SDK heartbeat')
+  .option('--api-key <key>', 'Mushi API key (mushi_…) — or set MUSHI_API_KEY to keep it out of shell history')
+  .requiredOption('--project-id <id>', 'Project UUID')
+  .requiredOption('--endpoint <url>', 'Supabase edge function URL')
+  .option('--cwd <path>', 'Target repo')
+  .option('--no-env', 'Skip writing .env.local')
+  .option('--no-ide', 'Skip writing .cursor/mcp.json')
+  .option('--wait', 'Poll ingest-setup until SDK heartbeat lands')
+  .option('--wait-timeout <sec>', 'Max seconds for --wait', '120')
+  .option('--json', 'Machine-readable output')
+  .addHelpText('after', `
+Examples:
+  MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint https://<ref>.supabase.co/functions/v1/api --wait
+  mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --no-ide`)
+  .action(async (opts: {
+    apiKey?: string
+    projectId: string
+    endpoint: string
+    cwd?: string
+    env?: boolean
+    ide?: boolean
+    wait?: boolean
+    waitTimeout: string
+    json?: boolean
+  }) => {
+    // Prefer the env var so the key isn't captured in shell history / `ps`.
+    const apiKey = process.env.MUSHI_API_KEY ?? opts.apiKey
+    if (!apiKey) {
+      console.error('Provide the API key via the MUSHI_API_KEY env var (recommended) or --api-key <key>.')
+      process.exit(1)
+    }
+    const result = await runConnect({
+      apiKey,
+      projectId: opts.projectId,
+      endpoint: opts.endpoint,
+      cwd: opts.cwd,
+      writeEnv: opts.env !== false,
+      wireIde: opts.ide !== false,
+      wait: opts.wait,
+      waitTimeoutSec: parseInt(opts.waitTimeout, 10) || 120,
+      json: opts.json,
+    })
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2))
+    } else {
+      for (const line of result.messages) console.log(line)
+    }
+    if (!result.ok) process.exit(1)
+  })
+
+program
   .command('doctor')
   .description(
     'Run pre-flight checks: CLI config, endpoint reachability, API key shape, ' +
@@ -1498,9 +1612,19 @@ program
       'checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled). ' +
       'Requires a configured projectId and API key.',
   )
-  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean }) => {
+  .option(
+    '--ingest',
+    'Also call GET /v1/sync/ingest-setup for the 4 required ingest steps ' +
+      '(API key, SDK heartbeat, first report). Composable with --server.',
+  )
+  .option(
+    '--qa-stories',
+    'Check enabled QA stories for common setup issues: missing Firecrawl key, ' +
+      'missing target URL, Slack not connected. Requires --server credentials.',
+  )
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean }) => {
     const config = loadConfig()
-    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server })
+    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server, ingest: opts.ingest, qaStories: opts.qaStories })
     const { checks } = result
 
     if (opts.json) {
@@ -1836,7 +1960,348 @@ keys
     console.log(`✓ Key added — id: ${res.data.id}`)
   })
 
-program.parse()
+// parseAsync so rejections from async command actions surface as clean
+// one-line errors (plain `parse()` leaves them as unhandled rejections).
+// ─── integrations ─────────────────────────────────────────────────────────────
+
+const integrations = program.command('integrations').description('Manage service integrations')
+
+integrations
+  .command('list')
+  .description('List all configured integrations and their current health status')
+  .option('--json', 'Machine-readable output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const result = await apiCall<IntegrationListData>(
+      `/v1/admin/projects/${config.projectId}/integrations`,
+      config,
+    )
+    // Server returns { integrations: [...] } directly (no ok wrapper)
+    const rawResult = result as unknown as Record<string, unknown>
+    if (!rawResult.integrations && !result.ok) {
+      console.error('Failed:', result.error); process.exit(1)
+    }
+    if (opts.json) { console.log(JSON.stringify(rawResult, null, 2)); return }
+    const rows: IntegrationListData['integrations'] = (rawResult.integrations as IntegrationListData['integrations']) ?? []
+    if (rows.length === 0) { console.log('No integrations configured. Visit the Integrations page to connect services.'); return }
+    const icons: Record<string, string> = {
+      slack: '🔔', github: '🐙', sentry: '🪲', langfuse: '🔭',
+      discord: '💬', linear: '📐', jira: '🗂️', cursor_cloud: '🖱️', claude_code_agent: '🤖',
+    }
+    console.log('\nIntegrations:\n')
+    for (const row of rows) {
+      const icon = icons[row.kind] ?? '🔌'
+      const statusIcon = row.status === 'ok' ? '✅' : row.status === 'error' ? '❌' : '⚪'
+      console.log(`  ${icon}  ${row.kind.padEnd(20)} ${statusIcon}  ${row.detail ?? ''}`)
+    }
+    console.log()
+  })
+
+integrations
+  .command('test <kind>')
+  .description(
+    'Run a health probe for a specific integration (e.g. slack, sentry, github, langfuse, discord, cursor_cloud, claude_code_agent)',
+  )
+  .option('--json', 'Machine-readable output')
+  .action(async (kind: string, opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const result = await apiCall<IntegrationProbeResult>(
+      `/v1/admin/projects/${config.projectId}/integrations/probe/${kind}`,
+      config,
+      { method: 'POST' },
+    )
+    if (!result.ok) { console.error('Request failed:', result.error); process.exit(1) }
+    if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
+    const probeOk = result.data?.status === 'ok'
+    console.log(probeOk
+      ? `✅  ${kind} integration is healthy${result.data.detail ? ': ' + result.data.detail : ''}`
+      : `❌  ${kind} integration check failed${result.data.detail ? ': ' + result.data.detail : ''}`,
+    )
+    if (!probeOk) process.exit(1)
+  })
+
+// ─── slack ────────────────────────────────────────────────────────────────────
+
+const slack = program.command('slack').description('Slack integration commands')
+
+slack
+  .command('status')
+  .description('Show whether Slack is connected and which channel receives notifications')
+  .option('--json', 'Machine-readable output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const result = await apiCall<IntegrationProbeResult>(
+      `/v1/admin/projects/${config.projectId}/integrations/probe/slack`,
+      config,
+      { method: 'POST' },
+    )
+    if (!result.ok) { console.error('Request failed:', result.error); process.exit(1) }
+    if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
+    if (result.data?.status === 'ok') {
+      console.log('✅  Slack connected')
+      if (result.data.detail) console.log(`    ${result.data.detail}`)
+      console.log('\n    To change the channel or notification prefs, visit /integrations in the Mushi console.')
+    } else {
+      console.log('⚪  Slack not connected')
+      console.log('    Visit /integrations in the Mushi console and click "Add to Slack".')
+    }
+  })
+
+slack
+  .command('test')
+  .description('Send a test Slack notification to confirm the current channel is working')
+  .option('--json', 'Machine-readable output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const result = await apiCall<{ ok: boolean; error?: string }>(
+      `/v1/admin/projects/${config.projectId}/integrations/slack/test`,
+      config,
+      { method: 'POST' },
+    )
+    if (!result.ok) { console.error('Request failed:', result.error); process.exit(1) }
+    if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
+    if (result.data?.ok) {
+      console.log('✅  Test message sent! Check your Slack channel.')
+    } else {
+      console.error('❌  Test failed:', result.data?.error ?? 'unknown error')
+      process.exit(1)
+    }
+  })
+
+// ─── qa ───────────────────────────────────────────────────────────────────────
+
+const qa = program.command('qa').description('QA story management')
+
+qa
+  .command('stories')
+  .description('List QA stories for the current project')
+  .option('--json', 'Machine-readable output')
+  .option('-n, --limit <n>', 'Max stories to return (not applied server-side; all stories returned)', '20')
+  .action(async (opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const result = await apiCall<{ coverage: QaStoryRow[] }>(
+      `/v1/admin/projects/${config.projectId}/qa-coverage`,
+      config,
+    )
+    if (!result.ok) { console.error('Failed:', result.error); process.exit(1) }
+    if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
+    const stories = result.data?.coverage ?? []
+    if (stories.length === 0) {
+      console.log('No QA stories yet. Create one at /qa-coverage in the Mushi console.')
+      return
+    }
+    console.log(`\nQA Stories (${stories.length}):\n`)
+    for (const s of stories) {
+      const statusIcon = s.last_run_status === 'passed' ? '✅'
+        : s.last_run_status === 'failed' ? '❌'
+        : s.last_run_status === 'error' ? '🚨'
+        : '⚪'
+      const enabled = s.enabled ? '' : ' [disabled]'
+      const sid = s.story_id ?? s.id ?? '—'
+      console.log(`  ${statusIcon}  ${s.name.slice(0, 50).padEnd(52)}  ${sid}${enabled}`)
+    }
+    console.log(`\n   Use 'mushi qa runs <storyId>' to see recent runs for a story.`)
+    console.log()
+  })
+
+qa
+  .command('runs <storyId>')
+  .description('Show recent runs for a QA story, including error heads')
+  .option('--json', 'Machine-readable output')
+  .option('-n, --limit <n>', 'Max runs to return', '10')
+  .action(async (storyId: string, opts: { json?: boolean; limit?: string }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const limit = parseInt(opts.limit ?? '10', 10)
+    const result = await apiCall<{ runs: QaRunRow[] }>(
+      `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/runs?limit=${limit}`,
+      config,
+    )
+    if (!result.ok) { console.error('Failed:', result.error); process.exit(1) }
+    if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
+    const runs = result.data?.runs ?? []
+    if (runs.length === 0) {
+      console.log('No runs yet for this story. Trigger one with `mushi qa run <storyId>`.')
+      return
+    }
+    console.log(`\nRecent runs for story ${storyId.slice(0, 8)}…:\n`)
+    for (const r of runs) {
+      const statusIcon = r.status === 'passed' ? '✅' : r.status === 'failed' ? '❌' : r.status === 'error' ? '🚨' : '⏳'
+      const ts = r.created_at ? new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ') : '—'
+      const latency = r.latency_ms ? ` (${(r.latency_ms / 1000).toFixed(1)}s)` : ''
+      console.log(`  ${statusIcon}  ${ts}${latency}  ${r.id.slice(0, 8)}`)
+      if (r.error_message) {
+        console.log(`       Error: ${r.error_message.slice(0, 120)}`)
+      }
+      if (r.assertion_failures?.length) {
+        for (const af of r.assertion_failures.slice(0, 3)) {
+          console.log(`       · ${String(af).slice(0, 100)}`)
+        }
+      }
+    }
+    const consoleUrl = config.consoleUrl ?? 'https://app.mushi.ai'
+    console.log(`\n   Open in console: ${consoleUrl}/qa-coverage?story=${storyId}`)
+    console.log(`   Tip: run 'mushi config consoleUrl http://localhost:6464' to set your local console URL`)
+    console.log()
+  })
+
+qa
+  .command('run <storyId>')
+  .description('Manually trigger a QA story run (fire-and-forget; check results with `mushi qa runs <id>`)')
+  .option('--json', 'Machine-readable output')
+  .action(async (storyId: string, opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(2) }
+    if (!config.projectId) { console.error('No projectId. Run `mushi config projectId <uuid>`'); process.exit(2) }
+    const result = await apiCall<{ run_id: string; queued: boolean }>(
+      `/v1/admin/projects/${config.projectId}/qa-stories/${storyId}/run`,
+      config,
+      { method: 'POST' },
+    )
+    if (!result.ok) { console.error('Failed:', result.error); process.exit(1) }
+    if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
+    const runId = result.data?.run_id
+    if (runId) {
+      console.log(`▶  Run triggered: ${runId.slice(0, 8)}…`)
+      console.log(`   Check results: mushi qa runs ${storyId}`)
+    } else {
+      console.error('❌  Trigger failed: no run_id in response', JSON.stringify(result.data))
+      process.exit(1)
+    }
+  })
+
+// ─── audit ────────────────────────────────────────────────────────────────────
+
+program
+  .command('audit')
+  .description('Run a full-stack health audit for the current project')
+  .option('--json', 'Machine-readable JSON output')
+  .option('--project-id <id>', 'Project ID to audit (defaults to MUSHI_PROJECT_ID from config)')
+  .addHelpText('after', `
+Description:
+  Fans out to the Mushi backend to run a full-stack health audit:
+    • DB schema + Supabase advisors (requires Supabase PAT in API Keys)
+    • Recent backend error logs
+    • Tables without RLS enabled
+    • Gate results: API contract (G3), spec drift (G6), orphan endpoints (G7),
+      unknown frontend calls (G8), schema drift, status claim (G5)
+
+  Returns a PM-readable scorecard with severity-ranked findings.
+
+  Prerequisites:
+    1. Configure your Supabase PAT: mushi settings set supabase-pat <token>
+    2. Set supabase_project_ref in Admin → Settings → Project.
+
+Examples:
+  mushi audit
+  mushi audit --json
+  mushi audit --project-id abc123`)
+  .action(async (opts: { json?: boolean; projectId?: string }) => {
+    const config = requireConfig()
+    const projectId = opts.projectId ?? config.projectId
+    if (!projectId) {
+      process.stderr.write('error: project ID required. Run `mushi login` or pass --project-id\n')
+      process.exit(1)
+    }
+
+    // Admin JWT auth is required for the audit endpoint. The CLI uses the
+    // stored Supabase JWT if available, falling back to the API key.
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Mushi-Project-Id': projectId,
+    }
+    const jwt = (config as unknown as Record<string, unknown>).jwt as string | undefined ?? null
+    const apiKey = config.apiKey ?? null
+    if (jwt) {
+      headers['Authorization'] = `Bearer ${jwt}`
+    } else if (apiKey) {
+      headers['X-Mushi-Api-Key'] = apiKey
+    } else {
+      process.stderr.write('error: no credentials found. Run `mushi login` first.\n')
+      process.exit(1)
+    }
+
+    if (!opts.json) process.stdout.write('Running full-stack audit… ')
+
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 30_000)
+      const res = await fetch(
+        `${config.endpoint}/v1/admin/projects/${projectId}/audit`,
+        { method: 'POST', headers, body: '{}', signal: controller.signal },
+      )
+      clearTimeout(timer)
+      const body = await res.json() as { ok: boolean; data?: Record<string, unknown>; error?: { message: string } }
+      if (!res.ok || !body.ok) {
+        if (opts.json) { console.log(JSON.stringify(body)); process.exit(1) }
+        process.stdout.write('FAIL\n')
+        process.stderr.write(`error: ${body.error?.message ?? `HTTP ${res.status}`}\n`)
+        process.exit(1)
+      }
+
+      if (opts.json) { console.log(JSON.stringify(body.data, null, 2)); return }
+
+      const data = body.data as {
+        summary: { overall: string; error_count: number; warn_count: number }
+        findings: Array<{ severity: string; title: string; detail: string }>
+        gate_runs: Array<{ gate: string; status: string; findings_count: number }>
+        backend_linked: boolean
+        audit_at: string
+      }
+
+      const overallGlyph = data.summary.overall === 'fail' ? '❌' : data.summary.overall === 'warn' ? '⚠️ ' : '✅'
+      process.stdout.write(`${overallGlyph}\n\n`)
+
+      console.log(`Full-Stack Audit — ${new Date(data.audit_at).toLocaleString()}`)
+      console.log(`Backend linked: ${data.backend_linked ? 'yes' : 'no (configure Supabase PAT + project ref)'}`)
+      console.log(`Summary: ${data.summary.error_count} error(s) · ${data.summary.warn_count} warning(s)\n`)
+
+      if (data.findings.length === 0) {
+        console.log('  ✓ No findings. Your project looks healthy.')
+      } else {
+        for (const f of data.findings) {
+          const icon = f.severity === 'error' ? '🔴' : f.severity === 'warn' ? '🟡' : 'ℹ️ '
+          console.log(`  ${icon} ${f.title}`)
+          console.log(`     ${f.detail.slice(0, 120)}${f.detail.length > 120 ? '…' : ''}`)
+        }
+      }
+
+      if (data.gate_runs.length > 0) {
+        console.log('\nGate Results:')
+        for (const run of data.gate_runs) {
+          const g = run.status === 'pass' ? '✓' : run.status === 'fail' ? '✗' : '~'
+          console.log(`  ${g} ${run.gate.padEnd(22)} ${run.status}  (${run.findings_count} finding${run.findings_count !== 1 ? 's' : ''})`)
+        }
+      }
+
+      if (data.summary.overall === 'fail') process.exit(1)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: false, error: msg }))
+      } else {
+        process.stdout.write('ERROR\n')
+        process.stderr.write(`error: ${msg}\n`)
+      }
+      process.exit(1)
+    }
+  })
+
+program.parseAsync().catch((err: unknown) => {
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`)
+  process.exit(1)
+})
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1877,6 +2342,39 @@ interface ReportDetail extends ReportRow {
   sentry_event_id?: string | null
   fix_id?: string | null
   tags?: Record<string, unknown> | null
+}
+
+interface IntegrationListData {
+  integrations: Array<{
+    kind: string
+    status: 'ok' | 'error' | 'unknown'
+    detail?: string | null
+  }>
+}
+
+interface IntegrationProbeResult {
+  status: 'ok' | 'error' | 'unknown'
+  detail?: string | null
+}
+
+interface QaStoryRow {
+  id?: string
+  story_id?: string
+  name: string
+  enabled: boolean
+  last_run_status?: string | null
+  browser_provider?: string | null
+  runs_24h?: number
+  pass_rate_pct?: number | null
+}
+
+interface QaRunRow {
+  id: string
+  status: string
+  created_at?: string | null
+  latency_ms?: number | null
+  error_message?: string | null
+  assertion_failures?: unknown[] | null
 }
 
 interface LessonRow {

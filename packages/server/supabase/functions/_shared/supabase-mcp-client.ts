@@ -139,7 +139,12 @@ export async function getSupabaseAdvisors(
 
 /**
  * Resolve the Supabase PAT for a given project from the `byok_keys` table.
- * Returns null when the key hasn't been configured yet.
+ *
+ * `byok_keys` never stores the raw secret — it stores a `vault_secret_id`
+ * pointing at Supabase Vault — so we select the vault reference for the
+ * highest-priority active key under slug `supabase` and dereference it via the
+ * `vault_get_secret` RPC (the same path `_shared/byok.ts` uses for LLM keys).
+ * Returns null when the key hasn't been configured yet or can't be resolved.
  */
 export async function resolveSupabasePat(
   db: SupabaseClient,
@@ -147,11 +152,132 @@ export async function resolveSupabasePat(
 ): Promise<string | null> {
   const { data, error } = await db
     .from('byok_keys')
-    .select('api_key')
+    .select('vault_secret_id')
     .eq('project_id', projectId)
     .eq('provider_slug', 'supabase')
-    .single()
+    .eq('status', 'active')
+    .order('priority', { ascending: true })
+    .limit(1)
+    .maybeSingle()
 
-  if (error || !data?.api_key) return null
-  return data.api_key as string
+  if (error || !data?.vault_secret_id) return null
+
+  const { data: secret, error: secretErr } = await db.rpc('vault_get_secret', {
+    secret_id: data.vault_secret_id as string,
+  })
+  if (secretErr || typeof secret !== 'string' || !secret) return null
+  return secret
+}
+
+// ─── Extended helpers ────────────────────────────────────────────────────────
+
+export interface TableInfo {
+  name: string
+  schema: string
+  rls_enabled: boolean
+  columns: Array<{ name: string; type: string; nullable: boolean }>
+  row_count_estimate?: number
+}
+
+export interface FunctionInfo {
+  name: string
+  schema: string
+  language: string
+  security_definer: boolean
+}
+
+export interface LogEntry {
+  timestamp: string
+  level: string
+  message: string
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * List tables in the linked host-app Supabase project.
+ * When `prefixFilter` is provided, only tables starting with that prefix are returned.
+ * Calls the `list_tables` tool on the hosted Supabase MCP.
+ */
+export async function listTables(
+  opts: SupabaseMcpClientOptions,
+  prefixFilter?: string,
+): Promise<TableInfo[]> {
+  const result = await callTool<TableInfo[] | { tables?: TableInfo[] }>(opts, 'list_tables', {
+    schema: 'public',
+    include_columns: true,
+  })
+  const tables = Array.isArray(result) ? result : (result.tables ?? [])
+  if (!prefixFilter) return tables
+  return tables.filter((t) => t.name.startsWith(prefixFilter))
+}
+
+/**
+ * Fetch recent API or Postgres logs for the linked host-app project.
+ * Calls `get_logs` on the hosted Supabase MCP (read-only).
+ * Returns the 100 most recent entries at or above ERROR level by default.
+ */
+export async function getLogs(
+  opts: SupabaseMcpClientOptions,
+  service: 'api' | 'postgres',
+  options: { limit?: number; minLevel?: 'info' | 'warn' | 'error' } = {},
+): Promise<LogEntry[]> {
+  const result = await callTool<LogEntry[] | { logs?: LogEntry[] }>(opts, 'get_logs', {
+    service,
+    limit: options.limit ?? 100,
+    min_level: options.minLevel ?? 'error',
+  })
+  return Array.isArray(result) ? result : (result.logs ?? [])
+}
+
+/**
+ * List edge/pg functions in the linked host-app Supabase project.
+ * Calls `list_edge_functions` on the hosted Supabase MCP (read-only).
+ */
+export async function listFunctions(
+  opts: SupabaseMcpClientOptions,
+): Promise<FunctionInfo[]> {
+  const result = await callTool<FunctionInfo[] | { functions?: FunctionInfo[] }>(
+    opts,
+    'list_edge_functions',
+    {},
+  )
+  return Array.isArray(result) ? result : (result.functions ?? [])
+}
+
+/**
+ * Produce a canonical, order-independent JSON string for a value: object keys
+ * are sorted recursively at every level so that two schemas that differ only in
+ * key ordering hash identically, while any change to a value, key, or array
+ * element changes the output. Array order is preserved (it is significant).
+ */
+function canonicalize(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'null'
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(',')}]`
+  }
+  const entries = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${canonicalize((value as Record<string, unknown>)[k])}`)
+  return `{${entries.join(',')}}`
+}
+
+/**
+ * Compute a deterministic SHA-256 hex hash of a JSON-serialisable value.
+ * Used by backend-drift-scanner to detect schema changes without a full diff.
+ *
+ * NOTE: This uses a recursive canonical serialization. The previous
+ * implementation passed `Object.keys(schema).sort()` as the `JSON.stringify`
+ * replacer array, which (a) only whitelisted top-level keys — stripping all
+ * nested content — and (b) is ignored entirely for arrays, so the digest was
+ * effectively content-blind and could not detect dropped columns or RLS
+ * changes. `canonicalize` walks the whole structure.
+ */
+export async function hashSchema(schema: unknown): Promise<string> {
+  const text = canonicalize(schema)
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }

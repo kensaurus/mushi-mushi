@@ -23,9 +23,11 @@ import {
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
 import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight, toneForOpen } from '../lib/useNavCounts'
+import { useProjectSnapshots } from '../lib/useProjectSnapshots'
+import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePill } from './billing/UpgradeNudge'
-import { ProjectSwitcher } from './ProjectSwitcher'
+import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
@@ -33,6 +35,7 @@ import { Tooltip } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { NextBestAction } from './NextBestAction'
 import { PipelineStatusRibbon } from './PipelineStatusRibbon'
+import { DavChromeCoachmark } from './DavChromeCoachmark'
 import { QuickstartMegaCta } from './QuickstartMegaCta'
 import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
@@ -51,6 +54,7 @@ import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
+import { shouldSkipLayoutHero } from '../lib/pageHeroOwnership'
 import { useFaviconBadge } from '../lib/favicon'
 import { useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
@@ -138,7 +142,8 @@ const NAV: NavSection[] = [
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'My feedback', path: '/feedback',   icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'My feedback',    path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'Feature board',  path: '/feature-board', icon: IconSparkle,   beginner: false },
     ],
   },
   {
@@ -183,6 +188,7 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
       { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
+      { label: 'Full-Stack Audit', path: '/fullstack-audit', icon: IconAudit,  beginner: true },
       { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconQaCoverage,   beginner: true },
       { label: 'Lessons',      path: '/lessons',      icon: IconLessons,      beginner: true },
       { label: 'Drift',        path: '/drift',        icon: IconDrift,        beginner: true },
@@ -242,21 +248,10 @@ interface PageHeroFallback {
   verify: PageHeroVerify
 }
 
+// Ownership rule: a route gets a layout fallback hero OR a page-owned
+// <PageHero>, never both. Routes in pageHeroOwnership.ts must NOT appear
+// here. Worklist routes in PAGE_ROUTES_SKIP_LAYOUT_HERO skip this too.
 const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
-  '/feedback': {
-    title: 'My feedback',
-    kicker: 'Start',
-    scope: 'feedback',
-    decide: {
-      label: 'Your submissions',
-      summary: 'Status banner and FEEDBACK SNAPSHOT show replies, active tickets, and shipped releases before you pick a tab.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Closed loop',
-      detail: 'Shipped tab shows release version chips — Active tab pulses when the team replies.',
-    },
-  },
   '/dashboard': {
     title: 'Dashboard',
     kicker: 'Start',
@@ -269,76 +264,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Refresh source',
       detail: 'Stats reload on report/fix webhooks — use Refresh if you just dispatched a fix manually.',
-    },
-  },
-  '/reports': {
-    title: 'Reports',
-    kicker: 'Plan',
-    scope: 'reports',
-    decide: {
-      label: 'Triage queue',
-      summary: 'Banner + TRIAGE SNAPSHOT — Overview for posture, Queue to triage, Severity for 14d trends.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Report evidence',
-      detail: 'Open a report to review screenshots, console logs, network traces, and user context.',
-    },
-  },
-  '/inventory': {
-    title: 'User stories',
-    kicker: 'Plan',
-    scope: 'inventory',
-    decide: {
-      label: 'Truth layer',
-      summary: 'Banner + INVENTORY SNAPSHOT — map stories to verified actions before dispatching fixes.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Gate evidence',
-      detail: 'Gates tab lists open findings; Tree tab shows backend and test wiring per action.',
-    },
-  },
-  '/graph': {
-    title: 'Knowledge graph',
-    kicker: 'Plan',
-    scope: 'graph',
-    decide: {
-      label: 'Blast radius map',
-      summary: 'Banner + GRAPH SNAPSHOT — see how reports cluster into components, pages, and regressions.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Node evidence',
-      detail: 'Click any node on Explore tab to highlight blast radius and related edges.',
-    },
-  },
-  '/explore': {
-    title: 'Codebase atlas',
-    kicker: 'Plan',
-    scope: 'explore',
-    decide: {
-      label: 'Source map',
-      summary: 'Banner + EXPLORE SNAPSHOT — indexed files by layer with import edges and semantic search.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Index evidence',
-      detail: 'Index tab shows repo, webhook, last error, and embedding coverage for debug.',
-    },
-  },
-  '/fixes': {
-    title: 'Fixes',
-    kicker: 'Do',
-    scope: 'fixes',
-    decide: {
-      label: 'Fix pipeline',
-      summary: 'Track each attempted fix from dispatch through PR, judge review, and merge readiness.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Pipeline proof',
-      detail: 'Use attempt cards for branch, PR, CI, and trace evidence.',
     },
   },
   '/repo': {
@@ -367,34 +292,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Evaluation data',
       detail: 'Use scored runs and datasets below to confirm prompt changes improve classification.',
-    },
-  },
-  '/judge': {
-    title: 'Judge',
-    kicker: 'Check',
-    scope: 'judge',
-    decide: {
-      label: 'Classifier quality',
-      summary: 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Evaluation proof',
-      detail: 'Evaluations tab links each grade to the source report and judge reasoning.',
-    },
-  },
-  '/health': {
-    title: 'Health',
-    kicker: 'Check',
-    scope: 'health',
-    decide: {
-      label: 'Pipeline vitals',
-      summary: 'Banner + HEALTH SNAPSHOT — LLM error/fallback rates, cron cadence, and provider probes.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Trace proof',
-      detail: 'Activity tab links each LLM call to Langfuse and the source report.',
     },
   },
   '/qa-coverage': {
@@ -635,76 +532,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Overview shows ACS URL — paste into Okta/Azure AD, then verify login on Providers tab.',
     },
   },
-  '/compliance': {
-    title: 'Compliance',
-    kicker: 'Workspace',
-    scope: 'compliance',
-    decide: {
-      label: 'Audit posture',
-      summary: 'Review failing controls, open DSARs, and legal holds before your next SOC 2 review.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Evidence snapshot',
-      detail: 'Overview KPI strip shows control pass/fail counts — Evidence tab expands payload JSON for auditors.',
-    },
-  },
-  '/audit': {
-    title: 'Audit log',
-    kicker: 'Workspace',
-    scope: 'audit',
-    decide: {
-      label: 'Mutation trail',
-      summary: 'Scan 24h failures and actor mix before exporting CSV evidence for compliance.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Latest event',
-      detail: 'Log tab expands metadata JSON — Breakdown tab links to top 7-day actions.',
-    },
-  },
-  '/storage': {
-    title: 'Storage',
-    kicker: 'Workspace',
-    scope: 'storage',
-    decide: {
-      label: 'Bucket health',
-      summary: 'Probe BYO buckets before screenshot uploads fail silently — defaults use cluster Supabase Storage.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Usage + probe',
-      detail: 'Configure tab shows step-by-step health debug — Usage tab lists screenshot object counts.',
-    },
-  },
-  '/query': {
-    title: 'Ask Your Data',
-    kicker: 'Analytics',
-    scope: 'query',
-    decide: {
-      label: 'Query posture',
-      summary: 'Check 24h error rate and saved prompts before running ad-hoc analytics on production bug data.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Latest run',
-      detail: 'History tab reruns saved prompts — Schema tab lists approved tables for raw SQL.',
-    },
-  },
-  '/onboarding': {
-    title: 'Get started',
-    kicker: 'Start',
-    scope: 'onboarding',
-    decide: {
-      label: 'Setup progress',
-      summary: 'Finish required steps so Dashboard, Reports, and Fixes stop showing empty shells.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Pipeline proof',
-      detail: 'Verify tab sends a test report — SDK tab shows the install snippet for every environment.',
-    },
-  },
   '/research': {
     title: 'Research',
     kicker: 'Check',
@@ -731,34 +558,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Run detail',
       detail: 'Open a run for the score timeline, per-iteration critique, and clipboard export.',
-    },
-  },
-  '/integrations/config': {
-    title: 'Integrations',
-    kicker: 'Act',
-    scope: 'integrations',
-    decide: {
-      label: 'Platform wiring',
-      summary: 'Connect Sentry, Langfuse, and GitHub so classification, traces, and auto-fix PRs work end-to-end.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Probe history',
-      detail: 'Test each card to refresh status pills and sparklines scoped to the active project.',
-    },
-  },
-  '/inbox': {
-    title: 'Inbox',
-    kicker: 'Start',
-    scope: 'inbox',
-    decide: {
-      label: 'Action queue',
-      summary: 'Status banner and INBOX SNAPSHOT tell you open vs clear before you work the Actions tab top-to-bottom.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Card source',
-      detail: 'Counts match the sidebar badge — derived from the same dashboard aggregate + live stats endpoint.',
     },
   },
 }
@@ -850,8 +649,16 @@ export function Layout({ children }: { children: ReactNode }) {
   const [feedbackModalType, setFeedbackModalType] = useState<'bug' | 'feature'>('bug')
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
+  const projectSnapshots = useProjectSnapshots()
+  const activeProjectId = useActiveProjectId()
+  const activeProjectSnapshot = activeProjectId
+    ? projectSnapshots.byId.get(activeProjectId)
+    : undefined
+  const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
   const { isSuperAdmin, has } = useEntitlements()
-  const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
+  const fallbackHero = shouldSkipLayoutHero(pathname)
+    ? null
+    : PAGE_HERO_FALLBACKS[pathname]
   const [focusMode, setFocusMode] = useFocusMode()
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
@@ -1253,9 +1060,33 @@ export function Layout({ children }: { children: ReactNode }) {
                         )}
                         {path === '/reports' && navCounts.ready && (
                           <SidebarHealthDot
-                            tone={navCounts.ready ? toneForBacklog(navCounts.untriagedBacklog) : 'loading'}
-                            count={navCounts.untriagedBacklog}
-                            label={`${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`}
+                            tone={
+                              criticalReports30d > 0
+                                ? 'danger'
+                                : toneForBacklog(navCounts.untriagedBacklog)
+                            }
+                            count={
+                              criticalReports30d > 0
+                                ? criticalReports30d
+                                : navCounts.untriagedBacklog
+                            }
+                            label={
+                              criticalReports30d > 0
+                                ? `${criticalReports30d} critical ${criticalReports30d === 1 ? 'report' : 'reports'} (30d)`
+                                : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/judge' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.judgeDisagreements)}
+                            count={navCounts.judgeDisagreements}
+                            label={
+                              navCounts.judgeDisagreements > 0
+                                ? `${navCounts.judgeDisagreements} classifier vs judge ${navCounts.judgeDisagreements === 1 ? 'disagreement' : 'disagreements'}`
+                                : 'Judge agrees with classifier'
+                            }
                             hideWhenZero
                           />
                         )}
@@ -1412,7 +1243,7 @@ export function Layout({ children }: { children: ReactNode }) {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-full min-h-0 overflow-hidden">
       <RouteProgress />
       {/* Skip nav — a11y */}
       <a
@@ -1429,7 +1260,7 @@ export function Layout({ children }: { children: ReactNode }) {
           replaces all sidebar affordances when focus mode is on. */}
       {!focusMode && (
         <aside
-          className={`hidden md:flex flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-60'}`}
+          className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-60'}`}
           data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
           {renderSidebarContent(sidebarCollapsed)}
@@ -1509,7 +1340,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         {/* Mobile header */}
         <header className="md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 bg-surface-root overflow-visible relative z-20">
           <button
@@ -1598,10 +1429,15 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>}
 
         <PageHelpProvider>
-          <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
+          <main id="main-content" className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-surface">
             <div className="w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base">
               {!focusMode && <QuickstartMegaCta />}
-              {!focusMode && <PipelineStatusRibbon />}
+              {!focusMode && (
+                <>
+                  <PipelineStatusRibbon />
+                  <DavChromeCoachmark />
+                </>
+              )}
               {!focusMode && <NextBestAction />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}
@@ -1674,7 +1510,7 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
       role="radiogroup"
       aria-label="Admin mode"
       data-tour-id="mode-toggle"
-      className="mt-2 flex w-full min-w-0 items-center gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
+      className="mt-2 inline-flex max-w-full min-w-0 items-stretch gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
     >
       {MODE_OPTIONS.map((opt) => {
         const active = opt.id === mode
@@ -1685,7 +1521,7 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
               role="radio"
               aria-checked={active}
               onClick={() => onSelect(opt.id)}
-              className={`min-w-0 flex-1 truncate rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+              className={`shrink-0 rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
                 active
                   ? 'bg-brand/25 text-brand shadow-sm ring-1 ring-brand/20 font-semibold'
                   : 'text-fg-muted hover:bg-surface-overlay hover:text-fg-secondary'
@@ -1717,9 +1553,8 @@ interface SectionHeaderProps {
 
 /**
  * Compute a single "how stale is this stage" badge for the PDCA sections.
- * Only Plan + Do have cheap aggregate counts today (reused from
- * `useNavCounts`). Check + Act return null — the section header simply
- * has no badge, which is indistinguishable from "no work pending".
+ * Plan + Do use `useNavCounts` backlog/fix counters. Check adds judge
+ * disagreements + judge-batch staleness; Act surfaces integration health.
  */
 function computeStaleness(
   sectionId: string,
@@ -1755,6 +1590,34 @@ function computeStaleness(
         label: navCounts.fixesFailed > 0
           ? `${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'} · ${navCounts.fixesInFlight} in flight`
           : `${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`,
+      }
+    }
+    case 'check': {
+      const disagreements = navCounts.judgeDisagreements
+      const staleHours = readJudgeStaleHours()
+      if (disagreements > 0) {
+        return {
+          count: disagreements,
+          tone: disagreements > 3 ? 'danger' : 'warn',
+          label: `${disagreements} judge ${disagreements === 1 ? 'disagreement' : 'disagreements'} with classifier`,
+        }
+      }
+      if (staleHours != null && staleHours > 48) {
+        return {
+          count: 0,
+          tone: 'warn',
+          label: 'Judge batch overdue — open Health to refresh',
+        }
+      }
+      return null
+    }
+    case 'act': {
+      const issues = navCounts.healthIssues
+      if (issues === 0) return null
+      return {
+        count: issues,
+        tone: issues > 2 ? 'danger' : 'warn',
+        label: `${issues} integration${issues === 1 ? '' : 's'} need attention`,
       }
     }
     default:

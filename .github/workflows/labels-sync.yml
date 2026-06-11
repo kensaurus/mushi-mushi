@@ -14,6 +14,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # SUPPLY-CHAIN HARDENING: this job has `issues: write`, so a
       # compromised label-sync action could mass-edit issues. Harden-

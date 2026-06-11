@@ -1,9 +1,41 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
+    "majorMinor": "1.8",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.8.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.8.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.8.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "1.7",
     "headline": null,
     "pending": false,
     "versions": [
+      "1.7.8",
+      "1.7.7",
+      "1.7.6",
+      "1.7.5",
+      "1.7.4",
       "1.7.2",
       "1.7.1",
       "1.7.0"
@@ -61,11 +93,11 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.7.2"
+        "version": "1.7.5"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.7.2"
+        "version": "1.7.8"
       }
     ]
   },
@@ -420,6 +452,10 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/cli",
+        "version": "0.13.0"
+      },
+      {
         "name": "@mushi-mushi/react-native",
         "version": "0.13.1"
       }
@@ -520,6 +556,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.10.1",
       "0.10.0"
     ],
     "highlights": [
@@ -543,7 +580,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.10.0"
+        "version": "0.10.1"
       }
     ]
   },
@@ -741,6 +778,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.5",
       "0.7.4",
       "0.7.3",
       "0.7.2",
@@ -832,7 +870,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.4"
+        "version": "0.7.5"
       }
     ]
   },
@@ -914,6 +952,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.10",
       "0.5.9",
       "0.5.8",
       "0.5.7",
@@ -1010,7 +1049,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.9"
+        "version": "0.5.10"
       },
       {
         "name": "mushi-mushi",

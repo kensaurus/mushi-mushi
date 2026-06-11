@@ -12,7 +12,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
-import { AuditStatusBanner } from '../components/audit/AuditStatusBanner'
+import { AuditStatusBanner, isAuditStatusBannerCritical } from '../components/audit/AuditStatusBanner'
 import { EMPTY_AUDIT_STATS, type AuditStats, type AuditTabId } from '../components/audit/types'
 import {
   actorMixDetail,
@@ -61,7 +61,6 @@ import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFilter
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
-import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
@@ -689,12 +688,14 @@ export function AuditPage() {
         </p>
       </ContainedBlock>
 
-      <AuditStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onFilterFailures={() => applyPreset({ tab: 'log', action: 'fix.failed', since: '24h' })}
-        onFilterWarns={() => applyPreset({ tab: 'log', action: 'api_key.revoked', since: '24h' })}
-      />
+      {isAuditStatusBannerCritical(stats) && (
+        <AuditStatusBanner
+          stats={stats}
+          onTab={setActiveTab}
+          onFilterFailures={() => applyPreset({ tab: 'log', action: 'fix.failed', since: '24h' })}
+          onFilterWarns={() => applyPreset({ tab: 'log', action: 'api_key.revoked', since: '24h' })}
+        />
+      )}
 
       <SegmentedControl
         value={activeTab}
@@ -703,6 +704,84 @@ export function AuditPage() {
         ariaLabel="Audit sections"
         size="sm"
       />
+
+      {activeTab === 'overview' && (
+        <PageHero
+          scope="audit"
+          title="Audit Log"
+          kicker="Append-only evidence"
+          decide={{
+            label:
+              failCount > 0
+                ? 'FAIL events present'
+                : warnCount > 0
+                  ? 'WARN events present'
+                  : stats.totalEvents === 0
+                    ? 'No audit activity'
+                    : 'Audit trail clean',
+            metric: `${stats.events24h} / 24h`,
+            summary:
+              failCount > 0
+                ? `${failCount} FAIL event${failCount === 1 ? '' : 's'} in 24h — block next SOC 2 cycle without remediation.`
+                : warnCount > 0
+                  ? `${warnCount} WARN event${warnCount === 1 ? '' : 's'} — technical debt on evidence, not blocking.`
+                  : stats.totalEvents === 0
+                    ? 'Audit stream empty — mutations will appear as your team uses the console.'
+                    : 'Every mutation in scope is accounted for. Export evidence for your next review.',
+            severity: auditSeverity,
+            anchor: 'audit:decide',
+            evidence: {
+              kind: 'metric-breakdown',
+              items: [
+                { label: '24h events', value: stats.events24h, tone: 'neutral' },
+                { label: 'FAIL (24h)', value: failCount, tone: failCount > 0 ? 'crit' : 'ok' },
+                { label: 'WARN (24h)', value: warnCount, tone: warnCount > 0 ? 'warn' : 'ok' },
+              ],
+            },
+          }}
+          act={auditAction}
+          actAnchor="audit:act"
+          actEvidence={
+            auditAction
+              ? {
+                  kind: 'rule-trace',
+                  why: auditAction.reason ?? auditAction.title,
+                  threshold: failCount > 0 ? `${failCount} FAIL event${failCount === 1 ? '' : 's'}` : undefined,
+                }
+              : undefined
+          }
+          verify={{
+            label: lastLog ? `Last event · ${lastLog.action}` : stats.latestAction ? `Latest · ${stats.latestAction}` : 'Awaiting activity',
+            detail: lastLog
+              ? `${lastLog.actor_email ?? lastLog.actor_id ?? 'system'} · ${new Date(lastLog.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
+              : stats.latestActorEmail ?? '—',
+            to: '/audit?tab=log',
+            secondaryTo: '/compliance',
+            secondaryLabel: 'Open compliance',
+            anchor: 'audit:verify',
+            evidence: lastLog
+              ? {
+                  kind: 'last-event',
+                  at: lastLog.created_at,
+                  by: lastLog.actor_email ?? lastLog.actor_id ?? 'system',
+                  payloadSummary: lastLog.action,
+                  status:
+                    lastLog.action === 'fix.failed' || lastLog.action === 'integration.disconnected'
+                      ? 'error'
+                      : 'ok',
+                }
+              : stats.latestEventAt
+                ? {
+                    kind: 'last-event',
+                    at: stats.latestEventAt,
+                    by: stats.latestActorEmail ?? 'system',
+                    payloadSummary: stats.latestAction ?? 'event',
+                    status: 'ok',
+                  }
+                : undefined,
+          }}
+        />
+      )}
 
       <Section
         title="Audit snapshot"
@@ -749,84 +828,6 @@ export function AuditPage() {
 
       {activeTab === 'overview' && (
         <>
-          <PageHero
-            scope="audit"
-            title="Audit Log"
-            kicker="Append-only evidence"
-            decide={{
-              label:
-                failCount > 0
-                  ? 'FAIL events present'
-                  : warnCount > 0
-                    ? 'WARN events present'
-                    : stats.totalEvents === 0
-                      ? 'No audit activity'
-                      : 'Audit trail clean',
-              metric: `${stats.events24h} / 24h`,
-              summary:
-                failCount > 0
-                  ? `${failCount} FAIL event${failCount === 1 ? '' : 's'} in 24h — block next SOC 2 cycle without remediation.`
-                  : warnCount > 0
-                    ? `${warnCount} WARN event${warnCount === 1 ? '' : 's'} — technical debt on evidence, not blocking.`
-                    : stats.totalEvents === 0
-                      ? 'Audit stream empty — mutations will appear as your team uses the console.'
-                      : 'Every mutation in scope is accounted for. Export evidence for your next review.',
-              severity: auditSeverity,
-              anchor: 'audit:decide',
-              evidence: {
-                kind: 'metric-breakdown',
-                items: [
-                  { label: '24h events', value: stats.events24h, tone: 'neutral' },
-                  { label: 'FAIL (24h)', value: failCount, tone: failCount > 0 ? 'crit' : 'ok' },
-                  { label: 'WARN (24h)', value: warnCount, tone: warnCount > 0 ? 'warn' : 'ok' },
-                ],
-              },
-            }}
-            act={auditAction}
-            actAnchor="audit:act"
-            actEvidence={
-              auditAction
-                ? {
-                    kind: 'rule-trace',
-                    why: auditAction.reason ?? auditAction.title,
-                    threshold: failCount > 0 ? `${failCount} FAIL event${failCount === 1 ? '' : 's'}` : undefined,
-                  }
-                : undefined
-            }
-            verify={{
-              label: lastLog ? `Last event · ${lastLog.action}` : stats.latestAction ? `Latest · ${stats.latestAction}` : 'Awaiting activity',
-              detail: lastLog
-                ? `${lastLog.actor_email ?? lastLog.actor_id ?? 'system'} · ${new Date(lastLog.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
-                : stats.latestActorEmail ?? '—',
-              to: '/audit?tab=log',
-              secondaryTo: '/compliance',
-              secondaryLabel: 'Open compliance',
-              anchor: 'audit:verify',
-              evidence: lastLog
-                ? {
-                    kind: 'last-event',
-                    at: lastLog.created_at,
-                    by: lastLog.actor_email ?? lastLog.actor_id ?? 'system',
-                    payloadSummary: lastLog.action,
-                    status:
-                      lastLog.action === 'fix.failed' || lastLog.action === 'integration.disconnected'
-                        ? 'error'
-                        : 'ok',
-                  }
-                : stats.latestEventAt
-                  ? {
-                      kind: 'last-event',
-                      at: stats.latestEventAt,
-                      by: stats.latestActorEmail ?? 'system',
-                      payloadSummary: stats.latestAction ?? 'event',
-                      status: 'ok',
-                    }
-                  : undefined,
-            }}
-          />
-
-          <PageActionBar scope="audit" action={auditAction} />
-
           <PageHelp
             title={copy?.help?.title ?? 'About the Audit Log'}
             whatIsIt={

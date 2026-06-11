@@ -30,7 +30,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CopyButton } from './ui'
+import { Card } from './ui'
+import { CodePanel } from './CodePanel'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
@@ -96,6 +97,8 @@ interface RemoteSdkConfig {
     bannerPosition?: BannerPosition
     bannerBugCta?: string | null
     bannerFeatureCta?: boolean
+    bannerMessage?: string | null
+    bannerLabel?: string | null
   }
   capture?: SdkPreviewConfig['capture']
   native?: SdkPreviewConfig['native']
@@ -110,6 +113,8 @@ function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
     attachToSelector: remote.widget?.attachToSelector ?? DEFAULT_SDK_CONFIG.attachToSelector,
     bannerVariant: remote.widget?.bannerVariant ?? DEFAULT_SDK_CONFIG.bannerVariant,
     bannerPosition: remote.widget?.bannerPosition ?? DEFAULT_SDK_CONFIG.bannerPosition,
+    bannerMessage: remote.widget?.bannerMessage ?? DEFAULT_SDK_CONFIG.bannerMessage,
+    bannerLabel: remote.widget?.bannerLabel ?? DEFAULT_SDK_CONFIG.bannerLabel,
     bannerBugCta: remote.widget?.bannerBugCta ?? DEFAULT_SDK_CONFIG.bannerBugCta,
     bannerFeatureCta: remote.widget?.bannerFeatureCta ?? DEFAULT_SDK_CONFIG.bannerFeatureCta,
     capture: {
@@ -138,6 +143,8 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
       attachToSelector: config.attachToSelector.trim() || null,
       bannerVariant: config.bannerVariant,
       bannerPosition: config.bannerPosition,
+      bannerMessage: config.bannerMessage.trim() || null,
+      bannerLabel: config.bannerLabel.trim() || null,
       bannerBugCta: config.bannerBugCta.trim() || null,
       bannerFeatureCta: config.bannerFeatureCta,
     },
@@ -231,6 +238,8 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
     config.attachToSelector === DEFAULT_SDK_CONFIG.attachToSelector &&
     config.bannerVariant === DEFAULT_SDK_CONFIG.bannerVariant &&
     config.bannerPosition === DEFAULT_SDK_CONFIG.bannerPosition &&
+    config.bannerMessage === DEFAULT_SDK_CONFIG.bannerMessage &&
+    config.bannerLabel === DEFAULT_SDK_CONFIG.bannerLabel &&
     config.bannerBugCta === DEFAULT_SDK_CONFIG.bannerBugCta &&
     config.bannerFeatureCta === DEFAULT_SDK_CONFIG.bannerFeatureCta &&
     config.capture.console === DEFAULT_SDK_CONFIG.capture.console &&
@@ -348,7 +357,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             ))}
           </div>
 
-          <CodeBlock
+          <CodePanel
             label="Install"
             language="bash"
             code={install}
@@ -356,7 +365,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             copied={installCopied}
           />
 
-          <CodeBlock
+          <CodePanel
             label="Code"
             language={CODE_LANG_BY_FRAMEWORK[framework]}
             code={code}
@@ -388,7 +397,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
                   so subsequent Sentry events backlink — the admin can pivot via
                   Sentry MCP without a manual paste.
                 </p>
-                <pre className="px-2 py-2 rounded-sm bg-surface-overlay text-fg overflow-x-auto whitespace-pre-wrap font-mono">{`// Identity — sticky across every subsequent report
+                <pre className="mushi-code-block mushi-code-body px-2.5 py-2 rounded-sm border border-edge-subtle overflow-x-auto whitespace-pre-wrap">{`// Identity — sticky across every subsequent report
 Mushi.getInstance()?.identify(user.id, { email: user.email, name: user.name })
 
 // Tags — short scalar key/values, surfaced to the Triage LLM
@@ -427,16 +436,7 @@ try {
   )
 }
 
-/* ── Code block primitive ─────────────────────────────────────────────── */
-
-/**
- * Maps each framework tab to the language label printed on the code-block
- * chrome. The label is purely informational — we don't ship a syntax
- * highlighter (would balloon the bundle and the existing monospace render
- * is already legible against the editorial-paper surface), but stamping
- * "tsx" / "vue" / "svelte" / "html" on the header tells users at a glance
- * which file the snippet belongs in.
- */
+/** Maps each framework tab to the language label on the code-panel chrome. */
 const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
   react: 'tsx',
   'react-native': 'tsx',
@@ -450,69 +450,6 @@ const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
   express: 'ts',
   fastify: 'ts',
   hono: 'ts',
-}
-
-interface CodeBlockProps {
-  /** Section heading rendered on the left of the toolbar (e.g. "Install"). */
-  label: string
-  /** Short language token shown on the right of the toolbar — purely a
-   *  comprehension aid so users can see at a glance whether they're looking
-   *  at a shell command, a `.tsx` snippet, or an `.html` paste. */
-  language: string
-  code: string
-  onCopy: () => void
-  copied: boolean
-  /** Optional max-height so long snippets stay scrollable inside the card.
-   *  Tailwind class string (e.g. `max-h-72`) — we deliberately avoid inline
-   *  pixel heights so the rhythm matches the rest of the admin's
-   *  `text-2xs / max-h-72` density. */
-  maxHeight?: string
-}
-
-/**
- * Reusable framed code surface. Earlier revisions inlined `<pre>` tags with
- * a copy button positioned via `flex justify-between` above them — at
- * narrow widths the "Install / Copy" header and the code body felt
- * disconnected (the user reported "code area could be code blocked").
- *
- * This primitive wraps both into a single bordered surface with a tinted
- * toolbar:  ┌── Install · bash ───── Copy ──┐
- *           │ npm install @mushi-mushi/web  │
- *           └───────────────────────────────┘
- * so the eye reads the snippet as one contiguous code block, not "label +
- * mystery rectangle". The `<>` glyph reinforces the affordance for
- * scanners. We keep `whitespace-pre-wrap` so long lines wrap rather than
- * triggering a horizontal scrollbar inside the card (most install commands
- * + init code are short enough that wrapping is preferable to scrolling).
- */
-function CodeBlock({ label, language, code, onCopy, copied, maxHeight }: CodeBlockProps) {
-  return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle bg-surface-overlay/50">
-        <div className="flex items-center gap-2 min-w-0">
-          <span aria-hidden="true" className="text-fg-faint font-mono text-2xs leading-none select-none">{'</>'}</span>
-          <span className="text-2xs uppercase tracking-wider font-medium text-fg-secondary truncate">
-            {label}
-          </span>
-          <span className="text-3xs font-mono text-fg-faint uppercase tracking-wider px-1 rounded-sm bg-surface-overlay border border-edge-subtle/60">
-            {language}
-          </span>
-        </div>
-        <CopyButton
-          onCopy={onCopy}
-          copied={copied}
-          label={`Copy ${label.toLowerCase()} snippet`}
-          copiedLabel={`${label} snippet copied`}
-          className="shrink-0"
-        />
-      </div>
-      <pre
-        className={`px-3 py-2 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`.trim()}
-      >
-        {code}
-      </pre>
-    </div>
-  )
 }
 
 /* ── Live widget preview ─────────────────────────────────────────────── */
@@ -612,10 +549,10 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
             left: 0,
             right: 0,
             ...(config.bannerPosition === 'bottom' ? { bottom: 0 } : { top: 22 }),
-            height: 22,
+            minHeight: 22,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: config.bannerMessage.trim() ? 'space-between' : 'center',
             gap: 6,
             paddingLeft: 8,
             paddingRight: 8,
@@ -631,15 +568,42 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
             borderTop: config.bannerPosition === 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? '#00C43A' : config.bannerVariant === 'subtle' ? tokens.rule : '#B52F1F'}` : 'none',
           }}
         >
-          <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.14)', cursor: 'pointer' }}>
-            {config.bannerBugCta.trim() || '🐛 Report a bug'}
-          </span>
-          {config.bannerFeatureCta && (
-            <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.10)', cursor: 'pointer' }}>
-              ✨ Feature
-            </span>
+          {config.bannerMessage.trim() ? (
+            <>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}>
+                {(config.bannerLabel.trim() || 'Beta') && (
+                  <span style={{ flexShrink: 0, padding: '0 4px', borderRadius: 2, border: '1px solid currentColor', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                    {config.bannerLabel.trim() || 'Beta'}
+                  </span>
+                )}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.9 }}>
+                  {config.bannerMessage.trim()}
+                </span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 11 }}>
+                <span style={{ cursor: 'pointer', opacity: 0.9 }}>{config.bannerBugCta.trim() || '🐛 Report a bug'}</span>
+                {config.bannerFeatureCta && (
+                  <>
+                    <span style={{ opacity: 0.25 }}>|</span>
+                    <span style={{ cursor: 'pointer', opacity: 0.75 }}>✨ Feature</span>
+                  </>
+                )}
+                <span style={{ opacity: 0.55, marginLeft: 2, cursor: 'pointer' }}>✕</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.14)', cursor: 'pointer' }}>
+                {config.bannerBugCta.trim() || '🐛 Report a bug'}
+              </span>
+              {config.bannerFeatureCta && (
+                <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.10)', cursor: 'pointer' }}>
+                  ✨ Feature
+                </span>
+              )}
+              <span style={{ opacity: 0.55, marginLeft: 'auto', cursor: 'pointer' }}>✕</span>
+            </>
           )}
-          <span style={{ opacity: 0.55, marginLeft: 'auto', cursor: 'pointer' }}>✕</span>
         </div>
       ) : (config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
         <div
@@ -868,6 +832,27 @@ function ConfiguratorPanel({
                   ))}
                 </div>
               </fieldset>
+              {/* Rich banner copy */}
+              <label className="block">
+                <span className="text-fg-faint">Banner message</span>
+                <input
+                  type="text"
+                  value={config.bannerMessage}
+                  onChange={(e) => onChange({ ...config, bannerMessage: e.target.value })}
+                  placeholder="Your app is in active beta — expect rough edges."
+                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand text-2xs"
+                />
+              </label>
+              <label className="block">
+                <span className="text-fg-faint">Pill label</span>
+                <input
+                  type="text"
+                  value={config.bannerLabel}
+                  onChange={(e) => onChange({ ...config, bannerLabel: e.target.value })}
+                  placeholder="Beta"
+                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand text-2xs"
+                />
+              </label>
               {/* Bug CTA label */}
               <label className="block">
                 <span className="text-fg-faint">Bug button label</span>
