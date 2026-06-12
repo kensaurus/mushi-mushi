@@ -11,9 +11,11 @@ import { execSync } from 'node:child_process'
 
 const BASE = process.env.MUSHI_ADMIN_URL ?? 'http://localhost:6464'
 const YEN_YEN_PROJECT_HINT = process.env.MUSHI_YEN_YEN_PROJECT_ID ?? '6e7e0c3a-a777-4f1e-a699-6515993cf3bd'
-const MUSHI_API_URL = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
-const OUT = resolve('C:/Users/kensa/Documents/GitHub/mushi-mushi/.playwright-mcp')
-const REPO = 'kensaurus/yen-yen'
+const MUSHI_API_URL = process.env.MUSHI_API_URL_OVERRIDE ?? 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+// Repo-relative default so the script works on any machine / CI runner.
+// Override via PLAYWRIGHT_OUT_DIR env var.
+const OUT = resolve(process.env.PLAYWRIGHT_OUT_DIR ?? new URL('../.playwright-mcp', import.meta.url).pathname)
+const REPO = process.env.MUSHI_TARGET_REPO ?? 'kensaurus/yen-yen'
 
 mkdirSync(OUT, { recursive: true })
 
@@ -32,7 +34,8 @@ function loadEnv(file) {
     }
   } catch { /* optional */ }
 }
-loadEnv(resolve('C:/Users/kensa/Documents/GitHub/mushi-mushi/.env.local'))
+// Repo-relative .env.local — override via DOTENV_PATH env var.
+loadEnv(resolve(process.env.DOTENV_PATH ?? new URL('../.env.local', import.meta.url).pathname))
 
 const email = process.env.TEST_USER_EMAIL
 const password = process.env.TEST_USER_PASSWORD
@@ -109,10 +112,14 @@ try {
   // Persist for local verification only — never commit.
   writeFileSync(resolve(OUT, 'ingest-key.tmp'), ingestKey, { mode: 0o600 })
 
-  execSync(`gh secret set MUSHI_API_URL --body "${MUSHI_API_URL}" --repo ${REPO}`, {
-    stdio: 'inherit',
+  // Use --body-file (reading from stdin via '-') so secrets are never exposed
+  // in process argv, shell history, or CI logs.
+  execSync(`printf '%s' "${MUSHI_API_URL}" | gh secret set MUSHI_API_URL --body-file - --repo ${REPO}`, {
+    stdio: ['pipe', 'inherit', 'inherit'],
   })
-  execSync(`gh secret set MUSHI_INGEST_KEY --body "${ingestKey}" --repo ${REPO}`, {
+  // The key is already on disk in ingest-key.tmp (mode 0o600); read from there.
+  const keyFile = resolve(OUT, 'ingest-key.tmp')
+  execSync(`gh secret set MUSHI_INGEST_KEY --body-file "${keyFile}" --repo ${REPO}`, {
     stdio: 'inherit',
   })
 

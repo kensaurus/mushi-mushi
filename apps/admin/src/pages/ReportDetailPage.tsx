@@ -211,8 +211,13 @@ interface ReportDetailViewProps {
 // ── Recommended Skills section ────────────────────────────────────────────────
 function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
   const { push } = useToast()
-  const addToast = (t: { type: string; message: string }) =>
-    push({ tone: t.type as 'success' | 'error' | 'info' | 'warn', message: t.message })
+  // Memoize addToast so it has a stable identity — an inline arrow would be
+  // re-created on every render and invalidate the startPipeline useCallback.
+  const addToast = useCallback(
+    (t: { type: string; message: string }) =>
+      push({ tone: t.type as 'success' | 'error' | 'info' | 'warn', message: t.message }),
+    [push],
+  )
   const navigate = useNavigate()
   const [searchParams] = useReactSearchParams()
   // Support ?skill=<slug> triage link — pre-select the skill

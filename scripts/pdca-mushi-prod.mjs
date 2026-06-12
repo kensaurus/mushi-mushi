@@ -7,7 +7,8 @@ import { mkdirSync } from 'node:fs'
 const BASE = 'https://kensaur.us/mushi-mushi/admin'
 const PROJECT = '542b34e0-019e-41fe-b900-7b637717bb86'
 const STORY = '506596e5-374c-4e3b-8461-19451fa4103f'
-const OUT = 'C:/Users/kensa/.playwright-mcp'
+// Repo-relative default — override via PLAYWRIGHT_OUT_DIR.
+const OUT = process.env.PLAYWRIGHT_OUT_DIR ?? new URL('../.playwright-mcp', import.meta.url).pathname
 
 mkdirSync(OUT, { recursive: true })
 

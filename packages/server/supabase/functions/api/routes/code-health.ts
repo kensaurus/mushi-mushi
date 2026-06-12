@@ -5,7 +5,9 @@
  *   Returns bundle-size trends (from metric_series) and the latest
  *   code_health gate run's findings (god-file LOC violations).
  *
- * Auth: requireAuth + requireProjectAccess (JWT-gated, same as other admin routes).
+ * Auth: adminOrApiKey({ scope: 'mcp:read' }) — accepts both JWT sessions and
+ *   project-scoped API keys (e.g. MCP clients). Access is additionally gated
+ *   by resolveOwnedProject which checks project membership.
  *
  * Response shape:
  *   {
@@ -99,11 +101,13 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
     // ── 1. Fetch metric_series (bundle + code_health metrics) ───────────────
+    // Quote filter values containing dots so PostgREST does not interpret them
+    // as nested JSONB column paths (e.g. "bundle" as a column accessor).
     const { data: metricRows, error: metricErr } = await db
       .from('metric_series')
       .select('metric_name, dimension, value, ts')
       .eq('project_id', projectId)
-      .or('metric_name.like.bundle.%,metric_name.like.code_health.%')
+      .or('metric_name.like."bundle.%",metric_name.like."code_health.%"')
       .gte('ts', since)
       .order('ts', { ascending: true })
       .limit(2000)
@@ -162,24 +166,30 @@ export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): v
         .from('gate_findings')
         .select('id, rule_id, severity, file_path, line, message, suggested_fix')
         .eq('gate_run_id', latestRun.id)
-        .order('severity', { ascending: true }) // error first
         .limit(200)
 
       if (findErr) {
         hlog.warn('gate_findings fetch error', { err: findErr.message, projectId })
       }
 
-      godFiles = (findingRows ?? []) as GodFileFinding[]
+      // Sort by explicit severity rank (error → warn → info). Lexicographic
+      // ordering would produce error < info < warn, which is wrong.
+      const SEVERITY_RANK: Record<string, number> = { error: 0, warn: 1, info: 2 }
+      godFiles = ((findingRows ?? []) as GodFileFinding[]).sort(
+        (a, b) => (SEVERITY_RANK[a.severity] ?? 99) - (SEVERITY_RANK[b.severity] ?? 99),
+      )
     }
 
     // ── 4. Compute summary ──────────────────────────────────────────────────
     const errorCount = godFiles.filter((f) => f.severity === 'error').length
     const warnCount = godFiles.filter((f) => f.severity === 'warn').length
 
-    // Latest LOC from the most recent max_file_loc point.
+    // Latest LOC: pick the point with the most recent ts (ISO strings compare
+    // lexicographically). Using Math.max would report an old spike even if LOC
+    // has since improved, making the summary disagree with the trend chart.
     const allLocPoints = Object.values(maxFileLoc).flat()
     const maxLoc = allLocPoints.length > 0
-      ? Math.max(...allLocPoints.map((p) => p.value))
+      ? allLocPoints.reduce((latest, p) => (p.ts > latest.ts ? p : latest)).value
       : null
 
     // Latest combined bundle KB. The web + mobile arrays are each sorted by ts,
