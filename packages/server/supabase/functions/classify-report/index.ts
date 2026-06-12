@@ -959,9 +959,11 @@ async function recommendSkills(
     return recommendByKeyword(db, reportId, classification.category, classification.severity);
   }
 
-  // Vector similarity search against agent_skills descriptions
+  // Vector similarity search against agent_skills descriptions.
+  // Pass the number[] directly — JSON.stringify relies on implicit string→vector
+  // casting in Postgres which can fail depending on client serialization.
   const { data: matches } = await db.rpc('match_agent_skills', {
-    query_embedding: JSON.stringify(queryEmbedding),
+    query_embedding: queryEmbedding,
     match_threshold: 0.65,
     match_count: 5,
   });
