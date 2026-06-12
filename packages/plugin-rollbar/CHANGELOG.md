@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-rollbar
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [ae878a1]
+  - @mushi-mushi/plugin-sdk@0.7.0
+
 ## 0.1.3
 
 ### Patch Changes
