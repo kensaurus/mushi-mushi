@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-crashlytics",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Mushi Mushi plugin for Firebase Crashlytics — flags fixed reports via Remote Config and closes Crashlytics issues when Mushi applies a fix.",
   "license": "MIT",
   "type": "module",
