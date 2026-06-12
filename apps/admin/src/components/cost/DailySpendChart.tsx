@@ -82,8 +82,6 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
         scaleToData
         showAxes
         valueFormat="usd"
-        yAxisCaption="Spend (USD)"
-        xAxisCaption="UTC calendar days · oldest left, today right"
         showBarLabels={series.activeDays <= 3}
         showPeakLabel={series.activeDays > 1}
         ariaLabel={`LLM spend per day, last ${series.days.length} days`}
@@ -93,11 +91,6 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
         <div className="flex flex-wrap gap-3 text-3xs text-fg-muted">
           <LegendDot color="bg-brand/90" label="Spend" />
           <LegendDot color="bg-fg-faint/30" label="No spend" />
-          {series.peakDayLabel && series.peakUsd > 0 && series.activeDays > 1 && (
-            <span className="font-mono tabular-nums text-fg-faint">
-              Peak {fmtSpend(series.peakUsd)} on {series.peakDayLabel}
-            </span>
-          )}
         </div>
         {series.activeDays === 1 && (
           <p className="text-2xs text-fg-muted">

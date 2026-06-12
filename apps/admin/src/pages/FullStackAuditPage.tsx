@@ -14,6 +14,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import {
   PageHeader,
   PageHelp,
@@ -300,6 +301,16 @@ export function FullStackAuditPage() {
       {result && (
         <div className="space-y-4">
           <OverallScorecard result={result} />
+
+          <Card className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+            <p className="text-xs text-fg-secondary">
+              Bundle sizes and god-file LOC budgets are tracked on{' '}
+              <Link to="/code-health" className="text-accent hover:underline">
+                Code Health
+              </Link>
+              .
+            </p>
+          </Card>
 
           <Section title="Findings">
             <FindingsList findings={result.findings} />

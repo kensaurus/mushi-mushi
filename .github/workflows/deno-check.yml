@@ -107,6 +107,21 @@ jobs:
             deno check --no-lock --node-modules-dir "$f"
           done
 
+      - name: Run Deno unit tests (pure parsers, no network/DB)
+        working-directory: packages/server/supabase/functions
+        run: |
+          TEST_FILES=$(find . -name '*.test.ts' ! -path './_shared/*')
+          if [ -z "$TEST_FILES" ]; then
+            echo "No Deno test files found — skipping"
+          else
+            echo "Running Deno tests:"
+            echo "$TEST_FILES"
+            for f in $TEST_FILES; do
+              echo "--- deno test $f ---"
+              deno test --no-lock --node-modules-dir "$f"
+            done
+          fi
+
       - name: Summary
         if: always()
         run: |
@@ -116,3 +131,4 @@ jobs:
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| _shared/ type-check | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Function entry points type-check | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deno unit tests | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY

@@ -32,6 +32,10 @@ export default withNextra({
   poweredByHeader: false,
   compress: true,
   trailingSlash: false,
+  // Inlined into client bundles (DocScreenshot, AdminDocHero GIFs).
+  env: {
+    NEXT_PUBLIC_MUSHI_BASE_PATH: basePath,
+  },
   // Static-export so the build is a pure folder of HTML + assets we can sync
   // to S3 with the same long/short cache pattern the admin already uses.
   // Set MUSHI_DOCS_EXPORT=0 to opt out (useful when running `next dev` with

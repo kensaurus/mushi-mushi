@@ -154,3 +154,7 @@ apps/admin/dist/**/*.map
 
 # Local-only Edge Function deploy payloads
 .agent-tmp/
+tsup.config.bundled_*.mjs
+
+# Editor-local multi-root workspace files
+*.code-workspace

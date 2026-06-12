@@ -243,7 +243,11 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       // Fallback: direct query when the RPC doesn't exist yet
       const { data: stories, error: e2 } = await db
         .from('qa_stories')
-        .select('id, project_id, name, enabled, browser_provider')
+        // Include live status columns so the card reflects a manual run
+        // immediately — the MV (qa_story_coverage_24h) only refreshes every
+        // 15 min, so without these the "Passing/Failing" badge and the
+        // timestamp can lag by up to 15 min after a run completes.
+        .select('id, project_id, name, enabled, browser_provider, last_run_status, updated_at, script')
         .eq('project_id', pid)
         .order('created_at');
       if (e2) return dbError(c, e2);
@@ -255,18 +259,42 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       const mvMap = new Map((mv ?? []).map((r: Record<string, unknown>) => [r.story_id as string, r]));
       const coverage = (stories ?? []).map((s) => {
         const m = mvMap.get(s.id) as Record<string, unknown> | undefined;
+        // Prefer live qa_stories.updated_at as the timestamp when
+        // last_run_status is set — it reflects the most recent run write
+        // without waiting for the MV refresh cycle.
+        const liveAt = (s as Record<string, unknown>).updated_at as string | null ?? null
+        const mvAt = m?.last_run_at as string | null ?? null
+        // Use the more recent of live vs MV timestamps
+        const last_run_at = liveAt && mvAt
+          ? (liveAt > mvAt ? liveAt : mvAt)
+          : liveAt ?? mvAt
+
+        // Detect directFetch mode from script for content-only metadata
+        let is_direct_fetch = false
+        const script = (s as Record<string, unknown>).script as string | null ?? null
+        if (script && !script.startsWith('http')) {
+          try {
+            const parsed = JSON.parse(script) as Record<string, unknown>
+            is_direct_fetch = parsed.directFetch === true
+          } catch { /* ignore */ }
+        }
+
         return {
           story_id: s.id,
           project_id: s.project_id,
           name: s.name,
           enabled: s.enabled,
           browser_provider: s.browser_provider,
+          // Live status from qa_stories (updated immediately after each run)
+          last_run_status: (s as Record<string, unknown>).last_run_status as string | null ?? null,
+          // Content-only flag for UI evidence label
+          is_direct_fetch,
           runs_24h: Number(m?.runs_24h ?? 0),
           passed_24h: Number(m?.passed_24h ?? 0),
           failed_24h: Number(m?.failed_24h ?? 0),
           error_24h: Number(m?.error_24h ?? 0),
           pass_rate_pct: m?.pass_rate_pct != null ? Number(m.pass_rate_pct) : null,
-          last_run_at: m?.last_run_at ?? null,
+          last_run_at,
           last_failure_url: m?.last_failure_url ?? null,
         };
       });
@@ -364,7 +392,7 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const db = getServiceClient();
     if (!(await resolveProject(db, userId, pid))) return c.json({ error: 'Not found' }, 404);
 
-    const body = await c.req.json<{
+    let body: {
       name?: string;
       prompt?: string;
       script?: string;
@@ -372,7 +400,12 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
       enabled?: boolean;
       browser_provider?: string;
       byok_provider?: string;
-    }>();
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: 'invalid_json_body' }, 400);
+    }
 
     const patch: Record<string, unknown> = {};
     if (body.name !== undefined) patch.name = body.name;

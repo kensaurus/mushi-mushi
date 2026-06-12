@@ -22,18 +22,20 @@ import { z } from 'zod'
 // Every field here is surfaced in the UI; a missing one flips to the empty
 // state or a gate, so validation has real leverage. Matches SetupResponse
 // in useSetupStatus.ts exactly — keep in sync when that type changes.
-export const SetupStepIdSchema = z.enum([
-  'project_created',
-  'api_key_generated',
-  'sdk_installed',
-  'first_report_received',
-  'github_connected',
-  'sentry_connected',
-  'byok_anthropic',
-  'codebase_indexed',
-  'autofix_enabled',
-  'first_fix_dispatched',
-])
+// SetupStepIdSchema accepts any string so new steps added on the backend
+// never cause Zod validation to fail and break the ProjectSwitcher (the
+// "Loading project…" forever bug). Known values are documented here for
+// grep-ability; TypeScript callers use the SetupStepId union in
+// useSetupStatus.ts for type-safe keying (REQUIRED_STEP_SHORT_LABEL, etc.).
+// If you need to gate UI on a NEW step, add it to SetupStepId in
+// useSetupStatus.ts — but DO NOT add it back to a z.enum() here.
+export const SetupStepIdSchema = z.string()
+
+// Legacy named values (for reference only — no longer used as a Zod enum):
+// 'project_created' | 'api_key_generated' | 'sdk_installed' |
+// 'first_report_received' | 'github_connected' | 'sentry_connected' |
+// 'byok_anthropic' | 'codebase_indexed' | 'autofix_enabled' |
+// 'first_fix_dispatched' | 'slack_connected' | 'first_qa_story_passing'
 /**
  * Optional diagnostic emitted alongside the `sdk_installed` step. The
  * fields come from `project_api_keys.last_seen_*`, set by the API-key

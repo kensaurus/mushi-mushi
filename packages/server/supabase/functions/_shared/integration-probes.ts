@@ -37,8 +37,14 @@ export type IntegrationKind =
   | 'slack'
 
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
+/** Fix-agent integrations stored in project_settings (Integrations → Cursor Cloud / Claude Code). */
+export const FIX_AGENT_KINDS: IntegrationKind[] = ['cursor_cloud', 'claude_code_agent']
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty', 'reward_webhook']
-export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [...PLATFORM_KINDS, ...ROUTING_KINDS]
+export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [
+  ...PLATFORM_KINDS,
+  ...FIX_AGENT_KINDS,
+  ...ROUTING_KINDS,
+]
 
 export interface ProbeResult {
   status: 'ok' | 'degraded' | 'down' | 'unknown'
@@ -56,6 +62,9 @@ export interface PlatformSettings {
   langfuse_secret_key_ref?: string | null
   github_repo_url?: string | null
   github_installation_token_ref?: string | null
+  cursor_api_key_ref?: string | null
+  cursor_default_model?: string | null
+  claude_api_key_ref?: string | null
   /** UUID of vault secret containing the per-project Slack bot token (xoxb-*). */
   slack_bot_token_ref?: string | null
 }
@@ -399,25 +408,27 @@ export async function probeIntegration(
 
   // ── cursor_cloud ──────────────────────────────────────────────────────────
   if (kind === 'cursor_cloud') {
-    const apiKey = await dereferenceMaybeVault(db, Deno.env.get('CURSOR_API_KEY') ?? null)
-      ?? Deno.env.get('CURSOR_API_KEY')
+    const apiKey =
+      (await dereferenceMaybeVault(db, settings.cursor_api_key_ref ?? null)) ||
+      Deno.env.get('CURSOR_API_KEY') ||
+      ''
     if (!apiKey) {
       status = 'unknown'
-      detail = 'No Cursor API key configured. Add CURSOR_API_KEY to your environment or under Settings → API Keys.'
+      detail = 'No Cursor API key configured. Paste your crsr_… key under Integrations → Cursor Cloud.'
     } else {
       try {
-        const res = await fetch('https://api.cursor.com/v1/me', {
+        const res = await fetch('https://api.cursor.com/v0/me', {
           headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'mushi-mushi-health-probe/1.0' },
           signal: AbortSignal.timeout(8_000),
         })
         httpStatus = res.status
         if (res.ok) {
-          const data = await res.json() as { email?: string; username?: string }
+          const data = await res.json() as { email?: string; username?: string; user?: { email?: string } }
           status = 'ok'
-          detail = `Connected as ${data.email ?? data.username ?? '?'}`
+          detail = `Connected as ${data.email ?? data.user?.email ?? data.username ?? 'Cursor account'}`
         } else if (res.status === 401 || res.status === 403) {
           status = 'down'
-          detail = 'API key invalid or revoked. Regenerate in Cursor Settings → Advanced.'
+          detail = 'API key invalid or revoked. Regenerate at cursor.com/dashboard/integrations.'
         } else {
           status = 'degraded'
           detail = `HTTP ${res.status}`
@@ -431,8 +442,10 @@ export async function probeIntegration(
 
   // ── claude_code_agent ─────────────────────────────────────────────────────
   if (kind === 'claude_code_agent') {
-    const apiKey = await dereferenceMaybeVault(db, Deno.env.get('ANTHROPIC_API_KEY') ?? null)
-      ?? Deno.env.get('ANTHROPIC_API_KEY')
+    const apiKey =
+      (await dereferenceMaybeVault(db, settings.claude_api_key_ref ?? null)) ||
+      Deno.env.get('ANTHROPIC_API_KEY') ||
+      ''
     if (!apiKey) {
       status = 'unknown'
       detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → API Keys.'

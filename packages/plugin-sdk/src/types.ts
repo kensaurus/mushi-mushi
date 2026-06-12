@@ -19,6 +19,8 @@ export type MushiEventName =
   | 'qa_story.passed'
   | 'judge.score_recorded'
   | 'sla.breached'
+  // Skill-driven triage pipelines
+  | 'skill_pipeline.step.dispatched'
   // Rewards program (P1+)
   | 'reward.points_awarded'
   | 'reward.tier_changed'
