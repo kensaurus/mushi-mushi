@@ -39,7 +39,13 @@ export interface ReportContext {
 export interface PacketOptions {
   /** Max chars for each chained skill body to keep packet under budget. */
   maxBodyChars?: number
-  /** Max total packet chars. Enforced by truncating RAG files last. */
+  /**
+   * Max total packet chars. Enforced by slicing the fully-assembled packet
+   * string from the end and appending a truncation notice. The last sections
+   * (typically chained skill bodies and the checklist) are dropped first
+   * because the packet is assembled in priority order: report context first,
+   * then skill instructions, then chain steps.
+   */
   maxTotalChars?: number
 }
 

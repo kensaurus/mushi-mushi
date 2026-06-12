@@ -313,6 +313,9 @@ export const codeHealthIngestSchema = z
     metrics: z.array(metricPointSchema).max(50).optional(),
     findings: z.array(codeHealthFindingSchema).max(200).optional(),
   })
+  // Reject unknown top-level keys so unexpected CI payload fields are not
+  // silently stripped and persisted. Returns 400 with a clear parse error.
+  .strict()
   .refine(
     (body) => (body.metrics?.length ?? 0) + (body.findings?.length ?? 0) > 0,
     { message: 'Provide at least one metric or one finding' },
