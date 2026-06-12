@@ -1,30 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
-    "highlights": [
-      {
-        "title": "CLI",
-        "description": "new `mushi skills` (`list`, `show`, `sync`) and `mushi pipeline` (`start`, `watch`, `checkin`) command groups. Browse the synced skill catalog, start a pipeline for a report, print the composed run packet, and check step progress back in from the terminal or CI."
-      },
-      {
-        "title": "MCP",
-        "description": "five new tools so a Cursor agent can close the loop without leaving the IDE — `list_skills` and `get_skill` (read), plus `start_skill_pipeline`, `get_pipeline_run`, and `checkin_pipeline_step` (write). Each tool now advertises the correct title and `readOnlyHint` from the shared catalog so MCP clients render the right UI."
-      },
-      {
-        "title": "plugin-sdk",
-        "description": "new `skill_pipeline.step.dispatched` event. Plugins can subscribe to react when a pipeline step is dispatched in cloud mode; the event payload carries `{ runId, stepIndex, skillSlug, contextPacket, projectId }`."
-      },
-      {
-        "title": "plugin-cursor-cloud",
-        "description": "handles `skill_pipeline.step.dispatched` by running the step's pre-composed context packet as a Cursor Cloud agent, storing the agent run id on the step, and checking the step back in. Emits a clear warning when `MUSHI_API_KEY` or `repoUrl` is unset so dispatches can no longer fail silently."
-      }
-    ],
-    "packages": []
-  },
-  {
     "majorMinor": "1.9",
     "headline": null,
     "pending": false,
@@ -445,6 +420,38 @@
     ]
   },
   {
+    "majorMinor": "0.15",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.15.0"
+    ],
+    "highlights": [
+      {
+        "title": "CLI",
+        "description": "new `mushi skills` (`list`, `show`, `sync`) and `mushi pipeline` (`start`, `watch`, `checkin`) command groups. Browse the synced skill catalog, start a pipeline for a report, print the composed run packet, and check step progress back in from the terminal or CI."
+      },
+      {
+        "title": "MCP",
+        "description": "five new tools so a Cursor agent can close the loop without leaving the IDE — `list_skills` and `get_skill` (read), plus `start_skill_pipeline`, `get_pipeline_run`, and `checkin_pipeline_step` (write). Each tool now advertises the correct title and `readOnlyHint` from the shared catalog so MCP clients render the right UI."
+      },
+      {
+        "title": "plugin-sdk",
+        "description": "new `skill_pipeline.step.dispatched` event. Plugins can subscribe to react when a pipeline step is dispatched in cloud mode; the event payload carries `{ runId, stepIndex, skillSlug, contextPacket, projectId }`."
+      },
+      {
+        "title": "plugin-cursor-cloud",
+        "description": "handles `skill_pipeline.step.dispatched` by running the step's pre-composed context packet as a Cursor Cloud agent, storing the agent run id on the step, and checking the step back in. Emits a clear warning when `MUSHI_API_KEY` or `repoUrl` is unset so dispatches can no longer fail silently."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.15.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.14",
     "headline": null,
     "pending": false,
@@ -521,6 +528,22 @@
     ],
     "highlights": [
       {
+        "title": "CLI",
+        "description": "new `mushi skills` (`list`, `show`, `sync`) and `mushi pipeline` (`start`, `watch`, `checkin`) command groups. Browse the synced skill catalog, start a pipeline for a report, print the composed run packet, and check step progress back in from the terminal or CI."
+      },
+      {
+        "title": "MCP",
+        "description": "five new tools so a Cursor agent can close the loop without leaving the IDE — `list_skills` and `get_skill` (read), plus `start_skill_pipeline`, `get_pipeline_run`, and `checkin_pipeline_step` (write). Each tool now advertises the correct title and `readOnlyHint` from the shared catalog so MCP clients render the right UI."
+      },
+      {
+        "title": "plugin-sdk",
+        "description": "new `skill_pipeline.step.dispatched` event. Plugins can subscribe to react when a pipeline step is dispatched in cloud mode; the event payload carries `{ runId, stepIndex, skillSlug, contextPacket, projectId }`."
+      },
+      {
+        "title": "plugin-cursor-cloud",
+        "description": "handles `skill_pipeline.step.dispatched` by running the step's pre-composed context packet as a Cursor Cloud agent, storing the agent run id on the step, and checking the step back in. Emits a clear warning when `MUSHI_API_KEY` or `repoUrl` is unset so dispatches can no longer fail silently."
+      },
+      {
         "title": "`mushi sync-lessons`",
         "description": "— pulls promoted lessons from"
       },
@@ -532,6 +555,10 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.12.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.12.0"
       },
       {
@@ -833,6 +860,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.7",
       "0.7.6",
       "0.7.5",
       "0.7.4",
@@ -881,6 +909,14 @@
       {
         "title": "MCP Inspector",
         "description": "`pnpm --filter @mushi-mushi/mcp inspector` now spawns the official `@modelcontextprotocol/inspector` against the local build for interactive tool exploration during development."
+      },
+      {
+        "title": "CLI",
+        "description": "new `mushi skills` (`list`, `show`, `sync`) and `mushi pipeline` (`start`, `watch`, `checkin`) command groups. Browse the synced skill catalog, start a pipeline for a report, print the composed run packet, and check step progress back in from the terminal or CI."
+      },
+      {
+        "title": "MCP",
+        "description": "five new tools so a Cursor agent can close the loop without leaving the IDE — `list_skills` and `get_skill` (read), plus `start_skill_pipeline`, `get_pipeline_run`, and `checkin_pipeline_step` (write). Each tool now advertises the correct title and `readOnlyHint` from the shared catalog so MCP clients render the right UI."
       }
     ],
     "packages": [
@@ -905,6 +941,10 @@
         "version": "0.7.1"
       },
       {
+        "name": "@mushi-mushi/plugin-sdk",
+        "version": "0.7.0"
+      },
+      {
         "name": "@mushi-mushi/react",
         "version": "0.7.0"
       },
@@ -926,7 +966,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.6"
+        "version": "0.7.7"
       }
     ]
   },
@@ -1012,6 +1052,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.12",
       "0.5.11",
       "0.5.10",
       "0.5.9",
@@ -1101,6 +1142,10 @@
         "version": "0.5.1"
       },
       {
+        "name": "@mushi-mushi/plugin-cursor-cloud",
+        "version": "0.5.0"
+      },
+      {
         "name": "@mushi-mushi/plugin-sdk",
         "version": "0.5.0"
       },
@@ -1114,7 +1159,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.11"
+        "version": "0.5.12"
       },
       {
         "name": "mushi-mushi",
@@ -1360,6 +1405,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.9",
       "0.2.8",
       "0.2.7",
       "0.2.6",
@@ -1459,15 +1505,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-jira",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.2.6"
+        "version": "0.2.7"
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.6"
+        "version": "0.2.7"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -1475,15 +1521,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.8"
+        "version": "0.2.9"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.5"
+        "version": "0.2.6"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.6"
+        "version": "0.2.7"
       },
       {
         "name": "@mushi-mushi/react",
@@ -1520,6 +1566,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.1.4",
       "0.1.3",
       "0.1.2",
       "0.1.1",
@@ -1549,27 +1596,27 @@
       },
       {
         "name": "@mushi-mushi/plugin-bugsnag",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/plugin-crashlytics",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/plugin-discord",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/plugin-github-issues",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/plugin-msteams",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/plugin-rollbar",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       {
         "name": "@mushi-mushi/react",

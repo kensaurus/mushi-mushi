@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-pagerduty
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [ae878a1]
+  - @mushi-mushi/plugin-sdk@0.7.0
+
 ## 0.2.6
 
 ### Patch Changes

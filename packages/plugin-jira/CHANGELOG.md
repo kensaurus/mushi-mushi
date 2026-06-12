@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-jira
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [ae878a1]
+  - @mushi-mushi/plugin-sdk@0.7.0
+
 ## 0.2.4
 
 ### Patch Changes

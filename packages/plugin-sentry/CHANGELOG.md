@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-sentry
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [ae878a1]
+  - @mushi-mushi/plugin-sdk@0.7.0
+
 ## 0.2.8
 
 ### Patch Changes

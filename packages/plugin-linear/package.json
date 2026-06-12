@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-linear",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "license": "MIT",
   "description": "Reference Mushi Mushi plugin: create and bidirectionally sync Linear issues from Mushi reports.",
   "type": "module",
