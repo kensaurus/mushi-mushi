@@ -14,7 +14,10 @@
  */
 
 // ── Inline the pure helpers so tests run without Deno runtime deps ────────────
-// (These match the implementations in index.ts exactly.)
+// IMPORTANT: these copies MUST stay in sync with index.ts by hand whenever
+// the production implementations change. The Copilot review (Jun 2026) flagged
+// that the original copy did not support YAML block scalars (> >- | |-) which
+// are supported by the production parseFrontmatter. This copy now matches.
 
 function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; body: string } | null {
   const trimmed = raw.trimStart()
@@ -27,12 +30,30 @@ function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; b
   const body = trimmed.slice(endIdx + 4).trimStart()
 
   const frontmatter: Record<string, string> = {}
-  for (const line of fmBlock.split('\n')) {
+  const lines = fmBlock.split('\n')
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
     const colonIdx = line.indexOf(':')
-    if (colonIdx === -1) continue
+    if (colonIdx === -1) { i++; continue }
+
     const key = line.slice(0, colonIdx).trim()
-    const val = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '')
-    if (key) frontmatter[key] = val
+    const rawVal = line.slice(colonIdx + 1).trim()
+
+    // Handle YAML block scalars: > >- | |- (fold/literal multi-line values)
+    if (rawVal === '>' || rawVal === '>-' || rawVal === '|' || rawVal === '|-') {
+      const parts: string[] = []
+      i++
+      while (i < lines.length && (lines[i].startsWith(' ') || lines[i].startsWith('\t'))) {
+        parts.push(lines[i].trim())
+        i++
+      }
+      if (key) frontmatter[key] = parts.filter((p) => p !== '').join(' ')
+    } else {
+      const val = rawVal.replace(/^["']|["']$/g, '')
+      if (key) frontmatter[key] = val
+      i++
+    }
   }
 
   return { frontmatter, body }
@@ -110,6 +131,30 @@ test('parseFrontmatter: returns null when no opening delimiter', () => {
   const raw = `name: no-delimiter\ndescription: missing dashes\n\n# Body`
   const result = parseFrontmatter(raw)
   if (result !== null) throw new Error('expected null for missing delimiter')
+})
+
+test('parseFrontmatter: handles YAML fold block scalar (>) in description', () => {
+  // Production index.ts supports block scalars so long descriptions can be
+  // multi-line. This test pins the behaviour of the inlined copy.
+  const raw = `---
+name: test-skill
+description: >
+  This is a folded
+  multi-line description
+  that spans several lines.
+license: MIT
+---
+
+# Body here
+`
+  const result = parseFrontmatter(raw)
+  if (!result) throw new Error('expected result, got null')
+  const desc = result.frontmatter.description
+  if (!desc.includes('folded') || !desc.includes('multi-line')) {
+    throw new Error(`fold scalar not parsed: '${desc}'`)
+  }
+  // Folded lines are joined with a space (no newlines in the value)
+  if (desc.includes('\n')) throw new Error('fold scalar must not contain newlines')
 })
 
 test('parseFrontmatter: returns null when closing delimiter is missing', () => {
@@ -265,10 +310,28 @@ test('containsSecretPattern: returns false for partial key-like strings that are
 })
 
 // ── Description length enforcement ───────────────────────────────────────────
+// The production skill-sync enforces a 1024-char cap on `description` before
+// upserting into agent_skills (per Agent Skills spec). These tests verify the
+// SKILL.md parsing path that feeds the description field — specifically that a
+// description longer than 1024 chars in frontmatter is treated as too long and
+// that a 1024-char description is accepted exactly at the boundary.
 
-test('description truncation to 1024 chars', () => {
-  const longDescription = 'x'.repeat(2000)
-  const truncated = longDescription.slice(0, 1024)
-  if (truncated.length !== 1024) throw new Error(`expected 1024 chars, got ${truncated.length}`)
-  if (longDescription.length === truncated.length) throw new Error('no truncation occurred')
+test('parseFrontmatter: description at exactly 1024 chars is valid', () => {
+  const desc1024 = 'a'.repeat(1024)
+  const raw = `---\nname: test-skill\ndescription: ${desc1024}\n---\nBody.`
+  const result = parseFrontmatter(raw)
+  if (!result) throw new Error('parseFrontmatter returned null for valid input')
+  if (result.frontmatter.description !== desc1024) throw new Error('description mismatch')
+  if (result.frontmatter.description.length !== 1024) throw new Error(`expected 1024, got ${result.frontmatter.description.length}`)
+})
+
+test('parseFrontmatter: description beyond 1024 chars is parsed (caller must truncate)', () => {
+  // parseFrontmatter returns the raw value; skill-sync callers apply the cap.
+  const desc2000 = 'b'.repeat(2000)
+  const raw = `---\nname: test-skill\ndescription: ${desc2000}\n---\nBody.`
+  const result = parseFrontmatter(raw)
+  if (!result) throw new Error('parseFrontmatter returned null')
+  // Caller (skill-sync) must slice to 1024 before upsert.
+  const capped = result.frontmatter.description.slice(0, 1024)
+  if (capped.length !== 1024) throw new Error(`expected 1024 after cap, got ${capped.length}`)
 })

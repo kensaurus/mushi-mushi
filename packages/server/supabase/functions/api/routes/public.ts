@@ -1508,18 +1508,18 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const db = getServiceClient();
 
     // Burst cap: 60 calls/minute per project.
-    try {
-      await db.rpc('report_ingest_rate_limit_claim', {
-        p_project_id: projectId,
-        p_max_per_minute: 60,
-      });
-    } catch (rateErr) {
-      const msg = rateErr instanceof Error ? rateErr.message : String(rateErr);
-      if (msg.includes('rate_limit_exceeded')) {
+    // supabase-js returns { data, error } and does NOT throw on PostgREST errors
+    // unless .throwOnError() is used — so we check { error } directly.
+    const { error: rateErr } = await db.rpc('report_ingest_rate_limit_claim', {
+      p_project_id: projectId,
+      p_max_per_minute: 60,
+    });
+    if (rateErr) {
+      if (rateErr.message.includes('rate_limit_exceeded')) {
         c.header('Retry-After', '60');
         return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Metric ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
       }
-      log.warn('metric ingest rate limit check failed (non-fatal)', { err: msg });
+      log.warn('metric ingest rate limit check failed (non-fatal)', { err: rateErr.message });
     }
 
     let rawBody: unknown;
