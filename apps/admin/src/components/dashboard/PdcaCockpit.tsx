@@ -39,8 +39,8 @@ const TONE_DOT: Record<PdcaStageTone, { dot: string; label: string; pulse?: bool
 export function PdcaCockpit({ stages, focusStage }: Props) {
   if (stages.length === 0) return null
   return (
-    <section aria-label="Loop status" className="mb-4">
-      <div className="flex items-baseline justify-between mb-2">
+    <section aria-label="Loop status" className="mb-3">
+      <div className="flex items-baseline justify-between mb-1.5">
         <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
           Loop status &mdash; Plan, Do, Check, Act
         </h2>
@@ -49,7 +49,7 @@ export function PdcaCockpit({ stages, focusStage }: Props) {
         </InlineProof>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         {stages.map((stage, i) => (
           <StageTile
             key={stage.id}

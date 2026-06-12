@@ -118,6 +118,7 @@ function PdcaStepNodeInner({ data }: NodeProps) {
           type="target"
           position={Position.Bottom}
           id="loop-in"
+          style={{ left: '42%' }}
           className="!bg-transparent !border-none !w-1.5 !h-1.5"
         />
       )}
@@ -126,6 +127,7 @@ function PdcaStepNodeInner({ data }: NodeProps) {
           type="source"
           position={Position.Bottom}
           id="loop-out"
+          style={{ left: '58%' }}
           className="!bg-transparent !border-none !w-1.5 !h-1.5"
         />
       )}

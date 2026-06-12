@@ -10,6 +10,7 @@
  */
 
 import { useMemo } from 'react'
+import type { ZodType, ZodTypeDef } from 'zod'
 import { usePageData } from './usePageData'
 import { SetupResponseSchema } from './apiSchemas'
 
@@ -24,6 +25,8 @@ export type SetupStepId =
   | 'codebase_indexed'
   | 'autofix_enabled'
   | 'first_fix_dispatched'
+  | 'slack_connected'
+  | 'first_qa_story_passing'
 
 /** Type-safe const enum for step IDs — eliminates string literals at call sites.
  *  Usage: `setup.isStepIncomplete(SETUP_STEPS.sdkInstalled)` */
@@ -38,6 +41,8 @@ export const SETUP_STEPS = {
   codebaseIndexed: 'codebase_indexed',
   autofixEnabled: 'autofix_enabled',
   firstFixDispatched: 'first_fix_dispatched',
+  slackConnected: 'slack_connected',
+  firstQaStoryPassing: 'first_qa_story_passing',
 } as const satisfies Record<string, SetupStepId>
 
 /**
@@ -136,8 +141,12 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
   // FE-API-1: Zod-validate the response. Setup drives the onboarding gate,
   // the banner, and every per-page "finish setup first" nudge — silent
   // drift here sends users into a broken empty state with no diagnostic.
+  // SetupStepIdSchema is z.string() (not z.enum) so new backend steps never
+  // break Zod validation. The cast below bridges the Zod-inferred type (where
+  // step.id is `string`) back to the SetupResponse interface (where step.id is
+  // the narrower `SetupStepId` union). Runtime shape is unchanged.
   const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup', {
-    schema: SetupResponseSchema,
+    schema: SetupResponseSchema as unknown as ZodType<SetupResponse, ZodTypeDef, SetupResponse>,
   })
 
   return useMemo(() => {

@@ -1177,6 +1177,12 @@ select, input, textarea {
 .flow-canvas-chrome .react-flow {
   background: transparent !important;
 }
+/* Dashboard PDCA: keep loop-back markers inside the chrome box. */
+.flow-canvas-chrome--pdca .react-flow__renderer,
+.flow-canvas-chrome--pdca .react-flow__edges,
+.flow-canvas-chrome--pdca .react-flow__edge-path {
+  overflow: visible;
+}
 
 /* ---------------------------------------------------------------------------
    RESPONSIVE TABLE

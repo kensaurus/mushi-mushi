@@ -90,6 +90,7 @@ jobs:
         env:
           MUSHI_BASE_PATH: ${{ env.MUSHI_BASE_PATH }}
           MUSHI_ASSET_PREFIX: ${{ env.MUSHI_BASE_PATH }}
+          NEXT_PUBLIC_MUSHI_BASE_PATH: ${{ env.MUSHI_BASE_PATH }}
 
       - name: Generate version file
         env:

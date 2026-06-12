@@ -46,6 +46,8 @@ import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
 import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
+import { registerSkillsRoutes } from './routes/skills.ts';
+import { registerCodeHealthRoutes } from './routes/code-health.ts';
 
 ensureSentry('api');
 
@@ -455,6 +457,8 @@ registerContentQualityRoutes(app);
 registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
 registerFullstackAuditRoutes(app);
+registerCodeHealthRoutes(app);
+registerSkillsRoutes(app);
 
 registerA2ATaskRoutes(app);
 

@@ -70,13 +70,16 @@ export interface PdcaEdgeData extends Record<string, unknown> {
 // The 48px gap between nodes leaves room for the arrowhead without crowding.
 const GAP = 48
 const NODE_WIDTH = 220
-const NODE_HEIGHT = 148
+const NODE_HEIGHT = 172
+/** Left/top inset so loop-back arrowheads + markers stay inside fitView bounds. */
+const LAYOUT_INSET_X = 36
+const LAYOUT_INSET_Y = 8
 
 const POSITIONS: Record<PdcaStageId, { x: number; y: number }> = {
-  plan:  { x: 0,                             y: 0 },
-  do:    { x: NODE_WIDTH + GAP,               y: 0 },
-  check: { x: (NODE_WIDTH + GAP) * 2,         y: 0 },
-  act:   { x: (NODE_WIDTH + GAP) * 3,         y: 0 },
+  plan:  { x: LAYOUT_INSET_X,                             y: LAYOUT_INSET_Y },
+  do:    { x: LAYOUT_INSET_X + NODE_WIDTH + GAP,         y: LAYOUT_INSET_Y },
+  check: { x: LAYOUT_INSET_X + (NODE_WIDTH + GAP) * 2,   y: LAYOUT_INSET_Y },
+  act:   { x: LAYOUT_INSET_X + (NODE_WIDTH + GAP) * 3,   y: LAYOUT_INSET_Y },
 }
 
 const STAGE_HREF: Record<PdcaStageId, string> = {
@@ -204,8 +207,8 @@ export function buildEdges(
       animated: source === focusStage || source === runningStage || failing,
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: 22,
-        height: 22,
+        width: 18,
+        height: 18,
         color: arrowColor,
       },
       data: {

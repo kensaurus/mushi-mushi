@@ -68,9 +68,11 @@ const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 // Horizontal-row layout: nodes (148px tall) + loop-back arc (~110px below)
 // + fitView padding. Keep enough room for the activity-log panel too.
 const VARIANT_HEIGHT: Record<PdcaFlowVariant, string> = {
-  live:        'h-[380px] sm:h-[400px]',
-  onboarding:  'h-[340px] sm:h-[360px]',
+  live:        'h-[288px] sm:h-[304px]',
+  onboarding:  'h-[300px] sm:h-[320px]',
 }
+
+const LIVE_FIT_PADDING = { top: 0.04, right: 0.12, bottom: 0.2, left: 0.14 }
 
 const DRAWER_HASH_PREFIX = '#pdca='
 
@@ -160,7 +162,7 @@ export function PdcaFlow(props: PdcaFlowProps) {
   return (
     <PdcaFlowContext.Provider value={ctxValue}>
       <div
-        className={`flow-canvas-chrome relative w-full ${VARIANT_HEIGHT[variant]} overflow-hidden ${className}`.trim()}
+        className={`flow-canvas-chrome flow-canvas-chrome--pdca relative w-full ${VARIANT_HEIGHT[variant]} overflow-x-auto overflow-y-clip ${className}`.trim()}
         role="region"
         aria-label={ariaLabel ?? 'Plan, Do, Check, Act loop diagram'}
         data-tour-id="pdca-flow"
@@ -299,20 +301,25 @@ function PdcaFlowCanvas({
     setCtxMenu(null)
   }, [])
 
+  const fitPadding = variant === 'live' ? LIVE_FIT_PADDING : 0.08
+
   const onTidy = useCallback(() => {
     // Our layout is fixed (buildNodes sets canonical positions every render),
     // so "tidy" == re-fit the view with a gentle animation.
-    rf.fitView({ duration: 400, padding: 0.14 })
-  }, [rf])
+    rf.fitView({ duration: 400, padding: fitPadding })
+  }, [rf, fitPadding])
 
   // Re-fit after the first paint so the loop-back arc's bounding box is
   // included. The `fitView` prop fires before edge paths are measured, so
   // without this the arc can be clipped on initial load.
   const onInit = useCallback(() => {
+    // Double-rAF: first paint measures nodes; second measures loop-back edge paths.
     requestAnimationFrame(() => {
-      rf.fitView({ duration: 0, padding: 0.14 })
+      requestAnimationFrame(() => {
+        rf.fitView({ duration: 0, padding: fitPadding })
+      })
     })
-  }, [rf])
+  }, [rf, fitPadding])
 
   // Imperative focus for the activity-log sync path. When a user clicks an
   // activity row we fly the canvas to the matching stage node and briefly
@@ -360,7 +367,10 @@ function PdcaFlowCanvas({
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         fitView
-        fitViewOptions={{ padding: 0.14, includeHiddenNodes: false }}
+        fitViewOptions={{
+          padding: variant === 'live' ? LIVE_FIT_PADDING : 0.08,
+          includeHiddenNodes: false,
+        }}
         onInit={onInit}
         proOptions={{ hideAttribution: true }}
         onNodeClick={onNodeClick}
@@ -376,11 +386,11 @@ function PdcaFlowCanvas({
         zoomOnPinch={interactive}
         zoomOnDoubleClick={false}
         preventScrolling={false}
-        minZoom={0.72}
+        minZoom={variant === 'live' ? 0.48 : 0.72}
         maxZoom={1.35}
         defaultEdgeOptions={{ type: 'pdcaGradient' }}
       >
-        <FlowCanvasBackground density="pipeline" />
+        {variant !== 'live' && <FlowCanvasBackground density="pipeline" />}
 
         {variant === 'live' && (
           <Panel position="top-left">

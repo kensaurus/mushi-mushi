@@ -262,3 +262,63 @@ export const discoveryEventSchema = z
   }))
 
 export type DiscoveryEventPayload = z.infer<typeof discoveryEventSchema>
+
+// ---------------------------------------------------------------------------
+// Code-health CI ingest (POST /v1/ingest/metrics)
+// ---------------------------------------------------------------------------
+
+// Allowed metric-name prefixes — any name that doesn't start with one of
+// these is rejected to prevent accidentally polluting metric_series with
+// arbitrary CI environment variables.
+const METRIC_NAME_PREFIXES = ['bundle.', 'code_health.'] as const
+
+const metricPointSchema = z.object({
+  /** Dot-namespaced metric name, e.g. "bundle.mobile.gzip_kb" */
+  metric_name: z
+    .string()
+    .min(1)
+    .max(120)
+    .refine(
+      (v) => METRIC_NAME_PREFIXES.some((p) => v.startsWith(p)),
+      { message: 'metric_name must start with one of: bundle. code_health.' },
+    ),
+  /** Optional sub-dimension, e.g. "ios", "android", "combined", "mobile", "web" */
+  dimension: z.string().max(60).optional(),
+  /** Numeric metric value (gzipped KB, LOC count, file count, …) */
+  value: z
+    .number()
+    .finite()
+    .nonnegative(),
+  /** ISO-8601 timestamp. Defaults to server time when omitted. */
+  ts: z.string().datetime({ offset: true }).optional(),
+})
+
+export const codeHealthFindingSchema = z.object({
+  /** Rule identifier: 'god_file' | 'bundle_regression' */
+  rule_id: z.string().min(1).max(80),
+  severity: z.enum(['error', 'warn', 'info']),
+  /** Repo-relative file path (for god_file findings) */
+  file_path: z.string().max(500).optional(),
+  /** Reused as a numeric carrier: LOC count for god_file, delta KB for bundle_regression */
+  line: z.number().int().nonnegative().optional(),
+  message: z.string().max(500),
+  /** JSONB bag: e.g. { hint, budget } for god_file or { delta_kb, budget_kb } */
+  suggested_fix: z
+    .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+    .optional(),
+})
+
+export const codeHealthIngestSchema = z
+  .object({
+    metrics: z.array(metricPointSchema).max(50).optional(),
+    findings: z.array(codeHealthFindingSchema).max(200).optional(),
+  })
+  .refine(
+    (body) => (body.metrics?.length ?? 0) + (body.findings?.length ?? 0) > 0,
+    { message: 'Provide at least one metric or one finding' },
+  )
+
+export type CodeHealthIngestPayload = z.infer<typeof codeHealthIngestSchema>
+export type MetricPoint = z.infer<typeof metricPointSchema>
+export type CodeHealthFinding = z.infer<typeof codeHealthFindingSchema>
+

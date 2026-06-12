@@ -104,6 +104,8 @@ export type MushiEventName =
   | 'reward.tier_changed'
   | 'reward.payout_requested'
   | 'reward.payout_paid'
+  // Skill pipelines (cloud mode step dispatch)
+  | 'skill_pipeline.step.dispatched'
 
 interface WebhookPlugin {
   plugin_slug: string
@@ -137,21 +139,39 @@ export async function dispatchPluginEvent(
     (p) => p.subscribed_events.length === 0 || p.subscribed_events.includes('*') || p.subscribed_events.includes(event),
   )
 
-  await Promise.all(
-    subscribedPlugins.map((p) => {
-      // Cursor Cloud Agent uses direct REST dispatch — no webhook hop needed.
-      if (p.plugin_slug === CURSOR_AGENT_SLUG && CURSOR_EVENTS.has(event)) {
-        return deliverCursorAgent(db, projectId, event, data, {
-          plugin_slug: p.plugin_slug,
-          subscribed_events: p.subscribed_events,
-          config: p.config ?? null,
-        })
-      }
+  const tasks: Promise<unknown>[] = []
+
+  // Skill pipelines: dispatch to Cursor Cloud even without a marketplace plugin
+  // row — credentials live in Integrations → Cursor Cloud
+  // (project_settings.cursor_api_key_ref). This is in ADDITION to (not instead
+  // of) any other subscribed plugins, so a project with a Discord/Teams webhook
+  // subscribed to this event still receives the fan-out below.
+  if (
+    event === 'skill_pipeline.step.dispatched' &&
+    !subscribedPlugins.some((p) => p.plugin_slug === CURSOR_AGENT_SLUG)
+  ) {
+    tasks.push(deliverCursorAgent(db, projectId, event, data, {
+      plugin_slug: CURSOR_AGENT_SLUG,
+      subscribed_events: [event],
+      config: null,
+    }))
+  }
+
+  for (const p of subscribedPlugins) {
+    // Cursor Cloud Agent uses direct REST dispatch — no webhook hop needed.
+    if (p.plugin_slug === CURSOR_AGENT_SLUG && CURSOR_EVENTS.has(event)) {
+      tasks.push(deliverCursorAgent(db, projectId, event, data, {
+        plugin_slug: p.plugin_slug,
+        subscribed_events: p.subscribed_events,
+        config: p.config ?? null,
+      }))
+    } else if (p.webhook_url) {
       // All other plugins use the HMAC-signed webhook path.
-      if (!p.webhook_url) return Promise.resolve()
-      return deliverOne(db, projectId, event, data, p)
-    }),
-  )
+      tasks.push(deliverOne(db, projectId, event, data, p))
+    }
+  }
+
+  await Promise.all(tasks)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -165,8 +185,53 @@ interface CursorPluginRow {
 }
 
 const CURSOR_AGENT_SLUG = 'cursor-cloud-agent'
-const CURSOR_EVENTS = new Set(['report.classified', 'qa_story.failed', 'fix.requested'])
+const CURSOR_EVENTS = new Set([
+  'report.classified',
+  'qa_story.failed',
+  'fix.requested',
+  'skill_pipeline.step.dispatched',
+])
 const CURSOR_SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 }
+
+async function resolveVaultRef(db: SupabaseClient, ref: string): Promise<string> {
+  if (!ref) return ''
+  if (!ref.startsWith('vault://')) return ref
+  const vaultName = ref.slice('vault://'.length)
+  const { data: vaultData } = await db.rpc('vault_lookup', { secret_name: vaultName })
+  return typeof vaultData === 'string' ? vaultData : ''
+}
+
+async function resolveCursorCredentials(
+  db: SupabaseClient,
+  projectId: string,
+  pluginConfig: Record<string, unknown> | null,
+): Promise<{ apiKeyRef: string; model: string; autoCreatePR: boolean; maxIterations: number }> {
+  const cfg = pluginConfig ?? {}
+  let apiKeyRef = typeof cfg.api_key_ref === 'string' ? cfg.api_key_ref : ''
+  let model = typeof cfg.model === 'string' ? cfg.model : 'composer-2.5'
+  let autoCreatePR = cfg.auto_create_pr !== false
+  let maxIterations = typeof cfg.max_iterations === 'number' ? cfg.max_iterations : 1
+
+  if (!apiKeyRef) {
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('cursor_api_key_ref, cursor_default_model, cursor_auto_create_pr, cursor_max_iterations')
+      .eq('project_id', projectId)
+      .maybeSingle()
+    const row = settings as {
+      cursor_api_key_ref?: string | null
+      cursor_default_model?: string | null
+      cursor_auto_create_pr?: boolean | null
+      cursor_max_iterations?: number | null
+    } | null
+    apiKeyRef = row?.cursor_api_key_ref ?? ''
+    if (row?.cursor_default_model) model = row.cursor_default_model
+    if (row?.cursor_auto_create_pr === false) autoCreatePR = false
+    if (typeof row?.cursor_max_iterations === 'number') maxIterations = row.cursor_max_iterations
+  }
+
+  return { apiKeyRef, model, autoCreatePR, maxIterations }
+}
 
 async function deliverCursorAgent(
   db: SupabaseClient,
@@ -175,12 +240,25 @@ async function deliverCursorAgent(
   data: unknown,
   plugin: CursorPluginRow,
 ): Promise<void> {
-  const cfg = plugin.config ?? {}
-  const apiKey = typeof cfg.api_key_ref === 'string' ? cfg.api_key_ref : ''
-  const workspaceId = typeof cfg.workspace_id === 'string' ? cfg.workspace_id : ''
-  const model = typeof cfg.model === 'string' ? cfg.model : 'composer-2.5'
-  const autoCreatePR = cfg.auto_create_pr !== false
-  const maxIterations = typeof cfg.max_iterations === 'number' ? cfg.max_iterations : 1
+  const { apiKeyRef, model, autoCreatePR, maxIterations } = await resolveCursorCredentials(
+    db,
+    projectId,
+    plugin.config,
+  )
+  const workspaceId = typeof plugin.config?.workspace_id === 'string' ? plugin.config.workspace_id : ''
+
+  // Skill pipeline steps use Cursor v0 API (source.repository) — workspace_id optional.
+  if (event === 'skill_pipeline.step.dispatched') {
+    const resolvedApiKey = await resolveVaultRef(db, apiKeyRef)
+    await deliverSkillPipelineStep(db, projectId, data, {
+      apiKey: resolvedApiKey,
+      model,
+      autoCreatePR,
+    })
+    return
+  }
+
+  const apiKey = apiKeyRef
 
   if (!apiKey || !workspaceId) {
     pluginLog.warn('Cursor plugin skipped: missing api_key_ref or workspace_id', { projectId })
@@ -203,6 +281,7 @@ async function deliverCursorAgent(
     return
   }
 
+  const cfg = plugin.config ?? {}
   const severityThreshold =
     typeof cfg.severity_threshold === 'string' &&
     cfg.severity_threshold in CURSOR_SEVERITY_RANK
@@ -217,16 +296,10 @@ async function deliverCursorAgent(
     if (rank < minRank) return
   }
 
-  // Resolve API key if it's a vault ref
-  let resolvedApiKey = apiKey
-  if (apiKey.startsWith('vault://')) {
-    const vaultName = apiKey.slice('vault://'.length)
-    const { data: vaultData } = await db.rpc('vault_lookup', { secret_name: vaultName })
-    resolvedApiKey = typeof vaultData === 'string' ? vaultData : ''
-    if (!resolvedApiKey) {
-      pluginLog.warn('Cursor plugin: vault lookup failed for api_key_ref', { projectId })
-      return
-    }
+  const resolvedApiKey = await resolveVaultRef(db, apiKey)
+  if (!resolvedApiKey) {
+    pluginLog.warn('Cursor plugin: API key not configured (Integrations → Cursor Cloud)', { projectId })
+    return
   }
 
   // Build a minimal prompt from the event data
@@ -306,6 +379,159 @@ async function deliverCursorAgent(
   } else {
     pluginLog.warn('Cursor Cloud Agent dispatch failed', { projectId, event, excerpt })
   }
+}
+
+interface SkillPipelineStepPayload {
+  runId: string
+  stepIndex: number
+  skillSlug: string
+  contextPacket: string
+  projectId: string
+}
+
+async function deliverSkillPipelineStep(
+  db: SupabaseClient,
+  projectId: string,
+  data: unknown,
+  opts: { apiKey: string; model: string; autoCreatePR: boolean },
+): Promise<void> {
+  const d = data as SkillPipelineStepPayload
+  if (!d?.runId || d.stepIndex === undefined || !d.skillSlug) {
+    pluginLog.warn('Skill pipeline dispatch skipped: invalid payload', { projectId })
+    return
+  }
+
+  let resolvedApiKey = opts.apiKey
+  if (opts.apiKey.startsWith('vault://')) {
+    const vaultName = opts.apiKey.slice('vault://'.length)
+    const { data: vaultData } = await db.rpc('vault_lookup', { secret_name: vaultName })
+    resolvedApiKey = typeof vaultData === 'string' ? vaultData : ''
+  }
+  if (!resolvedApiKey) {
+    await failSkillPipelineStep(db, d, 'Cursor API key not configured')
+    return
+  }
+
+  const { data: projSettings } = await db
+    .from('project_settings')
+    .select('github_repo_url')
+    .eq('project_id', projectId)
+    .single()
+  const repoUrl = (projSettings as { github_repo_url?: string | null } | null)?.github_repo_url ?? ''
+  if (!repoUrl) {
+    await failSkillPipelineStep(db, d, 'GitHub repo URL not configured — set it under Integrations')
+    return
+  }
+
+  const prompt = [
+    `# Mushi Skill Pipeline — Step ${d.stepIndex + 1}`,
+    ``,
+    `Skill: \`${d.skillSlug}\``,
+    `Pipeline run: ${d.runId}`,
+    ``,
+    `You are executing step ${d.stepIndex + 1} of a Mushi skill pipeline.`,
+    `When done, call the Mushi MCP tool \`checkin_pipeline_step\` with run_id, step_index, and status.`,
+    ``,
+    `─── Context Packet ────────────────────────────────────────────────────`,
+    ``,
+    (d.contextPacket ?? '').slice(0, 32_000),
+  ].join('\n')
+
+  const deliveryId = crypto.randomUUID()
+  const start = Date.now()
+  let agentId: string | null = null
+  let excerpt = ''
+
+  try {
+    const res = await fetch('https://api.cursor.com/v0/agents', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolvedApiKey}`,
+      },
+      signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify({
+        prompt: { text: prompt },
+        model: opts.model || 'default',
+        source: { repository: repoUrl, ref: 'main' },
+        target: {
+          autoCreatePr: opts.autoCreatePR,
+          branchName: `mushi/skill-${d.skillSlug.slice(0, 24)}-${Date.now()}`,
+          skipReviewerRequest: true,
+        },
+      }),
+    })
+    const text = await res.text().catch(() => '')
+    excerpt = text.slice(0, 512)
+    if (res.ok) {
+      const body = JSON.parse(text) as { agentId?: string; id?: string }
+      agentId = body.agentId ?? body.id ?? null
+    } else {
+      await failSkillPipelineStep(db, d, `Cursor API ${res.status}: ${excerpt}`)
+      return
+    }
+  } catch (err) {
+    await failSkillPipelineStep(db, d, String(err).slice(0, 500))
+    return
+  }
+
+  const now = new Date().toISOString()
+  if (agentId) {
+    await db
+      .from('skill_pipeline_step_runs')
+      .update({
+        status: 'running',
+        agent_ref: agentId,
+        notes: `Cursor Cloud agent dispatched (model: ${opts.model})`,
+        updated_at: now,
+      })
+      .eq('run_id', d.runId)
+      .eq('step_index', d.stepIndex)
+  }
+
+  try {
+    await db.from('plugin_dispatch_log').insert({
+      delivery_id: deliveryId,
+      project_id: projectId,
+      plugin_slug: CURSOR_AGENT_SLUG,
+      event: 'skill_pipeline.step.dispatched',
+      attempt: 1,
+      status: agentId ? 'ok' : 'error',
+      http_status: agentId ? 200 : null,
+      response_excerpt: agentId ? `agentId=${agentId}` : excerpt,
+      duration_ms: Date.now() - start,
+      next_retry_at: null,
+      payload_digest: await sha256Hex(JSON.stringify({ runId: d.runId, stepIndex: d.stepIndex })),
+    })
+  } catch { /* best-effort */ }
+
+  if (agentId) {
+    pluginLog.info('Skill pipeline step dispatched to Cursor Cloud', {
+      projectId,
+      runId: d.runId,
+      stepIndex: d.stepIndex,
+      agentId,
+    })
+  }
+}
+
+async function failSkillPipelineStep(
+  db: SupabaseClient,
+  d: SkillPipelineStepPayload,
+  notes: string,
+): Promise<void> {
+  const now = new Date().toISOString()
+  pluginLog.warn('Skill pipeline step dispatch failed', { runId: d.runId, stepIndex: d.stepIndex, notes })
+  await db
+    .from('skill_pipeline_step_runs')
+    .update({ status: 'failed', finished_at: now, updated_at: now, notes })
+    .eq('run_id', d.runId)
+    .eq('step_index', d.stepIndex)
+  await db
+    .from('skill_pipeline_runs')
+    .update({ status: 'failed', finished_at: now })
+    .eq('id', d.runId)
+    .in('status', ['pending', 'running'])
 }
 
 async function deliverOne(
