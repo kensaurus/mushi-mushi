@@ -168,41 +168,46 @@ export function ProjectSwitcher() {
                     role="option"
                     aria-selected={isActive}
                     onClick={() => pick(p.project_id)}
-                    className={`flex w-full items-start justify-between gap-2 px-2.5 py-2 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
+                    className={`flex w-full flex-col gap-1 px-2.5 py-2 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
                       isActive ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
                     }`}
                   >
-                    <ProjectFavicon
-                      project_id={p.project_id}
-                      project_name={p.project_name}
-                      project_slug={p.project_slug}
-                      sdk_origin={sdkOriginFromSetupProject(p)}
-                      size={16}
-                      className="mt-0.5"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{p.project_name}</div>
-                      <Tooltip
-                        content={<MetricTooltipContent data={buildProjectSetupTooltip(p)} />}
-                        side="left"
-                        nowrap={false}
-                        portal
-                      >
-                        <div className="mt-0.5 cursor-help truncate text-3xs text-fg-faint">
-                          {p.report_count} reports · {p.required_complete}/{p.required_total} setup
-                        </div>
-                      </Tooltip>
+                    <div className="flex w-full items-start justify-between gap-2">
+                      <ProjectFavicon
+                        project_id={p.project_id}
+                        project_name={p.project_name}
+                        project_slug={p.project_slug}
+                        sdk_origin={sdkOriginFromSetupProject(p)}
+                        size={16}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{p.project_name}</div>
+                        <Tooltip
+                          content={<MetricTooltipContent data={buildProjectSetupTooltip(p)} />}
+                          side="left"
+                          nowrap={false}
+                          portal
+                        >
+                          <div className="mt-0.5 cursor-help truncate text-3xs text-fg-faint">
+                            {p.report_count} reports · {p.required_complete}/{p.required_total} setup
+                          </div>
+                        </Tooltip>
+                        <ProjectSnapshotMeta
+                          snapshot={snapshots.byId.get(p.project_id)}
+                          compact
+                          linkless
+                        />
+                      </div>
+                      {isActive && <span className="shrink-0 text-2xs text-brand">✓</span>}
+                    </div>
+                    <div className="flex justify-end">
                       <ProjectHeartbeatStrip
                         project={p}
                         adminEndpointHost={setup.data?.admin_endpoint_host}
-                      />
-                      <ProjectSnapshotMeta
-                        snapshot={snapshots.byId.get(p.project_id)}
-                        compact
-                        linkless
+                        placement="corner"
                       />
                     </div>
-                    {isActive && <span className="text-2xs text-brand">✓</span>}
                   </button>
                 </li>
               )

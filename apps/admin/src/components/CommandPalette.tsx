@@ -102,6 +102,20 @@ export function CommandPalette() {
     if (!isOpen) setQuery('')
   }, [isOpen])
 
+  // Close on Escape — cmdk's bare <Command> (no Dialog wrapper) does not
+  // wire this automatically; without it the overlay blocks the page after Esc.
+  useEffect(() => {
+    if (!isOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      close()
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [isOpen, close])
+
   // Debounced live search. Aborts on query change so a slow request never
   // clobbers the results for a newer query.
   useEffect(() => {
@@ -221,7 +235,7 @@ export function CommandPalette() {
           className="overflow-y-auto flex-1 min-h-0 py-1 cmdk-list"
         >
           <Command.Empty className="px-4 py-6 text-center text-xs text-fg-muted">
-            No matches. Try "reports", "prompt", or a bug description.
+            No matches. Try "catalog", "reports", "skills", or a bug description.
           </Command.Empty>
 
           {/* Page-contributed actions — promoted above everything else so

@@ -1319,6 +1319,116 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  // ── Skill Pipeline MCP tools ──────────────────────────────────────────────
+  server.registerTool(
+    'list_skills',
+    {
+      title: titleOf('list_skills'),
+      description: descOf('list_skills'),
+      annotations: annotationsFor('list_skills'),
+      inputSchema: {
+        category: z.string().optional().describe('Filter by category: workflow, debug, test, audit, enhance, …'),
+        search: z.string().optional().describe('Free-text search across slug, title, description'),
+        page: z.number().optional().describe('Page number (default 1)'),
+        limit: z.number().optional().describe('Max results per page (default 200, max 200)'),
+      },
+    },
+    async (args) => {
+      const qs = new URLSearchParams()
+      if (args.category) qs.set('category', args.category)
+      if (args.search) qs.set('q', args.search)
+      if (args.page) qs.set('page', String(args.page))
+      qs.set('limit', String(Math.min(args.limit ?? 200, 200)))
+      // apiCall unwraps the `{ ok, data }` envelope, so `data` is the skill array.
+      const data = await apiCall<unknown[]>(`/v1/admin/skills?${qs}`)
+      const skills = Array.isArray(data) ? data : []
+      return jsonText({ skills, count: skills.length })
+    },
+  )
+
+  server.registerTool(
+    'get_skill',
+    {
+      title: titleOf('get_skill'),
+      description: descOf('get_skill'),
+      annotations: annotationsFor('get_skill'),
+      inputSchema: {
+        slug: z.string().describe('Skill slug, e.g. "workflow-fix-and-ship"'),
+      },
+    },
+    async (args) => {
+      const data = await apiCall<unknown>(`/v1/admin/skills/${args.slug}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'start_skill_pipeline',
+    {
+      title: titleOf('start_skill_pipeline'),
+      description: descOf('start_skill_pipeline'),
+      annotations: annotationsFor('start_skill_pipeline'),
+      inputSchema: {
+        root_skill_slug: z.string().describe('Root skill slug to run, e.g. "workflow-fix-and-ship"'),
+        report_id: z.string().optional().describe('Report UUID to attach the pipeline to'),
+        mode: z.enum(['handoff', 'cloud']).optional().describe('handoff (default): get context packet for local agent. cloud: auto-dispatch via Cursor Cloud.'),
+        project_id: z.string().optional().describe('Project UUID. Falls back to the configured project.'),
+      },
+    },
+    async (args) => {
+      const resolvedProjectId = args.project_id ?? projectId
+      if (!resolvedProjectId) return jsonText({ error: 'No project_id provided or configured.' })
+      // apiCall unwraps to the run row (includes id, chain_slugs, context_packet).
+      // Spread args first so the resolved project_id always wins.
+      const data = await apiCall<Record<string, unknown>>(
+        '/v1/admin/skills/pipelines',
+        { method: 'POST', body: JSON.stringify({ ...args, project_id: resolvedProjectId }) },
+      )
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_pipeline_run',
+    {
+      title: titleOf('get_pipeline_run'),
+      description: descOf('get_pipeline_run'),
+      annotations: annotationsFor('get_pipeline_run'),
+      inputSchema: {
+        run_id: z.string().describe('Pipeline run UUID'),
+      },
+    },
+    async (args) => {
+      const data = await apiCall<unknown>(`/v1/admin/skills/pipelines/${args.run_id}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'checkin_pipeline_step',
+    {
+      title: titleOf('checkin_pipeline_step'),
+      description: descOf('checkin_pipeline_step'),
+      annotations: annotationsFor('checkin_pipeline_step'),
+      inputSchema: {
+        run_id: z.string().describe('Pipeline run UUID'),
+        step_index: z.number().describe('Step index (0-based)'),
+        status: z.enum(['running', 'passed', 'failed', 'skipped']).describe('Step status'),
+        notes: z.string().optional().describe('Optional notes or output summary'),
+        pr_url: z.string().optional().describe('PR URL opened during this step'),
+        agent_ref: z.string().optional().describe('Cursor agentId or external agent reference'),
+      },
+    },
+    async (args) => {
+      const { run_id, step_index, ...body } = args
+      await apiCall(
+        `/v1/admin/skills/pipelines/${run_id}/steps/${step_index}/checkin`,
+        { method: 'POST', body: JSON.stringify(body) },
+      )
+      return jsonText({ ok: true, message: `Step ${step_index} → ${args.status}` })
+    },
+  )
+
   // Apply scope filtering if granted scopes were provided.
   // All tools are registered above for readability; this block removes the
   // ones the caller's API key does not have access to. When `scopes` is

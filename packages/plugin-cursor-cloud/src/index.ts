@@ -272,6 +272,136 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
         }
         console.warn('[cursor-cloud] qa_story.failed dispatched', JSON.stringify(result))
       },
+
+      // ── Skill pipeline step dispatch (Phase 5) ───────────────────────────
+      // When a pipeline run is started in 'cloud' mode, the skills.ts route
+      // fires this event for each step. The plugin creates a Cursor Cloud
+      // agent run whose prompt is the pre-composed context_packet for that
+      // step, stores the agentId on the step row, and reports back to Mushi
+      // via the check-in endpoint.
+      'skill_pipeline.step.dispatched': async (e) => {
+        const data = e.data as {
+          runId: string
+          stepIndex: number
+          skillSlug: string
+          contextPacket: string
+          projectId: string
+        }
+
+        const repoUrl = cfg.repoUrl ?? ''
+        if (!repoUrl) {
+          console.warn('[cursor-cloud] skill_pipeline.step.dispatched skipped: repoUrl not configured.')
+          return
+        }
+
+        let run: CursorAgentRunResponse
+        try {
+          run = await withRetry(
+            () =>
+              createCursorAgentRun(
+                resolvedCfg,
+                {
+                  repoUrl,
+                  prompt: buildPromptFromSkillStep(data),
+                },
+                f,
+              ),
+            { maxAttempts: 3 },
+          )
+        } catch (err) {
+          console.error('[cursor-cloud] skill_pipeline step dispatch failed', String(err))
+          const mushiUrl =
+            (typeof process !== 'undefined' ? process.env.MUSHI_API_URL : undefined) ?? 'https://api.mushi.ai'
+          const mushiKey =
+            (typeof process !== 'undefined' ? process.env.MUSHI_API_KEY : undefined) ?? ''
+          if (mushiKey) {
+            try {
+              await f(`${mushiUrl}/v1/admin/skills/pipelines/${data.runId}/steps/${data.stepIndex}/checkin`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Mushi-Api-Key': mushiKey,
+                },
+                body: JSON.stringify({
+                  status: 'failed',
+                  notes: `Cursor Cloud dispatch failed: ${String(err).slice(0, 400)}`,
+                }),
+              })
+            } catch { /* best-effort */ }
+          } else {
+            console.warn(
+              `[cursor-cloud] MUSHI_API_KEY unset — cannot report the failed dispatch for run ${data.runId} step ${data.stepIndex}. ` +
+              `The step will remain 'running' server-side until it is manually checked in.`,
+            )
+          }
+          return
+        }
+
+        console.log('[cursor-cloud] skill_pipeline step dispatched', {
+          runId: data.runId,
+          stepIndex: data.stepIndex,
+          agentId: run.agentId,
+        })
+
+        // Report back to Mushi: update the step row with the agentId.
+        // The console React Flow canvas will update via Realtime.
+        // Use a best-effort POST to the check-in endpoint.
+        const mushiUrl =
+          (typeof process !== 'undefined' ? process.env.MUSHI_API_URL : undefined) ?? 'https://api.mushi.ai'
+        const mushiKey =
+          (typeof process !== 'undefined' ? process.env.MUSHI_API_KEY : undefined) ?? ''
+
+        if (mushiKey) {
+          try {
+            await f(`${mushiUrl}/v1/admin/skills/pipelines/${data.runId}/steps/${data.stepIndex}/checkin`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Mushi-Api-Key': mushiKey,
+              },
+              body: JSON.stringify({
+                status: 'running',
+                agent_ref: run.agentId,
+                notes: `Cursor Cloud agent dispatched (model: ${model})`,
+              }),
+            })
+          } catch (err) {
+            console.warn('[cursor-cloud] checkin failed (best-effort)', String(err))
+          }
+        } else {
+          console.warn(
+            `[cursor-cloud] MUSHI_API_KEY unset — agent ${run.agentId} was dispatched for run ${data.runId} step ${data.stepIndex} ` +
+            `but its agent_ref/running status cannot be reported back. The console flow will not reflect this step until it is manually checked in.`,
+          )
+        }
+      },
     },
   })
+}
+
+function buildPromptFromSkillStep(data: {
+  runId: string
+  stepIndex: number
+  skillSlug: string
+  contextPacket: string
+}): string {
+  return [
+    `# Mushi Skill Pipeline — Step ${data.stepIndex + 1}`,
+    ``,
+    `Skill: \`${data.skillSlug}\``,
+    `Pipeline run: ${data.runId}`,
+    ``,
+    `You are executing step ${data.stepIndex + 1} of a Mushi skill pipeline. ` +
+      `The full context packet below contains your instructions plus the complete report context.`,
+    ``,
+    `When you have completed this step, call the Mushi MCP tool \`checkin_pipeline_step\` with:`,
+    `  run_id: "${data.runId}"`,
+    `  step_index: ${data.stepIndex}`,
+    `  status: "passed" (or "failed" if you could not complete it)`,
+    `  pr_url: <your PR URL if you opened one>`,
+    ``,
+    `─── Context Packet ────────────────────────────────────────────────────`,
+    ``,
+    data.contextPacket.slice(0, 32_000),
+  ].join('\n')
 }

@@ -143,15 +143,23 @@ function PulseArrow({
   const gId = `pa-${fromColor.replace(/\W/g, '')}-${toColor.replace(/\W/g, '')}`
   const animId = `pm-${fromColor.replace(/\W/g, '')}-${toColor.replace(/\W/g, '')}`
   const fullLabel = `${fromLabel} → ${toLabel}`
+  const shortLabel = `${fromLabel}→${toLabel}`
 
   return (
     <Tooltip content={fullLabel} side="top" portal>
       <div
-        className="hidden md:flex items-center justify-center shrink-0 w-12 lg:w-14 xl:w-16 px-0.5 self-center"
+        className="relative z-20 hidden md:flex flex-col items-center justify-center shrink-0 w-16 lg:w-[4.5rem] xl:w-20 px-0.5 self-center overflow-visible pt-3"
         aria-label={fullLabel}
         role="img"
       >
-        <svg width="64" height="32" viewBox="0 0 64 32" fill="none" className="w-full h-auto">
+        {/* HTML pill — SVG text was clipped by neighbouring tiles in the narrow gutter. */}
+        <span
+          className="absolute top-0 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-edge/70 bg-surface-overlay/95 px-1.5 py-px text-3xs font-semibold uppercase tracking-wide text-fg-muted shadow-sm pointer-events-none"
+          title={fullLabel}
+        >
+          {shortLabel}
+        </span>
+        <svg width="64" height="28" viewBox="0 0 64 28" fill="none" className="w-full h-auto">
           <defs>
             <linearGradient id={gId} x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor={fromColor} />
@@ -166,25 +174,15 @@ function PulseArrow({
               }
             `}</style>
           )}
-          {/* Label lives inside the SVG — one line above the rail, no extra box */}
-          <text
-            x="32"
-            y="8"
-            textAnchor="middle"
-            fill="var(--color-fg-muted)"
-            style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.04em' }}
-          >
-            {fromLabel} → {toLabel}
-          </text>
           {/* Surface casing */}
-          <path d="M2 20 L42 20" stroke="var(--color-surface-root)" strokeWidth="8" strokeLinecap="round" />
+          <path d="M2 16 L42 16" stroke="var(--color-surface-root)" strokeWidth="8" strokeLinecap="round" />
           {/* Wide track */}
-          <path d="M2 20 L42 20" stroke={toColor} strokeWidth="6" strokeLinecap="round" opacity="0.22" />
+          <path d="M2 16 L42 16" stroke={toColor} strokeWidth="6" strokeLinecap="round" opacity="0.22" />
           {/* Base rail */}
-          <path d="M2 20 L42 20" stroke={toColor} strokeWidth="2.5" strokeLinecap="round" opacity="0.6" />
+          <path d="M2 16 L42 16" stroke={toColor} strokeWidth="2.5" strokeLinecap="round" opacity="0.6" />
           {/* Gradient dashes */}
           <path
-            d="M2 20 L42 20"
+            d="M2 16 L42 16"
             stroke={`url(#${gId})`}
             strokeWidth="3"
             strokeLinecap="round"
@@ -192,8 +190,8 @@ function PulseArrow({
             style={{ animation: animated ? `${animId} 0.85s linear infinite` : 'none' }}
           />
           {/* Arrowhead */}
-          <path d="M38 15 L52 20 L38 25 Z" fill="var(--color-surface-root)" />
-          <path d="M40 16.5 L49 20 L40 23.5 Z" fill={toColor} stroke="var(--color-surface-root)" strokeWidth="0.75" />
+          <path d="M38 11 L52 16 L38 21 Z" fill="var(--color-surface-root)" />
+          <path d="M40 12.5 L49 16 L40 19.5 Z" fill={toColor} stroke="var(--color-surface-root)" strokeWidth="0.75" />
         </svg>
       </div>
     </Tooltip>
@@ -419,7 +417,7 @@ export function PipelineStatusRibbon() {
       {/* Mobile/tablet: 2×2 grid. Desktop: tiles + fixed-width arrow gutters. */}
       <div
         id="pipeline-status-ribbon-tiles"
-        className="grid grid-cols-2 gap-2 px-1.5 pb-1.5 pt-1.5 md:flex md:items-stretch md:gap-1"
+        className="grid grid-cols-2 gap-2 px-1.5 pb-1.5 pt-1.5 md:flex md:items-stretch md:gap-1 overflow-visible"
       >
         {tiles.map((tile, i) => {
           const tone = TONE_CLASS[tile.tone]
@@ -428,7 +426,7 @@ export function PipelineStatusRibbon() {
             <Fragment key={tile.stage}>
               <Link
                 to={tile.to}
-                className={`group relative flex w-full items-center gap-2.5 rounded-md border border-edge-subtle/80 border-l-[4px] bg-surface-raised/80 px-2.5 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
+                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle/80 border-l-[4px] bg-surface-raised/80 px-2.5 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
                   focusRibbonStage === tile.stage
                     ? 'ring-2 ring-brand/40 shadow-sm'
                     : ''

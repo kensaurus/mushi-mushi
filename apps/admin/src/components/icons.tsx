@@ -781,3 +781,16 @@ export function IconPagerDuty(p: IconProps) {
   </>)
 }
 
+// Chain-link / pipeline — "Skills": three circles connected by a flowing
+// line, evoking a skill chain or pipeline of steps.
+export function IconSkills(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="3" cy="8" r="1.8" />
+    <circle cx="8" cy="8" r="1.8" />
+    <circle cx="13" cy="8" r="1.8" />
+    <line x1="4.8" y1="8" x2="6.2" y2="8" />
+    <line x1="9.8" y1="8" x2="11.2" y2="8" />
+    <path d="M6 5.5 Q8 3.5 10 5.5" fill="none" />
+  </>)
+}
+

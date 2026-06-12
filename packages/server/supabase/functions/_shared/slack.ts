@@ -22,6 +22,16 @@
  *   fix-worker / copilot
  *     → sendBotMessage({ threadTs }) once PR is opened
  *
+ * Block layout (report notifications)
+ * ------------------------------------
+ *   header          — severity + category + project
+ *   section         — bold summary (+ optional screenshot)
+ *   context         — icon chips: location, confidence, reporter, env, page link
+ *   actions         — Triage → + Dispatch fix (or Install GitHub App / Enable Autofix)
+ *   context         — report id (+ session id)
+ *
+ * Delivery wraps blocks in a severity-colored attachment for the left stripe.
+ *
  * Security note:
  *   SLACK_BOT_TOKEN must be the Bot User OAuth Token (xoxb-*) for `chat.postMessage`.
  *   Do NOT put it in the repo or in project_settings — keep it as a Supabase secret.
@@ -31,7 +41,7 @@ import { log } from './logger.ts'
 
 const slackLog = log.child('slack')
 
-interface SlackReportPayload {
+export interface SlackReportPayload {
   projectName: string
   category: string
   severity: string
@@ -98,96 +108,152 @@ const SEVERITY_COLOR: Record<string, string> = {
   low: '#3B82F6',      // blue-500
 }
 
+/** Human-readable severity label for headers and fallback text. */
+function titleCaseSeverity(severity: string): string {
+  if (!severity) return 'Unknown'
+  return severity.charAt(0).toUpperCase() + severity.slice(1).toLowerCase()
+}
+
+/** Derive environment badge from the reporter's page URL. */
+function inferEnvironmentLabel(pageUrl: string): string {
+  if (!pageUrl) return ':grey_question: Unknown'
+  try {
+    const host = new URL(pageUrl).hostname.toLowerCase()
+    if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) {
+      return ':hammer_and_wrench: Local'
+    }
+    if (/staging|stage|preview|dev\.|sandbox|test\./.test(host)) {
+      return ':test_tube: Staging'
+    }
+    return ':globe_with_meridians: Production'
+  } catch {
+    return ':grey_question: Unknown'
+  }
+}
+
+/** Short, clickable label for an affected page URL. */
+function pageLinkLabel(pageUrl: string): string {
+  if (!pageUrl) return 'Unknown page'
+  try {
+    const url = new URL(pageUrl)
+    const path = url.pathname.replace(/^\//, '') || url.hostname
+    const tab = url.searchParams.get('tab')
+    return tab ? `${path} › ${tab}` : path
+  } catch {
+    return truncate(pageUrl, 48)
+  }
+}
+
+function reporterLabel(payload: SlackReportPayload): string {
+  if (payload.reporterDisplayName) {
+    return payload.reporterVerified
+      ? `${payload.reporterDisplayName} ✓`
+      : `${payload.reporterDisplayName} (unverified)`
+  }
+  return `\`${payload.reporterToken.slice(0, 8)}…\` (anon)`
+}
+
+/** Plain-text fallback for notifications — short; details live in blocks only. */
+export function buildReportFallbackText(payload: SlackReportPayload): string {
+  const sev = titleCaseSeverity(payload.severity)
+  const emoji = CATEGORY_EMOJI[payload.category] ?? '🐛'
+  const dedup = payload.dedupCount && payload.dedupCount > 1 ? ` (${payload.dedupCount}×)` : ''
+  return `${emoji} ${sev} ${payload.category} · ${payload.projectName}${dedup}`
+}
+
+/** Compact metadata chips for a single context row (no labeled field grid). */
+function buildMetaContextLine(payload: SlackReportPayload): string {
+  const parts: string[] = []
+
+  if (payload.component) {
+    parts.push(`:file_folder: ${payload.component}`)
+  }
+  if (payload.confidence != null) {
+    parts.push(`:brain: ${Math.round(payload.confidence * 100)}%`)
+  }
+  parts.push(`:bust_in_silhouette: ${reporterLabel(payload)}`)
+  parts.push(inferEnvironmentLabel(payload.pageUrl))
+
+  if (payload.pageUrl) {
+    parts.push(`:link: <${payload.pageUrl}|${pageLinkLabel(payload.pageUrl)}>`)
+  }
+  if (payload.dedupCount && payload.dedupCount > 1) {
+    parts.push(`:repeat: ${payload.dedupCount}×`)
+  }
+  if (payload.sentryIssueUrl) {
+    parts.push(`:rotating_light: <${payload.sentryIssueUrl}|Sentry>`)
+  }
+
+  return parts.join('  ·  ')
+}
+
+/** Wrap blocks in a colored attachment for the severity sidebar stripe. */
+export function wrapReportAttachment(
+  payload: SlackReportPayload,
+  blocks: unknown[],
+): unknown[] {
+  return [{
+    color: severityAttachmentColor(payload.severity),
+    blocks,
+  }]
+}
+
 export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
   const base = adminBaseUrl()
   const reportUrl = base ? `${base}/reports/${encodeURIComponent(payload.reportId)}` : null
   const severityBadge = SEVERITY_EMOJI[payload.severity] ?? '\u{26AA}'
-  const categoryBadge = CATEGORY_EMOJI[payload.category] ?? '\u{1F41B}'
-  const severityColor = SEVERITY_COLOR[payload.severity] ?? '#64748B'
+  const sevLabel = titleCaseSeverity(payload.severity)
+  const canDispatch = payload.githubAppInstalled !== false && payload.autofixEnabled !== false
+  const setupUrl = base ? `${base}/integrations/config` : null
 
-  // ── Header ─────────────────────────────────────────────────────────────────
   const blocks: unknown[] = [
     {
       type: 'header',
       text: {
         type: 'plain_text',
-        text: `${categoryBadge} ${payload.severity.toUpperCase()} ${payload.category} · ${payload.projectName}`,
+        text: truncate(
+          `${severityBadge} ${sevLabel} ${payload.category} · ${payload.projectName}${
+            payload.dedupCount && payload.dedupCount > 1 ? ` (${payload.dedupCount}×)` : ''
+          }`,
+          150,
+        ),
         emoji: true,
       },
     },
-    // Severity color bar via a divider-emoji hack (Block Kit doesn't support
-    // color bars natively; we use a context element with the colored square emoji)
-    {
-      type: 'context',
-      elements: [
-        {
-          type: 'mrkdwn',
-          text: `${severityBadge} *${payload.severity}*  ·  ${categoryBadge} ${payload.category}${
-            payload.component ? `  ·  :file_folder: *${payload.component}*` : ''
-          }${
-            payload.confidence != null
-              ? `  ·  :brain: confidence ${Math.round(payload.confidence * 100)}%`
-              : ''
-          }${
-            payload.dedupCount && payload.dedupCount > 1
-              ? `  ·  :repeat: seen *${payload.dedupCount}×*`
-              : ''
-          }`,
-        },
-      ],
-    },
   ]
 
-  // ── Summary ─────────────────────────────────────────────────────────────────
-  blocks.push({
+  // Summary — once, bold (header + fallback already carry severity/project)
+  const summaryBlock: Record<string, unknown> = {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: `*${payload.summary || '_no summary_'}*`,
+      text: payload.summary?.trim()
+        ? `*${payload.summary.trim()}*`
+        : '_No summary provided_',
     },
-    ...(payload.screenshotUrl
-      ? {
-          accessory: {
-            type: 'image',
-            image_url: payload.screenshotUrl,
-            alt_text: 'Screenshot captured by reporter',
-          },
-        }
-      : {}),
+  }
+  if (payload.screenshotUrl) {
+    summaryBlock.accessory = {
+      type: 'image',
+      image_url: payload.screenshotUrl,
+      alt_text: 'Screenshot',
+    }
+  }
+  blocks.push(summaryBlock)
+
+  // Single scannable metadata row (icons, not labeled columns)
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: buildMetaContextLine(payload) }],
   })
 
-  // ── Reporter identity + session ─────────────────────────────────────────────
-  const reporterLabel = payload.reporterDisplayName
-    ? `${payload.reporterDisplayName}${payload.reporterVerified ? ' ✓' : ' (unverified)'}`
-    : `\`${payload.reporterToken.slice(0, 8)}\u2026\` (anon)`
-  const sessionLabel = payload.sessionId
-    ? `*Session:* \`${payload.sessionId.slice(0, 8)}\u2026\``
-    : null
-
-  const contextElements: unknown[] = [
-    { type: 'mrkdwn', text: `:bust_in_silhouette: *Reporter:* ${reporterLabel}` },
-    { type: 'mrkdwn', text: `:link: *Page:* \`${truncate(payload.pageUrl || 'unknown', 60)}\`` },
-    { type: 'mrkdwn', text: `:mag: *ID:* \`${payload.reportId.slice(0, 8)}\u2026\`` },
-  ]
-  if (sessionLabel) contextElements.push({ type: 'mrkdwn', text: sessionLabel })
-  if (payload.sentryIssueUrl) {
-    contextElements.push({
-      type: 'mrkdwn',
-      text: `:rotating_light: <${payload.sentryIssueUrl}|Sentry issue>`,
-    })
-  }
-
-  blocks.push({ type: 'context', elements: contextElements })
-
-  // ── Actions ─────────────────────────────────────────────────────────────────
+  // CTAs: Triage always; Dispatch or Setup as second button
   if (reportUrl) {
-    const canDispatch = payload.githubAppInstalled !== false && payload.autofixEnabled !== false
-
     const actionElements: unknown[] = [
       {
         type: 'button',
         style: 'primary',
-        text: { type: 'plain_text', text: 'Triage \u2192', emoji: true },
+        text: { type: 'plain_text', text: 'Triage →', emoji: true },
         url: reportUrl,
         action_id: `open_report:${payload.reportId}`,
       },
@@ -196,36 +262,32 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
     if (canDispatch) {
       actionElements.push({
         type: 'button',
-        text: { type: 'plain_text', text: ':robot_face: Dispatch fix', emoji: true },
+        text: { type: 'plain_text', text: 'Dispatch fix', emoji: true },
         action_id: `dispatch_fix:${payload.reportId}`,
         value: payload.reportId,
         confirm: {
-          title: { type: 'plain_text', text: 'Dispatch fix?' },
+          title: { type: 'plain_text', text: 'Dispatch auto-fix?' },
           text: {
             type: 'mrkdwn',
-            text: `Auto-fix agent will open a draft PR for *${payload.summary?.slice(0, 80) ?? 'this report'}*.\n\nConfirm to start the worker.`,
+            text: `Open a draft PR for this report?`,
           },
           confirm: { type: 'plain_text', text: 'Dispatch' },
           deny: { type: 'plain_text', text: 'Cancel' },
         },
       })
-    } else {
-      // Preflight failed — show a setup link instead of a broken dispatch button
-      const setupUrl = base ? `${base}/integrations/config` : null
-      if (setupUrl) {
-        actionElements.push({
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: payload.githubAppInstalled === false
-              ? ':warning: Install GitHub App to dispatch'
-              : ':warning: Enable Autofix to dispatch',
-            emoji: true,
-          },
-          url: setupUrl,
-          action_id: `setup_autofix:${payload.reportId}`,
-        })
-      }
+    } else if (setupUrl) {
+      actionElements.push({
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: payload.githubAppInstalled === false
+            ? 'Install GitHub App'
+            : 'Enable Autofix',
+          emoji: true,
+        },
+        url: setupUrl,
+        action_id: `setup_autofix:${payload.reportId}`,
+      })
     }
 
     blocks.push({
@@ -234,6 +296,16 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
       elements: actionElements,
     })
   }
+
+  // Minimal footer — IDs only
+  const footerParts = [`\`${payload.reportId.slice(0, 8)}…\``]
+  if (payload.sessionId) {
+    footerParts.push(`session \`${payload.sessionId.slice(0, 8)}…\``)
+  }
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: footerParts.join('  ·  ') }],
+  })
 
   return blocks
 }
@@ -385,6 +457,16 @@ export function buildQaStoryRunBlocks(payload: QaRunPayload): unknown[] {
     elements: actionElements,
   })
 
+  blocks.push({
+    type: 'context',
+    elements: [{
+      type: 'mrkdwn',
+      text: `Run \`${payload.runId.slice(0, 8)}…\`  ·  Story \`${payload.storyId.slice(0, 8)}…\`  ·  via Mushi QA`,
+    }],
+  })
+
+  blocks.push({ type: 'divider' })
+
   return blocks
 }
 
@@ -409,8 +491,11 @@ async function postToSlack(webhookUrl: string, body: object): Promise<void> {
 export async function sendSlackNotification(webhookUrl: string, payload: SlackPayload): Promise<void> {
   if (isReportPayload(payload)) {
     const blocks = buildReportBlocks(payload)
-    const fallback = `${payload.category} report in ${payload.projectName}: ${payload.summary}`
-    await postToSlack(webhookUrl, { text: fallback, blocks })
+    const fallback = buildReportFallbackText(payload)
+    await postToSlack(webhookUrl, {
+      text: fallback,
+      attachments: wrapReportAttachment(payload, blocks),
+    })
     return
   }
   await postToSlack(webhookUrl, { text: payload.text })
@@ -426,8 +511,10 @@ export async function sendSlackText(webhookUrl: string, text: string): Promise<v
 export interface BotMessageOptions {
   /** Slack channel ID (e.g. C0B82A322RW). Falls back to SLACK_CHANNEL_ID env var. */
   channel?: string
-  /** Block Kit blocks array. */
+  /** Block Kit blocks array. Prefer `attachments` for severity-colored report cards. */
   blocks?: unknown[]
+  /** Legacy attachments wrapper (color bar + nested blocks). */
+  attachments?: unknown[]
   /** Plain-text fallback (required by Slack if blocks are provided). */
   text: string
   /** When set, posts as a threaded reply to this message timestamp. */
@@ -494,7 +581,8 @@ export async function sendBotMessage(opts: BotMessageOptions): Promise<BotMessag
     channel,
     text: opts.text,
   }
-  if (opts.blocks?.length) body.blocks = opts.blocks
+  if (opts.attachments?.length) body.attachments = opts.attachments
+  else if (opts.blocks?.length) body.blocks = opts.blocks
   if (opts.threadTs) body.thread_ts = opts.threadTs
 
   try {
@@ -527,22 +615,22 @@ export async function sendReportNotification(
   payload: SlackReportPayload,
   opts: { channelId?: string; webhookUrl?: string },
 ): Promise<string | null> {
+  const blocks = buildReportBlocks(payload)
+  const fallback = buildReportFallbackText(payload)
+  const attachments = wrapReportAttachment(payload, blocks)
+
   const botToken = Deno.env.get('SLACK_BOT_TOKEN')
   if (botToken) {
-    const blocks = buildReportBlocks(payload)
-    const fallback = `${CATEGORY_EMOJI[payload.category] ?? '\u{1F41B}'} New ${payload.severity} ${payload.category} in ${payload.projectName}: ${payload.summary}`
     const result = await sendBotMessage({
       channel: opts.channelId ?? undefined,
-      blocks,
+      attachments,
       text: fallback,
     })
     return result.ts
   }
   // Legacy webhook fallback
   if (opts.webhookUrl) {
-    const blocks = buildReportBlocks(payload)
-    const fallback = `${payload.category} report in ${payload.projectName}: ${payload.summary}`
-    await postToSlack(opts.webhookUrl, { text: fallback, blocks })
+    await postToSlack(opts.webhookUrl, { text: fallback, attachments })
   }
   return null
 }

@@ -1489,6 +1489,135 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
 
     return c.json({ ok: true, data: { inserted, total: spans.length } }, 201);
   });
+
+  // ── POST /v1/ingest/metrics — Code-health CI ingest ───────────────────────
+  //
+  // Called from host-app CI pipelines (e.g. yen-yen bundle-budget.yml) to push
+  // bundle-size time-series data and god-file / bundle-regression findings.
+  //
+  // Auth: API key (same as all other SDK ingest endpoints).
+  // Rate: 60 calls/minute per project — generous for CI but prevents abuse.
+  // Storage:
+  //   • metrics[] → metric_series rows (project_id, metric_name, dimension, value, ts)
+  //   • findings[] → one gate_runs row (gate='code_health') + gate_findings rows
+  //
+  // The endpoint is intentionally append-only: each CI push creates a new
+  // gate_run row. The admin console's /code-health page shows the latest run.
+  app.post('/v1/ingest/metrics', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const db = getServiceClient();
+
+    // Burst cap: 60 calls/minute per project.
+    try {
+      await db.rpc('report_ingest_rate_limit_claim', {
+        p_project_id: projectId,
+        p_max_per_minute: 60,
+      });
+    } catch (rateErr) {
+      const msg = rateErr instanceof Error ? rateErr.message : String(rateErr);
+      if (msg.includes('rate_limit_exceeded')) {
+        c.header('Retry-After', '60');
+        return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Metric ingest rate limit exceeded. Retry in 60 seconds.' } }, 429);
+      }
+      log.warn('metric ingest rate limit check failed (non-fatal)', { err: msg });
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'Body must be valid JSON' } }, 400);
+    }
+
+    // Runtime Zod validation (imported lazily to keep module parse time down).
+    const { codeHealthIngestSchema } = await import('../../_shared/schemas.ts');
+    const parsed = codeHealthIngestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      return c.json({
+        ok: false,
+        error: {
+          code: 'INVALID_PAYLOAD',
+          message: first ? `${first.path.join('.')}: ${first.message}` : 'Invalid payload',
+        },
+      }, 400);
+    }
+
+    const { metrics = [], findings = [] } = parsed.data;
+    const now = new Date().toISOString();
+
+    // ── 1. Insert metric_series rows ─────────────────────────────────────────
+    let metricsInserted = 0;
+    if (metrics.length > 0) {
+      const rows = metrics.map((m) => ({
+        project_id: projectId,
+        metric_name: m.metric_name,
+        dimension: m.dimension ?? null,
+        value: m.value,
+        ts: m.ts ?? now,
+      }));
+      const { error: metricErr } = await db.from('metric_series').insert(rows);
+      if (metricErr) {
+        log.warn('metric_series insert error (non-fatal)', { err: metricErr.message });
+      } else {
+        metricsInserted = rows.length;
+      }
+    }
+
+    // ── 2. Insert gate_run + gate_findings ────────────────────────────────────
+    let findingsInserted = 0;
+    let gateRunId: string | null = null;
+
+    if (findings.length > 0) {
+      // Derive gate_run status from the worst severity present.
+      const hasError = findings.some((f) => f.severity === 'error');
+      const hasWarn = findings.some((f) => f.severity === 'warn');
+      const gateStatus = hasError ? 'fail' : hasWarn ? 'warn' : 'pass';
+
+      const { data: runRow, error: runErr } = await db
+        .from('gate_runs')
+        .insert({
+          project_id: projectId,
+          gate: 'code_health',
+          status: gateStatus,
+          started_at: now,
+          completed_at: now,
+          findings_count: findings.length,
+          triggered_by: 'ci_push',
+        })
+        .select('id')
+        .single();
+
+      if (runErr || !runRow) {
+        log.warn('gate_runs insert error (non-fatal)', { err: runErr?.message });
+      } else {
+        gateRunId = runRow.id as string;
+
+        const findingRows = findings.map((f) => ({
+          gate_run_id: gateRunId,
+          project_id: projectId,
+          rule_id: f.rule_id,
+          severity: f.severity,
+          file_path: f.file_path ?? null,
+          line: f.line ?? null,
+          message: f.message,
+          suggested_fix: f.suggested_fix ?? null,
+        }));
+
+        const { error: findErr } = await db.from('gate_findings').insert(findingRows);
+        if (findErr) {
+          log.warn('gate_findings insert error (non-fatal)', { err: findErr.message });
+        } else {
+          findingsInserted = findingRows.length;
+        }
+      }
+    }
+
+    return c.json({
+      ok: true,
+      data: { metrics_inserted: metricsInserted, findings_inserted: findingsInserted, gate_run_id: gateRunId },
+    }, 201);
+  });
 }
 
 // ── GitHub App: auto-register repo webhook via installation token ────────────

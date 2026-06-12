@@ -1,0 +1,142 @@
+---
+title: Skill Pipelines
+---
+
+import { Callout, Steps } from 'nextra/components'
+
+# Skill Pipelines
+
+**Route:** `/skills`
+
+Skill Pipelines integrate the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem directly into Mushi triage. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
+
+---
+
+## How it works
+
+```
+git repo skills/SKILL.md (cursor-kenji or any skills.sh-compatible repo)
+  → skill-sync syncs SKILL.md files into the agent_skills catalog (daily cron)
+  → classify-report Stage 2 recommends top 3 skills per report (pgvector similarity)
+  → You start a pipeline run from the Report Detail page (or via CLI/MCP)
+  → Mushi composes a "run packet" — skill instructions + full report context
+  → Console renders the chain as a live React Flow pipeline
+  → Steps update in real-time as your Cursor agent checks them in
+```
+
+---
+
+## The three tabs
+
+### Catalog
+
+Browse the full skill catalog grouped by category (`workflow`, `debug`, `test`, `audit`, `enhance`, …). Search by name or description. Start a pipeline from any skill.
+
+### Pipelines
+
+All pipeline runs for your project — past and active. Click a run to see the live React Flow visualization with step-level status (pending → running → passed / failed). Subscribe to real-time updates without refreshing.
+
+### Sources
+
+Manage the GitHub repos whose SKILL.md files are synced into your project's catalog. The default seed is `kensaurus/cursor-kenji`. Any [skills.sh](https://skills.sh)-compatible repo works.
+
+---
+
+## Execution modes
+
+| Mode | Description | When to use |
+|------|-------------|-------------|
+| **Handoff** (default) | Mushi composes a run packet you paste into Cursor | Local development, free, full Cursor IDE experience |
+| **Cloud** (opt-in) | Each step dispatches a Cursor Cloud agent run automatically | CI pipelines, async execution, PM-driven automation |
+
+---
+
+## Triage links (`?skill=`)
+
+Share a pre-loaded triage link with any team member:
+
+```
+https://console.mushimushi.dev/reports/<report-id>?skill=workflow-fix-and-ship
+```
+
+When opened, the report detail page pre-selects the skill and prompts to start the pipeline. Useful for PMs handing off to devs, or for embedding in Slack/Linear notifications.
+
+---
+
+## CLI quick reference
+
+```bash
+# Browse the skill catalog
+mushi skills list
+mushi skills list --category workflow
+mushi skills list --search "fix bug"
+
+# View full skill instructions
+mushi skills show workflow-fix-and-ship
+
+# Trigger skill sync (after adding a new source)
+mushi skills sync
+
+# Start a pipeline for a report
+mushi pipeline start <reportId> --skill workflow-fix-and-ship
+mushi pipeline start <reportId> --skill workflow-fix-and-ship --mode cloud
+
+# Watch a pipeline run and print the context packet
+mushi pipeline watch <runId>
+
+# Check in a step (report your progress back to Mushi)
+mushi pipeline checkin <runId> --step 0 --status passed
+mushi pipeline checkin <runId> --step 1 --status failed --notes "Build failed: missing dep"
+```
+
+---
+
+## MCP tools
+
+Use these from your Cursor agent to close the loop without leaving the IDE:
+
+| Tool | Scope | Description |
+|------|-------|-------------|
+| `list_skills` | read | Browse the skill catalog |
+| `get_skill` | read | Full skill body + chain |
+| `start_skill_pipeline` | write | Attach a skill to a report and get the run packet |
+| `get_pipeline_run` | read | Fetch the context packet and step statuses |
+| `checkin_pipeline_step` | write | Report step completion — PM sees it live in the console |
+
+---
+
+## PDCA-style improvement loop
+
+If a pipeline step fails, the console offers **Improve and retry** — this creates a child run (with `parent_run_id` and incremented `iteration`) so the PM can loop a feature through a skill like `workflow-build-feature` repeatedly, each iteration accumulating context from the previous run.
+
+---
+
+## Security
+
+<Callout type="info">
+Skill catalog content comes exclusively from **allowlisted GitHub repos** configured in the Sources tab. Arbitrary URLs are never fetched. Every SKILL.md body is scanned for leaked API keys before storage.
+</Callout>
+
+- Allowlisted sources only — no arbitrary URL ingestion
+- Secret-pattern scan before embedding or storing any SKILL.md body
+- Skill content flows *into* LLM prompts only — never executed against raw user strings (air-gap preserved)
+- Description length enforced at ≤ 1024 chars per the Agent Skills spec
+- Run packet capped at 40,000 chars to prevent context overflows
+
+---
+
+## Adding a new skill source
+
+<Steps>
+### Go to Skill Pipelines → Sources
+
+Click **Add source** and enter the GitHub `owner/repo` slug (e.g. `myorg/my-skills-repo`).
+
+### Trigger a sync
+
+Click **Sync now** or run `mushi skills sync`. The `skill-sync` edge function fetches all `skills/*/SKILL.md` files, parses frontmatter, embeds descriptions, and upserts the catalog.
+
+### Browse the new skills
+
+Switch to the **Catalog** tab. New skills appear grouped by category prefix.
+</Steps>

@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { CHART_LOCALE, sparseXLabels } from './chartAxis'
+import { sparseXLabels } from './chartAxis'
 import { InlineProof } from '../report-detail/ReportSurface'
 
 export interface ChartFrameProps {
@@ -29,10 +29,11 @@ export function ChartFrame({
   className = '',
 }: ChartFrameProps) {
   const ticks = yTickLabels.length > 0 ? yTickLabels : ['0']
-  const xSparse = xLabels?.length ? sparseXLabels(xLabels.map(shortenX)) : []
+  const xSparse = xLabels?.length ? sparseXLabels(xLabels) : []
+  const xLast = xLabels ? xLabels.length - 1 : 0
 
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
+    <div className={`flex w-full min-w-0 flex-col gap-1.5 ${className}`}>
       {yAxisCaption && (
         <span className="text-3xs font-medium uppercase tracking-wider text-fg-muted">
           {yAxisCaption}
@@ -55,7 +56,7 @@ export function ChartFrame({
 
         <div className="min-w-0 flex-1">
           <div
-            className="relative border-b border-edge-subtle/80 bg-surface-overlay/30 rounded-sm"
+            className="relative overflow-visible border-b border-edge-subtle/80 bg-surface-overlay/30 rounded-sm"
             style={{ height: `${height}px` }}
           >
             <div
@@ -69,25 +70,38 @@ export function ChartFrame({
                 />
               ))}
             </div>
-            <div className="relative z-[1] h-full px-0.5 pb-px">{children}</div>
+            <div className="relative z-[1] h-full w-full overflow-visible pb-px">{children}</div>
           </div>
 
           {xLabels && xLabels.length > 0 && (
-            <div className="relative mt-1.5 h-5 border-t border-transparent">
-              {xSparse.map(({ text, index }) => {
+            <div className="relative mt-1.5 h-6 border-t border-transparent">
+              {xSparse.map(({ text, index, isToday }) => {
+                const isFirst = index === 0
+                const isEnd = index === xLast
                 const pct =
                   xLabels.length <= 1 ? 0 : (index / (xLabels.length - 1)) * 100
+                const alignClass = isFirst
+                  ? 'left-0 items-start translate-x-0'
+                  : isEnd
+                    ? 'right-0 left-auto items-end translate-x-0'
+                    : 'items-center -translate-x-1/2'
                 return (
                   <span
                     key={`${text}-${index}`}
-                    className="absolute flex flex-col items-center -translate-x-1/2"
-                    style={{ left: `${pct}%` }}
+                    className={`absolute flex flex-col ${alignClass}`}
+                    style={isEnd ? undefined : { left: `${pct}%` }}
                   >
                     <span
                       className="mb-0.5 h-1.5 w-px bg-edge-subtle"
                       aria-hidden="true"
                     />
-                    <span className="text-3xs font-mono text-fg-muted tabular-nums whitespace-nowrap">
+                    <span
+                      className={`text-3xs tabular-nums whitespace-nowrap ${
+                        isToday
+                          ? 'font-semibold text-brand'
+                          : 'font-mono text-fg-muted'
+                      }`}
+                    >
                       {text}
                     </span>
                   </span>
@@ -107,16 +121,3 @@ export function ChartFrame({
   )
 }
 
-function shortenX(label: string): string {
-  if (/^\d{4}-\d{2}-\d{2}/.test(label)) {
-    const d = new Date(`${label.slice(0, 10)}T00:00:00Z`)
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleDateString(CHART_LOCALE, {
-        month: 'short',
-        day: 'numeric',
-        timeZone: 'UTC',
-      })
-    }
-  }
-  return label
-}

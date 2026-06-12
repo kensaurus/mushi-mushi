@@ -16,6 +16,7 @@ export default {
   'anti-gaming': 'Anti-gaming',
 
   // Do — make the fix
+  'skill-pipelines': 'Skill Pipelines',
   fixes: 'Fix orchestrator',
   repo: 'Repo graph',
   'prompt-lab': 'Prompt lab',

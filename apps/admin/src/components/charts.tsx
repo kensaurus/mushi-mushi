@@ -12,8 +12,16 @@ import { InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { useBrushSelection } from '../lib/useBrushSelection'
 import { ChartFrame } from './charts/ChartFrame'
 import {
+  ChartHoverPopover,
+  dayLabelAt,
+  seriesXPercent,
+  seriesYPercent,
+  useSeriesHover,
+} from './charts/ChartSeriesInteraction'
+import {
   buildYTickValues,
   formatChartCount,
+  formatChartDayLabel,
   formatChartUsd,
   resolveChartMax,
   shortDay,
@@ -67,6 +75,10 @@ export interface KpiTileProps {
   seriesAccent?: string
   /** Optional aria label for the sparkline. Defaults to `${label} trend`. */
   seriesAriaLabel?: string
+  /** ISO day strings aligned 1:1 with `series` — enables labeled axes. */
+  seriesDays?: string[]
+  /** Optional Y-axis caption for the sparkline (e.g. "runs / day"). */
+  seriesYAxisCaption?: string
 }
 
 const TONE_SPARK_ACCENT: Record<Tone, string> = {
@@ -89,8 +101,11 @@ export function KpiTile({
   series,
   seriesAccent,
   seriesAriaLabel,
+  seriesDays,
 }: KpiTileProps) {
-  const showSpark = Array.isArray(series) && series.length >= 2 && series.some((v) => v > 0)
+  const hasSeries = Array.isArray(series) && series.length >= 2
+  const showSparkAxes = hasSeries && Array.isArray(seriesDays) && seriesDays.length === series!.length
+  const showSpark = hasSeries && (series!.some((v) => v > 0) || showSparkAxes)
   const sparkColour = seriesAccent ?? (accent ? TONE_SPARK_ACCENT[accent] : 'text-fg-faint')
   const inner = (
     <div className="px-3 py-2.5">
@@ -130,12 +145,16 @@ export function KpiTile({
         </InlineProof>
       )}
       {showSpark && (
-        <div className="-mx-1 mt-1.5" aria-hidden={seriesAriaLabel ? undefined : true}>
+        <div className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible" aria-hidden={seriesAriaLabel ? undefined : true}>
           <LineSparkline
             values={series!}
+            timestamps={showSparkAxes ? seriesDays : undefined}
             accent={sparkColour}
             ariaLabel={seriesAriaLabel ?? `${label} trend`}
-            height={18}
+            showAxes={showSparkAxes}
+            scaleToData={showSparkAxes}
+            valueFormat="count"
+            height={showSparkAxes ? 52 : 18}
           />
         </div>
       )}
@@ -227,124 +246,176 @@ export function LineSparkline({
       onRangeSelect({ fromIso, toIso })
     },
   })
+  const { hoverIdx, onMouseMove, onMouseLeave } = useSeriesHover(
+    values.length,
+    showAxes && values.length > 0,
+  )
 
   if (values.length === 0) return null
 
   const min = Math.min(0, ...values)
   const chartMax = resolveChartMax(values, scaleToData)
-  const range = chartMax - min || 1
   const plotHeight = showAxes ? Math.max(height, 56) : height
-  const w = 100
-  const h = plotHeight
-  const step = w / Math.max(1, values.length - 1)
+  const xAt = (i: number) => seriesXPercent(i, values.length, showAxes ? 0 : 2)
+  const yAt = (v: number) => seriesYPercent(v, min, chartMax, showAxes ? 2 : 2)
   const points = values
-    .map(
-      (v, i) =>
-        `${(i * step).toFixed(2)},${(h - ((v - min) / range) * (h - 2) - 1).toFixed(2)}`,
-    )
+    .map((v, i) => `${xAt(i).toFixed(2)},${yAt(v).toFixed(2)}`)
     .join(' ')
 
   const peakIdx = values.reduce((best, v, i) => (v > values[best] ? i : best), 0)
   const peakVal = values[peakIdx] ?? 0
   const rawPeak = Math.max(...values, 0)
   const yTicks = buildYTickValues(rawPeak, min, 4).map((v) => formatChartValue(v, valueFormat))
-  const axisX =
-    xLabels ??
-    (timestamps?.map((t) => shortDay(t.slice(0, 10))) ?? [])
+  const axisXIso =
+    timestamps?.map((t) => t.slice(0, 10)) ?? (xLabels ?? [])
 
-  const preview = brush.isDragging && brush.previewStart != null && brush.previewEnd != null
-    ? {
-        x: Math.min(brush.previewStart, brush.previewEnd) * step,
-        width: Math.abs(brush.previewEnd - brush.previewStart) * step,
-      }
-    : null
+  const interactive = showAxes && values.length > 0
+  const activeIdx =
+    brush.isDragging || hoverIdx == null ? null : hoverIdx
 
-  const svg = (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className={`w-full h-full ${accent} ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
+  const preview =
+    brush.isDragging && brush.previewStart != null && brush.previewEnd != null
+      ? {
+          left: seriesXPercent(Math.min(brush.previewStart, brush.previewEnd), values.length),
+          width:
+            seriesXPercent(Math.max(brush.previewStart, brush.previewEnd), values.length) -
+            seriesXPercent(Math.min(brush.previewStart, brush.previewEnd), values.length),
+        }
+      : null
+
+  const brushable = Boolean(onRangeSelect)
+  const plotShell = (
+    <div
+      className={`relative h-full w-full ${brushable ? 'cursor-crosshair touch-none select-none' : interactive ? 'cursor-crosshair' : ''}`}
       role="img"
       aria-label={ariaLabel}
+      onMouseMove={(e) => {
+        if (!brush.isDragging) onMouseMove(e)
+      }}
+      onMouseLeave={onMouseLeave}
       onPointerDown={brush.onPointerDown}
       onPointerMove={brush.onPointerMove}
       onPointerUp={brush.onPointerUp}
       onPointerCancel={() => brush.cancel()}
     >
-      {showAxes && (
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className={`pointer-events-none absolute inset-0 h-full w-full ${accent}`}
+        aria-hidden="true"
+      >
+        {showAxes && (
+          <polyline
+            points={points}
+            fill="currentColor"
+            fillOpacity={0.08}
+            stroke="none"
+          />
+        )}
         <polyline
           points={points}
-          fill="currentColor"
-          fillOpacity={0.08}
-          stroke="none"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={showAxes ? 1.5 : 1.2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
         />
-      )}
-      <polyline
-        points={points}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={showAxes ? 1.5 : 1.2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {values.map((v, i) => {
-        if (v <= 0) return null
-        const x = values.length > 1 ? i * step : w / 2
-        const y = h - ((v - min) / range) * (h - 2) - 1
-        return (
-          <circle
-            key={i}
-            cx={x}
-            cy={y}
-            r={showAxes ? 1.8 : 0}
-            fill="currentColor"
-            className={showAxes ? 'opacity-90' : 'opacity-0'}
-          />
-        )
-      })}
-      {preview && (
-        <rect
-          x={preview.x}
-          y={0}
-          width={preview.width}
-          height={h}
-          fill="currentColor"
-          opacity={0.15}
-          pointerEvents="none"
-        />
-      )}
-    </svg>
-  )
+        {values.map((v, i) => {
+          if (v <= 0) return null
+          const isPeak = showPeakLabel && peakVal > 0 && i === peakIdx
+          const isActive = activeIdx === i
+          if (showPeakLabel && !isPeak && !isActive) return null
+          return (
+            <circle
+              key={i}
+              cx={xAt(i)}
+              cy={yAt(v)}
+              r={isPeak || isActive ? 2.2 : showAxes ? 1.8 : 0}
+              fill="currentColor"
+              className={isPeak || isActive || showAxes ? 'opacity-90' : 'opacity-0'}
+            />
+          )
+        })}
+      </svg>
 
-  const peakCaption =
-    showPeakLabel && peakVal > 0 ? (
-      <p className="mt-1 text-3xs font-mono text-fg-faint tabular-nums">
-        peak {formatChartValue(peakVal, valueFormat)}
-        {axisX[peakIdx] ? ` · ${axisX[peakIdx]}` : ''}
-      </p>
-    ) : null
+      {/* Peak label rendered as HTML so it is immune to the SVG's
+          preserveAspectRatio="none" distortion. An SVG <text> inside a
+          viewBox="0 0 100 100" stretched over e.g. 250×56 px compresses the
+          font vertically by ×0.56, making fontSize=4 render as ~2.2 px —
+          an unreadable sliver. The HTML span reads pixel metrics correctly. */}
+      {showPeakLabel && peakVal > 0 && activeIdx !== peakIdx && (
+        <span
+          className={`pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap text-3xs font-semibold font-mono tabular-nums leading-none ${accent}`}
+          style={{
+            left: `${xAt(peakIdx)}%`,
+            top: `${yAt(peakVal)}%`,
+            paddingBottom: '4px',
+          }}
+          aria-hidden="true"
+        >
+          {formatChartValue(peakVal, valueFormat)}
+        </span>
+      )}
+
+      {activeIdx != null && values[activeIdx] != null && (
+        <>
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-current opacity-25"
+            style={{ left: `${xAt(activeIdx)}%` }}
+            aria-hidden="true"
+          />
+          <div
+            className={`pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-current bg-surface ${accent}`}
+            style={{
+              left: `${xAt(activeIdx)}%`,
+              top: `${yAt(values[activeIdx])}%`,
+            }}
+            aria-hidden="true"
+          />
+          <ChartHoverPopover
+            dayLabel={dayLabelAt(activeIdx, timestamps, xLabels)}
+            valueLabel={formatChartValue(values[activeIdx], valueFormat)}
+            visible
+            style={{
+              left: `${xAt(activeIdx)}%`,
+              top: `${Math.max(4, yAt(values[activeIdx]) - 6)}%`,
+            }}
+          />
+        </>
+      )}
+
+      {preview && (
+        <div
+          className="pointer-events-none absolute inset-y-0 bg-current opacity-15"
+          style={{ left: `${preview.left}%`, width: `${Math.max(preview.width, 0.5)}%` }}
+          aria-hidden="true"
+        />
+      )}
+    </div>
+  )
 
   if (!showAxes) {
     return (
-      <div>
-        <div style={{ height: `${height}px` }}>{svg}</div>
-        {peakCaption}
+      <div className="w-full min-w-0">
+        <div className="h-full w-full" style={{ height: `${height}px` }}>
+          {plotShell}
+        </div>
       </div>
     )
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <ChartFrame
         height={plotHeight}
         yTickLabels={yTicks}
-        xLabels={axisX.length > 0 ? axisX : undefined}
+        xLabels={axisXIso.length > 0 ? axisXIso : undefined}
         yAxisCaption={yAxisCaption}
         xAxisCaption={xAxisCaption}
       >
-        {svg}
+        {plotShell}
       </ChartFrame>
-      {peakCaption}
     </div>
   )
 }
@@ -396,6 +467,10 @@ export function BarSparkline({
       onRangeSelect({ fromIso, toIso })
     },
   })
+  const { hoverIdx, onMouseMove, onMouseLeave } = useSeriesHover(
+    values.length,
+    showAxes && values.length > 0,
+  )
 
   if (values.length === 0) return null
 
@@ -408,15 +483,19 @@ export function BarSparkline({
   )
   const activeCount = values.filter((v) => v > 0).length
   const showIdleBaseline = showAxes && activeCount < values.length
-  const axisX =
-    xLabels ??
-    (timestamps?.map((t) => shortDay(t.slice(0, 10))) ?? [])
+  const axisXIso =
+    timestamps?.map((t) => t.slice(0, 10)) ?? (xLabels ?? [])
+  const axisXDisplay = axisXIso.map((iso) => formatChartDayLabel(iso))
 
   const bars = (
     <div
-      className={`relative flex h-full items-end gap-[3px] w-full ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
+      className={`relative flex h-full w-full items-end gap-px ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : showAxes ? 'cursor-crosshair' : ''}`}
       role="img"
       aria-label={ariaLabel}
+      onMouseMove={(e) => {
+        if (!brush.isDragging) onMouseMove(e)
+      }}
+      onMouseLeave={onMouseLeave}
       onPointerDown={brush.onPointerDown}
       onPointerMove={brush.onPointerMove}
       onPointerUp={brush.onPointerUp}
@@ -424,18 +503,25 @@ export function BarSparkline({
     >
       {values.map((v, i) => {
         const isPeak = i === peakIdx && v > 0
+        const isHovered = !brush.isDragging && hoverIdx === i
         const isToday = i === values.length - 1
         const label =
-          showBarLabels && v > 0 && (activeCount > 2 || isPeak)
+          v > 0 &&
+          ((showBarLabels && (activeCount > 2 || isPeak)) || (showPeakLabel && isPeak))
             ? formatChartValue(v, valueFormat)
             : null
         const isIdle = v <= 0
+        const dayLabel = axisXDisplay[i] ?? `Day ${i + 1}`
+        const valueLabel = isIdle
+          ? '0'
+          : formatChartValue(v, valueFormat)
         return (
           <div
             key={i}
-            className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+            title={barTitles?.[i]}
+            className={`group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end ${isHovered ? 'z-10' : ''}`}
           >
-            {label && (
+            {label && !isHovered && (
               <span
                 className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-surface-overlay/90 px-1 py-px text-3xs font-mono tabular-nums shadow-sm ${
                   isPeak ? 'text-brand font-semibold' : 'text-fg-muted'
@@ -445,23 +531,29 @@ export function BarSparkline({
                 {label}
               </span>
             )}
+            <ChartHoverPopover
+              dayLabel={dayLabel}
+              valueLabel={valueLabel}
+              visible={isHovered}
+              style={{ left: '50%', bottom: '100%', marginBottom: '4px' }}
+            />
             {isIdle && showIdleBaseline ? (
               <div
-                className={`h-1 w-1 rounded-full bg-fg-faint/30 motion-safe:transition-colors group-hover:bg-fg-faint/50 ${
+                className={`h-1 w-full max-w-[6px] rounded-full bg-fg-faint/30 motion-safe:transition-colors group-hover:bg-fg-faint/50 ${
                   isToday ? 'ring-1 ring-edge-subtle ring-offset-1 ring-offset-transparent' : ''
-                }`}
-                title={barTitles?.[i] ?? `${axisX[i] ?? i}: no spend`}
+                } ${isHovered ? 'bg-fg-faint/60' : ''}`}
               />
             ) : (
               <div
-                className={`mx-auto w-[72%] max-w-[11px] min-w-[4px] ${accent} rounded-t-sm motion-safe:transition-all ${
-                  isPeak ? 'opacity-100 shadow-sm shadow-brand/40' : 'opacity-80 group-hover:opacity-100'
+                className={`w-full min-w-[3px] max-w-none ${accent} rounded-t-sm motion-safe:transition-all ${
+                  isPeak || isHovered
+                    ? 'opacity-100 shadow-sm shadow-brand/40'
+                    : 'opacity-80 group-hover:opacity-100'
                 } ${isToday && v > 0 ? 'ring-1 ring-brand/40 ring-offset-1 ring-offset-transparent' : ''}`}
                 style={{
                   height: `${(v / chartMax) * 100}%`,
                   minHeight: v > 0 ? '4px' : 0,
                 }}
-                title={barTitles?.[i] ?? `${axisX[i] ?? i}: ${formatChartValue(v, valueFormat)}`}
               />
             )}
           </div>
@@ -480,35 +572,27 @@ export function BarSparkline({
     </div>
   )
 
-  const peakCaption =
-    showPeakLabel && peak > 0 ? (
-      <p className="mt-1 text-3xs font-mono text-fg-faint tabular-nums">
-        peak {formatChartValue(peak, valueFormat)}
-        {axisX[peakIdx] ? ` · ${axisX[peakIdx]}` : ''}
-      </p>
-    ) : null
-
   if (!showAxes) {
     return (
-      <div>
-        <div style={{ height: `${height}px` }}>{bars}</div>
-        {peakCaption}
+      <div className="w-full min-w-0">
+        <div className="w-full" style={{ height: `${height}px` }}>
+          {bars}
+        </div>
       </div>
     )
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <ChartFrame
         height={plotHeight}
         yTickLabels={yTicks}
-        xLabels={axisX.length > 0 ? axisX : undefined}
+        xLabels={axisXIso.length > 0 ? axisXIso : undefined}
         yAxisCaption={yAxisCaption}
         xAxisCaption={xAxisCaption}
       >
         {bars}
       </ChartFrame>
-      {peakCaption}
     </div>
   )
 }
@@ -525,42 +609,24 @@ export interface SeverityDay {
   unscored?: number
 }
 
-// Picks ~N evenly-spaced tick indices from an array of length `len`,
-// always including first and last.
-function pickTicks(len: number, n = 5): number[] {
-  if (len <= n) return Array.from({ length: len }, (_, i) => i)
-  const step = (len - 1) / (n - 1)
-  return Array.from({ length: n }, (_, i) => Math.round(i * step))
-}
-
 export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
   const max = Math.max(1, ...data.map((d) => d.total))
   const totalReports = data.reduce((sum, d) => sum + d.total, 0)
-  // Y-axis: show 0, mid, max for quick scale reading
-  const yMid = Math.round(max / 2)
-  // X-axis: ~5 evenly distributed tick indices so labels never collide
-  const tickIdx = new Set(pickTicks(data.length, Math.min(5, data.length)))
+  const plotHeight = 112
+  const yTicks = buildYTickValues(max, 0, 4).map((v) => formatChartCount(v))
+  const dayLabels = data.map((d) => d.day)
   // Only show value labels for bars tall enough that text fits (> 20% of max)
   const labelThreshold = max * 0.20
 
   return (
-    <div>
-      <div className="flex gap-1.5">
-        {/* Y-axis labels */}
+    <div className="w-full min-w-0">
+      <ChartFrame
+        height={plotHeight}
+        yTickLabels={yTicks}
+        xLabels={dayLabels}
+      >
         <div
-          className="flex flex-col justify-between items-end text-3xs text-fg-faint font-mono select-none shrink-0"
-          style={{ height: '7rem' }}
-          aria-hidden="true"
-        >
-          <span className="tabular-nums">{max}</span>
-          <span className="tabular-nums">{yMid}</span>
-          <span>0</span>
-        </div>
-
-        {/* Bar columns */}
-        <div
-          className="flex items-end gap-[2px] flex-1"
-          style={{ height: '7rem' }}
+          className="flex h-full w-full items-end gap-px"
           role="group"
           aria-label={`Daily severity breakdown · ${totalReports} reports across ${data.length} days`}
         >
@@ -578,21 +644,7 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
             )
           })}
         </div>
-      </div>
-
-      {/* X-axis: show evenly spaced date labels, centred under each column */}
-      <div
-        className="flex mt-1 pl-5 text-3xs font-mono text-fg-faint select-none"
-        aria-hidden="true"
-      >
-        {data.map((d, i) => (
-          <div key={d.day} className="flex-1 flex justify-center">
-            {tickIdx.has(i) ? (
-              <span className="truncate tabular-nums">{shortDay(d.day)}</span>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      </ChartFrame>
 
       {/* Legend */}
       <div className="flex flex-wrap gap-1.5 mt-2">

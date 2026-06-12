@@ -125,6 +125,14 @@ export const STATIC_ROUTES: StaticRoute[] = [
     keywords: ['status', 'uptime', 'availability', 'sentry', 'slo', 'monitoring', 'incidents'],
   },
   {
+    id: 'nav:code-health',
+    label: 'Code Health',
+    path: '/code-health',
+    description: 'Bundle-size trends and god-file LOC findings pushed from host-repo CI.',
+    group: 'Check',
+    keywords: ['bundle', 'loc', 'god file', 'refactor', 'gzip', 'code health', 'ci', 'budget', 'file size'],
+  },
+  {
     id: 'nav:intelligence',
     label: 'Intelligence',
     path: '/intelligence',
@@ -139,6 +147,37 @@ export const STATIC_ROUTES: StaticRoute[] = [
     description: 'Pull external context via Firecrawl to ground fixes in fresh docs.',
     group: 'Check',
     keywords: ['firecrawl', 'web search', 'docs', 'scrape', 'crawl', 'knowledge'],
+  },
+  {
+    id: 'nav:skills-catalog',
+    label: 'Skill Catalog',
+    path: '/skills?tab=catalog',
+    description: 'Browse 70+ cursor-kenji agent skills by category — audit, test, enhance, workflow.',
+    group: 'Act',
+    keywords: [
+      'catalog', 'skill catalog', 'skills', 'skill pipelines', 'pipeline', 'pipelines',
+      'cursor-kenji', 'cursor', 'kenji', 'agent skills', 'workflow', 'audit', 'enhance',
+      'handoff', 'skill sync', 'sources', 'kenji skills',
+    ],
+  },
+  {
+    id: 'nav:skills-pipelines',
+    label: 'Skill Pipelines',
+    path: '/skills?tab=pipelines',
+    description: 'Track live pipeline runs, copy handoff packets, and check in each step.',
+    group: 'Act',
+    keywords: [
+      'pipeline runs', 'skill pipeline', 'handoff', 'context packet', 'checkin',
+      'cursor agent', 'pipeline status', 'skills run',
+    ],
+  },
+  {
+    id: 'nav:skills-sources',
+    label: 'Skill Sources',
+    path: '/skills?tab=sources',
+    description: 'Add GitHub repos (e.g. kensaurus/cursor-kenji) and sync SKILL.md files.',
+    group: 'Act',
+    keywords: ['skill sources', 'skill sync', 'cursor-kenji', 'github repo', 'skills.sh'],
   },
   {
     id: 'nav:integrations',
