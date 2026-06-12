@@ -41,6 +41,11 @@ The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-c
 | `report.classified` | Immediately after classification | Investigates the report in your codebase; opens a draft PR if `autoCreatePR` is enabled |
 | `fix.requested` | When a fix is explicitly requested via the Fixes page, MCP, or CLI | Dispatches the agent for the specific report |
 | `qa_story.failed` | When a scheduled QA story fails all assertions | Attempts to heal the failing story by opening a PR |
+| `skill_pipeline.step.dispatched` | When a skill pipeline run in `cloud` mode advances to a step | Runs the step's pre-composed context packet as a Cursor Cloud agent prompt, stores the `agentId` on the step row, and checks the step in via the API |
+
+<Callout type="info">
+For `skill_pipeline.step.dispatched`, the agent dispatches even when the marketplace plugin is not installed — credentials are read from **Integrations → Cursor Cloud**. Set `repoUrl` in the plugin config so the cloud agent knows which repository to operate on; without it the step is skipped with a warning.
+</Callout>
 
 ## Fixes view integration
 

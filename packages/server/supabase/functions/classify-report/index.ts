@@ -556,6 +556,13 @@ ${ontologyContext}${inventoryContext}`;
         model: usedModel,
       });
 
+      // Skill recommendation: find top-3 agent_skills matching this report's
+      // symptom signature via pgvector similarity on description embeddings.
+      // Fire-and-forget so a missing embedding index doesn't gate classification.
+      recommendSkills(db, reportId, projectId, classification).catch((err) =>
+        log.warn('Skill recommendation failed', { err: String(err) }),
+      );
+
       // Knowledge graph (Stage 2): now that we have a real component label
       // (Stage 1 only had the category), wire the component node + affects
       // edge from the report group. Fire-and-forget; graph quality must not
@@ -908,3 +915,114 @@ CRITICAL SECURITY RULES (immutable):
     }
   }),
 );
+
+// ── Skill recommendation ──────────────────────────────────────────────────────
+/**
+ * Post-classification: match the report to the top-3 agent_skills by
+ * embedding similarity on a structured symptom query derived from the
+ * Stage 2 output. Writes reports.recommended_skills as:
+ *   [{ slug, title, rationale }]
+ *
+ * Security: uses the already-air-gapped Stage 2 classification output —
+ * never the raw user description. Skill descriptions from the catalog
+ * (trusted source) are used for matching, not shown to the user.
+ */
+async function recommendSkills(
+  db: ReturnType<typeof getServiceClient>,
+  reportId: string,
+  projectId: string,
+  classification: {
+    category: string;
+    severity: string;
+    summary: string;
+    component?: string;
+    rootCause?: string;
+    suggestedFix?: string;
+  },
+): Promise<void> {
+  const { createEmbedding } = await import('../_shared/embeddings.ts');
+
+  // Build a symptom query from structured Stage 2 output (not raw user text)
+  const query = [
+    `${classification.severity} ${classification.category} bug`,
+    classification.component ? `in ${classification.component}` : '',
+    classification.summary,
+    classification.rootCause ? `Root cause: ${classification.rootCause}` : '',
+    classification.suggestedFix ? `Fix direction: ${classification.suggestedFix}` : '',
+  ].filter(Boolean).join('. ').slice(0, 512);
+
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await createEmbedding(query, { projectId });
+  } catch {
+    // No OpenAI key configured — fall back to category-keyword match
+    return recommendByKeyword(db, reportId, classification.category, classification.severity);
+  }
+
+  // Vector similarity search against agent_skills descriptions
+  const { data: matches } = await db.rpc('match_agent_skills', {
+    query_embedding: JSON.stringify(queryEmbedding),
+    match_threshold: 0.65,
+    match_count: 5,
+  });
+
+  if (!matches || matches.length === 0) {
+    return recommendByKeyword(db, reportId, classification.category, classification.severity);
+  }
+
+  // Pick top 3, build rationale per skill from its description
+  const top3 = (matches as Array<{ slug: string; title: string; description: string; similarity: number }>)
+    .slice(0, 3)
+    .map((m) => ({
+      slug: m.slug,
+      title: m.title,
+      rationale: buildRationale(m.slug, m.description, classification),
+    }));
+
+  await db.from('reports').update({ recommended_skills: top3 }).eq('id', reportId);
+}
+
+function buildRationale(
+  slug: string,
+  description: string,
+  classification: { category: string; severity: string; summary: string },
+): string {
+  // Derive a one-line rationale from the skill description (no LLM call)
+  const first = description.split('.')[0]?.trim() ?? description.slice(0, 120);
+  const severity = classification.severity === 'critical' ? 'Critical fix needed. ' : '';
+  return `${severity}${first}.`.slice(0, 200);
+}
+
+async function recommendByKeyword(
+  db: ReturnType<typeof getServiceClient>,
+  reportId: string,
+  category: string,
+  severity: string,
+): Promise<void> {
+  // Category → default skill mapping when embeddings aren't available
+  const categorySkillMap: Record<string, string> = {
+    bug: severity === 'critical' ? 'workflow-fix-and-ship' : 'debug-error',
+    slow: 'audit-performance',
+    visual: 'enhance-web-ui',
+    confusing: 'audit-ux',
+    other: 'debug-error',
+  };
+  const slug = categorySkillMap[category] ?? 'debug-error';
+
+  const { data: skill } = await db
+    .from('agent_skills')
+    .select('slug, title, description')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!skill) return;
+
+  const recommended = [{
+    slug: skill.slug,
+    title: skill.title,
+    rationale: `Default recommendation for ${category} bugs.`,
+  }];
+
+  await db.from('reports').update({ recommended_skills: recommended }).eq('id', reportId);
+}

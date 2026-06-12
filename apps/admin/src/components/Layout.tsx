@@ -18,7 +18,7 @@ import {
   // unique glyphs for the closed-loop + workspace sections
   IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
   IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
-  IconInbox, IconGauge, IconUser, IconExplore, IconChat,
+  IconInbox, IconGauge, IconUser, IconExplore, IconChat, IconSkills,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
@@ -189,6 +189,7 @@ const NAV: NavSection[] = [
       { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
       { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
       { label: 'Full-Stack Audit', path: '/fullstack-audit', icon: IconAudit,  beginner: true },
+      { label: 'Code Health',  path: '/code-health',  icon: IconGauge,        beginner: true, quickstartLabel: 'Code health' },
       { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconQaCoverage,   beginner: true },
       { label: 'Lessons',      path: '/lessons',      icon: IconLessons,      beginner: true },
       { label: 'Drift',        path: '/drift',        icon: IconDrift,        beginner: true },
@@ -206,6 +207,7 @@ const NAV: NavSection[] = [
     hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
     items: [
       { label: 'Iterate',       path: '/iterate',       icon: IconIterate,      beginner: true },
+      { label: 'Skill Pipelines', path: '/skills',     icon: IconSkills,       beginner: true, quickstartLabel: 'Skill catalog' },
       { label: 'Integrations',  path: '/integrations/config',  icon: IconIntegrations, beginner: true },
       { label: 'MCP',           path: '/mcp',           icon: IconMcp,          beginner: true },
       { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
@@ -292,6 +294,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Evaluation data',
       detail: 'Use scored runs and datasets below to confirm prompt changes improve classification.',
+    },
+  },
+  '/code-health': {
+    title: 'Code Health',
+    kicker: 'Operate',
+    scope: 'code-health',
+    decide: {
+      label: 'Bundle size + god-file LOC',
+      summary: 'Bundle-size trends and per-file LOC findings pushed from CI. Flags files over the 2000-LOC budget.',
+      severity: 'warn',
+    },
+    verify: {
+      label: 'Trend chart',
+      detail: 'Check the bundle trend line after a refactor to confirm sizes moved in the right direction.',
     },
   },
   '/qa-coverage': {
@@ -558,6 +574,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Run detail',
       detail: 'Open a run for the score timeline, per-iteration critique, and clipboard export.',
+    },
+  },
+  '/skills': {
+    title: 'Skill Pipelines',
+    kicker: 'Act',
+    scope: 'skills',
+    decide: {
+      label: 'Pipeline status',
+      summary: 'Attach a cursor-kenji skill to a report, run it as a pipeline, and track each step live.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Step check-in',
+      detail: 'Dev checks in each step via CLI or MCP. Console React Flow updates in realtime.',
     },
   },
 }
@@ -839,7 +869,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {
         id: 'quick',
         title: 'Quickstart',
-        hint: 'Three pages: bugs to fix, fixes ready to merge, setup. Switch modes to unlock more.',
+        hint: 'Bugs, fixes, skill catalog, and setup. Switch to Beginner or Advanced for the full PDCA sidebar.',
         items: quickItems,
       },
     ]

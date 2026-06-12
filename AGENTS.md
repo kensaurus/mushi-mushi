@@ -10,7 +10,7 @@ can execute without additional context.
 
 ## Agent Inventory
 
-<sub>15 pipeline agents · 44 edge functions · 240 SQL migrations — updated Jun 11 2026 (wave s: backend-drift-scanner + 4 new migrations).</sub>
+<sub>16 pipeline agents · 45 edge functions · 241 SQL migrations — updated Jun 12 2026 (wave t: skill-driven triage pipelines — skill-sync agent + 4 new tables + MCP tools + CLI commands).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
@@ -29,6 +29,7 @@ can execute without additional context.
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
 | `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | **NEW** Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
+| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | **NEW** Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/cursor-kenji), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
 
 ---
 
@@ -81,6 +82,23 @@ When a user triggers "Generate test from report" in the Reports page:
 1. `test-gen-from-report` edge function generates a Playwright TypeScript test
 2. A draft GitHub PR is opened
 3. A `qa_stories` row is automatically created (provider: `local`, weekly cron)
+
+---
+
+## Code Health Ingest (Jun 2026)
+
+`POST /v1/ingest/metrics` — CI-push endpoint that records host-app bundle sizes and god-file LOC
+findings into `metric_series` (time-series) and `gate_runs` / `gate_findings` (the new
+`code_health` gate). Uses the same `apiKeyAuth` middleware as all other SDK ingest routes.
+
+| Payload key | Type | Description |
+|---|---|---|
+| `metrics[]` | `MetricPoint` | `{ metric_name, dimension?, value, ts? }` — prefix allow-list: `bundle.`, `code_health.` |
+| `findings[]` | `CodeHealthFinding` | `{ rule_id, severity, file_path?, line?, message, suggested_fix? }` |
+
+The admin console `/code-health` page reads the data back via `GET /v1/admin/code-health?project_id=`.
+
+**yen-yen integration**: `scripts/scan-god-files.mjs` scans `apps/mobile/app`, `apps/mobile/components`, `apps/mobile/lib` for files over 2,000 LOC. `.github/workflows/bundle-budget.yml` posts bundle KB + scan findings on every push to `main`. Requires `MUSHI_API_URL` + `MUSHI_INGEST_KEY` repo secrets on `kensaurus/yen-yen` (mint via Projects → SDK ingest key; `scripts/setup-yen-yen-ingest-secrets.mjs` automates Playwright + `gh secret set`).
 
 ---
 
@@ -220,6 +238,72 @@ TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_stor
 - `list_qa_story_runs` — recent runs for a story with error heads
 - `get_qa_story_run` — full run detail with screenshots and assertion failures
 - `test_notification_channel` — send a test ping to verify Slack or Discord is wired up
+
+---
+
+## Skill-Driven Triage Pipelines
+
+The Skill Pipeline feature (Jun 2026) integrates the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem into Mushi as a first-class pipeline concept.
+
+### Architecture
+
+```
+git repo skills/SKILL.md
+  → skill-sync edge fn (daily cron + manual POST)
+  → agent_skills catalog (pgvector embeddings)
+  → classify-report Stage 2 (recommended_skills on reports)
+  → api/routes/skills.ts
+  → skill_pipeline_runs + step_runs (Realtime)
+  → Console SkillPipelinesPage (React Flow, live updates)
+  → CLI: mushi skills / mushi pipeline
+  → MCP tools (list_skills, start_skill_pipeline, …)
+  → plugin-cursor-cloud (cloud mode auto-dispatch)
+```
+
+### Execution Modes
+
+| Mode | Description |
+|------|-------------|
+| `handoff` | Composes a "run packet" (skill instructions + report context) for the dev's local Cursor agent via CLI/MCP |
+| `cloud` | Each step dispatches a Cursor Cloud agent run via the existing plugin; step status streams to the console |
+
+### CLI Quick Reference
+
+```bash
+# Skill catalog
+mushi skills list [--category workflow] [--search "fix bug"]
+mushi skills show workflow-fix-and-ship
+mushi skills sync [--source-id <id>]
+
+# Pipeline runs
+mushi pipeline start <reportId> --skill workflow-fix-and-ship [--mode cloud]
+mushi pipeline watch <runId-or-prefix>
+mushi pipeline checkin <runId-or-prefix> --step 0 --status passed [--notes "Fixed null check"]
+```
+
+### MCP Tools (Jun 2026 Skill Pipelines)
+
+Skill tools (`mcp:read` scope): `list_skills`, `get_skill`
+
+Pipeline tools (`mcp:write` scope): `start_skill_pipeline`, `get_pipeline_run`, `checkin_pipeline_step`
+
+### Key Tables
+
+| Table | Purpose |
+|-------|---------|
+| `skill_sources` | Allowlisted git repos whose SKILL.md files are synced |
+| `agent_skills` | Global catalog; one row per SKILL.md; carries pgvector embedding for Stage 2 semantic recommendation |
+| `skill_pipeline_runs` | One run per "attach skill to report" action; stores `context_packet`, `mode`, `status` |
+| `skill_pipeline_step_runs` | One step per skill in the chain; Realtime-enabled for live console updates |
+
+### Guardrails
+
+- **Allowlist only**: `skill-sync` only fetches from `skill_sources.repo_slug` rows (no arbitrary URL ingestion)
+- **Secret-pattern scan**: every SKILL.md body is scanned for leaked keys/tokens before upsert
+- **Description length**: enforced at ≤ 1024 chars per Agent Skills spec
+- **Packet budget**: `context_packet` is capped at 40,000 chars (configurable in `_shared/skill-packet.ts`)
+- **Rate limit**: pipeline starts are limited per project (enforced in `api/routes/skills.ts`)
+- **Air-gap**: skill content flows *into* LLM prompts only — never executed against raw user strings
 
 ---
 

@@ -129,14 +129,16 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
     const cat = data.classification.category
     const sevBadge = SEVERITY_EMOJI[sev] ?? '\u26AA'
     const catBadge = CATEGORY_EMOJI[cat] ?? '\u{1F41B}'
+    const sevLabel = sev.charAt(0).toUpperCase() + sev.slice(1).toLowerCase()
     const url = reportUrl(reportId)
+    const title = data.report.title ?? `Report ${reportId.slice(0, 8)}`
 
     const blocks: unknown[] = [
       {
         type: 'header',
         text: {
           type: 'plain_text',
-          text: `${catBadge} New ${sev} ${cat} report`,
+          text: `${sevBadge} ${sevLabel} ${cat} report`,
           emoji: true,
         },
       },
@@ -144,20 +146,20 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*${data.report.title ?? `Report ${reportId.slice(0, 8)}`}*`,
+          text: title.trim() ? `>${title.trim().replace(/\n/g, '\n>')}` : '_No summary provided_',
         },
       },
       {
-        type: 'context',
-        elements: [
-          { type: 'mrkdwn', text: `${sevBadge} *${sev}*` },
-          { type: 'mrkdwn', text: `*Category:* ${cat}` },
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Severity*\n${sevBadge} ${sevLabel}` },
+          { type: 'mrkdwn', text: `*Type*\n${catBadge} ${cat}` },
           {
             type: 'mrkdwn',
-            text: `*Confidence:* ${Math.round(data.classification.confidence * 100)}%`,
+            text: `*AI confidence*\n${Math.round(data.classification.confidence * 100)}%`,
           },
           ...(data.classification.tags?.length
-            ? [{ type: 'mrkdwn', text: `*Tags:* ${data.classification.tags.join(', ')}` }]
+            ? [{ type: 'mrkdwn', text: `*Tags*\n${data.classification.tags.join(', ')}` }]
             : []),
         ],
       },
@@ -171,7 +173,7 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
           {
             type: 'button',
             style: 'primary',
-            text: { type: 'plain_text', text: 'Triage \u2192' },
+            text: { type: 'plain_text', text: 'Open in Console' },
             url,
             action_id: `open_report:${reportId}`,
           },
@@ -181,7 +183,7 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
             action_id: `dispatch_fix:${reportId}`,
             value: reportId,
             confirm: {
-              title: { type: 'plain_text', text: 'Dispatch fix?' },
+              title: { type: 'plain_text', text: 'Dispatch auto-fix?' },
               text: {
                 type: 'mrkdwn',
                 text: 'This starts the auto-fix agent and opens a draft PR.',
@@ -193,6 +195,12 @@ export function createSlackPlugin(config: SlackPluginConfig): SlackPlugin {
         ],
       })
     }
+
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: `Report \`${reportId.slice(0, 8)}…\`  ·  via Mushi plugin` }],
+    })
+    blocks.push({ type: 'divider' })
 
     return blocks
   }

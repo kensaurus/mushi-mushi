@@ -26,7 +26,8 @@ const STROKE_BASE = 3.25
 const STROKE_ACTIVE = 4.5
 // The loop-back cubic bezier dips this many flow-px below the node row.
 // Must be < (canvas height − node height) so fitView keeps the arc in frame.
-const LOOP_DEPTH = 120
+// Must fit inside live canvas: insetY + nodeHeight + LOOP_DEPTH + marker < canvas h.
+const LOOP_DEPTH = 96
 
 function PdcaGradientEdgeInner({
   id,

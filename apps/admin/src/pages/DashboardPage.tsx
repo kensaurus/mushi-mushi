@@ -160,7 +160,7 @@ export function DashboardPage() {
   const renderFullDashboard = !setupIncomplete || showFullDashboard
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <Confetti triggerKey={confettiKey} />
       <PageHeaderBar
         title={copy?.title ?? 'Dashboard'}
@@ -243,13 +243,13 @@ export function DashboardPage() {
                   stages with live counts, bottlenecks, and an animated
                   gradient edge out of the current focus stage so the eye
                   lands on the bottleneck without reading text. */}
-              <div className="hidden sm:block">
-                <div className="flex items-baseline justify-between mb-2">
+              <div className="hidden sm:block space-y-1">
+                <div className="flex items-baseline justify-between gap-2">
                   <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
                     Loop status &mdash; Plan, Do, Check, Act
                   </h2>
-                  <span className="text-2xs text-fg-faint">
-                    Plan → Do → Check → Act (loops back)
+                  <span className="text-2xs text-fg-faint shrink-0">
+                    Plan → Do → Check → Act
                   </span>
                 </div>
                 <PdcaFlow
@@ -260,7 +260,6 @@ export function DashboardPage() {
                   activity={activity}
                   interactive
                   showActionPanel
-                  showActivityLog
                   ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
                 />
               </div>
@@ -273,12 +272,17 @@ export function DashboardPage() {
             </>
           )}
 
-          <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} llmByDay={llmByDay} />
+          <KpiRow
+            counts={counts}
+            fixSummary={fixSummary}
+            reportsByDay={reportsByDay}
+            llmByDay={llmByDay}
+            pdcaStages={data.pdcaStages}
+          />
 
           <ChartsRow
             reportsByDay={reportsByDay}
             llmByDay={llmByDay}
-            totalLlmCalls={counts.llmCalls14d}
             chartEvents={chartEvents}
           />
 

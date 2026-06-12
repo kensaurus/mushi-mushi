@@ -538,6 +538,63 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Did "Add to Slack" work? Send a test ping to confirm.',
   },
 
+  // ── Skill Pipeline tools ─────────────────────────────────────────────────────
+
+  {
+    name: 'list_skills',
+    title: 'List agent skills',
+    description:
+      'List the agent skills available in the catalog, optionally filtered by category. ' +
+      'Returns slug, title, description, category, and chain_slugs for each skill. ' +
+      'Use before start_skill_pipeline to find the right skill slug for a given type of work.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What skills are available for debugging production errors?',
+  },
+  {
+    name: 'get_skill',
+    title: 'Get skill detail',
+    description:
+      'Fetch the full detail for a single agent skill by slug, including the complete SKILL.md body and resolved chain. ' +
+      'Use before executing a step to understand what the skill expects you to do.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What does workflow-fix-and-ship actually instruct me to do?',
+  },
+  {
+    name: 'start_skill_pipeline',
+    title: 'Start a skill pipeline',
+    description:
+      'Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. ' +
+      'Returns run_id, context_packet (full instructions + report context), and step list. ' +
+      'Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). ' +
+      'After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Start the workflow-fix-and-ship pipeline for this bug report.',
+  },
+  {
+    name: 'get_pipeline_run',
+    title: 'Get pipeline run detail',
+    description:
+      'Fetch the full detail for a skill pipeline run: status, context_packet, and all step statuses. ' +
+      'Call to retrieve the context_packet after a pipeline was started from the console or another agent.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Give me the context packet and step status for this pipeline run.',
+  },
+  {
+    name: 'checkin_pipeline_step',
+    title: 'Check in a pipeline step',
+    description:
+      'Report the completion status of a pipeline step (passed, failed, running, or skipped). ' +
+      'Optionally include notes, a PR URL, or the Cursor agentId. ' +
+      'Updates the live React Flow canvas in the Mushi console so PMs see real-time progress.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'I just opened the PR — mark step 2 as passed and link the PR.',
+  },
+
   // ── Full-Stack Audit tools (Phase 5) ────────────────────────────────────────
 
   {

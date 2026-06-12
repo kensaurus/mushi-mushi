@@ -19,7 +19,7 @@ interface Props {
 
 export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 mb-3">
       <Card className="p-3 lg:col-span-2">
         <div className="mb-2.5 flex items-center justify-between gap-2">
           <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Triage queue</h3>

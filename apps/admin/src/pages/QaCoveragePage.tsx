@@ -47,11 +47,16 @@ interface QaStoryCoverage {
   name: string
   enabled: boolean
   browser_provider: string
+  /** Live status from qa_stories.last_run_status — updates immediately after a run */
+  last_run_status: string | null
+  /** True when the story uses directFetch mode (content-only, no screenshots) */
+  is_direct_fetch?: boolean
   runs_24h: number
   passed_24h: number
   failed_24h: number
   error_24h: number
   pass_rate_pct: number | null
+  /** Most recent of MV last_run_at and live qa_stories.updated_at */
   last_run_at: string | null
   last_failure_url: string | null
 }
@@ -199,13 +204,21 @@ function StoryCard({
           <span className="text-fg-muted tabular-nums">
             {coverage.runs_24h === 0 ? 'No runs in 24h' : `${coverage.runs_24h} run${coverage.runs_24h === 1 ? '' : 's'} · 24h`}
           </span>
-          {passRate !== null ? (
-            <span className={`font-medium tabular-nums ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}>
-              {passRate}%
-            </span>
-          ) : (
-            <span className="text-fg-faint">—</span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {/* Live status badge from qa_stories — immediate, not MV-lagged */}
+            {coverage.last_run_status && (
+              <span className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${STATUS_BG[coverage.last_run_status] ?? 'bg-surface-overlay border-edge-subtle text-fg-secondary'}`}>
+                {coverage.last_run_status}
+              </span>
+            )}
+            {passRate !== null ? (
+              <span className={`font-medium tabular-nums ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}>
+                {passRate}%
+              </span>
+            ) : (
+              <span className="text-fg-faint">—</span>
+            )}
+          </div>
         </div>
         <div className="h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
           <div
@@ -261,10 +274,13 @@ function RunDetail({
   run,
   projectId,
   storyId,
+  isDirectFetch,
 }: {
   run: QaStoryRun
   projectId: string
   storyId: string
+  /** True when the story uses directFetch mode — shows a "content-only mode" note instead of "No evidence captured" */
+  isDirectFetch?: boolean
 }) {
   const { data: evData, loading: evLoading } = usePageData<{ evidence: QaEvidence[] }>(
     `/v1/admin/projects/${projectId}/qa-stories/${storyId}/runs/${run.id}/evidence`,
@@ -418,7 +434,16 @@ function RunDetail({
         </div>
       )}
       {!evLoading && evidence.length === 0 && (
-        <p className="text-2xs text-fg-faint italic">No evidence captured for this run.</p>
+        isDirectFetch ? (
+          <div className="flex items-start gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-raised/60 px-2.5 py-2">
+            <span className="text-3xs font-medium text-fg-muted mt-px">Content-only mode</span>
+            <span className="text-2xs text-fg-faint leading-relaxed">
+              Assertions verified against raw HTML — no screenshots or session replay captured.
+            </span>
+          </div>
+        ) : (
+          <p className="text-2xs text-fg-faint italic">No evidence captured for this run.</p>
+        )
       )}
 
       {/* Session replay link */}
@@ -467,6 +492,17 @@ function StoryDrawer({
   const hasActiveRun = isQueued || recentRuns.some((r) => ACTIVE_STATUSES.has(r.status))
   // initialRunId from ?run= URL param preselects a specific run (e.g. from Slack deep links)
   const [expandedRunId, setExpandedRunId] = useState<string | null>(initialRunId ?? null)
+
+  // Detect directFetch mode from the story script so RunDetail can show
+  // "content-only mode" instead of "No evidence captured for this run."
+  const isDirectFetch = (() => {
+    const script = story?.script ?? null
+    if (!script || script.startsWith('http')) return false
+    try {
+      const parsed = JSON.parse(script) as Record<string, unknown>
+      return parsed.directFetch === true
+    } catch { return false }
+  })()
 
   // Auto-expand: prefer initialRunId, then fall back to most recent run
   useEffect(() => {
@@ -627,7 +663,7 @@ function StoryDrawer({
                     {/* Expanded run detail */}
                     {isExpanded && (
                       <div className="px-3 pb-3">
-                        <RunDetail run={run} projectId={projectId} storyId={storyId} />
+                        <RunDetail run={run} projectId={projectId} storyId={storyId} isDirectFetch={isDirectFetch} />
                       </div>
                     )}
                   </div>

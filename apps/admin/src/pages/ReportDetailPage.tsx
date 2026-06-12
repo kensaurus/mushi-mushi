@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -31,6 +31,7 @@ import {
   IconTerminal,
   IconNetwork,
   IconHealth,
+  IconSkills,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
@@ -207,6 +208,107 @@ interface ReportDetailViewProps {
   savedAt: number | null
 }
 
+// ── Recommended Skills section ────────────────────────────────────────────────
+function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
+  const { push } = useToast()
+  const addToast = (t: { type: string; message: string }) =>
+    push({ tone: t.type as 'success' | 'error' | 'info' | 'warn', message: t.message })
+  const navigate = useNavigate()
+  const [searchParams] = useReactSearchParams()
+  // Support ?skill=<slug> triage link — pre-select the skill
+  const preselectedSlug = searchParams.get('skill')
+  const [startingSlug, setStartingSlug] = useState<string | null>(null)
+  const [mode, setMode] = useState<'handoff' | 'cloud'>('handoff')
+  const projectId = report.project_id
+
+  const skills = report.recommended_skills ?? []
+
+  const startPipeline = useCallback(async (slug: string) => {
+    setStartingSlug(slug)
+    try {
+      // apiFetch resolves with an { ok, data, error } envelope and does NOT
+      // throw on HTTP errors, so we must inspect res.ok explicitly — a 404
+      // (skill not synced), 409 (duplicate), or 429 (rate limit) all return
+      // ok:false and must not show a success toast.
+      const res = await apiFetch<{ id: string }>('/v1/admin/skills/pipelines', {
+        method: 'POST',
+        body: JSON.stringify({ project_id: projectId, root_skill_slug: slug, report_id: report.id, mode }),
+      })
+      if (!res.ok) {
+        addToast({ type: 'error', message: res.error?.message ?? "Couldn't start the pipeline — try again" })
+        return
+      }
+      addToast({ type: 'success', message: `Pipeline started — track it in Skill Pipelines` })
+      navigate('/skills?tab=pipelines')
+    } catch (err) {
+      addToast({ type: 'error', message: String(err) })
+    } finally {
+      setStartingSlug(null)
+    }
+  }, [projectId, report.id, mode, addToast, navigate])
+
+  // If a ?skill= triage link was used and there are no recommendations yet,
+  // show the pre-selected skill as a prompt to start its pipeline.
+  const displaySkills = skills.length > 0 ? skills : preselectedSlug
+    ? [{ slug: preselectedSlug, title: preselectedSlug, rationale: 'Requested via triage link.' }]
+    : []
+
+  if (displaySkills.length === 0) return null
+
+  return (
+    <Section title="Recommended skills" icon={<IconSkills />}>
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-fg-muted">
+          Skills matched to this report by AI triage. Start a pipeline to guide a Cursor agent through the fix.
+        </p>
+
+        <div className="flex gap-2 items-center mb-1">
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
+            className="input text-xs py-1 h-7"
+          >
+            <option value="handoff">Handoff (local Cursor agent)</option>
+            <option value="cloud">Cloud (auto Cursor Cloud)</option>
+          </select>
+        </div>
+
+        {displaySkills.map((skill) => (
+          <div
+            key={skill.slug}
+            className={[
+              'flex items-start gap-3 p-2.5 rounded-lg border',
+              preselectedSlug === skill.slug
+                ? 'border-brand bg-brand/5'
+                : 'border-border bg-surface-3',
+            ].join(' ')}
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-fg">{skill.title || skill.slug}</p>
+              <p className="text-2xs font-mono text-fg-muted">{skill.slug}</p>
+              <p className="text-2xs text-fg-muted mt-0.5">{skill.rationale}</p>
+            </div>
+            <button
+              onClick={() => startPipeline(skill.slug)}
+              disabled={startingSlug === skill.slug}
+              className="btn btn-xs btn-primary flex-shrink-0"
+            >
+              {startingSlug === skill.slug ? 'Starting…' : 'Run pipeline →'}
+            </button>
+          </div>
+        ))}
+
+        <p className="text-2xs text-fg-muted mt-1">
+          Share triage link:{' '}
+          <code className="font-mono text-brand">
+            {typeof window !== 'undefined' ? window.location.origin : ''}/reports/{report.id}?skill={displaySkills[0]?.slug}
+          </code>
+        </p>
+      </div>
+    </Section>
+  )
+}
+
 function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailViewProps) {
   const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
@@ -360,6 +462,11 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
             <div className="text-fg-muted text-xs italic">Pending classification — refresh in a few seconds.</div>
           )}
         </Section>
+
+        {/* Skill recommendations — shown when Stage 2 has classified */}
+        {(report.recommended_skills?.length || report.status === 'classified') && (
+          <RecommendedSkillsSection report={report} />
+        )}
 
         <Section title="Environment" icon={<IconGlobe />}>
           <EnvironmentFields

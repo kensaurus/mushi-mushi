@@ -37,13 +37,13 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
   return (
     <section
       aria-label="Dashboard hero"
-      className={`relative mb-4 overflow-hidden rounded-lg border ${meta.tintBorder} ${meta.tintBg}`}
+      className={`relative mb-3 overflow-hidden rounded-lg border ${meta.tintBorder} ${meta.tintBg}`}
     >
       <span
         aria-hidden="true"
         className={`absolute -top-12 -right-12 h-40 w-40 rounded-full blur-3xl opacity-30 ${HALO[focus.id]}`}
       />
-      <div className="relative grid gap-4 p-4 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="relative grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-2xs font-medium text-fg-muted uppercase tracking-wider">
             <span
@@ -65,7 +65,7 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
             {lastReportAt && <PulseChip lastReportAt={lastReportAt} />}
           </div>
 
-          <h1 className="mt-2 text-xl font-semibold text-fg leading-tight">
+          <h1 className="mt-1.5 text-lg font-semibold text-fg leading-tight">
             {subtle ? 'Loop is clean. Watch for the next inbound bug.' : focus.bottleneck ?? `${focus.count} ${focus.countLabel}`}
           </h1>
           <ContainedBlock tone="muted" className="mt-1.5 max-w-xl">

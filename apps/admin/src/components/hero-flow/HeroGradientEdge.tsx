@@ -1,9 +1,9 @@
 /**
  * FILE: apps/admin/src/components/hero-flow/HeroGradientEdge.tsx
  *
- * Gradient connector between hero tiles. Uses the same layered stroke
- * pattern as PdcaGradientEdge (wide track + glow + main rail) so edges
- * stay legible in dark mode — no surface-root casing that reads black-on-black.
+ * Gradient connector between hero tiles. At rest: a single quiet rail +
+ * arrowhead (matches the workspace pipeline ribbon). When work is in flight
+ * or failing, layers on marching dashes and a soft glow.
  */
 import { memo } from 'react'
 
@@ -14,8 +14,8 @@ import { TravelingDotsEdge } from '../flow-primitives/TravelingDotsEdge'
 import { useTheme } from '../../lib/useTheme'
 import type { HeroEdgeData } from './heroFlow.data'
 
-const STROKE = 3.25
-const STROKE_ACTIVE = 4.25
+const STROKE = 2.5
+const STROKE_ACTIVE = 3.25
 const DASH_LENGTH = 6
 const GAP_LENGTH = 6
 
@@ -58,7 +58,7 @@ function HeroGradientEdgeInner({
   const active = flowing || fail
   const strokeW = active ? STROKE_ACTIVE : STROKE
   const danger = '#ef4444'
-  const strokeValue = fail ? danger : `url(#${gradientId})`
+  const strokeValue = fail ? danger : active ? `url(#${gradientId})` : tgt
   const arrowColor = fail ? danger : tgt
   const arrowHalo = ARROW_HALO[resolved]
   const dashArray = `${DASH_LENGTH} ${GAP_LENGTH}`
@@ -82,11 +82,10 @@ function HeroGradientEdgeInner({
           viewBox="0 0 12 12"
           refX="10"
           refY="6"
-          markerWidth="9"
-          markerHeight="9"
+          markerWidth="8"
+          markerHeight="8"
           orient="auto-start-reverse"
         >
-          {/* Halo so the head separates from dark canvas */}
           <path d="M 1 2.5 L 10 6 L 1 9.5 Z" fill={arrowHalo} />
           <path d="M 2 3.5 L 9 6 L 2 8.5 Z" fill={arrowColor} />
         </marker>
@@ -101,48 +100,61 @@ function HeroGradientEdgeInner({
         `}</style>
       )}
 
-      {/* Wide coloured track — visible at rest on dark backgrounds */}
-      <path
-        d={edgePath}
-        stroke={strokeValue}
-        strokeWidth={strokeW + 5}
-        fill="none"
-        strokeLinecap="round"
-        style={{ opacity: active ? 0.5 : 0.38 }}
-      />
-
-      {/* Soft glow */}
-      <path
-        d={edgePath}
-        stroke={strokeValue}
-        strokeWidth={active ? 11 : 9}
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={active ? dashArray : 'none'}
-        style={{
-          opacity: active ? 0.45 : 0.32,
-          filter: 'blur(3px)',
-          animation: active ? `${animName} 0.9s linear infinite` : undefined,
-        }}
-      />
-
-      {/* Main rail */}
-      <path
-        d={edgePath}
-        stroke={strokeValue}
-        strokeWidth={strokeW}
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={active ? dashArray : 'none'}
-        markerEnd={`url(#${arrowId})`}
-        style={{
-          opacity: 1,
-          animation: active ? `${animName} 0.9s linear infinite` : undefined,
-        }}
-      />
+      {active ? (
+        <>
+          {/* Wide track — only when the lane needs attention */}
+          <path
+            d={edgePath}
+            stroke={strokeValue}
+            strokeWidth={strokeW + 4}
+            fill="none"
+            strokeLinecap="round"
+            style={{ opacity: 0.35 }}
+          />
+          {/* Soft glow */}
+          <path
+            d={edgePath}
+            stroke={strokeValue}
+            strokeWidth={10}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={dashArray}
+            style={{
+              opacity: fail ? 0.5 : 0.38,
+              filter: 'blur(2.5px)',
+              animation: `${animName} 0.9s linear infinite`,
+            }}
+          />
+          {/* Main rail */}
+          <path
+            d={edgePath}
+            stroke={strokeValue}
+            strokeWidth={strokeW}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={dashArray}
+            markerEnd={`url(#${arrowId})`}
+            style={{
+              opacity: 1,
+              animation: `${animName} 0.9s linear infinite`,
+            }}
+          />
+        </>
+      ) : (
+        /* Calm at-rest rail — no gradient stack or blur halo */
+        <path
+          d={edgePath}
+          stroke={strokeValue}
+          strokeWidth={strokeW}
+          fill="none"
+          strokeLinecap="round"
+          markerEnd={`url(#${arrowId})`}
+          style={{ opacity: 0.62 }}
+        />
+      )}
 
       {flowing && !fail && (
-        <TravelingDotsEdge path={edgePath} color={tgt} dots={2} strokeWidth={2.5} glowBlur={4} durationMs={2400} />
+        <TravelingDotsEdge path={edgePath} color={tgt} dots={2} strokeWidth={2} glowBlur={2} durationMs={2400} />
       )}
     </>
   )

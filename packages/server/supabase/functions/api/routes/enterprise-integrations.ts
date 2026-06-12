@@ -2,7 +2,7 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts'
 
 import type { IntegrationKind } from '../../_shared/integration-probes.ts';
-import { PLATFORM_KINDS } from '../../_shared/integration-probes.ts';
+import { FIX_AGENT_KINDS, PLATFORM_KINDS } from '../../_shared/integration-probes.ts';
 import type { ExportSampleRow } from '../../_shared/fine-tune.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
@@ -1366,7 +1366,16 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       'github_webhook_secret',
       'github_deploy_key',
     ],
+    cursor_cloud: [
+      'cursor_api_key_ref',
+      'cursor_default_model',
+      'cursor_auto_create_pr',
+      'cursor_max_iterations',
+    ],
+    claude_code_agent: ['claude_api_key_ref'],
   };
+
+  const PLATFORM_API_KINDS = [...PLATFORM_KINDS, ...FIX_AGENT_KINDS] as IntegrationKind[];
 
   app.get('/v1/admin/integrations/platform', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -1425,12 +1434,14 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     sentry: ['sentry_auth_token_ref', 'sentry_webhook_secret'],
     langfuse: ['langfuse_public_key_ref', 'langfuse_secret_key_ref'],
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
+    cursor_cloud: ['cursor_api_key_ref'],
+    claude_code_agent: ['claude_api_key_ref'],
   };
 
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind')! as IntegrationKind;
-    if (!PLATFORM_KINDS.includes(kind)) {
+    if (!PLATFORM_API_KINDS.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;

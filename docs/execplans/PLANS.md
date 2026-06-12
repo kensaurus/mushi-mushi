@@ -268,3 +268,177 @@ multi-region operator deliverables that Plan 011 marked complete prematurely.
 - [x] `docs/runbooks/region-routing-replication.md` — Created with full `CREATE PUBLICATION` / `CREATE SUBSCRIPTION` SQL, replication lag query, Helm example, open-work callout for active/active write limitations.
 - [x] `deploy/helm/README.md` — "What is NOT in the chart" note for multi-region replaced with "Multi-region deployment" instructions.
 - [x] Apache AGE auto-detect: already implemented in `20260418001200_age_parallel_write.sql` via conditional `DO $$` block; no code change needed — documented in `deploy/helm/README.md` and confirmed via `grep`.
+
+---
+
+## Plan 015 — Code Health Console: Bundle Trends + Refactor Findings (2026-06-12) `COMPLETE`
+
+### Goal
+Surface a host app's **bundle-size trends** and **god-file / refactor
+recommendations** in the Mushi admin console, so an operator sees code-health
+regressions on the same dashboard they already use for backend audits.
+
+The trigger: the yen-yen refactor of `transactions.tsx`, `index.tsx`, and
+`transaction/new.tsx` (each driven under a 2,000-LOC budget) produced exactly
+the data this feature would track over time. Right now that signal lives only
+in CI logs; this plan persists it and renders it.
+
+### Design constraints / why it fits cleanly
+- **No new storage primitive.** Bundle sizes are a time series → reuse the
+  existing `metric_series` table. God-file findings are point-in-time lint-style
+  violations → reuse the existing `gate_runs` + `gate_findings` tables with a new
+  `code_health` gate value.
+- **One new ingest surface.** A single `POST /v1/ingest/metrics` SDK/CI endpoint
+  (API-key auth, mirrors the existing `POST /v1/ingest/spans` in
+  `packages/server/supabase/functions/api/routes/public.ts`). It accepts both
+  metric points and an optional `findings[]` array, so one CI call writes both
+  targets atomically.
+- **Push from CI, not a mushi-side scanner.** yen-yen already has
+  `.github/workflows/bundle-budget.yml` which measures gzipped bundle KB. We add
+  a step that POSTs sizes + a god-file LOC scan. Mushi never has to clone or
+  build the host repo.
+- **UI mirrors `FullStackAuditPage.tsx`** — same `PageHeader` / `Card` /
+  `Badge` / `Section` primitives, same `apiFetch` + `useActiveProjectId` wiring,
+  same severity-badge vocabulary.
+
+### Data-model decisions (concrete)
+**Metric names written to `metric_series` (`value` = `double precision`):**
+
+| `metric_name`               | `dimension`             | meaning                                   |
+|-----------------------------|-------------------------|-------------------------------------------|
+| `bundle.mobile.gzip_kb`     | `ios` / `android` / `combined` | Hermes JS bundle, gzipped KB       |
+| `bundle.web.gzip_kb`        | `combined`              | Next.js export JS chunks, gzipped KB      |
+| `code_health.god_file_count`| `mobile` / `web`        | # files over the LOC budget               |
+| `code_health.max_file_loc`  | `mobile` / `web`        | largest single source file LOC            |
+
+`ts` is the CI run timestamp; `release_id` left null (CI is not release-scoped).
+
+**Gate findings (`gate_runs.gate = 'code_health'`, one run per CI push):**
+- `rule_id = 'god_file'` — one finding per file over budget. `file_path` =
+  repo-relative path, `line` = the file's LOC (reused as a numeric carrier),
+  `severity` = `error` when LOC > 2000, `warn` when LOC > 1500, else skipped.
+  `message` = e.g. `"apps/mobile/app/(tabs)/transactions.tsx is 1905 LOC (budget 2000)"`.
+  `suggested_fix` (jsonb) = `{ "hint": "extract cohesive hooks/components", "budget": 2000 }`.
+- `rule_id = 'bundle_regression'` (optional) — `warn` finding when the gzipped
+  delta vs the previous point exceeds the workflow's `*_BUDGET_DELTA_KB`.
+
+### Deliverables
+
+#### Phase 1 — Migration (mushi backend)
+- [x] `packages/server/supabase/migrations/20260612140000_code_health_gate.sql`:
+  - Extend `gate_runs_gate_check` to add `'code_health'`. **Re-list the full
+    current set** so the constraint stays complete:
+    `dead_handler, mock_leak, api_contract, crawl, status_claim, spec_drift,
+    orphan_endpoint, unknown_call, schema_drift, code_health`
+    (current set defined in `20260612010000_gate_types_v2_schema_snapshots.sql`).
+  - No new tables, no new indexes (`metric_series` already has
+    `idx_metric_series_project_metric` on `(project_id, metric_name, ts desc)`;
+    `gate_findings` already has `idx_gate_findings_project_severity`).
+  - `COMMENT ON CONSTRAINT` documenting the new gate.
+  - `NOTIFY pgrst, 'reload schema';` at the end.
+- [x] Apply via Supabase MCP `apply_migration` on the mushi project (resolve ref
+  via `list_projects`; confirm once and reuse). Pre-check
+  `SELECT DISTINCT gate FROM gate_runs;` returns no value outside the new set.
+- [x] Verify post-apply: re-query the constraint via `pg_constraint`; insert a
+  throwaway `gate_runs` row with `gate='code_health'` as `service_role` then
+  delete it; run `get_advisors(security)` + `get_advisors(performance)` and
+  confirm no new ERROR-level findings.
+
+#### Phase 2 — Ingest endpoint + admin read (mushi backend)
+- [x] `packages/server/supabase/functions/api/routes/public.ts` — add
+  `app.post('/v1/ingest/metrics', apiKeyAuth, …)` directly beside the existing
+  `/v1/ingest/spans` handler:
+  - `projectId` comes from `c.get('projectId')` (set by `apiKeyAuth`).
+  - Burst-cap via the existing `report_ingest_rate_limit_claim` RPC
+    (`p_max_per_minute: 60`); rate-limit errors → `429` + `Retry-After`, other
+    RPC errors logged non-fatally (same pattern as spans).
+  - Body: `{ metrics?: MetricPoint[], findings?: CodeHealthFinding[] }` where
+    `MetricPoint = { metric_name, dimension?, value, ts? }`.
+    Validate with a Zod schema in `packages/server/supabase/functions/_shared/schemas.ts`
+    (`codeHealthIngestSchema`) — cap `metrics` ≤ 50 and `findings` ≤ 200,
+    enforce `metric_name` prefix allow-list (`bundle.` / `code_health.`),
+    `value` finite, reject unknown top-level keys.
+  - Insert metric points into `metric_series` (stamp `project_id`, default
+    `ts = now()`).
+  - If `findings.length`: insert one `gate_runs` row
+    (`gate='code_health'`, `status` derived: `fail` if any `error`, else `warn`
+    if any `warn`, else `pass`), then bulk-insert `gate_findings` with that
+    `gate_run_id`. All writes use `getServiceClient()` (service role bypasses RLS).
+  - Return `{ ok: true, data: { metrics_inserted, findings_inserted, gate_run_id } }`, `201`.
+- [x] `packages/server/supabase/functions/api/routes/code-health.ts` (new, thin) —
+  `registerCodeHealthRoutes(parent)` with:
+  - `GET /v1/admin/code-health` (`requireAuth`, `requireProjectAccess`):
+    reads `metric_series` for the `bundle.*` + `code_health.*` names (last 90
+    days, ascending) and the **latest** `code_health` gate run's `gate_findings`,
+    returns `{ trends: {...}, godFiles: [...], summary: { error_count, warn_count, max_loc, latest_bundle_kb } }`.
+  - Register in `packages/server/supabase/functions/api/index.ts`
+    (`import { registerCodeHealthRoutes }` + call it next to
+    `registerFullstackAuditRoutes(app)`).
+- [x] Deploy: `npx supabase functions deploy api --no-verify-jwt`. Verify with a
+  real `curl` to `/v1/ingest/metrics` using a project API key (expect `201`) and
+  `SET ROLE authenticated` read-back of the gate run.
+
+#### Phase 3 — CodeHealthPage (mushi admin)
+- [x] `apps/admin/src/pages/CodeHealthPage.tsx` — mirror `FullStackAuditPage.tsx`:
+  - `useActiveProjectId()` + `apiFetch('/v1/admin/code-health?project_id=…')`.
+  - **Bundle trend** section: small line/sparkline using the existing
+    `apps/admin/src/components/charts/` primitives (`ChartFrame`), one series
+    per `bundle.*` metric, with the current value + delta-vs-previous badge.
+  - **God-files** section: `gate_findings` list reusing the `SeverityBadge`
+    pattern; each row shows `file_path`, LOC (from `line`), severity, and the
+    `suggested_fix.hint`. Empty state mirrors the audit page's "All clear".
+  - `PageHelp` blurb explaining the data is pushed from the host repo's CI.
+- [x] `apps/admin/src/App.tsx` — `const CodeHealthPage = lazy(() => import('./pages/CodeHealthPage').then(m => ({ default: m.CodeHealthPage })))` + `<Route path="/code-health" element={<CodeHealthPage />} />`.
+- [x] `apps/admin/src/components/Layout.tsx` — add
+  `{ label: 'Code Health', path: '/code-health', icon: IconGauge, beginner: false }`
+  to the operate group, directly after the `Full-Stack Audit` entry.
+
+#### Phase 4 — yen-yen CI push step
+- [x] `scripts/scan-god-files.mjs` (yen-yen) — walks `apps/mobile/app`,
+  `apps/mobile/components`, `apps/web` for `*.ts(x)` files, emits
+  `{ findings: [...], metrics: [{ metric_name: 'code_health.god_file_count', dimension, value }, { metric_name: 'code_health.max_file_loc', dimension, value }] }`
+  as JSON to stdout. Budget 2000 (error) / 1500 (warn). Pure Node, no deps.
+- [x] `.github/workflows/bundle-budget.yml` — in the `web` and `mobile` jobs,
+  after the existing `Measure …` step, add a **`Push code-health metrics`** step:
+  - Guard: `if: github.event_name == 'push' && github.repository == 'kensa/yen-yen'`
+    (skip PRs and forks so the secret never leaks and PR noise is avoided).
+  - Builds the JSON payload (bundle KB from the `measure` step output + god-file
+    scan) and `curl -sf -X POST "$MUSHI_API_URL/v1/ingest/metrics"` with header
+    `X-Mushi-Api-Key: ${{ secrets.MUSHI_INGEST_KEY }}`; `|| echo "non-fatal"` so a
+    mushi outage never fails the yen-yen build.
+  - Add repo secrets `MUSHI_API_URL` + `MUSHI_INGEST_KEY` (a yen-yen project API
+    key from the mushi console) — note this as a manual one-time setup step.
+    **Secrets not yet added** — one-time manual step in the yen-yen GitHub repo settings.
+
+### Verification checklist (full-stack ship discipline)
+- [ ] Migration applied to the remote mushi project via MCP and the constraint
+  verified by re-query (not assumed).
+- [ ] `POST /v1/ingest/metrics` returns `201` for a valid API-key call and `429`
+  on burst; an authenticated `GET /v1/admin/code-health` returns the same data
+  the page renders (verified with `SET ROLE authenticated`).
+- [ ] `gate_findings` for a `code_health` run are readable by the project owner
+  and **not** by a non-member (RLS spot-check).
+- [ ] `pnpm --filter @yen-yen/mobile typecheck` (script) + admin `tsc --noEmit`
+  pass; `bundle-budget.yml` still green on a PR (push step skipped).
+- [ ] `get_advisors` shows no new ERROR findings after the migration + deploy.
+- [ ] One real CI push from yen-yen `main` lands rows in `metric_series` and a
+  `code_health` gate run visible on `/code-health`.
+
+### Acceptance criteria
+A merge to yen-yen `main` records bundle KB + god-file counts, and the mushi
+`/code-health` page shows the bundle trend line and the current god-file list
+for the active project, with severity badges and refactor hints.
+
+### Rollback
+- Backend: the migration only widens a CHECK constraint and adds a route —
+  revert by a follow-up migration restoring the prior constraint and removing
+  the route registration; `metric_series` / `gate_findings` rows are inert.
+- CI: delete the push step + secrets; bundle-budget behaviour is unchanged.
+
+### Open decisions (resolve before Phase 1)
+- **Endpoint name:** keep `/v1/ingest/metrics` (per the original take) carrying
+  optional `findings[]`, vs. a more literal `/v1/ingest/code-health`. Default:
+  keep `/v1/ingest/metrics` for one surface.
+- **God-file scan scope:** mobile-only first, or include `apps/web` from day one.
+  Default: include both (the scanner is trivial and web has its own budget job).
+- [x] Mark `COMPLETE` and update `AGENTS.md` (note the new ingest surface) once shipped.

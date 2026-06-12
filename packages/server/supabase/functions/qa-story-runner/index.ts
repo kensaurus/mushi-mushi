@@ -127,10 +127,13 @@ async function resolveTargetUrl(
   // 2. Script field starts with a URL
   if (story.script?.startsWith('http')) return story.script
 
-  // 3. First https:// URL extracted from prompt
+  // 3. First https:// URL extracted from prompt (skip localhost — Firecrawl can't reach it)
   if (story.prompt) {
     const match = story.prompt.match(/https?:\/\/[^\s"']+/)
-    if (match) return match[0].replace(/[.,;)]+$/, '') // strip trailing punctuation
+    if (match) {
+      const url = match[0].replace(/[.,;)]+$/, '') // strip trailing punctuation
+      if (!url.includes('localhost') && !url.includes('127.0.0.1')) return url
+    }
   }
 
   // 4. Project-level base URLs from project_settings
@@ -186,29 +189,195 @@ async function resolveStoryApiKey(
   return undefined
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+/** Returns true when the story script has { directFetch: true }. */
+function isDirectFetchMode(story: QaStory): boolean {
+  if (!story.script || story.script.startsWith('http')) return false
+  try {
+    const parsed = JSON.parse(story.script) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return (parsed as { directFetch?: boolean }).directFetch === true
+    }
+  } catch { /* ignore */ }
+  return false
+}
+
+// ── Direct-fetch runner (no Firecrawl, no browser) ───────────────────────
+//
+// For SSG/SSR pages (static exports, CDN-served HTML), a plain HTTP GET is
+// faster and more reliable than Firecrawl's headless browser.
+// Activated by `directFetch: true` in the story's script JSON.
+//
+// Uses Deno's built-in fetch() with a 20-second timeout via AbortController.
+// Checks assertContains (or prompt-quoted strings) against the raw HTML body.
+// No Firecrawl API key needed.
+async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunResult> {
+  const start = Date.now()
+  const assertionFailures: RunResult['assertion_failures'] = []
+
+  // Parse assertContains from script
+  let assertContains: string[] = []
+  if (story.script && !story.script.startsWith('http')) {
+    try {
+      const parsed = JSON.parse(story.script) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const spec = parsed as { assertContains?: string[] }
+        if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
+      }
+    } catch { /* use defaults */ }
+  }
+
+  const termsToCheck: string[] = assertContains.length > 0
+    ? assertContains
+    : story.prompt
+        ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
+        : []
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20_000)
+
+  try {
+    const res = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'MushiQARunner/1.0 (directFetch)' },
+    })
+    clearTimeout(timer)
+
+    if (!res.ok) {
+      return {
+        status: 'error',
+        latency_ms: Date.now() - start,
+        summary: `HTTP ${res.status} from ${targetUrl}`,
+        assertion_failures: [],
+        provider_session_url: null,
+        error_message: `HTTP ${res.status} ${res.statusText}`,
+        evidence: [],
+      }
+    }
+
+    const html = await res.text()
+
+    // Check terms against raw HTML (case-insensitive)
+    for (const term of termsToCheck) {
+      if (!html.toLowerCase().includes(term.toLowerCase())) {
+        assertionFailures.push({ step: 'content', expected: term, actual: '(not found in HTML)' })
+      }
+    }
+
+    // directFetch returns no screenshot evidence — the run status + assertion
+    // failures are the signal. Storing raw HTML inline would exceed column limits.
+    const passed = assertionFailures.length === 0
+    return {
+      status: passed ? 'passed' : 'failed',
+      latency_ms: Date.now() - start,
+      summary: passed
+        ? `"${story.name}" passed.`
+        : `"${story.name}" failed ${assertionFailures.length} assertion(s).`,
+      assertion_failures: assertionFailures,
+      provider_session_url: null,
+      error_message: null,
+      evidence: [],
+    }
+  } catch (err) {
+    clearTimeout(timer)
+    const isAbort = err instanceof Error && err.name === 'AbortError'
+    return {
+      status: isAbort ? 'timeout' : 'error',
+      latency_ms: Date.now() - start,
+      summary: isAbort ? `Fetch timed out after 20s for ${targetUrl}` : `Fetch error`,
+      assertion_failures: [],
+      provider_session_url: null,
+      error_message: err instanceof Error ? err.message : String(err),
+      evidence: [],
+    }
+  }
+}
+
 // ── Firecrawl inline runner (Deno-compatible) ─────────────────────────────
+//
+// script column supports two formats:
+//   1. Array  — raw Firecrawl actions (legacy): [...actions]
+//   2. Object — structured spec: { actions?: [...], assertContains?: string[], waitFor?: number, htmlOnly?: boolean, directFetch?: boolean }
+//
+// assertContains is the preferred way to define pass criteria — each string is
+// checked as a case-insensitive substring in the scraped markdown. The old NL
+// prompt regex (30-60 char prose phrases) produced too many false failures on
+// SPA-rendered pages and is replaced by quoted-string extraction when no
+// assertContains is present.
 async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): Promise<RunResult> {
   const start = Date.now()
   const assertionFailures: RunResult['assertion_failures'] = []
   const evidence: RunResult['evidence'] = []
 
   try {
+    // Parse script — supports array (legacy) or structured object:
+    //
+    //   { actions?, assertContains?, waitFor?, htmlOnly? }
+    //
+    // htmlOnly=true  → rawHtml format, no headless browser (fast, for SSR/SSG pages)
+    // htmlOnly=false → full browser mode with actions + screenshot
+    //
+    // SCREENSHOT HANDLING: action `{ type: 'screenshot' }` writes to
+    // `data.data.actions.screenshots[]`; the top-level `formats: ['screenshot']`
+    // writes to `data.data.screenshot`. We always try `data.screenshot` first.
+    let actions: Array<Record<string, unknown>> = [
+      { type: 'wait', milliseconds: 3000 },
+      { type: 'screenshot' },
+    ]
+    let assertContains: string[] = []
+    let waitFor = 5000
+    // htmlOnly skips the headless browser entirely — ideal for SSR/SSG pages
+    // that have all content in the initial HTML. Avoids SCRAPE_TIMEOUT on
+    // complex JS bundles.
+    let htmlOnly = false
 
-    // Parse script as JSON actions array, or use simple GET + screenshot
-    let actions: Array<Record<string, unknown>> = [{ type: 'screenshot' }]
     if (story.script && !story.script.startsWith('http')) {
       try {
-        const parsed = JSON.parse(story.script) as Array<Record<string, unknown>>
-        if (Array.isArray(parsed)) actions = parsed
+        const parsed = JSON.parse(story.script) as unknown
+        if (Array.isArray(parsed)) {
+          // Legacy: bare actions array
+          actions = parsed as Array<Record<string, unknown>>
+        } else if (parsed && typeof parsed === 'object') {
+          // Structured spec object
+          const spec = parsed as {
+            actions?: Array<Record<string, unknown>>
+            assertContains?: string[]
+            waitFor?: number
+            htmlOnly?: boolean
+          }
+          if (Array.isArray(spec.actions)) actions = spec.actions
+          if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
+          if (typeof spec.waitFor === 'number') waitFor = spec.waitFor
+          if (typeof spec.htmlOnly === 'boolean') htmlOnly = spec.htmlOnly
+        }
       } catch {
-        actions = [{ type: 'screenshot' }]
+        // Unparseable — use defaults (browser mode)
       }
+    }
+
+    // Ensure the screenshot action is present when using browser mode —
+    // Firecrawl uses it as a rendering-complete signal, preventing SCRAPE_TIMEOUT.
+    if (!htmlOnly) {
+      const hasScreenshotAction = actions.some(
+        (a) => (a as { type?: string }).type === 'screenshot',
+      )
+      if (!hasScreenshotAction) actions = [...actions, { type: 'screenshot' }]
+    }
+
+    const fcBody: Record<string, unknown> = {
+      url: targetUrl,
+      formats: htmlOnly ? ['rawHtml'] : ['markdown', 'screenshot'],
+    }
+    if (!htmlOnly) {
+      fcBody.actions = actions
+      fcBody.waitFor = waitFor
     }
 
     const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ url: targetUrl, formats: ['markdown', 'screenshot'], actions }),
+      body: JSON.stringify(fcBody),
     })
 
     if (!res.ok) {
@@ -226,19 +395,33 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
 
     const data = await res.json() as {
       success?: boolean
-      data?: { markdown?: string; screenshot?: string }
+      data?: {
+        markdown?: string
+        rawHtml?: string
+        screenshot?: string
+        // Firecrawl v1: action screenshots land in data.actions.screenshots
+        actions?: { screenshots?: string[] }
+      }
     }
 
-    const markdown = data?.data?.markdown ?? ''
-    const screenshot = data?.data?.screenshot ?? ''
+    // Use rawHtml as fallback content source for htmlOnly mode
+    const markdown = data?.data?.markdown ?? data?.data?.rawHtml ?? ''
+    const screenshot = data?.data?.screenshot
+      ?? data?.data?.actions?.screenshots?.[0]
+      ?? ''
 
-    // Content assertions from prompt
-    if (story.prompt && markdown) {
-      const keywords = story.prompt
-        .match(/(?:should|must|expect|verify|check|contains?)\s+["']?([^"'\n]{3,60})["']?/gi) ?? []
-      for (const kw of keywords.slice(0, 8)) {
-        const term = kw.replace(/^(should|must|expect|verify|check|contains?)\s+/i, '').replace(/["']/g, '').trim()
-        if (term && !markdown.toLowerCase().includes(term.toLowerCase())) {
+    // Assertions — prefer explicit assertContains; fall back to quoted strings
+    // in the prompt (single or double quoted terms, ≤ 50 chars). The old broad
+    // regex extracted full NL sentences and caused false failures on SPAs.
+    const termsToCheck: string[] = assertContains.length > 0
+      ? assertContains
+      : story.prompt
+          ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
+          : []
+
+    if (markdown && termsToCheck.length > 0) {
+      for (const term of termsToCheck) {
+        if (!markdown.toLowerCase().includes(term.toLowerCase())) {
           assertionFailures.push({ step: 'content', expected: term, actual: '(not found)' })
         }
       }
@@ -378,6 +561,11 @@ async function executeManualRun(
       error_message: 'no_target_url',
       evidence: [],
     }
+  } else if (provider === 'firecrawl_actions' && isDirectFetchMode(story)) {
+    // directFetch: bypass Firecrawl entirely — plain HTTP GET via Deno fetch().
+    // Ideal for SSG/SSR pages (static exports, CDN-served HTML) where a headless
+    // browser is unnecessary and Firecrawl's SCRAPE_TIMEOUT is unreliable.
+    result = await runDirectFetch(story, resolvedTargetUrl!)
   } else if (provider === 'firecrawl_actions') {
     const key = resolvedApiKey ?? Deno.env.get('FIRECRAWL_API_KEY') ?? ''
     if (!key) {
@@ -387,38 +575,38 @@ async function executeManualRun(
         summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
         assertion_failures: [],
         provider_session_url: null,
-              error_message: 'No Firecrawl key. Run: mushi keys add --provider firecrawl',
-              evidence: [],
-            }
-          } else {
-            result = await runFirecrawl(story, key, resolvedTargetUrl!)
-          }
-        } else if (provider === 'browserbase') {
-          const key = resolvedApiKey ?? Deno.env.get('BROWSERBASE_API_KEY') ?? ''
-          if (!key) {
-            result = {
-              status: 'error',
-              latency_ms: 0,
-              summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
-              assertion_failures: [],
-              provider_session_url: null,
-              error_message: 'No Browserbase key. Add via Settings → API Keys → Browserbase.',
-              evidence: [],
-            }
-          } else {
-            result = await runBrowserbase(story, key)
-          }
-        } else {
-          result = {
-            status: 'skipped',
-            latency_ms: 0,
-            summary: 'Local provider stories must be run via the mushi CLI.',
-            assertion_failures: [],
-            provider_session_url: null,
-            error_message: null,
-            evidence: [],
-          }
-        }
+        error_message: 'No Firecrawl key. Run: mushi keys add --provider firecrawl',
+        evidence: [],
+      }
+    } else {
+      result = await runFirecrawl(story, key, resolvedTargetUrl!)
+    }
+  } else if (provider === 'browserbase') {
+    const key = resolvedApiKey ?? Deno.env.get('BROWSERBASE_API_KEY') ?? ''
+    if (!key) {
+      result = {
+        status: 'error',
+        latency_ms: 0,
+        summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+        assertion_failures: [],
+        provider_session_url: null,
+        error_message: 'No Browserbase key. Add via Settings → API Keys → Browserbase.',
+        evidence: [],
+      }
+    } else {
+      result = await runBrowserbase(story, key)
+    }
+  } else {
+    result = {
+      status: 'skipped',
+      latency_ms: 0,
+      summary: 'Local provider stories must be run via the mushi CLI.',
+      assertion_failures: [],
+      provider_session_url: null,
+      error_message: null,
+      evidence: [],
+    }
+  }
 
   await db.from('qa_story_runs').update({
     status: result.status,
@@ -430,18 +618,36 @@ async function executeManualRun(
     finished_at: new Date().toISOString(),
   }).eq('id', runId)
 
-  // Save evidence artefacts
+  // Save evidence artefacts. Schema: (run_id, kind, storage_path, mime, step_label).
+  // We store a stub storage_path — actual upload to Supabase Storage is a future
+  // enhancement. The record's presence signals evidence was captured.
   if (result.evidence?.length) {
     const evidenceRows = result.evidence.map((e) => ({
       run_id: runId,
-      story_id: storyId,
       kind: e.kind,
-      data: e.data,
-      mime_type: e.mime,
-      step_label: e.step_label,
+      storage_path: `qa-evidence/${storyId}/${runId}/${e.step_label ?? e.kind}.${e.mime.split('/')[1] ?? 'bin'}`,
+      mime: e.mime,
+      step_label: e.step_label ?? null,
     }))
     await db.from('qa_story_evidence').insert(evidenceRows)
   }
+
+  // Update story-level state so the UI card reflects the latest manual run immediately,
+  // not just after the next cron tick. Mirror the cron path's increment semantics
+  // (consecutive_failures + 1) so the Slack failure-backoff / threading / recovery-count
+  // state machine stays in sync regardless of whether the run was manual or cron-driven.
+  const isNowFailing = result.status === 'failed' || result.status === 'error'
+  const { data: storyState } = await db
+    .from('qa_stories')
+    .select('consecutive_failures')
+    .eq('id', storyId)
+    .maybeSingle()
+  const prevConsecutive = (storyState?.consecutive_failures as number | null) ?? 0
+  await db.from('qa_stories').update({
+    last_run_status: result.status,
+    consecutive_failures: isNowFailing ? prevConsecutive + 1 : 0,
+    ...(isNowFailing ? {} : { slack_failure_ts: null }),
+  }).eq('id', storyId)
 
   rlog.info('manual_run_complete', { storyId, runId, status: result.status })
   return new Response(JSON.stringify({ ok: true, status: result.status }), { status: 200 })
@@ -566,6 +772,10 @@ Deno.serve(
             error_message: 'no_target_url',
             evidence: [],
           }
+        } else if (provider === 'firecrawl_actions' && isDirectFetchMode(story)) {
+          // directFetch: bypass Firecrawl entirely — plain HTTP GET via Deno fetch().
+          // Ideal for SSG/SSR pages where SCRAPE_TIMEOUT is unreliable.
+          result = await runDirectFetch(story, resolvedTargetUrl!)
         } else if (provider === 'firecrawl_actions') {
           const key = resolvedApiKey ?? Deno.env.get('FIRECRAWL_API_KEY') ?? ''
           if (!key) {

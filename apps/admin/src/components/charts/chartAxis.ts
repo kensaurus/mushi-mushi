@@ -6,6 +6,10 @@
 /** Admin console copy is English — keep chart dates off system locale (e.g. 5月7日). */
 export const CHART_LOCALE = 'en-US'
 
+export function utcTodayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export function shortDay(iso: string): string {
   if (!iso) return ''
   const d = new Date(iso.includes('T') ? iso : `${iso}T00:00:00Z`)
@@ -17,22 +21,39 @@ export function shortDay(iso: string): string {
   })
 }
 
-/** Sparse x-axis captions: start, optional midpoint, end. */
-export function sparseXLabels(
-  labels: string[],
-  maxTicks = 3,
-): Array<{ text: string; index: number }> {
+/** X-axis tick copy — "Today" on the current UTC bucket, else short date. */
+export function formatChartDayLabel(iso: string): string {
+  const day = iso.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day) && day === utcTodayIso()) return 'Today'
+  return shortDay(iso)
+}
+
+export interface SparseXTick {
+  text: string
+  index: number
+  isToday: boolean
+}
+
+/** Sparse x-axis ticks: start, optional middles, end (4 ticks when ≥10 days). */
+export function sparseXLabels(labels: string[], maxTicks?: number): SparseXTick[] {
   if (labels.length === 0) return []
-  if (labels.length === 1) return [{ text: labels[0], index: 0 }]
-  if (labels.length <= maxTicks) {
-    return labels.map((text, index) => ({ text, index }))
+  const cap = maxTicks ?? (labels.length >= 10 ? 4 : labels.length >= 5 ? 3 : labels.length)
+  const tickAt = (index: number): SparseXTick => {
+    const iso = labels[index] ?? ''
+    const text = formatChartDayLabel(iso)
+    return { text, index, isToday: text === 'Today' }
+  }
+  if (labels.length === 1) return [tickAt(0)]
+  if (labels.length <= cap) {
+    return labels.map((_, index) => tickAt(index))
+  }
+  if (cap >= 4 && labels.length >= 10) {
+    const i1 = Math.floor(labels.length / 3)
+    const i2 = Math.floor((labels.length * 2) / 3)
+    return [tickAt(0), tickAt(i1), tickAt(i2), tickAt(labels.length - 1)]
   }
   const mid = Math.floor(labels.length / 2)
-  return [
-    { text: labels[0], index: 0 },
-    { text: labels[mid], index: mid },
-    { text: labels[labels.length - 1], index: labels.length - 1 },
-  ]
+  return [tickAt(0), tickAt(mid), tickAt(labels.length - 1)]
 }
 
 export function formatChartCount(n: number): string {

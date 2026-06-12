@@ -200,4 +200,6 @@ export interface ReportDetail {
   sdk_version?: string | null
   /** Host app version string from the SDK, e.g. `2.4.1` or `(234)`. */
   app_version?: string | null
+  /** Skill recommendations from classify-report Stage 2. */
+  recommended_skills?: Array<{ slug: string; title: string; rationale: string }> | null
 }

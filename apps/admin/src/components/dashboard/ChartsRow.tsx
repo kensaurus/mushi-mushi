@@ -6,7 +6,6 @@
 
 import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '../ui'
-import { SignalChip } from '../report-detail/ReportSurface'
 import { SeverityStackedBars, LineSparkline } from '../charts'
 import { ChartAnnotations } from '../charts/ChartAnnotations'
 import type { LlmDay, ReportDay } from './types'
@@ -15,14 +14,13 @@ import type { ChartEvent } from '../../lib/apiSchemas'
 interface Props {
   reportsByDay: ReportDay[]
   llmByDay: LlmDay[]
-  totalLlmCalls: number
   /** Wave T.5.8b: optional event overlay. Forwarded from DashboardPage
    *  which owns the chart-events query. Defaults to `[]` so existing
    *  render tests don't have to stub the query. */
   chartEvents?: ChartEvent[]
 }
 
-export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents = [] }: Props) {
+export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
   const navigate = useNavigate()
   // Wave T.4.7b: brushing the LLM sparklines deep-links to Reports filtered
   // by the same window. Each day already carries an ISO date; we align
@@ -36,9 +34,9 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
     navigate(`/reports?${next.toString()}`)
   }
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 mb-3">
       <Card className="p-3">
-        <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Report intake (14d)</h3>
           <Link to="/reports" className="text-2xs text-brand hover:text-brand-hover">All reports →</Link>
         </div>
@@ -46,14 +44,13 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
       </Card>
 
       <Card className="p-3">
-        <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">LLM activity (14d)</h3>
           <Link to="/health" className="text-2xs text-brand hover:text-brand-hover">Health →</Link>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <SignalChip tone="neutral" className="mb-1.5">Tokens / day</SignalChip>
-            <div className="relative">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="min-w-0 w-full">
+            <div className="relative w-full">
               <LineSparkline
                 values={llmByDay.map((d) => d.tokens)}
                 timestamps={llmTimestamps}
@@ -61,8 +58,6 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
                 showAxes
                 scaleToData
                 valueFormat="count"
-                yAxisCaption="Tokens"
-                xAxisCaption="UTC day"
                 showPeakLabel
                 height={56}
                 ariaLabel="LLM tokens per day — drag to filter reports by date range"
@@ -78,9 +73,8 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
               )}
             </div>
           </div>
-          <div>
-            <SignalChip tone="info" className="mb-1.5">Calls / day</SignalChip>
-            <div className="relative">
+          <div className="min-w-0 w-full">
+            <div className="relative w-full">
               <LineSparkline
                 values={llmByDay.map((d) => d.calls)}
                 timestamps={llmTimestamps}
@@ -88,8 +82,6 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
                 accent="text-info"
                 showAxes
                 valueFormat="count"
-                yAxisCaption="Calls"
-                xAxisCaption="UTC day"
                 showPeakLabel
                 height={56}
                 ariaLabel="LLM calls per day — drag to filter reports by date range"
@@ -104,7 +96,6 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
                 />
               )}
             </div>
-            <div className="text-3xs font-mono text-fg-faint mt-1">{totalLlmCalls} total calls</div>
           </div>
         </div>
       </Card>

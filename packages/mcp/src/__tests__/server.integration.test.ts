@@ -111,6 +111,7 @@ describe('MCP protocol handshake', () => {
       'add_byok_key',
       'approve_qa_story',
       'award_bonus_points',
+      'checkin_pipeline_step',
       'dispatch_fix',
       'fix_suggest',
       'generate_tdd_from_story',
@@ -120,10 +121,12 @@ describe('MCP protocol handshake', () => {
       'get_fix_timeline',
       'get_knowledge_graph',
       'get_map_run_status',
+      'get_pipeline_run',
       'get_qa_story_run',
       'get_recent_reports',
       'get_report_detail',
       'get_similar_bugs',
+      'get_skill',
       'graph_neighborhood',
       'graph_node_status',
       'improve_qa_story',
@@ -134,6 +137,7 @@ describe('MCP protocol handshake', () => {
       'list_byok_keys',
       'list_pending_review_stories',
       'list_qa_story_runs',
+      'list_skills',
       'list_top_contributors',
       'map_user_stories',
       'reply_to_reporter',
@@ -144,6 +148,7 @@ describe('MCP protocol handshake', () => {
       'set_tier',
       'setup_check',
       'setup_repo_for_mushi',
+      'start_skill_pipeline',
       'submit_fix_result',
       'test_gen_from_report',
       'test_notification_channel',
@@ -178,6 +183,9 @@ describe('MCP protocol handshake', () => {
       // Phase 5: notification + full-stack audit write tools
       'test_notification_channel',
       'run_fullstack_audit',
+      // Skill pipeline write tools
+      'start_skill_pipeline',
+      'checkin_pipeline_step',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()

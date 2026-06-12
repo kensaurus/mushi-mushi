@@ -50,6 +50,7 @@ const RepoPage = lazy(() => import('./pages/RepoPage').then(m => ({ default: m.R
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(m => ({ default: m.FullStackAuditPage })))
+const CodeHealthPage = lazy(() => import('./pages/CodeHealthPage').then(m => ({ default: m.CodeHealthPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
 const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
@@ -69,6 +70,7 @@ const RewardsPage = lazy(() => import('./pages/RewardsPage').then(m => ({ defaul
 const LessonsPage = lazy(() => import('./pages/LessonsPage').then(m => ({ default: m.LessonsPage })))
 const ReleasesPage = lazy(() => import('./pages/ReleasesPage').then(m => ({ default: m.ReleasesPage })))
 const IteratePage = lazy(() => import('./pages/IteratePage').then(m => ({ default: m.IteratePage })))
+const SkillPipelinesPage = lazy(() => import('./pages/SkillPipelinesPage').then(m => ({ default: m.SkillPipelinesPage })))
 const DriftPage = lazy(() => import('./pages/DriftPage').then(m => ({ default: m.DriftPage })))
 const ExperimentsPage = lazy(() => import('./pages/ExperimentsPage').then(m => ({ default: m.ExperimentsPage })))
 const AnomaliesPage = lazy(() => import('./pages/AnomaliesPage').then(m => ({ default: m.AnomaliesPage })))
@@ -394,6 +396,7 @@ export function App() {
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/fullstack-audit" element={<FullStackAuditPage />} />
+                  <Route path="/code-health" element={<CodeHealthPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
                   <Route path="/intelligence" element={<IntelligencePage />} />
@@ -415,6 +418,7 @@ export function App() {
                   <Route path="/lessons" element={<LessonsPage />} />
                   <Route path="/releases" element={<ReleasesPage />} />
                   <Route path="/iterate" element={<IteratePage />} />
+                  <Route path="/skills" element={<SkillPipelinesPage />} />
                   <Route path="/drift" element={<DriftPage />} />
                   <Route path="/experiments" element={<ExperimentsPage />} />
                   <Route path="/anomalies" element={<AnomaliesPage />} />
