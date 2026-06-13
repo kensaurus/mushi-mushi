@@ -140,6 +140,9 @@ describe('MCP protocol handshake', () => {
       'list_skills',
       'list_top_contributors',
       'map_user_stories',
+      'merge_fix',
+      'refresh_ci',
+      'reopen_report',
       'reply_to_reporter',
       'run_fullstack_audit',
       'run_nl_query',
@@ -186,6 +189,9 @@ describe('MCP protocol handshake', () => {
       // Skill pipeline write tools
       'start_skill_pipeline',
       'checkin_pipeline_step',
+      // Fix-merge + reopen write tools (refresh_ci is read-only)
+      'merge_fix',
+      'reopen_report',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()
