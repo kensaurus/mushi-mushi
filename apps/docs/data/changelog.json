@@ -1,11 +1,22 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.11",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.11.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.11.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.11.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.10",
@@ -451,6 +462,21 @@
     ]
   },
   {
+    "majorMinor": "0.17",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.17.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.17.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.16",
     "headline": null,
     "pending": false,
@@ -493,6 +519,10 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.15.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
         "version": "0.15.0"
       }
     ]
@@ -561,6 +591,10 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.13.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.13.0"
       },
       {
@@ -872,6 +906,10 @@
         "version": "0.8.4"
       },
       {
+        "name": "@mushi-mushi/capacitor",
+        "version": "0.8.0"
+      },
+      {
         "name": "@mushi-mushi/cli",
         "version": "0.8.0"
       },
@@ -910,6 +948,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.9",
       "0.7.8",
       "0.7.7",
       "0.7.6",
@@ -1017,7 +1056,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.8"
+        "version": "0.7.9"
       }
     ]
   },
@@ -1085,6 +1124,10 @@
         "version": "0.6.0"
       },
       {
+        "name": "@mushi-mushi/mcp-ci",
+        "version": "0.6.0"
+      },
+      {
         "name": "@mushi-mushi/node",
         "version": "0.6.0"
       },
@@ -1103,6 +1146,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.14",
       "0.5.13",
       "0.5.12",
       "0.5.11",
@@ -1211,7 +1255,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.13"
+        "version": "0.5.14"
       },
       {
         "name": "mushi-mushi",
