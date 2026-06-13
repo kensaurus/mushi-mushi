@@ -48,8 +48,10 @@ export function IntegrationsPage() {
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   const historyQuery = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
+  // /v1/admin/settings returns raw project_settings rows (no slackConfigured
+  // computed field). Stats endpoint derives webhook/channel/bot truth.
   const settingsQuery = usePageData<{ slackConfigured?: boolean; slackTeamName?: string | null }>(
-    '/v1/admin/settings',
+    '/v1/admin/settings/stats',
   )
 
   const platform = platformQuery.data?.platform ?? null

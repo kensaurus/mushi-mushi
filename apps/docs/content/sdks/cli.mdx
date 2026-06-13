@@ -2,58 +2,218 @@
 title: '@mushi-mushi/cli'
 ---
 
+import { Callout } from 'nextra/components'
+
 # `@mushi-mushi/cli`
 
-Project setup, schema sync, RAG indexing, report management, and agentic fix
-dispatch from the terminal.
+Project setup, report triage, agentic fix dispatch, QA coverage, skill pipelines, and
+headless merge — all from the terminal.
 
 ```bash
 npm install -g @mushi-mushi/cli
 
 mushi login
-mushi project create
-mushi index ./src                 # build the codebase RAG index
+mushi connect --project-id <uuid> --endpoint <url> --wait
+mushi doctor --server --qa-stories
 mushi reports list --status new
-mushi reports show rep_01HXY…
-mushi fix <reportId>              # dispatch an agentic fix
+mushi fix <reportId> --agent cursor_cloud --wait
+mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 ```
 
-## `mushi fix`
+<Callout type="info">
+  Most commands require an admin API key with `mcp:write` scope (mint in **Settings →
+  API Keys**). The SDK ingest key is read-only and cannot dispatch fixes or merge PRs.
+</Callout>
 
-Dispatch an agentic fix for a classified report from the command line.
+---
+
+## Setup & health
+
+| Command | Purpose |
+| ------- | ------- |
+| `mushi init` | Wizard: detect framework, install SDK, write `.env.local`, optional test report |
+| `mushi connect` | Non-interactive wiring: `~/.mushirc` + env + Cursor MCP + optional heartbeat wait |
+| `mushi login` | Save credentials to `~/.mushirc` (mode `0o600`) |
+| `mushi whoami` | Verify API key and show project info |
+| `mushi ping` | Backend connectivity probe |
+| `mushi config` | View or update CLI config |
+| `mushi upgrade` | Bump installed `@mushi-mushi/*` packages to latest stable |
+| `mushi migrate` | Suggest migration guides based on `package.json` |
+| `mushi project create` | Create project, mint key, write config |
+| `mushi project setup` | Wire Mushi into your IDE in one command |
+| `mushi doctor` | Local + optional server preflight checks |
+| `mushi reset <projectId> --confirm` | Archive project and wipe test data (irreversible) |
+
+### `mushi doctor`
+
+```bash
+mushi doctor                  # local: config, endpoint, SDK install
+mushi doctor --server         # + 4 dispatch checks (GitHub, codebase, Anthropic, autofix)
+mushi doctor --ingest         # + SDK heartbeat / first-report ingest steps
+mushi doctor --qa-stories     # + QA story setup warnings (needs --server credentials)
+mushi doctor --json           # machine-readable; exits 1 if any check fails
+```
+
+---
+
+## Reports & lessons
+
+```bash
+mushi reports list [--status new] [--severity critical]
+mushi reports show <id>
+mushi reports triage <id> --status acknowledged --severity high
+mushi reports resolve <id>
+mushi reports reopen <id>
+mushi reports dismiss <id>
+mushi reports reply <id> "Thanks — we're on it"
+mushi reports search "checkout button"
+
+mushi lessons list
+mushi lessons show <id>
+mushi sync-lessons              # pull promoted rules → .mushi/lessons.json
+```
+
+---
+
+## Agentic fixes
+
+### `mushi fix <reportId>`
+
+Dispatch an agentic fix for a classified report.
 
 ```bash
 # Default agent (from project settings)
 mushi fix 00000000-0000-0000-0000-000000000123
 
-# Dispatch a Cursor Cloud Agent
-mushi fix 00000000-0000-0000-0000-000000000123 --agent cursor_cloud
-
-# Override model and wait for the run to complete
-mushi fix <reportId> --agent cursor_cloud --model composer-latest --wait
+# Cursor Cloud Agent — wait for PR
+mushi fix <reportId> --agent cursor_cloud --wait
 
 # CI: fail the pipeline if the fix errors
 mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
-
-# Disable auto-PR creation
-mushi fix <reportId> --agent cursor_cloud --no-auto-pr
 ```
-
-### Options
 
 | Flag | Description |
-|------|-------------|
-| `--agent <name>` | Agent adapter: `cursor_cloud`, `claude_code`, `codex`, `mcp` |
+| ---- | ----------- |
+| `--agent <name>` | `claude_code` (default), `cursor_cloud`, `codex`, `mcp` |
 | `--model <slug>` | Model override for `cursor_cloud` (e.g. `composer-latest`) |
-| `--no-auto-pr` | Disable automatic PR creation for this dispatch |
-| `--wait` | Block until the run terminates; exits non-zero on failure |
+| `--no-auto-pr` | Skip automatic PR creation for `cursor_cloud` |
+| `--wait` | Poll until terminal state; exits non-zero on failure |
 
-### Output
+### `mushi fixes`
 
-When not `--wait`, the command streams `dispatch.start` and `dispatch.ok` events to stdout (JSON when piped, human-readable in a TTY). With `--wait`, it also streams `fix.status` poll events until the run reaches a terminal state.
+Headless fix lifecycle — pairs with `mushi fix --wait`.
 
-```json
-{"type":"dispatch.start","reportId":"…","agent":"cursor_cloud","model":null}
-{"type":"dispatch.ok","fixId":"…","status":"running","agentId":"bc-…","prUrl":null}
-{"type":"fix.status","fixId":"…","status":"completed","prUrl":"https://github.com/…"}
+```bash
+# Stream dispatch SSE events (no browser)
+mushi fixes tail --report-id <reportId>
+
+# Pull latest GitHub Actions status (same as console "Refresh CI status")
+mushi fixes refresh-ci <fixId>
+mushi fixes refresh-ci <fixId> --json
+
+# Squash-merge the draft PR and mark the report Fixed
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash   # default
+mushi fixes merge <fixId> --method merge
+mushi fixes merge <fixId> --json
 ```
+
+**Merge prerequisites:** the fix attempt must be `completed` with an open PR (`pr_url`
++ `pr_number`). Draft PRs are auto-readied via GitHub GraphQL before merge (same as the
+console). Requires GitHub App or PAT connected and an API key with `mcp:write`.
+
+When merge succeeds, the report moves to **Fixed**, the reporter gets notified, and
+`fix.applied` webhooks fire — identical to merging on GitHub or via the admin console.
+
+---
+
+## QA coverage & TDD
+
+```bash
+# Live crawl → inventory proposal
+mushi stories map --url https://your-app.com --wait
+mushi stories map --url https://app.com --provider browserbase --cursor-refine
+
+# TDD test generation
+mushi tdd gen <storyId> --mode review
+mushi tdd pending
+mushi tdd approve <qaStoryId>
+mushi tdd improve                    # PDCA on failing tests
+mushi tdd run <qaStoryId>
+
+# QA story ops
+mushi qa stories
+mushi qa runs <storyId>
+mushi qa run <storyId>
+mushi qa audit                     # full-stack project health audit
+```
+
+---
+
+## Skill pipelines
+
+```bash
+mushi skills list [--category workflow] [--search "fix bug"]
+mushi skills show workflow-fix-and-ship
+mushi skills sync [--source-id <id>]
+
+mushi pipeline start <reportId> --skill workflow-fix-and-ship [--mode cloud]
+mushi pipeline watch <runId-or-prefix>
+mushi pipeline checkin <runId-or-prefix> --step 0 --status passed [--notes "Done"]
+```
+
+| Mode | Behavior |
+| ---- | -------- |
+| `handoff` | Prints a context packet for your local Cursor agent |
+| `cloud` | Dispatches each step to Cursor Cloud; status streams to the console |
+
+---
+
+## Integrations, keys & Slack
+
+```bash
+mushi integrations list
+mushi integrations test slack
+mushi integrations test sentry
+mushi integrations test github
+
+mushi keys list
+MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup"
+
+mushi slack status
+mushi slack test
+```
+
+---
+
+## Indexing, sourcemaps & deploy
+
+```bash
+mushi index ./src                    # upload codebase chunks to RAG
+mushi sourcemaps upload --release 1.4.2 --dir ./dist
+mushi deploy check                   # edge-function health + latency
+mushi test                           # synthetic report end-to-end
+```
+
+---
+
+## Environment variables
+
+| Variable | Purpose |
+| -------- | ------- |
+| `MUSHI_API_KEY` | Admin or ingest API key (prefer env over `--api-key` flag) |
+| `MUSHI_API_ENDPOINT` | API base URL |
+| `MUSHI_PROJECT_ID` | Project UUID |
+| `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
+| `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
+
+Config file: `~/.mushirc` (Unix mode `0o600`).
+
+---
+
+## See also
+
+- [Admin → Fix orchestrator](/admin/fixes) — streaming view, CI feedback, console merge
+- [Admin → Reports & triage](/admin/reports) — merge from report detail
+- [@mushi-mushi/mcp](/sdks/mcp) — MCP tools for agents (`dispatch_fix`, skill pipelines)
+- [AGENTS.md](https://github.com/kensaurus/mushi-mushi/blob/master/AGENTS.md) — full agent inventory

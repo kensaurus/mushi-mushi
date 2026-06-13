@@ -15,7 +15,7 @@ can execute without additional context.
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
-| `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix |
+| `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix; auto-readies PR via GraphQL `markPullRequestAsReady` |
 | `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
 | `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | **NEW** Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
 | `test-gen-from-story` | `supabase/functions/test-gen-from-story/` | POST /stories/:id/generate-test | **NEW** User story → Playwright TypeScript test + Firecrawl YAML + draft GitHub PR + `qa_stories` row; gated by `automation_mode` |
@@ -223,6 +223,12 @@ mushi tdd improve
 mushi keys list
 # Prefer the env var so the key is not captured in shell history:
 MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup key"
+
+# ── Fix lifecycle (dispatch → CI → merge) ─────────────────────────────────
+mushi fix <reportId> --agent cursor_cloud --wait
+mushi fixes tail --report-id <reportId>
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed
 ```
 
 ### MCP Tools
@@ -304,6 +310,41 @@ Pipeline tools (`mcp:write` scope): `start_skill_pipeline`, `get_pipeline_run`, 
 - **Packet budget**: `context_packet` is capped at 40,000 chars (configurable in `_shared/skill-packet.ts`)
 - **Rate limit**: pipeline starts are limited per project (enforced in `api/routes/skills.ts`)
 - **Air-gap**: skill content flows *into* LLM prompts only — never executed against raw user strings
+
+---
+
+## Console merge loop (Jun 2026)
+
+User-confirmed PR merge from the admin console or CLI — closes the gap between
+"draft PR open" and report **Fixed** without requiring a manual GitHub merge +
+webhook.
+
+### Endpoints
+
+| Route | Auth | Purpose |
+| ----- | ---- | ------- |
+| `POST /v1/admin/fixes/:id/merge` | `adminOrApiKey(mcp:write)` | Merge PR on GitHub + `finalizeFixMerge()` |
+| `POST /v1/admin/fixes/:id/refresh-ci` | `adminOrApiKey(mcp:write)` | On-demand `ci-sync` for check-run badge |
+
+Shared logic: `_shared/fix-merge.ts` (`mergeGithubPullRequest`, `finalizeFixMerge`).
+
+### Draft → ready → merge
+
+1. `fix-worker` opens a **draft** PR, then calls `markPullRequestReady()` (GraphQL —
+   REST `draft: false` is unreliable).
+2. Console/CLI merge calls `mergeGithubPullRequest()` which re-readies if still draft.
+3. GitHub squash-merge (default) → webhook or inline `finalizeFixMerge()` sets
+   `merged_at`, report → `fixed`, reporter notification, `fix.applied` plugins.
+
+### CLI
+
+```bash
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId> [--method squash|merge|rebase]
+```
+
+Admin UI: `MergeFixPreflight`, `FixCiFeedback`, `pickPrimaryFixAttempt()` in
+`apps/admin/src/lib/mergeFix.ts`.
 
 ---
 

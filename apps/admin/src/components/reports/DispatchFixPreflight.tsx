@@ -145,7 +145,7 @@ export function DispatchFixPreflight({
             file it thinks owns this bug, and drafts a pull request on a new
             feature branch.{' '}
             <span className="text-fg-faint">
-              You stay in control — nothing merges automatically.
+              You stay in control — dispatch opens a draft PR; you review and merge in the console or on GitHub.
             </span>
           </p>
 

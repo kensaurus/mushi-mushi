@@ -42,6 +42,7 @@ export type {
   MushiSdkVersionInfo,
   MushiReporterReport,
   MushiReporterComment,
+  MushiHallOfFameEntry,
   MushiOnDeviceClassifier,
   MushiOnDeviceClassifierInput,
   MushiOnDeviceClassifierResult,

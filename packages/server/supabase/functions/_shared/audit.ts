@@ -6,7 +6,7 @@ const auditLog = log.child('audit')
 export type AuditAction = 'report.created' | 'report.classified' | 'report.triaged' | 'report.fixed'
   | 'api_key.created' | 'api_key.revoked' | 'settings.updated'
   | 'user.logged_in' | 'user.logged_out'
-  | 'fix.attempted' | 'fix.reviewed'
+  | 'fix.attempted' | 'fix.reviewed' | 'fix.merge'
   | 'integration.synced' | 'plugin.executed'
   | 'billing.checkout_started' | 'billing.subscription_changed' | 'billing.payment_failed'
   | 'support.ticket_created' | 'support.ticket_status_changed' | 'support.ticket_cancelled'

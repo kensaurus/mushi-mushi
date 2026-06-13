@@ -304,6 +304,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'crawl_max_pages_per_day',
       'crawl_max_runs_per_day',
       'tdd_max_gens_per_day',
+      // Fix-worker branch naming template ({date}/{category}/{shortId})
+      'fix_branch_template',
     ];
     // Free-text banner fields are served verbatim on the UNAUTHENTICATED
     // public SDK config endpoint — enforce the same caps as
@@ -313,6 +315,9 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       sdk_banner_message: 240,
       sdk_banner_label: 24,
       sdk_banner_bug_cta: 60,
+      // Branch templates are short by nature; cap well above any real
+      // pattern while preventing an oversized free-text write.
+      fix_branch_template: 200,
     };
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
