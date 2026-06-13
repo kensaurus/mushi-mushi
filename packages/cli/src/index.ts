@@ -2261,9 +2261,9 @@ qa
         }
       }
     }
-    const consoleUrl = config.consoleUrl ?? 'http://localhost:6464'
+    const consoleUrl = config.consoleUrl ?? 'https://app.mushi.ai'
     console.log(`\n   Open in console: ${consoleUrl}/qa-coverage?story=${storyId}`)
-    console.log(`   Tip: run 'mushi config consoleUrl http://localhost:6464' to set your local console URL`)
+    console.log(`   Tip: run 'mushi config consoleUrl <url>' to override (e.g. http://localhost:6464 for local dev)`)
     console.log()
   })
 

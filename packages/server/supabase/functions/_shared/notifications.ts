@@ -143,7 +143,7 @@ async function sendInAppNotification(
   reporterTokenHash: string,
   type: NotificationType,
   payload: NotificationPayload,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   const { error } = await db.from('reporter_notifications').insert({
     project_id: projectId,
     report_id: reportId,
@@ -153,7 +153,11 @@ async function sendInAppNotification(
     payload,
     sent_at: new Date().toISOString(),
   })
-  if (error) notifLog.error('in_app_insert_failed', { type, error: error.message })
+  if (error) {
+    notifLog.error('in_app_insert_failed', { type, error: error.message })
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
 }
 
 async function sendEmailNotification(
@@ -227,8 +231,8 @@ export async function createNotification(
     if (!deliveryId) continue
 
     if (channel === 'in_app') {
-      await sendInAppNotification(db, projectId, reportId, reporterTokenHash, type, fullPayload)
-      await markDelivery(db, deliveryId, 'sent')
+      const result = await sendInAppNotification(db, projectId, reportId, reporterTokenHash, type, fullPayload)
+      await markDelivery(db, deliveryId, result.ok ? 'sent' : 'failed', result.error)
       continue
     }
 
