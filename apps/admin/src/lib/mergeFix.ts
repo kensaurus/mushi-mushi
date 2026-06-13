@@ -51,17 +51,32 @@ export async function mergeFixAttempt(
   }
 }
 
-export function canMergeFix(fix: {
+export type MergeEligibleFix = {
   pr_url?: string | null
   pr_number?: number | null
   pr_state?: string | null
   status?: string
   merged_at?: string | null
-}): boolean {
-  if (!fix.pr_url || !fix.pr_number) return false
-  if (fix.pr_state === 'merged' || fix.merged_at) return false
-  if (fix.status !== 'completed' && fix.status !== 'merged') return false
-  return true
+}
+
+/** PR landed on the default branch — console merge is closed and filters should treat the loop as shipped. */
+export function isFixMerged(fix: MergeEligibleFix): boolean {
+  return fix.pr_state === 'merged' || fix.status === 'merged' || Boolean(fix.merged_at)
+}
+
+export function canMergeFix(fix: MergeEligibleFix): boolean {
+  return getMergeBlockerReason(fix) === null
+}
+
+/** Human-readable reason when console merge is unavailable — drives bulk-bar hints and per-card affordances. */
+export function getMergeBlockerReason(fix: MergeEligibleFix): string | null {
+  if (!fix.pr_url) return 'No pull request opened yet'
+  if (!fix.pr_number) return 'PR number missing — refresh CI or open on GitHub'
+  if (isFixMerged(fix)) return 'Already merged on GitHub'
+  if (fix.status !== 'completed' && fix.status !== 'merged') {
+    return `Attempt status is “${fix.status ?? 'unknown'}” — only completed attempts can merge from the console`
+  }
+  return null
 }
 
 /** Pick the fix attempt the UI should treat as "current" — not always [0]

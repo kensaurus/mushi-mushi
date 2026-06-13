@@ -11,6 +11,7 @@
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { isFixMerged } from '../../lib/mergeFix'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import type { FixAttempt } from './types'
 import type { FixTimelineEvent } from '../FixGitGraph'
@@ -96,7 +97,6 @@ function buildReceipts(
   const committed = has('commit') ?? null
   const prOpened = has('pr_opened') ?? null
   const ciResolved = has('ci_resolved') ?? null
-  const completed = has('completed') ?? null
   const failedEvent = has('failed') ?? null
 
   const status = fix.status?.toLowerCase() ?? ''
@@ -105,7 +105,7 @@ function buildReceipts(
   const hasFiles = (fix.files_changed?.length ?? 0) > 0 || !!committed
   const ciConclusion = fix.check_run_conclusion?.toLowerCase() ?? null
   const isFailed = status === 'failed' || !!failedEvent
-  const isCompleted = status === 'completed' || !!completed
+  const shippedOnGithub = isFixMerged(fix)
 
   // PLAN — the report was classified and Mushi decided to dispatch a fix.
   // If the fix exists at all, planning happened; we only stay "pending" when
@@ -158,23 +158,36 @@ function buildReceipts(
       : 'No PR to verify yet'
   const check: StageReceipt = { id: 'check', stamp: checkStamp, proof: checkProof }
 
-  // ACT — merged + report closed.
+  // ACT — merged + report closed. A merged PR closes the loop unconditionally.
+  // A hard CI failure (red CHECK) blocks the loop, so ACT must not read
+  // "Awaiting merge" — that contradicts the failed CHECK + pipeline Ship stage.
+  const ciHardFailed = ciConclusion === 'failure' || ciConclusion === 'timed_out'
   let actStamp: StageStamp = 'idle'
-  if (isCompleted && !isFailed && ciConclusion === 'success') actStamp = 'done'
+  if (shippedOnGithub) actStamp = 'done'
   else if (isFailed) actStamp = 'failed'
+  else if (ciHardFailed) actStamp = 'failed'
   else if (ciConclusion === 'success' || hasPr) actStamp = 'pending'
-  const actProof = actStamp === 'done'
-    ? 'Loop closed — report resolved by this fix'
+  const actProof = shippedOnGithub
+    ? fix.merged_at
+      ? 'Merged on GitHub — report marked Fixed when the webhook ran'
+      : 'Merged on GitHub — loop closed for this PR'
     : isFailed
       ? `Loop blocked — ${fix.error ?? 'fix attempt failed'}`
-      : actStamp === 'pending'
-        ? 'Awaiting merge'
-        : 'Not yet — needs Do + Check first'
+      : ciHardFailed
+        ? 'CI failed on the PR — review before merging'
+        : actStamp === 'pending'
+          ? ciConclusion === 'success'
+            ? 'CI passed — awaiting merge from console or GitHub'
+            : 'Awaiting merge'
+          : 'Not yet — needs Do + Check first'
   const act: StageReceipt = {
     id: 'act',
     stamp: actStamp,
     proof: actProof,
-    link: fix.pr_url && actStamp === 'pending' ? { href: fix.pr_url, label: 'Review & merge' } : undefined,
+    link:
+      fix.pr_url && actStamp === 'pending' && !shippedOnGithub
+        ? { href: fix.pr_url, label: 'Review & merge' }
+        : undefined,
   }
 
   return { plan, do: doReceipt, check, act }

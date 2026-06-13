@@ -11,6 +11,8 @@ export const STATUS: Record<string, string> = {
   classified: 'bg-ok-muted text-ok border border-ok/20',
   fixing:     'bg-accent-muted text-accent border border-accent/20',
   fixed:      'bg-info-muted text-info border border-info/20',
+  verified:   'bg-ok-muted text-ok border border-ok/20',
+  reopened:   'bg-warn-muted text-warn border border-warn/20',
   resolved:   'bg-ok-muted text-ok border border-ok/20',
   dismissed:  'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
@@ -27,6 +29,7 @@ export const PIPELINE_STATUS: Record<string, string> = {
   promoted:   'bg-ok-muted text-ok',
   rejected:   'bg-danger-muted text-danger',
   completed:         'bg-ok-muted text-ok',
+  merged:            'bg-ok-muted text-ok',
   failed:            'bg-danger-muted text-danger',
   error:             'bg-danger-muted text-danger',
   dead_letter:       'bg-danger-muted text-danger',
@@ -149,6 +152,8 @@ export const STATUS_LABELS: Record<string, string> = {
   classified: 'Classified',
   fixing:     'Fixing',
   fixed:      'Fixed',
+  verified:   'Verified',
+  reopened:   'Reopened',
   dismissed:  'Dismissed',
   // SDK ingest aliases — normalised server-side but displayed here until migrated
   submitted:  'New',
@@ -179,6 +184,7 @@ export const PIPELINE_STATUS_LABELS: Record<string, string> = {
   promoted:    'Promoted',
   rejected:    'Rejected',
   completed:          'Completed',
+  merged:             'Merged',
   failed:             'Failed',
   error:              'Error',
   dead_letter:        'Dead letter',

@@ -5,6 +5,7 @@
 
 import type { PipelineStageState } from '../ui'
 import type { FixAttempt } from './types'
+import { isFixMerged } from '../../lib/mergeFix'
 import { deriveStatuses, type FixStageStatus } from './fixAttemptFlow.data'
 
 const STAGE_META = [
@@ -38,6 +39,7 @@ export function buildFixPipelineStages(fix: FixAttempt): Array<{ label: string; 
 
 /** Left stripe tone for at-a-glance row scan (Linear / GitHub PR list pattern). */
 export function fixStatusStripeClass(fix: FixAttempt): string {
+  if (isFixMerged(fix)) return 'bg-ok'
   const status = fix.status?.toLowerCase()
   if (status === 'failed') return 'bg-danger'
   if (status === 'queued' || status === 'running') return 'bg-info motion-safe:animate-pulse'

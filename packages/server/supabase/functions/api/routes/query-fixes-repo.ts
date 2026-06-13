@@ -605,7 +605,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     let query = db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, error, spec_validation_warnings, inventory_action_node_id, failure_category',
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category',
       )
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
