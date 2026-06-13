@@ -167,11 +167,14 @@ class ApiClient {
     required String reporterHmac,
   }) async {
     final uri = Uri.parse('${config.endpoint}/v1/reporter/reports');
-    final res = await _client.get(uri, headers: {
-      ..._headers,
-      'X-Mushi-Reporter-Token': reporterToken,
-      'X-Mushi-Reporter-Signature': reporterHmac,
-    });
+    final res = await _client.get(
+      uri,
+      headers: {
+        ..._headers,
+        'X-Mushi-Reporter-Token': reporterToken,
+        'X-Mushi-Reporter-Signature': reporterHmac,
+      },
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) return [];
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final data = body['data'] as Map<String, dynamic>?;
