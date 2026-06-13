@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "license": "MIT",
   "description": "MCP server exposing Mushi Mushi reports to coding agents",
   "type": "module",
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@mushi-mushi/core": "^1.9.0",
+    "@mushi-mushi/core": "^1.11.0",
     "zod": "^4.4.2"
   },
   "devDependencies": {

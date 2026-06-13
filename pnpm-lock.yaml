@@ -652,7 +652,7 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.2)
       '@mushi-mushi/core':
-        specifier: ^1.9.0
+        specifier: ^1.11.0
         version: link:../core
       zod:
         specifier: ^4.4.2
@@ -1321,7 +1321,7 @@ importers:
   packages/web:
     dependencies:
       '@mushi-mushi/core':
-        specifier: ^1.10.0
+        specifier: ^1.11.0
         version: link:../core
     devDependencies:
       '@mushi-mushi/eslint-config':
