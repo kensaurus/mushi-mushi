@@ -55,6 +55,9 @@ import {
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
+import { RegressionChain } from '../components/report-detail/RegressionChain'
+import { CursorAgentLaunch } from '../components/report-detail/CursorAgentLaunch'
+import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
@@ -391,6 +394,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
+      <RegressionChain report={report} className="mb-3" />
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <GenerateTestButton report={report} />
+      </div>
+
+      <CursorAgentLaunch report={report} />
+
       <ReportPipelineFlow report={report} dispatchState={dispatchState} />
 
       {!isAdvanced && (
@@ -453,6 +464,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         dispatchState={dispatchState}
         onDispatch={dispatch}
         isDispatchBusy={isDispatchBusy}
+        preflight={preflight}
       />
 
       <FixProgressStream reportId={report.id} dispatchState={dispatchState} />

@@ -1178,6 +1178,22 @@ export interface MushiSDKInstance {
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>;
 
   /**
+   * Submit a structured feedback chip (confirms / not_fixed / …) on a report.
+   * Drives the verify/reopen lifecycle when the report is in a fixed state.
+   */
+  submitFeedbackSignal(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>;
+
+  /**
+   * Reporter-initiated regression reopen with an optional note.
+   */
+  reopenReport(reportId: string, note?: string): Promise<Record<string, unknown> | null>;
+
+  /**
+   * Open the reporter inbox ("my reports") view in the widget.
+   */
+  openMyReports(): void;
+
+  /**
    * Returns the global contributor hall-of-fame ranked by total points.
    * Safe to call without an authenticated user; uses public endpoint.
    * @param limit Maximum entries to return (default 20).
@@ -1243,7 +1259,13 @@ export interface MushiApiClient {
     reportId: string,
     reporterToken: string,
     body: string,
-  ): Promise<MushiApiResponse<{ comment: MushiReporterComment }>>;
+    feedbackSignal?: string,
+  ): Promise<MushiApiResponse<{ comment: MushiReporterComment; feedback?: Record<string, unknown> }>>;
+  reopenReporterReport(
+    reportId: string,
+    reporterToken: string,
+    note?: string,
+  ): Promise<MushiApiResponse<{ outcome: Record<string, unknown> }>>;
 
   // ─── Rewards program (P1) ───────────────────────────────────
 
@@ -1349,6 +1371,10 @@ export interface MushiReporterReport {
   created_at: string;
   last_admin_reply_at?: string | null;
   last_reporter_reply_at?: string | null;
+  parent_report_id?: string | null;
+  verified_at?: string | null;
+  reopened_at?: string | null;
+  regression_count?: number;
   unread_count?: number;
 }
 

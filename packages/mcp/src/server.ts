@@ -584,11 +584,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         filesChanged: z.array(z.string()).describe('Files modified'),
         linesChanged: z.number().describe('Total lines changed'),
         summary: z.string().describe('Fix summary'),
+        idempotencyKey: z.string().uuid().optional().describe('Optional UUID — resend the same key to safely retry without creating duplicate fix rows'),
       },
     },
     async (args) => {
+      const idemKey = args.idempotencyKey ?? crypto.randomUUID()
       const created = await apiCall<{ fixId: string }>('/v1/admin/fixes', {
         method: 'POST',
+        headers: { 'Idempotency-Key': idemKey },
         body: JSON.stringify({ reportId: args.reportId, agent: 'mcp' }),
       })
       await apiCall(`/v1/admin/fixes/${created.fixId}`, {
@@ -703,6 +706,62 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   )
 
   server.registerTool(
+    'merge_fix',
+    {
+      title: 'Merge fix PR',
+      description: 'Squash-merge a fix attempt PR and mark the linked report fixed.',
+      annotations: annotationsFor('merge_fix'),
+      inputSchema: {
+        fixId: z.string().describe('Fix attempt UUID'),
+        mergeMethod: z.enum(['squash', 'merge', 'rebase']).optional().describe('GitHub merge method'),
+      },
+    },
+    async (args) => {
+      const data = await apiCall(`/v1/admin/fixes/${args.fixId}/merge`, {
+        method: 'POST',
+        body: JSON.stringify({ mergeMethod: args.mergeMethod ?? 'squash' }),
+      })
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'refresh_ci',
+    {
+      title: 'Refresh fix CI status',
+      description: 'Pull the latest GitHub check-run status for a fix attempt.',
+      annotations: annotationsFor('refresh_ci'),
+      inputSchema: {
+        fixId: z.string().describe('Fix attempt UUID'),
+      },
+    },
+    async (args) => {
+      const data = await apiCall(`/v1/admin/fixes/${args.fixId}/refresh-ci`, { method: 'POST' })
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'reopen_report',
+    {
+      title: 'Reopen report (operator)',
+      description: 'Operator alias to move a report back to new for regression triage.',
+      annotations: annotationsFor('reopen_report'),
+      inputSchema: {
+        reportId: z.string().describe('Report UUID'),
+        note: z.string().optional().describe('Triage note'),
+      },
+    },
+    async (args) => {
+      const data = await apiCall(`/v1/sync/reports/${args.reportId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'reopened', note: args.note }),
+      })
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
     'transition_status',
     {
       title: titleOf('transition_status'),
@@ -710,7 +769,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       annotations: annotationsFor('transition_status'),
       inputSchema: {
         reportId: z.string().describe('Report UUID'),
-        status: z.enum(['pending', 'classified', 'grouped', 'fixing', 'fixed', 'dismissed']).describe('Target status'),
+        status: z.enum(['pending', 'classified', 'grouped', 'fixing', 'fixed', 'resolved', 'verified', 'reopened', 'dismissed']).describe('Target status'),
         reason: z.string().optional().describe('Reason for the transition (audit trail)'),
       },
     },

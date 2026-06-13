@@ -89,12 +89,53 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [category, setCategory] = useState<string | null>(null)
   const [description, setDescription] = useState('')
   const [phase, setPhase] = useState<'form' | 'sending' | 'sent'>('form')
+  const [sheetTab, setSheetTab] = useState<'report' | 'inbox'>('report')
+  const [inboxReports, setInboxReports] = useState<Array<{ id: string; status: string; summary?: string | null; description?: string }>>([])
+  const [inboxLoading, setInboxLoading] = useState(false)
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
+  const [threadComments, setThreadComments] = useState<Array<{ id: number; body: string; author_kind: string; created_at: string }>>([])
+  const [replyText, setReplyText] = useState('')
   // Local shadow of the screenshot so we can clear it from inside the sheet
   const [screenshotAttached, setScreenshotAttached] = useState(true)
 
   useEffect(() => {
-    if (visible) setScreenshotAttached(true)
-  }, [visible])
+    if (visible) {
+      setScreenshotAttached(true)
+      if (sheetTab === 'inbox') void loadInbox()
+    }
+  }, [visible, sheetTab])
+
+  const loadInbox = useCallback(async () => {
+    if (!mushi?.listMyReports) return
+    setInboxLoading(true)
+    try {
+      const rows = await mushi.listMyReports()
+      setInboxReports(rows as typeof inboxReports)
+    } finally {
+      setInboxLoading(false)
+    }
+  }, [mushi])
+
+  const openThread = useCallback(async (reportId: string) => {
+    setSelectedReportId(reportId)
+    if (!mushi?.listMyComments) return
+    const comments = await mushi.listMyComments(reportId)
+    setThreadComments(comments as typeof threadComments)
+  }, [mushi])
+
+  const sendReply = useCallback(async () => {
+    if (!mushi?.replyToReport || !selectedReportId || !replyText.trim()) return
+    await mushi.replyToReport(selectedReportId, replyText.trim())
+    setReplyText('')
+    await openThread(selectedReportId)
+  }, [mushi, selectedReportId, replyText, openThread])
+
+  const submitFeedback = useCallback(async (signal: string) => {
+    if (!mushi?.submitFeedbackSignal || !selectedReportId) return
+    await mushi.submitFeedbackSignal(selectedReportId, signal)
+    await loadInbox()
+    await openThread(selectedReportId)
+  }, [mushi, selectedReportId, loadInbox, openThread])
 
   const resetForm = useCallback(() => {
     setCategory(null)
@@ -218,7 +259,73 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
             <View style={[s.handle, { backgroundColor: colors.sub }]} />
           </View>
 
-          {phase === 'sent' ? (
+          {/* Tab row */}
+          <View style={s.tabRow}>
+            {(['report', 'inbox'] as const).map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => {
+                  setSheetTab(tab)
+                  if (tab === 'inbox') void loadInbox()
+                  else setSelectedReportId(null)
+                }}
+                style={[s.tabBtn, sheetTab === tab && { borderBottomColor: colors.accent }]}
+              >
+                <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.accent : colors.sub }]}>
+                  {tab === 'report' ? 'Report' : 'Inbox'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {sheetTab === 'inbox' ? (
+            <View style={s.body}>
+              {inboxLoading ? (
+                <Text style={{ color: colors.sub }}>Loading…</Text>
+              ) : selectedReportId ? (
+                <>
+                  <TouchableOpacity onPress={() => setSelectedReportId(null)}>
+                    <Text style={{ color: colors.accent, marginBottom: 8 }}>← Back</Text>
+                  </TouchableOpacity>
+                  {threadComments.map((c) => (
+                    <View key={c.id} style={[s.threadBubble, { backgroundColor: colors.card }]}>
+                      <Text style={{ color: colors.sub, fontSize: 11 }}>{c.author_kind}</Text>
+                      <Text style={{ color: colors.text }}>{c.body}</Text>
+                    </View>
+                  ))}
+                  {inboxReports.find((r) => r.id === selectedReportId)?.status === 'fixed' && (
+                    <View style={s.verifyRow}>
+                      <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.accent }]} onPress={() => submitFeedback('confirms')}>
+                        <Text style={s.submitText}>Yes, fixed</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.border }]} onPress={() => submitFeedback('not_fixed')}>
+                        <Text style={[s.submitText, { color: colors.text }]}>Not fixed</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <TextInput
+                    style={[s.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, minHeight: 48 }]}
+                    placeholder="Reply…"
+                    placeholderTextColor={colors.sub}
+                    value={replyText}
+                    onChangeText={setReplyText}
+                  />
+                  <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]} onPress={sendReply}>
+                    <Text style={s.submitText}>Send</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                inboxReports.map((r) => (
+                  <TouchableOpacity key={r.id} style={[s.inboxRow, { borderColor: colors.border }]} onPress={() => openThread(r.id)}>
+                    <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>
+                      {(r.summary ?? r.description ?? 'Report').slice(0, 60)}
+                    </Text>
+                    <Text style={{ color: colors.sub, fontSize: 11 }}>{r.status}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          ) : phase === 'sent' ? (
             <View style={s.sentWrap}>
               <Text style={[s.sentEmoji]}>✅</Text>
               <Text style={[s.sentText, { color: colors.text }]}>Report sent!</Text>
@@ -452,5 +559,42 @@ const s = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     paddingHorizontal: 4,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#ccc',
+    marginBottom: 8,
+  },
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  inboxRow: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  threadBubble: {
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+  },
+  verifyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  verifyBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
   },
 })

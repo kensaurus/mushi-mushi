@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
+import { stageDrawerBelowAppChromeClass } from '../../lib/appChrome'
 
 interface StageDrawerProps {
   open: boolean
@@ -84,7 +85,7 @@ export function StageDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end sm:items-stretch sm:justify-end motion-safe:animate-mushi-drawer-backdrop-in"
+      className={stageDrawerBelowAppChromeClass}
       role="presentation"
     >
       <button

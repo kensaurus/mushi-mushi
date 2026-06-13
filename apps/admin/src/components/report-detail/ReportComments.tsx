@@ -21,6 +21,10 @@ function feedbackSignalTooltip(signal: FeedbackSignal): string {
       return 'Reporter says the bug is gone — likely a regression that someone else fixed. Auto-resolves the report.'
     case 'noise':
       return "Reporter says this shouldn't have been classified — noise / spam / off-topic. Down-weights this reporter's anti-gaming score."
+    case 'not_fixed':
+      return 'Reporter says the fix did not work — regression reopen was filed automatically.'
+    default:
+      return 'Reporter feedback signal.'
   }
 }
 
@@ -35,6 +39,10 @@ function feedbackSignalToneClass(signal: FeedbackSignal): string {
       return 'border-warn/40 bg-warn-muted/20 text-warn'
     case 'noise':
       return 'border-danger/40 bg-danger-muted/20 text-danger'
+    case 'not_fixed':
+      return 'border-warn/40 bg-warn-muted/20 text-warn'
+    default:
+      return 'border-edge-subtle bg-surface-overlay text-fg-muted'
   }
 }
 
@@ -126,6 +134,18 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
         ))}
       </div>
       <form onSubmit={onSubmit} className="space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setVisibleToReporter(true)}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/40 text-accent hover:bg-accent/10 motion-safe:transition-colors"
+          >
+            Message reporter
+          </button>
+          {visibleToReporter && (
+            <span className="text-2xs text-accent">Reply will be visible in their inbox</span>
+          )}
+        </div>
         <textarea
           value={body}
           onChange={(e) => setBody(e.currentTarget.value)}

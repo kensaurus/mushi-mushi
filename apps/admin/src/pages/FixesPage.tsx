@@ -93,8 +93,7 @@ function bucketize(fix: FixAttempt): StatusBucket {
   if (status === 'queued' || status === 'running') return 'inflight'
   if (status === 'failed') return 'failed'
   if (isFixMerged(fix)) return 'merged'
-  const conclusion = fix.check_run_conclusion?.toLowerCase()
-  if (conclusion === 'success') return 'merged'
+  // Open PRs (including CI-green) stay in pr_open — "Shipped" is merged-only.
   if (fix.pr_url) return 'pr_open'
   return 'all'
 }

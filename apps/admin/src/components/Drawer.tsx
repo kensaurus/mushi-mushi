@@ -11,6 +11,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { ReactNode, MouseEvent } from 'react'
+import { drawerBelowAppChromeClass } from '../lib/appChrome'
 
 type DrawerWidth = 'sm' | 'md' | 'lg'
 
@@ -36,9 +37,8 @@ interface DrawerProps {
    *  report preview where the list should stay readable. Defaults true. */
   dimmed?: boolean
   /** Override the outer fixed-container className. Defaults to
-   *  `'fixed inset-0 z-50 flex justify-end'`. Pass a custom value when
-   *  the drawer must start below a persistent header (e.g. Ask Mushi
-   *  should not occlude the desktop top bar). */
+   *  `drawerBelowAppChromeClass` (clears beta banner + desktop sub-header).
+   *  Pass a custom value only when a drawer needs a non-standard inset. */
   containerClassName?: string
 }
 
@@ -138,7 +138,7 @@ export function Drawer({
       role="dialog"
       aria-modal="true"
       aria-label={typeof title === 'string' ? title : ariaLabel}
-      className={containerClassName ?? 'fixed inset-0 z-50 flex justify-end'}
+      className={containerClassName ?? drawerBelowAppChromeClass}
       onClick={onBackdropClick}
     >
       {dimmed && (
