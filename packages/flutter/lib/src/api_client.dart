@@ -190,7 +190,9 @@ class ApiClient {
     required String reporterHmac,
     String? note,
   }) async {
-    final uri = Uri.parse('${config.endpoint}/v1/reporter/reports/$reportId/reopen');
+    final uri = Uri.parse(
+      '${config.endpoint}/v1/reporter/reports/$reportId/reopen',
+    );
     final res = await _client.post(
       uri,
       headers: {

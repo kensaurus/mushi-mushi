@@ -1156,6 +1156,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return result.data?.outcome ?? null;
     },
 
+    openMyReports() {
+      widget.recorderOpenMyReports();
+    },
+
     async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
       const result = await apiClient.getHallOfFame(limit);
       if (!result.ok) return [];
