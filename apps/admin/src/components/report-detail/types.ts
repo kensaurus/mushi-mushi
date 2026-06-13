@@ -48,6 +48,7 @@ export interface ReportFixAttempt {
   review_passed: boolean | null
   check_run_status: string | null
   check_run_conclusion: string | null
+  check_run_updated_at?: string | null
   /** GitHub PR lifecycle state (merged / closed / draft / open). Updated by
    *  the `webhooks-github-indexer` on pull_request events. Null when we
    *  haven't received a webhook yet. */

@@ -28,5 +28,33 @@ shortcut. Selecting a report opens the detail view:
   timestamps that expose the full ISO time on hover.
 - **Actions**: change status, dispatch a fix, dedupe into a parent group,
   flag as anti-gaming.
+- **Fix card + pipeline flow** — when a fix is dispatched, the detail page shows
+  the active attempt, CI badge, and merge controls.
 - **Related cross-links** — jump to other reports from the same component
   or reporter, the knowledge-graph node, and the dispatched fix / PR.
+
+---
+
+## Merging a fix from report detail
+
+When a fix attempt completes with an open PR, the report detail page shows:
+
+1. **CI feedback** — check-run status with **Refresh CI status** and a link to
+   GitHub Actions.
+2. **Merge PR** — confirm popover (squash by default). Disabled when the report
+   is already **Fixed** or the PR is merged.
+3. **Primary attempt selection** — if a retry failed after a successful PR open,
+   the UI surfaces the mergeable attempt, not the failed retry.
+
+After merge, the report status becomes **Fixed**, the reporter widget receives a
+resolution notification, and `fix.applied` webhooks fire.
+
+Equivalent CLI:
+
+```bash
+mushi fixes refresh-ci <fixId>
+mushi fixes merge <fixId>
+```
+
+See [Fix orchestrator → Merging from the console](/admin/fixes#merging-from-the-console)
+for the full sequence diagram and prerequisites.

@@ -41,10 +41,19 @@ describe('createPreFilter', () => {
     expect(result.passed).toBe(false);
   });
 
-  it('rejects common test strings', () => {
+  it('rejects standalone placeholder strings', () => {
     const filter = createPreFilter();
-    const result = filter.check('asdf test content here');
-    expect(result.passed).toBe(false);
+    // The whole description is just a placeholder — clearly not a real report.
+    expect(filter.check('lorem ipsum').passed).toBe(false);
+    expect(filter.check('lorem ipsum...').passed).toBe(false);
+  });
+
+  it('allows real reports that merely contain the word "test"', () => {
+    const filter = createPreFilter();
+    // Regression guard: users legitimately write "I was testing…" in real
+    // reports, so "test" as a substring must not trip the spam filter.
+    const result = filter.check('I was testing the checkout flow and the button froze');
+    expect(result.passed).toBe(true);
   });
 
   it('rejects gibberish consonant-only strings', () => {

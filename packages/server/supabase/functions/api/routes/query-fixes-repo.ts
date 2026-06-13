@@ -32,7 +32,16 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import {
+  finalizeFixMerge,
+  mergeGithubPullRequest,
+  parsePrRepoRef,
+  type MergeMethod,
+} from '../../_shared/fix-merge.ts';
+import {
+  resolveProjectGithubToken,
+} from '../../_shared/github.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -477,10 +486,12 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         .eq('project_id', pid)
         .gte('created_at', since.toISOString())
         .limit(500),
-      db.from('project_integrations')
-        .select('provider, enabled')
+      // Check project_settings for GitHub connectivity — the fix-worker uses
+      // github_installation_token_ref + github_repo_url (not project_integrations).
+      // project_integrations uses integration_type/is_active columns (not provider/enabled).
+      db.from('project_settings')
+        .select('github_repo_url, github_installation_token_ref')
         .eq('project_id', pid)
-        .eq('provider', 'github')
         .maybeSingle(),
       db.from('project_codebase_files')
         .select('id', { count: 'exact', head: true })
@@ -510,7 +521,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     }
     const topEntry = [...failureBuckets.entries()].sort((a, b) => b[1] - a[1])[0]
 
-    const hasGithub = !!(integrationRes.data?.enabled)
+    const hasGithub = !!(integrationRes.data?.github_repo_url) || !!(integrationRes.data?.github_installation_token_ref)
     const indexedFiles = codebaseRes.count ?? 0
     const inflightDispatches = inflightRes.count ?? inProgress
     const successRatePct = completed + failed > 0
@@ -651,7 +662,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   app.get('/v1/admin/fixes/summary', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({
         ok: true,
@@ -782,7 +793,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // check-run conclusion on demand; the `mushi-ci-sync-10m` pg_cron runs the
   // same sync periodically for every completed attempt.
   // ---------------------------------------------------------------------------
-  app.post('/v1/admin/fixes/:id/refresh-ci', jwtAuth, async (c) => {
+  app.post('/v1/admin/fixes/:id/refresh-ci', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -839,6 +850,154 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ ok: false, error: { code: 'CI_SYNC_TIMEOUT', message: msg } }, 504);
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Merge PR from console — POST /v1/admin/fixes/:id/merge
+  //
+  // User-confirmed merge (not automatic). Calls GitHub's merge API, then runs
+  // the same post-merge bookkeeping as the pull_request.merged webhook:
+  // merged_at, report → fixed, reporter notification, fix.applied plugins.
+  // ---------------------------------------------------------------------------
+  app.post('/v1/admin/fixes/:id/merge', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const fixId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    let body: { mergeMethod?: MergeMethod } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      // empty body ok
+    }
+
+    const { data: attempt, error: fetchErr } = await db
+      .from('fix_attempts')
+      .select(
+        'id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, pr_state, repo_id, summary',
+      )
+      .eq('id', fixId)
+      .maybeSingle();
+    if (fetchErr) return dbError(c, fetchErr);
+    if (!attempt) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
+    }
+
+    const access = await userCanAccessProject(db, userId, attempt.project_id);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403);
+    }
+
+    if (attempt.merged_at || attempt.pr_state === 'merged') {
+      const { reportStatus } = await finalizeFixMerge(db, attempt, {
+        prUrl: attempt.pr_url!,
+        prNumber: attempt.pr_number,
+        actorUserId: userId,
+      });
+      return c.json({
+        ok: true,
+        data: { alreadyMerged: true, reportId: attempt.report_id, reportStatus },
+      });
+    }
+
+    if (!attempt.pr_url || !attempt.pr_number) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'NO_PR', message: 'This fix has no open pull request to merge' },
+        },
+        409,
+      );
+    }
+
+    const ref = parsePrRepoRef(attempt.pr_url);
+    if (!ref) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PR_URL', message: 'Could not parse GitHub repo from PR URL' } },
+        400,
+      );
+    }
+
+    let installationId: number | null = null;
+    if (attempt.repo_id) {
+      const { data: repo } = await db
+        .from('project_repos')
+        .select('github_app_installation_id')
+        .eq('id', attempt.repo_id)
+        .maybeSingle();
+      if (repo?.github_app_installation_id) {
+        installationId = Number(repo.github_app_installation_id);
+      }
+    }
+
+    const token = await resolveProjectGithubToken(db, attempt.project_id, installationId);
+    if (!token) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'GITHUB_NOT_CONNECTED',
+            message: 'Connect GitHub (App or PAT) before merging from the console',
+          },
+        },
+        409,
+      );
+    }
+
+    let mergeResult;
+    try {
+      mergeResult = await mergeGithubPullRequest(token, ref, attempt.pr_number, {
+        mergeMethod: body.mergeMethod ?? 'squash',
+        commitTitle: attempt.summary
+          ? `fix: ${String(attempt.summary).slice(0, 72)}`
+          : undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ ok: false, error: { code: 'GITHUB_MERGE_FAILED', message: msg } }, 502);
+    }
+
+    if (!mergeResult.merged && !mergeResult.alreadyMerged) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NOT_MERGEABLE',
+            message: mergeResult.message ?? 'GitHub rejected the merge',
+          },
+        },
+        409,
+      );
+    }
+
+    const { justMerged, reportStatus } = await finalizeFixMerge(db, attempt, {
+      prUrl: attempt.pr_url,
+      prNumber: attempt.pr_number,
+      repository: `${ref.owner}/${ref.repo}`,
+      actorUserId: userId,
+    });
+
+    await logAudit(
+      db,
+      attempt.project_id,
+      userId,
+      'fix.merge',
+      'fix_attempt',
+      attempt.id,
+      { report_id: attempt.report_id, pr_number: attempt.pr_number },
+    ).catch(() => null);
+
+    return c.json({
+      ok: true,
+      data: {
+        merged: true,
+        alreadyMerged: mergeResult.alreadyMerged,
+        justMerged,
+        reportId: attempt.report_id,
+        reportStatus,
+        sha: mergeResult.sha ?? null,
+      },
+    });
   });
 
   // PDCA timeline for a single fix attempt — merges fix_dispatch_jobs +

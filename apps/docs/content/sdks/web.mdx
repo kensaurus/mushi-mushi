@@ -108,3 +108,48 @@ const tier = await mushi.getTier()
 
 See [Concepts → Rewards & contributor identity](/concepts/rewards) for the
 full data model, anti-gaming integration, and webhook reference.
+
+## Reporter API
+
+Let reporters see and follow up on their own submissions without a login. Every
+method is keyed to the persistent anonymous `reporterToken` the SDK stores in
+`localStorage`, so no auth wiring is required.
+
+```typescript
+// The reporter's own report history (newest first)
+const reports = await mushi.listMyReports()
+// → MushiReporterReport[]  (each carries `unread_count` for a badge)
+
+// The comment thread on one of their reports
+const comments = await mushi.listMyComments(reportId)
+// → MushiReporterComment[]  (their comments + team replies)
+
+// Post a follow-up comment on their own report
+const comment = await mushi.replyToReport(reportId, 'Still happening on iOS 18')
+// → MushiReporterComment | null
+
+// The project's public contributor leaderboard
+const leaders = await mushi.getHallOfFame(10)
+// → MushiHallOfFameEntry[]  (display_name, tier_name, points_30d, total_points)
+```
+
+All four methods fail soft: they return `[]` / `null` (never throw) when the
+network is down or no reporter token exists yet, so they're safe to call on
+first render.
+
+### React
+
+The same methods are exposed on the `useMushi()` hook, memoised so they're
+stable across renders:
+
+```tsx
+import { useMushi } from '@mushi-mushi/react'
+
+function MyReports() {
+  const { listMyReports, replyToReport } = useMushi()
+  // ... call inside an effect or event handler
+}
+```
+
+`useMushi()` returns no-op fallbacks (`() => Promise.resolve([])`) before the
+SDK finishes initialising, so you never need to null-check the instance.

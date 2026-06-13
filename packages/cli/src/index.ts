@@ -1750,6 +1750,98 @@ fixes
     }
   })
 
+fixes
+  .command('merge <fixId>')
+  .description(
+    'Squash-merge the fix PR on GitHub and mark the report Fixed (same as console merge)',
+  )
+  .option(
+    '--method <method>',
+    'GitHub merge method: squash (default), merge, or rebase',
+    'squash',
+  )
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (fixId: string, opts: { method: string; json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const method = opts.method as 'squash' | 'merge' | 'rebase'
+    if (!['squash', 'merge', 'rebase'].includes(method)) {
+      console.error('--method must be squash, merge, or rebase')
+      process.exit(1)
+    }
+
+    const result = await apiCall<{
+      merged?: boolean
+      alreadyMerged?: boolean
+      reportId?: string
+      reportStatus?: string | null
+    }>(`/v1/admin/fixes/${fixId}/merge`, config, {
+      method: 'POST',
+      body: JSON.stringify({ mergeMethod: method }),
+    })
+
+    if (!result.ok) {
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      } else {
+        console.error('Merge failed:', result.error.message)
+      }
+      process.exit(1)
+    }
+
+    const data = result.data ?? {}
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, ...data }, null, 2))
+      return
+    }
+
+    if (data.alreadyMerged) {
+      console.log(`PR was already merged. Report status: ${data.reportStatus ?? 'unknown'}`)
+    } else {
+      console.log(`Merged successfully. Report status: ${data.reportStatus ?? 'fixed'}`)
+    }
+  })
+
+fixes
+  .command('refresh-ci <fixId>')
+  .description('Pull latest GitHub Actions check-run status for a fix attempt (on-demand ci-sync)')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (fixId: string, opts: { json?: boolean }) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.endpoint) { console.error('No endpoint configured. Run `mushi init`'); process.exit(1) }
+
+    const result = await apiCall<{
+      check_run_status?: string | null
+      check_run_conclusion?: string | null
+      check_run_updated_at?: string | null
+    }>(`/v1/admin/fixes/${fixId}/refresh-ci`, config, { method: 'POST' })
+
+    if (!result.ok) {
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: false, error: result.error }, null, 2))
+      } else {
+        console.error('CI refresh failed:', result.error.message)
+      }
+      process.exit(1)
+    }
+
+    const data = result.data ?? {}
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, ...data }, null, 2))
+      return
+    }
+
+    const status = data.check_run_status ?? 'unknown'
+    const conclusion = data.check_run_conclusion ?? '—'
+    const updated = data.check_run_updated_at
+      ? new Date(data.check_run_updated_at).toISOString()
+      : '—'
+    console.log(`CI status: ${status} · conclusion: ${conclusion} · updated: ${updated}`)
+  })
+
 // ─── Phase 4: TDD / Story CLI commands ───────────────────────────────────────
 
 const stories = program.command('stories').description('TDD story mapping and test generation')

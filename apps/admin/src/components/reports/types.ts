@@ -152,14 +152,18 @@ export function severityLabelShort(s: string | null): string {
 
 export function formatRelative(iso: string): string {
   const t = new Date(iso).getTime()
-  const diff = Date.now() - t
-  const sec = Math.round(diff / 1000)
+  if (Number.isNaN(t)) return '—'
+  // Client-supplied createdAt can land slightly in the future (clock skew).
+  // Clamp so we never render "-26769s ago".
+  const diff = Math.max(0, Date.now() - t)
+  const sec = Math.floor(diff / 1000)
+  if (sec < 10) return 'just now'
   if (sec < 60) return `${sec}s ago`
-  const min = Math.round(sec / 60)
+  const min = Math.floor(sec / 60)
   if (min < 60) return `${min}m ago`
-  const hr = Math.round(min / 60)
+  const hr = Math.floor(min / 60)
   if (hr < 24) return `${hr}h ago`
-  const day = Math.round(hr / 24)
+  const day = Math.floor(hr / 24)
   if (day < 30) return `${day}d ago`
   return new Date(iso).toLocaleDateString()
 }

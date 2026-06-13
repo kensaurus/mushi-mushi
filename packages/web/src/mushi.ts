@@ -9,6 +9,9 @@ import {
   type MushiEventHandler,
   type MushiSDKInstance,
   type MushiDiagnosticsResult,
+  type MushiReporterReport,
+  type MushiReporterComment,
+  type MushiHallOfFameEntry,
   DEFAULT_API_ENDPOINT,
   MUSHI_INTERNAL_INIT_MARKER,
   createApiClient,
@@ -35,6 +38,7 @@ import {
   updateRewardsUser,
   enqueue as enqueueActivity,
   getTier as getRewardsTier,
+  fetchLeaderboard,
   type RewardsContext,
 } from './rewards';
 import {
@@ -403,6 +407,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), body);
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not send reply');
     },
+    onLeaderboardOpen() {
+      widget.setLeaderboard(null, true);
+      void fetchLeaderboard(10).then((entries) => {
+        widget.setLeaderboard(entries, false);
+      });
+    },
   }, MUSHI_SDK_VERSION);
   syncCaptureModules();
 
@@ -712,13 +722,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       await offlineQueue.enqueue(finalReport);
       log.info('Offline — report queued', { reportId: finalReport.id });
       emit('report:queued', { reportId: finalReport.id });
-      return;
-      await offlineQueue.enqueue(report);
-      log.info('Offline — report queued', { reportId: report.id });
-      emit('report:queued', { reportId: report.id });
-      // Outcome propagates back to the widget so the success step can
-      // render the "Queued offline" receipt rather than implying the
-      // report already landed.
+      // Propagates back to the widget so the success step renders
+      // "Queued offline" rather than implying the report already landed.
       return { reportId: null, queuedOffline: true };
     }
 
@@ -1108,6 +1113,33 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     pulseTrigger() {
       widget.pulseTrigger?.();
     },
+
+    // ─── Reporter API (cross-platform) ────────────────────────────────
+
+    async listMyReports(): Promise<MushiReporterReport[]> {
+      const result = await apiClient.listReporterReports(getReporterToken());
+      if (!result.ok) return [];
+      return result.data?.reports ?? [];
+    },
+
+    async listMyComments(reportId: string): Promise<MushiReporterComment[]> {
+      const result = await apiClient.listReporterComments(reportId, getReporterToken());
+      if (!result.ok) return [];
+      return result.data?.comments ?? [];
+    },
+
+    async replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null> {
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), body);
+      if (!result.ok) return null;
+      return result.data?.comment ?? null;
+    },
+
+    async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
+      const result = await apiClient.getHallOfFame(limit);
+      if (!result.ok) return [];
+      const raw = result.data as { data?: MushiHallOfFameEntry[] } | undefined;
+      return raw?.data ?? [];
+    },
   };
 
   if (typeof globalThis !== 'undefined' && (bootstrapConfig.debug ?? false)) {
@@ -1474,6 +1506,10 @@ function createNoopInstance(): MushiSDKInstance {
     getTier: async () => null,
     recordActivity: () => {},
     pulseTrigger: () => {},
+    listMyReports: async () => [],
+    listMyComments: async () => [],
+    replyToReport: async () => null,
+    getHallOfFame: async () => [],
   };
 }
 

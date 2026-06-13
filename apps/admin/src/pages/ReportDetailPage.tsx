@@ -37,6 +37,7 @@ import { ReportDetailHeader } from '../components/report-detail/ReportDetailHead
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
+import { ReportPipelineFlow } from '../components/report-detail/ReportPipelineFlow'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
 import { useAdminMode } from '../lib/mode'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
@@ -59,6 +60,8 @@ import { deriveRecommendation } from '../components/report-detail/deriveRecommen
 import type { ReportDetail } from '../components/report-detail/types'
 import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
+import { canMergeFix, pickPrimaryFixAttempt } from '../lib/mergeFix'
+import { MergeFixPreflight } from '../components/fixes/MergeFixPreflight'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -198,7 +201,7 @@ export function ReportDetailPage() {
 
   if (!report) return <DetailSkeleton label="Loading report" />
 
-  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} />
+  return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} onReload={reload} />
 }
 
 interface ReportDetailViewProps {
@@ -206,6 +209,7 @@ interface ReportDetailViewProps {
   onTriage: (updates: Record<string, string>) => Promise<void>
   saving: boolean
   savedAt: number | null
+  onReload: () => void
 }
 
 // ── Recommended Skills section ────────────────────────────────────────────────
@@ -314,13 +318,14 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
   )
 }
 
-function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailViewProps) {
+function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: ReportDetailViewProps) {
+  const toast = useToast()
   const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
   const commentCount = comments.length
   const platform = usePlatformIntegrations()
-  const latestFix = report.fix_attempts?.[0]
+  const latestFix = pickPrimaryFixAttempt(report.fix_attempts)
 
   // Tick the clock every second only while the agent is actively running so
   // the elapsed chip in the recommendation banner live-updates without
@@ -352,6 +357,20 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   const reporterShort = report.reporter_token_hash?.slice(0, 8) ?? 'unknown'
+  const mergeTarget = latestFix && canMergeFix(latestFix) ? latestFix : null
+
+  const handleMerged = useCallback(
+    (reportStatus: string | null) => {
+      toast.success(
+        'PR merged',
+        reportStatus === 'fixed'
+          ? 'Report marked Fixed — reporter will be notified.'
+          : 'Merge recorded.',
+      )
+      onReload()
+    },
+    [onReload, toast],
+  )
 
   return (
     <div>
@@ -371,6 +390,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
       />
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
+
+      <ReportPipelineFlow report={report} dispatchState={dispatchState} />
 
       {!isAdvanced && (
         <ReportPdcaStory report={report} dispatchState={dispatchState} />
@@ -408,6 +429,21 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
         meta={recommendation.meta}
         actions={recommendation.actions}
       />
+
+      {mergeTarget && (
+        <div className="mb-3 flex justify-end">
+          <MergeFixPreflight
+            fixId={mergeTarget.id}
+            prUrl={mergeTarget.pr_url!}
+            prNumber={mergeTarget.pr_number}
+            summary={null}
+            ciConclusion={mergeTarget.check_run_conclusion}
+            ciStatus={mergeTarget.check_run_status}
+            ciUpdatedAt={mergeTarget.check_run_updated_at}
+            onMerged={handleMerged}
+          />
+        </div>
+      )}
 
       <ReportTriageBar
         report={report}

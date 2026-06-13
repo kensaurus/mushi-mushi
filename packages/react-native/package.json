@@ -17,7 +17,8 @@
     "@react-navigation/native": ">=6",
     "expo-sensors": ">=13",
     "react": ">=18",
-    "react-native": ">=0.72"
+    "react-native": ">=0.72",
+    "react-native-view-shot": ">=3.8"
   },
   "peerDependenciesMeta": {
     "@react-navigation/native": {
@@ -30,6 +31,9 @@
       "optional": true
     },
     "@react-native-community/netinfo": {
+      "optional": true
+    },
+    "react-native-view-shot": {
       "optional": true
     }
   },

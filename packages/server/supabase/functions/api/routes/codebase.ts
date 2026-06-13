@@ -83,8 +83,8 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
       );
     }
 
-    const { chunk, shouldIndex, sha256Hex } = await import('../_shared/code-indexer.ts');
-    const { createEmbedding } = await import('../_shared/embeddings.ts');
+    const { chunk, shouldIndex, sha256Hex } = await import('../../_shared/code-indexer.ts');
+    const { createEmbedding } = await import('../../_shared/embeddings.ts');
 
     if (!shouldIndex(body.filePath)) {
       return c.json({ ok: true, chunks: 0, skipped: 'unsupported_extension' });

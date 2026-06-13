@@ -46,6 +46,9 @@ import {
   type MushiRewardsConfig,
   type MushiReputationResult,
   type MushiTierResult,
+  type MushiReporterReport,
+  type MushiReporterComment,
+  type MushiHallOfFameEntry,
 } from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
@@ -78,22 +81,38 @@ export interface MushiRNConfig {
   rewards?: MushiRewardsConfig
 }
 
+// MushiHallOfFameEntry is now defined in and imported from @mushi-mushi/core
+export type { MushiHallOfFameEntry }
+
 export interface MushiRNInstance {
   open(): void
   close(): void
   attachTo(): { onPress: () => void }
-  submitReport(data: { description: string; category: string }): Promise<void>
+  /** screenshotDataUrl is optional — pass `undefined` if not captured or removed by the user. */
+  submitReport(data: { description: string; category: string; screenshotDataUrl?: string }): Promise<void>
   getDeviceInfo(): ReturnType<typeof getDeviceInfo>
   getConsoleEntries(): ReturnType<ReturnType<typeof setupConsoleCapture>['getEntries']>
   getNetworkEntries(): ReturnType<ReturnType<typeof setupNetworkCapture>['getEntries']>
 
-  // v0.10.0: missing methods that glot.it had to workaround in apps/mobile/src/native/mushi.ts
+  // v0.10.0: identity methods (previously caused workarounds in glot.it + yen-yen)
   /** Set the current authenticated user. Equivalent to Mushi.identify() on web. */
   identify(userId: string, traits?: { email?: string; name?: string; provider?: string; [k: string]: unknown }): void
   /** Attach arbitrary key/value metadata to subsequent reports. */
   setMetadata(key: string, value: unknown): void
   /** Set the current screen context attached to subsequent reports. */
   setScreen(screen: { name: string; route?: string; feature?: string }): void
+
+  // Reporter API — returns reports/comments for this device's persistent token
+  /** List this device's reports ordered by most recent. Returns [] on failure. */
+  listMyReports(): Promise<MushiReporterReport[]>
+  /** List admin + reporter comments on a specific report. */
+  listMyComments(reportId: string): Promise<MushiReporterComment[]>
+  /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
+  replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
+
+  // Leaderboard — SDK-public, anonymized
+  /** Fetch the project's top contributors by points (max 50). */
+  getHallOfFame(limit?: number): Promise<MushiHallOfFameEntry[]>
 
   // Rewards program (P1)
   /** Manually record a host-defined activity event. */
@@ -120,6 +139,19 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
   const apiClientRef = useRef<MushiApiClient | null>(null)
 
   const [sheetVisible, setSheetVisible] = useState(false)
+  // Screenshot captured just before the sheet opens (captured while app content is still visible)
+  const [sheetScreenshot, setSheetScreenshot] = useState<string | null>(null)
+
+  // Per-install reporter token — persisted in AsyncStorage so "My reports" shows
+  // reports from this device across sessions. Falls back to the legacy shared constant
+  // when AsyncStorage is unavailable (e.g. test environments).
+  const reporterTokenRef = useRef<string>(`rn-${config.projectId}-anon`)
+  let resolveReporterTokenReady: () => void = () => {}
+  const reporterTokenReadyRef = useRef(
+    new Promise<void>((resolve) => {
+      resolveReporterTokenReady = resolve
+    }),
+  )
 
   // Validate: an explicitly empty string is a misconfiguration.
   if (config.endpoint !== undefined && config.endpoint.trim() === '') {
@@ -151,6 +183,30 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     })
 
     queueRef.current.flush().catch(() => {})
+
+    // Load or create a stable per-install reporter token from AsyncStorage so
+    // listMyReports() scopes results to this device's reports correctly.
+    ;(async () => {
+      const TOKEN_KEY = '@mushi:reporter_token'
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default
+        const existing = await AsyncStorage.getItem(TOKEN_KEY)
+        if (existing && existing.startsWith('mushi_')) {
+          reporterTokenRef.current = existing
+        } else {
+          const fresh = `mushi_${newUuid()}`
+          reporterTokenRef.current = fresh
+          await AsyncStorage.setItem(TOKEN_KEY, fresh)
+        }
+        resolveReporterTokenReady()
+      } catch {
+        // AsyncStorage unavailable — per-session token is fine for fallback
+        if (reporterTokenRef.current === `rn-${config.projectId}-anon`) {
+          reporterTokenRef.current = `mushi_${newUuid()}`
+        }
+        resolveReporterTokenReady()
+      }
+    })().catch(() => {})
 
     return () => {
       consoleRef.current?.restore()
@@ -186,7 +242,28 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     return () => unsubscribe?.()
   }, [])
 
-  const open = useCallback(() => setSheetVisible(true), [])
+  const open = useCallback(() => {
+    // Capture a screenshot of the current app state BEFORE the sheet overlays it.
+    // react-native-view-shot is an optional peer dep — fall through immediately when
+    // it isn't installed. The sheet opens after capture resolves (typ. <150 ms).
+    let vshot: { captureScreen(opts: Record<string, unknown>): Promise<string> } | null = null
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      vshot = require('react-native-view-shot') as { captureScreen(opts: Record<string, unknown>): Promise<string> }
+    } catch { /* optional dep not installed */ }
+
+    if (!vshot) {
+      setSheetScreenshot(null)
+      setSheetVisible(true)
+      return
+    }
+
+    vshot
+      .captureScreen({ format: 'jpg', quality: 0.7, result: 'data-uri' })
+      .then((url: string) => { setSheetScreenshot(url) })
+      .catch(() => { setSheetScreenshot(null) })
+      .finally(() => { setSheetVisible(true) })
+  }, [])
   const close = useCallback(() => setSheetVisible(false), [])
   const attachTo = useCallback(() => ({ onPress: open }), [open])
 
@@ -228,8 +305,24 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
   }, [config.widget?.trigger, config.widget?.shakeThreshold, open])
 
   const submitReport = useCallback(
-    async (data: { description: string; category: string }) => {
+    async (data: { description: string; category: string; screenshotDataUrl?: string }) => {
       const deviceInfo = getDeviceInfo()
+
+      // Build rich contextual metadata from identity + screen state so the
+      // admin console shows who reported and from which screen without parsing
+      // the description text. Merges explicit setMetadata() calls last so the
+      // host app can override anything.
+      const contextMeta: Record<string, unknown> = {}
+      if (userRef.current?.id) contextMeta.userId = userRef.current.id
+      if (userRef.current?.email) contextMeta.userEmail = userRef.current.email
+      if (userRef.current?.name) contextMeta.userName = userRef.current.name
+      if (screenRef.current?.name) contextMeta.screenName = screenRef.current.name
+      if (screenRef.current?.route) contextMeta.screenRoute = screenRef.current.route
+      if (screenRef.current?.feature) contextMeta.screenFeature = screenRef.current.feature
+      const merged = Object.keys(metadataRef.current).length > 0
+        ? { ...contextMeta, ...metadataRef.current }
+        : Object.keys(contextMeta).length > 0 ? contextMeta : undefined
+
       const report: MushiReport = {
         id: newUuid(),
         projectId: config.projectId,
@@ -240,7 +333,7 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
           platform: deviceInfo.platform ?? 'mobile',
           language: deviceInfo.locale ?? 'en',
           viewport: { width: deviceInfo.screenWidth ?? 0, height: deviceInfo.screenHeight ?? 0 },
-          url: '',
+          url: screenRef.current?.route ?? '',
           referrer: '',
           timestamp: new Date().toISOString(),
           timezone: deviceInfo.timezone ?? 'UTC',
@@ -251,7 +344,9 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
             ...entry,
             status: entry.status ?? 0,
           })) ?? [],
-        reporterToken: `rn-${config.projectId}-anon`,
+        screenshotDataUrl: data.screenshotDataUrl,
+        metadata: merged,
+        reporterToken: reporterTokenRef.current,
         createdAt: new Date().toISOString(),
       }
       const client = apiClientRef.current
@@ -262,7 +357,7 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
         await queueRef.current?.enqueue(report)
       }
     },
-    [config.projectId, config.apiKey, apiEndpoint],
+    [config.projectId, apiEndpoint],
   )
 
   // v0.10.0: user identity state (was missing, causing workarounds in glot.it)
@@ -321,6 +416,41 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
         screenRef.current = screen
       },
 
+      // Reporter API — scoped to the device's persistent reporter token
+      async listMyReports() {
+        const client = apiClientRef.current
+        if (!client) return []
+        await reporterTokenReadyRef.current
+        const res = await client.listReporterReports(reporterTokenRef.current)
+        return res.ok
+          ? (res.data as { reports?: MushiReporterReport[] } | undefined)?.reports ?? []
+          : []
+      },
+      async listMyComments(reportId: string) {
+        const client = apiClientRef.current
+        if (!client) return []
+        const res = await client.listReporterComments(reportId, reporterTokenRef.current)
+        return res.ok
+          ? (res.data as { comments: MushiReporterComment[] }).comments ?? []
+          : []
+      },
+      async replyToReport(reportId: string, body: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        const res = await client.replyToReporterReport(reportId, reporterTokenRef.current, body)
+        return res.ok ? (res.data as { comment: MushiReporterComment }).comment : null
+      },
+
+      // Leaderboard — SDK-public anonymized hall-of-fame
+      async getHallOfFame(limit = 10) {
+        const client = apiClientRef.current
+        if (!client) return []
+        const res = await client.getHallOfFame(limit)
+        return res.ok
+          ? (res.data as { data: MushiHallOfFameEntry[] }).data ?? []
+          : []
+      },
+
       // Rewards (P1)
       recordActivity(action, metadata) {
         if (!config.rewards?.enabled) return
@@ -364,7 +494,12 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
           inset={config.widget?.inset}
         />
       )}
-      <MushiBottomSheet visible={sheetVisible} onClose={close} />
+      <MushiBottomSheet
+        visible={sheetVisible}
+        onClose={close}
+        screenshotDataUrl={sheetScreenshot ?? undefined}
+        onClearScreenshot={() => setSheetScreenshot(null)}
+      />
     </MushiContext.Provider>
   )
 }

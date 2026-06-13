@@ -16,6 +16,8 @@ import { PdcaReceipt } from './PdcaReceipt';
 import { pluralizeWithCount } from '../../lib/format';
 import { ciBadge, type FixAttempt } from './types';
 import { FixAttemptFlow } from './FixAttemptFlow';
+import { MergeFixPreflight } from './MergeFixPreflight';
+import { canMergeFix } from '../../lib/mergeFix';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -34,10 +36,11 @@ interface Props {
   traceUrl: string | null;
   onToggle: () => void;
   onRetry: () => Promise<void>;
+  onMerged?: () => void;
   inventoryAction?: InventoryActionSummary | null;
 }
 
-export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, inventoryAction }: Props) {
+export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, onMerged, inventoryAction }: Props) {
   const ci = ciBadge(fix);
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0);
   // Spec-traceability soft warnings (e.g. "diff didn't touch the contract's
@@ -167,6 +170,19 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
             >
               View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
             </a>
+          )}
+          {canMergeFix(fix) && fix.pr_url && (
+            <MergeFixPreflight
+              fixId={fix.id}
+              prUrl={fix.pr_url}
+              prNumber={fix.pr_number}
+              summary={fix.summary}
+              ciConclusion={fix.check_run_conclusion}
+              ciStatus={fix.check_run_status}
+              ciUpdatedAt={fix.check_run_updated_at}
+              compact
+              onMerged={() => onMerged?.()}
+            />
           )}
           {traceUrl && (
             <a

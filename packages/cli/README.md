@@ -215,6 +215,77 @@ mushi fixes tail --report-id 11111111-2222-3333-4444-555555555555
 Exits automatically when the job reaches a terminal status (`completed`,
 `failed`, `cancelled`, `skipped`).
 
+### `mushi fixes merge <fixId>`
+
+Squash-merge (or merge/rebase) the fix PR on GitHub and run the same post-merge
+bookkeeping as the admin console: `merged_at`, report → **Fixed**, reporter
+notification, `fix.applied` webhooks.
+
+```bash
+mushi fixes merge 75199dde-f726-404a-b5f7-be17bf7a3a46
+mushi fixes merge <fixId> --method squash    # default
+mushi fixes merge <fixId> --method merge
+mushi fixes merge <fixId> --method rebase
+mushi fixes merge <fixId> --json
+```
+
+Requires an admin API key with `mcp:write` scope and a connected GitHub App or PAT.
+Draft PRs are auto-readied via GraphQL before merge.
+
+### `mushi fixes refresh-ci <fixId>`
+
+Pull the latest GitHub Actions check-run status on demand (same as **Refresh CI
+status** in the console). Useful when webhooks drop or you just pushed to the PR
+branch.
+
+```bash
+mushi fixes refresh-ci <fixId>
+mushi fixes refresh-ci <fixId> --json
+```
+
+---
+
+## QA coverage & TDD
+
+```bash
+mushi stories map --url https://your-app.com --wait
+mushi tdd gen <storyId> --mode review
+mushi tdd pending
+mushi tdd approve <qaStoryId>
+mushi tdd improve
+mushi qa stories
+mushi qa runs <storyId>
+mushi qa run <storyId>
+mushi qa audit
+```
+
+---
+
+## Skill pipelines
+
+```bash
+mushi skills list [--category workflow] [--search "fix"]
+mushi skills show workflow-fix-and-ship
+mushi skills sync
+
+mushi pipeline start <reportId> --skill workflow-fix-and-ship [--mode cloud|handoff]
+mushi pipeline watch <runId-or-prefix>
+mushi pipeline checkin <runId-or-prefix> --step 0 --status passed
+```
+
+---
+
+## Integrations & BYOK
+
+```bash
+mushi integrations list
+mushi integrations test slack|sentry|github
+mushi keys list
+MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup"
+mushi slack status
+mushi slack test
+```
+
 ## Security notes
 
 - `~/.mushirc` is written with mode `0o600` on Unix. Legacy configs with looser permissions are tightened on load.

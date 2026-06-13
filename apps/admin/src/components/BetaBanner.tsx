@@ -72,46 +72,47 @@ export function BetaBanner() {
         aria-label="Beta announcement"
         className="sticky top-0 z-[100] shrink-0 border-b border-lime/40 bg-lime-muted"
       >
-        <div className="mx-auto flex w-full max-w-[100rem] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-0.5 text-xs">
-          <span className="inline-flex min-w-0 flex-1 items-center gap-2">
-            {/* BETA pill — high-contrast lime so it pops in both dark + light themes */}
+        <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4 sm:py-0.5">
+          <span className="flex min-w-0 items-start gap-2 sm:flex-1 sm:items-center">
             <span className="inline-flex shrink-0 items-center rounded border border-lime/60 bg-lime/20 px-1.5 py-px font-mono text-3xs font-bold uppercase tracking-[0.18em] text-lime">
               Beta
             </span>
-            <span className="text-pretty text-xs font-medium leading-snug text-lime/80">
+            <span className="min-w-0 text-pretty text-xs font-medium leading-snug text-lime/80">
               Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
             </span>
           </span>
-          {/* Flat text actions — no pills, no borders, just links separated by dividers */}
-          <nav aria-label="Beta banner actions" className="flex shrink-0 items-center gap-0 text-2xs">
+          <nav
+            aria-label="Beta banner actions"
+            className="flex shrink-0 flex-wrap items-center gap-x-0 gap-y-0.5 text-2xs sm:justify-end"
+          >
             <button
               type="button"
               onClick={() => openFeedback('bug')}
-              className="px-2.5 py-px font-medium text-lime/90 hover:text-lime transition-colors"
+              className="px-2 py-0.5 font-medium text-lime/90 hover:text-lime transition-colors"
             >
               🐛 Report a bug
             </button>
-            <span aria-hidden="true" className="text-lime/25 select-none">|</span>
+            <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
             <button
               type="button"
               onClick={() => openFeedback('feature')}
-              className="px-2.5 py-px font-medium text-lime/70 hover:text-lime transition-colors"
+              className="px-2 py-0.5 font-medium text-lime/70 hover:text-lime transition-colors"
             >
               ✨ Feature request
             </button>
-            <span aria-hidden="true" className="text-lime/25 select-none">|</span>
+            <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
             <Link
               to="/feedback"
-              className="px-2.5 py-px font-medium text-lime/70 hover:text-lime transition-colors"
+              className="px-2 py-0.5 font-medium text-lime/70 hover:text-lime transition-colors"
             >
               My submissions
             </Link>
-            <span aria-hidden="true" className="text-lime/25 select-none">|</span>
+            <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
             <button
               type="button"
               onClick={handleDismiss}
               aria-label="Dismiss beta banner"
-              className="px-2.5 py-px font-medium text-lime/50 hover:text-lime/80 transition-colors"
+              className="px-2 py-0.5 font-medium text-lime/50 hover:text-lime/80 transition-colors"
             >
               ✕
             </button>

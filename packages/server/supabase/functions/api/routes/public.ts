@@ -414,6 +414,15 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       if (!result.ok) {
         return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400);
       }
+      if (result.deduplicated) {
+        return c.json(
+          {
+            ok: true,
+            data: { reportId: result.reportId, status: 'deduplicated', deduplicated: true },
+          },
+          200,
+        );
+      }
       return c.json({ ok: true, data: { reportId: result.reportId, status: 'submitted' } }, 201);
     } catch (err) {
       log.error('Unhandled report submission error', { err: String(err) });

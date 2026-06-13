@@ -349,22 +349,46 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       font-weight: 600;
       color: ${ink};
     }
-    .mushi-close, .mushi-back {
+    .mushi-close {
       background: none;
       border: none;
       cursor: pointer;
-      padding: 4px;
+      padding: 2px 4px;
       color: ${inkMuted};
       font-family: ${fontBody};
-      font-size: 14px;
+      font-size: 16px;
       line-height: 1;
-      border-radius: 3px;
+      border-radius: 0;
       transition: color 150ms ${easeStamp};
     }
-    .mushi-close:hover, .mushi-back:hover { color: ${widgetAccent}; }
-    .mushi-close:focus-visible, .mushi-back:focus-visible {
+    .mushi-back {
+      align-self: flex-start;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      margin: 0 0 2px;
+      color: ${inkMuted};
+      font-family: ${fontMono};
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      line-height: 1.2;
+      border-radius: 0;
+      transition: color 150ms ${easeStamp};
+    }
+    .mushi-close:hover { color: ${widgetAccent}; }
+    .mushi-back:hover { color: ${ink}; }
+    .mushi-close:focus-visible {
       outline: 1.5px solid ${widgetAccent};
       outline-offset: 2px;
+    }
+    .mushi-back:focus-visible {
+      outline: none;
+      color: ${widgetAccent};
+      text-decoration: underline;
+      text-underline-offset: 3px;
     }
 
     /* ── Body ───────────────────────────────────────────────────────
@@ -454,39 +478,121 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-report-row {
       width: 100%;
       display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 8px;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
       align-items: center;
-      padding: 10px 0;
+      padding: 12px 4px 12px 0;
       border: 0;
       border-bottom: 1px solid ${rule};
       background: transparent;
       color: ${ink};
       cursor: pointer;
       text-align: left;
+      transition: background 180ms ${easeStamp}, padding-left 180ms ${easeStamp};
     }
-    .mushi-report-status {
-      font-family: ${fontMono};
-      font-size: 10px;
-      color: ${widgetAccent};
-      text-transform: uppercase;
+    .mushi-report-row:hover,
+    .mushi-report-row:focus-visible {
+      background: ${isDark ? 'rgba(242,235,221,0.04)' : 'rgba(14,13,11,0.03)'};
+      padding-left: 4px;
+    }
+    .mushi-report-main {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
     }
     .mushi-report-title {
       font-size: 13px;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+    .mushi-report-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .mushi-report-status {
+      display: inline-flex;
+      align-items: center;
+      font-family: ${fontMono};
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+    }
+    .mushi-status-sent {
+      color: ${isDark ? '#A8C4FF' : '#1E4A8C'};
+      background: ${isDark ? 'rgba(120,160,255,0.12)' : 'rgba(30,74,140,0.08)'};
+      border-color: ${isDark ? 'rgba(120,160,255,0.22)' : 'rgba(30,74,140,0.16)'};
+    }
+    .mushi-status-review {
+      color: ${isDark ? '#FFD27A' : '#8A5A00'};
+      background: ${isDark ? 'rgba(255,190,90,0.12)' : 'rgba(180,120,0,0.10)'};
+      border-color: ${isDark ? 'rgba(255,190,90,0.22)' : 'rgba(180,120,0,0.18)'};
+    }
+    .mushi-status-fixing {
+      color: ${isDark ? '#FFB899' : '#9A3D12'};
+      background: ${isDark ? 'rgba(255,120,60,0.12)' : 'rgba(224,60,44,0.10)'};
+      border-color: ${isDark ? 'rgba(255,120,60,0.24)' : 'rgba(224,60,44,0.18)'};
+    }
+    .mushi-status-fixed {
+      color: ${isDark ? '#8FE3B0' : '#1F6B3A'};
+      background: ${isDark ? 'rgba(80,200,130,0.12)' : 'rgba(31,107,58,0.10)'};
+      border-color: ${isDark ? 'rgba(80,200,130,0.22)' : 'rgba(31,107,58,0.18)'};
+    }
+    .mushi-status-closed,
+    .mushi-status-unknown {
+      color: ${inkMuted};
+      background: ${isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.05)'};
+      border-color: ${ruleStrong};
+    }
+    .mushi-report-when {
+      font-family: ${fontMono};
+      font-size: 10px;
+      color: ${inkFaint};
+    }
+    .mushi-unread-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      font-family: ${fontMono};
+      font-size: 10px;
+      font-weight: 700;
+      color: ${widgetAccentInk};
+      background: ${widgetAccent};
+    }
+    .mushi-report-chevron {
+      font-size: 18px;
+      line-height: 1;
+      color: ${inkFaint};
+      transition: color 180ms ${easeStamp}, transform 180ms ${easeStamp};
+    }
+    .mushi-report-row:hover .mushi-report-chevron,
+    .mushi-report-row:focus-visible .mushi-report-chevron {
+      color: ${widgetAccent};
+      transform: translateX(2px);
     }
     .mushi-thread-summary {
       border-bottom: 1px solid ${rule};
       padding-bottom: 10px;
       margin-bottom: 10px;
     }
-    .mushi-thread-summary span {
-      font-family: ${fontMono};
-      font-size: 10px;
-      color: ${widgetAccent};
-      text-transform: uppercase;
+    .mushi-thread-summary-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
     }
     .mushi-thread {
       display: grid;

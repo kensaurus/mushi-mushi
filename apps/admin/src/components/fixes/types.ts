@@ -43,6 +43,7 @@ export interface FixAttempt {
   llm_output_tokens?: number | null;
   check_run_status?: string | null;
   check_run_conclusion?: string | null;
+  check_run_updated_at?: string | null;
   pr_state?: 'open' | 'closed' | 'merged' | 'draft' | null;
   spec_validation_warnings?: SpecValidationWarning[] | null;
   inventory_action_node_id?: string | null;
