@@ -17,7 +17,7 @@ import { pluralizeWithCount } from '../../lib/format';
 import { ciBadge, type FixAttempt } from './types';
 import { FixAttemptFlow } from './FixAttemptFlow';
 import { MergeFixPreflight } from './MergeFixPreflight';
-import { canMergeFix } from '../../lib/mergeFix';
+import { canMergeFix, getMergeBlockerReason, isFixMerged } from '../../lib/mergeFix';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -38,9 +38,15 @@ interface Props {
   onRetry: () => Promise<void>;
   onMerged?: () => void;
   inventoryAction?: InventoryActionSummary | null;
+  /** When true, a selection checkbox is rendered for bulk actions. */
+  selectable?: boolean;
+  /** Whether this card is currently part of the bulk selection. */
+  selected?: boolean;
+  /** Toggle this card's membership in the bulk selection. */
+  onSelectChange?: (next: boolean) => void;
 }
 
-export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, onMerged, inventoryAction }: Props) {
+export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, onMerged, inventoryAction, selectable = false, selected = false, onSelectChange }: Props) {
   const ci = ciBadge(fix);
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0);
   // Spec-traceability soft warnings (e.g. "diff didn't touch the contract's
@@ -48,6 +54,15 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
   // dispatch passed all hard gates but reviewers should still eyeball the
   // diff before merging — surface a count chip so it's impossible to miss.
   const specWarnings = fix.spec_validation_warnings ?? [];
+  const shipped = isFixMerged(fix);
+  const mergeBlocker = fix.pr_url && !canMergeFix(fix) ? getMergeBlockerReason(fix) : null;
+  const selectAriaLabel = [
+    'Select fix',
+    fix.pr_number ? `PR #${fix.pr_number}` : null,
+    fix.summary ? fix.summary.slice(0, 56) : `report ${fix.report_id.slice(0, 8)}`,
+  ]
+    .filter(Boolean)
+    .join(': ');
 
   // Wave T.2.5: one-shot background wash on realtime status transitions so
   // a live dispatch `queued → running → completed` flashes in-card. Tone
@@ -80,9 +95,22 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
       style={flash.style}
       onAnimationEnd={flash.onAnimationEnd}
     >
-      <Card className="p-3 space-y-1.5">
+      <Card className={`p-3 space-y-1.5 ${selected ? 'ring-1 ring-brand/50 ring-offset-1 ring-offset-surface' : ''} ${shipped ? 'border border-ok/30 bg-ok/5' : ''}`}>
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2 flex-wrap">
+            {selectable && (
+              <input
+                type="checkbox"
+                checked={selected}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  onSelectChange?.(e.target.checked);
+                }}
+                aria-label={selectAriaLabel}
+                className="h-3.5 w-3.5 shrink-0 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
+              />
+            )}
             <Badge className={PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}>
               {pipelineStatusLabel(fix.status)}
             </Badge>
@@ -93,6 +121,18 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
               </span>
             )}
             {ci && <Badge className={ci.className}>{ci.label}</Badge>}
+            {shipped && fix.status !== 'merged' && (
+              <Badge
+                className="bg-ok-muted text-ok"
+                title={
+                  fix.merged_at
+                    ? `Merged on GitHub at ${fix.merged_at}`
+                    : 'Pull request merged on GitHub — console merge is closed'
+                }
+              >
+                Merged
+              </Badge>
+            )}
             {fix.review_passed === false && (
               <Badge
                 className="bg-warn-muted text-warn"
@@ -170,6 +210,16 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             >
               View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
             </a>
+          )}
+          {shipped && (
+            <span className="text-2xs text-ok" title={mergeBlocker ?? 'Already merged on GitHub'}>
+              Shipped — no console merge needed
+            </span>
+          )}
+          {mergeBlocker && !shipped && (
+            <span className="text-2xs text-fg-faint" title={mergeBlocker}>
+              {mergeBlocker}
+            </span>
           )}
           {canMergeFix(fix) && fix.pr_url && (
             <MergeFixPreflight

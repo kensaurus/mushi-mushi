@@ -13,6 +13,7 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { FixAttempt } from './types'
+import { isFixMerged } from '../../lib/mergeFix'
 import { STAGE_HEX } from '../flow-primitives/flowTokens'
 
 export type FixStageStatus = 'pending' | 'active' | 'done' | 'failed' | 'skipped'
@@ -130,13 +131,15 @@ export function deriveStatuses(fix: FixAttempt): Record<string, FixStageStatus> 
           ? 'active'
           : 'pending'
   const act: FixStageStatus =
-    ci === 'success'
+    isFixMerged(fix)
       ? 'done'
-      : ci === 'failure' || ci === 'timed_out'
-        ? 'failed'
-        : judge === 'done'
-          ? 'pending'
-          : 'pending'
+      : ci === 'success'
+        ? 'pending'
+        : ci === 'failure' || ci === 'timed_out'
+          ? 'failed'
+          : judge === 'done'
+            ? 'pending'
+            : 'pending'
 
   return { report, dispatch, pr, judge, act }
 }
@@ -152,6 +155,7 @@ function subLabelFor(key: string, fix: FixAttempt): string | undefined {
     case 'judge':
       return fix.review_passed === true ? 'passed' : fix.review_passed === false ? 'flagged' : undefined
     case 'act':
+      if (isFixMerged(fix)) return 'merged'
       return fix.check_run_conclusion ?? fix.check_run_status ?? undefined
   }
   return undefined
