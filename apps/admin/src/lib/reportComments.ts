@@ -19,6 +19,7 @@ export type FeedbackSignal =
   | 'agent_fixed_wrong_thing'
   | 'already_fixed'
   | 'noise'
+  | 'not_fixed'
 
 export interface ReportCommentRow {
   id: number

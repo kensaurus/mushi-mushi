@@ -5,10 +5,11 @@
  *          via the in-app feedback modal (POST /v1/support/contact).
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FeedbackModal } from './FeedbackModal'
 import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
 import { Link } from 'react-router-dom'
+import { BETA_BANNER_ID, setBetaBannerOffset } from '../lib/appChrome'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DISMISS_KEY = 'mushi-mushi:beta-banner-dismissed-at'
@@ -29,6 +30,7 @@ export function BetaBanner() {
   const [dismissed, setDismissed] = useState(true)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature'>('bug')
+  const bannerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const at = readDismissedAt()
@@ -36,6 +38,26 @@ export function BetaBanner() {
       setDismissed(false)
     }
   }, [])
+
+  // Fixed drawers/panels use viewport positioning and ignore in-flow chrome.
+  // Publish the live banner height so overlays can offset their top edge.
+  useEffect(() => {
+    if (dismissed) {
+      setBetaBannerOffset(0)
+      return
+    }
+    const el = bannerRef.current
+    if (!el) return
+
+    const sync = () => setBetaBannerOffset(el.getBoundingClientRect().height)
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      setBetaBannerOffset(0)
+    }
+  }, [dismissed])
 
   if (dismissed) return null
 
@@ -68,6 +90,8 @@ export function BetaBanner() {
           even against dark or light themes. Height is intentionally tight (py-0.5)
           so it steals minimal vertical space while still being unmissably loud. */}
       <div
+        id={BETA_BANNER_ID}
+        ref={bannerRef}
         role="region"
         aria-label="Beta announcement"
         className="sticky top-0 z-[100] shrink-0 border-b border-lime/40 bg-lime-muted"

@@ -17,20 +17,34 @@ import * as core from '@actions/core'
 
 interface ApiResp<T = unknown> { ok: boolean; data?: T; error?: { code: string; message: string } }
 
+const API_TIMEOUT_MS = 30_000
+
 async function api<T>(endpoint: string, apiKey: string, projectId: string, path: string, init?: RequestInit): Promise<ApiResp<T>> {
-  const res = await fetch(`${endpoint}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Mushi-Api-Key': apiKey,
-      'X-Mushi-Project': projectId,
-      ...(init?.headers ?? {}),
-    },
-  })
-  const text = await res.text()
-  let body: ApiResp<T>
-  try { body = JSON.parse(text) as ApiResp<T> } catch { body = { ok: false, error: { code: `HTTP_${res.status}`, message: text.slice(0, 500) } } }
-  return body
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${endpoint}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Mushi-Api-Key': apiKey,
+        'X-Mushi-Project': projectId,
+        ...(init?.headers ?? {}),
+      },
+    })
+    const text = await res.text()
+    let body: ApiResp<T>
+    try { body = JSON.parse(text) as ApiResp<T> } catch { body = { ok: false, error: { code: `HTTP_${res.status}`, message: text.slice(0, 500) } } }
+    return body
+  } catch (err) {
+    const message = err instanceof Error && err.name === 'AbortError'
+      ? `Request timed out after ${API_TIMEOUT_MS}ms`
+      : (err instanceof Error ? err.message : String(err))
+    return { ok: false, error: { code: 'REQUEST_FAILED', message } }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function main(): Promise<void> {

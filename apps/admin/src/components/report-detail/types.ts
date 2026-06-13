@@ -155,6 +155,13 @@ export interface ReportDetail {
   confidence: number | null
   status: string
   reporter_token_hash: string
+  /** Parent report when this row is a regression reopen. */
+  parent_report_id?: string | null
+  verified_at?: string | null
+  reopened_at?: string | null
+  regression_count?: number | null
+  /** Child regression reports linked to this parent. */
+  child_report_ids?: string[] | null
   session_id: string | null
   end_user_id: string | null
   reporter_display_name?: string | null

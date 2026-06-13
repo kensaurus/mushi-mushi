@@ -212,12 +212,26 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       );
     },
 
-    async replyToReporterReport(reportId: string, reporterToken: string, body: string) {
-      return requestForReporter<{ comment: MushiReporterComment }>(
+    async replyToReporterReport(
+      reportId: string,
+      reporterToken: string,
+      body: string,
+      feedbackSignal?: string,
+    ) {
+      return requestForReporter<{ comment: MushiReporterComment; feedback?: Record<string, unknown> }>(
         'POST',
         `/v1/reporter/reports/${reportId}/reply`,
         reporterToken,
-        { body },
+        { body, ...(feedbackSignal ? { feedback_signal: feedbackSignal } : {}) },
+      );
+    },
+
+    async reopenReporterReport(reportId: string, reporterToken: string, note?: string) {
+      return requestForReporter<{ outcome: Record<string, unknown> }>(
+        'POST',
+        `/v1/reporter/reports/${reportId}/reopen`,
+        reporterToken,
+        { note: note ?? '' },
       );
     },
 

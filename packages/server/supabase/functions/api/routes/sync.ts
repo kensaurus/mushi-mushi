@@ -26,12 +26,13 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
+import { normalizeSyncStatus, isReporterFixedStatus } from '../../_shared/report-status.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
 const TriageBody = z.object({
   status: z
-    .enum(['new', 'triaged', 'in_progress', 'resolved', 'dismissed'])
+    .enum(['new', 'triaged', 'in_progress', 'resolved', 'dismissed', 'verified', 'reopened', 'fixed'])
     .optional(),
   severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
   note: z.string().max(2000).optional(),
@@ -312,7 +313,10 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
     // Build the update payload, only setting fields explicitly provided.
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (status !== undefined) updates['status'] = status
+    if (status !== undefined) {
+      const canonical = normalizeSyncStatus(status) ?? status
+      updates['status'] = canonical === 'resolved' ? 'fixed' : canonical
+    }
     if (severity !== undefined) updates['severity'] = severity
 
     const { data: updated, error: updateErr } = await db
@@ -345,8 +349,13 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     // Fire reporter notification when status changes to resolved or dismissed.
     // Mirrors the same trigger that reports-dashboard.ts fires from the admin UI,
     // so CLI triage also notifies the end-user widget.
-    if (status && (status === 'resolved' || status === 'dismissed') && existing.status !== status) {
-      const notifType = status === 'resolved' ? 'fixed' : 'dismissed'
+    const canonicalStatus = status ? (normalizeSyncStatus(status) ?? status) : undefined
+    if (
+      canonicalStatus &&
+      (isReporterFixedStatus(canonicalStatus) || canonicalStatus === 'dismissed') &&
+      existing.status !== updates['status']
+    ) {
+      const notifType = isReporterFixedStatus(canonicalStatus) ? 'fixed' : 'dismissed'
       // reporter_token_hash is not on existing (select was minimal) — re-fetch it.
       db.from('reports')
         .select('reporter_token_hash')
@@ -407,12 +416,29 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     if (fetchErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: fetchErr.message } }, 500)
     if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: `Report ${id} not found` } }, 404)
 
+    // API-key replies have no JWT caller — satisfy report_comments_author_well_formed
+    // by attributing the comment to the project owner (same as a signed-in admin).
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('owner_id')
+      .eq('id', projectId)
+      .maybeSingle()
+
+    if (projectErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: projectErr.message } }, 500)
+    if (!project?.owner_id) {
+      return c.json({
+        ok: false,
+        error: { code: 'MISCONFIGURED', message: 'Project has no owner_id — cannot post admin reply via API key' },
+      }, 500)
+    }
+
     const { data: comment, error: insertErr } = await db
       .from('report_comments')
       .insert({
         report_id: id,
         project_id: projectId,
         author_kind: 'admin',
+        author_user_id: project.owner_id,
         author_name,
         body: message,
         visible_to_reporter: true,
