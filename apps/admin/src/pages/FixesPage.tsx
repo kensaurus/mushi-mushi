@@ -30,6 +30,8 @@ import { FixSummaryRow } from '../components/fixes/FixSummaryRow'
 import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixCard } from '../components/fixes/FixCard'
+import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
+import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
@@ -59,7 +61,7 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'inflight', label: 'In flight' },
   { id: 'pr_open', label: 'PR open' },
-  { id: 'merged', label: 'CI passing' },
+  { id: 'merged', label: 'Shipped' },
   { id: 'failed', label: 'Failed' },
 ]
 
@@ -90,6 +92,7 @@ function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
   if (status === 'failed') return 'failed'
+  if (isFixMerged(fix)) return 'merged'
   const conclusion = fix.check_run_conclusion?.toLowerCase()
   if (conclusion === 'success') return 'merged'
   if (fix.pr_url) return 'pr_open'
@@ -152,6 +155,12 @@ export function FixesPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
   const [retryAllConfirm, setRetryAllConfirm] = useState(false)
+  // Bulk selection on the Attempts tab. Set of fix_attempt ids.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<string | null>(null)
+  const [bulkMergeConfirm, setBulkMergeConfirm] = useState(false)
+  const [bulkRetryConfirm, setBulkRetryConfirm] = useState(false)
   const urlStatus = searchParams.get('status')
   const initialBucket: StatusBucket =
     urlStatus === 'failed' ? 'failed' :
@@ -412,6 +421,150 @@ export function FixesPage() {
     void loadFixes()
   }, [activeProjectId, failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast])
 
+  // ── Bulk selection ────────────────────────────────────────────────────────
+  // Drop ids that have scrolled out of existence (e.g. after a reload removed a
+  // merged fix) so the selection counts never reference stale rows.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev
+      const live = new Set(fixes.map((f) => f.id))
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (live.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [fixes])
+
+  const toggleSelect = useCallback((id: string, next: boolean) => {
+    setSelectedIds((prev) => {
+      const updated = new Set(prev)
+      if (next) updated.add(id)
+      else updated.delete(id)
+      return updated
+    })
+  }, [])
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [statusBucket])
+
+  const activeBucketLabel = useMemo(
+    () => (statusBucket === 'all' ? null : STATUS_BUCKETS.find((b) => b.id === statusBucket)?.label),
+    [statusBucket],
+  )
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
+
+  // Select-all operates on the *current view* (the active status bucket), and
+  // the label communicates that scope explicitly — NN/g guideline for select-all.
+  const allVisibleSelected = useMemo(
+    () => visibleFixes.length > 0 && visibleFixes.every((f) => selectedIds.has(f.id)),
+    [visibleFixes, selectedIds],
+  )
+  const someVisibleSelected = useMemo(
+    () => visibleFixes.some((f) => selectedIds.has(f.id)),
+    [visibleFixes, selectedIds],
+  )
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (visibleFixes.every((f) => next.has(f.id))) {
+        for (const f of visibleFixes) next.delete(f.id)
+      } else {
+        for (const f of visibleFixes) next.add(f.id)
+      }
+      return next
+    })
+  }, [visibleFixes])
+
+  // Counts that drive which bulk actions are enabled. Only fixes that are both
+  // selected AND actionable count toward each action.
+  const selectedFixes = useMemo(
+    () => fixes.filter((f) => selectedIds.has(f.id)),
+    [fixes, selectedIds],
+  )
+  const selectedMergeable = useMemo(
+    () => selectedFixes.filter((f) => canMergeFix(f) && f.pr_url),
+    [selectedFixes],
+  )
+  const selectedFailed = useMemo(
+    () => selectedFixes.filter((f) => f.status === 'failed'),
+    [selectedFixes],
+  )
+  const selectedMerged = useMemo(
+    () => selectedFixes.filter((f) => isFixMerged(f)),
+    [selectedFixes],
+  )
+
+  // Merge runs sequentially: GitHub write calls are far more sensitive to
+  // secondary-rate-limits than the read-only dispatch fan-out, and a serial
+  // loop lets us surface honest "3 / 8 merged…" progress as each PR lands.
+  const mergeSelected = useCallback(async () => {
+    if (selectedMergeable.length === 0) return
+    setBulkBusy(true)
+    let ok = 0
+    let failed = 0
+    for (let i = 0; i < selectedMergeable.length; i++) {
+      const fix = selectedMergeable[i]
+      setBulkProgress(`Merging ${i + 1} / ${selectedMergeable.length}…`)
+      const result = await mergeFixAttempt(fix.id, 'squash')
+      if (result.ok) {
+        ok += 1
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(fix.id)
+          return next
+        })
+      } else {
+        failed += 1
+      }
+    }
+    setBulkBusy(false)
+    setBulkProgress(null)
+    if (failed === 0) {
+      toast.push({ tone: 'success', message: `Merged ${ok} ${pluralize(ok, 'PR', 'PRs')} · linked reports marked Fixed` })
+    } else {
+      toast.push({ tone: 'warning', message: `Merged ${ok} \u00b7 ${failed} could not merge (check CI / branch protection)` })
+    }
+    void loadFixes()
+  }, [selectedMergeable, loadFixes, toast])
+
+  const retrySelected = useCallback(async () => {
+    if (selectedFailed.length === 0) return
+    setBulkBusy(true)
+    setBulkProgress(`Re-dispatching ${selectedFailed.length}…`)
+    const optimisticIds = selectedFailed.map((f) => ({ reportId: f.report_id, id: pushOptimistic(f.report_id) }))
+    const results = await Promise.allSettled(
+      optimisticIds.map(({ reportId }) =>
+        apiFetch('/v1/admin/fixes/dispatch', {
+          method: 'POST',
+          body: JSON.stringify({ reportId, projectId: activeProjectId }),
+        }),
+      ),
+    )
+    results.forEach((r, idx) => {
+      const { id } = optimisticIds[idx]
+      const okRes = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
+      const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
+      settleOptimistic(id, okRes ? 'ok' : 'error', msg)
+    })
+    const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
+    const failed = results.length - ok
+    setBulkBusy(false)
+    setBulkProgress(null)
+    clearSelection()
+    if (failed === 0) {
+      toast.push({ tone: 'success', message: `Re-dispatched ${ok} ${pluralize(ok, 'fix', 'fixes')}` })
+    } else {
+      toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
+    }
+    void loadFixes()
+  }, [selectedFailed, activeProjectId, pushOptimistic, settleOptimistic, clearSelection, loadFixes, toast])
+
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
   // makes sense when `failedFixes.length > 0`).
@@ -653,6 +806,23 @@ export function FixesPage() {
             />
           ) : (
             <div className="space-y-1.5">
+              <FixBulkActionBar
+                visibleCount={visibleFixes.length}
+                filterLabel={activeBucketLabel}
+                allVisibleSelected={allVisibleSelected}
+                someVisibleSelected={someVisibleSelected}
+                onToggleSelectAll={toggleSelectAllVisible}
+                selectedCount={selectedIds.size}
+                mergeableCount={selectedMergeable.length}
+                mergedCount={selectedMerged.length}
+                failedCount={selectedFailed.length}
+                busy={bulkBusy}
+                progressLabel={bulkProgress}
+                onMergeSelected={() => setBulkMergeConfirm(true)}
+                onRetrySelected={() => setBulkRetryConfirm(true)}
+                onClear={clearSelection}
+              />
+
               {visibleFixes.map((fix, idx) => (
                 <div
                   key={fix.id}
@@ -665,6 +835,9 @@ export function FixesPage() {
                     isOpen={expanded === fix.id}
                     timeline={timelines[fix.id]}
                     traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
+                    selectable
+                    selected={selectedIds.has(fix.id)}
+                    onSelectChange={(next) => toggleSelect(fix.id, next)}
                     onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
                     onRetry={() => retryOne(fix.report_id)}
                     onMerged={() => {
@@ -711,6 +884,42 @@ export function FixesPage() {
           }}
           onCancel={() => {
             if (!retryingAll) setRetryAllConfirm(false)
+          }}
+        />
+      ) : null}
+
+      {bulkRetryConfirm && selectedFailed.length > 0 ? (
+        <ConfirmDialog
+          title={`Retry ${selectedFailed.length} ${pluralize(selectedFailed.length, 'fix', 'fixes')}?`}
+          body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
+          confirmLabel={`Retry ${selectedFailed.length}`}
+          cancelLabel="Cancel"
+          tone="danger"
+          loading={bulkBusy}
+          onConfirm={() => {
+            setBulkRetryConfirm(false)
+            void retrySelected()
+          }}
+          onCancel={() => {
+            if (!bulkBusy) setBulkRetryConfirm(false)
+          }}
+        />
+      ) : null}
+
+      {bulkMergeConfirm && selectedMergeable.length > 0 ? (
+        <ConfirmDialog
+          title={`Merge ${selectedMergeable.length} ${pluralize(selectedMergeable.length, 'PR', 'PRs')}?`}
+          body={`Each PR is squash-merged into your default branch via GitHub, the linked report is marked Fixed, the reporter is notified, and your connected integrations run. PRs with failing CI or branch protection may be rejected — they stay open for you to review. ${selectedFixes.length > selectedMergeable.length ? `(${selectedFixes.length - selectedMergeable.length} of your selected fixes have no mergeable PR and will be skipped.)` : ''}`}
+          confirmLabel={`Merge ${selectedMergeable.length}`}
+          cancelLabel="Cancel"
+          tone="danger"
+          loading={bulkBusy}
+          onConfirm={() => {
+            setBulkMergeConfirm(false)
+            void mergeSelected()
+          }}
+          onCancel={() => {
+            if (!bulkBusy) setBulkMergeConfirm(false)
           }}
         />
       ) : null}

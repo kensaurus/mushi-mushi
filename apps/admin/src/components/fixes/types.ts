@@ -45,6 +45,7 @@ export interface FixAttempt {
   check_run_conclusion?: string | null;
   check_run_updated_at?: string | null;
   pr_state?: 'open' | 'closed' | 'merged' | 'draft' | null;
+  merged_at?: string | null;
   spec_validation_warnings?: SpecValidationWarning[] | null;
   inventory_action_node_id?: string | null;
   /**
