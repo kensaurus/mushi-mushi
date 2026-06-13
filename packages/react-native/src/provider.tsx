@@ -109,6 +109,10 @@ export interface MushiRNInstance {
   listMyComments(reportId: string): Promise<MushiReporterComment[]>
   /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
+  /** Record a reporter feedback signal (e.g. `confirms`, `not_fixed`) on a report. Returns the outcome or null. */
+  submitFeedbackSignal(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>
+  /** Reopen a report the reporter flagged as not fixed. Returns the reopen outcome or null. */
+  reopenReport(reportId: string, note?: string): Promise<Record<string, unknown> | null>
 
   // Leaderboard — SDK-public, anonymized
   /** Fetch the project's top contributors by points (max 50). */
@@ -439,6 +443,18 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
         if (!client) return null
         const res = await client.replyToReporterReport(reportId, reporterTokenRef.current, body)
         return res.ok ? (res.data as { comment: MushiReporterComment }).comment : null
+      },
+      async submitFeedbackSignal(reportId: string, signal: string, note?: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        const res = await client.replyToReporterReport(reportId, reporterTokenRef.current, note ?? '', signal)
+        return res.ok ? (res.data as { feedback?: Record<string, unknown> }).feedback ?? null : null
+      },
+      async reopenReport(reportId: string, note?: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        const res = await client.reopenReporterReport(reportId, reporterTokenRef.current, note)
+        return res.ok ? (res.data as { outcome: Record<string, unknown> }).outcome : null
       },
 
       // Leaderboard — SDK-public anonymized hall-of-fame

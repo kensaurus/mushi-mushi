@@ -639,7 +639,7 @@ reports
   .option('--json', 'Machine-readable JSON output')
   .action(async (id: string, opts: { note?: string; json?: boolean }) => {
     const config = requireConfig()
-    const body: Record<string, string> = { status: 'new' }
+    const body: Record<string, string> = { status: 'reopened' }
     if (opts.note) body['note'] = opts.note
     const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config, {
       method: 'PATCH',
@@ -657,6 +657,24 @@ reports
     } else {
       console.log(`✓ Reopened report ${id}`)
     }
+  })
+
+reports
+  .command('verify <id>')
+  .description('Mark a fixed report as verified by the reporter (operator shortcut)')
+  .option('--note <text>', 'Optional audit note')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (id: string, opts: { note?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { status: 'verified' }
+    if (opts.note) body['note'] = opts.note
+    const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) die(result)
+    if (opts.json) console.log(JSON.stringify(result.data, null, 2))
+    else console.log(`✓ Verified report ${id}`)
   })
 
 reports
@@ -2245,7 +2263,7 @@ qa
     }
     const consoleUrl = config.consoleUrl ?? 'https://app.mushi.ai'
     console.log(`\n   Open in console: ${consoleUrl}/qa-coverage?story=${storyId}`)
-    console.log(`   Tip: run 'mushi config consoleUrl http://localhost:6464' to set your local console URL`)
+    console.log(`   Tip: run 'mushi config consoleUrl <url>' to override (e.g. http://localhost:6464 for local dev)`)
     console.log()
   })
 
@@ -2319,20 +2337,16 @@ Examples:
       process.exit(2)
     }
 
-    // Admin JWT auth is required for the audit endpoint. The CLI uses the
-    // stored Supabase JWT if available, falling back to the API key.
+    // Admin audit uses API key auth (same as other sync/admin MCP tools).
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Mushi-Project-Id': projectId,
     }
-    const jwt = (config as unknown as Record<string, unknown>).jwt as string | undefined ?? null
     const apiKey = config.apiKey ?? null
-    if (jwt) {
-      headers['Authorization'] = `Bearer ${jwt.replace(/[\r\n\0]/g, '')}`
-    } else if (apiKey) {
+    if (apiKey) {
       headers['X-Mushi-Api-Key'] = sanitizeApiKey(apiKey)
     } else {
-      process.stderr.write('error: no credentials found. Run `mushi login` first.\n')
+      process.stderr.write('error: no API key found. Run `mushi login` or set MUSHI_API_KEY.\n')
       process.exit(1)
     }
 

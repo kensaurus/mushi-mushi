@@ -60,6 +60,7 @@ import { useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
+import { mobileNavBelowAppChromeClass } from '../lib/appChrome'
 
 interface NavItem {
   label: string
@@ -1326,7 +1327,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className={mobileNavBelowAppChromeClass}>
           <div
             className="absolute inset-0 bg-overlay backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}

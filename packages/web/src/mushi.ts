@@ -407,6 +407,16 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), body);
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not send reply');
     },
+    async onReporterFeedback(reportId, signal, note) {
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), note ?? '', signal);
+      if (!result.ok) throw new Error(result.error?.message ?? 'Could not send feedback');
+      return result.data?.feedback ?? null;
+    },
+    async onReporterReopen(reportId, note) {
+      const result = await apiClient.reopenReporterReport(reportId, getReporterToken(), note);
+      if (!result.ok) throw new Error(result.error?.message ?? 'Could not reopen report');
+      return result.data?.outcome ?? null;
+    },
     onLeaderboardOpen() {
       widget.setLeaderboard(null, true);
       void fetchLeaderboard(10).then((entries) => {
@@ -1134,6 +1144,22 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return result.data?.comment ?? null;
     },
 
+    async submitFeedbackSignal(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null> {
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), note ?? '', signal);
+      if (!result.ok) return null;
+      return result.data?.feedback ?? null;
+    },
+
+    async reopenReport(reportId: string, note?: string): Promise<Record<string, unknown> | null> {
+      const result = await apiClient.reopenReporterReport(reportId, getReporterToken(), note);
+      if (!result.ok) return null;
+      return result.data?.outcome ?? null;
+    },
+
+    openMyReports() {
+      widget.recorderOpenMyReports();
+    },
+
     async getHallOfFame(limit = 20): Promise<MushiHallOfFameEntry[]> {
       const result = await apiClient.getHallOfFame(limit);
       if (!result.ok) return [];
@@ -1509,6 +1535,9 @@ function createNoopInstance(): MushiSDKInstance {
     listMyReports: async () => [],
     listMyComments: async () => [],
     replyToReport: async () => null,
+    submitFeedbackSignal: async () => null,
+    reopenReport: async () => null,
+    openMyReports: () => {},
     getHallOfFame: async () => [],
   };
 }

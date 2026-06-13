@@ -1144,7 +1144,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const db = getServiceClient();
     const { data: reports, error } = await db
       .from('reports')
-      .select('id, status, category, severity, summary, description, created_at, last_admin_reply_at, last_reporter_reply_at')
+      .select('id, status, category, severity, summary, description, created_at, last_admin_reply_at, last_reporter_reply_at, parent_report_id, verified_at, reopened_at, regression_count')
       .eq('project_id', projectId)
       .eq('reporter_token_hash', auth.tokenHash)
       .order('created_at', { ascending: false })
@@ -1233,6 +1233,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       'agent_fixed_wrong_thing',
       'already_fixed',
       'noise',
+      'not_fixed',
     ]);
     const rawSignal = typeof body.feedback_signal === 'string' ? body.feedback_signal : null;
     if (rawSignal && !FEEDBACK_SIGNALS.has(rawSignal)) {
@@ -1271,6 +1272,36 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     if (reportError) return dbError(c, reportError);
     if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
 
+    let feedbackOutcome: Record<string, unknown> | null = null;
+    if (rawSignal) {
+      const { data: outcome, error: rpcErr } = await db.rpc('mushi_apply_reporter_feedback', {
+        p_report_id: reportId,
+        p_signal: rawSignal,
+        p_reporter_token_hash: auth.tokenHash,
+        p_note: text || null,
+      });
+      if (rpcErr) {
+        log.warn('reporter_feedback_rpc_failed', { reportId, error: rpcErr.message });
+      } else if (outcome && typeof outcome === 'object') {
+        feedbackOutcome = outcome as Record<string, unknown>;
+        const code = typeof feedbackOutcome.code === 'string' ? feedbackOutcome.code : '';
+        if (code === 'VERIFIED') {
+          await createNotification(db, projectId, reportId, auth.tokenHash, 'verified', {
+            message: buildNotificationMessage('verified', {}),
+            reportId,
+          });
+        } else if (code === 'REOPENED') {
+          const childId = typeof feedbackOutcome.child_report_id === 'string'
+            ? feedbackOutcome.child_report_id
+            : reportId;
+          await createNotification(db, projectId, childId, auth.tokenHash, 'reopened', {
+            message: buildNotificationMessage('reopened', {}),
+            reportId: childId,
+          });
+        }
+      }
+    }
+
     const { data: comment, error } = await db
       .from('report_comments')
       .insert({
@@ -1291,7 +1322,53 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       )
       .single();
     if (error) return dbError(c, error);
-    return c.json({ ok: true, data: { comment } }, 201);
+
+    return c.json({ ok: true, data: { comment, feedback: feedbackOutcome } }, 201);
+  });
+
+  app.post('/v1/reporter/reports/:id/reopen', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const reportId = c.req.param('id')!;
+    const auth = await resolveReporterTokenHash(c, projectId);
+    if (!auth.ok) {
+      return c.json(
+        { ok: false, error: { code: auth.code, message: auth.message } },
+        auth.status as 400 | 401,
+      );
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const note = typeof body.note === 'string' ? body.note.trim() : '';
+
+    const db = getServiceClient();
+    const { data: report, error: reportError } = await db
+      .from('reports')
+      .select('id, status')
+      .eq('id', reportId)
+      .eq('project_id', projectId)
+      .eq('reporter_token_hash', auth.tokenHash)
+      .maybeSingle();
+    if (reportError) return dbError(c, reportError);
+    if (!report) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const { data: outcome, error: rpcErr } = await db.rpc('mushi_apply_reporter_feedback', {
+      p_report_id: reportId,
+      p_signal: 'not_fixed',
+      p_reporter_token_hash: auth.tokenHash,
+      p_note: note || 'Reporter reopened this report',
+    });
+    if (rpcErr) return dbError(c, rpcErr);
+
+    const parsed = (outcome ?? {}) as Record<string, unknown>;
+    const childId = typeof parsed.child_report_id === 'string' ? parsed.child_report_id : reportId;
+    await createNotification(db, projectId, childId, auth.tokenHash, 'reopened', {
+      message: buildNotificationMessage('reopened', {}),
+      reportId: childId,
+    });
+
+    return c.json({ ok: true, data: { outcome: parsed } }, 201);
   });
 
   app.get('/v1/notifications', apiKeyAuth, async (c) => {

@@ -159,4 +159,51 @@ class ApiClient {
     }
     return result;
   }
+
+  /// Reporter inbox — list reports filed from this device's reporter token.
+  /// Requires HMAC reporter auth (wired via core SDK in web/Capacitor builds).
+  Future<List<Map<String, dynamic>>> listReporterReports({
+    required String reporterToken,
+    required String reporterHmac,
+  }) async {
+    final uri = Uri.parse('${config.endpoint}/v1/reporter/reports');
+    final res = await _client.get(
+      uri,
+      headers: {
+        ..._headers,
+        'X-Mushi-Reporter-Token': reporterToken,
+        'X-Mushi-Reporter-Signature': reporterHmac,
+      },
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return [];
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final data = body['data'] as Map<String, dynamic>?;
+    return (data?['reports'] as List<dynamic>? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
+
+  /// Reporter-initiated regression reopen.
+  Future<Map<String, dynamic>?> reopenReporterReport({
+    required String reportId,
+    required String reporterToken,
+    required String reporterHmac,
+    String? note,
+  }) async {
+    final uri = Uri.parse(
+      '${config.endpoint}/v1/reporter/reports/$reportId/reopen',
+    );
+    final res = await _client.post(
+      uri,
+      headers: {
+        ..._headers,
+        'X-Mushi-Reporter-Token': reporterToken,
+        'X-Mushi-Reporter-Signature': reporterHmac,
+      },
+      body: jsonEncode({'note': note ?? ''}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    return body['data'] as Map<String, dynamic>?;
+  }
 }
