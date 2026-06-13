@@ -27,3 +27,6 @@ export { useNavigationCapture } from './capture/navigation-capture'
 export type { NavigationEntry } from './capture/navigation-capture'
 
 export { AsyncStorageQueue } from './storage/async-storage-queue'
+
+// Re-export shared types that host apps commonly need
+export type { MushiReporterReport, MushiReporterComment, MushiHallOfFameEntry } from '@mushi-mushi/core'

@@ -24,6 +24,7 @@ export interface MushiMarketingRecorder {
   selectIntent(label: string): void;
   focusDescription(): void;
   submit(): void;
+  openMyReports(): void;
 }
 
 function centerOf(el: Element | null): MushiRecorderCenter | null {
@@ -48,6 +49,7 @@ export function exposeMarketingRecorder(widget: MushiWidget): void {
     selectIntent: (label) => widget.recorderSelectIntent(label),
     focusDescription: () => widget.recorderFocusDescription(),
     submit: () => widget.recorderSubmit(),
+    openMyReports: () => widget.recorderOpenMyReports(),
   };
 
   (globalThis as typeof globalThis & { __mushiRecorder?: MushiMarketingRecorder }).__mushiRecorder = api;

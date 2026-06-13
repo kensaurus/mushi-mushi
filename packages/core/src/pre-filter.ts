@@ -11,9 +11,11 @@ const DEFAULT_MAX_LENGTH = 2000;
 const SPAM_PATTERNS: RegExp[] = [
   /^(.)\1{10,}$/,                          // repeated single character
   /^[A-Z\s!?]{20,}$/,                      // all caps shouting
-  /^[\d\s]+$/,                              // numbers only
+  /^[\d\s]+$/,                             // numbers only
   /^[^a-zA-Z\u00C0-\u024F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]{10,}$/, // no real letters
-  /\b(test|asdf|qwerty|lorem ipsum)\b/i,    // common test strings
+  // "test" removed — users legitimately write "I was testing…" in real reports.
+  // Keep clearly-nonsense patterns that are never real sentences.
+  /^(asdf|qwerty|lorem ipsum)[.,!?\s]*$/i, // standalone keyboard-mash or placeholder
 ];
 
 const GIBBERISH_PATTERN = /^[bcdfghjklmnpqrstvwxz]{6,}/i; // consonant-only strings

@@ -105,8 +105,10 @@ export function ReportsPage() {
   }, [status, category, severity, platform, sdkPackage, component, reporter, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
-    `/v1/admin/reports?${queryString}`,
-    { deps: [queryString] },
+    // Wait for ProjectSwitcher to hydrate active project so the first fetch
+    // carries X-Mushi-Project-Id and doesn't briefly show all-org reports.
+    activeProjectId ? `/v1/admin/reports?${queryString}` : null,
+    { deps: [queryString, activeProjectId] },
   )
 
   const reports = data?.reports ?? []

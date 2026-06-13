@@ -23,8 +23,9 @@
  *   5. Validates scope/circuit breaker.
  *   6. Resolves the GitHub repo (project_repos primary, falls back to
  *      project_settings.github_repo_url).
- *   7. Creates a draft PR via direct GitHub REST API (no auto-merge — the
- *      whitepaper is explicit about human approval on every PR).
+ *   7. Creates a draft PR via direct GitHub REST API, then immediately marks
+ *      it ready for review so CI runs and console merge works (human still
+ *      confirms merge — nothing auto-merges).
  *   8. Updates fix_attempts and fix_dispatch_jobs with the result.
  *
  * Security:
@@ -84,6 +85,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { markPullRequestReady } from '../_shared/github.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -112,7 +114,8 @@ Rules:
 NEVER emit placeholder output. The strings "placeholder", "TODO", "lorem ipsum", "FIXME", "...", or any stub stand-in for real content are FORBIDDEN as the value of \`summary\`, \`rationale\`, \`files[].contents\`, or \`files[].reason\`. The schema will reject them and you will be retried. If you do not have enough context to write a real fix:
   - set \`needsHumanReview: true\`
   - in \`rationale\`, explain exactly which file or snippet you would need to see
-  - in \`files\`, emit the SMALLEST plausible defensive change you can justify (e.g. an explicit error message at the crash site) rather than a placeholder
+  - in \`files\`, you MUST include at least one file — emit the SMALLEST plausible defensive change you can justify (e.g. an explicit error message at the crash site, a null-guard, or a TODO comment that references the specific line that needs investigation). A \`NEEDS_INVESTIGATION.md\` with a concrete analysis of what you found and what needs to change is acceptable.
+  - \`files\` can NEVER be an empty array — the schema requires at least one entry
   - never emit a draft PR full of stub files just to satisfy the schema`;
 
 interface FixRequestBody {
@@ -308,7 +311,7 @@ Deno.serve(
           .from('project_settings')
           .select(
             'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
-              'github_repo_url, codebase_repo_url',
+              'github_repo_url, codebase_repo_url, fix_branch_template',
           )
           .eq('project_id', dispatch.project_id)
           .single(),
@@ -705,7 +708,7 @@ ${
           const cause = llmErr.cause as
             | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
             | undefined;
-          log.error('Fix worker structured-output schema violation', {
+          log.warn('Fix worker structured-output schema violation', {
             dispatchId: dispatch.id,
             model: usedModel,
             modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
@@ -780,7 +783,11 @@ ${
       const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
       if (!ghToken) {
         // Still record the LLM output so the user can copy/paste even without GH.
-        const branch = `mushi/fix-${dispatch.report_id.slice(0, 8)}`;
+        const branch = generateBranchName(
+          dispatch.report_id,
+          (settings as Record<string, unknown> | null)?.fix_branch_template as string | null,
+          (report as Record<string, unknown> | null)?.category as string | null,
+        );
         await completeAttempt(db, fixAttemptId, {
           status: 'completed',
           branch,
@@ -820,6 +827,9 @@ ${
         defaultBranch: repo.defaultBranch,
         reportId: dispatch.report_id,
         fix,
+        branchTemplate: (settings as Record<string, unknown> | null)?.fix_branch_template as string | null,
+        category: (report as Record<string, unknown> | null)?.category as string | null,
+        log,
       });
       prSpan.end({ prUrl: prResult.url });
 
@@ -1071,6 +1081,10 @@ const EXPECTED_FAILURE_CATEGORIES = new Set<string>([
   'spec_violation',
   'no_relevant_code',
   'llm_rate_limit',
+  // Model returned unparseable JSON or failed Zod validation (e.g. literal
+  // "placeholder" stubs). Guardrail working as designed — not a server bug.
+  'llm_no_object',
+  'llm_invalid_json',
 ]);
 
 /**
@@ -1695,11 +1709,48 @@ interface CreatePrInput {
   defaultBranch: string;
   reportId: string;
   fix: FixOutput;
+  branchTemplate?: string | null;
+  category?: string | null;
+  log: Logger;
+}
+
+/**
+ * Build a branch name from the project-configurable template.
+ * Tokens: {date} = YYYY-MM-DD UTC, {category} = report category slug,
+ *         {shortId} = first 8 chars of reportId.
+ * Falls back to the legacy scheme when template is empty.
+ */
+function generateBranchName(
+  reportId: string,
+  template?: string | null,
+  category?: string | null,
+): string {
+  const effectiveTemplate =
+    template && template.trim().length > 0
+      ? template.trim()
+      : null;
+
+  if (!effectiveTemplate) {
+    return `mushi/fix-${reportId.slice(0, 8)}-${Date.now().toString(36)}`;
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  const categorySlug = (category ?? 'fix')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 20);
+  const shortId = reportId.slice(0, 8);
+
+  return effectiveTemplate
+    .replace('{date}', date)
+    .replace('{category}', categorySlug)
+    .replace('{shortId}', shortId);
 }
 
 async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
-  const { token, owner, repo, defaultBranch, reportId, fix } = input;
-  const branch = `mushi/fix-${reportId.slice(0, 8)}-${Date.now().toString(36)}`;
+  const { token, owner, repo, defaultBranch, reportId, fix, branchTemplate, category, log } = input;
+  const branch = generateBranchName(reportId, branchTemplate, category);
 
   const baseHeaders = {
     Authorization: `Bearer ${token}`,
@@ -1716,12 +1767,19 @@ async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
   );
   const baseSha = (refRes as { object: { sha: string } }).object.sha;
 
-  // Create the new branch.
-  await ghFetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
-    method: 'POST',
-    headers: baseHeaders,
-    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
-  });
+  // Create the new branch. Idempotent: a retry or duplicate dispatch for the
+  // same report may find the branch already exists from a prior attempt.
+  try {
+    await ghFetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
+      method: 'POST',
+      headers: baseHeaders,
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('Reference already exists')) throw err;
+    log.info('fix-worker: branch already exists, continuing', { branch, reportId });
+  }
 
   // Commit each file. Sequential keeps the commit log readable; the diffs
   // are small enough that parallelism isn't worth the rate-limit risk.
@@ -1765,6 +1823,18 @@ async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
       body: buildPrBody(fix, reportId),
     }),
   })) as { number: number; html_url: string };
+
+  // Draft PRs block CI merge APIs until marked ready. Human approval is still
+  // required — we only lift the draft gate so checks run and console merge works.
+  const readyResult = await markPullRequestReady(token, { owner, repo }, prRes.number);
+  if (!readyResult.ok) {
+    log.warn('fix-worker: could not mark PR ready for review', {
+      prNumber: prRes.number,
+      message: readyResult.message,
+    });
+  } else if (!readyResult.alreadyReady) {
+    log.info('fix-worker: marked draft PR ready for review', { prNumber: prRes.number });
+  }
 
   // Best-effort labels: no-op on failure (e.g. permissions or label doesn't
   // exist). The PR itself is the load-bearing artifact.

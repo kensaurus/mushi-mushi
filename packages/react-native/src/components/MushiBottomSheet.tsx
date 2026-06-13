@@ -38,6 +38,7 @@ import {
   View,
   Text,
   TextInput,
+  Image,
   TouchableOpacity,
   Animated,
   PanResponder,
@@ -66,9 +67,18 @@ const CATEGORIES = [
 export interface MushiBottomSheetProps {
   visible: boolean
   onClose: () => void
+  /** Base64 data-URI of the screenshot captured before the sheet opened. Optional. */
+  screenshotDataUrl?: string
+  /** Called when the user removes the attached screenshot. */
+  onClearScreenshot?: () => void
 }
 
-export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({ visible, onClose }) => {
+export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
+  visible,
+  onClose,
+  screenshotDataUrl,
+  onClearScreenshot,
+}) => {
   const mushi = useMushiContext()
   const scheme = useColorScheme()
   const dark = scheme === 'dark'
@@ -79,6 +89,12 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({ visible, onClose }
   const [category, setCategory] = useState<string | null>(null)
   const [description, setDescription] = useState('')
   const [phase, setPhase] = useState<'form' | 'sending' | 'sent'>('form')
+  // Local shadow of the screenshot so we can clear it from inside the sheet
+  const [screenshotAttached, setScreenshotAttached] = useState(true)
+
+  useEffect(() => {
+    if (visible) setScreenshotAttached(true)
+  }, [visible])
 
   const resetForm = useCallback(() => {
     setCategory(null)
@@ -157,13 +173,19 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({ visible, onClose }
     if (!category || !description.trim() || !mushi) return
     setPhase('sending')
     try {
-      await mushi.submitReport({ category, description: description.trim() })
+      await mushi.submitReport({
+        category,
+        description: description.trim(),
+        screenshotDataUrl: screenshotDataUrl && screenshotAttached ? screenshotDataUrl : undefined,
+      })
       setPhase('sent')
       setTimeout(handleClose, 1400)
     } catch {
       setPhase('form')
     }
   }
+
+  const activeScreenshot = screenshotDataUrl && screenshotAttached ? screenshotDataUrl : null
 
   const colors = dark
     ? { bg: '#1c1c1e', text: '#f2f2f7', sub: '#8e8e93', card: '#2c2c2e', accent: '#0a84ff', border: '#38383a', backdrop: 'rgba(0,0,0,0.6)' }
@@ -254,6 +276,35 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({ visible, onClose }
                 onChangeText={setDescription}
                 editable={phase === 'form'}
               />
+
+              {/* Screenshot thumbnail — shown if a screenshot was captured */}
+              {activeScreenshot ? (
+                <View style={s.screenshotRow}>
+                  <Image
+                    source={{ uri: activeScreenshot }}
+                    style={s.screenshotThumb}
+                    accessibilityLabel="Attached screenshot"
+                  />
+                  <View style={s.screenshotMeta}>
+                    <Text style={[s.screenshotLabel, { color: colors.text }]}>
+                      Screenshot attached
+                    </Text>
+                    <Text style={[s.screenshotSub, { color: colors.sub }]}>
+                      Helps the team see the issue
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setScreenshotAttached(false)
+                      onClearScreenshot?.()
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel="Remove screenshot"
+                  >
+                    <Text style={[s.screenshotRemove, { color: colors.sub }]}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               {/* Submit */}
               <TouchableOpacity
@@ -368,5 +419,38 @@ const s = StyleSheet.create({
   sentText: {
     fontSize: 20,
     fontWeight: '600',
+  },
+  screenshotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(128,128,128,0.1)',
+  },
+  screenshotThumb: {
+    width: 48,
+    height: 36,
+    borderRadius: 4,
+    backgroundColor: '#000',
+    flexShrink: 0,
+  },
+  screenshotMeta: {
+    flex: 1,
+    gap: 2,
+  },
+  screenshotLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  screenshotSub: {
+    fontSize: 11,
+  },
+  screenshotRemove: {
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 4,
   },
 })

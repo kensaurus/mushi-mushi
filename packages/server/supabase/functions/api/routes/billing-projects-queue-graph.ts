@@ -32,7 +32,7 @@ import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
-import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
+import { resolveLlmKey } from '../../_shared/byok.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
@@ -2551,7 +2551,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
     }
 
-    const [settingsRes, reposRes] = await Promise.all([
+    const [settingsRes, reposRes, anthropicKey] = await Promise.all([
       db
         .from('project_settings')
         .select(
@@ -2560,6 +2560,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .eq('project_id', projectId)
         .maybeSingle(),
       db.from('project_repos').select('repo_url').eq('project_id', projectId).limit(1),
+      resolveLlmKey(db, projectId, 'anthropic'),
     ]);
 
     const settings = settingsRes.data;
@@ -2571,7 +2572,8 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       (repos.length > 0 ? (repos[0] as { repo_url?: string | null }).repo_url ?? null : null);
 
     const hasGithub = Boolean(settings?.github_repo_url) || repos.length > 0;
-    const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+    const hasAnthropic = Boolean(anthropicKey);
+    const anthropicSource = anthropicKey?.source ?? null;
     const hasCodebase = Boolean(settings?.codebase_index_enabled);
     const hasAutofix = Boolean(settings?.autofix_enabled);
 
@@ -2600,9 +2602,15 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       },
       {
         key: 'anthropic',
-        ready: hasByok,
-        label: 'Anthropic API key set',
-        hint: 'Add your Anthropic API key (BYOK) to power the fix-generation model.',
+        ready: hasAnthropic,
+        label: anthropicSource === 'env'
+          ? 'Anthropic key available (platform)'
+          : anthropicSource === 'byok'
+            ? 'Anthropic API key set'
+            : 'Anthropic API key set',
+        hint: anthropicSource === 'env'
+          ? 'Using the platform Anthropic key — add your own in Settings → API Keys to isolate usage.'
+          : 'Add your Anthropic API key (BYOK) to power the fix-generation model.',
         fixHref: '/settings?tab=byok',
       },
       {

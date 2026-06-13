@@ -17,6 +17,7 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { NoObjectGeneratedError } from 'npm:ai@4'
 import { resolveLlmKeys, markKeyStatus, type ResolvedKey, type LlmProvider } from './byok.ts'
 import { log as rootLog } from './logger.ts'
 
@@ -152,8 +153,13 @@ export async function withAnthropicOrOpenAi<T>(
     return { result, usedProvider: 'anthropic' }
   } catch (err) {
     if (err instanceof LlmFailoverError && (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')) {
-      // Fall through to OpenAI
+      // No Anthropic keys available — fall through to OpenAI.
       log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code })
+    } else if (NoObjectGeneratedError.isInstance(err)) {
+      // Anthropic responded but its output didn't match the required schema.
+      // OpenAI often handles complex structured-output schemas more reliably —
+      // try it as a fallback before giving up.
+      log.warn('Anthropic NoObjectGeneratedError; falling back to OpenAI', { projectId })
     } else {
       throw err
     }

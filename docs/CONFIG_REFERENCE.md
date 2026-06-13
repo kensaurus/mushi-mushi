@@ -3,13 +3,13 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_93 configuration knobs across 18 sections · last regenerated 2026-06-12._
+_94 configuration knobs across 18 sections · last regenerated 2026-06-13._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
 ## Contents
 
-- [Settings → General](#settings-general) (8)
+- [Settings → General](#settings-general) (9)
 - [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (3)
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
@@ -163,6 +163,22 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `project_settings.dedup_threshold` · endpoint `PATCH /v1/admin/settings` · read by `classify-report edge function`
 
 **When to change** — Raise to 0.88+ if you're seeing false merges (different bugs being lumped together). Lower to ~0.75 if duplicate clusters look thin and the same regression keeps appearing as separate reports.
+
+### Fix Branch Template
+
+<a id="settings-general-fix-branch-template"></a>
+
+`settings.general.fix_branch_template`
+
+**Summary** — Naming pattern for the Git branch the fix-worker creates when it opens a draft PR.
+
+**How it works** — When the fix orchestrator opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.
+
+**Default** — `mushi/fix/{date}-{category}-{shortId}`
+
+**Where it lives** — table `project_settings.fix_branch_template` · endpoint `PATCH /v1/admin/settings` · read by `fix-worker edge function`
+
+**When to change** — Change it to match your team’s branch convention (e.g. `fixes/{date}-{shortId}`) so Mushi PRs sort alongside your existing branches. Keep `{shortId}` in the template to guarantee uniqueness and avoid branch collisions across reports.
 
 ## Settings → BYOK (LLM keys)
 

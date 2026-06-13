@@ -27,6 +27,7 @@ const DB_VERSION = 1;
 const LS_KEY = 'mushi_offline_queue';
 const BATCH_SIZE = 10;
 const MAX_BACKOFF_MS = 60_000;
+const AUTO_FLUSH_INTERVAL_MS = 30_000;
 
 export interface OfflineQueue {
   enqueue(report: MushiReport): Promise<void>;
@@ -43,6 +44,7 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
   const { enabled = true, maxQueueSize = 50, syncOnReconnect = true, encryptAtRest = true } = config;
 
   let syncCleanup: (() => void) | null = null;
+  let flushInterval: ReturnType<typeof setInterval> | null = null;
   let backendType: StorageBackend | null = null;
 
   async function wrapForStorage(report: MushiReport): Promise<StoredRow> {
@@ -282,6 +284,15 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
             /invalid payload|description must be at least|validation/i.test(
               result.error.message,
             ));
+        const transient =
+          !permanent &&
+          (result.error?.code === 'NETWORK_ERROR' ||
+            result.error?.code === 'HTTP_403' ||
+            result.error?.code === 'HTTP_429' ||
+            result.error?.code === 'HTTP_502' ||
+            result.error?.code === 'HTTP_503' ||
+            result.error?.code === 'HTTP_504' ||
+            (typeof result.error?.code === 'string' && result.error.code.startsWith('HTTP_5')));
         if (permanent) {
           try {
             if (backend === 'indexeddb') await idbDelete(rowId);
@@ -289,6 +300,11 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
           } catch {
             lsDelete(rowId);
           }
+        } else if (transient) {
+          queueLog.debug('Offline queue: transient failure, will retry', {
+            id: rowId,
+            code: result.error?.code,
+          });
         }
         failed++;
         if (i < batch.length - 1) {
@@ -331,14 +347,25 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
   function startAutoSync(client: MushiApiClient): void {
     if (!enabled || !syncOnReconnect || typeof window === 'undefined') return;
 
-    const handler = () => {
+    const tryFlush = () => {
       if (navigator.onLine) {
         flush(client).catch(() => {});
       }
     };
 
-    window.addEventListener('online', handler);
-    syncCleanup = () => window.removeEventListener('online', handler);
+    window.addEventListener('online', tryFlush);
+    flushInterval = setInterval(() => {
+      void size().then((n) => {
+        if (n > 0) tryFlush();
+      });
+    }, AUTO_FLUSH_INTERVAL_MS);
+    syncCleanup = () => {
+      window.removeEventListener('online', tryFlush);
+      if (flushInterval) {
+        clearInterval(flushInterval);
+        flushInterval = null;
+      }
+    };
   }
 
   function stopAutoSync(): void {

@@ -114,6 +114,91 @@ with the payload, HTTP status, and any retry attempts.
 
 ---
 
+## CI feedback on open PRs
+
+When a fix-worker or Cursor agent opens a draft PR, GitHub Actions runs on the branch.
+The fix detail card shows a **CI badge** with the latest check-run conclusion
+(`success`, `failure`, `pending`, etc.).
+
+| Control | What it does |
+| ------- | ------------ |
+| **Refresh CI status** | Calls `POST /v1/admin/fixes/:id/refresh-ci` → `ci-sync` edge function. Use when webhooks dropped or the badge is stale. |
+| **View GitHub Actions log →** | Deep link to the check run on GitHub. |
+
+A background `mushi-ci-sync-10m` pg_cron also refreshes completed attempts every
+10 minutes, but on-demand refresh closes the loop immediately after you push a fix
+to the PR branch.
+
+From the CLI:
+
+```bash
+mushi fixes refresh-ci <fixId>
+```
+
+---
+
+## Merging from the console
+
+After CI passes (or you've reviewed manually), merge the draft PR without leaving
+Mushi. This is **user-confirmed** — Mushi never auto-merges.
+
+### Where merge appears
+
+- **Report detail** → fix card → **Merge PR** (confirm popover)
+- **Fixes list** → completed row with open PR
+- **Pipeline flow** on the report detail page
+
+The UI picks the **primary fix attempt** — if a later retry failed but an earlier
+attempt still has an open PR, the merge button targets the mergeable attempt, not
+the failed retry.
+
+### Merge flow
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant Console
+  participant API
+  participant GitHub
+  participant DB
+
+  You->>Console: Confirm squash merge
+  Console->>API: POST /v1/admin/fixes/:id/merge
+  API->>GitHub: markPullRequestAsReady (if draft)
+  API->>GitHub: PUT /pulls/:n/merge
+  API->>DB: merged_at, report → fixed
+  API->>DB: reporter notification + fix.applied webhooks
+  Console-->>You: Report status Fixed
+```
+
+**Draft PRs:** fix-worker opens PRs as drafts. Before merge, the API calls GitHub's
+GraphQL `markPullRequestAsReady` (same as `gh pr ready`). New fix-worker runs also
+auto-ready immediately after opening the PR.
+
+**Merge methods:** squash (default), merge commit, or rebase — chosen in the confirm
+popover.
+
+**Already merged:** if GitHub shows merged but the webhook was missed, merge is
+idempotent — `finalizeFixMerge()` backfills `merged_at` and report status.
+
+From the CLI (requires `mcp:write` API key):
+
+```bash
+mushi fixes merge <fixId>
+mushi fixes merge <fixId> --method squash
+```
+
+### Prerequisites
+
+| Requirement | Why |
+| ----------- | --- |
+| Fix status `completed` | Agent finished and opened a PR |
+| Open PR (`pr_url`, `pr_number`) | Nothing to merge otherwise |
+| GitHub connected | App installation or PAT with merge permission |
+| CI green (recommended) | Merge popover warns on failing checks; you can override |
+
+---
+
 ## See also
 
 - [Concepts → Agentic fix orchestrator](/concepts/fix-orchestrator) — how the orchestrator works internally.

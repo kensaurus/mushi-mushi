@@ -33,6 +33,8 @@ interface ProjectSettings {
   crawl_max_pages_per_day?: number
   crawl_max_runs_per_day?: number
   tdd_max_gens_per_day?: number
+  /** Branch name template for fix-worker PRs. Tokens: {date}, {category}, {shortId}. */
+  fix_branch_template?: string
 }
 
 export function GeneralPanel() {
@@ -60,6 +62,7 @@ export function GeneralPanel() {
     setTimeout(() => setSlackTestResult(null), 4000)
   }
 
+  const DEFAULT_BRANCH_TEMPLATE = 'mushi/fix/{date}-{category}-{shortId}'
   const changeCount = dirty
     ? countChangedFields([
         { current: settings.slack_webhook_url ?? '', saved: saved.slack_webhook_url ?? '' },
@@ -73,6 +76,7 @@ export function GeneralPanel() {
         { current: settings.crawl_max_pages_per_day ?? 150, saved: saved.crawl_max_pages_per_day ?? 150 },
         { current: settings.crawl_max_runs_per_day ?? 8, saved: saved.crawl_max_runs_per_day ?? 8 },
         { current: settings.tdd_max_gens_per_day ?? 20, saved: saved.tdd_max_gens_per_day ?? 20 },
+        { current: settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE, saved: saved.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE },
       ])
     : 0
 
@@ -289,6 +293,49 @@ export function GeneralPanel() {
             current={settings.dedup_threshold ?? 0.82}
             saved={saved.dedup_threshold ?? 0.82}
             kind="number"
+          />
+        </div>
+      </Section>
+
+      <Section title="Autofix Branch Naming" className="space-y-3">
+        <ContainedBlock tone="muted">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Template for branches opened by the fix-worker. Available tokens:{' '}
+            <code className="font-mono text-fg-secondary">{'{'}</code>
+            <code className="font-mono text-fg-secondary">date</code>
+            <code className="font-mono text-fg-secondary">{'}'}</code>{' '}
+            (YYYY-MM-DD),{' '}
+            <code className="font-mono text-fg-secondary">{'{'}</code>
+            <code className="font-mono text-fg-secondary">category</code>
+            <code className="font-mono text-fg-secondary">{'}'}</code>{' '}
+            (bug / slow / visual / …),{' '}
+            <code className="font-mono text-fg-secondary">{'{'}</code>
+            <code className="font-mono text-fg-secondary">shortId</code>
+            <code className="font-mono text-fg-secondary">{'}'}</code>{' '}
+            (first 8 chars of report UUID).
+          </p>
+        </ContainedBlock>
+        <div>
+          <Input
+            label="Branch template"
+            helpId="settings.general.fix_branch_template"
+            type="text"
+            value={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
+            onChange={(e) => update({ fix_branch_template: e.target.value })}
+            placeholder={DEFAULT_BRANCH_TEMPLATE}
+          />
+          <p className="text-fg-faint text-3xs mt-0.5">
+            Example result: <code className="font-mono">{
+              (settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
+                .replace('{date}', new Date().toISOString().slice(0, 10))
+                .replace('{category}', 'bug')
+                .replace('{shortId}', 'abc12345')
+            }</code>
+          </p>
+          <SettingsChangeHint
+            current={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
+            saved={saved.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
+            kind="text"
           />
         </div>
       </Section>

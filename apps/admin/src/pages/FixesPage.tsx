@@ -667,6 +667,10 @@ export function FixesPage() {
                     traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
                     onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
                     onRetry={() => retryOne(fix.report_id)}
+                    onMerged={() => {
+                      toast.success('PR merged', 'Report marked Fixed when applicable.')
+                      void loadFixes()
+                    }}
                     inventoryAction={
                       fix.inventory_action_node_id
                         ? (() => {

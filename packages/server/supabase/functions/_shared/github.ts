@@ -129,6 +129,109 @@ export function parseGithubRepoUrl(url: string | null | undefined): GithubRepoRe
   return { owner: match[1], repo: match[2] }
 }
 
+export interface PullRequestSnapshot {
+  number: number
+  draft: boolean
+  state: string
+  merged: boolean
+  nodeId?: string | null
+}
+
+function githubAuthHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  }
+}
+
+/** Fetch minimal PR metadata — used before merge to detect draft state. */
+export async function fetchPullRequest(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+): Promise<PullRequestSnapshot | null> {
+  const res = await fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}`,
+    { headers: githubAuthHeaders(token) },
+  )
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`pull fetch ${res.status}`)
+  const body = await res.json() as {
+    number?: number
+    draft?: boolean
+    state?: string
+    merged?: boolean
+    node_id?: string
+  }
+  return {
+    number: body.number ?? pullNumber,
+    draft: body.draft === true,
+    state: body.state ?? 'open',
+    merged: body.merged === true,
+    nodeId: body.node_id ?? null,
+  }
+}
+
+/**
+ * Convert a draft PR to "ready for review" so CI can run and the merge API
+ * accepts squash-merge. GitHub blocks merge on draft PRs even when checks pass.
+ * Idempotent — no-ops when the PR is already non-draft.
+ */
+export async function markPullRequestReady(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+): Promise<{ ok: boolean; alreadyReady: boolean; message?: string }> {
+  const existing = await fetchPullRequest(token, ref, pullNumber)
+  if (!existing) {
+    return { ok: false, alreadyReady: false, message: 'Pull request not found' }
+  }
+  if (existing.merged || existing.state === 'closed') {
+    return { ok: true, alreadyReady: true, message: 'Pull request already closed or merged' }
+  }
+  if (!existing.draft) {
+    return { ok: true, alreadyReady: true }
+  }
+
+  const nodeId = existing.nodeId
+  if (!nodeId) {
+    return { ok: false, alreadyReady: false, message: 'Pull request missing node_id for ready mutation' }
+  }
+
+  // REST PATCH { draft: false } does not reliably undraft on GitHub; the
+  // supported path is the GraphQL markPullRequestAsReady mutation (same as
+  // `gh pr ready`).
+  const gqlRes = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: `mutation MarkPullRequestReady($id: ID!) {
+        markPullRequestAsReady(input: { pullRequestId: $id }) {
+          pullRequest { isDraft }
+        }
+      }`,
+      variables: { id: nodeId },
+    }),
+  })
+  const gqlBody = await gqlRes.json().catch(() => ({})) as {
+    data?: { markPullRequestAsReady?: { pullRequest?: { isDraft?: boolean } } }
+    errors?: Array<{ message?: string }>
+  }
+  if (gqlBody.errors?.length) {
+    return {
+      ok: false,
+      alreadyReady: false,
+      message: gqlBody.errors.map((e) => e.message).filter(Boolean).join('; ') || 'GraphQL ready failed',
+    }
+  }
+  const stillDraft = gqlBody.data?.markPullRequestAsReady?.pullRequest?.isDraft
+  if (stillDraft === true) {
+    return { ok: false, alreadyReady: false, message: 'Pull request is still a draft after ready mutation' }
+  }
+  return { ok: true, alreadyReady: false }
+}
+
 export interface CheckRunSnapshot {
   status: string | null
   conclusion: string | null

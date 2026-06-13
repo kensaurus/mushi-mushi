@@ -20,7 +20,7 @@ import { createEmbedding, createEmbeddingBatch } from '../_shared/embeddings.ts'
 import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { classifyIndexerError } from '../_shared/sweep-error-classifier.ts';
 
 ensureSentry('webhooks-github-indexer');
@@ -459,7 +459,7 @@ async function handleFixPrMerged(payload: {
   const { data: attempt } = await db
     .from('fix_attempts')
     .select(
-      'id, project_id, report_id, agent, branch, commit_sha, summary, rationale, files_changed',
+      'id, project_id, report_id, agent, branch, commit_sha, pr_url, pr_number, merged_at, summary, rationale, files_changed',
     )
     .eq('pr_url', prUrl)
     .maybeSingle();
@@ -471,53 +471,13 @@ async function handleFixPrMerged(payload: {
     );
   }
 
-  // Mark the fix attempt as merged so the dashboard PDCA cockpit + the
-  // intelligence reports can show "successful fixes" downstream. We
-  // capture whether this is the first time the row flips to merged; that
-  // distinction gates the `fix.applied` plugin dispatch below so a
-  // GitHub redelivery (same PR, same merge) doesn't re-fire the event
-  // and re-resolve the upstream Sentry/Jira issue.
-  const { data: mergedRow } = await db
-    .from('fix_attempts')
-    .update({ merged_at: new Date().toISOString() })
-    .eq('id', attempt.id)
-    .is('merged_at', null)
-    .select('id')
-    .maybeSingle();
-  const justMerged = !!mergedRow;
+  const { justMerged } = await finalizeFixMerge(db, attempt, {
+    prUrl,
+    prNumber: payload.pull_request?.number,
+    repository: payload.repository?.full_name,
+  });
 
-  // Loop-closure: dispatch `fix.applied` exactly once per merge so the
-  // outbound plugin bridges (plugin-sentry auto-resolve, plugin-jira
-  // transition-to-Done, plugin-linear close-issue, plugin-bugsnag
-  // resolve-error, etc.) receive the signal. Previously this dispatch
-  // only existed inside `PATCH /v1/admin/fixes/:id` — an endpoint the
-  // admin UI never calls — so the README claim "resolves the upstream
-  // tracker when Mushi merges" was effectively dead for the auto-worker
-  // path (the 99% path). The unique-via-`is(merged_at, null)` write
-  // above guarantees this fires exactly once even on webhook retries.
   if (justMerged) {
-    void dispatchPluginEvent(db, attempt.project_id, 'fix.applied', {
-      report: { id: attempt.report_id },
-      fix: {
-        id: attempt.id,
-        agent: attempt.agent,
-        branch: attempt.branch,
-        prUrl,
-        prNumber: payload.pull_request?.number,
-        commitSha: attempt.commit_sha,
-        repository: payload.repository?.full_name,
-      },
-    }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }));
-
-    // Loop-closure: index the merged fix into `fix_corpus` so future fix
-    // attempts can retrieve "past similar fixes that worked" via the
-    // `match_fix_corpus` RPC. We only do this on `justMerged` so a webhook
-    // redelivery doesn't double-write the same row (the merged_at write
-    // above is idempotent; this one piggybacks on the same gate).
-    //
-    // Best-effort: a failure here must NOT 500 the webhook, otherwise
-    // GitHub will retry forever and the billing usage_event below also
-    // never lands. We swallow + log.
     try {
       await indexFixIntoCorpus(db, attempt, prUrl);
     } catch (err) {
@@ -528,45 +488,13 @@ async function handleFixPrMerged(payload: {
     }
   }
 
-  // Idempotency check — if we already billed this PR, skip the second insert.
-  const { data: existing } = await db
-    .from('usage_events')
-    .select('id')
-    .eq('project_id', attempt.project_id)
-    .eq('event_name', 'fixes_succeeded')
-    .contains('metadata', { fix_attempt_id: attempt.id })
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    return new Response(JSON.stringify({ ok: true, deduped: true, fix_attempt_id: attempt.id }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const { error: usageErr } = await db.from('usage_events').insert({
-    project_id: attempt.project_id,
-    event_name: 'fixes_succeeded',
-    quantity: 1,
-    metadata: {
-      fix_attempt_id: attempt.id,
-      pr_url: prUrl,
-      pr_number: payload.pull_request?.number,
-      repository: payload.repository?.full_name,
-    },
-  });
-
-  if (usageErr) {
-    log.warn('usage_events fixes_succeeded insert failed (non-fatal)', {
-      err: usageErr.message,
-      projectId: attempt.project_id,
-      prUrl,
-    });
-  }
-
   return new Response(
-    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, project_id: attempt.project_id }),
+    JSON.stringify({
+      ok: true,
+      justMerged,
+      fix_attempt_id: attempt.id,
+      project_id: attempt.project_id,
+    }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
 }

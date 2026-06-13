@@ -26,8 +26,10 @@ create index if not exists idx_releases_project_status
 
 alter table releases enable row level security;
 
+drop policy if exists "service_role_all_releases" on releases;
 create policy "service_role_all_releases" on releases for all using (true) with check (true);
 
+drop policy if exists "org_members_read_releases" on releases;
 create policy "org_members_read_releases" on releases for select
   using (
     exists (
@@ -38,6 +40,7 @@ create policy "org_members_read_releases" on releases for select
     )
   );
 
+drop policy if exists "org_members_write_releases" on releases;
 create policy "org_members_write_releases" on releases for all
   using (
     exists (
@@ -79,8 +82,10 @@ create index if not exists idx_release_credits_user   on release_credits (end_us
 
 alter table release_credits enable row level security;
 
+drop policy if exists "service_role_all_release_credits" on release_credits;
 create policy "service_role_all_release_credits" on release_credits for all using (true) with check (true);
 
 -- End users can see credits that mention them (for SDK widget toast)
+drop policy if exists "end_user_read_own_credits" on release_credits;
 create policy "end_user_read_own_credits" on release_credits for select
   using (end_user_id is not null);

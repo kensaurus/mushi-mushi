@@ -1,5 +1,13 @@
 import { useCallback } from 'react';
-import type { MushiSDKInstance, MushiReportCategory } from '@mushi-mushi/core';
+import type {
+  MushiSDKInstance,
+  MushiReportCategory,
+  MushiReporterReport,
+  MushiReporterComment,
+  MushiHallOfFameEntry,
+  MushiReputationResult,
+  MushiTierResult,
+} from '@mushi-mushi/core';
 import { createLogger } from '@mushi-mushi/core';
 import { useMushiContext } from './provider';
 
@@ -18,6 +26,20 @@ export interface UseMushiResult {
   pulseTrigger: () => void;
   /** True once the SDK has finished initializing and can accept reports. */
   isReady: boolean;
+
+  // ─── Reporter API ───────────────────────────────────────────────────────
+  /** Returns the reporter's own report history (keyed to persistent token). */
+  listMyReports: () => Promise<MushiReporterReport[]>;
+  /** Returns the comment thread for a given report. */
+  listMyComments: (reportId: string) => Promise<MushiReporterComment[]>;
+  /** Post a follow-up comment on one of the reporter's own reports. */
+  replyToReport: (reportId: string, body: string) => Promise<MushiReporterComment | null>;
+  /** Returns the global hall-of-fame ranked by total points. */
+  getHallOfFame: (limit?: number) => Promise<MushiHallOfFameEntry[]>;
+  /** Returns the current user's reputation + points. */
+  getReputation: () => Promise<MushiReputationResult | null>;
+  /** Returns the current user's tier. */
+  getTier: () => Promise<MushiTierResult | null>;
 }
 
 /**
@@ -50,7 +72,41 @@ export function useMushi(): UseMushiResult {
     sdk?.pulseTrigger();
   }, [sdk]);
 
-  return { report, pulseTrigger, isReady };
+  const listMyReports = useCallback((): Promise<MushiReporterReport[]> => {
+    return sdk?.listMyReports() ?? Promise.resolve([]);
+  }, [sdk]);
+
+  const listMyComments = useCallback((reportId: string): Promise<MushiReporterComment[]> => {
+    return sdk?.listMyComments(reportId) ?? Promise.resolve([]);
+  }, [sdk]);
+
+  const replyToReport = useCallback((reportId: string, body: string): Promise<MushiReporterComment | null> => {
+    return sdk?.replyToReport(reportId, body) ?? Promise.resolve(null);
+  }, [sdk]);
+
+  const getHallOfFame = useCallback((limit?: number): Promise<MushiHallOfFameEntry[]> => {
+    return sdk?.getHallOfFame(limit) ?? Promise.resolve([]);
+  }, [sdk]);
+
+  const getReputation = useCallback((): Promise<MushiReputationResult | null> => {
+    return sdk?.getReputation() ?? Promise.resolve(null);
+  }, [sdk]);
+
+  const getTier = useCallback((): Promise<MushiTierResult | null> => {
+    return sdk?.getTier() ?? Promise.resolve(null);
+  }, [sdk]);
+
+  return {
+    report,
+    pulseTrigger,
+    isReady,
+    listMyReports,
+    listMyComments,
+    replyToReport,
+    getHallOfFame,
+    getReputation,
+    getTier,
+  };
 }
 
 /**
