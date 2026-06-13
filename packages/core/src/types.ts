@@ -1189,6 +1189,11 @@ export interface MushiSDKInstance {
   reopenReport(reportId: string, note?: string): Promise<Record<string, unknown> | null>;
 
   /**
+   * Open the reporter inbox ("my reports") view in the widget.
+   */
+  openMyReports(): void;
+
+  /**
    * Returns the global contributor hall-of-fame ranked by total points.
    * Safe to call without an authenticated user; uses public endpoint.
    * @param limit Maximum entries to return (default 20).
