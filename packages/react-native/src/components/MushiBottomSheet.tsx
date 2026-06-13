@@ -93,7 +93,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [inboxReports, setInboxReports] = useState<Array<{ id: string; status: string; summary?: string | null; description?: string }>>([])
   const [inboxLoading, setInboxLoading] = useState(false)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
-  const [threadComments, setThreadComments] = useState<Array<{ id: string; body: string; author_kind: string; created_at: string }>>([])
+  const [threadComments, setThreadComments] = useState<Array<{ id: number; body: string; author_kind: string; created_at: string }>>([])
   const [replyText, setReplyText] = useState('')
   // Local shadow of the screenshot so we can clear it from inside the sheet
   const [screenshotAttached, setScreenshotAttached] = useState(true)

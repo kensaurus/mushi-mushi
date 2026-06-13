@@ -1254,7 +1254,13 @@ export interface MushiApiClient {
     reportId: string,
     reporterToken: string,
     body: string,
-  ): Promise<MushiApiResponse<{ comment: MushiReporterComment }>>;
+    feedbackSignal?: string,
+  ): Promise<MushiApiResponse<{ comment: MushiReporterComment; feedback?: Record<string, unknown> }>>;
+  reopenReporterReport(
+    reportId: string,
+    reporterToken: string,
+    note?: string,
+  ): Promise<MushiApiResponse<{ outcome: Record<string, unknown> }>>;
 
   // ─── Rewards program (P1) ───────────────────────────────────
 

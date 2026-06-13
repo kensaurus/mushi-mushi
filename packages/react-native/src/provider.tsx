@@ -109,6 +109,10 @@ export interface MushiRNInstance {
   listMyComments(reportId: string): Promise<MushiReporterComment[]>
   /** Post a reporter reply on a report thread. Returns the new comment or null on failure. */
   replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>
+  /** Record a reporter feedback signal (e.g. `confirms`, `not_fixed`) on a report. Returns the outcome or null. */
+  submitFeedbackSignal(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>
+  /** Reopen a report the reporter flagged as not fixed. Returns the reopen outcome or null. */
+  reopenReport(reportId: string, note?: string): Promise<Record<string, unknown> | null>
 
   // Leaderboard — SDK-public, anonymized
   /** Fetch the project's top contributors by points (max 50). */

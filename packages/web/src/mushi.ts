@@ -1531,6 +1531,8 @@ function createNoopInstance(): MushiSDKInstance {
     listMyReports: async () => [],
     listMyComments: async () => [],
     replyToReport: async () => null,
+    submitFeedbackSignal: async () => null,
+    reopenReport: async () => null,
     getHallOfFame: async () => [],
   };
 }
