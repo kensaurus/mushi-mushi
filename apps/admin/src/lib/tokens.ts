@@ -145,15 +145,19 @@ export function statusGlowClass(status: string | null | undefined): string {
 
 export const STATUS_LABELS: Record<string, string> = {
   new:        'New',
+  queued:     'Queued',
   classified: 'Classified',
   fixing:     'Fixing',
   fixed:      'Fixed',
   dismissed:  'Dismissed',
-  // Legacy rows / SDK ingest — shown until migrated server-side
+  // SDK ingest aliases — normalised server-side but displayed here until migrated
+  submitted:  'New',
+  pending:    'New',
   triaged:    'Classified',
-  resolved:   'Resolved (close external)',
-  queued:     'Queued',
   grouped:    'Classified',
+  dispatched: 'Classified',
+  resolved:   'Fixed',
+  completed:  'Fixed',
 }
 
 export const SEVERITY_LABELS: Record<string, string> = {

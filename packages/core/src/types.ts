@@ -1155,6 +1155,34 @@ export interface MushiSDKInstance {
    * welcome" nudges (first-session, beta-onboarding).
    */
   pulseTrigger(): void;
+
+  // ─── Reporter API (cross-platform) ────────────────────────────────
+
+  /**
+   * Returns the signed-in reporter's own report history.
+   * Keyed to the persistent `reporterToken` stored in localStorage /
+   * AsyncStorage. Returns an empty array when no token exists yet.
+   */
+  listMyReports(): Promise<MushiReporterReport[]>;
+
+  /**
+   * Returns the comment thread for a given report. Only returns comments
+   * visible to the reporter (their own comments + team replies).
+   */
+  listMyComments(reportId: string): Promise<MushiReporterComment[]>;
+
+  /**
+   * Post a follow-up comment on one of the reporter's own reports.
+   * Returns the newly created comment, or null on failure.
+   */
+  replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null>;
+
+  /**
+   * Returns the global contributor hall-of-fame ranked by total points.
+   * Safe to call without an authenticated user; uses public endpoint.
+   * @param limit Maximum entries to return (default 20).
+   */
+  getHallOfFame(limit?: number): Promise<MushiHallOfFameEntry[]>;
 }
 
 export interface MushiCaptureExceptionOptions {
@@ -1253,6 +1281,19 @@ export interface MushiApiClient {
     userId: string,
     opts?: { limit?: number },
   ): Promise<MushiApiResponse<{ items: unknown[]; total: number }>>;
+
+  /** Fetch the project's public leaderboard (top contributors). */
+  getHallOfFame(limit?: number): Promise<MushiApiResponse<{
+    data: Array<{
+      display_name: string;
+      email_hash: string | null;
+      tier_slug: string | null;
+      tier_name: string | null;
+      points_30d: number;
+      total_points: number;
+    }>;
+    meta: { project_name: string };
+  }>>;
 }
 
 /**
@@ -1318,4 +1359,13 @@ export interface MushiReporterComment {
   body: string;
   visible_to_reporter?: boolean;
   created_at: string;
+}
+
+export interface MushiHallOfFameEntry {
+  display_name: string;
+  email_hash: string | null;
+  tier_slug: string | null;
+  tier_name: string | null;
+  points_30d: number;
+  total_points: number;
 }

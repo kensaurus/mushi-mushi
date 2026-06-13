@@ -110,12 +110,39 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
 })();
 
 // Public SDK / widget / webhook paths: Access-Control-Allow-Origin: *
+// Note: 'baggage' and 'sentry-trace' are W3C / Sentry tracing headers emitted
+// by every host app that instruments Sentry. Without them in allowHeaders the
+// browser blocks all SDK preflight requests with a CORS error.
 app.use(
   '/v1/sdk/*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Mushi-Internal'],
+    allowHeaders: [
+      'Content-Type',
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+      'baggage',
+      'sentry-trace',
+    ],
     allowMethods: ['GET', 'OPTIONS'],
+  }),
+);
+app.use(
+  '/v1/reports',
+  cors({
+    origin: '*',
+    allowHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+      'X-Sentry-Hook-Signature',
+      'baggage',
+      'sentry-trace',
+    ],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
 );
 app.use(
@@ -129,6 +156,8 @@ app.use(
       'X-Mushi-Project',
       'X-Mushi-Internal',
       'X-Sentry-Hook-Signature',
+      'baggage',
+      'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
@@ -163,6 +192,8 @@ app.use(
       'X-Reporter-Token-Hash',
       'X-Reporter-Ts',
       'X-Reporter-Hmac',
+      'baggage',
+      'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
   }),
@@ -180,6 +211,8 @@ app.use(
       'X-Reporter-Token-Hash',
       'X-Reporter-Ts',
       'X-Reporter-Hmac',
+      'baggage',
+      'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
   }),
@@ -197,6 +230,8 @@ app.use(
       'X-Reporter-Token-Hash',
       'X-Reporter-Ts',
       'X-Reporter-Hmac',
+      'baggage',
+      'sentry-trace',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
   }),

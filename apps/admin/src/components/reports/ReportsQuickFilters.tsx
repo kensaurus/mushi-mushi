@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 
@@ -49,11 +50,12 @@ const SEVERITY_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 
 
 export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
+  const activeProjectSignal = useActiveProjectSignal()
 
   const load = useCallback(async () => {
     const res = await apiFetch<StatsResponse>('/v1/admin/stats')
     if (res.ok && res.data) setStats(res.data)
-  }, [])
+  }, [activeProjectSignal])
 
   useEffect(() => {
     void load()

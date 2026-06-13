@@ -254,6 +254,30 @@ async function fetchAndCacheTier(userId: string): Promise<MushiTierResult | null
   return null;
 }
 
+export async function fetchLeaderboard(limit = 10): Promise<Array<{
+  display_name: string;
+  tier_name: string | null;
+  total_points: number;
+  points_30d: number;
+}> | null> {
+  if (!apiClient || isRewardsApiBackedOff()) return null;
+  try {
+    const res = await apiClient.getHallOfFame(limit);
+    if (res.ok && res.data) {
+      return (res.data.data ?? []).map((e) => ({
+        display_name: e.display_name,
+        tier_name: e.tier_name,
+        total_points: e.total_points,
+        points_30d: e.points_30d,
+      }));
+    }
+    noteRewardsApiFailure(res.error?.code);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function teardown(): void {
   if (flushTimer) { clearInterval(flushTimer); flushTimer = null; }
   if (dwellTimer) { clearInterval(dwellTimer); dwellTimer = null; }

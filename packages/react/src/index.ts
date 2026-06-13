@@ -14,4 +14,9 @@ export type {
   MushiWidgetConfig,
   MushiEventType,
   MushiEventHandler,
+  MushiReporterReport,
+  MushiReporterComment,
+  MushiHallOfFameEntry,
+  MushiReputationResult,
+  MushiTierResult,
 } from '@mushi-mushi/core';

@@ -271,6 +271,26 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         'reporter-poll',
       );
     },
+
+    async getHallOfFame(limit = 10) {
+      return request<{
+        data: Array<{
+          display_name: string;
+          email_hash: string | null;
+          tier_slug: string | null;
+          tier_name: string | null;
+          points_30d: number;
+          total_points: number;
+        }>;
+        meta: { project_name: string };
+      }>(
+        'GET',
+        `/v1/sdk/hall-of-fame?limit=${limit}`,
+        undefined,
+        1,
+        'reporter-poll',
+      );
+    },
   };
 }
 

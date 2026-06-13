@@ -244,6 +244,23 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     whenToChange:
       "Raise to 0.88+ if you're seeing false merges (different bugs being lumped together). Lower to ~0.75 if duplicate clusters look thin and the same regression keeps appearing as separate reports.",
   },
+  {
+    id: 'settings.general.fix_branch_template',
+    label: 'Fix Branch Template',
+    summary:
+      'Naming pattern for the Git branch the fix-worker creates when it opens a draft PR.',
+    howItWorks:
+      'When the fix orchestrator opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.',
+    default: { value: 'mushi/fix/{date}-{category}-{shortId}' },
+    backend: {
+      table: 'project_settings',
+      column: 'fix_branch_template',
+      endpoint: 'PATCH /v1/admin/settings',
+      readBy: ['fix-worker edge function'],
+    },
+    whenToChange:
+      'Change it to match your team\u2019s branch convention (e.g. `fixes/{date}-{shortId}`) so Mushi PRs sort alongside your existing branches. Keep `{shortId}` in the template to guarantee uniqueness and avoid branch collisions across reports.',
+  },
 ];
 
 const SETTINGS_BYOK: ConfigDoc[] = [

@@ -19,7 +19,7 @@ import type {
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 
-type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail';
+type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail' | 'leaderboard';
 
 const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
   bug: '\u26A0\uFE0F',
@@ -39,6 +39,104 @@ const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
  */
 const FEATURE_REQUEST_INTENT = 'Feature request';
 
+type ReporterStatusTone = 'sent' | 'review' | 'fixing' | 'fixed' | 'closed' | 'unknown';
+
+/** Compact status pill copy for list rows. */
+function reporterStatusShort(status: string): string {
+  switch (status) {
+    case 'new':
+    case 'queued':
+    case 'pending':
+    case 'submitted':
+      return 'Sent';
+    case 'classified':
+    case 'triaged':
+    case 'grouped':
+    case 'dispatched':
+      return 'Review';
+    case 'fixing':
+      return 'Fixing';
+    case 'fixed':
+    case 'resolved':
+    case 'completed':
+      return 'Fixed';
+    case 'dismissed':
+      return 'Closed';
+    default:
+      return status.replace(/_/g, ' ').slice(0, 12);
+  }
+}
+
+/** Map raw DB status to reporter-facing copy (detail views). */
+function reporterStatusLabel(status: string): string {
+  switch (status) {
+    case 'new':
+    case 'queued':
+    case 'pending':
+    case 'submitted':
+      return 'Submitted';
+    case 'classified':
+    case 'triaged':
+    case 'grouped':
+    case 'dispatched':
+      return 'In review';
+    case 'fixing':
+      return 'Fix in progress';
+    case 'fixed':
+    case 'resolved':
+    case 'completed':
+      return 'Fixed';
+    case 'dismissed':
+      return 'Closed';
+    default:
+      return status.replace(/_/g, ' ');
+  }
+}
+
+function reporterStatusTone(status: string): ReporterStatusTone {
+  switch (status) {
+    case 'new':
+    case 'queued':
+    case 'pending':
+    case 'submitted':
+      return 'sent';
+    case 'classified':
+    case 'triaged':
+    case 'grouped':
+    case 'dispatched':
+      return 'review';
+    case 'fixing':
+      return 'fixing';
+    case 'fixed':
+    case 'resolved':
+    case 'completed':
+      return 'fixed';
+    case 'dismissed':
+      return 'closed';
+    default:
+      return 'unknown';
+  }
+}
+
+/** Human-readable relative time, e.g. "2h ago". */
+function formatRelativeTime(iso: string): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return '';
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return 'just now';
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  const week = Math.floor(day / 7);
+  if (week < 5) return `${week}w ago`;
+  return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 /** The two-digit padded step number used in the header ledger ("01 / 03"). */
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -51,6 +149,7 @@ const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
   details: 3,
   reports: 1,
   'report-detail': 1,
+  leaderboard: 1,
 };
 
 /** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
@@ -104,6 +203,7 @@ export interface WidgetCallbacks {
   onReporterReportsRequest?(): Promise<MushiReporterReport[]>;
   onReporterCommentsRequest?(reportId: string): Promise<MushiReporterComment[]>;
   onReporterReply?(reportId: string, body: string): Promise<void>;
+  onLeaderboardOpen?(): void;
 }
 
 export class MushiWidget {
@@ -160,6 +260,13 @@ export class MushiWidget {
   private successTimer: ReturnType<typeof setTimeout> | null = null;
   private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
   private rewardsState: WidgetRewardsState | null = null;
+  private leaderboardEntries: Array<{
+    display_name: string;
+    tier_name: string | null;
+    total_points: number;
+    points_30d: number;
+  }> | null = null;
+  private leaderboardLoading = false;
   /** Server-confirmed id for the just-submitted report. Surfaces in
    *  the success step as a copyable receipt + optional deep link to
    *  the Mushi console (when `dashboardUrl` is configured). Cleared
@@ -526,6 +633,12 @@ export class MushiWidget {
   setRewardsState(state: WidgetRewardsState | null): void {
     this.rewardsState = state;
     if (this.isOpen) this.render();
+  }
+
+  setLeaderboard(entries: Array<{ display_name: string; tier_name: string | null; total_points: number; points_30d: number; }> | null, loading = false): void {
+    this.leaderboardEntries = entries;
+    this.leaderboardLoading = loading;
+    if (this.isOpen && this.step === 'leaderboard') this.render();
   }
 
   destroy(): void {
@@ -1029,6 +1142,7 @@ export class MushiWidget {
       case 'success': return this.renderSuccessStep();
       case 'reports': return this.renderReportsStep();
       case 'report-detail': return this.renderReportDetailStep();
+      case 'leaderboard': return this.renderLeaderboardStep();
     }
   }
 
@@ -1071,7 +1185,7 @@ export class MushiWidget {
     const { title, showBack = false, step, eyebrow } = opts;
 
     const eyebrowHtml = showBack
-      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190 ${t.widget.back}</button>`
+      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190</button>`
       : `<span class="mushi-header-eyebrow">${eyebrow ?? 'Mushi \u00B7 Report'}</span>`;
 
     const counterHtml = step
@@ -1229,25 +1343,69 @@ export class MushiWidget {
   }
 
   private renderReportsStep(): string {
-    const reports = this.reporterReports.map((report) => `
-      <button type="button" class="mushi-report-row" data-report-id="${escapeHtml(report.id)}">
-        <span class="mushi-report-status">${escapeHtml(report.status)}</span>
-        <span class="mushi-report-title">${escapeHtml(report.summary ?? report.description ?? `Report ${report.id.slice(0, 8)}`)}</span>
-        ${report.unread_count ? `<b>${report.unread_count}</b>` : ''}
-      </button>
-    `).join('');
+    const reports = this.reporterReports.map((report) => {
+      const title = report.summary ?? report.description ?? `Report ${report.id.slice(0, 8)}`;
+      const tone = reporterStatusTone(report.status);
+      const when = formatRelativeTime(report.created_at);
+      const unread = report.unread_count && report.unread_count > 0
+        ? `<span class="mushi-unread-badge" aria-label="${report.unread_count} unread">${report.unread_count}</span>`
+        : '';
+      return `
+      <button type="button" class="mushi-report-row" data-report-id="${escapeHtml(report.id)}" aria-label="View report: ${escapeHtml(title)}">
+        <div class="mushi-report-main">
+          <span class="mushi-report-title">${escapeHtml(title)}</span>
+          <span class="mushi-report-meta">
+            <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusShort(report.status))}</span>
+            ${when ? `<span class="mushi-report-when">${escapeHtml(when)}</span>` : ''}
+            ${unread}
+          </span>
+        </div>
+        <span class="mushi-report-chevron" aria-hidden="true">\u203A</span>
+      </button>`;
+    }).join('');
+    const leaderboardBtn = this.rewardsState
+      ? `<button type="button" class="mushi-leaderboard-link" data-action="open-leaderboard">🏆 Leaderboard</button>`
+      : '';
     return `
       ${this.renderHeader({ title: 'Your reports', showBack: true, eyebrow: 'Mushi · Inbox' })}
       <div class="mushi-body">
         ${this.reporterLoading ? '<p class="mushi-muted">Loading reports…</p>' : ''}
         ${this.reporterError ? `<p class="mushi-error-inline">${escapeHtml(this.reporterError)}</p>` : ''}
         ${reports || (!this.reporterLoading ? '<p class="mushi-muted">No reports from this browser yet.</p>' : '')}
+        ${leaderboardBtn}
+      </div>
+    `;
+  }
+
+  private renderLeaderboardStep(): string {
+    const myRank = this.rewardsState && this.leaderboardEntries
+      ? this.leaderboardEntries.findIndex((e) => e.display_name === 'You') + 1
+      : 0;
+    const rows = (this.leaderboardEntries ?? []).map((e, i) => `
+      <div class="mushi-lb-row ${i === 0 ? 'mushi-lb-top' : ''}">
+        <span class="mushi-lb-rank">#${i + 1}</span>
+        <span class="mushi-lb-name">${escapeHtml(e.display_name)}</span>
+        ${e.tier_name ? `<span class="mushi-lb-tier">${escapeHtml(e.tier_name)}</span>` : ''}
+        <span class="mushi-lb-pts">${e.total_points.toLocaleString()} pts</span>
+      </div>
+    `).join('');
+    return `
+      ${this.renderHeader({ title: '🏆 Leaderboard', showBack: true, eyebrow: 'Mushi · Contributors' })}
+      <div class="mushi-body">
+        ${this.leaderboardLoading ? '<p class="mushi-muted">Loading leaderboard…</p>' : ''}
+        ${!this.leaderboardLoading && !this.leaderboardEntries?.length ? '<p class="mushi-muted">No contributors yet — be the first!</p>' : ''}
+        <div class="mushi-lb-list">${rows}</div>
+        ${myRank > 0 ? `<p class="mushi-lb-myrank">You are ranked #${myRank}</p>` : ''}
+        <p class="mushi-lb-note">Top contributors this month · Points refresh monthly</p>
       </div>
     `;
   }
 
   private renderReportDetailStep(): string {
     const report = this.reporterReports.find((r) => r.id === this.selectedReportId);
+    const status = report?.status ?? 'unknown';
+    const tone = reporterStatusTone(status);
+    const when = report?.created_at ? formatRelativeTime(report.created_at) : '';
     const comments = this.reporterComments.map((comment) => `
       <div class="mushi-thread-comment ${comment.author_kind}">
         <strong>${escapeHtml(comment.author_kind === 'reporter' ? 'You' : (comment.author_name ?? 'Developer'))}</strong>
@@ -1258,7 +1416,10 @@ export class MushiWidget {
       ${this.renderHeader({ title: 'Report thread', showBack: true, eyebrow: 'Mushi · Inbox' })}
       <div class="mushi-body">
         <div class="mushi-thread-summary">
-          <span>${escapeHtml(report?.status ?? 'unknown')}</span>
+          <div class="mushi-thread-summary-meta">
+            <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusLabel(status))}</span>
+            ${when ? `<span class="mushi-report-when">Reported ${escapeHtml(when)}</span>` : ''}
+          </div>
           <p>${escapeHtml(report?.summary ?? report?.description ?? 'Report details')}</p>
         </div>
         <div class="mushi-thread">
@@ -1616,6 +1777,7 @@ export class MushiWidget {
       }
       else if (this.step === 'reports') { this.step = 'category'; }
       else if (this.step === 'report-detail') { this.step = 'reports'; this.selectedReportId = null; }
+      else if (this.step === 'leaderboard') { this.step = 'reports'; }
       this.render();
     });
 
@@ -1639,6 +1801,12 @@ export class MushiWidget {
         const reportId = (btn as HTMLElement).dataset.reportId;
         if (reportId) void this.loadReporterComments(reportId);
       });
+    });
+
+    panel.querySelector('[data-action="open-leaderboard"]')?.addEventListener('click', () => {
+      this.step = 'leaderboard';
+      this.callbacks.onLeaderboardOpen?.();
+      this.render();
     });
 
     panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
@@ -1964,5 +2132,10 @@ export class MushiWidget {
   recorderSubmit(): void {
     const submit = this.shadow.querySelector('[data-action="submit"]') as HTMLButtonElement | null;
     submit?.click();
+  }
+
+  recorderOpenMyReports(): void {
+    if (!this.isOpen) this.open();
+    void this.loadReporterReports();
   }
 }

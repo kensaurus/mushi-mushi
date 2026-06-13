@@ -20,6 +20,7 @@ import { childTraceparent } from '../_shared/trace.ts';
 // API keys were stored unmasked and visible to MCP mcp:read clients and any
 // future data export. Scrubbing at insert time closes that gap.
 import { scrubPii } from '../_shared/pii-scrubber.ts';
+import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
 
 // Fixed namespace for deriving deterministic report ids from non-UUID client
 // ids (RFC 4122 §4.3 name-based v5). Arbitrary but stable — it only has to be
@@ -65,6 +66,36 @@ async function resolveReportId(rawId: unknown): Promise<string> {
     return isUuid(rawId) ? rawId : await uuidV5FromName(rawId);
   }
   return crypto.randomUUID();
+}
+
+/** Window for collapsing identical rapid resubmits (double-click / SDK retry). */
+const INGEST_CONTENT_DEDUP_WINDOW_MS = 60_000;
+
+/**
+ * Content-hash dedup: the SDK mints a fresh UUID per submit, so PK-only
+ * idempotency (23505) never fires on double-click. Same reporter + same
+ * scrubbed description + category within the window → return the existing row.
+ */
+async function findRecentDuplicateReport(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  tokenHash: string,
+  description: string,
+  category: string,
+): Promise<string | null> {
+  const since = new Date(Date.now() - INGEST_CONTENT_DEDUP_WINDOW_MS).toISOString();
+  const { data } = await db
+    .from('reports')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('reporter_token_hash', tokenHash)
+    .eq('description', description)
+    .eq('user_category', category)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as { id?: string } | null)?.id ?? null;
 }
 
 const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
@@ -262,7 +293,7 @@ export async function ingestReport(
     testerId?: string
     testerSubmissionId?: string
   },
-): Promise<{ ok: boolean; reportId?: string; error?: string }> {
+): Promise<{ ok: boolean; reportId?: string; error?: string; deduplicated?: boolean }> {
   const normalizedBody = { ...body };
   if (typeof normalizedBody.description === 'string') {
     const trimmed = normalizedBody.description.trim();
@@ -429,6 +460,22 @@ export async function ingestReport(
   // This ensures the at-rest copy is already redacted — not just the pre-LLM copy.
   const safeDescription = scrubPii(sanitizeText(report.description) ?? '');
   const safeUserIntent = scrubPii(sanitizeText(report.userIntent) ?? '') || null;
+
+  const recentDuplicateId = await findRecentDuplicateReport(
+    db,
+    projectId,
+    tokenHash,
+    safeDescription,
+    report.category ?? 'other',
+  );
+  if (recentDuplicateId) {
+    log.info('Content-deduped report ingest', {
+      reportId: recentDuplicateId,
+      projectId,
+      windowMs: INGEST_CONTENT_DEDUP_WINDOW_MS,
+    });
+    return { ok: true, reportId: recentDuplicateId, deduplicated: true };
+  }
   const safeConsoleLogs = Array.isArray(report.consoleLogs)
     ? report.consoleLogs.map((entry: Record<string, unknown>) => ({
         ...entry,
@@ -672,6 +719,25 @@ export async function ingestReport(
   } else {
     await db.from('reports').update({ status: 'queued' }).eq('id', reportId);
     log.warn('Circuit breaker open — report queued', { reportId });
+    // Notify Slack so a queued-but-unclassified report is never silent.
+    // Fire-and-forget; channel/webhook fetched from project_settings.
+    void (async () => {
+      try {
+        const { data: ps } = await db
+          .from('project_settings')
+          .select('slack_webhook_url, slack_channel_id, slack_bot_token_ref')
+          .eq('project_id', projectId)
+          .maybeSingle();
+        const text = `⚠️ New report queued (classification paused — circuit breaker open)\n• Report: \`${reportId}\`\n• Category: ${report?.category ?? 'unknown'}\nCheck the Mushi console to re-enable classification.`;
+        if (ps?.slack_webhook_url) {
+          await sendSlackText(ps.slack_webhook_url, text);
+        } else if (ps?.slack_channel_id) {
+          await sendBotMessage({ channel: ps.slack_channel_id, text, db, projectId });
+        }
+      } catch (err) {
+        log.warn('Circuit-breaker Slack notify failed', { reportId, err: String(err) });
+      }
+    })();
   }
 
   return { ok: true, reportId };

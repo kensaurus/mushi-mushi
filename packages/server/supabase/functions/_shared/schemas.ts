@@ -8,7 +8,7 @@ export const reportSubmissionSchema = z.object({
   projectId: z.string(),
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']),
   description: z.string().min(20, 'Description must be at least 20 characters').max(5000),
-  userIntent: z.string().optional(),
+  userIntent: z.coerce.string().optional(),
 
   // `passthrough()` lets the SDK ship richer environment fields (the
   // 2026-05-07 boost added screen / userAgentData / prefersColorScheme /

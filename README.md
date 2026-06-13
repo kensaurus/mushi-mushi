@@ -218,14 +218,14 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 </td>
 <td align="center" width="16%">
 
-**43**
+**45**
 <br/>
 <sub>Edge Functions</sub>
 
 </td>
 <td align="center" width="16%">
 
-**236**
+**247**
 <br/>
 <sub>SQL Migrations</sub>
 
@@ -234,7 +234,7 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 <tr>
 <td align="center">
 
-**14**
+**16**
 <br/>
 <sub>Pipeline Agents</sub>
 
@@ -718,7 +718,7 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 236 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 247 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet — see [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 

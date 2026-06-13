@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from './supabase'
 import { useRealtimeReload } from './realtime'
-import { getActiveProjectIdSnapshot } from './activeProject'
+import { getActiveProjectIdSnapshot, useActiveProjectSignal } from './activeProject'
 import type { DashboardData } from '../components/dashboard/types'
 import { inboxOpenActionCount } from './actionInboxFromDashboard'
 
@@ -117,6 +117,7 @@ function countHealthIssues(dashboard: DashboardData | undefined): number {
 
 export function useNavCounts(): NavCounts {
   const [counts, setCounts] = useState<NavCounts>(INITIAL)
+  const activeProjectSignal = useActiveProjectSignal()
 
   const load = useCallback(async () => {
     const projectId = getActiveProjectIdSnapshot()
@@ -174,7 +175,7 @@ export function useNavCounts(): NavCounts {
       judgeDisagreements,
       ready: true,
     })
-  }, [])
+  }, [activeProjectSignal])
 
   useEffect(() => {
     void load()

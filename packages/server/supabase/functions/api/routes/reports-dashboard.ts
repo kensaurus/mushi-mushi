@@ -32,7 +32,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -212,7 +212,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const days = Math.min(Math.max(Number(c.req.query('days')) || 14, 1), 90);
     const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({
         ok: true,
@@ -270,7 +270,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { reports: [], total: 0 } });
 
     const status = c.req.query('status');
@@ -1054,7 +1054,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0)
       return c.json({ ok: true, data: { total: 0, byStatus: {}, byCategory: {}, bySeverity: {} } });
 

@@ -1,6 +1,7 @@
 import { severityLabel } from '../../lib/tokens'
 import type { DispatchState } from '../../lib/dispatchFix'
-import type { ReportDetail } from './types'
+import type { ReportDetail, ReportFixAttempt } from './types'
+import { pickPrimaryFixAttempt } from '../../lib/mergeFix'
 
 export interface RecommendationMeta {
   label: string
@@ -52,7 +53,7 @@ function buildFixingMeta(
   nowMs: number = Date.now(),
 ): RecommendationMeta[] {
   const meta: RecommendationMeta[] = []
-  const latest = report.fix_attempts?.[0]
+  const latest = pickPrimaryFixAttempt(report.fix_attempts)
   const startedAtIso = latest?.started_at ?? null
   if (startedAtIso) {
     const startedAt = new Date(startedAtIso)
@@ -83,6 +84,39 @@ function buildFixingMeta(
   return meta
 }
 
+function mergeReadyRecommendation(
+  _report: ReportDetail,
+  prUrl: string,
+  latest?: ReportFixAttempt | null,
+): Recommendation {
+  const ci = latest?.check_run_conclusion
+  const meta: RecommendationMeta[] = []
+  if (latest?.pr_number) {
+    meta.push({ label: 'PR', value: `#${latest.pr_number}`, tone: 'neutral' })
+  }
+  if (ci) {
+    meta.push({
+      label: 'CI',
+      value: ci,
+      tone: ci === 'success' ? 'ok' : ci === 'failure' ? 'danger' : 'warn',
+    })
+  }
+  const ciNote =
+    ci === 'failure'
+      ? ' CI is failing — resolve checks on GitHub or merge anyway if you accept the risk.'
+      : ci === 'success'
+        ? ' CI passed.'
+        : ''
+  return {
+    title: 'Draft PR is ready — merge when satisfied',
+    description: `Review the diff on GitHub, then use Merge PR in console below (or merge on GitHub).${ciNote} Merging marks this report Fixed and notifies the reporter.`,
+    cta: { label: 'View PR', href: prUrl },
+    tone: 'success',
+    meta: meta.length > 0 ? meta : undefined,
+    actions: [{ label: 'Open Fixes pipeline \u2192', to: '/fixes', tone: 'ghost' }],
+  }
+}
+
 export function deriveRecommendation(
   report: ReportDetail,
   dispatchState: DispatchState,
@@ -91,12 +125,19 @@ export function deriveRecommendation(
   nowMs: number = Date.now(),
 ): Recommendation {
   if (dispatchState.status === 'completed' && dispatchState.prUrl) {
-    return {
-      title: 'Auto-fix PR is ready for review',
-      description: 'The agent finished. Review the pull request and merge or request changes.',
-      cta: { label: 'View PR', href: dispatchState.prUrl },
-      tone: 'success',
-    }
+    return mergeReadyRecommendation(report, dispatchState.prUrl, pickPrimaryFixAttempt(report.fix_attempts))
+  }
+
+  const latestForMerge = pickPrimaryFixAttempt(report.fix_attempts)
+  const openPrUrl = latestForMerge?.pr_url ?? dispatchState.prUrl ?? null
+  if (
+    openPrUrl &&
+    latestForMerge?.pr_state !== 'merged' &&
+    report.status !== 'fixed' &&
+    report.status !== 'dismissed' &&
+    (latestForMerge?.status === 'completed' || dispatchState.status === 'completed' || report.status === 'fixing')
+  ) {
+    return mergeReadyRecommendation(report, openPrUrl, latestForMerge)
   }
 
   if (
@@ -158,7 +199,7 @@ export function deriveRecommendation(
   // fix_attempt row is ever created, so it never appears here. That prereq is
   // surfaced via the DispatchPreflightBanner component on the report page.
   // ---------------------------------------------------------------------------
-  const latest = report.fix_attempts?.[0]
+  const latest = pickPrimaryFixAttempt(report.fix_attempts)
   const isSkipped = latest?.status?.startsWith('skipped_')
   const isFailed = latest?.status === 'failed'
 
