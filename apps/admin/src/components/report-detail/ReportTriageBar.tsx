@@ -6,9 +6,10 @@ import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
+import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { ReportDetail } from './types'
 
-const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'dismissed']
+const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'verified', 'reopened', 'dismissed']
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 
 interface RoutingIntegration {
@@ -25,6 +26,7 @@ interface ReportTriageBarProps {
   dispatchState: DispatchState
   onDispatch: () => void | Promise<void>
   isDispatchBusy: boolean
+  preflight?: PreflightState
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -42,6 +44,7 @@ export function ReportTriageBar({
   dispatchState,
   onDispatch,
   isDispatchBusy,
+  preflight,
 }: ReportTriageBarProps) {
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -56,7 +59,15 @@ export function ReportTriageBar({
     return () => clearTimeout(t)
   }, [savedAt])
 
-  const dispatchDisabled = report.status === 'fixed' || report.status === 'dismissed' || isDispatchBusy
+  const dispatchDisabled =
+    report.status === 'fixed' ||
+    report.status === 'dismissed' ||
+    isDispatchBusy ||
+    (preflight != null && !preflight.loading && !preflight.ready)
+  const dispatchBlockReason =
+    preflight != null && !preflight.loading && !preflight.ready
+      ? `Preflight: ${preflight.failing.map((c) => c.label).join(', ')}`
+      : undefined
   const dispatchLabel =
     dispatchState.status === 'idle' ? 'Dispatch fix' :
     dispatchState.status === 'queueing' ? 'Dispatching…' :
@@ -144,6 +155,7 @@ export function ReportTriageBar({
             disabled={dispatchDisabled}
             loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
             leadingIcon={<IconArrowRight />}
+            title={dispatchBlockReason}
           >
             {dispatchLabel}
           </Btn>

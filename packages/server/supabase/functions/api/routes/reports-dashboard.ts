@@ -23,6 +23,7 @@ import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
 import { awardPoints, getReputation } from '../../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
+import { normalizeAdminStatus, isReporterFixedStatus } from '../../_shared/report-status.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue, resolveExternalIssue } from '../../_shared/integrations.ts';
@@ -558,7 +559,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     // Inventory anchor: walk graph_edges to find the action node this report is
     // filed against (edge type='reports_against') and return its metadata so
     // MCP get_fix_context.inventoryAction is always populated when one exists.
-    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes] = await Promise.all([
+    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes, endUserRes, childrenRes] = await Promise.all([
       db
         .from('llm_invocations')
         .select(
@@ -604,6 +605,12 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
             .eq('id', data.end_user_id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
+      db
+        .from('reports')
+        .select('id')
+        .eq('parent_report_id', reportId)
+        .order('created_at', { ascending: false })
+        .limit(20),
     ]);
 
     return c.json({
@@ -615,6 +622,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
         judge_eval: judgeRes.data ?? null,
         inventory_action: inventoryAnchorRes.data ?? null,
         reporter_identity: endUserRes.data ?? null,
+        child_report_ids: (childrenRes.data ?? []).map((r: { id: string }) => r.id),
       },
     });
   });
@@ -636,6 +644,18 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const updates: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body)) {
       if (allowedFields[key]) updates[key] = value;
+    }
+
+    if (typeof updates.status === 'string') {
+      const normalized = normalizeAdminStatus(updates.status as string);
+      if (!normalized) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_STATUS', message: `Unknown status: ${updates.status}` } },
+          400,
+        );
+      }
+      // resolved (admin alias) maps to fixed for storage + reporter notifications
+      updates.status = normalized === 'resolved' ? 'fixed' : normalized;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -697,7 +717,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
             reportId,
           },
         ).catch((e) => log.error('Notification failed', { type: 'confirmed', err: String(e) }));
-      } else if (newStatus === 'fixed') {
+      } else if (isReporterFixedStatus(newStatus)) {
         awardPoints(db, report.project_id, report.reporter_token_hash, { action: 'fixed' }).catch(
           (e) => log.error('Reputation award failed', { action: 'fixed', err: String(e) }),
         );
@@ -706,6 +726,16 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
           points: 25,
           reportId,
         }).catch((e) => log.error('Notification failed', { type: 'fixed', err: String(e) }));
+      } else if (newStatus === 'verified') {
+        createNotification(db, report.project_id, reportId, report.reporter_token_hash, 'verified', {
+          message: buildNotificationMessage('verified', {}),
+          reportId,
+        }).catch((e) => log.error('Notification failed', { type: 'verified', err: String(e) }));
+      } else if (newStatus === 'reopened') {
+        createNotification(db, report.project_id, reportId, report.reporter_token_hash, 'reopened', {
+          message: buildNotificationMessage('reopened', {}),
+          reportId,
+        }).catch((e) => log.error('Notification failed', { type: 'reopened', err: String(e) }));
       } else if (newStatus === 'dismissed') {
         awardPoints(db, report.project_id, report.reporter_token_hash, {
           action: 'dismissed',

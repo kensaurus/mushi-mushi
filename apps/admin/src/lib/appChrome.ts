@@ -10,12 +10,35 @@ export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 /** Desktop sub-header height (Search + toolbar row in Layout). */
 export const DESKTOP_SUBHEADER_OFFSET = '2.25rem' /* tailwind top-9 */
 
+/** Tailwind top offset shared by every fixed overlay below persistent chrome. */
+export const topBelowAppChromeClass = [
+  'top-[var(--mushi-beta-banner-offset,0px)]',
+  `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
+].join(' ')
+
 /**
  * Right-anchored drawer shell that starts below persistent top chrome.
  * Beta strip height is published by BetaBanner via ResizeObserver.
  */
 export const drawerBelowAppChromeClass = [
   'fixed inset-x-0 bottom-0 z-50 flex justify-end',
-  'top-[var(--mushi-beta-banner-offset,0px)]',
-  `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
+  topBelowAppChromeClass,
 ].join(' ')
+
+/** PDCA stage drawer — bottom sheet on mobile, right rail on desktop. */
+export const stageDrawerBelowAppChromeClass = [
+  'fixed inset-x-0 bottom-0 z-40 flex items-end sm:items-stretch sm:justify-end motion-safe:animate-mushi-drawer-backdrop-in',
+  topBelowAppChromeClass,
+].join(' ')
+
+/** Mobile navigation overlay (left rail). */
+export const mobileNavBelowAppChromeClass = [
+  'fixed inset-x-0 bottom-0 z-40 md:hidden',
+  topBelowAppChromeClass,
+].join(' ')
+
+/** Publish measured beta-banner height on :root for fixed overlays. */
+export function setBetaBannerOffset(px: number) {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.setProperty(BETA_BANNER_OFFSET_VAR, `${px}px`)
+}

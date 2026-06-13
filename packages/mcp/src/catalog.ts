@@ -258,13 +258,34 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'transition_status',
     title: 'Move report between states',
     description:
-      'Move a report between workflow states (new → classified → grouped → fixing → fixed → dismissed). Enforces the same transition rules as the admin UI.',
+      'Move a report between workflow states (new → classified → grouped → fixing → fixed → verified → reopened → dismissed). Enforces the same transition rules as the admin UI.',
     scope: 'mcp:write',
-    // Transitioning to `dismissed` is destructive by intent — it removes the
-    // report from triage queues. Flag the whole tool as destructive so the
-    // client prompts the user on every call.
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Dismiss this duplicate / mark it fixed.',
+  },
+  {
+    name: 'merge_fix',
+    title: 'Merge fix PR',
+    description: 'Squash-merge a fix attempt PR and mark the linked report fixed.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
+    useCase: 'Merge the draft PR and notify the reporter.',
+  },
+  {
+    name: 'refresh_ci',
+    title: 'Refresh fix CI status',
+    description: 'Pull the latest GitHub check-run status for a fix attempt.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Check whether CI is green before merging.',
+  },
+  {
+    name: 'reopen_report',
+    title: 'Reopen report (operator)',
+    description: 'Move a report to reopened for regression triage.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Reopen a regression the reporter flagged as not fixed.',
   },
   // --- Rewards (P3) -------------------------------------------------------
   {

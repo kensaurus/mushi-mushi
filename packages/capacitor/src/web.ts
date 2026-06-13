@@ -146,4 +146,44 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   async getBreadcrumbs(): Promise<{ breadcrumbs: MushiCapacitorBreadcrumb[] }> {
     return { breadcrumbs: [] };
   }
+
+  async listMyReports(): Promise<{ reports: Array<Record<string, unknown>> }> {
+    const client = this.apiClient;
+    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.listReporterReports(getReporterToken());
+    return { reports: (result.data?.reports ?? []) as Array<Record<string, unknown>> };
+  }
+
+  async listMyComments(options: { reportId: string }): Promise<{ comments: Array<Record<string, unknown>> }> {
+    const client = this.apiClient;
+    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.listReporterComments(options.reportId, getReporterToken());
+    return { comments: (result.data?.comments ?? []) as Array<Record<string, unknown>> };
+  }
+
+  async replyToReport(options: {
+    reportId: string;
+    body?: string;
+    feedbackSignal?: string;
+  }): Promise<{ comment?: Record<string, unknown>; feedback?: Record<string, unknown> }> {
+    const client = this.apiClient;
+    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.replyToReporterReport(
+      options.reportId,
+      getReporterToken(),
+      options.body ?? '',
+      options.feedbackSignal,
+    );
+    return {
+      comment: result.data?.comment as Record<string, unknown> | undefined,
+      feedback: result.data?.feedback as Record<string, unknown> | undefined,
+    };
+  }
+
+  async reopenReport(options: { reportId: string; note?: string }): Promise<{ outcome: Record<string, unknown> }> {
+    const client = this.apiClient;
+    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.reopenReporterReport(options.reportId, getReporterToken(), options.note);
+    return { outcome: (result.data?.outcome ?? {}) as Record<string, unknown> };
+  }
 }

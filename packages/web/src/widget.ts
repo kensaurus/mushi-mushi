@@ -85,7 +85,11 @@ function reporterStatusLabel(status: string): string {
     case 'fixed':
     case 'resolved':
     case 'completed':
-      return 'Fixed';
+      return 'Fixed — confirm?';
+    case 'verified':
+      return 'Verified';
+    case 'reopened':
+      return 'Reopened';
     case 'dismissed':
       return 'Closed';
     default:
@@ -111,6 +115,10 @@ function reporterStatusTone(status: string): ReporterStatusTone {
     case 'resolved':
     case 'completed':
       return 'fixed';
+    case 'verified':
+      return 'fixed';
+    case 'reopened':
+      return 'fixing';
     case 'dismissed':
       return 'closed';
     default:
@@ -203,6 +211,8 @@ export interface WidgetCallbacks {
   onReporterReportsRequest?(): Promise<MushiReporterReport[]>;
   onReporterCommentsRequest?(reportId: string): Promise<MushiReporterComment[]>;
   onReporterReply?(reportId: string, body: string): Promise<void>;
+  onReporterFeedback?(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>;
+  onReporterReopen?(reportId: string, note?: string): Promise<Record<string, unknown> | null>;
   onLeaderboardOpen?(): void;
 }
 
@@ -1425,6 +1435,12 @@ export class MushiWidget {
         <div class="mushi-thread">
           ${this.reporterLoading ? '<p class="mushi-muted">Loading thread…</p>' : comments || '<p class="mushi-muted">No developer replies yet.</p>'}
         </div>
+        ${['fixed', 'resolved', 'verified'].includes(status) ? `
+          <div class="mushi-verify-actions" role="group" aria-label="Fix verification">
+            <button type="button" class="mushi-intent-btn" data-action="reporter-confirms">Yes, fixed for me</button>
+            <button type="button" class="mushi-intent-btn" data-action="reporter-not-fixed">Not fixed yet</button>
+          </div>
+        ` : ''}
         <textarea class="mushi-textarea" data-role="reporter-reply" rows="3" placeholder="Reply to the developer…"></textarea>
         <button type="button" class="mushi-submit" data-action="reporter-reply">
           <span>Reply</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
@@ -1813,6 +1829,14 @@ export class MushiWidget {
       void this.submitReporterReply(panel);
     });
 
+    panel.querySelector('[data-action="reporter-confirms"]')?.addEventListener('click', () => {
+      void this.submitReporterFeedback('confirms');
+    });
+
+    panel.querySelector('[data-action="reporter-not-fixed"]')?.addEventListener('click', () => {
+      void this.submitReporterFeedback('not_fixed');
+    });
+
     // Receipt-copy on the success step. We do the clipboard work
     // inside the widget rather than emitting a callback so the
     // optical feedback (button label flips to "Copied") is instant
@@ -2043,6 +2067,22 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not load thread.';
     } finally {
+      this.reporterLoading = false;
+      this.render();
+    }
+  }
+
+  private async submitReporterFeedback(signal: string): Promise<void> {
+    const reportId = this.selectedReportId;
+    if (!reportId || this.reporterLoading) return;
+    this.reporterLoading = true;
+    this.render();
+    try {
+      await this.callbacks.onReporterFeedback?.(reportId, signal);
+      await this.loadReporterReports();
+      if (reportId) await this.loadReporterComments(reportId);
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not send feedback.';
       this.reporterLoading = false;
       this.render();
     }

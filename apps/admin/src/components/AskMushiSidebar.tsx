@@ -452,11 +452,6 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
       onClose={onClose}
       width="md"
       dimmed={false}
-      // Offset below the desktop header (~36px = top-9) so the header
-      // chrome remains accessible and visible while the drawer is open.
-      // On mobile the header is taller and sits on top of the drawer in
-      // the DOM flow already, so we keep full-height there (top-0).
-      containerClassName="fixed inset-x-0 bottom-0 top-0 md:top-9 z-50 flex justify-end"
       title={
         <div className="flex items-center gap-2 min-w-0">
           <span className="shrink-0">Ask Mushi</span>

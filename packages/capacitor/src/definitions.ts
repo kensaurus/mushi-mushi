@@ -116,4 +116,20 @@ export interface MushiCapacitorPlugin {
     eventName: 'reportSubmitted',
     listenerFunc: (event: MushiCapacitorReport & { context: unknown }) => void,
   ): Promise<{ remove: () => Promise<void> }>;
+
+  /** List the reporter's own reports (two-way inbox data API). */
+  listMyReports(): Promise<{ reports: Array<Record<string, unknown>> }>;
+
+  /** List comments visible to the reporter on a report. */
+  listMyComments(options: { reportId: string }): Promise<{ comments: Array<Record<string, unknown>> }>;
+
+  /** Post a reply or feedback signal on a report. */
+  replyToReport(options: {
+    reportId: string;
+    body?: string;
+    feedbackSignal?: string;
+  }): Promise<{ comment?: Record<string, unknown>; feedback?: Record<string, unknown> }>;
+
+  /** Reporter-initiated regression reopen. */
+  reopenReport(options: { reportId: string; note?: string }): Promise<{ outcome: Record<string, unknown> }>;
 }

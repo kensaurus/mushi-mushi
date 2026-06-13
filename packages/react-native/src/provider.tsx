@@ -440,6 +440,18 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
         const res = await client.replyToReporterReport(reportId, reporterTokenRef.current, body)
         return res.ok ? (res.data as { comment: MushiReporterComment }).comment : null
       },
+      async submitFeedbackSignal(reportId: string, signal: string, note?: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        const res = await client.replyToReporterReport(reportId, reporterTokenRef.current, note ?? '', signal)
+        return res.ok ? (res.data as { feedback?: Record<string, unknown> }).feedback ?? null : null
+      },
+      async reopenReport(reportId: string, note?: string) {
+        const client = apiClientRef.current
+        if (!client) return null
+        const res = await client.reopenReporterReport(reportId, reporterTokenRef.current, note)
+        return res.ok ? (res.data as { outcome: Record<string, unknown> }).outcome : null
+      },
 
       // Leaderboard — SDK-public anonymized hall-of-fame
       async getHallOfFame(limit = 10) {
