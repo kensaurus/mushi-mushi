@@ -710,7 +710,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     {
       title: 'Merge fix PR',
       description: 'Squash-merge a fix attempt PR and mark the linked report fixed.',
-      annotations: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
+      annotations: annotationsFor('merge_fix'),
       inputSchema: {
         fixId: z.string().describe('Fix attempt UUID'),
         mergeMethod: z.enum(['squash', 'merge', 'rebase']).optional().describe('GitHub merge method'),
@@ -730,7 +730,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     {
       title: 'Refresh fix CI status',
       description: 'Pull the latest GitHub check-run status for a fix attempt.',
-      annotations: { readOnly: true, idempotent: true, openWorld: true },
+      annotations: annotationsFor('refresh_ci'),
       inputSchema: {
         fixId: z.string().describe('Fix attempt UUID'),
       },
@@ -746,7 +746,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     {
       title: 'Reopen report (operator)',
       description: 'Operator alias to move a report back to new for regression triage.',
-      annotations: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+      annotations: annotationsFor('reopen_report'),
       inputSchema: {
         reportId: z.string().describe('Report UUID'),
         note: z.string().optional().describe('Triage note'),

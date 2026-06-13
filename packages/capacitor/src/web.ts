@@ -151,14 +151,14 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
     const client = this.apiClient;
     if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
     const result = await client.listReporterReports(getReporterToken());
-    return { reports: (result.data?.reports ?? []) as Array<Record<string, unknown>> };
+    return { reports: (result.data?.reports ?? []) as unknown as Array<Record<string, unknown>> };
   }
 
   async listMyComments(options: { reportId: string }): Promise<{ comments: Array<Record<string, unknown>> }> {
     const client = this.apiClient;
     if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
     const result = await client.listReporterComments(options.reportId, getReporterToken());
-    return { comments: (result.data?.comments ?? []) as Array<Record<string, unknown>> };
+    return { comments: (result.data?.comments ?? []) as unknown as Array<Record<string, unknown>> };
   }
 
   async replyToReport(options: {
