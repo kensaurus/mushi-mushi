@@ -686,7 +686,7 @@ ${
       // ---- 5. Call LLM with structured output (multi-key failover) ----------
       const llmSpan = trace.span('llm.fix');
       const llmStart = Date.now();
-      let fix: FixOutput;
+      let fix: FixOutput | undefined;
       let usedModel = '';
       let inputTokens = 0;
       let outputTokens = 0;
@@ -780,7 +780,7 @@ ${
           throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
         }
       }
-      if (lastLlmErr) {
+      if (lastLlmErr || !fix) {
         throw new Error(`LLM call failed after ${MAX_OUTPUT_RETRIES + 1} attempts`);
       }
       const llmLatencyMs = Date.now() - llmStart;
