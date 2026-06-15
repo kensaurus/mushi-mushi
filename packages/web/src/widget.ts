@@ -1316,7 +1316,7 @@ export class MushiWidget {
     const categories = categoryEntries
       .map(({ id, icon, label, desc }) => `
         <button type="button" class="mushi-option-btn" data-category="${escapeHtml(id)}" role="radio" aria-checked="false">
-          <span class="mushi-option-icon" aria-hidden="true">${icon}</span>
+          <span class="mushi-option-icon" aria-hidden="true">${escapeHtml(icon)}</span>
           <div class="mushi-option-text">
             <span class="mushi-option-label">${escapeHtml(label)}</span>
             ${desc ? `<span class="mushi-option-desc">${escapeHtml(desc)}</span>` : ''}
@@ -1590,7 +1590,7 @@ export class MushiWidget {
       ${this.renderHeader({ title: t.step2.heading, showBack: true, step: STEP_NUMBER.intent })}
       <div class="mushi-body">
         <div class="mushi-selected-category">
-          <span aria-hidden="true">${icon}</span>
+          <span aria-hidden="true">${escapeHtml(icon)}</span>
           <span>${escapeHtml(label)}</span>
         </div>
         <div class="mushi-intents">
