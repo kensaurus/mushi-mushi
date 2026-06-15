@@ -175,7 +175,7 @@ function actionTone(action: string): string {
     action.endsWith('.revoked') ||
     action.endsWith('.dismissed')
   ) {
-    return 'bg-danger/15 text-danger'
+    return 'bg-danger-muted/50 text-danger-foreground'
   }
   if (
     action.endsWith('.applied') ||
@@ -667,7 +667,7 @@ export function AuditPage() {
         {stats.auditLogEntitlement ? (
           <Badge className="bg-ok-muted text-ok">Audit enabled</Badge>
         ) : (
-          <Badge className="bg-warn/10 text-warn">{stats.planDisplayName} — upgrade for audit</Badge>
+          <Badge className="bg-warn-muted/50 text-warning-foreground">{stats.planDisplayName} — upgrade for audit</Badge>
         )}
         <Btn variant="ghost" size="sm" onClick={exportCsv} data-dav-anchor="audit:act">
           Export CSV ({logs.length})

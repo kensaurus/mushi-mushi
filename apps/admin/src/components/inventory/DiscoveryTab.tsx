@@ -978,9 +978,9 @@ function LiveCrawlCard({
           {runs.slice(0, 5).map(run => (
             <div key={run.id} className="flex items-center gap-3 text-2xs">
               <span className={`shrink-0 font-mono px-1.5 py-0.5 rounded-sm ${
-                run.status === 'completed' ? 'bg-ok/10 text-ok' :
-                run.status === 'failed' ? 'bg-danger/10 text-danger' :
-                'bg-info/10 text-info'
+                run.status === 'completed' ? 'bg-ok-muted/50 text-ok-foreground' :
+                run.status === 'failed' ? 'bg-danger-muted/50 text-danger-foreground' :
+                'bg-info-muted/50 text-info-foreground'
               }`}>{run.status}</span>
               <span className="text-fg-muted truncate flex-1">{run.base_url}</span>
               {run.status === 'completed' && run.proposal_id && (

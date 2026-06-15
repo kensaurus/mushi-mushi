@@ -19,7 +19,7 @@ const LEVEL_CLASS: Record<OperatorTraceLevel, string> = {
 const LEVEL_BADGE: Record<OperatorTraceLevel, string> = {
   debug: 'bg-surface-overlay text-fg-faint',
   info: 'bg-info-muted/30 text-info',
-  warn: 'bg-warn/15 text-warn',
+  warn: 'bg-warn-muted/50 text-warning-foreground',
   error: 'bg-err/15 text-err',
 }
 
@@ -55,7 +55,7 @@ export function OperatorTraceBadge({ lines }: { lines: OperatorTraceLine[] }) {
   const tone =
     summary.errorCount > 0
       ? 'bg-err/20 text-err border-err/30'
-      : 'bg-warn/15 text-warn border-warn/30'
+      : 'bg-warn-muted/50 text-warning-foreground border-warn/30'
   return (
     <span
       className={`ml-1 inline-flex shrink-0 items-center rounded px-1 py-px text-3xs font-bold uppercase tracking-wide border ${tone} ${summary.errorCount > 0 ? 'motion-safe:animate-pulse' : ''}`}

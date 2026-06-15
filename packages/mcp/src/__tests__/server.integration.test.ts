@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, RESOURCE_CATALOG } from '../catalog.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const API_KEY = 'mushi_test_key_0123456789'
@@ -107,62 +108,9 @@ describe('MCP protocol handshake', () => {
   it('advertises every tool with description + input schema', async () => {
     const { tools } = await client.listTools()
     const names = tools.map(t => t.name).sort()
-    expect(names).toEqual([
-      'add_byok_key',
-      'approve_qa_story',
-      'award_bonus_points',
-      'checkin_pipeline_step',
-      'diagnose_connection',
-      'dispatch_fix',
-      'fix_suggest',
-      'generate_tdd_from_story',
-      'get_activation_status',
-      'get_backend_health',
-      'get_blast_radius',
-      'get_fix_context',
-      'get_fix_timeline',
-      'get_knowledge_graph',
-      'get_map_run_status',
-      'get_pipeline_run',
-      'get_qa_story_run',
-      'get_recent_reports',
-      'get_report_detail',
-      'get_report_timeline',
-      'get_reporter_thread',
-      'get_similar_bugs',
-      'get_skill',
-      'get_two_way_comms_health',
-      'graph_neighborhood',
-      'graph_node_status',
-      'improve_qa_story',
-      'ingest_setup_check',
-      'inventory_diff',
-      'inventory_findings',
-      'inventory_get',
-      'list_byok_keys',
-      'list_pending_review_stories',
-      'list_qa_story_runs',
-      'list_skills',
-      'list_top_contributors',
-      'map_user_stories',
-      'merge_fix',
-      'refresh_ci',
-      'reopen_report',
-      'reply_to_reporter',
-      'run_fullstack_audit',
-      'run_nl_query',
-      'run_qa_story',
-      'search_reports',
-      'set_tier',
-      'setup_check',
-      'setup_repo_for_mushi',
-      'start_skill_pipeline',
-      'submit_fix_result',
-      'test_gen_from_report',
-      'test_notification_channel',
-      'transition_status',
-      'trigger_judge',
-    ])
+    // Derive expected names from the catalog so this list auto-updates.
+    const expected = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG].map(t => t.name).sort()
+    expect(names).toEqual(expected)
     for (const t of tools) {
       expect(t.description, `${t.name} description`).toBeTruthy()
       expect(t.inputSchema, `${t.name} inputSchema`).toBeTruthy()
@@ -218,16 +166,9 @@ describe('MCP protocol handshake', () => {
   it('advertises project://* resources', async () => {
     const { resources } = await client.listResources()
     const uris = resources.map(r => r.uri).sort()
-    expect(uris).toEqual([
-      'evolution://history',
-      'inventory://current',
-      'mushi://activation',
-      'privacy://status',
-      'project://dashboard',
-      'project://integration-health',
-      'project://settings',
-      'project://stats',
-    ])
+    // Derived from RESOURCE_CATALOG so this stays in sync automatically.
+    const expected = RESOURCE_CATALOG.map(r => r.uri).sort()
+    expect(uris).toEqual(expected)
   })
 
   it('advertises the fix-plan / judge / triage prompts', async () => {

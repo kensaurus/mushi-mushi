@@ -96,8 +96,8 @@ export function SyntheticReportsCard() {
                   : match >= 0.8
                     ? 'bg-ok/15 text-ok border border-ok/30'
                     : match >= 0.5
-                      ? 'bg-warn/15 text-warn border border-warn/30'
-                      : 'bg-danger/15 text-danger border border-danger/30'
+                      ? 'bg-warn-muted/50 text-warning-foreground border border-warn/30'
+                      : 'bg-danger-muted/50 text-danger-foreground border border-danger/30'
                 return (
                   <tr key={r.id} className="border-t border-edge-subtle align-top">
                     <td className="px-2 py-1.5 text-fg-secondary max-w-[24rem]">

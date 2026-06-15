@@ -212,7 +212,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
           className={[
             'inline-flex items-center rounded-full px-1.5 py-0.5 text-2xs font-medium',
             badge === 'Free'
-              ? 'bg-ok/10 text-ok'
+              ? 'bg-ok-muted/50 text-ok-foreground'
               : 'bg-brand/10 text-brand',
           ].join(' ')}
         >

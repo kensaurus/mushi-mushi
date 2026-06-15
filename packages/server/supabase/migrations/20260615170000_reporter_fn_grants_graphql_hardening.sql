@@ -38,3 +38,8 @@ BEGIN
     REVOKE SELECT ON public.pipeline_runs FROM anon, authenticated;
   END IF;
 END $$;
+
+-- Flush PostgREST's schema + config cache so the revoked function/table grants
+-- drop out of the GraphQL/PostgREST introspection surface immediately after deploy.
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

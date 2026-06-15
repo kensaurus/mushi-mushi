@@ -54,9 +54,8 @@ interface StatusStepperProps {
    *  any stage we don't have an exact landing time for. */
   timestamps?: Partial<Record<StatusStep, string | null>>
   className?: string
-  /** Compact = no labels, just bars (used inside the table row). Default
-   *  shows labels under each segment for the report-detail header. */
-  size?: 'compact' | 'full'
+  /** Compact = label + bars. `table` = bars only (dense triage row). */
+  size?: 'compact' | 'full' | 'table'
 }
 
 export function StatusStepper({
@@ -83,12 +82,14 @@ export function StatusStepper({
     : 'bg-brand'
 
   const activeLabel = STEP_LABELS[STATUS_STEPS[activeIdx]]
+  const isTable = size === 'table'
+  const barHeight = size === 'full' ? 'h-2.5' : 'h-1.5'
 
   return (
     <div
-      className={`inline-flex items-stretch ${size === 'full' ? 'flex-col gap-1' : 'flex-col gap-0.5'} ${className}`}
+      className={`flex items-stretch w-full min-w-0 ${size === 'full' ? 'flex-col gap-1' : isTable ? 'flex-row items-center gap-1' : 'flex-col gap-1'} ${className}`}
       role="group"
-      aria-label={`Report progress: ${activeLabel}`}
+      aria-label={`Report progress: ${activeLabel} (${activeIdx + 1} of 4)`}
     >
       {size === 'compact' && (
         <span className="text-2xs text-fg-muted leading-none font-medium">
@@ -96,7 +97,7 @@ export function StatusStepper({
           <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
         </span>
       )}
-      <div className={`flex items-center gap-0.5 w-full max-w-full ${size === 'compact' ? 'min-w-0' : ''}`}>
+      <div className={`flex items-center gap-px min-w-0 ${isTable ? 'flex-1' : 'w-full max-w-full'}`}>
         {STATUS_STEPS.map((step, i) => {
           const completed = i < activeIdx
           const active = i === activeIdx
@@ -104,22 +105,26 @@ export function StatusStepper({
             ? activeTone
             : completed
               ? 'bg-ok'
-              : 'bg-edge-subtle'
+              : 'bg-fg-faint/20'
           const ts = timestamps?.[step]
           const tooltipBase = STEP_LABELS[step]
           const tooltip = ts ? `${tooltipBase} · ${new Date(ts).toLocaleString()}` : tooltipBase
-          const heightCls = size === 'full' ? 'h-2.5' : 'h-2'
-          const activeRing = active ? 'ring-1 ring-inset ring-fg/10' : ''
+          const activeRing = active ? 'ring-1 ring-inset ring-fg/15' : ''
           return (
-            <Tooltip key={step} content={tooltip}>
+            <Tooltip key={step} portal content={tooltip}>
               <span
                 aria-label={tooltipBase}
-                className={`${heightCls} flex-1 rounded-full motion-safe:transition-colors ${tint} ${activeRing}`}
+                className={`${barHeight} flex-1 rounded-[1px] motion-safe:transition-colors ${tint} ${activeRing}`}
               />
             </Tooltip>
           )
         })}
       </div>
+      {isTable && (
+        <span className="shrink-0 text-2xs text-fg-faint tabular-nums leading-none">
+          {activeIdx + 1}/4
+        </span>
+      )}
       {size === 'full' && (
         <div className="flex items-center justify-between text-2xs text-fg-faint w-full">
           {STATUS_STEPS.map((step, i) => (

@@ -19,7 +19,7 @@ const RESOURCES: Record<string, AuditResourceInfo> = {
   fix: {
     label: 'Auto-fix',
     description: 'Draft pull request from the fix worker. Review on the Fixes page.',
-    className: 'border-accent/30 bg-accent-muted/35 text-accent hover:bg-accent-muted/55',
+    className: 'border-accent/30 bg-accent-muted/55 text-accent-foreground hover:bg-accent-muted/55',
     listPath: '/fixes',
   },
   settings: {

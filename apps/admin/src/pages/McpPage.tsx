@@ -524,7 +524,7 @@ export function McpPage() {
                 bannerSeverity === 'ok'
                   ? 'bg-ok-muted text-ok'
                   : bannerSeverity === 'warn'
-                    ? 'bg-warn/10 text-warn'
+                    ? 'bg-warn-muted/50 text-warning-foreground'
                     : bannerSeverity === 'brand'
                       ? 'bg-brand/15 text-brand'
                       : 'bg-surface-overlay text-fg-muted'

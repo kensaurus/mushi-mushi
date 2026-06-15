@@ -70,3 +70,15 @@ export function normalizeAdminStatus(
 export function isReporterFixedStatus(status: string | null | undefined): boolean {
   return status === 'fixed' || status === 'resolved'
 }
+
+/**
+ * Storage canonicalization: the API persists `resolved` as `fixed`. Use this to
+ * compare a stored row's status against an incoming update on equal footing, so
+ * a pure `resolved`→`fixed` canonicalization isn't mistaken for a real status
+ * change (which would re-fire reporter notifications / re-award points).
+ */
+export function toStoredStatus(
+  status: string | null | undefined,
+): string | null | undefined {
+  return status === 'resolved' ? 'fixed' : status
+}

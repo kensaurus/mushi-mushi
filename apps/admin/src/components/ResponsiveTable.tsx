@@ -22,15 +22,18 @@
  *          replace-the-outer-wrapper-only.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTableDensity } from '../lib/useTableDensity'
 import type { TableDensity } from '../lib/useTableDensity'
 
 interface ResponsiveTableProps {
   children: ReactNode
-  /** Visually pin the first column while the rest scrolls horizontally. */
+  /** @deprecated Prefer `stickyLeadColumns` — pins only the 1px stripe. */
   stickyFirstColumn?: boolean
+  /** Pin the first N columns while the rest scrolls (e.g. 3 = stripe + checkbox + summary). */
+  stickyLeadColumns?: 0 | 2 | 3
+  /** CSS custom properties for sticky column `left` offsets (cols 2 and 3). */
+  stickyOffsets?: { col2Left: string; col3Left: string }
   /** Optional ARIA label for the scroll region. */
   ariaLabel?: string
   className?: string
@@ -39,9 +42,12 @@ interface ResponsiveTableProps {
 export function ResponsiveTable({
   children,
   stickyFirstColumn = false,
+  stickyLeadColumns = 0,
+  stickyOffsets,
   ariaLabel,
   className = '',
 }: ResponsiveTableProps) {
+  const leadCount = stickyLeadColumns || (stickyFirstColumn ? 1 : 0)
   const [density] = useTableDensity()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [overflow, setOverflow] = useState<{ left: boolean; right: boolean }>({
@@ -69,11 +75,27 @@ export function ResponsiveTable({
     }
   }, [])
 
+  const scrollHint =
+    overflow.left || overflow.right
+      ? ' Scroll horizontally to see all columns.'
+      : ''
+
   return (
     <div
       className={`responsive-table ${className}`.trim()}
       data-density={density}
-      data-sticky-first={stickyFirstColumn ? 'true' : undefined}
+      data-sticky-first={stickyFirstColumn && !stickyLeadColumns ? 'true' : undefined}
+      data-sticky-lead={leadCount > 1 ? String(leadCount) : undefined}
+      data-overflow-left={overflow.left ? 'true' : undefined}
+      data-overflow-right={overflow.right ? 'true' : undefined}
+      style={
+        leadCount >= 3 && stickyOffsets
+          ? ({
+              '--sticky-col-2-left': stickyOffsets.col2Left,
+              '--sticky-col-3-left': stickyOffsets.col3Left,
+            } as CSSProperties)
+          : undefined
+      }
     >
       <div
         ref={scrollRef}
@@ -81,7 +103,7 @@ export function ResponsiveTable({
         data-overflow-left={overflow.left ? 'true' : undefined}
         data-overflow-right={overflow.right ? 'true' : undefined}
         role="region"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel ? `${ariaLabel}.${scrollHint}` : undefined}
         tabIndex={overflow.left || overflow.right ? 0 : -1}
       >
         {children}

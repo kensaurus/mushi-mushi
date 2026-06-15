@@ -21,7 +21,8 @@
  *          to indexing off, etc.).
  */
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { PreflightCheck, PreflightState } from '../../lib/useDispatchPreflight'
 
@@ -35,6 +36,14 @@ interface Props {
   preflight?: PreflightState
   /** GitHub repo URL the fix PR will land on. Sourced from platform integrations. */
   repoUrl?: string | null
+  /** Table row — shorter label, width-constrained trigger. */
+  variant?: 'default' | 'table'
+}
+
+const POPOVER_PAD = 10
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(Math.max(n, min), max)
 }
 
 export function DispatchFixPreflight({
@@ -46,11 +55,50 @@ export function DispatchFixPreflight({
   onOpenDetail,
   preflight,
   repoUrl,
+  variant = 'default',
 }: Props) {
   const [open, setOpen] = useState(false)
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
   const popoverId = useId()
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
+
+  // Compute position: fixed so the popover escapes overflow:auto + mask-image
+  // on the scroll container and is never clipped inside the reports table.
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const popW = popoverRef.current?.offsetWidth ?? 416
+    const popH = popoverRef.current?.offsetHeight ?? 480
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const GAP = 4
+
+    let top = rect.bottom + GAP
+    // Right-align the popover with the trigger button's right edge.
+    let left = rect.right - popW
+
+    if (left < POPOVER_PAD) left = POPOVER_PAD
+    if (left + popW > vw - POPOVER_PAD) left = vw - popW - POPOVER_PAD
+    if (top + popH > vh - POPOVER_PAD) top = rect.top - popH - GAP
+    top = clamp(top, POPOVER_PAD, Math.max(POPOVER_PAD, vh - popH - POPOVER_PAD))
+
+    setPopoverStyle({ position: 'fixed', top, left, zIndex: 10_000 })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) return
+    updatePosition()
+    const raf = requestAnimationFrame(updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [open, updatePosition])
 
   useEffect(() => {
     if (!open) return
@@ -93,8 +141,17 @@ export function DispatchFixPreflight({
     onConfirm()
   }
 
+  const isTable = variant === 'table'
+  const triggerLabel = busy
+    ? isTable
+      ? 'Sending…'
+      : 'Dispatching…'
+    : isTable
+      ? 'Dispatch →'
+      : 'Dispatch fix →'
+
   return (
-    <div className="relative inline-flex">
+    <div className={isTable ? 'inline-flex min-w-0 max-w-full shrink-0' : 'inline-flex'}>
       <button
         type="button"
         ref={triggerRef}
@@ -107,19 +164,25 @@ export function DispatchFixPreflight({
           setOpen((v) => !v)
         }}
         disabled={busy}
-        className="inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 disabled:opacity-50 disabled:cursor-wait"
+        className={[
+          'inline-flex items-center justify-center gap-1 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
+          isTable
+            ? 'min-w-0 shrink-0 truncate px-2 py-1 text-2xs bg-brand/10 text-brand border-brand/30 hover:bg-brand/20'
+            : 'px-2 py-1 text-2xs bg-brand/10 text-brand border-brand/30 hover:bg-brand/20',
+        ].join(' ')}
       >
-        {busy ? 'Dispatching…' : 'Dispatch fix →'}
+        <span className="truncate">{triggerLabel}</span>
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
           id={popoverId}
           ref={popoverRef}
           role="dialog"
           aria-label="Dispatch agentic fix"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 top-full mt-1 z-30 w-80 rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
+          style={popoverStyle}
+          className="w-[min(26rem,calc(100vw-1.25rem))] max-h-[min(32rem,calc(100vh-1.25rem))] overflow-y-auto rounded-md border border-edge-subtle bg-surface-raised shadow-xl p-3 text-left"
         >
           <div className="flex items-center justify-between gap-2 mb-1">
             <div className="text-xs font-medium text-fg">
@@ -258,7 +321,8 @@ export function DispatchFixPreflight({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

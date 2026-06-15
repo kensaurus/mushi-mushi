@@ -136,7 +136,7 @@ export function GeneralPanel() {
                   disabled={testingSlack}
                   className={`shrink-0 px-2.5 py-1 rounded-sm text-2xs font-medium border transition-colors ${
                     slackTestResult === 'ok'
-                      ? 'border-ok bg-ok/10 text-ok'
+                      ? 'border-ok bg-ok-muted/50 text-ok-foreground'
                       : slackTestResult === 'err'
                         ? 'border-danger bg-danger-muted text-danger'
                         : 'border-edge-subtle text-fg-muted hover:text-fg'

@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "mushi": {
+      "type": "http",
+      "url": "https://your-project.supabase.co/functions/v1/mcp",
+      "headers": {
+        "X-Mushi-Api-Key": "${MUSHI_API_KEY}"
+      }
+    },
+    "mushi-stdio": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mushi-mushi/mcp"],
+      "env": {
+        "MUSHI_API_KEY": "${MUSHI_API_KEY}",
+        "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}"
+      }
+    }
+  }
+}

@@ -74,3 +74,9 @@ CREATE POLICY reporter_push_subscriptions_deny_all ON public.reporter_push_subsc
 -- unused grant so any future authenticated read is tenant-scoped.
 ALTER VIEW feature_requests_with_stats SET (security_invoker = on);
 REVOKE SELECT ON feature_requests_with_stats FROM authenticated;
+
+-- Flush PostgREST's in-memory schema + config cache so the new tables / views /
+-- grants are visible immediately after deploy (repo convention for structural
+-- migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

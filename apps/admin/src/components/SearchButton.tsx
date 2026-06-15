@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react'
 import { useCommandPalette } from '../lib/useCommandPalette'
+import { Kbd } from './ui'
 
 function detectIsMac(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -44,11 +45,9 @@ export function SearchButton() {
         <path d="m20 20-3-3" strokeLinecap="round" />
       </svg>
       <span className="hidden sm:inline">Search</span>
-      <span className="hidden md:flex items-center gap-0.5 text-3xs text-fg-faint">
-        <kbd className="border border-edge-subtle px-1 py-px rounded-xs font-sans">
-          {isMac ? '⌘' : 'Ctrl'}
-        </kbd>
-        <kbd className="border border-edge-subtle px-1 py-px rounded-xs font-sans">K</kbd>
+      <span className="hidden md:flex items-center gap-0.5 text-2xs text-fg-muted">
+        <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+        <Kbd>K</Kbd>
       </span>
     </button>
   )

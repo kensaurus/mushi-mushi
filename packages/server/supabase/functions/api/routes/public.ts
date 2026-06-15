@@ -45,6 +45,11 @@ import {
 } from '../helpers.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 
+// Upper bound for reporter-supplied notes that feed `mushi_apply_reporter_feedback`
+// (these can seed a reopened child report's description). Keeps a hostile or
+// runaway client from creating oversized reports through the public routes.
+const REPORTER_NOTE_MAX = 2000;
+
 export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // SDK ROUTES (API key auth)
@@ -1279,7 +1284,10 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         p_report_id: reportId,
         p_signal: rawSignal,
         p_reporter_token_hash: auth.tokenHash,
-        p_note: text || null,
+        // `p_note` can seed a reopened child report's description. Cap it so a
+        // huge reply body can't create an oversized report through this public
+        // route (the comment body is capped separately at 10k below).
+        p_note: text ? text.slice(0, REPORTER_NOTE_MAX) : null,
       });
       if (rpcErr) {
         log.warn('reporter_feedback_rpc_failed', { reportId, error: rpcErr.message });
@@ -1339,7 +1347,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     const body = await c.req.json().catch(() => ({}));
-    const note = typeof body.note === 'string' ? body.note.trim() : '';
+    // Cap the note: it can become the reopened child report's description, so
+    // an unbounded body would let this public route create oversized reports.
+    const note = (typeof body.note === 'string' ? body.note.trim() : '').slice(0, REPORTER_NOTE_MAX);
 
     const db = getServiceClient();
     const { data: report, error: reportError } = await db
@@ -1363,11 +1373,36 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     if (rpcErr) return dbError(c, rpcErr);
 
     const parsed = (outcome ?? {}) as Record<string, unknown>;
+    const code = typeof parsed.code === 'string' ? parsed.code : '';
+
+    // The RPC only spawns/links a reopen when the report is in a terminal
+    // (fixed/resolved/verified) state. Any other code (e.g. SIGNAL_RECORDED)
+    // means nothing was reopened — surface a 409 instead of silently claiming
+    // success and firing a misleading "reopened" notification.
+    if (code !== 'REOPENED' && code !== 'ALREADY_APPLIED') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NOT_REOPENABLE',
+            message: 'This report is not in a state that can be reopened.',
+          },
+        },
+        409,
+      );
+    }
+
     const childId = typeof parsed.child_report_id === 'string' ? parsed.child_report_id : reportId;
-    await createNotification(db, projectId, childId, auth.tokenHash, 'reopened', {
-      message: buildNotificationMessage('reopened', {}),
-      reportId: childId,
-    });
+    // Notify only on a fresh reopen. ALREADY_APPLIED means the child already
+    // exists and was notified on the first reopen; createNotification is
+    // idempotent per (report, type, channel), but gating avoids the redundant
+    // write entirely.
+    if (code === 'REOPENED') {
+      await createNotification(db, projectId, childId, auth.tokenHash, 'reopened', {
+        message: buildNotificationMessage('reopened', {}),
+        reportId: childId,
+      });
+    }
 
     return c.json({ ok: true, data: { outcome: parsed } }, 201);
   });

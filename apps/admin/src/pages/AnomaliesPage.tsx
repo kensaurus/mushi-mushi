@@ -87,9 +87,9 @@ interface MetricPoint {
 }
 
 const METHOD_CLS: Record<string, string> = {
-  'page-hinkley': 'bg-warn/10 text-warn border border-warn/20',
-  'z-score': 'bg-danger/10 text-danger border border-danger/20',
-  'release-regression': 'bg-danger/10 text-danger border border-danger/20',
+  'page-hinkley': 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
+  'z-score': 'bg-danger-muted/50 text-danger-foreground border border-danger/20',
+  'release-regression': 'bg-danger-muted/50 text-danger-foreground border border-danger/20',
 }
 
 function methodBadge(m: string) {
@@ -284,9 +284,9 @@ export function AnomaliesPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
+                ? 'bg-danger-muted/50 text-danger-foreground'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
+                  ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
                     ? 'bg-brand/15 text-brand'
                     : 'bg-surface-overlay text-fg-muted'

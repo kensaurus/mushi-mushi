@@ -281,8 +281,9 @@ export function LineSparkline({
     .join(' ')
 
   const rawPeak = Math.max(...values, 0)
-  const rawMin = Math.min(...values)
-  const yTicks = buildYTickValues(rawPeak, rawMin, 4).map((v) => formatChartValue(v, valueFormat))
+  // Tick floor must match the plot floor (`min = Math.min(0, ...values)`) so
+  // grid-line labels stay aligned with actual data-point positions on the SVG.
+  const yTicks = buildYTickValues(rawPeak, min, 4).map((v) => formatChartValue(v, valueFormat))
   const axisXIso =
     timestamps?.map((t) => t.slice(0, 10)) ?? (xLabels ?? [])
   const useRangeSummary = showRangeSummary || showPeakLabel
@@ -729,7 +730,14 @@ function SeverityBarColumn({
         tabIndex={0}
         aria-label={ariaSummary}
         className={[
-          'absolute inset-x-0 bottom-0 flex flex-col justify-end rounded-sm',
+          // overflow-hidden is load-bearing: each non-zero severity segment
+          // floors at 2px (segPx) while the bar itself floors at 4px (barPx),
+          // so on a low-volume day with several severities present the stacked
+          // segments can sum taller than the bar. With `justify-end` the excess
+          // would otherwise spill past the TOP edge into the inline label and
+          // the neighbouring column; clipping keeps the most-severe (bottom)
+          // segments visible within the bar boundary.
+          'absolute inset-x-0 bottom-0 flex flex-col justify-end overflow-hidden rounded-sm',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
           'motion-safe:transition-[filter,background-color] duration-150',
           /* Zero-day: keep full-height for hover target but NO visual fill —
@@ -754,9 +762,13 @@ function SeverityBarColumn({
             <span aria-hidden="true" className={`block w-full rounded-t-sm ${SEVERITY_TRAFFIC.low.bg}`} style={{ height: `${segPx(day.low)}px` }} />
             <span aria-hidden="true" className={`block w-full ${SEVERITY_TRAFFIC.medium.bg}`} style={{ height: `${segPx(day.medium)}px` }} />
             <span aria-hidden="true" className={`block w-full ${SEVERITY_TRAFFIC.high.bg}`} style={{ height: `${segPx(day.high)}px` }} />
-            <span aria-hidden="true" className={`block w-full rounded-b-sm ${SEVERITY_TRAFFIC.critical.bg}`} style={{ height: `${segPx(day.critical)}px` }} />
+            <span
+              aria-hidden="true"
+              className={`block w-full ${day.unscored == null || day.unscored <= 0 ? 'rounded-b-sm' : ''} ${SEVERITY_TRAFFIC.critical.bg}`}
+              style={{ height: `${segPx(day.critical)}px` }}
+            />
             {day.unscored != null && day.unscored > 0 && (
-              <span aria-hidden="true" className={`block w-full ${SEVERITY_TRAFFIC.unscored.bg}`} style={{ height: `${segPx(day.unscored)}px` }} />
+              <span aria-hidden="true" className={`block w-full rounded-b-sm ${SEVERITY_TRAFFIC.unscored.bg}`} style={{ height: `${segPx(day.unscored)}px` }} />
             )}
           </>
         )}
@@ -811,13 +823,13 @@ export function HealthPill({ status }: { status: string | null | undefined }) {
     )
   if (status === 'degraded')
     return (
-      <Badge className="bg-warn/15 text-warn border border-warn/30">
+      <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">
         Degraded
       </Badge>
     )
   if (status === 'down')
     return (
-      <Badge className="bg-danger/15 text-danger border border-danger/30">
+      <Badge className="bg-danger-muted/50 text-danger-foreground border border-danger/30">
         Down
       </Badge>
     )
@@ -831,17 +843,17 @@ export function HealthPill({ status }: { status: string | null | undefined }) {
 /* ── StatusPill ─────────────────────────────────────────────────────────── */
 
 const STATUS_CLASS: Record<string, string> = {
-  new: 'bg-warn/15 text-warn border-warn/30',
-  pending: 'bg-warn/15 text-warn border-warn/30',
+  new: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
+  pending: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
   queued: 'bg-info/15 text-info border-info/30',
   running: 'bg-info/15 text-info border-info/30',
   classified: 'bg-ok/15 text-ok border-ok/30',
   completed: 'bg-ok/15 text-ok border-ok/30',
   fixing: 'bg-brand/15 text-brand border-brand/30',
   fixed: 'bg-info/15 text-info border-info/30',
-  failed: 'bg-danger/15 text-danger border-danger/30',
-  dead_letter: 'bg-danger/15 text-danger border-danger/30',
-  rejected: 'bg-danger/15 text-danger border-danger/30',
+  failed: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
+  dead_letter: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
+  rejected: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
   dismissed: 'bg-fg-faint/15 text-fg-muted border-edge-subtle',
 }
 

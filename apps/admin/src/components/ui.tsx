@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
-import { pctToneClass } from '../lib/tokens'
+import { pctToneClass, META_CHIP_TONE } from '../lib/tokens'
 import { PAGE_FLOW_LINKS, flowLinkBlurb, resolveFlowPath, type PageFlowLink } from '../lib/pageLinks'
 import { navIconForPath } from '../lib/pageNavIcons'
 import { HelpBulletList, HelpRichText } from './HelpRichText'
@@ -1197,9 +1197,9 @@ const RECOMMENDED_TONES = {
 } as const
 
 const RECOMMENDED_ACCENTS = {
-  urgent: 'text-danger',
-  info: 'text-info',
-  success: 'text-ok',
+  urgent: 'text-danger-foreground',
+  info: 'text-info-foreground',
+  success: 'text-ok-foreground',
   neutral: 'text-fg-muted',
 } as const
 
@@ -1233,18 +1233,12 @@ function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
   )
 }
 
-const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string> = {
-  neutral: 'bg-surface-overlay text-fg-secondary border-edge',
-  info: 'bg-info/10 text-info border-info/30',
-  ok: 'bg-ok/10 text-ok border-ok/30',
-  warn: 'bg-warn/10 text-warn border-warn/30',
-  danger: 'bg-danger/10 text-danger border-danger/30',
-}
+const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string> = META_CHIP_TONE
 
 const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
   ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: 'bg-danger/10 text-danger hover:bg-danger/20 border border-danger/30',
+  danger: 'bg-danger-muted/50 text-danger-foreground hover:bg-danger-muted/70 border border-danger/30',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
@@ -1522,7 +1516,7 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: 'border-info/35 bg-info/10 text-info',
+    chipClass: 'border-info/35 bg-info-muted/50 text-info-foreground',
   },
   counted: {
     Icon: IconTerminal,
@@ -1530,7 +1524,7 @@ const METRIC_SECTION_META: Record<
   },
   takeaway: {
     Icon: IconSparkle,
-    chipClass: 'border-ok/35 bg-ok/10 text-ok',
+    chipClass: 'border-ok/35 bg-ok-muted/50 text-ok-foreground',
   },
 }
 
@@ -2703,7 +2697,7 @@ const CHIP_ACTIVE: Record<FilterChipTone, string> = {
   brand:   'bg-brand/15 text-brand border-brand/40',
   ok:      'bg-ok-muted text-ok border-ok/40',
   warn:    'bg-warn-muted text-warn border-warn/40',
-  danger:  'bg-danger/15 text-danger border-danger/40',
+  danger:  'bg-danger-muted/50 text-danger-foreground border-danger/40',
   info:    'bg-info-muted text-info border-info/40',
 }
 
@@ -2847,7 +2841,7 @@ const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
   idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
   running: 'border-info/35 bg-info/15 text-info font-medium',
   success: 'border-ok/35 bg-ok/15 text-ok font-medium',
-  error: 'border-danger/35 bg-danger/15 text-danger font-medium',
+  error: 'border-danger/35 bg-danger-muted/50 text-danger-foreground font-medium',
   info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
 }
 
@@ -2981,6 +2975,10 @@ interface TooltipProps {
   nowrap?: boolean
   /** Render in document.body so tips escape overflow:hidden ancestors (e.g. React Flow). */
   portal?: boolean
+  /** Extra classes applied to the anchor wrapper span — use `w-full` or `flex` to prevent
+   *  the default `inline-flex` from collapsing children that rely on `w-full` to fill
+   *  their parent's width (e.g. RecencyHeatLabel inside a flex-col container). */
+  className?: string
 }
 
 const TOOLTIP_SURFACE =
@@ -3085,6 +3083,7 @@ export function Tooltip({
   side = 'top',
   nowrap = true,
   portal = false,
+  className,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -3167,7 +3166,7 @@ export function Tooltip({
   return (
     <span
       ref={anchorRef}
-      className="relative inline-flex"
+      className={`relative inline-flex${className ? ` ${className}` : ''}`}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocusCapture={show}
@@ -3299,7 +3298,7 @@ export function DataTableCell({
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-3xs font-mono font-medium text-fg-faint bg-surface-root border border-edge rounded-sm">
+    <kbd className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-2xs font-mono font-medium text-fg-secondary bg-surface-overlay border border-edge rounded-sm">
       {children}
     </kbd>
   )
@@ -3355,7 +3354,7 @@ export function ErrorAlert({
       <div className="flex items-start gap-3">
         <div
           aria-hidden="true"
-          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger/15 text-danger text-xs font-bold"
+          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger-muted/50 text-danger-foreground text-xs font-bold"
         >
           !
         </div>

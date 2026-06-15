@@ -53,6 +53,15 @@ interface Props {
   windowDays?: number
 }
 
+const TONE_SHARE_BAR: Record<Tone, string> = {
+  danger: 'bg-danger/80',
+  warn: 'bg-warn/80',
+  info: 'bg-info/70',
+  ok: 'bg-ok/80',
+  brand: 'bg-brand/70',
+  muted: 'bg-fg-faint/40',
+}
+
 const TILES: Array<{
   key: 'critical' | 'high' | 'medium' | 'low'
   label: string
@@ -111,6 +120,9 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3">
       {TILES.map((tile) => {
         const isActive = activeSeverity === tile.key
+        const total = data?.total ?? 0
+        const count = counts[tile.key]
+        const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
         return (
           <button
             key={tile.key}
@@ -122,20 +134,37 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
                 ? `Clear ${tile.label} filter`
                 : `Filter to ${tile.label} severity reports`
             }
-            className={`text-left rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-all ${
+            className={`relative overflow-hidden text-left rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-all ${
               isActive ? 'ring-2 ring-brand/60' : ''
             }`}
           >
             <KpiTile
               label={tile.label}
-              value={loading ? '…' : counts[tile.key]}
-              sublabel={`last ${windowDays}d${isActive ? ' · filtering' : ''}`}
+              value={loading ? '…' : count}
+              sublabel={
+                loading
+                  ? `last ${windowDays}d`
+                  : total > 0
+                    ? `${sharePct}% of ${total} · last ${windowDays}d${isActive ? ' · filtering' : ''}`
+                    : `last ${windowDays}d${isActive ? ' · filtering' : ''}`
+              }
               accent={tile.accent}
               meaning={tile.meaning}
               series={sparks[tile.key]}
               delta={severityDelta(sparks[tile.key])}
               seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
             />
+            {!loading && total > 0 && sharePct > 0 ? (
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-surface-overlay/40"
+                aria-hidden="true"
+              >
+                <div
+                  className={`h-full motion-safe:transition-[width] ${TONE_SHARE_BAR[tile.accent]}`}
+                  style={{ width: `${sharePct}%` }}
+                />
+              </div>
+            ) : null}
           </button>
         )
       })}

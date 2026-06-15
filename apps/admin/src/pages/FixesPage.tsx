@@ -29,7 +29,7 @@ import type { FixTimelineEvent } from '../components/FixGitGraph'
 import { FixSummaryRow } from '../components/fixes/FixSummaryRow'
 import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
-import { FixCard } from '../components/fixes/FixCard'
+import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
@@ -40,8 +40,6 @@ import { EMPTY_FIXES_STATS, type FixesStats, type FixesTabId } from '../componen
 import { usePageCopy } from '../lib/copy'
 import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
 import { usePageData } from '../lib/usePageData'
-import { useStaggeredAppear } from '../lib/useStaggeredAppear'
-
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -328,8 +326,6 @@ export function FixesPage() {
 
   // Capped at 12 entries so a freshly-loaded list of 100+ fixes still finishes
   // its entrance animation in well under half a second
-  const stagger = useStaggeredAppear({ stepMs: 28, max: 12 })
-
   // Optimistic-only dispatch rows: inserted synchronously when the user
   // clicks retry so the InflightDispatches panel updates within a frame
   // instead of waiting for the POST + realtime round-trip (typically
@@ -436,15 +432,6 @@ export function FixesPage() {
       return changed ? next : prev
     })
   }, [fixes])
-
-  const toggleSelect = useCallback((id: string, next: boolean) => {
-    setSelectedIds((prev) => {
-      const updated = new Set(prev)
-      if (next) updated.add(id)
-      else updated.delete(id)
-      return updated
-    })
-  }, [])
 
   useEffect(() => {
     setSelectedIds(new Set())
@@ -630,6 +617,19 @@ export function FixesPage() {
     return [...keptOptimistic, ...dispatches]
   }, [dispatches, optimisticDispatches])
 
+  const inFlightReportIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const f of fixes) {
+      const s = f.status?.toLowerCase()
+      if (s === 'queued' || s === 'running' || s === 'dispatched') ids.add(f.report_id)
+    }
+    for (const d of mergedDispatches) {
+      const s = d.status?.toLowerCase()
+      if (s === 'queued' || s === 'running') ids.add(d.report_id)
+    }
+    return ids
+  }, [fixes, mergedDispatches])
+
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
@@ -806,7 +806,7 @@ export function FixesPage() {
               hint="Try another filter or dispatch a fix from Reports."
             />
           ) : (
-            <div className="space-y-1.5">
+            <>
               <FixBulkActionBar
                 visibleCount={visibleFixes.length}
                 filterLabel={activeBucketLabel}
@@ -823,49 +823,19 @@ export function FixesPage() {
                 onRetrySelected={() => setBulkRetryConfirm(true)}
                 onClear={clearSelection}
               />
-
-              {visibleFixes.map((fix, idx) => (
-                <div
-                  key={fix.id}
-                  data-tour-id={idx === 0 ? 'fix-card' : undefined}
-                  className="motion-safe:animate-mushi-fade-in"
-                  style={stagger(idx)}
-                >
-                  <FixCard
-                    fix={fix}
-                    isOpen={expanded === fix.id}
-                    timeline={timelines[fix.id]}
-                    traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
-                    selectable
-                    selected={selectedIds.has(fix.id)}
-                    onSelectChange={(next) => toggleSelect(fix.id, next)}
-                    onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
-                    onRetry={() => retryOne(fix.report_id)}
-                    onMerged={() => {
-                      toast.success('PR merged', 'Report marked Fixed when applicable.')
-                      void loadFixes()
-                    }}
-                    inventoryAction={
-                      fix.inventory_action_node_id
-                        ? (() => {
-                            const n = inventoryActions[fix.inventory_action_node_id]
-                            if (!n) return n
-                            return {
-                              actionNodeId: (n.actionNodeId ?? n.id ?? fix.inventory_action_node_id) as string,
-                              actionLabel: (n.actionLabel ?? n.label ?? 'Unknown action') as string,
-                              actionDescription: n.actionDescription ?? (n.metadata?.['action'] as string | null) ?? null,
-                              pagePath: n.pagePath ?? (n.metadata?.['page_path'] as string | null) ?? null,
-                              storyTitle: n.storyTitle ?? (n.metadata?.['story_title'] as string | null) ?? null,
-                              expectedOutcome: (n.expectedOutcome ?? (n.metadata?.['expected_outcome'] as Record<string, unknown> | null) ?? null),
-                              status: n.status ?? (n.metadata?.['status'] as string | null) ?? null,
-                            }
-                          })()
-                        : undefined
-                    }
-                  />
-                </div>
-              ))}
-            </div>
+              <FixesTable
+                fixes={visibleFixes}
+                expandedId={expanded}
+                timelines={timelines}
+                traceUrlFor={(traceId) => platform.traceUrl(traceId)}
+                inFlightReportIds={inFlightReportIds}
+                inventoryActions={inventoryActions}
+                onToggle={(fixId) => setExpanded(expanded === fixId ? null : fixId)}
+                onRetry={retryOne}
+                compactTable={ux.compactTable}
+                hideTableChrome={ux.hideTableChrome}
+              />
+            </>
           )}
         </>
       )

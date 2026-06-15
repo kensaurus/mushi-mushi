@@ -14,23 +14,31 @@
 
 import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Tooltip } from '../ui'
-import { SEVERITY } from '../../lib/tokens'
+import { Tooltip } from '../ui'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
-import { ReportSourceBadge } from './ReportSourceBadge'
+import { ReportRowMeta, ReportRowLayerPill } from './ReportRowSummaryMeta'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
-import { IconBolt, IconShare, IconExternalLink, IconClose } from '../icons'
+import { IconShare, IconExternalLink, IconClose } from '../icons'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
-  severityLabelShort,
   severityStripeClass,
   type ReportRow,
 } from './types'
-import { REPORTS_TABLE_COL } from './reportsTableLayout'
+import {
+  REPORTS_ACTION_STACK_MAX,
+  REPORTS_TABLE_COL,
+  TABLE_CELL,
+} from './reportsTableLayout'
+import {
+  BlastRadiusMeter,
+  RecencyHeatLabel,
+  TableConfidenceCell,
+  TableSeverityCell,
+} from './ReportMetricCells'
 
 interface Props {
   row: ReportRow
@@ -78,7 +86,6 @@ function ReportRowViewInner({
   preflight,
 }: Props) {
   const summary = row.summary ?? row.description
-  const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
   const dedupCount = row.dedup_count ?? 1
   // Real blast radius — distinct people who felt this. Falls back to the raw
   // dedup count when the BE is older than the migration so the column
@@ -155,7 +162,7 @@ function ReportRowViewInner({
           aria-hidden="true"
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.checkbox} px-2 py-2 align-top pl-3`}>
+      <td className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 align-top pl-3`}>
         <input
           type="checkbox"
           checked={isSelected}
@@ -165,11 +172,11 @@ function ReportRowViewInner({
           className="h-3.5 w-3.5 accent-brand"
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.summary} px-2 py-2 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-start gap-1.5 min-w-0">
+      <td className={`${REPORTS_TABLE_COL.summary} ${TABLE_CELL.pxLead} py-2 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex items-start gap-1 min-w-0">
             {onToggleGroup && (
-              <Tooltip content={expanded ? 'Hide variants' : `Show ${(variantCount ?? 1) - 1} more variant${(variantCount ?? 1) - 1 === 1 ? '' : 's'}`}>
+              <Tooltip portal content={expanded ? 'Hide variants' : `Show ${(variantCount ?? 1) - 1} more variant${(variantCount ?? 1) - 1 === 1 ? '' : 's'}`}>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -196,109 +203,76 @@ function ReportRowViewInner({
               sentryEnvironment={row.sentry_environment}
             >
               <div
-                className="text-sm text-fg-secondary truncate leading-snug min-w-0 flex-1"
+                className="w-full min-w-0 flex-1 truncate text-sm leading-snug text-fg-secondary"
                 title={typeof summary === 'string' ? summary : undefined}
               >
                 {summary}
               </div>
             </BreadcrumbPeek>
-          </div>
-          {(blastRadius > 1 || reporterReplied || (variantCount && variantCount > 1 && !isVariant)) && (
-            <div className="flex flex-wrap items-center gap-1 min-w-0">
+            <div className="shrink-0 flex items-center gap-1 pt-px">
               {blastRadius > 1 && (
-                <Tooltip
-                  content={
+                <BlastRadiusMeter
+                  value={blastRadius}
+                  tooltip={
                     uniqueUsers > 0
-                      ? `${uniqueUsers} distinct user${uniqueUsers === 1 ? '' : 's'} felt this in the last 7d (across ${dedupCount} report${dedupCount === 1 ? '' : 's'}). One fix attempt closes the whole group — open to expand variants.`
-                      : `Felt by ${dedupCount} report${dedupCount === 1 ? '' : 's'} so far. One fix attempt closes the whole group — open to see siblings.`
+                      ? `${uniqueUsers} distinct user${uniqueUsers === 1 ? '' : 's'} felt this (across ${dedupCount} reports).`
+                      : `Felt by ${dedupCount} reports.`
                   }
-                >
-                  <span
-                    className={`shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border ${
-                      blastRadius >= 5
-                        ? 'bg-danger/15 text-danger border-danger/30'
-                        : blastRadius >= 3
-                          ? 'bg-warn/15 text-warn border-warn/30'
-                          : 'bg-info-muted text-info border-info/20'
-                    }`}
-                  >
-                    ×{blastRadius} felt
-                  </span>
-                </Tooltip>
+                />
               )}
               {reporterReplied && (
-                <Tooltip content="Reporter replied after the last developer response. Open the report thread.">
-                  <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border bg-accent/15 text-accent border-accent/30">
-                    reporter replied
+                <Tooltip portal content="Reporter replied — open thread">
+                  <span className="shrink-0 rounded-full border border-accent/35 bg-accent-muted/70 px-1.5 py-0.5 text-2xs font-medium text-[var(--color-accent-foreground)] cursor-help">
+                    reply
                   </span>
                 </Tooltip>
               )}
               {variantCount && variantCount > 1 && !isVariant && (
-                <Tooltip content={`${variantCount - 1} sibling report${variantCount - 1 === 1 ? '' : 's'} on this page share the same fingerprint. Click the chevron to expand.`}>
-                  <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full border border-edge-subtle text-fg-muted cursor-help">
-                    +{variantCount - 1} variant{variantCount - 1 === 1 ? '' : 's'}
+                <Tooltip portal content={`${variantCount - 1} sibling reports share this fingerprint`}>
+                  <span className="shrink-0 rounded-full border border-edge-subtle px-1.5 py-0.5 text-2xs font-mono text-fg-muted cursor-help">
+                    +{variantCount - 1}
                   </span>
                 </Tooltip>
               )}
+              <ReportRowLayerPill row={row} />
             </div>
-          )}
-          {row.component && (
-            <div className="text-2xs text-fg-faint font-mono truncate">{row.component}</div>
-          )}
-          <ReportSourceBadge row={row} />
-          {row.reporter_display_name && (
-            <Tooltip content={row.reporter_jwt_verified ? 'Identity verified via signed JWT' : 'Reporter identity (unverified)'}>
-              <span className={`inline-flex items-center gap-1 text-2xs font-mono ${
-                row.reporter_jwt_verified ? 'text-ok' : 'text-fg-faint'
-              }`}>
-                {row.reporter_jwt_verified && <span aria-hidden="true">✓</span>}
-                <span className="truncate max-w-full">{row.reporter_display_name}</span>
-              </span>
-            </Tooltip>
-          )}
-          {(hasObservability(row) || row.sentry_trace_id) && (
-            <ObservabilityStrip row={row} />
-          )}
+          </div>
+          <ReportRowMeta row={row} />
         </div>
       </td>
-      <td className={`${REPORTS_TABLE_COL.status} px-2 py-2 align-top whitespace-nowrap`}>
-        <StatusStepper
-          status={row.status}
-          severity={row.severity}
-          timestamps={{ new: row.created_at }}
-        />
+      <td className={`reports-metric-cell ${REPORTS_TABLE_COL.status} ${TABLE_CELL.pxMeta}`}>
+        <div className="reports-metric-cell-slot">
+          <StatusStepper
+            className="w-full min-w-0 max-w-full"
+            size="table"
+            status={row.status}
+            severity={row.severity}
+            timestamps={{ new: row.created_at }}
+          />
+        </div>
       </td>
-      <td className={`${REPORTS_TABLE_COL.severity} px-2 py-2 align-top whitespace-nowrap`}>
-        {row.severity ? (
-          <Badge
-            className={SEVERITY[row.severity] ?? ''}
-            title={`Severity: ${row.severity ?? 'unset'}`}
-          >
-            {severityLabelShort(row.severity)}
-          </Badge>
-        ) : (
-          <span className="text-2xs text-fg-faint">—</span>
-        )}
+      <td className={`reports-metric-cell ${REPORTS_TABLE_COL.severity} ${TABLE_CELL.pxMeta}`}>
+        <div className="reports-metric-cell-slot">
+          <TableSeverityCell severity={row.severity} />
+        </div>
       </td>
-      <td className={`${REPORTS_TABLE_COL.confidence} px-2 py-2 text-right align-top whitespace-nowrap tabular-nums`}>
-        {conf != null ? (
-          <span className="text-xs font-mono text-fg-muted">{conf}%</span>
-        ) : (
-          <span className="text-2xs text-fg-faint">—</span>
-        )}
+      <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>
+        <div className="reports-metric-cell-slot reports-metric-cell-slot--confidence">
+          <TableConfidenceCell confidence={row.confidence} layout="table" />
+        </div>
       </td>
-      <td className={`${REPORTS_TABLE_COL.created} px-2 py-2 text-right align-top whitespace-nowrap tabular-nums`}>
-        <Tooltip content={new Date(row.created_at).toLocaleString()}>
-          <span className="text-2xs text-fg-faint font-mono cursor-help">
-            {formatRelative(row.created_at)}
+      <td className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
+        <div className={`reports-action-top ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
+          <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
+            <RowKebab row={row} onCopyLink={onCopyLink} onDismiss={onDismiss} />
           </span>
-        </Tooltip>
-      </td>
-      <td className={`${REPORTS_TABLE_COL.action} px-2 py-2 text-right align-top whitespace-nowrap`}>
-        <div className="inline-flex items-center gap-1">
           {canDispatch ? (
-            <span data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}>
+            <span
+              className="inline-flex shrink-0"
+              data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}
+            >
               <DispatchFixPreflight
+                variant="table"
                 busy={dispatchBusy}
                 severity={row.severity}
                 blastRadius={blastRadius}
@@ -313,15 +287,17 @@ function ReportRowViewInner({
             <Link
               to={`/reports/${row.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+              className="inline-flex shrink-0 items-center justify-center truncate px-2 py-1 text-2xs font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
             >
               Triage →
             </Link>
           )}
-          <RowKebab
-            row={row}
-            onCopyLink={onCopyLink}
-            onDismiss={onDismiss}
+        </div>
+        <div className={`reports-action-age ${REPORTS_ACTION_STACK_MAX}`}>
+          <RecencyHeatLabel
+            createdAt={row.created_at}
+            label={formatRelative(row.created_at)}
+            wrapperClass="w-full"
           />
         </div>
       </td>
@@ -337,8 +313,8 @@ interface KebabProps {
 
 function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
   return (
-    <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 motion-safe:transition-opacity">
-      <Tooltip content="Copy share link">
+    <>
+      <Tooltip portal content="Copy share link">
         <button
           type="button"
           onClick={(e) => {
@@ -351,7 +327,7 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           <IconShare size={12} />
         </button>
       </Tooltip>
-      <Tooltip content="Open in new tab">
+      <Tooltip portal content="Open in new tab">
         <a
           href={`/reports/${row.id}`}
           target="_blank"
@@ -363,7 +339,7 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           <IconExternalLink size={12} />
         </a>
       </Tooltip>
-      <Tooltip content="Dismiss">
+      <Tooltip portal content="Dismiss">
         <button
           type="button"
           onClick={(e) => {
@@ -376,80 +352,8 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           <IconClose size={12} />
         </button>
       </Tooltip>
-    </div>
+    </>
   )
 }
 
-/**
- * Tiny inline strip beneath the row's component line that surfaces
- * a single representative tag and a Sentry-trace pill when present.
- * Deliberately kept to one line so it doesn't grow row height; the
- * BreadcrumbPeek hover-card is the affordance for the full set.
- *
- * "Most informative tag" wins the inline slot. We pick by precedence:
- * `feature` → `flag` → `tenant` → `plan` → first key alphabetically.
- */
-const INLINE_TAG_PRIORITY = ['feature', 'flag', 'tenant', 'plan', 'env', 'release']
-
-function pickInlineTag(
-  tags: Record<string, string | number | boolean> | null | undefined,
-): [string, string | number | boolean] | null {
-  if (!tags) return null
-  const keys = Object.keys(tags)
-  if (keys.length === 0) return null
-  for (const k of INLINE_TAG_PRIORITY) {
-    if (k in tags) return [k, tags[k]]
-  }
-  const [first] = keys.sort()
-  return [first, tags[first]]
-}
-
-function hasObservability(row: ReportRow): boolean {
-  return Boolean(
-    (row.tags && Object.keys(row.tags).length > 0) ||
-      row.sentry_release ||
-      row.sentry_environment,
-  )
-}
-
-function ObservabilityStrip({ row }: { row: ReportRow }) {
-  const inlineTag = pickInlineTag(row.tags)
-  const tagCount = row.tags ? Object.keys(row.tags).length : 0
-  const traceShort = row.sentry_trace_id
-    ? `${row.sentry_trace_id.slice(0, 7)}…`
-    : null
-  return (
-    <div className="mt-1 flex items-center gap-1 flex-wrap">
-      {inlineTag && (
-        <span
-          className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-secondary max-w-[14rem] truncate"
-          title={`Tag — ${inlineTag[0]}: ${String(inlineTag[1])}`}
-        >
-          <span className="text-fg-muted">{inlineTag[0]}</span>
-          <span className="mx-0.5 text-fg-faint">:</span>
-          <span className="truncate">{String(inlineTag[1])}</span>
-        </span>
-      )}
-      {tagCount > 1 && (
-        <span className="text-2xs text-fg-faint">+{tagCount - 1}</span>
-      )}
-      {traceShort && (
-        <Tooltip content={`Sentry trace: ${row.sentry_trace_id}`}>
-          <span className="inline-flex items-center gap-0.5 text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-[#7553ff]/10 text-[#7553ff] border border-[#7553ff]/30 cursor-help">
-            <IconBolt className="size-2.5" />
-            {traceShort}
-          </span>
-        </Tooltip>
-      )}
-    </div>
-  )
-}
-
-// Wave S3 (PERF): memoise so typing into the filter bar doesn't re-render
-// every row in the list. ReportsTable renders up to 200 rows; each row
-// re-render used to cost ~3 ms in a React 19 profiler — 600 ms per
-// keystroke on a paginated table. Memo bails out when the callback
-// identities are stable (ReportsTable already stabilises them via
-// useCallback). Row data equality is shallow; ReportRow objects are
-// replaced by new references only when the backend updates them.
 export const ReportRowView = memo(ReportRowViewInner)
