@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="56" viewBox="0 0 240 56">
+  <title>Mushi Mushi</title>
+
+  <!-- Hanko stamp mark — slight tilt like a real hand-stamp -->
+  <g transform="translate(4,4) rotate(-3,24,24)">
+    <rect x="0" y="0" width="48" height="48" rx="8" fill="#E03C2C"/>
+    <text
+      x="24" y="38"
+      text-anchor="middle"
+      fill="#F8F4ED"
+      font-family="'Hiragino Mincho ProN','Yu Mincho Pr6N','Yu Mincho','Source Han Serif JP','Noto Serif CJK JP','SimSun',serif"
+      font-weight="700"
+      font-size="34">&#x866B;</text>
+  </g>
+
+  <!-- Wordmark -->
+  <text
+    x="64" y="30"
+    fill="#1C1009"
+    font-family="'Inter','Helvetica Neue',Arial,sans-serif"
+    font-size="22"
+    font-weight="700"
+    letter-spacing="-0.3">Mushi</text>
+  <text
+    x="64" y="48"
+    fill="#1C1009"
+    font-family="'Inter','Helvetica Neue',Arial,sans-serif"
+    font-size="22"
+    font-weight="700"
+    letter-spacing="-0.3">Mushi</text>
+
+  <!-- Vermillion accent dot between stamp and wordmark -->
+  <circle cx="58" cy="39" r="2" fill="#E03C2C"/>
+</svg>

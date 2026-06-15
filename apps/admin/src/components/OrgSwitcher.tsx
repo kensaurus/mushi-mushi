@@ -182,7 +182,7 @@ export function OrgSwitcher() {
         aria-expanded={open}
         className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
       >
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">Team</span>
+        <span className="text-3xs uppercase tracking-wider text-fg-muted">Team</span>
         <span className="max-w-[12rem] truncate font-medium">{active.name}</span>
         <span
           className={`rounded px-1.5 text-3xs font-medium uppercase border ${

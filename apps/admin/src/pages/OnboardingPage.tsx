@@ -367,7 +367,7 @@ export function OnboardingPage() {
         title={copy?.title ?? 'Setup'}
         projectScope={stats.projectName ?? undefined}
       >
-        <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn/10 text-warn' : 'bg-info/10 text-info'}>
+        <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn-muted/50 text-warning-foreground' : 'bg-info-muted/50 text-info-foreground'}>
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
       </PageHeader>

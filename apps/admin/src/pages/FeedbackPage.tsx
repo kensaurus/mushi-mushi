@@ -246,8 +246,8 @@ export function FeedbackPage() {
               : bannerSeverity === 'brand'
                 ? 'bg-brand/15 text-brand'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : 'bg-info/10 text-info'
+                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  : 'bg-info-muted/50 text-info-foreground'
           }
         >
           {stats.awaitingReply > 0

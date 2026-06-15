@@ -32,8 +32,8 @@ const STATUS_TONE: Record<string, string> = {
   validating: 'bg-info/15 text-info border border-info/30',
   validated: 'bg-ok/15 text-ok border border-ok/30',
   promoted: 'bg-ok/15 text-ok border border-ok/30',
-  rejected: 'bg-warn/15 text-warn border border-warn/30',
-  failed: 'bg-danger/15 text-danger border border-danger/30',
+  rejected: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
+  failed: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
 }
 
 const VENDOR_OPTIONS = [

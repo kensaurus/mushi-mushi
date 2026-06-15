@@ -1,0 +1,41 @@
+{
+  "name": "mushi-mushi",
+  "displayName": "Mushi Mushi",
+  "version": "1.0.0",
+  "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Mushi sees what users feel; Sentry sees what code throws.",
+  "author": {
+    "name": "Mushi Mushi",
+    "url": "https://kensaur.us/mushi-mushi"
+  },
+  "icon": "./logo.png",
+  "homepage": "https://kensaur.us/mushi-mushi",
+  "repository": "https://github.com/kensaurus/mushi-mushi",
+  "license": "MIT",
+  "keywords": [
+    "bug-tracking",
+    "error-monitoring",
+    "mcp",
+    "triage",
+    "ai-debugging",
+    "observability",
+    "user-feedback",
+    "auto-fix",
+    "developer-tools"
+  ],
+  "categories": ["monitoring", "debugging", "productivity"],
+  "mcp": {
+    "configFile": "mcp.json"
+  },
+  "skills": [
+    "skills/mushi-triage/SKILL.md"
+  ],
+  "rules": [
+    "rules/mushi-mcp.mdc"
+  ],
+  "commands": [
+    "commands/triage-mushi-report.md",
+    "commands/test-mushi-mcp.md",
+    "commands/fix-with-mushi.md"
+  ],
+  "minCursorVersion": "0.43.0"
+}

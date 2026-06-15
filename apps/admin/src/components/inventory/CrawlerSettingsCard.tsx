@@ -207,7 +207,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
           </SettingRow>
           <SettingRow label="Allow mutations">
             {data?.synthetic_monitor_allow_mutations ? (
-              <Badge className="bg-warn/10 text-warn border border-warn/25 font-mono">
+              <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/25 font-mono">
                 mutations enabled
               </Badge>
             ) : (

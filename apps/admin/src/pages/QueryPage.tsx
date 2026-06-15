@@ -337,7 +337,7 @@ function HistoryItem({
       >
         <span className="inline-flex items-center gap-1.5 w-full min-w-0">
           {row.mode === 'raw' && (
-            <span className="inline-flex shrink-0 px-1 py-0.5 rounded-[2px] text-3xs font-mono font-medium bg-warn/10 text-warn border border-warn/20">SQL</span>
+            <span className="inline-flex shrink-0 px-1 py-0.5 rounded-[2px] text-3xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
           )}
           <span className="line-clamp-2">{row.prompt}</span>
         </span>
@@ -484,10 +484,10 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Severity
   if (colL === 'severity') {
     const map: Record<string, string> = {
-      critical: 'bg-danger/15 text-danger border border-danger/30',
-      high:     'bg-warn/15 text-warn border border-warn/30',
-      medium:   'bg-warn/10 text-warn border border-warn/25',
-      low:      'bg-info/10 text-info border border-info/25',
+      critical: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
+      high:     'bg-warn-muted/50 text-warning-foreground border border-warn/30',
+      medium:   'bg-warn-muted/50 text-warning-foreground border border-warn/25',
+      low:      'bg-info-muted/50 text-info-foreground border border-info/25',
     }
     const label: Record<string, string> = { critical: 'P0 critical', high: 'P1 high', medium: 'P2 medium', low: 'P3 low' }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{label[strL] ?? str}</CellBadge>
@@ -497,15 +497,15 @@ function renderCell(col: string, val: unknown): ReactNode {
   if (colL === 'status') {
     const map: Record<string, string> = {
       new:        'bg-brand/10 text-brand border border-brand/25',
-      pending:    'bg-info/10 text-info border border-info/25',
-      submitted:  'bg-info/10 text-info border border-info/25',
-      queued:     'bg-info/10 text-info border border-info/25',
-      classified: 'bg-ok/10 text-ok border border-ok/25',
-      grouped:    'bg-ok/10 text-ok border border-ok/25',
-      fixing:     'bg-warn/10 text-warn border border-warn/25',
+      pending:    'bg-info-muted/50 text-info-foreground border border-info/25',
+      submitted:  'bg-info-muted/50 text-info-foreground border border-info/25',
+      queued:     'bg-info-muted/50 text-info-foreground border border-info/25',
+      classified: 'bg-ok-muted/50 text-ok-foreground border border-ok/25',
+      grouped:    'bg-ok-muted/50 text-ok-foreground border border-ok/25',
+      fixing:     'bg-warn-muted/50 text-warning-foreground border border-warn/25',
       fixed:      'bg-ok-muted text-ok border border-ok/25',
       dismissed:  'bg-surface-raised text-fg-muted border border-edge-subtle',
-      failed:     'bg-danger/10 text-danger border border-danger/25',
+      failed:     'bg-danger-muted/50 text-danger-foreground border border-danger/25',
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
   }
@@ -513,10 +513,10 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Category
   if (colL === 'category') {
     const map: Record<string, string> = {
-      bug:       'bg-danger/10 text-danger border border-danger/25',
-      slow:      'bg-warn/10 text-warn border border-warn/25',
-      visual:    'bg-accent/10 text-accent border border-accent/25',
-      confusing: 'bg-info/10 text-info border border-info/25',
+      bug:       'bg-danger-muted/50 text-danger-foreground border border-danger/25',
+      slow:      'bg-warn-muted/50 text-warning-foreground border border-warn/25',
+      visual:    'bg-accent-muted/55 text-accent-foreground border border-accent/25',
+      confusing: 'bg-info-muted/50 text-info-foreground border border-info/25',
       other:     'bg-surface-raised text-fg-muted border border-edge-subtle',
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
@@ -526,8 +526,8 @@ function renderCell(col: string, val: unknown): ReactNode {
   if (colL === 'verification_status') {
     const map: Record<string, string> = {
       passed:  'bg-ok-muted text-ok border border-ok/25',
-      failed:  'bg-danger/10 text-danger border border-danger/25',
-      pending: 'bg-info/10 text-info border border-info/25',
+      failed:  'bg-danger-muted/50 text-danger-foreground border border-danger/25',
+      pending: 'bg-info-muted/50 text-info-foreground border border-info/25',
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
   }
@@ -1004,7 +1004,7 @@ export function QueryPage() {
         title={copy?.title ?? 'Ask Your Data'}
         projectScope={stats.projectName ?? undefined}
       >
-        <Badge className={stats.errors24h > 0 ? 'bg-danger-subtle text-danger' : stats.runs24h > 0 ? 'bg-ok-muted text-ok' : 'bg-info/10 text-info'}>
+        <Badge className={stats.errors24h > 0 ? 'bg-danger-subtle text-danger' : stats.runs24h > 0 ? 'bg-ok-muted text-ok' : 'bg-info-muted/50 text-info-foreground'}>
           {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
         </Badge>
       </PageHeader>
@@ -1350,7 +1350,7 @@ export function QueryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {run.mode === 'raw' && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-3xs font-mono font-medium bg-warn/10 text-warn border border-warn/20">SQL</span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-3xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
                           )}
                           <p className="text-sm text-fg font-medium break-words line-clamp-3">
                             {run.question}

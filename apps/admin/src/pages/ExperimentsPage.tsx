@@ -99,9 +99,9 @@ interface AnalysisResult {
 
 const STATUS_CLS: Record<Experiment['status'], string> = {
   draft: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-  running: 'bg-warn/10 text-warn border border-warn/20',
+  running: 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
   stopped: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-  completed: 'bg-ok/10 text-ok border border-ok/20',
+  completed: 'bg-ok-muted/50 text-ok-foreground border border-ok/20',
 }
 
 const STATUS_LABEL: Record<Experiment['status'], string> = {
@@ -287,7 +287,7 @@ export function ExperimentsPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'warn'
-                ? 'bg-warn/10 text-warn'
+                ? 'bg-warn-muted/50 text-warning-foreground'
                 : bannerSeverity === 'brand'
                   ? 'bg-brand/15 text-brand'
                   : 'bg-surface-overlay text-fg-muted'
@@ -629,7 +629,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
             <Badge className="bg-brand/10 text-brand border border-brand/20">Bandit</Badge>
           )}
           {experiment.winner_variant_id && (
-            <Badge className="bg-ok/10 text-ok border border-ok/20">Winner found</Badge>
+            <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/20">Winner found</Badge>
           )}
           <div className="ml-auto flex gap-2">
             {experiment.status === 'draft' && variants.length >= 2 && (
@@ -659,7 +659,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
-                  <Badge className="bg-ok/10 text-ok border border-ok/20">Winner</Badge>
+                  <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/20">Winner</Badge>
                 )}
               </div>
             ))}

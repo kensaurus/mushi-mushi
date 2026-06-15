@@ -567,7 +567,7 @@ export async function ingestReport(
     id: reportId,
     project_id: projectId,
     description: safeDescription,
-    user_category: report.category,
+    user_category: report.userCategory ?? report.category,
     user_intent: safeUserIntent,
     screenshot_url: safeScreenshotUrl,
     screenshot_path: screenshotPath,

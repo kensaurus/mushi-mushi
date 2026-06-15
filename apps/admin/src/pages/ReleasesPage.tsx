@@ -94,8 +94,8 @@ interface Credit {
 }
 
 const STATUS_CLS: Record<Release['status'], string> = {
-  draft: 'bg-warn/10 text-warn border border-warn/20',
-  published: 'bg-ok/10 text-ok border border-ok/20',
+  draft: 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
+  published: 'bg-ok-muted/50 text-ok-foreground border border-ok/20',
 }
 
 const STATUS_LABEL: Record<Release['status'], string> = {
@@ -598,7 +598,7 @@ export function ReleasesPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'warn'
-                ? 'bg-warn/10 text-warn'
+                ? 'bg-warn-muted/50 text-warning-foreground'
                 : bannerSeverity === 'brand'
                   ? 'bg-brand/15 text-brand'
                   : 'bg-surface-overlay text-fg-muted'

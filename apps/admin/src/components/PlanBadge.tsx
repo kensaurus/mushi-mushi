@@ -17,7 +17,7 @@ const TONE: Record<string, string> = {
   hobby: 'bg-surface-overlay text-fg-muted border-edge-subtle',
   starter: 'bg-brand-subtle text-brand border-brand/30',
   pro: 'bg-ok-muted text-ok border-ok/30',
-  enterprise: 'bg-warn/10 text-warn border-warn/30',
+  enterprise: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
 }
 
 const GLYPH: Record<string, string> = {
@@ -93,7 +93,7 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
         <span aria-hidden="true" className="leading-none shrink-0">◆</span>
         <span className={sidebar ? 'truncate' : ''}>Admin</span>
         <span
-          className={`rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-muted shrink-0 ${sidebar ? 'text-3xs px-0.5 py-px' : 'px-1 py-0.5 text-3xs'}`}
+          className={`rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-secondary shrink-0 ${sidebar ? 'text-3xs px-0.5 py-px' : 'px-1 py-0.5 text-3xs'}`}
           aria-hidden="true"
         >
           {plan.displayName}

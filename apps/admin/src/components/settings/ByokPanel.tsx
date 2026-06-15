@@ -56,10 +56,10 @@ const PROVIDER_META: Record<string, { name: string; placeholder: string; console
 }
 
 const STATUS_CHIP: Record<PoolKeyStatus, { label: string; className: string }> = {
-  active: { label: 'active', className: 'bg-ok/10 text-ok' },
+  active: { label: 'active', className: 'bg-ok-muted/50 text-ok-foreground' },
   disabled: { label: 'disabled', className: 'bg-surface-raised text-fg-muted' },
-  quota_exhausted: { label: 'quota exhausted', className: 'bg-warn/10 text-warn' },
-  auth_failed: { label: 'auth failed', className: 'bg-danger/10 text-danger' },
+  quota_exhausted: { label: 'quota exhausted', className: 'bg-warn-muted/50 text-warning-foreground' },
+  auth_failed: { label: 'auth failed', className: 'bg-danger-muted/50 text-danger-foreground' },
 }
 
 const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'cursor'] as const

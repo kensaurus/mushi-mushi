@@ -138,7 +138,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
           <button
             type="button"
             onClick={() => setVisibleToReporter(true)}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/40 text-accent hover:bg-accent/10 motion-safe:transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md border border-accent/35 bg-accent-muted/55 text-accent-foreground hover:bg-accent/10 motion-safe:transition-colors"
           >
             Message reporter
           </button>

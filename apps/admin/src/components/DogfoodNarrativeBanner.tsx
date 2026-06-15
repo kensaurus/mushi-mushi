@@ -62,7 +62,7 @@ export function DogfoodNarrativeBanner() {
     >
       <span
         aria-hidden="true"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-warn/15 text-warn text-sm"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-warn-muted/50 text-warning-foreground text-sm"
         title="Most fragile area"
       >
         ⚠

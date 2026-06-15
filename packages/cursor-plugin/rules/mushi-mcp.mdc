@@ -1,0 +1,41 @@
+---
+description: Mushi MCP safety and least-privilege rules for Cursor agents.
+globs: []
+alwaysApply: true
+---
+
+# Mushi MCP Safety Rules
+
+## Scope discipline
+
+- Always start with **read-only** tools: `list_projects`, `get_recent_reports`, `get_report_detail`, `get_report_evidence`, `get_project_context`, `triage_issue`.
+- **Never call write tools** (`dispatch_fix`, `close_report`, `reopen_report`, `set_report_status`, `reply_to_reporter`, `dispatch_test_run`, `start_skill_pipeline`, `add_byok_key`, `award_bonus_points`, `set_tier`) without explicit user confirmation in the same turn.
+- `dispatch_fix` must always use `autoReadyPr: false` by default so the PR stays a draft. Only set `autoReadyPr: true` if the user explicitly requests it.
+
+## Credential safety
+
+- Never echo, paste, log, or commit the value of `MUSHI_API_KEY`.
+- Do not suggest the user paste their API key into chat.
+- If a key is needed and unavailable, ask the user to set `MUSHI_API_KEY` in their environment and restart Cursor.
+
+## Project scope
+
+- API-key credentials are bound to a single project. Do not assume you can access other projects unless `list_projects` returns them.
+- If a tool returns `INSUFFICIENT_SCOPE` or `PROJECT_REQUIRED`, explain the error to the user and do not retry.
+
+## Evidence handling
+
+- Screenshot URLs and console logs may contain PII. Do not reproduce them verbatim in chat unless the user asks. Summarize instead.
+- Network request logs may contain auth tokens. Strip or redact `Authorization` values before displaying.
+
+## Fix dispatch discipline
+
+Before calling `dispatch_fix`:
+1. Confirm you have read the full evidence (`get_report_evidence` or `triage_issue`).
+2. Confirm the `recommended_actions` list from `triage_issue` includes a fix recommendation.
+3. Show the user a one-paragraph summary of the proposed fix scope.
+4. Wait for explicit "yes" / "go ahead" / equivalent confirmation.
+
+## Sentry vs Mushi
+
+Mushi sees **user-felt bugs** reported through its SDK (rage-clicks, console errors, network failures flagged by real users). Sentry sees thrown exceptions. They are complementary — use both when both are configured.

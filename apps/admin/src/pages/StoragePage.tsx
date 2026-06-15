@@ -85,8 +85,8 @@ interface StorageUsageRow {
 const HEALTH_CHIP: Record<StorageSetting['health_status'], string> = {
   unknown: 'bg-fg-muted/10 text-fg-muted border-edge-subtle',
   healthy: 'bg-ok/15 text-ok border-ok/30',
-  degraded: 'bg-warn/15 text-warn border-warn/30',
-  failing: 'bg-danger/15 text-danger border-danger/30',
+  degraded: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
+  failing: 'bg-danger-muted/50 text-danger-foreground border-danger/30',
 }
 
 // New cards (no DB row yet) need a sensible baseline so the user can hit Save
@@ -424,7 +424,7 @@ export function StoragePage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {!existing ? (
-                  <span className="inline-flex rounded px-2 py-0.5 text-3xs bg-info/10 text-info border border-info/30">
+                  <span className="inline-flex rounded px-2 py-0.5 text-3xs bg-info-muted/50 text-info-foreground border border-info/30">
                     Using cluster default — save to override
                   </span>
                 ) : (
@@ -661,7 +661,7 @@ export function StoragePage() {
         title={copy?.title ?? 'Storage'}
         projectScope={stats.projectName ?? undefined}
       >
-        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? 'bg-ok-muted text-ok' : stats.activeProjectHealthStatus === 'failing' ? 'bg-danger-subtle text-danger' : 'bg-warn/10 text-warn'}>
+        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? 'bg-ok-muted text-ok' : stats.activeProjectHealthStatus === 'failing' ? 'bg-danger-subtle text-danger' : 'bg-warn-muted/50 text-warning-foreground'}>
           {stats.activeProjectHealthStatus.toUpperCase()}
         </Badge>
       </PageHeader>
