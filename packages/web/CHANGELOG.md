@@ -1,5 +1,13 @@
 # @mushi-mushi/web
 
+## 1.12.1
+
+### Patch Changes
+
+- e422d40: Polish the MCP and Cursor integration path with a shared MCP tool catalog, subpath exports for catalog/server consumers, publish-readiness checks, Cursor plugin bundle validation, and marketplace documentation.
+
+  Fix the web SDK export map so TypeScript consumers consistently resolve generated declarations through package exports, and refine the React Native bottom-sheet reporter experience.
+
 ## 1.12.0
 
 ### Minor Changes

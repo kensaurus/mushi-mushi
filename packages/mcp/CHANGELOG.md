@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.14.0
+
+### Minor Changes
+
+- e422d40: Polish the MCP and Cursor integration path with a shared MCP tool catalog, subpath exports for catalog/server consumers, publish-readiness checks, Cursor plugin bundle validation, and marketplace documentation.
+
+  Fix the web SDK export map so TypeScript consumers consistently resolve generated declarations through package exports, and refine the React Native bottom-sheet reporter experience.
+
 ## 0.13.1
 
 ### Patch Changes
