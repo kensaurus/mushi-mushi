@@ -130,6 +130,8 @@ export function invalidateApiCache(pathPrefix?: string): void {
  */
 export interface ApiFetchOptions<T> extends RequestInit {
   schema?: ZodType<T>
+  /** When set, sends Idempotency-Key on POST/PATCH/DELETE mutations. */
+  idempotencyKey?: string
 }
 
 export async function apiFetch<T>(
@@ -168,6 +170,16 @@ export async function apiFetch<T>(
   return promise
 }
 
+/** POST/PATCH/DELETE helper — auto-generates Idempotency-Key unless provided. */
+export async function apiFetchMutate<T>(
+  path: string,
+  options?: ApiFetchOptions<T>,
+): Promise<ApiResult<T>> {
+  const method = (options?.method ?? 'POST').toUpperCase()
+  const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID()
+  return apiFetch<T>(path, { ...options, method, idempotencyKey })
+}
+
 async function doFetch<T>(
   path: string,
   options: ApiFetchOptions<T> | undefined,
@@ -187,6 +199,7 @@ async function doFetch<T>(
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(options?.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
         ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),

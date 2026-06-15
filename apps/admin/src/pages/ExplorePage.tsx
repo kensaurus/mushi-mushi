@@ -17,8 +17,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useTheme } from '../lib/useTheme'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   SegmentedControl,
   ErrorAlert,
@@ -29,8 +28,7 @@ import {
   Btn,
   Card,
   DetailRows,
-  type DetailRowItem,
-} from '../components/ui'
+  type DetailRowItem, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
 import { PageHero } from '../components/PageHero'
@@ -663,13 +661,7 @@ export function ExplorePage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas."} />
 
       <ExploreStatusBanner
         stats={stats}
@@ -694,9 +686,7 @@ export function ExplorePage() {
         title={copy?.sections?.snapshot ?? 'EXPLORE SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.files ?? 'Files'}

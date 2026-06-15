@@ -12,6 +12,7 @@ import {
   setActiveOrgIdSnapshot,
 } from '../lib/activeOrg'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
+import { headerDropdownPanelClass } from '../lib/appChrome'
 
 export interface OrganizationSummary {
   id: string
@@ -200,7 +201,7 @@ export function OrgSwitcher() {
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
+          className={`${headerDropdownPanelClass} w-72`}
         >
           <ul role="listbox" className="max-h-72 overflow-y-auto">
             {orgs.map((org) => (

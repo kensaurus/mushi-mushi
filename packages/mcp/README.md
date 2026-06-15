@@ -132,6 +132,8 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `get_knowledge_graph` | Traverse the knowledge graph from a seed component or page |
 | `setup_check` | The 4 **dispatch-readiness** checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled) — run before `dispatch_fix` |
 | `ingest_setup_check` | The 4 **required ingest** checks (project, active API key, SDK heartbeat, first report) + `last_sdk_seen_at` diagnostics — run after wiring env vars to confirm the SDK is reporting |
+| `get_activation_status` | Unified setup posture for the active project — required steps, SDK heartbeat, dispatch preflight, and the next best action. Run first when a user says setup is broken |
+| `get_reporter_thread` | Unified report timeline — the reporter/admin comment thread (including verify/reopen signals) plus fix, QA, and status lanes. Use when triaging whether an end user still sees a bug as unfixed |
 
 ### Write / agentic
 

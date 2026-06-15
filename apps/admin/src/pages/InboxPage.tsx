@@ -6,8 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import {
-  ErrorAlert,
+import { SnapshotSectionHint,ErrorAlert,
   Btn,
   FreshnessPill,
   PageHelp,
@@ -17,8 +16,7 @@ import {
   StatCard,
   SegmentedControl,
   Badge,
-  Card,
-} from '../components/ui'
+  Card, } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -222,6 +220,8 @@ export function InboxPage() {
     actions: [{ id: 'inbox-refresh', label: 'Refresh', hint: 'Re-fetch stats + dashboard', run: reloadAll }],
   })
 
+  const openStages = Math.max(0, stats.totalSurfaces - stats.clearStages)
+
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
@@ -233,11 +233,11 @@ export function InboxPage() {
       {
         id: 'stages' as const,
         label: copy?.tabLabels?.stages ?? 'Stages',
-        count: stats.clearStages > 0 ? stats.clearStages : undefined,
+        count: openStages > 0 ? openStages : undefined,
       },
       { id: 'activity' as const, label: copy?.tabLabels?.activity ?? 'Activity' },
     ],
-    [stats, copy?.tabLabels],
+    [stats, copy?.tabLabels, openStages],
   )
 
   if ((loading && !data) || (statsLoading && !statsData)) {
@@ -364,7 +364,7 @@ export function InboxPage() {
           />
           )}
 
-          {!ux.hideOverviewChrome && stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
+          {stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
             <Card className="border-danger/30 bg-danger/5 p-4">
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <SignalChip tone="danger">Top priority</SignalChip>
@@ -409,9 +409,7 @@ export function InboxPage() {
 
       {!ux.hideInboxSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.open ?? 'Open'}

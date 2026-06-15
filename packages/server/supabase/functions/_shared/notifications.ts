@@ -194,7 +194,14 @@ async function sendPushNotification(
   _reporterTokenHash: string,
   _message: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  // Stub — wired when native/web push tokens are collected in Phase 4.
+  // Honest stub. Real Web Push requires (1) VAPID JWT signing (RFC 8292),
+  // (2) RFC 8291 `aes128gcm` payload encryption against each subscription's
+  // p256dh/auth keys, (3) a client-side `PushManager.subscribe` path in the SDK
+  // (not yet wired — `reporter_push_subscriptions` has no producer), and
+  // (4) SSRF-safe validation of the stored push endpoint before any fetch.
+  // Until those land, never POST to a client-supplied endpoint: an unsigned,
+  // unencrypted body is rejected by every push service AND fetching an arbitrary
+  // stored URL is an SSRF vector. Email remains the live delivery channel.
   return { ok: false, error: 'push_not_configured' }
 }
 

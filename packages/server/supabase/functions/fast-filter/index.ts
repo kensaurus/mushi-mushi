@@ -17,6 +17,7 @@ import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemet
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 
 const stage1Schema = z.object({
@@ -36,6 +37,14 @@ interface EvidenceSummary {
   console: { errorCount: number; warnCount: number; topErrorTypes: string[] }
   network: { failureCount: number; statusBuckets: Record<string, number>; topMethods: string[] }
   perf: { lcp: number | null; fcp: number | null; cls: number | null; inp: number | null; ttfb: number | null; longTasks: number | null }
+  replay: {
+    eventCount: number
+    durationMs: number | null
+    clickCount: number
+    rageClickClusters: number
+    deadTapCount: number
+    lastInteractionKinds: string[]
+  } | null
 }
 
 /**
@@ -85,6 +94,9 @@ function buildEvidence(report: Record<string, any>): EvidenceSummary {
     .map(([k]) => k)
 
   const perf = report.performance_metrics ?? {}
+  const meta = (report.custom_metadata ?? {}) as Record<string, unknown>
+  const replayRaw = meta.replayEvents ?? (report as { replay_events?: unknown }).replay_events
+  const replay = summarizeReplayEvents(replayRaw)
   return {
     console: { errorCount, warnCount, topErrorTypes },
     network: { failureCount, statusBuckets, topMethods },
@@ -96,6 +108,7 @@ function buildEvidence(report: Record<string, any>): EvidenceSummary {
       ttfb: typeof perf.ttfb === 'number' ? perf.ttfb : null,
       longTasks: typeof perf.longTasks === 'number' ? perf.longTasks : null,
     },
+    replay,
   }
 }
 

@@ -43,6 +43,7 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
 
 export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -625,6 +626,30 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
         child_report_ids: (childrenRes.data ?? []).map((r: { id: string }) => r.id),
       },
     });
+  });
+
+  // Unified timeline — merges reporter comments, fixes, QA, pipelines, Ask Mushi.
+  app.get('/v1/admin/reports/:id/timeline', adminOrApiKey(), async (c) => {
+    const reportId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const projectIds = await ownedProjectIds(db, userId);
+
+    const { data: report, error } = await db
+      .from('reports')
+      .select('id, project_id')
+      .eq('id', reportId)
+      .in('project_id', projectIds)
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+    if (!report) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const timeline = await buildUnifiedReportTimeline(db, report.project_id as string, reportId);
+    return c.json({ ok: true, data: { report_id: reportId, timeline } });
   });
 
   app.patch('/v1/admin/reports/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {

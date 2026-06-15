@@ -5,7 +5,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Card } from '../ui'
+import { Card, PanelHeader } from '../ui'
 import { HealthPill } from '../charts'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { relTime, type ActivityItem, type IntegrationStatus } from './types'
@@ -19,7 +19,7 @@ interface Props {
 
 export function InsightsRow({ topComponents, integrations, activity }: Props) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+    <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
       <TopComponentsCard topComponents={topComponents} />
       <IntegrationsCard integrations={integrations} />
       <ActivityCard activity={activity} />
@@ -28,37 +28,45 @@ export function InsightsRow({ topComponents, integrations, activity }: Props) {
 }
 
 function TopComponentsCard({ topComponents }: { topComponents: Props['topComponents'] }) {
-  // `?? 1` only catches null/undefined — a `count` of 0 (which the server
-  // can legitimately emit on an empty project) would set max=0 and produce
-  // NaN-width bars. Match the `Math.max(1, …)` guard used in QuotaBanner.
   const max = Math.max(1, topComponents[0]?.count ?? 1)
   return (
-    <Card className="p-3">
-      <div className="flex items-center justify-between mb-2.5">
-        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Top components</h3>
-        <Link to="/graph" className="text-2xs text-brand hover:text-brand-hover">Graph →</Link>
-      </div>
+    <Card className="min-w-0 p-3">
+      <PanelHeader
+        title="Top components"
+        action={
+          <Link to="/graph" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+            Graph →
+          </Link>
+        }
+      />
       {topComponents.length === 0 ? (
-        <EmptySectionMessage text="No component data yet." hint="Reports will populate this once classification runs." />
+        <EmptySectionMessage
+          text="No component data yet."
+          hint="Reports will populate this once classification runs."
+        />
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {topComponents.map(({ component, count }) => {
             const pct = (count / max) * 100
             return (
               <Link
                 key={component}
                 to={`/reports?component=${encodeURIComponent(component)}`}
-                className="block group"
+                className="group block"
               >
-                <div className="flex items-center justify-between text-2xs mb-0.5">
-                  <span className="text-fg-secondary group-hover:text-fg truncate" title={component}>
+                <div className="mb-1 flex items-center justify-between gap-2 text-2xs">
+                  <span
+                    className="min-w-0 truncate text-fg-secondary group-hover:text-fg"
+                    title={component}
+                  >
                     {component}
                   </span>
-                  <span className="font-mono text-fg-muted shrink-0 ml-2">{count}</span>
+                  <span className="shrink-0 font-mono text-fg-muted">{count}</span>
                 </div>
-                <div className="h-1 bg-surface-overlay rounded-sm overflow-hidden">
+                {/* P2 — h-1.5 (6px) so the bar is actually visible, not a hairline */}
+                <div className="h-1.5 overflow-hidden rounded-full bg-surface-overlay">
                   <div
-                    className="h-full bg-brand/60 group-hover:bg-brand transition-colors"
+                    className="h-full rounded-full bg-brand/70 motion-safe:transition-[width,background-color] group-hover:bg-brand"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -71,30 +79,45 @@ function TopComponentsCard({ topComponents }: { topComponents: Props['topCompone
   )
 }
 
+/** P3 — colour-code the uptime figure so "0% up" screams without the user
+ *  reading it; "Unknown" gets a distinct muted treatment separate from "Healthy". */
+function uptimeTone(uptime: number | null): string {
+  if (uptime == null) return 'text-fg-faint'
+  if (uptime >= 0.95) return 'text-ok'
+  if (uptime >= 0.7) return 'text-warn'
+  return 'text-danger'
+}
+
 function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] }) {
   return (
-    <Card className="p-3">
-      <div className="flex items-center justify-between mb-2.5">
-        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Integrations</h3>
-        <Link to="/integrations/config" className="text-2xs text-brand hover:text-brand-hover">Manage →</Link>
-      </div>
+    <Card className="min-w-0 p-3">
+      <PanelHeader
+        title="Integrations"
+        action={
+          <Link to="/integrations/config" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+            Manage →
+          </Link>
+        }
+      />
       {integrations.length === 0 ? (
         <EmptySectionMessage
           text="No integrations configured yet."
           hint="Configure Sentry, Langfuse, and GitHub on the Integrations page."
         />
       ) : (
-        <div className="space-y-2">
+        <div className="divide-y divide-edge-subtle/40">
           {integrations.map((it) => (
             <Link
               key={it.kind}
               to="/integrations/config"
-              className="flex items-center justify-between gap-2 hover:bg-surface-overlay/50 rounded-sm px-1.5 py-1 transition-colors"
+              className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0 motion-safe:transition-colors hover:opacity-80"
             >
-              <span className="text-xs text-fg-secondary capitalize">{it.kind}</span>
+              <span className="text-xs capitalize text-fg-secondary">{it.kind}</span>
               <div className="flex items-center gap-2">
                 {it.uptime != null && (
-                  <span className="text-3xs font-mono text-fg-muted">{(it.uptime * 100).toFixed(0)}% up</span>
+                  <span className={`font-mono text-3xs ${uptimeTone(it.uptime)}`}>
+                    {(it.uptime * 100).toFixed(0)}% up
+                  </span>
                 )}
                 <HealthPill status={it.lastStatus} />
               </div>
@@ -109,28 +132,38 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
 function ActivityCard({ activity }: { activity: ActivityItem[] }) {
   const stagger = useStaggeredAppear({ stepMs: 30, max: 8 })
   return (
-    <Card className="p-3">
-      <div className="flex items-center justify-between mb-2.5">
-        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Recent activity</h3>
-      </div>
+    <Card className="min-w-0 p-3">
+      <PanelHeader title="Recent activity" />
       {activity.length === 0 ? (
-        <EmptySectionMessage text="Nothing in the last 14 days." hint="Recent reports and fixes will appear here." />
+        <EmptySectionMessage
+          text="Nothing in the last 14 days."
+          hint="Recent reports and fixes will appear here."
+        />
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {activity.map((a, i) => (
             <Link
               key={`${a.kind}-${a.id}-${i}`}
               to={a.kind === 'fix' ? '/fixes' : `/reports/${a.id}`}
               style={stagger(i)}
-              className="flex items-center gap-2 py-1 px-1.5 rounded-sm hover:bg-surface-overlay/50 transition-colors group motion-safe:animate-mushi-fade-in"
+              className="group flex items-center gap-2 rounded-sm px-1.5 py-1 motion-safe:animate-mushi-fade-in motion-safe:transition-colors hover:bg-surface-overlay/50"
             >
-              <span
-                className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
-                  a.kind === 'fix' ? 'bg-brand' : 'bg-info'
-                }`}
-              />
-              <span className="text-2xs text-fg-secondary group-hover:text-fg flex-1 truncate">{a.label}</span>
-              <span className="text-3xs font-mono text-fg-faint shrink-0">{relTime(a.at)}</span>
+              {/* P4 — square for fix (deliberate action), circle for report (event) */}
+              {a.kind === 'fix' ? (
+                <span
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-[2px] bg-brand"
+                  aria-label="fix"
+                />
+              ) : (
+                <span
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-danger/70"
+                  aria-label="report"
+                />
+              )}
+              <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary group-hover:text-fg">
+                {a.label}
+              </span>
+              <span className="shrink-0 font-mono text-3xs text-fg-faint">{relTime(a.at)}</span>
             </Link>
           ))}
         </div>

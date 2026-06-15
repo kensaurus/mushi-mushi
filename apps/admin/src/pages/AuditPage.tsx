@@ -32,8 +32,7 @@ import {
 } from '../lib/statTooltips/audit'
 import { auditLinks } from '../lib/statCardLinks'
 import { useToast } from '../lib/toast'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Badge,
@@ -47,8 +46,7 @@ import {
   CodeValue,
   Section,
   StatCard,
-  SegmentedControl,
-} from '../components/ui'
+  SegmentedControl, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -643,12 +641,7 @@ export function AuditPage() {
         <PageHeader
           title={copy?.title ?? 'Audit log'}
         />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              'Append-only history of every mutation — filter by actor, action, or resource.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Append-only history of every mutation — filter by actor, action, or resource."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -680,13 +673,7 @@ export function AuditPage() {
           Export CSV ({logs.length})
         </Btn>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Append-only history of every mutation — filter by actor, action, or resource.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Append-only history of every mutation — filter by actor, action, or resource."} />
 
       {isAuditStatusBannerCritical(stats) && (
         <AuditStatusBanner
@@ -787,9 +774,7 @@ export function AuditPage() {
         title="Audit snapshot"
         freshness={{ at: statsFetchedAt ?? lastFetchedAt, isValidating: statsValidating || isValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="24h events"

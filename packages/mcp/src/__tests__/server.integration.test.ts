@@ -112,9 +112,11 @@ describe('MCP protocol handshake', () => {
       'approve_qa_story',
       'award_bonus_points',
       'checkin_pipeline_step',
+      'diagnose_connection',
       'dispatch_fix',
       'fix_suggest',
       'generate_tdd_from_story',
+      'get_activation_status',
       'get_backend_health',
       'get_blast_radius',
       'get_fix_context',
@@ -125,8 +127,11 @@ describe('MCP protocol handshake', () => {
       'get_qa_story_run',
       'get_recent_reports',
       'get_report_detail',
+      'get_report_timeline',
+      'get_reporter_thread',
       'get_similar_bugs',
       'get_skill',
+      'get_two_way_comms_health',
       'graph_neighborhood',
       'graph_node_status',
       'improve_qa_story',
@@ -216,6 +221,7 @@ describe('MCP protocol handshake', () => {
     expect(uris).toEqual([
       'evolution://history',
       'inventory://current',
+      'mushi://activation',
       'privacy://status',
       'project://dashboard',
       'project://integration-health',
@@ -227,7 +233,7 @@ describe('MCP protocol handshake', () => {
   it('advertises the fix-plan / judge / triage prompts', async () => {
     const { prompts } = await client.listPrompts()
     const names = prompts.map(p => p.name).sort()
-    expect(names).toEqual(['explain_judge_result', 'summarize_report_for_fix', 'triage_next_steps'])
+    expect(names).toEqual(['explain_judge_result', 'mushi_setup', 'summarize_report_for_fix', 'triage_next_steps'])
   })
 })
 
@@ -410,6 +416,30 @@ describe('tool → REST contract', () => {
     const parsed = JSON.parse(content[0].text)
     expect(parsed.ready).toBe(true)
     expect(parsed.projectId).toBe(PROJECT_ID)
+  })
+
+  it('get_reporter_thread calls GET /v1/admin/reports/:id/timeline (not the non-existent /comments)', async () => {
+    fetchStub.enqueue({ ok: true, data: { report_id: 'rep_77', timeline: [] } })
+    const res = await client.callTool({
+      name: 'get_reporter_thread',
+      arguments: { reportId: 'rep_77' },
+    })
+    expect(fetchStub.calls).toHaveLength(1)
+    const call = fetchStub.calls[0]
+    expect(call.method).toBe('GET')
+    expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/reports/rep_77/timeline`)
+    expect(call.headers['x-mushi-api-key']).toBe(API_KEY)
+    expect(res.isError).toBeFalsy()
+  })
+
+  it('get_activation_status calls GET /v1/admin/activation with optional project override', async () => {
+    fetchStub.enqueue({ ok: true, data: { phase: 'ingesting' } })
+    await client.callTool({
+      name: 'get_activation_status',
+      arguments: { project_id: 'proj_override' },
+    })
+    expect(fetchStub.calls[0].method).toBe('GET')
+    expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/activation?project_id=proj_override`)
   })
 
   it('test_gen_from_report POSTs to inventory test-gen route', async () => {

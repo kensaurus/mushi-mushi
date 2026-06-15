@@ -5,7 +5,7 @@
  */
 
 import { Link, useNavigate } from 'react-router-dom'
-import { Card } from '../ui'
+import { Card, PanelHeader, PanelSubheader } from '../ui'
 import { SeverityStackedBars, LineSparkline } from '../charts'
 import { ChartAnnotations } from '../charts/ChartAnnotations'
 import type { LlmDay, ReportDay } from './types'
@@ -20,12 +20,10 @@ interface Props {
   chartEvents?: ChartEvent[]
 }
 
+const LLM_CHART_HEIGHT = 72
+
 export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
   const navigate = useNavigate()
-  // Wave T.4.7b: brushing the LLM sparklines deep-links to Reports filtered
-  // by the same window. Each day already carries an ISO date; we align
-  // those with the sparkline values so the brush commit emits concrete
-  // from/to strings we can serialise into URL state.
   const llmTimestamps = llmByDay.map((d) => d.day)
   const onLlmRange = (range: { fromIso: string; toIso: string }) => {
     const next = new URLSearchParams()
@@ -33,24 +31,34 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
     next.set('to', range.toIso)
     navigate(`/reports?${next.toString()}`)
   }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 mb-3">
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Report intake (14d)</h3>
-          <Link to="/reports" className="text-2xs text-brand hover:text-brand-hover">All reports →</Link>
-        </div>
+    <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+      <Card className="@container/chart-card min-w-0 p-3">
+        <PanelHeader
+          title="Report intake (14d)"
+          action={
+            <Link to="/reports" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+              All reports →
+            </Link>
+          }
+        />
         <SeverityStackedBars data={reportsByDay} />
       </Card>
 
-      <Card className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">LLM activity (14d)</h3>
-          <Link to="/health" className="text-2xs text-brand hover:text-brand-hover">Health →</Link>
-        </div>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="min-w-0 w-full">
-            <div className="relative w-full">
+      <Card className="@container/chart-card min-w-0 p-3">
+        <PanelHeader
+          title="LLM activity (14d)"
+          action={
+            <Link to="/health" className="shrink-0 text-2xs text-brand hover:text-brand-hover">
+              Health →
+            </Link>
+          }
+        />
+        <div className="grid w-full min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="min-w-0">
+            <PanelSubheader title="Tokens" />
+            <div className="relative w-full min-w-0">
               <LineSparkline
                 values={llmByDay.map((d) => d.tokens)}
                 timestamps={llmTimestamps}
@@ -58,8 +66,9 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
                 showAxes
                 scaleToData
                 valueFormat="count"
-                showPeakLabel
-                height={56}
+                showRangeSummary
+                seriesLabel="Tokens"
+                height={LLM_CHART_HEIGHT}
                 ariaLabel="LLM tokens per day — drag to filter reports by date range"
               />
               {llmTimestamps.length > 1 && chartEvents.length > 0 && (
@@ -73,17 +82,20 @@ export function ChartsRow({ reportsByDay, llmByDay, chartEvents = [] }: Props) {
               )}
             </div>
           </div>
-          <div className="min-w-0 w-full">
-            <div className="relative w-full">
+          <div className="min-w-0">
+            <PanelSubheader title="Calls" />
+            <div className="relative w-full min-w-0">
               <LineSparkline
                 values={llmByDay.map((d) => d.calls)}
                 timestamps={llmTimestamps}
                 onRangeSelect={onLlmRange}
                 accent="text-info"
                 showAxes
+                scaleToData
                 valueFormat="count"
-                showPeakLabel
-                height={56}
+                showRangeSummary
+                seriesLabel="Calls"
+                height={LLM_CHART_HEIGHT}
                 ariaLabel="LLM calls per day — drag to filter reports by date range"
               />
               {llmTimestamps.length > 1 && chartEvents.length > 0 && (

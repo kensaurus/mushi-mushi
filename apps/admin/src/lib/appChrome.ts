@@ -17,6 +17,23 @@ export const topBelowAppChromeClass = [
 ].join(' ')
 
 /**
+ * Stacking order for the authenticated shell.
+ *
+ * Without `appChromeMainClass` (`isolate` + `z-0`), descendants inside
+ * `<main>` that set z-20/z-30 (e.g. PipelineStatusRibbon arrow pills)
+ * participate in the *layout column's* root stacking context — same
+ * level as the sub-header — and paint over header dropdowns because
+ * `<main>` follows the header in DOM order.
+ */
+export const appChromeHeaderClass =
+  'relative z-40 overflow-visible shrink-0 bg-surface-root/95 backdrop-blur-sm'
+export const appChromeMainClass = 'relative z-0 isolate'
+
+/** Shared panel surface for header switcher / version menus. */
+export const headerDropdownPanelClass =
+  'absolute right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised'
+
+/**
  * Right-anchored drawer shell that starts below persistent top chrome.
  * Beta strip height is published by BetaBanner via ResizeObserver.
  */

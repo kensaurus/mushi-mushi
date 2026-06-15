@@ -13,6 +13,8 @@ interface Summary {
   active: number
   with_reply: number
   shipped: number
+  reopened?: number
+  votes?: number
 }
 
 export function FeedbackHubStrip({ className = '' }: { className?: string }) {
@@ -22,8 +24,8 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
 
   useRealtimeReload(['support_tickets'], () => { query.reload() }, { debounceMs: 2000 })
 
-  const s: Summary = query.data ?? { total: 0, active: 0, with_reply: 0, shipped: 0 }
-  const hasNews = s.with_reply > 0
+  const s: Summary = query.data ?? { total: 0, active: 0, with_reply: 0, shipped: 0, reopened: 0, votes: 0 }
+  const hasNews = s.with_reply > 0 || (s.reopened ?? 0) > 0
 
   if (!query.loading && s.total === 0) {
     return (
@@ -33,7 +35,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
             <p className="text-xs font-medium text-fg">Help shape Mushi</p>
             <ContainedBlock tone="muted" className="mt-1">
               <p className="text-2xs text-fg-muted">
-                Report bugs or request features — we link shipped work to release versions so you can see what landed.
+                Report bugs or request features — track replies, shipped updates, votes, and reopen signals in one loop.
               </p>
             </ContainedBlock>
           </div>
@@ -55,7 +57,14 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
             <p className="text-xs font-medium text-fg">My feedback</p>
             {hasNews && (
               <Badge className="bg-brand/15 text-brand border border-brand/30 text-3xs">
-                {s.with_reply} {s.with_reply === 1 ? 'reply' : 'replies'} waiting
+                {s.with_reply > 0
+                  ? `${s.with_reply} ${s.with_reply === 1 ? 'reply' : 'replies'} waiting`
+                  : `${s.reopened} reopened`}
+              </Badge>
+            )}
+            {(s.votes ?? 0) > 0 && (
+              <Badge className="bg-info-muted text-info text-3xs font-mono">
+                {s.votes} votes
               </Badge>
             )}
             {s.shipped > 0 && (
@@ -68,6 +77,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
             {s.total} submission{s.total === 1 ? '' : 's'}
             {s.active > 0 ? ` · ${s.active} active` : ''}
             {s.shipped > 0 ? ` · ${s.shipped} in a release` : ''}
+            {(s.reopened ?? 0) > 0 ? ` · ${s.reopened} reopened` : ''}
           </InlineProof>
         </div>
         <Link to="/feedback" className="shrink-0">

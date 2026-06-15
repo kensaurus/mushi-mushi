@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@mushi-mushi/core": "^1.11.0",
+    "@mushi-mushi/core": "workspace:^",
     "zod": "^4.4.2"
   },
   "devDependencies": {

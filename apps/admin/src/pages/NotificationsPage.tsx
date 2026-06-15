@@ -15,8 +15,7 @@ import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
 import { notificationsLinks } from '../lib/statCardLinks'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Section,
   Card,
@@ -31,8 +30,7 @@ import {
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
-  RelativeTime,
-} from '../components/ui'
+  RelativeTime, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -213,12 +211,7 @@ export function NotificationsPage() {
     return (
       <div className="space-y-4">
         <PageHeader title={copy?.title ?? 'Notifications'} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Outbound messages the reporter SDK widget polls after classify, fix, or reward events."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -334,13 +327,7 @@ export function NotificationsPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Outbound messages the reporter SDK widget polls after classify, fix, or reward events."} />
 
       <NotificationsStatusBanner
         stats={stats}
@@ -362,9 +349,7 @@ export function NotificationsPage() {
 
       {!ux.hideNotificationsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'} freshness={{ at: fetchedAt, isValidating: validating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.total ?? 'Total'}
@@ -418,7 +403,7 @@ export function NotificationsPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'disabled' || stats.topPriority === 'unread_backlog'
@@ -442,7 +427,7 @@ export function NotificationsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+          {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Reporter loop active"
@@ -450,7 +435,7 @@ export function NotificationsPage() {
               cta={{ label: 'View inbox', to: '/notifications?tab=inbox' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'disabled' && (
+          {stats.topPriority === 'disabled' && (
             <RecommendedAction
               tone="info"
               title="Enable reporter notifications"
@@ -458,7 +443,7 @@ export function NotificationsPage() {
               cta={{ label: 'Open Settings', to: '/settings' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'unread_backlog' && (
+          {stats.topPriority === 'unread_backlog' && (
             <RecommendedAction
               tone="urgent"
               title="Review unread messages"
@@ -466,7 +451,7 @@ export function NotificationsPage() {
               cta={{ label: 'Filter unread', to: '/notifications?tab=inbox&show=unread' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'no_messages' && (
+          {stats.topPriority === 'no_messages' && (
             <RecommendedAction
               tone="info"
               title="Send your first reporter message"

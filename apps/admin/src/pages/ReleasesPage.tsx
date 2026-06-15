@@ -32,8 +32,7 @@ import {
   publishedTooltip,
 } from '../lib/statTooltips/releases'
 import { releasesLinks } from '../lib/statCardLinks'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -45,8 +44,7 @@ import {
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
 import {
   ActionPill,
@@ -622,13 +620,7 @@ export function ReleasesPage() {
           + Draft
         </Btn>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI."} />
 
       <ReleasesStatusBanner
         stats={stats}
@@ -650,9 +642,7 @@ export function ReleasesPage() {
 
       {!ux.hideReleasesSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.drafts ?? 'Drafts'} value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} tooltip={draftsTooltip(stats)} detail={draftsDetail()} to={releasesLinks.drafts} />
           <StatCard label={copy?.statLabels?.published ?? 'Published'} value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} tooltip={publishedTooltip(stats)} detail={publishedDetail()} to={releasesLinks.published} />
@@ -664,7 +654,7 @@ export function ReleasesPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'drafts_pending'

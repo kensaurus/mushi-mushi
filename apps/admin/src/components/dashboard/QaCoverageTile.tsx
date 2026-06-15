@@ -2,21 +2,11 @@
  * FILE: apps/admin/src/components/dashboard/QaCoverageTile.tsx
  * PURPOSE: Dashboard tile summarising the QA Coverage suite — total stories,
  *          pass rate, top failing story, and a link to /qa-coverage.
- *
- * OVERVIEW:
- * - Reads from the `qa_story_coverage_24h` materialized view via the
- *   `/v1/admin/projects/:id/qa-coverage-summary` endpoint.
- * - Shows: total stories, % green (passing), failing story names (up to 3).
- * - Mirrors the density of `SdkHealthSummary` so it slots into the dashboard
- *   grid without disrupting the visual rhythm.
- *
- * USAGE:
- *   <QaCoverageTile projectId={projectId} />
  */
 
 import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
-import { Card } from '../ui'
+import { CardPanel, PanelSubheader } from '../ui'
 
 interface CoverageSummary {
   total: number
@@ -29,7 +19,7 @@ interface CoverageSummary {
 function PassRateBar({ pct }: { pct: number }) {
   const tone = pct >= 80 ? 'bg-ok' : pct >= 50 ? 'bg-warn' : 'bg-danger'
   return (
-    <div className="h-1.5 w-full rounded-full bg-surface-overlay overflow-hidden">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-overlay">
       <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
     </div>
   )
@@ -46,32 +36,34 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
     : null
 
   return (
-    <Card className="p-3 space-y-2">
-      <div className="flex items-center justify-between">
+    <CardPanel
+      title={
         <Link
           to="/qa-coverage"
-          className="text-2xs font-semibold text-fg-secondary uppercase tracking-wider hover:text-fg transition-colors"
+          className="motion-safe:transition-colors hover:text-fg"
         >
           QA Coverage
         </Link>
+      }
+      action={
         <Link to="/qa-coverage" className="text-2xs text-brand hover:underline">
           View all →
         </Link>
-      </div>
-
+      }
+    >
       {loading && (
         <div className="space-y-1">
-          <div className="h-4 w-full rounded-sm bg-surface-raised animate-pulse" />
-          <div className="h-4 w-3/4 rounded-sm bg-surface-raised animate-pulse" />
+          <div className="h-4 w-full animate-pulse rounded-sm bg-surface-raised" />
+          <div className="h-4 w-3/4 animate-pulse rounded-sm bg-surface-raised" />
         </div>
       )}
 
       {error && (
-        <p className="text-2xs text-fg-faint italic">QA Coverage not available.</p>
+        <p className="text-2xs italic text-fg-faint">QA Coverage not available.</p>
       )}
 
       {!loading && !error && !data?.total && (
-        <div className="text-2xs text-fg-faint space-y-1">
+        <div className="space-y-1 text-2xs text-fg-faint">
           <p>No QA stories yet.</p>
           <Link to="/qa-coverage" className="text-brand hover:underline">
             Create your first user story test →
@@ -81,40 +73,35 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
 
       {!loading && !error && data && data.total > 0 && (
         <div className="space-y-2">
-          {/* Summary row */}
           <div className="flex items-center gap-3 text-2xs">
-            <span className="text-fg font-mono font-semibold">{data.total}</span>
+            <span className="font-mono font-semibold text-fg">{data.total}</span>
             <span className="text-fg-muted">stories</span>
             {passRate !== null && (
-              <>
-                <span
-                  className={`ml-auto font-semibold ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}
-                >
-                  {passRate}% passing
-                </span>
-              </>
+              <span
+                className={`ml-auto font-semibold ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}
+              >
+                {passRate}% passing
+              </span>
             )}
           </div>
 
-          {/* Pass rate bar */}
           {passRate !== null && <PassRateBar pct={passRate} />}
 
-          {/* Top failing */}
           {data.top_failing.length > 0 && (
-            <div className="space-y-1 pt-1 border-t border-edge-subtle/60">
-              <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Failing</span>
+            <div className="space-y-1 pt-2">
+              <PanelSubheader title="Failing" />
               {data.top_failing.slice(0, 3).map((f) => (
                 <Link
                   key={f.story_id}
                   to={`/qa-coverage?highlight=${f.story_id}`}
-                  className="flex items-center gap-2 hover:bg-surface-overlay rounded-sm px-1 py-0.5 -mx-1 transition-colors group"
+                  className="group -mx-1 flex items-center gap-2 rounded-sm px-1 py-0.5 motion-safe:transition-colors hover:bg-surface-overlay"
                 >
-                  <span className="inline-block w-2 h-2 rounded-full bg-danger shrink-0" />
-                  <span className="text-2xs text-fg-secondary truncate flex-1 group-hover:text-fg">
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-2xs text-fg-secondary group-hover:text-fg">
                     {f.name}
                   </span>
                   {f.pass_rate_pct !== null && (
-                    <span className="text-3xs font-mono text-danger shrink-0">
+                    <span className="shrink-0 font-mono text-3xs text-danger">
                       {f.pass_rate_pct}%
                     </span>
                   )}
@@ -124,6 +111,6 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
           )}
         </div>
       )}
-    </Card>
+    </CardPanel>
   )
 }

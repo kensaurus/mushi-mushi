@@ -40,6 +40,7 @@ import {
   IconStorage,
   IconTerminal,
 } from './icons'
+import { headerDropdownPanelClass } from '../lib/appChrome'
 
 interface VersionBadgeProps {
   whatsNew: ReturnType<typeof useWhatsNew>
@@ -393,7 +394,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         <div
           role="dialog"
           aria-label="Version details and release notes"
-          className="absolute right-0 top-full mt-1.5 z-50 w-[28rem] max-w-[calc(100vw-2rem)] rounded-md border border-edge bg-surface-raised shadow-raised overflow-hidden tooltip-enter"
+          className={`${headerDropdownPanelClass} mt-1.5 w-[28rem] max-w-[calc(100vw-2rem)] tooltip-enter`}
         >
           <PopoverSection className="bg-accent/5">
             <div className="flex items-start justify-between gap-2">

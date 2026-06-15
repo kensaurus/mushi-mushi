@@ -71,6 +71,8 @@ interface PromptVersionRow {
   is_active: boolean
   is_candidate: boolean
   traffic_percentage: number
+  rollout_paused?: boolean
+  rollout_canary_pct?: number
   avg_judge_score: number | null
   total_evaluations: number
   judge_rubric?: PureJudgeRubric | null
@@ -97,7 +99,7 @@ export async function getPromptForStage(
   // jsonb) — no conditional needed.
   let { data: rows } = await db
     .from('prompt_versions')
-    .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, judge_rubric')
+    .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, rollout_paused, rollout_canary_pct, judge_rubric')
     .eq('project_id', projectId)
     .eq('stage', stage)
     .or('is_active.eq.true,is_candidate.eq.true')
@@ -106,7 +108,7 @@ export async function getPromptForStage(
   if (!rows?.length) {
     const { data: globalRows } = await db
       .from('prompt_versions')
-      .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, judge_rubric')
+      .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, rollout_paused, rollout_canary_pct, judge_rubric')
       .is('project_id', null)
       .eq('stage', stage)
       .or('is_active.eq.true,is_candidate.eq.true')
@@ -139,9 +141,22 @@ export async function getPromptForStage(
     }
   }
 
-  // Route traffic probabilistically based on candidate's traffic_percentage
+  if (candidate.rollout_paused) {
+    return {
+      promptTemplate: active.prompt_template,
+      promptVersion: active.version,
+      isCandidate: false,
+      judgeRubric: active.judge_rubric ?? null,
+    }
+  }
+
+  // `rollout_canary_pct` is NOT NULL DEFAULT 0, so a value of 0 means "unset" and
+  // falls back to the legacy traffic_percentage. To fully stop a candidate, set
+  // `rollout_paused` (handled above) — not a 0% canary, which would be ambiguous.
+  const canaryPct = candidate.rollout_canary_pct || candidate.traffic_percentage || 0
+  // Route traffic probabilistically based on canary percentage
   const roll = Math.random() * 100
-  if (roll < (candidate.traffic_percentage ?? 0)) {
+  if (roll < canaryPct) {
     log.info('Routing to candidate prompt', { stage, version: candidate.version, roll: roll.toFixed(1) })
     return {
       promptTemplate: candidate.prompt_template,

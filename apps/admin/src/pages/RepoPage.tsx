@@ -17,8 +17,7 @@ import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import {
-  PageHeader,
+import { PageScopeHint,PageHeader,
   PageHelp,
   ErrorAlert,
   EmptyState,
@@ -30,8 +29,7 @@ import {
   RelativeTime,
   SegmentedControl,
   FreshnessPill,
-  type DefinitionChipItem,
-} from '../components/ui'
+  type DefinitionChipItem, } from '../components/ui'
 import { usePageCopy } from '../lib/copy'
 import { useRepoUx, resolveQuickRepoTab } from '../lib/repoModeUx'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
@@ -586,13 +584,7 @@ export function RepoPage() {
           Refresh
         </Btn>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log."} />
 
       <RepoStatusBanner
         stats={repoStats}

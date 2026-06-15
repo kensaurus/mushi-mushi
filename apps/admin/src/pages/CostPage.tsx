@@ -31,8 +31,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -40,8 +39,7 @@ import {
   SegmentedControl,
   Badge,
   Btn,
-  ErrorAlert,
-} from '../components/ui'
+  ErrorAlert, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -235,13 +233,7 @@ export function CostPage() {
           }
         />
         <PageHeader title={copy?.title ?? 'LLM Cost'} />
-
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Track and audit every LLM call across classify, fix, judge, and inventory agents."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -290,13 +282,7 @@ export function CostPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Track and audit every LLM call across classify, fix, judge, and inventory agents."} />
 
       <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
 
@@ -312,9 +298,7 @@ export function CostPage() {
 
       {!ux.hideCostSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'Spend snapshot'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard

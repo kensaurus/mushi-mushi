@@ -32,12 +32,13 @@ export interface DoctorOptions {
   cwd?: string
   /**
    * When true, also calls the server's /preflight endpoint and includes
-   * the 4 dispatch-readiness checks. Requires apiKey + projectId + endpoint.
+   * the 4 dispatch-readiness checks. Defaults to true — pass `server: false`
+   * to skip when you only care about CLI wiring.
    */
   server?: boolean
   /**
-   * When true, calls GET /v1/sync/ingest-setup for the 4 required ingest steps
-   * (API key → SDK heartbeat → first report). Mutually composable with `server`.
+   * When true, calls GET /v1/sync/ingest-setup for the 4 required ingest steps.
+   * Defaults to true — pass `ingest: false` to skip.
    */
   ingest?: boolean
   /**
@@ -47,6 +48,10 @@ export interface DoctorOptions {
    *   - Slack unconfigured (no webhook or bot token)
    */
   qaStories?: boolean
+  /**
+   * When true, verify host-app wiring: env vars, MCP config, Capacitor hybrid notes.
+   */
+  hostApp?: boolean
   /**
    * Override the fetch implementation (for testing). Defaults to globalThis.fetch.
    */
@@ -360,6 +365,98 @@ export async function checkQaStoriesHealth(
   return checks
 }
 
+// ── Check: Host app wiring (Vite/React/Capacitor) ───────────────────────────
+
+export async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = []
+  try {
+    const { readFile, access } = await import('node:fs/promises')
+    const { join, resolve } = await import('node:path')
+    const root = resolve(cwd)
+    const pkgPath = join(root, 'package.json')
+    const pkg = JSON.parse(await readFile(pkgPath, 'utf8')) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) }
+    const isCapHybrid = Boolean(deps['@capacitor/core'] && deps['react'])
+
+    const envCandidates = ['.env.local', '.env']
+    let envContent = ''
+    for (const f of envCandidates) {
+      try {
+        envContent = await readFile(join(root, f), 'utf8')
+        break
+      } catch { /* try next */ }
+    }
+    const hasProjectId = /VITE_MUSHI_PROJECT_ID=|NEXT_PUBLIC_MUSHI_PROJECT_ID=|MUSHI_PROJECT_ID=/.test(envContent)
+    const hasApiKey = /VITE_MUSHI_API_KEY=|NEXT_PUBLIC_MUSHI_API_KEY=|MUSHI_API_KEY=/.test(envContent)
+    checks.push({
+      name: '[host] Mushi env vars in .env.local',
+      ok: hasProjectId && hasApiKey,
+      detail: hasProjectId && hasApiKey
+        ? 'VITE_/MUSHI_ project id + API key found'
+        : 'Run `mushi connect --write-env` or add VITE_MUSHI_PROJECT_ID + VITE_MUSHI_API_KEY',
+    })
+
+    let mcpPresent = false
+    try {
+      await access(join(root, '.cursor', 'mcp.json'))
+      mcpPresent = true
+    } catch { /* no mcp */ }
+    checks.push({
+      name: '[host] Cursor MCP config',
+      ok: mcpPresent,
+      detail: mcpPresent
+        ? '.cursor/mcp.json present'
+        : 'Run `mushi connect` to wire MCP for two-way reporter replies',
+    })
+
+    if (isCapHybrid) {
+      const hasWebSdk = Boolean(deps['@mushi-mushi/web'] || deps['@mushi-mushi/react'])
+      checks.push({
+        name: '[host] Capacitor hybrid — WebView SDK',
+        ok: hasWebSdk,
+        detail: hasWebSdk
+          ? 'Use @mushi-mushi/web or @mushi-mushi/react in the WebView (initMushi in main.tsx)'
+          : 'Install @mushi-mushi/web for Capacitor WebView reporting',
+      })
+      checks.push({
+        name: '[host] Capacitor native plugin (optional)',
+        ok: true,
+        detail: deps['@mushi-mushi/capacitor']
+          ? `@mushi-mushi/capacitor@${deps['@mushi-mushi/capacitor']} installed`
+          : 'Optional: @mushi-mushi/capacitor for native shell parity — WebView SDK covers most flows',
+      })
+    }
+  } catch {
+    checks.push({
+      name: '[host] Host app detection',
+      ok: false,
+      detail: 'No package.json in cwd — run from your app repo root',
+    })
+  }
+  return checks
+}
+
+// ── Fix hints — printed after each failed check so doctor always says HOW to fix ──
+
+const FIX_HINTS: Record<string, string> = {
+  'CLI config file': 'Run `mushi connect --endpoint <url> --project-id <uuid> --api-key mushi_xxx` or `mushi config endpoint <url>`.',
+  'API key configured': 'Mint a key in the console (Projects → API Keys) then `mushi login --api-key mushi_xxx`.',
+  'Project ID configured': 'Copy the project UUID from the console Projects page → `mushi config projectId <uuid>`.',
+  'Endpoint reachable': 'Check your network and that MUSHI_API_ENDPOINT points at `…/functions/v1/api`.',
+  '[ingest]': 'Open the console Onboarding wizard → Install SDK → submit a test report, or run `mushi connect --wait`.',
+  '[server]': 'Open Settings → Integrations: connect GitHub, index codebase, add Anthropic BYOK key, enable autofix.',
+}
+
+function fixHintForCheck(name: string): string | undefined {
+  if (FIX_HINTS[name]) return FIX_HINTS[name]
+  if (name.startsWith('[ingest]')) return FIX_HINTS['[ingest]']
+  if (name.startsWith('[server]') || name.startsWith('[preflight]')) return FIX_HINTS['[server]']
+  return undefined
+}
+
 // ── Main doctor runner ───────────────────────────────────────────────────────
 
 export async function runDoctor(
@@ -368,6 +465,8 @@ export async function runDoctor(
 ): Promise<DoctorResult> {
   const doFetch = options.fetch ?? globalThis.fetch
   const checks: DoctorCheck[] = []
+  const runServer = options.server !== false
+  const runIngest = options.ingest !== false
 
   // 1. CLI config
   checks.push(...checkCliConfig(config))
@@ -381,14 +480,14 @@ export async function runDoctor(
   const sdkCheck = await checkSdkInstall(options.cwd ?? process.cwd())
   if (sdkCheck) checks.push(sdkCheck)
 
-  // 4. Server preflight (opt-in)
-  if (options.server) {
+  // 4. Server preflight (on by default)
+  if (runServer) {
     const serverChecks = await checkServerPreflight(config, doFetch)
     checks.push(...serverChecks)
   }
 
-  // 5. Ingest setup (opt-in)
-  if (options.ingest) {
+  // 5. Ingest setup (on by default)
+  if (runIngest) {
     const ingestChecks = await checkIngestSetup(config, doFetch)
     checks.push(...ingestChecks)
   }
@@ -397,6 +496,12 @@ export async function runDoctor(
   if (options.qaStories) {
     const qaChecks = await checkQaStoriesHealth(config, doFetch)
     checks.push(...qaChecks)
+  }
+
+  // 7. Host app wiring (opt-in)
+  if (options.hostApp) {
+    const hostChecks = await checkHostAppWiring(options.cwd ?? process.cwd())
+    checks.push(...hostChecks)
   }
 
   return { checks, ready: checks.every((c) => c.ok) }
@@ -412,6 +517,10 @@ export function formatDoctorResult(result: DoctorResult): string {
   for (const c of result.checks) {
     lines.push(`${c.ok ? PASS : FAIL} ${c.name}`)
     if (c.detail) lines.push(`  ${c.detail}`)
+    if (!c.ok) {
+      const hint = fixHintForCheck(c.name)
+      if (hint) lines.push(`  → Fix: ${hint}`)
+    }
   }
 
   const failed = result.checks.filter((c) => !c.ok)

@@ -30,7 +30,7 @@ import {
   unconfiguredCountTooltip,
 } from '../lib/statTooltips/storage'
 import { storageLinks } from '../lib/statCardLinks'
-import { PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
+import { PageScopeHint,SnapshotSectionHint,PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
 import {
   ContainedBlock,
   InlineProof,
@@ -635,11 +635,7 @@ export function StoragePage() {
     return (
       <div className="space-y-4">
         <PageHeader title={copy?.title ?? 'Storage'} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ?? 'Per-project BYO bucket configuration for screenshots and attachments.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Per-project BYO bucket configuration for screenshots and attachments."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -669,13 +665,7 @@ export function StoragePage() {
           {stats.activeProjectHealthStatus.toUpperCase()}
         </Badge>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Per-project BYO bucket configuration for screenshots, intelligence PDFs, and fix attachments.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Per-project BYO bucket configuration for screenshots and attachments."} />
 
       {isStorageStatusBannerCritical(stats) && (
         <StorageStatusBanner
@@ -769,9 +759,7 @@ export function StoragePage() {
       )}
 
       <Section title="Storage snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Healthy"
