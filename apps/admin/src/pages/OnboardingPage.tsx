@@ -14,7 +14,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { Btn, Card, Input, PageHelp, PageHeader, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge } from '../components/ui'
+import { PageScopeHint,SnapshotSectionHint,Btn, Card, Input, PageHelp, PageHeader, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
@@ -29,6 +29,7 @@ import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeS
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { isActivationCockpitV2Enabled, useActivationStatus } from '../lib/useActivationStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
@@ -47,6 +48,7 @@ import {
 import { onboardingLinks } from '../lib/statCardLinks'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
+import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 
 interface ApiKey {
@@ -85,7 +87,22 @@ export function OnboardingPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
-  const setup = useSetupStatus(activeProjectId)
+  const activationEnabled = isActivationCockpitV2Enabled()
+  const activation = useActivationStatus(activeProjectId)
+  const legacySetup = useSetupStatus(activeProjectId)
+  const setup = activationEnabled
+    ? {
+        data: activation.setup,
+        loading: activation.loading,
+        error: activation.error,
+        reload: activation.reload,
+        hasAnyProject: activation.hasAnyProject,
+        activeProject: activation.activeProject,
+        selectors: activation.selectors,
+        isStepIncomplete: activation.isStepIncomplete,
+        getStep: activation.getStep,
+      }
+    : legacySetup
   const copy = usePageCopy('/onboarding')
   const ux = useOnboardingUx()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -94,13 +111,22 @@ export function OnboardingPage() {
   const activeTab: OnboardingTabId = isOnboardingTab(tabParam) ? tabParam : 'overview'
 
   const {
-    data: statsData,
-    loading: statsLoading,
-    error: statsError,
-    reload: reloadStats,
-    lastFetchedAt: statsFetchedAt,
-    isValidating: statsValidating,
-  } = usePageData<OnboardingStats>('/v1/admin/onboarding/stats')
+    data: legacyStatsData,
+    loading: legacyStatsLoading,
+    error: legacyStatsError,
+    reload: legacyReloadStats,
+    lastFetchedAt: legacyStatsFetchedAt,
+    isValidating: legacyStatsValidating,
+  } = usePageData<OnboardingStats>(
+    activationEnabled ? null : '/v1/admin/onboarding/stats',
+  )
+
+  const statsData = activationEnabled ? activation.stats : legacyStatsData
+  const statsLoading = activationEnabled ? activation.loading : legacyStatsLoading
+  const statsError = activationEnabled ? activation.error : legacyStatsError
+  const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
+  const statsValidating = activationEnabled ? activation.isValidating : legacyStatsValidating
+  const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
   const stats = statsData ?? EMPTY_ONBOARDING_STATS
 
   const effectiveTab: OnboardingTabId = ux.hideOverviewTab
@@ -345,13 +371,7 @@ export function OnboardingPage() {
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet."} />
 
       {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
       <OnboardingModeIntroCard />
@@ -379,9 +399,7 @@ export function OnboardingPage() {
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
         {!ux.hideOverviewTab ? (
-          <ContainedBlock tone="muted" className="mb-3">
-            <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-          </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         ) : null}
         <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
           <StatCard
@@ -423,6 +441,15 @@ export function OnboardingPage() {
 
       {effectiveTab === 'overview' && (
         <>
+      {activationEnabled && (
+        <OnboardingActivationLanes
+          project={project ?? null}
+          stats={stats}
+          preflight={activation.preflight}
+          topPriority={activation.topPriority}
+          className="mb-4"
+        />
+      )}
       {!ux.hideOverviewChrome ? (
       <div className="overflow-hidden rounded-xl border border-edge bg-surface-raised p-5">
         <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
@@ -778,7 +805,7 @@ export function OnboardingPage() {
         <>
       {project && !setup.isStepIncomplete('api_key_generated') ? (
         <div className="space-y-3">
-          <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} />
+          <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} showConnectionStatus />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>

@@ -6,7 +6,6 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, Section, Card, Btn } from '../components/ui'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
-import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
@@ -133,8 +132,18 @@ export function SetupCopilotPage() {
           </Section>
 
           <Section title="2 · Install snippet">
-            <p className="text-xs text-fg-muted mb-3">Copy init code tuned to this project&apos;s stack.</p>
-            <SdkInstallCard projectId={projectId} />
+            <p className="text-xs text-fg-muted mb-3">
+              Use the canonical{' '}
+              <Link to={`/onboarding?tab=sdk&project=${projectId}`} className="text-accent underline">
+                Onboarding → SDK tab
+              </Link>{' '}
+              for the live configurator, connection status chip, and copy-paste snippet.
+            </p>
+            <Card className="p-4">
+              <Link to={`/onboarding?tab=sdk&project=${projectId}`}>
+                <Btn variant="primary" size="sm">Open SDK install wizard →</Btn>
+              </Link>
+            </Card>
           </Section>
 
           <Section title="3 · SDK health">

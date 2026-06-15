@@ -28,7 +28,8 @@ import {
 import { statDestinationLabel } from '../lib/statCardLinks'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../lib/pageHelpRead'
-import { useAdminMode } from '../lib/mode'
+import { isDevFacingHint } from '../lib/devHintCopy'
+import { ContainedBlock } from './report-detail/ReportSurface'
 
 /* ── LabelHelp ──────────────────────────────────────────────────────────────
  *
@@ -124,6 +125,81 @@ export function Card({ children, className = '', interactive, elevated, onClick,
   )
 }
 
+/* ── PanelHeader — canonical card section title + separator ───────────────
+ *
+ * Every dashboard tile, chart card, and table panel uses this for the
+ * title→content boundary. Do not roll ad-hoc uppercase labels — import
+ * PanelHeader (inside Card) or CardPanel (Card + header bundled).
+ *
+ * NN/g #4 Consistency: one separator rhythm across the admin console.
+ */
+
+export const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
+export const PANEL_SUBHEADER_SEPARATOR = 'border-b border-edge-subtle/60'
+
+interface PanelHeaderProps {
+  title: ReactNode
+  action?: ReactNode
+  icon?: ReactNode
+  className?: string
+  /** Dashboard tiles default to uppercase; detail sections pass false. */
+  uppercase?: boolean
+  as?: 'h2' | 'h3' | 'p' | 'div'
+}
+
+export function PanelHeader({
+  title,
+  action,
+  icon,
+  className = '',
+  uppercase = true,
+  as: TitleTag = 'h3',
+}: PanelHeaderProps) {
+  const titleCls = uppercase
+    ? 'text-xs font-medium uppercase tracking-wider text-fg-muted'
+    : 'text-xs font-semibold text-fg-secondary'
+  return (
+    <div className={`mb-2 pb-2 ${PANEL_HEADER_SEPARATOR} ${className}`}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <TitleTag className={`flex min-w-0 items-center gap-1.5 ${titleCls}`}>
+          {icon && (
+            <span className="shrink-0 text-fg-muted [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>
+          )}
+          <span className="truncate">{title}</span>
+        </TitleTag>
+        {action != null && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+      </div>
+    </div>
+  )
+}
+
+export function PanelSubheader({ title, className = '' }: { title: string; className?: string }) {
+  return (
+    <p
+      className={`mb-1 pb-1 text-3xs font-medium uppercase tracking-wider text-fg-faint ${PANEL_SUBHEADER_SEPARATOR} ${className}`}
+    >
+      {title}
+    </p>
+  )
+}
+
+interface CardPanelProps {
+  title: ReactNode
+  children: ReactNode
+  className?: string
+  action?: ReactNode
+}
+
+/** Card + PanelHeader — standard dashboard / insight tile shell. */
+export function CardPanel({ title, children, className = '', action }: CardPanelProps) {
+  return (
+    <Card className={`min-w-0 p-3 ${className}`}>
+      <PanelHeader title={title} action={action} />
+      {children}
+    </Card>
+  )
+}
+
 /* ── Section (labeled card for detail views) ────────────────────────────── */
 
 /**
@@ -162,18 +238,51 @@ interface SectionProps {
 export function Section({ title, children, className = '', action, icon, freshness }: SectionProps) {
   return (
     <Card className={`p-3 ${className}`}>
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary min-w-0">
-          {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
-          <span className="truncate">{title}</span>
-        </h3>
-        <div className="flex items-center gap-2 shrink-0">
-          {freshness && <FreshnessPill {...freshness} />}
-          {action}
-        </div>
-      </div>
+      <PanelHeader
+        title={title}
+        icon={icon}
+        uppercase={false}
+        action={
+          <>
+            {freshness && <FreshnessPill {...freshness} />}
+            {action}
+          </>
+        }
+      />
       {children}
     </Card>
+  )
+}
+
+/** Suppresses internal TAB_META / "Banner + …" dev copy under snapshot sections. */
+export function SnapshotSectionHint({
+  text,
+  className = 'mb-3',
+}: {
+  text?: string | null
+  className?: string
+}) {
+  if (isDevFacingHint(text) || !text) return null
+  return (
+    <ContainedBlock tone="muted" className={className}>
+      <p className="text-2xs leading-relaxed text-fg-muted">{text}</p>
+    </ContainedBlock>
+  )
+}
+
+/** Same filter for one-line scope hints under page headers. */
+export function PageScopeHint({
+  text,
+  className = 'mb-1',
+}: {
+  text?: string | null
+  className?: string
+}) {
+  if (isDevFacingHint(text) || !text) return null
+  return (
+    <ContainedBlock tone="muted" className={className}>
+      <p className="text-xs leading-relaxed text-fg-muted">{text}</p>
+    </ContainedBlock>
   )
 }
 
@@ -1681,7 +1790,7 @@ export function PageHeader({ title, description, children, contextChip, projectS
           </div>
         )}
       </div>
-      {description && (
+      {description && !isDevFacingHint(description) && (
         <p className="w-full max-w-none text-xs text-fg-muted leading-relaxed text-pretty text-balance">
           {description}
         </p>
@@ -1843,7 +1952,6 @@ export function PageHelpBanner({
   flowPath,
 }: PageHelpBannerProps) {
   const { pathname } = useLocation()
-  const { isBeginner } = useAdminMode()
   const routeKey = resolveFlowPath(flowPath ?? pathname)
   const resolvedLinks = relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []
   const [isRead, setIsRead] = useState(() => isPageHelpRead(routeKey))
@@ -1861,12 +1969,11 @@ export function PageHelpBanner({
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
     if (readPageHelpDismissed(title)) return false
-    // Advanced users always start collapsed — the (?) icon in the header is
-    // the affordance. Beginners still auto-open on first visit so they get
-    // the guided experience.
-    if (!isBeginner) return false
+    // Returning users start collapsed on every page — expand only the first
+    // time they land on a route whose help has never been marked read.
+    if (isReturningUser()) return false
     if (!isPageHelpRead(routeKey)) return true
-    return !isReturningUser()
+    return false
   })
 
   useEffect(() => {

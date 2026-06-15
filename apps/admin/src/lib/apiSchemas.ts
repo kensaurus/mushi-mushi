@@ -97,6 +97,73 @@ export const SetupResponseSchema = z
   .passthrough()
 export type SetupResponse = z.infer<typeof SetupResponseSchema>
 
+// ─── /v1/admin/activation ───────────────────────────────────────────────────
+export const ActivationTopPrioritySchema = z
+  .object({
+    label: z.string(),
+    to: z.string(),
+    tone: z.enum(['plan', 'do', 'idle']),
+  })
+  .passthrough()
+
+export const ActivationPreflightSchema = z
+  .object({
+    ready: z.boolean(),
+    checks: z.array(
+      z
+        .object({
+          key: z.string(),
+          ready: z.boolean(),
+          label: z.string(),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough()
+
+export const OnboardingStatsSchema = z
+  .object({
+    hasAnyProject: z.boolean(),
+    projectId: z.string().nullable(),
+    projectName: z.string().nullable(),
+    requiredComplete: z.number().int().nonnegative(),
+    requiredTotal: z.number().int().nonnegative(),
+    stepsComplete: z.number().int().nonnegative(),
+    stepsTotal: z.number().int().nonnegative(),
+    optionalComplete: z.number().int().nonnegative().optional(),
+    optionalTotal: z.number().int().nonnegative().optional(),
+    setupDone: z.boolean(),
+    nextStepId: z.string().nullable(),
+    nextStepLabel: z.string().nullable(),
+    sdkInstalled: z.boolean(),
+    sdkHostMismatch: z.boolean(),
+    adminEndpointHost: z.string().nullable(),
+    sdkEndpointHost: z.string().nullable(),
+    hasApiKey: z.boolean(),
+    reportCount: z.number().int().nonnegative(),
+    fixCount: z.number().int().nonnegative(),
+    mergedFixCount: z.number().int().nonnegative(),
+    nextStepTo: z.string().nullable().optional(),
+  })
+  .passthrough()
+
+export const ActivationResponseSchema = z
+  .object({
+    setup: SetupResponseSchema,
+    stats: OnboardingStatsSchema,
+    preflight: ActivationPreflightSchema.nullable(),
+    phase: z.enum(['ingest', 'dispatch', 'loop']),
+    top_priority: ActivationTopPrioritySchema,
+    feature_flags: z
+      .object({
+        activation_cockpit_v2: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
+export type ActivationResponse = z.infer<typeof ActivationResponseSchema>
+
 // ─── /v1/admin/dashboard ────────────────────────────────────────────────────
 export const DashboardSummarySchema = z
   .object({

@@ -15,8 +15,7 @@ import { usePageCopy } from '../lib/copy'
 import { useIterateUx, resolveQuickIterateTab } from '../lib/iterateModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -27,8 +26,7 @@ import {
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
-  RelativeTime,
-} from '../components/ui'
+  RelativeTime, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -343,13 +341,7 @@ export function IteratePage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops."} />
 
       <IterateStatusBanner
         stats={stats}
@@ -374,9 +366,7 @@ export function IteratePage() {
         title={copy?.sections?.snapshot ?? 'PDCA SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.total ?? 'Total runs'} value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} tooltip={totalRunsTooltip(stats)} detail={totalRunsDetail()} to={iterateLinks.total} />
           <StatCard
@@ -409,7 +399,7 @@ export function IteratePage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'last_failed'
@@ -451,7 +441,7 @@ export function IteratePage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+              {stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"
                   title="PDCA pipeline idle"
@@ -459,7 +449,7 @@ export function IteratePage() {
                   cta={{ label: 'View runs', to: '/iterate?tab=runs' }}
                 />
               )}
-              {!ux.hideOverviewChrome && stats.topPriority === 'no_runs' && (
+              {stats.topPriority === 'no_runs' && (
                 <RecommendedAction
                   tone="info"
                   title="Queue your first PDCA run"
@@ -467,7 +457,7 @@ export function IteratePage() {
                   cta={{ label: 'New Run', to: '/iterate?tab=new' }}
                 />
               )}
-              {!ux.hideOverviewChrome && stats.topPriority === 'queued_waiting' && (
+              {stats.topPriority === 'queued_waiting' && (
                 <RecommendedAction
                   tone="info"
                   title="Queued runs need Trigger"
@@ -475,7 +465,7 @@ export function IteratePage() {
                   cta={{ label: 'Open Runs', to: '/iterate?tab=runs' }}
                 />
               )}
-              {!ux.hideOverviewChrome && stats.topPriority === 'active_runs' && (
+              {stats.topPriority === 'active_runs' && (
                 <RecommendedAction
                   tone="info"
                   title="Runs in progress"
@@ -483,7 +473,7 @@ export function IteratePage() {
                   cta={{ label: 'View progress', to: '/iterate?tab=runs' }}
                 />
               )}
-              {!ux.hideOverviewChrome && stats.topPriority === 'last_failed' && (
+              {stats.topPriority === 'last_failed' && (
                 <RecommendedAction
                   tone="urgent"
                   title="Inspect the failed run"

@@ -90,7 +90,7 @@
     {
       "name": "Core SDK bundle (minified + gzipped)",
       "path": "dist/index.js",
-      "limit": "57 KB",
+      "limit": "63 KB",
       "gzip": true
     },
     {
@@ -100,7 +100,10 @@
     }
   ],
   "dependencies": {
-    "@mushi-mushi/core": "^1.11.0"
+    "@mushi-mushi/core": "workspace:^"
+  },
+  "optionalDependencies": {
+    "rrweb": "^2.0.0-alpha.18"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",

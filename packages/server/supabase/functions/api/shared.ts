@@ -1,4 +1,5 @@
 import type { Context } from 'npm:hono@4';
+import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status';
 // `getServiceClient` is only referenced in `ReturnType<typeof
 // getServiceClient>` annotations on `userCanAccessProject` /
 // `resolveOwnedProject` — pull it in as a type-only import so `db.ts`
@@ -48,6 +49,38 @@ export function dbError(
     { ok: false, error: { code: 'DB_ERROR', message: err?.message ?? 'Unknown DB error' } },
     500,
   );
+}
+
+/** Canonical success envelope for admin routes. */
+export function jsonOk(
+  c: Context,
+  data: Record<string, unknown> | unknown[],
+  status: ContentfulStatusCode = 200,
+): Response {
+  return c.json({ ok: true, data }, status);
+}
+
+/** Canonical error envelope for admin routes. */
+export function jsonError(
+  c: Context,
+  code: string,
+  message: string,
+  status: ContentfulStatusCode = 400,
+  extra?: Record<string, unknown>,
+): Response {
+  return c.json({ ok: false, error: { code, message, ...extra } }, status);
+}
+
+export function jsonValidationError(c: Context, message: string): Response {
+  return jsonError(c, 'VALIDATION_ERROR', message, 400);
+}
+
+export function jsonNotFound(c: Context, message = 'Not found'): Response {
+  return jsonError(c, 'NOT_FOUND', message, 404);
+}
+
+export function jsonForbidden(c: Context, message = 'Forbidden'): Response {
+  return jsonError(c, 'FORBIDDEN', message, 403);
 }
 
 // `accessibleProjectIds` lives in `_shared/project-access.ts` so Edge

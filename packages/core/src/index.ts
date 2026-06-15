@@ -79,6 +79,14 @@ export {
   type BreadcrumbBufferOptions,
 } from './breadcrumbs';
 export {
+  checkReportPayloadSize,
+  estimateJsonBytes,
+  formatBytes,
+  MAX_REPORT_PAYLOAD_BYTES,
+  MAX_SCREENSHOT_DATA_URL_BYTES,
+  type PayloadGuardResult,
+} from './payload-guard';
+export {
   normaliseThrown,
   type NormalisedException,
 } from './exception-normaliser';

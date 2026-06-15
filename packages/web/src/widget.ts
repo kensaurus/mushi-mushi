@@ -19,7 +19,7 @@ import type {
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 
-type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail' | 'leaderboard';
+type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail' | 'leaderboard' | 'roadmap';
 
 const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
   bug: '\u26A0\uFE0F',
@@ -158,6 +158,7 @@ const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
   reports: 1,
   'report-detail': 1,
   leaderboard: 1,
+  roadmap: 1,
 };
 
 /** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
@@ -207,12 +208,16 @@ export interface WidgetCallbacks {
   onClose(): void;
   onScreenshotRequest(): void;
   onScreenshotRemove?(): void;
+  /** Optional markup pass (highlight / blur / arrow) before submit. */
+  onScreenshotAnnotateRequest?(container: HTMLElement): void | Promise<void>;
   onElementSelectorRequest?(): void;
   onReporterReportsRequest?(): Promise<MushiReporterReport[]>;
   onReporterCommentsRequest?(reportId: string): Promise<MushiReporterComment[]>;
   onReporterReply?(reportId: string, body: string): Promise<void>;
   onReporterFeedback?(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>;
   onReporterReopen?(reportId: string, note?: string): Promise<Record<string, unknown> | null>;
+  onFeatureBoardRequest?(): Promise<Array<Record<string, unknown>>>;
+  onFeatureBoardVote?(requestId: string): Promise<{ voted: boolean; action: string }>;
   onLeaderboardOpen?(): void;
 }
 
@@ -252,6 +257,7 @@ export class MushiWidget {
   private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   private sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null = null;
   private reporterReports: MushiReporterReport[] = [];
+  private featureBoard: Array<Record<string, unknown>> = [];
   private reporterComments: MushiReporterComment[] = [];
   private selectedReportId: string | null = null;
   private reporterLoading = false;
@@ -1153,6 +1159,7 @@ export class MushiWidget {
       case 'reports': return this.renderReportsStep();
       case 'report-detail': return this.renderReportDetailStep();
       case 'leaderboard': return this.renderLeaderboardStep();
+      case 'roadmap': return this.renderRoadmapStep();
     }
   }
 
@@ -1262,6 +1269,15 @@ export class MushiWidget {
           <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
         </button>
         ${this.renderFeatureRequestEntry()}
+        ${this.callbacks.onFeatureBoardRequest ? `
+        <button type="button" class="mushi-option-btn" data-action="roadmap">
+          <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDDF3\uFE0F</span>
+          <div class="mushi-option-text">
+            <span class="mushi-option-label">Community ideas</span>
+            <span class="mushi-option-desc">Vote on features and see what shipped</span>
+          </div>
+          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+        </button>` : ''}
         ${categories}
         ${this.rewardsState ? this.renderRewardsNudge() : ''}
       </div>
@@ -1383,6 +1399,40 @@ export class MushiWidget {
         ${this.reporterError ? `<p class="mushi-error-inline">${escapeHtml(this.reporterError)}</p>` : ''}
         ${reports || (!this.reporterLoading ? '<p class="mushi-muted">No reports from this browser yet.</p>' : '')}
         ${leaderboardBtn}
+      </div>
+    `;
+  }
+
+  private renderRoadmapStep(): string {
+    const rows = this.featureBoard.map((ticket) => {
+      const id = String(ticket.id ?? '');
+      const subject = escapeHtml(String(ticket.subject ?? 'Untitled idea'));
+      const votes = Number(ticket.vote_count ?? 0);
+      const shipped = Boolean(ticket.shipped_at);
+      const voted = Boolean(ticket.my_vote);
+      const status = shipped ? 'Shipped' : String(ticket.status_label ?? ticket.status ?? 'open');
+      return `
+        <div class="mushi-report-row mushi-roadmap-row">
+          <div class="mushi-report-main">
+            <span class="mushi-report-title">${subject}</span>
+            <span class="mushi-report-meta">
+              <span class="mushi-report-status">${escapeHtml(status)}</span>
+              <span class="mushi-report-when">${votes} vote${votes === 1 ? '' : 's'}</span>
+            </span>
+          </div>
+          ${this.callbacks.onFeatureBoardVote ? `
+            <button type="button" class="mushi-vote-btn" data-vote-id="${escapeHtml(id)}" aria-pressed="${voted}">
+              ${voted ? 'Voted' : 'Vote'}
+            </button>` : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      ${this.renderHeader({ title: 'Community ideas', showBack: true, eyebrow: 'Mushi · Roadmap' })}
+      <div class="mushi-body">
+        ${this.reporterLoading ? '<p class="mushi-muted">Loading ideas…</p>' : ''}
+        ${this.reporterError ? `<p class="mushi-error-inline">${escapeHtml(this.reporterError)}</p>` : ''}
+        ${rows || (!this.reporterLoading ? '<p class="mushi-muted">No community ideas yet. Be the first to suggest one.</p>' : '')}
       </div>
     `;
   }
@@ -1549,6 +1599,9 @@ export class MushiWidget {
           </button>
           ${this.screenshotAttached && this.allowScreenshotRemove
             ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot" aria-label="Remove screenshot">\u2715 Remove</button>'
+            : ''}
+          ${this.screenshotAttached
+            ? '<button type="button" class="mushi-attach-btn" data-action="annotate-screenshot" aria-label="Mark up screenshot">\u270F Mark up</button><div class="mushi-annotate-host" data-role="annotate-host"></div>'
             : ''}
           <button type="button" class="${elementClass}"
             data-action="element"
@@ -1794,11 +1847,23 @@ export class MushiWidget {
       else if (this.step === 'reports') { this.step = 'category'; }
       else if (this.step === 'report-detail') { this.step = 'reports'; this.selectedReportId = null; }
       else if (this.step === 'leaderboard') { this.step = 'reports'; }
+      else if (this.step === 'roadmap') { this.step = 'category'; }
       this.render();
     });
 
     panel.querySelector('[data-action="reports"]')?.addEventListener('click', () => {
       void this.loadReporterReports();
+    });
+
+    panel.querySelector('[data-action="roadmap"]')?.addEventListener('click', () => {
+      void this.loadFeatureBoard();
+    });
+
+    panel.querySelectorAll('[data-vote-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const requestId = (btn as HTMLElement).dataset.voteId;
+        if (requestId) void this.voteFeatureBoard(requestId);
+      });
     });
 
     panel.querySelector('[data-action="feature-request"]')?.addEventListener('click', () => {
@@ -1834,7 +1899,7 @@ export class MushiWidget {
     });
 
     panel.querySelector('[data-action="reporter-not-fixed"]')?.addEventListener('click', () => {
-      void this.submitReporterFeedback('not_fixed');
+      void this.submitReporterReopen();
     });
 
     // Receipt-copy on the success step. We do the clipboard work
@@ -1915,6 +1980,12 @@ export class MushiWidget {
     });
     panel.querySelector('[data-action="remove-screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRemove?.();
+    });
+    panel.querySelector('[data-action="annotate-screenshot"]')?.addEventListener('click', () => {
+      const host = panel.querySelector('[data-role="annotate-host"]') as HTMLElement | null;
+      if (host && this.callbacks.onScreenshotAnnotateRequest) {
+        void this.callbacks.onScreenshotAnnotateRequest(host);
+      }
     });
 
     panel.querySelector('[data-action="element"]')?.addEventListener('click', () => {
@@ -2039,6 +2110,56 @@ export class MushiWidget {
 
   private unreadCount(): number {
     return this.reporterReports.reduce((sum, report) => sum + (report.unread_count ?? 0), 0);
+  }
+
+  private async loadFeatureBoard(): Promise<void> {
+    this.step = 'roadmap';
+    this.reporterLoading = true;
+    this.reporterError = null;
+    this.render();
+    try {
+      this.featureBoard = await this.callbacks.onFeatureBoardRequest?.() ?? [];
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not load community ideas.';
+    } finally {
+      this.reporterLoading = false;
+      this.render();
+    }
+  }
+
+  private async voteFeatureBoard(requestId: string): Promise<void> {
+    if (!this.callbacks.onFeatureBoardVote || this.reporterLoading) return;
+    this.reporterLoading = true;
+    this.render();
+    try {
+      await this.callbacks.onFeatureBoardVote(requestId);
+      this.featureBoard = await this.callbacks.onFeatureBoardRequest?.() ?? this.featureBoard;
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not update vote.';
+    } finally {
+      this.reporterLoading = false;
+      this.render();
+    }
+  }
+
+  private async submitReporterReopen(): Promise<void> {
+    const reportId = this.selectedReportId;
+    if (!reportId || this.reporterLoading) return;
+    this.reporterLoading = true;
+    this.render();
+    try {
+      if (this.callbacks.onReporterReopen) {
+        await this.callbacks.onReporterReopen(reportId, 'Not fixed for me');
+      } else {
+        await this.callbacks.onReporterFeedback?.(reportId, 'not_fixed', 'Not fixed for me');
+      }
+      await this.loadReporterReports();
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not reopen report.';
+    } finally {
+      this.reporterLoading = false;
+      this.render();
+    }
   }
 
   private async loadReporterReports(): Promise<void> {

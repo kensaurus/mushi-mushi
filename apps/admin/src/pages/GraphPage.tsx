@@ -13,8 +13,7 @@ import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
-import {
-  PageHeader,
+import { SnapshotSectionHint,PageHeader,
   PageHelp,
   SegmentedControl,
   ErrorAlert,
@@ -23,8 +22,7 @@ import {
   FreshnessPill,
   Badge,
   Btn,
-  Card,
-} from '../components/ui'
+  Card, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
@@ -729,9 +727,7 @@ export function GraphPage() {
 
       {!ux.hideGraphSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'GRAPH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.nodes ?? 'Nodes'}
@@ -808,7 +804,7 @@ export function GraphPage() {
           />
           )}
 
-          {!ux.hideOverviewChrome && stats.topPriorityTo && stats.topPriority !== 'clear' ? (
+          {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
             <Card
               className={`space-y-3 p-4 ${
                 stats.topPriority === 'fragile'

@@ -72,6 +72,8 @@ export const reportSubmissionSchema = z.object({
 
   screenshotDataUrl: z.string().optional(),
   selectedElement: z.any().optional(),
+  /** rrweb / lite rolling-buffer events (compressed server-side). */
+  replayEvents: z.array(z.record(z.unknown())).max(500).optional(),
   metadata: z.record(z.unknown()).optional(),
 
   sessionId: z.string().optional(),

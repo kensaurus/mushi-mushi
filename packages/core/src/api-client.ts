@@ -9,6 +9,7 @@ import type {
   MushiSdkVersionInfo,
   MushiTierResult,
 } from './types';
+import { checkReportPayloadSize } from './payload-guard';
 
 export interface ApiClientOptions {
   projectId: string;
@@ -170,6 +171,16 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
   return {
     async submitReport(report: MushiReport) {
+      const guard = checkReportPayloadSize(report);
+      if (!guard.ok) {
+        return {
+          ok: false,
+          error: {
+            code: guard.serializeFailed ? 'SERIALIZE_FAILED' : 'PAYLOAD_TOO_LARGE',
+            message: guard.reason ?? 'Report payload exceeds size limit',
+          },
+        };
+      }
       return request<{ reportId: string }>('POST', '/v1/reports', report, maxRetries, 'report-submit');
     },
 
@@ -232,6 +243,44 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         `/v1/reporter/reports/${reportId}/reopen`,
         reporterToken,
         { note: note ?? '' },
+      );
+    },
+
+    async listNotifications(reporterToken: string, opts?: { since?: string; limit?: number }) {
+      const qs = new URLSearchParams();
+      if (opts?.since) qs.set('since', opts.since);
+      if (opts?.limit) qs.set('limit', String(opts.limit));
+      const suffix = qs.size ? `?${qs.toString()}` : '';
+      return requestForReporter<{ notifications: Array<Record<string, unknown>> }>(
+        'GET',
+        `/v1/notifications${suffix}`,
+        reporterToken,
+      );
+    },
+
+    async markNotificationRead(notificationId: string, reporterToken: string) {
+      return requestForReporter<{ ok: boolean }>(
+        'POST',
+        `/v1/notifications/${notificationId}/read`,
+        reporterToken,
+        {},
+      );
+    },
+
+    async listReporterFeatureBoard(reporterToken: string) {
+      return requestForReporter<{ tickets: Array<Record<string, unknown>> }>(
+        'GET',
+        '/v1/reporter/feature-board',
+        reporterToken,
+      );
+    },
+
+    async voteReporterFeatureBoard(requestId: string, reporterToken: string) {
+      return requestForReporter<{ voted: boolean; action: string }>(
+        'POST',
+        `/v1/reporter/feature-board/${requestId}/vote`,
+        reporterToken,
+        {},
       );
     },
 

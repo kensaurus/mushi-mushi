@@ -14,8 +14,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useExperimentsUx, resolveQuickExperimentsTab } from '../lib/experimentsModeUx'
 import { useToast } from '../lib/toast'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -28,8 +27,7 @@ import {
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -313,13 +311,7 @@ export function ExperimentsPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants."} />
 
       <ExperimentsStatusBanner
         stats={stats}
@@ -344,9 +336,7 @@ export function ExperimentsPage() {
         title={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.total ?? 'Total'} value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} tooltip={totalExperimentsTooltip(stats)} detail={totalExperimentsDetail(stats)} to={experimentsLinks.total} />
           <StatCard label={copy?.statLabels?.running ?? 'Running'} value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} tooltip={runningCountTooltip(stats)} detail={runningCountDetail()} to={experimentsLinks.running} />
@@ -358,7 +348,7 @@ export function ExperimentsPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'running'
@@ -392,14 +382,14 @@ export function ExperimentsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+          {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Experiment library is idle"
               description={`${stats.totalExperiments} experiment${stats.totalExperiments === 1 ? '' : 's'} · none running · launch a draft or create a new test.`}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'no_experiments' && (
+          {stats.topPriority === 'no_experiments' && (
             <RecommendedAction
               tone="info"
               title="Start your first A/B test"
@@ -407,7 +397,7 @@ export function ExperimentsPage() {
               cta={{ label: 'Create experiment', to: '/experiments?tab=new' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'draft_ready' && (
+          {stats.topPriority === 'draft_ready' && (
             <RecommendedAction
               tone="info"
               title="Launch a ready draft"

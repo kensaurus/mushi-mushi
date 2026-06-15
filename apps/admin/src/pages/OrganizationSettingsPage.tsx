@@ -6,8 +6,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
-import {
-  Badge,
+import { PageScopeHint,SnapshotSectionHint,Badge,
   Btn,
   Card,
   EmptyState,
@@ -20,9 +19,7 @@ import {
   SegmentedControl,
   SelectField,
   StatCard,
-  Tooltip,
-} from '../components/ui'
-import { ContainedBlock } from '../components/report-detail/ReportSurface'
+  Tooltip, } from '../components/ui'
 import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -652,11 +649,7 @@ export function OrganizationSettingsPage() {
     return (
       <div className="space-y-4">
         <PageHeader title={copy?.title ?? 'Team members'} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ?? 'Invite colleagues, assign roles, and manage workspace access.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Invite colleagues, assign roles, and manage workspace access."} />
         <EmptyState
           title="No team selected"
           description="Pick a team from the header org switcher, or create a project first — every project belongs to a team."
@@ -682,13 +675,7 @@ export function OrganizationSettingsPage() {
           {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Invite teammates, set their role, and share every project inside this organization.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Invite colleagues, assign roles, and manage workspace access."} />
 
       <MembersStatusBanner
         stats={stats}
@@ -704,9 +691,7 @@ export function OrganizationSettingsPage() {
       />
 
       <Section title="Team snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Members"

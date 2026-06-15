@@ -6,8 +6,7 @@ import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Btn,
@@ -20,8 +19,7 @@ import {
   Section,
   StatCard,
   SegmentedControl,
-  type FilterChipTone,
-} from '../components/ui'
+  type FilterChipTone, } from '../components/ui'
 import { ContainedBlock, SignalChip, InlineProof, ActionPill } from '../components/report-detail/ReportSurface'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -556,12 +554,7 @@ export function CompliancePage() {
         <PageHeader
           title={copy?.title ?? 'Compliance'}
         />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -597,13 +590,7 @@ export function CompliancePage() {
         </Btn>
         <TableDensityToggle />
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project."} />
 
       {isComplianceStatusBannerCritical(stats) && (
         <ComplianceStatusBanner
@@ -694,9 +681,7 @@ export function CompliancePage() {
       )}
 
       <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Controls"

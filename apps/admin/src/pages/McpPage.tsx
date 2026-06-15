@@ -6,8 +6,7 @@
 
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Section,
   Card,
@@ -19,11 +18,11 @@ import {
   CopyButton,
   FreshnessPill,
   RecommendedAction,
-  RelativeTime,
-} from '../components/ui'
+  RelativeTime, } from '../components/ui'
 import { IconIntegrations, IconCheck, IconArrowRight } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
+import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -31,7 +30,6 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useMcpUx, resolveQuickMcpTab } from '../lib/mcpModeUx'
-import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { detectFromPackageJson } from '../lib/frameworkDetect'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
@@ -294,6 +292,8 @@ export function McpPage() {
   const [monoWarnings, setMonoWarnings] = useState<string[]>([])
   const [detectOpen, setDetectOpen] = useState(false)
   const [detectText, setDetectText] = useState('')
+  const [mintingKey, setMintingKey] = useState(false)
+  const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
   const detectTaRef = useRef<HTMLTextAreaElement>(null)
 
   const projectsPath = activeProjectId ? '/v1/admin/projects' : null
@@ -356,6 +356,35 @@ export function McpPage() {
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
       toast.error('Clipboard blocked — select the text and copy manually.')
+    }
+  }
+
+  async function mintMcpReadKey() {
+    if (!activeProjectId) return
+    setMintingKey(true)
+    try {
+      const res = await apiFetch<{ key: string; prefix: string }>(
+        `/v1/admin/projects/${activeProjectId}/keys`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ scopes: ['mcp:read'] }),
+          idempotencyKey: crypto.randomUUID(),
+        },
+      )
+      if (!res.ok || !res.data?.key) {
+        toast.error('Could not mint MCP key', res.error?.message ?? 'Unknown error')
+        return
+      }
+      setRevealedMcpKey(res.data.key)
+      try {
+        await navigator.clipboard.writeText(res.data.key)
+        toast.success('mcp:read key copied', 'Paste into your MCP snippet — it will not be shown again.')
+      } catch {
+        toast.success('mcp:read key minted', 'Copy it now — it will not be shown again.')
+      }
+      reloadAll()
+    } finally {
+      setMintingKey(false)
     }
   }
 
@@ -504,24 +533,23 @@ export function McpPage() {
               {headerBadge}
             </Badge>
             <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
-              Refresh
-            </Btn>
-            <Link to="/projects">
-              <Btn variant="ghost" size="sm" data-testid="mcp-mint-key-link">
-                Generate an API key
-              </Btn>
-            </Link>
           </>
         )}
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
+          Refresh
+        </Btn>
+        <Btn
+          size="sm"
+          variant="ghost"
+          data-testid="mcp-mint-key-link"
+          loading={mintingKey}
+          disabled={!activeProjectId}
+          onClick={() => void mintMcpReadKey()}
+        >
+          Mint mcp:read key
+        </Btn>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools."} />
 
       <McpStatusBanner
         stats={stats}
@@ -543,9 +571,7 @@ export function McpPage() {
 
       {!ux.hideMcpSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} tooltip={activeKeysTooltip(stats)} detail={activeKeysDetail()} to={mcpLinks.activeKeys} />
           <StatCard
@@ -585,7 +611,7 @@ export function McpPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
@@ -609,8 +635,8 @@ export function McpPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && (
-          <>
+          {/* RecommendedAction is shown for all modes — every user benefits from a
+              clear next step rather than staring at blank space below the KPI snapshot. */}
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -651,7 +677,48 @@ export function McpPage() {
               cta={{ label: 'Copy correct snippet', to: '/mcp?tab=setup' }}
             />
           )}
+          {!ux.hideOverviewChrome && (
+          <>
           <div className="grid gap-3 sm:grid-cols-3">
+            <Card className="space-y-2 border-edge p-3 sm:col-span-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Connection cockpit</p>
+                <SignalChip tone={stats.connectedKeyCount > 0 ? 'ok' : stats.mcpReadKeyCount > 0 ? 'warn' : 'neutral'}>
+                  {stats.connectedKeyCount > 0 ? 'Handshake OK' : stats.mcpReadKeyCount > 0 ? 'Awaiting IDE' : 'No MCP key'}
+                </SignalChip>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                <div>
+                  <p className="text-fg-faint text-3xs uppercase tracking-wide">Expected endpoint</p>
+                  <p className="font-mono text-fg-secondary truncate" title={stats.expectedEndpointHost ?? MUSHI_CLOUD_API}>
+                    {stats.expectedEndpointHost ?? new URL(MUSHI_CLOUD_API).host}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-fg-faint text-3xs uppercase tracking-wide">Last agent host</p>
+                  <p className="font-mono text-fg-secondary truncate" title={stats.lastSeenEndpointHost ?? undefined}>
+                    {stats.lastSeenEndpointHost ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-fg-faint text-3xs uppercase tracking-wide">Try in Cursor</p>
+                  <ActionPillRow>
+                    <ActionPill
+                      tone="brand"
+                      onClick={() => void copySnippet('List all Mushi MCP tools for this project.', 'Try command')}
+                    >
+                      Copy: list tools
+                    </ActionPill>
+                    <ActionPill
+                      tone="neutral"
+                      onClick={() => void copySnippet('get_recent_reports limit=5', 'Try command')}
+                    >
+                      Copy: recent reports
+                    </ActionPill>
+                  </ActionPillRow>
+                </div>
+              </div>
+            </Card>
             <Card className="space-y-2 border-edge p-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Read scope</p>
@@ -774,13 +841,16 @@ export function McpPage() {
               </div>
 
               {!hasReadKey && (
-                <div className="pt-1">
-                  <Link to="/projects">
-                    <Btn size="sm" data-testid="mcp-status-mint">
-                      Generate a key on /projects
-                      <IconArrowRight className="h-3.5 w-3.5 ml-1" />
-                    </Btn>
-                  </Link>
+                <div className="pt-1 space-y-2">
+                  <Btn size="sm" data-testid="mcp-status-mint" loading={mintingKey} onClick={() => void mintMcpReadKey()}>
+                    Mint mcp:read key here
+                    <IconArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Btn>
+                  {revealedMcpKey ? (
+                    <ContainedBlock tone="muted">
+                      <p className="text-2xs text-fg-muted">Key minted — paste into snippet below. Not shown again after you leave.</p>
+                    </ContainedBlock>
+                  ) : null}
                 </div>
               )}
             </Card>
@@ -936,10 +1006,17 @@ export function McpPage() {
                   <ContainedBlock tone="muted" className="mt-2">
                     <p className="text-xs text-fg-muted">
                       MCP connects coding agents. The bug-capture SDK connects real users in your app.
+                      Install snippets live on the{' '}
+                      <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`} className="text-accent underline">
+                        Onboarding → SDK
+                      </Link>{' '}
+                      wizard (canonical path with connection status + live preview).
                     </p>
                   </ContainedBlock>
                 </div>
-                <SdkInstallCard projectId={activeProjectId} compact />
+                <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`}>
+                  <Btn variant="ghost" size="sm">Open SDK install wizard →</Btn>
+                </Link>
               </Card>
             )}
           </div>

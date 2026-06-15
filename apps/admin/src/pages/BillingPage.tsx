@@ -44,8 +44,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
 import { EMPTY_BILLING_STATS, type BillingStats, type BillingTabId } from '../components/billing/types'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Btn,
@@ -60,8 +59,7 @@ import {
   DetailRows,
   Section,
   StatCard,
-  SegmentedControl,
-} from '../components/ui'
+  SegmentedControl, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -412,13 +410,7 @@ export function BillingPage() {
         </SignalChip>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms."} />
 
       <BillingStatusBanner
         stats={stats}
@@ -443,9 +435,7 @@ export function BillingPage() {
         title={copy?.sections?.snapshot ?? 'Billing snapshot'}
         freshness={{ at: statsQuery.lastFetchedAt, isValidating: statsQuery.isValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.plan ?? 'Plan'}

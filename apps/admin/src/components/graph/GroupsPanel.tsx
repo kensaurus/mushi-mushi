@@ -26,12 +26,7 @@ interface ReportGroup {
   }>
 }
 
-const SEVERITY_TONE: Record<string, string> = {
-  critical: 'bg-danger/15 text-danger border border-danger/30',
-  high: 'bg-warn/15 text-warn border border-warn/30',
-  medium: 'bg-info/15 text-info border border-info/30',
-  low: 'bg-fg-faint/15 text-fg-muted border border-edge-subtle',
-}
+import { SEVERITY_TRAFFIC_BADGE } from '../../lib/severityTraffic'
 
 export function GroupsPanel() {
   const toast = useToast()
@@ -107,8 +102,8 @@ export function GroupsPanel() {
             <tbody>
               {groups.map((g) => {
                 const sevTone = g.representative_severity
-                  ? SEVERITY_TONE[g.representative_severity] ?? SEVERITY_TONE.low
-                  : SEVERITY_TONE.low
+                  ? SEVERITY_TRAFFIC_BADGE[g.representative_severity] ?? SEVERITY_TRAFFIC_BADGE.low
+                  : SEVERITY_TRAFFIC_BADGE.low
                 const firstReport = g.reports?.[0]
                 return (
                   <tr key={g.id} className="border-t border-edge-subtle align-top">

@@ -14,8 +14,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useAnomaliesUx, resolveQuickAnomaliesTab } from '../lib/anomaliesModeUx'
 import { useToast } from '../lib/toast'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -28,8 +27,7 @@ import {
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -312,13 +310,7 @@ export function AnomaliesPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis."} />
 
       <AnomaliesStatusBanner
         stats={stats}
@@ -343,9 +335,7 @@ export function AnomaliesPage() {
         title={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.open ?? 'Open'} value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} tooltip={openAnomaliesTooltip(stats)} detail={openAnomaliesDetail(stats)} to={anomaliesLinks.open} />
           <StatCard label={copy?.statLabels?.releaseRegressions ?? 'Release regressions'} value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} tooltip={releaseRegressionTooltip(stats)} detail={releaseRegressionDetail()} to={anomaliesLinks.releaseRegressions} />
@@ -357,7 +347,7 @@ export function AnomaliesPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'open_critical'
@@ -382,14 +372,14 @@ export function AnomaliesPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+          {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="No open anomalies"
               description={`${stats.distinctMetrics} metric series · ${stats.metricPointCount} data points · detection can run on demand.`}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'no_metrics' && (
+          {stats.topPriority === 'no_metrics' && (
             <RecommendedAction
               tone="info"
               title="Seed metric data first"
@@ -397,7 +387,7 @@ export function AnomaliesPage() {
               cta={{ label: 'Open Metrics', to: '/anomalies?tab=metrics' }}
             />
           )}
-          {!ux.hideOverviewChrome && (stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
+          {(stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
             <RecommendedAction
               tone="info"
               title="Triage open anomalies"

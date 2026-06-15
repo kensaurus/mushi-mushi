@@ -70,6 +70,26 @@ export interface ReportTimelineEntry {
   payload: Record<string, unknown>
 }
 
+export type UnifiedTimelineLane =
+  | 'report'
+  | 'reporter_comment'
+  | 'admin_comment'
+  | 'fix'
+  | 'qa'
+  | 'skill_pipeline'
+  | 'ask_mushi'
+
+export interface UnifiedTimelineEntry {
+  id: string
+  lane: UnifiedTimelineLane
+  at: string
+  title: string
+  body?: string | null
+  status?: string | null
+  actor?: string | null
+  links?: Record<string, string>
+}
+
 /**
  * SDK-side breadcrumb shape, mirrors `MushiBreadcrumb` in `@mushi-mushi/core`.
  * Server stores up to 100 entries per report on `reports.breadcrumbs`.

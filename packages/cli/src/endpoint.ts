@@ -12,6 +12,22 @@ const TEST_REPORT_TIMEOUT_MS = 10_000
 export const TEST_REPORT_FETCH_TIMEOUT_MS = TEST_REPORT_TIMEOUT_MS
 
 /**
+ * Canonical Mushi Cloud API endpoint — mirrors `@mushi-mushi/core`
+ * `DEFAULT_API_ENDPOINT`. Self-hosted users MUST override via
+ * `MUSHI_API_ENDPOINT` or `mushi config endpoint`.
+ */
+export const CLOUD_API_ENDPOINT =
+  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+
+/** Resolve the API endpoint: explicit flag → env → cloud default. */
+export function resolveCloudEndpoint(explicit?: string): string {
+  if (explicit?.trim()) return explicit.trim()
+  const fromEnv = process.env.MUSHI_API_ENDPOINT?.trim()
+  if (fromEnv) return fromEnv
+  return CLOUD_API_ENDPOINT
+}
+
+/**
  * Require https:// endpoints except for local development (localhost /
  * 127.0.0.1 / ::1 / *.local). Returns a normalized origin + pathname.
  * Throws on invalid URL or insecure scheme.
@@ -32,7 +48,9 @@ export function assertEndpoint(url: string): string {
   if (parsed.protocol !== 'https:' && !isLocal) {
     throw new Error(`Endpoint must use https:// (got ${parsed.protocol}//${host}).`)
   }
-  return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname)
+  // Strip any trailing slash (including on a sub-path like `/functions/v1/api/`)
+  // so persisted endpoints never produce `${endpoint}/v1/...` double-slashes.
+  return normalizeEndpoint(parsed.origin + parsed.pathname)
 }
 
 /**

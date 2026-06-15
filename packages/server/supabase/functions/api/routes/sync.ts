@@ -27,6 +27,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
 import { normalizeSyncStatus, isReporterFixedStatus } from '../../_shared/report-status.ts'
+import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -271,6 +272,28 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     }
 
     return c.json({ ok: true, data: { ...row, fix_id } })
+  })
+
+  // ── GET /v1/sync/reports/:id/timeline ─────────────────────────────────────
+  // Unified developer-facing timeline across comments, fixes, QA, pipelines, Ask Mushi.
+  app.get('/v1/sync/reports/:id/timeline', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+    const id = c.req.param('id')!
+
+    const { data: exists } = await db
+      .from('reports')
+      .select('id')
+      .eq('id', id)
+      .eq('project_id', projectId)
+      .maybeSingle()
+
+    if (!exists) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: `Report ${id} not found` } }, 404)
+    }
+
+    const timeline = await buildUnifiedReportTimeline(db, projectId, id)
+    return c.json({ ok: true, data: { report_id: id, timeline } })
   })
 
   // ── PATCH /v1/sync/reports/:id ────────────────────────────────────────────
@@ -709,6 +732,48 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
           last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
           admin_endpoint_host: adminHost,
         },
+      },
+    })
+  })
+
+  // ── GET /v1/sync/two-way-health ───────────────────────────────────────────
+  app.get('/v1/sync/two-way-health', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+
+    const [keysRes, unreadRes, repliesRes] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('last_seen_at, last_seen_user_agent')
+        .eq('project_id', projectId)
+        .eq('is_active', true)
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
+        .limit(1),
+      // Reporter read-state lives on `reporter_notifications` (read_at), which is
+      // raised on admin replies + status changes — there is no per-comment read
+      // flag. Unread notifications are the proxy for "updates the reporter hasn't seen".
+      db
+        .from('reporter_notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .is('read_at', null),
+      db
+        .from('report_comments')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('author_kind', 'admin')
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    ])
+
+    const heartbeat = keysRes.data?.[0]
+    return c.json({
+      ok: true,
+      data: {
+        last_sdk_heartbeat_at: heartbeat?.last_seen_at ?? null,
+        last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
+        unread_admin_replies: unreadRes.count ?? 0,
+        admin_replies_7d: repliesRes.count ?? 0,
+        healthy: Boolean(heartbeat?.last_seen_at),
       },
     })
   })

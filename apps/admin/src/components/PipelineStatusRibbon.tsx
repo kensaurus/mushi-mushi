@@ -148,13 +148,16 @@ function PulseArrow({
   return (
     <Tooltip content={fullLabel} side="top" portal>
       <div
-        className="relative z-20 hidden md:flex flex-col items-center justify-center shrink-0 w-16 lg:w-[4.5rem] xl:w-20 px-0.5 self-center overflow-visible pt-3"
+        className="relative z-[1] hidden md:flex flex-col items-center justify-center shrink-0 w-16 lg:w-[4.5rem] xl:w-20 px-0.5 self-center overflow-visible pt-3"
         aria-label={fullLabel}
         role="img"
       >
-        {/* HTML pill — SVG text was clipped by neighbouring tiles in the narrow gutter. */}
+        {/* HTML pill — SVG text was clipped by neighbouring tiles in the narrow gutter.
+            Tint to the source stage colour so the pill matches the arrow's gradient origin
+            (NN/g #6 Recognition over Recall — colour signals direction without reading copy). */}
         <span
-          className="absolute top-0 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-edge/70 bg-surface-overlay/95 px-1.5 py-px text-3xs font-semibold uppercase tracking-wide text-fg-muted shadow-sm pointer-events-none"
+          className="absolute top-0 left-1/2 z-[2] -translate-x-1/2 whitespace-nowrap rounded-full border bg-surface-overlay/95 px-1.5 py-px text-3xs font-semibold uppercase tracking-wide shadow-sm pointer-events-none"
+          style={{ color: fromColor, borderColor: fromColor }}
           title={fullLabel}
         >
           {shortLabel}
@@ -391,9 +394,6 @@ export function PipelineStatusRibbon() {
       <div className="flex items-center justify-between gap-2 px-2 pb-1 border-b border-edge-subtle/50">
         <span className="flex items-center gap-2 text-3xs font-medium text-fg-faint uppercase tracking-wider">
           Workspace pipeline
-          <span className="hidden sm:inline normal-case text-fg-muted font-normal tracking-normal">
-            · Plan → Do → Check → Act
-          </span>
           {!nav.ready && (
             <span className="inline-block h-1.5 w-8 animate-pulse rounded-full bg-fg-faint/30" aria-label="Loading counts" />
           )}

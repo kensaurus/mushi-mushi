@@ -277,9 +277,16 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
       } else {
         const permanent =
           result.error?.code === 'HTTP_400' ||
+          result.error?.code === 'HTTP_413' ||
           result.error?.code === 'HTTP_422' ||
           result.error?.code === 'INGEST_ERROR' ||
           result.error?.code === 'VALIDATION_ERROR' ||
+          // A payload that exceeds the size guard will never shrink on its own;
+          // retrying re-serialises the multi-MB body every sync tick and wedges
+          // the queue (it matches neither permanent nor transient otherwise).
+          // SERIALIZE_FAILED (circular ref) is likewise unrecoverable on retry.
+          result.error?.code === 'PAYLOAD_TOO_LARGE' ||
+          result.error?.code === 'SERIALIZE_FAILED' ||
           (typeof result.error?.message === 'string' &&
             /invalid payload|description must be at least|validation/i.test(
               result.error.message,

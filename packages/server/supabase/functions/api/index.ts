@@ -48,6 +48,7 @@ import { registerBackendRoutes } from './routes/backend.ts';
 import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
+import { registerActivationRoutes } from './routes/activation.ts';
 
 ensureSentry('api');
 
@@ -455,6 +456,8 @@ registerSettingsResearchRoutes(app);
 registerModernizationHealthSuperRoutes(app);
 
 registerBillingProjectsQueueGraphRoutes(app);
+
+registerActivationRoutes(app);
 
 registerAskMushiRoutes(app);
 

@@ -3,9 +3,10 @@
  * PURPOSE: Hover index tracking + popover for time-series charts.
  */
 
-import { useCallback, useState, type CSSProperties } from 'react'
+import { useCallback, useState, type CSSProperties, type ReactNode } from 'react'
 import { brushIndexFromClient } from '../../lib/useBrushSelection'
 import { formatChartDayLabel } from './chartAxis'
+import { clampPlotTopPercent } from './ChartSeriesSummary'
 
 export function useSeriesHover(dataLength: number, enabled: boolean) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
@@ -29,21 +30,33 @@ export function ChartHoverPopover({
   valueLabel,
   visible,
   style,
+  children,
 }: {
   dayLabel: string
   valueLabel: string
   visible: boolean
   style?: CSSProperties
+  children?: ReactNode
 }) {
   if (!visible) return null
+  const top = style?.top
+  const topNum =
+    typeof top === 'string' && top.endsWith('%')
+      ? clampPlotTopPercent(parseFloat(top))
+      : undefined
+  const clampedStyle =
+    topNum != null && !Number.isNaN(topNum) ? { ...style, top: `${topNum}%` } : style
   return (
     <div
-      className="pointer-events-none absolute z-30 -translate-x-1/2 whitespace-nowrap rounded-md border border-edge-subtle bg-surface-overlay px-2 py-1 text-3xs text-fg shadow-card"
-      style={style}
+      className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-edge-subtle bg-surface-overlay px-2 py-1 text-2xs text-fg shadow-card"
+      style={clampedStyle}
       aria-hidden="true"
     >
-      <span className="font-medium">{dayLabel}</span>
-      <span className="ml-2 font-mono tabular-nums text-fg-muted">{valueLabel}</span>
+      <div>
+        <span className="font-medium">{dayLabel}</span>
+        <span className="ml-2 font-mono tabular-nums text-fg-muted">{valueLabel}</span>
+      </div>
+      {children}
     </div>
   )
 }

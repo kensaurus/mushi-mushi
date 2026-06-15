@@ -104,6 +104,13 @@ export async function runConnect(
         ? `✓ Env vars merged into ${envPath}`
         : `✓ Env vars already present in ${envPath} (existing values left untouched)`,
     )
+    const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) }
+    if (deps['@capacitor/core'] && deps['react']) {
+      messages.push(
+        'ℹ Capacitor + React detected — install @mushi-mushi/web (or @mushi-mushi/react) and call initMushi() in main.tsx. ' +
+          'Optional @mushi-mushi/capacitor for native shell parity.',
+      )
+    }
   }
 
   let mcpPath: string | null = null

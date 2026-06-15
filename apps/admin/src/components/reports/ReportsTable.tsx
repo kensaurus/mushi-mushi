@@ -18,6 +18,7 @@ import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
+import { REPORTS_TABLE_COL } from './reportsTableLayout'
 
 interface Props {
   reports: ReportRow[]
@@ -137,12 +138,25 @@ export function ReportsTable({
 
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
-      <ResponsiveTable stickyFirstColumn ariaLabel="Bug reports">
-        <table className="w-full text-sm" aria-label="Bug reports">
+      <ResponsiveTable ariaLabel="Bug reports">
+        <table
+          className="w-full min-w-[68rem] table-fixed border-collapse text-sm"
+          aria-label="Bug reports"
+        >
+          <colgroup>
+            <col className={REPORTS_TABLE_COL.stripe} />
+            <col className={REPORTS_TABLE_COL.checkbox} />
+            <col />
+            <col className={REPORTS_TABLE_COL.status} />
+            <col className={REPORTS_TABLE_COL.severity} />
+            <col className={REPORTS_TABLE_COL.confidence} />
+            <col className={REPORTS_TABLE_COL.created} />
+            <col className={REPORTS_TABLE_COL.action} />
+          </colgroup>
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
-              <th scope="col" className="w-1 p-0" aria-label="Severity stripe" />
-              <th scope="col" className="w-8 px-2 py-2 text-left pl-3">
+              <th scope="col" className={`${REPORTS_TABLE_COL.stripe} p-0`} aria-label="Severity stripe" />
+              <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} px-2 py-2 text-left pl-3`}>
                 <input
                   type="checkbox"
                   aria-label={allSelected ? 'Deselect all on page' : 'Select all on page'}
@@ -158,7 +172,7 @@ export function ReportsTable({
                   free-form summary as primary content with component as a
                   secondary label. Use the Component filter chip to slice
                   by component instead. */}
-              <th scope="col" className="px-2 py-2 font-medium text-left text-fg-faint">
+              <th scope="col" className={`${REPORTS_TABLE_COL.summary} px-2 py-2 font-medium text-left text-fg-faint`}>
                 Summary
               </th>
               <SortHeader
@@ -167,7 +181,7 @@ export function ReportsTable({
                 current={sort}
                 dir={dir}
                 onSort={onSetSort}
-                className="text-left w-28"
+                className={`text-left ${REPORTS_TABLE_COL.status}`}
               />
               <SortHeader
                 label="Severity"
@@ -175,7 +189,7 @@ export function ReportsTable({
                 current={sort}
                 dir={dir}
                 onSort={onSetSort}
-                className="text-left w-24"
+                className={`text-left ${REPORTS_TABLE_COL.severity}`}
               />
               <SortHeader
                 label="Conf."
@@ -184,7 +198,7 @@ export function ReportsTable({
                 current={sort}
                 dir={dir}
                 onSort={onSetSort}
-                className="text-right w-16"
+                className={`text-right ${REPORTS_TABLE_COL.confidence}`}
               />
               <SortHeader
                 label="Created"
@@ -192,9 +206,9 @@ export function ReportsTable({
                 current={sort}
                 dir={dir}
                 onSort={onSetSort}
-                className="text-right w-24"
+                className={`text-right ${REPORTS_TABLE_COL.created}`}
               />
-              <th scope="col" className="w-40 px-2 py-2 text-right">
+              <th scope="col" className={`${REPORTS_TABLE_COL.action} px-2 py-2 text-right`}>
                 Next step
               </th>
             </tr>
