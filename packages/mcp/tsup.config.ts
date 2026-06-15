@@ -5,7 +5,7 @@ export default defineConfig([
     // Binary entry — the stdio MCP server that npx/node runs directly.
     entry: ['src/index.ts'],
     format: ['esm'],
-    dts: false,
+    dts: true,
     clean: true,
     target: 'node18',
     external: ['@modelcontextprotocol/sdk', 'zod', '@mushi-mushi/core'],
