@@ -377,11 +377,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   }
 
   widget = new MushiWidget(bootstrapConfig.widget, {
-    onSubmit: async ({ category, description, intent }) => {
-      log.info('Report submitted', { category, intent });
+    onSubmit: async ({ category, userCategory, description, intent }) => {
+      log.info('Report submitted', { category, userCategory, intent });
       proactiveManager?.recordSubmission();
       await autoCaptureScreenshot('submit');
-      const outcome = await submitReport(category, description, intent);
+      const outcome = await submitReport(category, description, intent, userCategory);
       // Surface the server-confirmed id back to the widget so the
       // success step renders a real receipt rather than a fake stamp.
       // `undefined` happens when the pre-filter/rate-limiter blocked
@@ -687,6 +687,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     category: MushiReportCategory,
     description: string,
     intent?: string,
+    userCategory?: string,
   ): Promise<{ reportId: string | null; queuedOffline?: boolean } | undefined> {
     const filterResult = preFilter.check(description);
     if (!filterResult.passed) {
@@ -766,6 +767,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       id: newUuid(),
       projectId: config.projectId,
       category,
+      ...(userCategory ? { userCategory } : {}),
       description: scrubbedDescription,
       userIntent: intent,
       environment: captureEnvironment(),
@@ -998,7 +1000,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.open();
     },
 
-    openWith(category) {
+    openWith(category: MushiReportCategory | string) {
       widget.open({ category });
     },
 
