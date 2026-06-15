@@ -37,6 +37,7 @@ import { join } from 'node:path'
 
 const ROOT = process.cwd()
 const PUBLISH_ROOTS = ['packages']
+const NPM_BIN = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 const token = process.env.NODE_AUTH_TOKEN
 if (!token) {
@@ -54,20 +55,33 @@ function* walk(dir) {
   }
 }
 
-/** Check whether a package+version already exists on npm. */
-function existsOnNpm(name, version) {
+/** Check whether the package name already exists on npm. */
+function packageExistsOnNpm(name) {
   try {
-    execFileSync('npm', ['view', `${name}@${version}`, 'version'], {
+    execFileSync(NPM_BIN, ['view', name, 'name'], {
       stdio: 'pipe',
       env: { ...process.env },
     })
     return true
-  } catch {
-    return false
+  } catch (err) {
+    const output = `${err.stdout?.toString?.() ?? ''}\n${err.stderr?.toString?.() ?? ''}`
+    if (/E404|404 Not Found|is not in this registry/i.test(output)) {
+      return false
+    }
+    throw new Error(`npm view ${name} failed while checking package existence:\n${output.trim()}`)
   }
 }
 
-// Collect publishable packages that are NOT on npm yet.
+function shouldBootstrapPackage(pkg) {
+  try {
+    return !packageExistsOnNpm(pkg.name)
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err))
+    process.exit(1)
+  }
+}
+
+// Collect publishable package names that are NOT on npm yet.
 const newPackages = []
 for (const root of PUBLISH_ROOTS) {
   const absRoot = join(ROOT, root)
@@ -78,7 +92,7 @@ for (const root of PUBLISH_ROOTS) {
     if (pkg.private === true) continue
     if (!pkg.version) continue
     if (!pkg.name?.match(/^(@[a-z0-9-]+\/)?[a-z0-9-]+/)) continue
-    if (existsOnNpm(pkg.name, pkg.version)) continue
+    if (!shouldBootstrapPackage(pkg)) continue
     newPackages.push({ pkgPath, pkg, dir: join(pkgPath, '..') })
   }
 }
