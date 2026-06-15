@@ -17,6 +17,15 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 - **New — screenshot compression** — before upload to keep payloads small.
 - **Hardening:** — oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture.
 
+## v1.11.x
+
+Latest tag: `v1.11.0`
+
+### Packages bumped
+
+- `@mushi-mushi/core` → 1.11.0
+- `@mushi-mushi/web` → 1.11.0
+
 ## v1.10.x
 
 Latest tag: `v1.10.0`
@@ -189,6 +198,14 @@ Latest tag: `v1.0.0`
 - `@mushi-mushi/react` → 1.0.0
 - `@mushi-mushi/web` → 1.0.0
 
+## v0.17.x
+
+Latest tag: `v0.17.0`
+
+### Packages bumped
+
+- `@mushi-mushi/cli` → 0.17.0
+
 ## v0.16.x
 
 Latest tag: `v0.16.0`
@@ -211,6 +228,7 @@ Latest tag: `v0.15.0`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.15.0
+- `@mushi-mushi/react-native` → 0.15.0
 
 ## v0.14.x
 
@@ -239,6 +257,7 @@ Latest tag: `v0.13.1`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.13.0
+- `@mushi-mushi/mcp` → 0.13.0
 - `@mushi-mushi/react-native` → 0.13.1
 
 ## v0.12.x
@@ -349,6 +368,7 @@ Latest tag: `v0.8.4`
 ### Packages bumped
 
 - `@mushi-mushi/angular` → 0.8.4
+- `@mushi-mushi/capacitor` → 0.8.0
 - `@mushi-mushi/cli` → 0.8.0
 - `@mushi-mushi/core` → 0.8.0
 - `@mushi-mushi/mcp` → 0.8.0
@@ -360,7 +380,7 @@ Latest tag: `v0.8.4`
 
 ## v0.7.x
 
-Latest tag: `v0.7.8`
+Latest tag: `v0.7.9`
 
 ### Highlights
 
@@ -390,7 +410,7 @@ Latest tag: `v0.7.8`
 - `@mushi-mushi/svelte` → 0.7.0
 - `@mushi-mushi/vue` → 0.7.0
 - `@mushi-mushi/web` → 0.7.0
-- `mushi-mushi` → 0.7.8
+- `mushi-mushi` → 0.7.9
 
 ## v0.6.x
 
@@ -413,13 +433,14 @@ Latest tag: `v0.6.5`
 - `@mushi-mushi/capacitor` → 0.6.0
 - `@mushi-mushi/cli` → 0.6.1
 - `@mushi-mushi/mcp` → 0.6.0
+- `@mushi-mushi/mcp-ci` → 0.6.0
 - `@mushi-mushi/node` → 0.6.0
 - `@mushi-mushi/plugin-sdk` → 0.6.0
 - `mushi-mushi` → 0.6.5
 
 ## v0.5.x
 
-Latest tag: `v0.5.13`
+Latest tag: `v0.5.14`
 
 ### Highlights
 
@@ -448,7 +469,7 @@ Latest tag: `v0.5.13`
 - `@mushi-mushi/plugin-sdk` → 0.5.0
 - `@mushi-mushi/react` → 0.5.0
 - `@mushi-mushi/web` → 0.5.1
-- `create-mushi-mushi` → 0.5.13
+- `create-mushi-mushi` → 0.5.14
 - `mushi-mushi` → 0.5.2
 
 ## v0.4.x

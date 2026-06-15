@@ -10,6 +10,12 @@ export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 /** Desktop sub-header height (Search + toolbar row in Layout). */
 export const DESKTOP_SUBHEADER_OFFSET = '2.25rem' /* tailwind top-9 */
 
+/** Tailwind top offset shared by every fixed overlay below persistent chrome. */
+export const topBelowAppChromeClass = [
+  'top-[var(--mushi-beta-banner-offset,0px)]',
+  `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
+].join(' ')
+
 /**
  * Stacking order for the authenticated shell.
  *
@@ -26,12 +32,6 @@ export const appChromeMainClass = 'relative z-0 isolate'
 /** Shared panel surface for header switcher / version menus. */
 export const headerDropdownPanelClass =
   'absolute right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised'
-
-/** Tailwind top offset shared by every fixed overlay below persistent chrome. */
-export const topBelowAppChromeClass = [
-  'top-[var(--mushi-beta-banner-offset,0px)]',
-  `md:top-[calc(var(--mushi-beta-banner-offset,0px)+${DESKTOP_SUBHEADER_OFFSET})]`,
-].join(' ')
 
 /**
  * Right-anchored drawer shell that starts below persistent top chrome.
