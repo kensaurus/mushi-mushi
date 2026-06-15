@@ -3,7 +3,7 @@
  * steps, and Ask Mushi turns into one ordered feed without merging underlying tables.
  */
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 
 export type UnifiedTimelineLane =
   | 'report'

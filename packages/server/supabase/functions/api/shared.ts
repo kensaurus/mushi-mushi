@@ -1,4 +1,5 @@
 import type { Context } from 'npm:hono@4';
+import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status';
 // `getServiceClient` is only referenced in `ReturnType<typeof
 // getServiceClient>` annotations on `userCanAccessProject` /
 // `resolveOwnedProject` — pull it in as a type-only import so `db.ts`
@@ -54,7 +55,7 @@ export function dbError(
 export function jsonOk(
   c: Context,
   data: Record<string, unknown> | unknown[],
-  status = 200,
+  status: ContentfulStatusCode = 200,
 ): Response {
   return c.json({ ok: true, data }, status);
 }
@@ -64,7 +65,7 @@ export function jsonError(
   c: Context,
   code: string,
   message: string,
-  status = 400,
+  status: ContentfulStatusCode = 400,
   extra?: Record<string, unknown>,
 ): Response {
   return c.json({ ok: false, error: { code, message, ...extra } }, status);
