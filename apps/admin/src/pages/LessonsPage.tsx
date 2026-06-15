@@ -115,10 +115,10 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 function SeverityBadge({ severity }: { severity: string }) {
   const className =
     severity === 'critical'
-      ? 'bg-danger/10 text-danger border border-danger/20'
+      ? 'bg-danger-muted/50 text-danger-foreground border border-danger/20'
       : severity === 'warn'
-        ? 'bg-warn/10 text-warn border border-warn/20'
-        : 'bg-info/10 text-info border border-info/20'
+        ? 'bg-warn-muted/50 text-warning-foreground border border-warn/20'
+        : 'bg-info-muted/50 text-info-foreground border border-info/20'
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${className}`}>
       {severity}
@@ -665,9 +665,9 @@ export function LessonsPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
+                ? 'bg-danger-muted/50 text-danger-foreground'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
+                  ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
                     ? 'bg-brand/15 text-brand'
                     : 'bg-surface-overlay text-fg-muted'

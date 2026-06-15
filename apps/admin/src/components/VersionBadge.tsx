@@ -68,7 +68,7 @@ const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
     pill: 'sdk',
   },
   warn: {
-    chip: 'bg-warn/15 text-warn border border-warn/35',
+    chip: 'bg-warn-muted/50 text-warning-foreground border border-warn/35',
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
     text: 'text-warn',
@@ -89,7 +89,7 @@ const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
     pill: 'neutral',
   },
   accent: {
-    chip: 'bg-accent/15 text-accent border border-accent/35',
+    chip: 'bg-accent-muted/55 text-accent-foreground border border-accent/35',
     header: 'bg-accent/10 border-accent/25',
     rail: 'border-l-accent/55',
     text: 'text-accent',
@@ -151,7 +151,7 @@ const PIPELINE_LINKS: PipelineLink[] = [
 const TONE_BADGE: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
   feature:  'bg-brand/15 text-brand border border-brand/30',
   fix:      'bg-ok-muted text-ok border border-ok/30',
-  breaking: 'bg-danger/15 text-danger border border-danger/30',
+  breaking: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
   note:     'bg-surface-overlay text-fg-secondary border border-edge/60',
 }
 const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
@@ -165,10 +165,10 @@ const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
 const CLOSE_DELAY_MS = 120
 
 /** Version pill label tones — SDK (info) vs Admin console (accent). */
-const SDK_LABEL = 'text-info font-semibold'
-const SDK_VER = 'text-info tabular-nums'
-const ADMIN_LABEL = 'text-accent font-semibold'
-const ADMIN_VER = 'text-accent tabular-nums'
+const SDK_LABEL = 'text-info-foreground font-semibold'
+const SDK_VER = 'text-info-foreground tabular-nums'
+const ADMIN_LABEL = 'text-accent-foreground font-semibold'
+const ADMIN_VER = 'text-accent-foreground tabular-nums'
 
 /** Monospace version chip — scannable at a glance in dense package grids. */
 function VersionPill({
@@ -180,15 +180,15 @@ function VersionPill({
 }) {
   const toneClass =
     tone === 'sdk'
-      ? 'border-info/35 bg-info/10 text-info'
+      ? 'border-info/35 bg-info-muted/50 text-info-foreground'
       : tone === 'admin'
-        ? 'border-accent/35 bg-accent/10 text-accent'
+        ? 'border-accent/35 bg-accent-muted/55 text-accent-foreground'
         : tone === 'tool'
-          ? 'border-warn/35 bg-warn/10 text-warn'
+          ? 'border-warn/35 bg-warn-muted/50 text-warning-foreground'
           : tone === 'plugin'
-            ? 'border-accent/35 bg-accent/10 text-accent'
+            ? 'border-accent/35 bg-accent-muted/55 text-accent-foreground'
             : tone === 'runtime'
-              ? 'border-ok/35 bg-ok/10 text-ok'
+              ? 'border-ok/35 bg-ok-muted/50 text-ok-foreground'
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span

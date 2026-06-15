@@ -165,6 +165,36 @@ jobs:
       - name: Check bundle sizes
         run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit
 
+      # ── MCP package gates ──────────────────────────────────────────────────
+      # Regression guard: keep the MCP package buildable, type-safe, and in
+      # sync with its catalog. Without this gate a new tool in catalog.ts
+      # that is never registered in server.ts (or vice versa) ships silently
+      # and breaks agents that enumerate tools.
+      - name: MCP typecheck
+        run: pnpm --filter @mushi-mushi/mcp typecheck
+
+      - name: MCP test
+        run: pnpm --filter @mushi-mushi/mcp test
+
+      - name: MCP build
+        run: pnpm --filter @mushi-mushi/mcp build
+
+      - name: MCP catalog sync
+        # Hard-fails if hosted MCP or admin catalog drifts from canonical.
+        run: pnpm check:catalog-sync
+
+      - name: MCP smoke (stdio)
+        # Spawns the stdio binary and verifies it advertises the expected
+        # tool/resource/prompt set from the catalog. Catches register-but-
+        # not-catalog and catalog-but-not-register bugs before publish.
+        run: pnpm --filter @mushi-mushi/mcp test:smoke
+
+      - name: Cursor plugin manifest validation
+        # Validates the Cursor plugin bundle has a well-formed plugin.json
+        # and that all referenced files (mcp.json, SKILL.md, .mdc, .md
+        # commands) exist.
+        run: node scripts/check-cursor-plugin.mjs
+
   e2e:
     # End-to-end Playwright dogfood suite. Runs against a local Supabase
     # stack spun up by the Supabase CLI action — no cloud credentials

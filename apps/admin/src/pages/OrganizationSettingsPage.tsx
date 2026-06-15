@@ -114,7 +114,7 @@ interface MembersResponse {
 }
 
 const ROLE_TONE: Record<OrgRole, string> = {
-  owner: 'bg-warn/10 text-warn border border-warn/30',
+  owner: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
   admin: 'bg-brand-subtle text-brand',
   member: 'bg-ok-muted text-ok',
   viewer: 'bg-surface-overlay text-fg-muted',
@@ -136,7 +136,7 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
   founding_owner: {
     label: 'Founder',
     tooltip: 'Created this organization. Has been here since day one.',
-    tone: 'bg-warn/10 text-warn border border-warn/30',
+    tone: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
   },
   invitation: {
     label: 'Invited',
@@ -671,7 +671,7 @@ export function OrganizationSettingsPage() {
         title={copy?.title ?? 'Team members'}
         projectScope={data?.organization?.name ?? stats.organizationName ?? undefined}
       >
-        <Badge className={teamsEnabled ? 'bg-ok-muted text-ok' : 'bg-warn/10 text-warn'}>
+        <Badge className={teamsEnabled ? 'bg-ok-muted text-ok' : 'bg-warn-muted/50 text-warning-foreground'}>
           {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeader>

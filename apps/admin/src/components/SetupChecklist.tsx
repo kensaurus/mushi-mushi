@@ -120,7 +120,7 @@ function BannerChecklist({
         className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-colors ${
           allDone || requiredDone
             ? 'border-ok/30 bg-ok-muted/15 text-ok'
-            : 'border-warn/30 bg-warn/10 text-warn'
+            : 'border-warn/30 bg-warn-muted/50 text-warning-foreground'
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
@@ -310,7 +310,7 @@ function buildSdkDiagnostic(
 function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: string[] }) {
   const palette =
     tone === 'warn'
-      ? 'border-warn/30 bg-warn/10 text-warn'
+      ? 'border-warn/30 bg-warn-muted/50 text-warning-foreground'
       : tone === 'ok'
         ? 'border-ok/30 bg-ok-muted/15 text-ok'
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'

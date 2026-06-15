@@ -2,6 +2,7 @@
  * Public roadmap — anonymous voting, no auth required.
  */
 import type { Metadata } from 'next'
+import { VoteButton } from './vote-button'
 
 export const metadata: Metadata = {
   title: 'Public roadmap — Mushi',
@@ -41,6 +42,7 @@ export default async function RoadmapPage({
   const params = await searchParams
   const slug = params.app ?? 'demo'
   const { project, tickets } = await getRoadmap(slug)
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -62,18 +64,15 @@ export default async function RoadmapPage({
                   <h2 className="font-medium">{t.subject}</h2>
                   {t.body && <p className="text-sm text-gray-400 mt-1 line-clamp-2">{t.body}</p>}
                   <p className="text-xs text-gray-500 mt-2">
-                    {t.vote_count} votes · {t.shipped_at ? 'Shipped' : t.status}
+                    {t.shipped_at ? 'Shipped' : t.status}
                   </p>
                 </div>
-                <form action={`/mushi-mushi/roadmap?app=${slug}`} method="get">
-                  <button
-                    type="button"
-                    className="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium hover:bg-violet-500"
-                    data-vote-id={t.id}
-                  >
-                    ▲ Vote
-                  </button>
-                </form>
+                <VoteButton
+                  apiUrl={apiUrl}
+                  slug={slug}
+                  requestId={t.id}
+                  initialVoteCount={t.vote_count}
+                />
               </div>
             </li>
           ))}
@@ -82,7 +81,7 @@ export default async function RoadmapPage({
           )}
         </ul>
         <p className="text-xs text-gray-600">
-          Wire votes with <code className="text-violet-300">POST /v1/public/roadmap/:slug/:id/vote</code> and a stable visitor id in localStorage.
+          Votes are anonymous — tap to vote, tap again to remove. One vote per item per browser.
         </p>
       </main>
     </div>

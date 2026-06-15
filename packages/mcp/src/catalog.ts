@@ -356,6 +356,93 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: false },
     useCase: 'Set up this repo for the Mushi evolution loop in one step.',
   },
+  // ── Sentry-like triage and project context ────────────────────────────────
+  {
+    name: 'list_projects',
+    title: 'List accessible projects',
+    description:
+      'List the Mushi projects accessible to this API key. For project-scoped keys (the typical case), ' +
+      'returns a single-item list with the bound project\'s id, name, slug, plan tier, and ingest status. ' +
+      'For org-level tokens, returns all projects in the org. ' +
+      'Use this when MUSHI_PROJECT_ID is not configured — call list_projects first, then pass the id to other tools.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Which projects can I access with this API key?',
+  },
+  {
+    name: 'get_project_context',
+    title: 'Project context snapshot',
+    description:
+      'Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, ' +
+      'open report count, autofix readiness, BYOK LLM config, plan tier, and active integration health. ' +
+      'Equivalent to a merged preflight + activation + settings read. ' +
+      'Agents should call this at the start of a triage session to orient themselves.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Give me a status overview of this project before I start triaging.',
+  },
+  {
+    name: 'get_pipeline_logs',
+    title: 'Recent pipeline logs',
+    description:
+      'Pull recent log entries from the Mushi pipeline services: classify-report, fix-worker, qa-story-runner, ' +
+      'mcp, webhook, api, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level ' +
+      '(info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, ' +
+      'and a trace_id/report_id when available. ' +
+      'Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Why did the last fix attempt fail? Show me recent pipeline errors.',
+  },
+  {
+    name: 'get_report_evidence',
+    title: 'Bug report evidence',
+    description:
+      'Return the full evidence package for a single bug report: screenshot URL, console logs, network excerpts, ' +
+      'browser environment (user agent, URL, viewport, SDK version), user replay link if available, ' +
+      'breadcrumb trail, and the reporter\'s own comments thread. ' +
+      'This is the same data an engineer would collect for a root-cause investigation. ' +
+      'Faster than calling get_report_detail + report timeline separately.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'I need all the evidence for this bug report to diagnose the root cause.',
+  },
+  {
+    name: 'triage_issue',
+    title: 'Triage issue end-to-end',
+    description:
+      'Read-only orchestration tool: combines report detail, evidence, similar bugs, fix context, blast radius, ' +
+      'and recent pipeline logs for a report into a single structured triage packet. ' +
+      'Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). ' +
+      'Equivalent to a Sentry "Analyze with Seer" flow grounded in user-felt reports. ' +
+      'Pass report_id to kick off triage. Call this before dispatch_fix.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Analyze this bug report end-to-end and tell me what to do.',
+  },
+  // ── Lessons / evolution loop ─────────────────────────────────────────────
+  {
+    name: 'query_lessons',
+    title: 'Query lessons for diff context',
+    description:
+      'Token-budget retrieval of relevant learning rules (lessons) for a given code diff or PR context. ' +
+      'Returns ranked lessons packed within max_tokens using bi-encoder retrieval + severity-weighted scoring. ' +
+      'Use this before opening a PR, writing a fix, or asking "what mistakes should I avoid in this area of code?"',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What past mistakes should I avoid when making this change?',
+  },
+  {
+    name: 'list_lessons',
+    title: 'List project lessons',
+    description:
+      'List promoted learning rules (lessons) for the current project. Each lesson represents a named pattern ' +
+      'of mistakes that has been encoded from bug reports. Use this to understand what systemic issues have ' +
+      'been identified and encoded as heuristics.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What systemic patterns has Mushi identified for this project?',
+  },
 ]
 
 export interface ResourceSpec {
@@ -417,6 +504,27 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
     description:
       'Unified setup posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. ' +
       'Agents should read this before guessing which onboarding step is blocking the user.',
+    scope: 'mcp:read',
+  },
+  {
+    name: 'project_integration_health',
+    uri: 'project://integration-health',
+    title: 'Integration health',
+    description:
+      'Live health status of every configured BYOK channel (Sentry, GitHub, LangFuse, PagerDuty, …). ' +
+      'Orchestrators should check this before dispatching a fix to fail-fast on broken channels ' +
+      'rather than burning LLM budget and discovering the failure mid-run.',
+    scope: 'mcp:read',
+  },
+  {
+    name: 'inventory_current',
+    uri: 'inventory://current',
+    title: 'Current inventory snapshot',
+    description:
+      'Current inventory snapshot for the active project — all Action nodes with their ' +
+      'spec contract (expected_outcome), build-gate status, linked reports, and fix attempts. ' +
+      'Subscribe to this resource to receive notifications/resources/updated when the inventory ' +
+      'is re-crawled. Orchestrators can use this to enumerate work items and pick the next Action to fix.',
     scope: 'mcp:read',
   },
 ]

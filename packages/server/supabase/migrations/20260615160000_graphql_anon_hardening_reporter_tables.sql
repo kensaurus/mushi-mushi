@@ -14,3 +14,8 @@
 
 REVOKE ALL ON public.reporter_push_subscriptions FROM anon, authenticated;
 REVOKE ALL ON public.feature_request_reporter_votes FROM anon, authenticated;
+
+-- Flush PostgREST's schema + config cache so the revoked grants drop out of the
+-- GraphQL/PostgREST introspection surface immediately after deploy.
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

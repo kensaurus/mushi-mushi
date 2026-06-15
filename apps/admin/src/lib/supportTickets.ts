@@ -46,7 +46,7 @@ export function releaseForTicket(ticket: SupportTicket): ShippedRelease | null {
 }
 
 export const TICKET_STATUS_TONE: Record<SupportTicketStatus, string> = {
-  open: 'bg-warn/10 text-warn',
+  open: 'bg-warn-muted/50 text-warning-foreground',
   in_progress: 'bg-brand-subtle text-brand',
   resolved: 'bg-ok-muted text-ok',
   closed: 'bg-surface-overlay text-fg-muted',

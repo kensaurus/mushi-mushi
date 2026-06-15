@@ -23,7 +23,7 @@ export interface ActivationLane {
 function laneTone(status: LaneStatus): string {
   if (status === 'done') return 'bg-ok-muted text-ok border-ok/30'
   if (status === 'next') return 'bg-brand/15 text-brand border-brand/30'
-  if (status === 'blocked') return 'bg-warn/10 text-warn border-warn/30'
+  if (status === 'blocked') return 'bg-warn-muted/50 text-warning-foreground border-warn/30'
   return 'bg-surface-overlay text-fg-muted border-edge-subtle'
 }
 

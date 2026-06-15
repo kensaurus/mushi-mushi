@@ -20,7 +20,6 @@ import { requireProjectAccess } from '../middleware/project.ts'
 import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
-import { createNotification } from '../../_shared/notifications.ts'
 import type { Variables } from '../types.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -418,30 +417,15 @@ function featureBoardRoutes() {
       notification: notifResult,
     })
 
-    // Notify voters (reporter + authenticated) via existing notification fan-out.
-    const { data: reporterVotes } = await db()
-      .from('feature_request_reporter_votes')
-      .select('reporter_token_hash')
-      .eq('request_id', requestId)
-    const { data: userVotes } = await db()
-      .from('feature_request_votes')
-      .select('user_id')
-      .eq('request_id', requestId)
-
-    for (const v of reporterVotes ?? []) {
-      await createNotification(
-        db(),
-        projectId,
-        requestId,
-        v.reporter_token_hash,
-        'fixed',
-        {
-          message: `A feature you voted for shipped: ${ticket.subject}`,
-          reportId: requestId,
-        },
-      )
-    }
-    void userVotes
+    // NB: feature-request voters are intentionally NOT fanned out through
+    // `createNotification`. That helper writes to `notification_deliveries` /
+    // `reporter_notifications`, whose `report_id` is a NOT NULL FK to
+    // `public.reports`. A feature request lives in `support_tickets`, so its id
+    // is not a valid `reports.id` — every insert would violate the FK, fail
+    // silently, and only produce error-log noise (no notification ever lands).
+    // The shipped webhook above (`fireShippedNotification`) is the delivery
+    // path for "this shipped". Per-voter in-app notifications would need a
+    // feature-request-scoped ledger, which doesn't exist yet.
 
     return jsonOk(c, { shipped: true, notification: notifResult })
   })

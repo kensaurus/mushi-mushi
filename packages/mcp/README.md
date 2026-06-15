@@ -134,6 +134,13 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `ingest_setup_check` | The 4 **required ingest** checks (project, active API key, SDK heartbeat, first report) + `last_sdk_seen_at` diagnostics — run after wiring env vars to confirm the SDK is reporting |
 | `get_activation_status` | Unified setup posture for the active project — required steps, SDK heartbeat, dispatch preflight, and the next best action. Run first when a user says setup is broken |
 | `get_reporter_thread` | Unified report timeline — the reporter/admin comment thread (including verify/reopen signals) plus fix, QA, and status lanes. Use when triaging whether an end user still sees a bug as unfixed |
+| `list_projects` | Discover all Mushi projects accessible to this API key. Returns project id, name, and created date |
+| `get_project_context` | Rich context snapshot: SDK heartbeat, ingest status, autofix readiness, and open report counts |
+| `get_pipeline_logs` | Recent log entries from fix-worker, pipeline, and QA story runner — filterable by service, level, time, and limit |
+| `get_report_evidence` | Focused evidence package for a report: screenshot URL, console logs, network excerpts, environment, and user comments (lighter than `get_report_detail`) |
+| `triage_issue` | **Primary triage entry point** — combines report detail, evidence, similar bugs, fix context, blast radius, pipeline logs, and recommended next actions in one packet |
+| `query_lessons` | Token-budget retrieval of relevant learning rules for a code diff |
+| `list_lessons` | List promoted learning rules (lessons) for the current project |
 
 ### Write / agentic
 
@@ -361,6 +368,28 @@ Rebuild the package (`pnpm --filter @mushi-mushi/mcp build`) after any MCP sourc
 ### Sanity check: did it connect?
 
 In Cursor chat, type `/` — you should see the Mushi Mushi slash-prompts (`/summarize_report_for_fix`, `/explain_judge_result`, `/triage_next_steps`). Or ask the agent directly: _"Use the Mushi MCP to list my recent reports"_. If scope is wrong you'll see the `[INSUFFICIENT_SCOPE]` error text verbatim — rotate the key with the right scope and retry.
+
+## Debug MCP logs in Cursor
+
+If tools are not showing up or returning unexpected errors:
+
+1. **Check the Cursor MCP logs**: Cursor → Help → Toggle Developer Tools → Console. Filter by `mushi`.
+2. **Verify the server started**: In the MCP panel (Cursor → Settings → MCP), look for a green dot next to the Mushi server.
+3. **Check scope errors**: A `INSUFFICIENT_SCOPE` response means your API key lacks the required scope — mint a new key with `mcp:read` (or `mcp:write` for mutating tools).
+4. **Run the health check**: `/test-mushi-mcp` command or call `list_projects` — a clean response confirms auth is working.
+5. **Restart Cursor**: After changing environment variables or `mcp.json`, restart Cursor to pick up the new config.
+
+## Mushi vs Sentry MCP
+
+| | Sentry MCP | Mushi MCP |
+|--|-----------|-----------|
+| Signal source | Thrown exceptions | User-felt bugs (rage-click, console errors, network failures flagged by real users) |
+| Evidence | Stack traces, breadcrumbs | Screenshots, console logs, network excerpts, user comments, replay pointers |
+| Triage tool | `sentry_get_issue` | `triage_issue` (evidence + similar bugs + blast radius + logs + recommended actions) |
+| Fix dispatch | — | `dispatch_fix` → draft GitHub PR → human review |
+| QA coverage | — | QA story runner, PDCA improvement loop |
+
+Both are complementary — use Sentry for exception noise, Mushi for "the user says it's broken" signal.
 
 ## See also
 

@@ -713,6 +713,207 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  // --- Sentry-like triage and project context tools -----------------------
+
+  server.registerTool(
+    'list_projects',
+    {
+      title: titleOf('list_projects'),
+      description: descOf('list_projects'),
+      annotations: annotationsFor('list_projects'),
+      inputSchema: {},
+    },
+    async () => {
+      const data = await apiCall<unknown>('/v1/admin/mcp/projects')
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_project_context',
+    {
+      title: titleOf('get_project_context'),
+      description: descOf('get_project_context'),
+      annotations: annotationsFor('get_project_context'),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required')
+
+      const [preflightRes, activationRes] = await Promise.allSettled([
+        apiCall<unknown>(`/v1/admin/projects/${pid}/preflight`),
+        apiCall<unknown>(`/v1/admin/activation?project_id=${encodeURIComponent(pid)}`),
+      ])
+
+      return jsonText({
+        project_id: pid,
+        preflight: preflightRes.status === 'fulfilled' ? preflightRes.value : { error: String(preflightRes.reason) },
+        activation: activationRes.status === 'fulfilled' ? activationRes.value : { error: String(activationRes.reason) },
+      })
+    },
+  )
+
+  server.registerTool(
+    'get_pipeline_logs',
+    {
+      title: titleOf('get_pipeline_logs'),
+      description: descOf('get_pipeline_logs'),
+      annotations: annotationsFor('get_pipeline_logs'),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+        service: z
+          .enum(['classify-report', 'fix-worker', 'qa-story-runner', 'mcp', 'webhook', 'api', 'all'])
+          .optional()
+          .describe('Pipeline service to filter (default: all).'),
+        since: z.string().optional().describe('ISO-8601 timestamp — return only entries after this time.'),
+        limit: z.number().optional().describe('Max entries to return (default 50, max 200).'),
+        level: z
+          .enum(['info', 'warn', 'error', 'fatal'])
+          .optional()
+          .describe('Minimum severity level (default: warn).'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT_ID', 'project_id is required')
+
+      const qs = new URLSearchParams()
+      if (args.service && args.service !== 'all') qs.set('service', args.service)
+      if (args.since) qs.set('since', args.since)
+      qs.set('limit', String(Math.min(args.limit ?? 50, 200)))
+      if (args.level) qs.set('level', args.level)
+
+      const data = await apiCall<unknown>(`/v1/admin/mcp/logs/${pid}?${qs}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_report_evidence',
+    {
+      title: titleOf('get_report_evidence'),
+      description: descOf('get_report_evidence'),
+      annotations: annotationsFor('get_report_evidence'),
+      inputSchema: {
+        report_id: z.string().describe('Report UUID.'),
+      },
+    },
+    async (args) => {
+      const [reportRes, timelineRes] = await Promise.allSettled([
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}`),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}/timeline`),
+      ])
+
+      const report = reportRes.status === 'fulfilled' ? reportRes.value : null
+      const timeline = timelineRes.status === 'fulfilled' ? timelineRes.value : null
+
+      // Return a focused evidence packet — strip the large classification/fix
+      // arrays that belong in get_report_detail, keep only the evidence fields.
+      const evidence = report
+        ? {
+            report_id: args.report_id,
+            description: (report as Record<string, unknown>).description,
+            summary: (report as Record<string, unknown>).summary,
+            screenshot_url: (report as Record<string, unknown>).screenshot_url ?? null,
+            environment: (report as Record<string, unknown>).environment ?? null,
+            breadcrumbs: (report as Record<string, unknown>).breadcrumbs ?? null,
+            sentry_replay_id: (report as Record<string, unknown>).sentry_replay_id ?? null,
+            sentry_trace_id: (report as Record<string, unknown>).sentry_trace_id ?? null,
+            sentry_event_id: (report as Record<string, unknown>).sentry_event_id ?? null,
+            session_id: (report as Record<string, unknown>).session_id ?? null,
+            created_at: (report as Record<string, unknown>).created_at,
+            tags: (report as Record<string, unknown>).tags ?? null,
+          }
+        : { error: String((reportRes as PromiseRejectedResult).reason) }
+
+      return jsonText({
+        evidence,
+        reporter_thread: timeline ?? { error: String((timelineRes as PromiseRejectedResult).reason) },
+      })
+    },
+  )
+
+  server.registerTool(
+    'triage_issue',
+    {
+      title: titleOf('triage_issue'),
+      description: descOf('triage_issue'),
+      annotations: annotationsFor('triage_issue'),
+      inputSchema: {
+        report_id: z.string().describe('Report UUID to triage.'),
+        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+        include_logs: z.boolean().optional().describe('Include recent pipeline logs in triage packet (default: true).'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      const includeLogs = args.include_logs !== false
+
+      const [reportRes, evidenceRes, similarRes, fixCtxRes, blastRes, logsRes] = await Promise.allSettled([
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}`),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}/timeline`),
+        apiCall<unknown>(`/v1/admin/reports/similarity`, {
+          method: 'POST',
+          body: JSON.stringify({ report_id: args.report_id }),
+        }).catch(() => null),
+        pid ? apiCall<unknown>(`/v1/admin/reports/${args.report_id}/fix-context`).catch(() => null) : Promise.resolve(null),
+        pid ? apiCall<unknown>(`/v1/admin/reports/${args.report_id}/blast-radius`).catch(() => null) : Promise.resolve(null),
+        includeLogs && pid
+          ? apiCall<unknown>(`/v1/admin/mcp/logs/${pid}?limit=20&level=warn`).catch(() => null)
+          : Promise.resolve(null),
+      ])
+
+      const report = reportRes.status === 'fulfilled' ? reportRes.value : null
+      const severity = report ? (report as Record<string, unknown>).severity : 'unknown'
+      const category = report ? (report as Record<string, unknown>).category : 'unknown'
+      const status = report ? (report as Record<string, unknown>).status : 'unknown'
+
+      // Build recommended next actions based on report state
+      const actions: Array<{ action: string; reason: string; tool?: string; args?: Record<string, unknown> }> = []
+
+      if (status === 'new' || status === 'classified') {
+        actions.push({
+          action: 'dispatch_fix',
+          reason: 'Report is classified but no fix has been attempted',
+          tool: 'dispatch_fix',
+          args: { reportId: args.report_id, agent: 'cursor_cloud' },
+        })
+      } else if (status === 'fixing') {
+        actions.push({
+          action: 'check_fix_progress',
+          reason: 'Fix is in progress — check the fix timeline for latest status',
+          tool: 'get_fix_timeline',
+          args: { reportId: args.report_id },
+        })
+      } else if (status === 'fixed') {
+        actions.push({
+          action: 'verify_fix',
+          reason: 'Fix was applied — verify it resolved the issue',
+          tool: 'get_fix_context',
+          args: { reportId: args.report_id },
+        })
+      }
+
+      return jsonText({
+        report_id: args.report_id,
+        severity,
+        category,
+        status,
+        report: reportRes.status === 'fulfilled' ? reportRes.value : { error: String(reportRes.reason) },
+        reporter_thread: evidenceRes.status === 'fulfilled' ? evidenceRes.value : null,
+        similar_bugs: similarRes.status === 'fulfilled' ? similarRes.value : null,
+        fix_context: fixCtxRes.status === 'fulfilled' ? fixCtxRes.value : null,
+        blast_radius: blastRes.status === 'fulfilled' ? blastRes.value : null,
+        recent_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
+        recommended_actions: actions,
+        triage_summary: `[${severity}] ${category} — status: ${status}. ${actions.length > 0 ? `Recommended: ${actions[0]?.action}.` : 'No action required.'}`,
+      })
+    },
+  )
+
   // --- Write / agentic tools -------------------------------------------
 
   server.registerTool(
@@ -888,8 +1089,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   server.registerTool(
     'reopen_report',
     {
-      title: 'Reopen report (operator)',
-      description: 'Operator alias to move a report back to new for regression triage.',
+      title: titleOf('reopen_report'),
+      description: descOf('reopen_report'),
       annotations: annotationsFor('reopen_report'),
       inputSchema: {
         reportId: z.string().describe('Report UUID'),
@@ -947,6 +1148,54 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'query_lessons',
+    {
+      title: titleOf('query_lessons'),
+      description: descOf('query_lessons'),
+      annotations: annotationsFor('query_lessons'),
+      inputSchema: {
+        diff_text: z.string().describe('The PR diff, code snippet, or description of the change being made.'),
+        max_tokens: z.number().optional().describe('Maximum tokens for returned lessons context (default 3000, max 8000).'),
+        top_k: z.number().optional().describe('Max number of lessons to return (default 15, max 50).'),
+        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      const params = new URLSearchParams()
+      params.set('diff_text', args.diff_text)
+      if (args.max_tokens !== undefined) params.set('max_tokens', String(args.max_tokens))
+      if (args.top_k !== undefined) params.set('top_k', String(args.top_k))
+      if (pid) params.set('projectId', pid)
+      const data = await apiCall<unknown>(`/v1/admin/lessons/query?${params}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'list_lessons',
+    {
+      title: titleOf('list_lessons'),
+      description: descOf('list_lessons'),
+      annotations: annotationsFor('list_lessons'),
+      inputSchema: {
+        severity: z.enum(['info', 'warn', 'critical']).optional().describe('Filter by severity level.'),
+        limit: z.number().optional().describe('Max number of lessons to return (default 50, max 200).'),
+        project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      const params = new URLSearchParams()
+      if (args.severity) params.set('severity', args.severity)
+      params.set('limit', String(Math.min(args.limit ?? 50, 200)))
+      if (pid) params.set('projectId', pid)
+      const data = await apiCall<unknown>(`/v1/admin/lessons?${params}`)
+      return jsonText(data)
+    },
+  )
+
   // --- Resources -------------------------------------------------------
 
   server.resource(
@@ -978,16 +1227,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Rewards tools (P3) -------------------------------------------------
 
-  const rewardsMeta = (name: string) => annotationsFor(name)
-
-  server.tool(
+  server.registerTool(
     'list_top_contributors',
-    rewardsMeta('list_top_contributors').title,
     {
-      limit: z.number().int().min(1).max(100).optional().default(10).describe('Max rows to return (default 10, max 100)'),
-      range: z.enum(['30d', '90d', 'all']).optional().default('30d').describe('Time window for points calculation'),
+      title: titleOf('list_top_contributors'),
+      description: descOf('list_top_contributors'),
+      annotations: annotationsFor('list_top_contributors'),
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional().default(10).describe('Max rows to return (default 10, max 100)'),
+        range: z.enum(['30d', '90d', 'all']).optional().default('30d').describe('Time window for points calculation'),
+      },
     },
-    rewardsMeta('list_top_contributors'),
     async ({ limit, range }) => ({
       content: [{
         type: 'text' as const,
@@ -999,15 +1249,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'award_bonus_points',
-    rewardsMeta('award_bonus_points').title,
     {
-      external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
-      points: z.number().int().min(1).max(50000).describe('Bonus points to award (max 50,000 per call)'),
-      reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
+      title: titleOf('award_bonus_points'),
+      description: descOf('award_bonus_points'),
+      annotations: annotationsFor('award_bonus_points'),
+      inputSchema: {
+        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+        points: z.number().int().min(1).max(50000).describe('Bonus points to award (max 50,000 per call)'),
+        reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
+      },
     },
-    rewardsMeta('award_bonus_points'),
     async ({ external_user_id, points, reason }) => ({
       content: [{
         type: 'text' as const,
@@ -1023,15 +1276,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   )
 
-  server.tool(
+  server.registerTool(
     'set_tier',
-    rewardsMeta('set_tier').title,
     {
-      external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
-      tier_slug: z.string().describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
-      reason: z.string().max(200).optional().describe('Optional reason for manual override'),
+      title: titleOf('set_tier'),
+      description: descOf('set_tier'),
+      annotations: annotationsFor('set_tier'),
+      inputSchema: {
+        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+        tier_slug: z.string().describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
+        reason: z.string().max(200).optional().describe('Optional reason for manual override'),
+      },
     },
-    rewardsMeta('set_tier'),
     async ({ external_user_id, tier_slug, reason }) => ({
       content: [{
         type: 'text' as const,

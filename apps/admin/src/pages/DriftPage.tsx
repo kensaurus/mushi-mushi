@@ -88,9 +88,9 @@ interface ContractSnapshot {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const SEVERITY_CLS: Record<DriftFinding['severity'], string> = {
-  info: 'bg-info/10 text-info border border-info/20',
-  warn: 'bg-warn/10 text-warn border border-warn/20',
-  critical: 'bg-danger/10 text-danger border border-danger/20',
+  info: 'bg-info-muted/50 text-info-foreground border border-info/20',
+  warn: 'bg-warn-muted/50 text-warning-foreground border border-warn/20',
+  critical: 'bg-danger-muted/50 text-danger-foreground border border-danger/20',
 }
 
 const SEVERITY_LABEL: Record<DriftFinding['severity'], string> = {
@@ -299,9 +299,9 @@ export function DriftPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
+                ? 'bg-danger-muted/50 text-danger-foreground'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
+                  ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
                     ? 'bg-brand/15 text-brand'
                     : 'bg-surface-overlay text-fg-muted'
