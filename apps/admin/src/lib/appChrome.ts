@@ -10,6 +10,23 @@ export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
 /** Desktop sub-header height (Search + toolbar row in Layout). */
 export const DESKTOP_SUBHEADER_OFFSET = '2.25rem' /* tailwind top-9 */
 
+/**
+ * Stacking order for the authenticated shell.
+ *
+ * Without `appChromeMainClass` (`isolate` + `z-0`), descendants inside
+ * `<main>` that set z-20/z-30 (e.g. PipelineStatusRibbon arrow pills)
+ * participate in the *layout column's* root stacking context — same
+ * level as the sub-header — and paint over header dropdowns because
+ * `<main>` follows the header in DOM order.
+ */
+export const appChromeHeaderClass =
+  'relative z-40 overflow-visible shrink-0 bg-surface-root/95 backdrop-blur-sm'
+export const appChromeMainClass = 'relative z-0 isolate'
+
+/** Shared panel surface for header switcher / version menus. */
+export const headerDropdownPanelClass =
+  'absolute right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised'
+
 /** Tailwind top offset shared by every fixed overlay below persistent chrome. */
 export const topBelowAppChromeClass = [
   'top-[var(--mushi-beta-banner-offset,0px)]',

@@ -54,11 +54,14 @@ import {
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
+import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { RegressionChain } from '../components/report-detail/RegressionChain'
 import { CursorAgentLaunch } from '../components/report-detail/CursorAgentLaunch'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
+import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
+import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
@@ -546,6 +549,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
         </Section>
 
+        <Section title="Unified timeline" icon={<IconTerminal />}>
+          <UnifiedTimelineCard reportId={report.id} />
+        </Section>
+
         <Section title="Repro timeline" icon={<IconTerminal />}>
           <TimelineCard report={report} />
         </Section>
@@ -563,6 +570,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           sentryIssueUrl={report.sentry_issue_url}
           tags={report.tags}
         />
+      </div>
+
+      <div className="mt-3 grid gap-3 ff-medium:grid-cols-2">
+        <ReportReplayPlayer
+          events={(report.custom_metadata?.replayEvents as unknown[] | undefined) ?? null}
+          replayPath={(report.custom_metadata?.replayPath as string | undefined) ?? null}
+        />
+        <AgentTracePanel report={report} />
       </div>
 
       <div className="mt-3">

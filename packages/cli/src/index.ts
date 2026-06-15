@@ -525,6 +525,56 @@ Examples:
   })
 
 reports
+  .command('thread <id>')
+  .description('Show unified timeline for a report (comments, fixes, QA, pipelines)')
+  .option('--json', 'Machine-readable JSON output')
+  .option('--watch', 'Poll for new timeline entries (TTY only)')
+  .action(async (id: string, opts: { json?: boolean; watch?: boolean }) => {
+    const config = requireConfig()
+    const fetchTimeline = async () => {
+      const result = await apiCall<{ report_id: string; timeline: Array<{
+        id: string; lane: string; at: string; title: string; body?: string; status?: string
+      }> }>(`/v1/sync/reports/${id}/timeline`, config)
+      if (!result.ok) {
+        if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+          process.stderr.write(`error: report "${id}" not found\n`)
+          process.exit(3)
+        }
+        die(result)
+      }
+      return result.data
+    }
+
+    const render = (data: Awaited<ReturnType<typeof fetchTimeline>>) => {
+      if (opts.json) {
+        console.log(JSON.stringify(data, null, 2))
+        return
+      }
+      console.log(`Timeline for ${data.report_id}`)
+      console.log('─'.repeat(72))
+      for (const e of data.timeline) {
+        console.log(`${fmtDate(e.at)}  [${e.lane}] ${e.title}${e.status ? ` (${e.status})` : ''}`)
+        if (e.body) console.log(`    ${e.body.replace(/\n/g, '\n    ')}`)
+      }
+    }
+
+    if (opts.watch && process.stdout.isTTY) {
+      let lastLen = -1
+      for (;;) {
+        const data = await fetchTimeline()
+        if (data.timeline.length !== lastLen) {
+          console.clear()
+          render(data)
+          lastLen = data.timeline.length
+        }
+        await new Promise((r) => setTimeout(r, 3000))
+      }
+    }
+
+    render(await fetchTimeline())
+  })
+
+reports
   .command('show <id>')
   .description('Show full details for a single report')
   .option('--json', 'Machine-readable JSON output')
@@ -769,6 +819,55 @@ Examples:
       const text = r.summary ?? r.description ?? ''
       if (text) console.log(`    ${text.slice(0, 80)}`)
       console.log('')
+    }
+  })
+
+// ─── feedback ────────────────────────────────────────────────────────────────
+const feedback = program.command('feedback').description('Community feedback board (bugs + feature requests)')
+
+feedback
+  .command('board')
+  .description('List open feature requests and community tickets for the current project')
+  .option('--limit <n>', 'Max results (1–50)', '20')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi feedback board
+  mushi feedback board --limit 10 --json`)
+  .action(async (opts: { limit: string; json?: boolean }) => {
+    const config = requireConfig()
+    if (!config.projectId) {
+      process.stderr.write('error: no projectId — run `mushi config projectId <uuid>`\n')
+      process.exit(2)
+    }
+    const limit = Math.min(Math.max(1, parseInt(opts.limit) || 20), 50)
+    // `/v1/admin/feature-board` accepts an operator API key (mcp:read) and
+    // scopes to the key's project automatically. The legacy
+    // `/v1/admin/support/tickets` route is console-JWT-only → always 401 here.
+    const result = await apiCall<{ tickets: Array<{
+      id: string
+      subject: string
+      status: string
+      vote_count?: number
+      created_at: string
+    }> }>(
+      `/v1/admin/feature-board`,
+      config,
+    )
+    if (!result.ok) die(result)
+    const rows = (result.data?.tickets ?? []).slice(0, limit)
+    if (opts.json) {
+      console.log(JSON.stringify(rows, null, 2))
+      return
+    }
+    if (rows.length === 0) {
+      console.log('No feature requests on the board yet.')
+      return
+    }
+    console.log(`${pad('ID', 38)} ${pad('VOTES', 6)} ${pad('STATUS', 12)} ${pad('CREATED', 17)} SUBJECT`)
+    console.log('─'.repeat(110))
+    for (const t of rows) {
+      console.log(`${pad(t.id, 38)} ${pad(String(t.vote_count ?? 0), 6)} ${pad(t.status, 12)} ${pad(fmtDate(t.created_at), 17)} ${(t.subject ?? '').slice(0, 40)}`)
     }
   })
 
@@ -1618,32 +1717,49 @@ Examples:
 program
   .command('doctor')
   .description(
-    'Run pre-flight checks: CLI config, endpoint reachability, API key shape, ' +
-      'SDK install status, and (with --server) the same 4 dispatch-readiness ' +
-      'checks shown in the Mushi console. Mirrors the in-console dispatch ' +
-      'preflight so you can spot setup gaps before opening the admin UI.',
+    'Run pre-flight checks: CLI config, endpoint reachability, SDK install, ' +
+      'ingest readiness (API key → heartbeat → first report), and dispatch ' +
+      'readiness (GitHub, index, BYOK, autofix). Ingest + server checks run ' +
+      'by default; pass --no-server or --no-ingest to skip.',
   )
   .option('--cwd <path>', 'Run package detection from a different directory')
   .option('--json', 'Machine-readable output')
-  .option(
-    '--server',
-    'Also call GET /preflight on the backend and include the 4 dispatch ' +
-      'checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled). ' +
-      'Requires a configured projectId and API key.',
-  )
-  .option(
-    '--ingest',
-    'Also call GET /v1/sync/ingest-setup for the 4 required ingest steps ' +
-      '(API key, SDK heartbeat, first report). Composable with --server.',
-  )
+  .option('--no-server', 'Skip dispatch-readiness /preflight checks')
+  .option('--no-ingest', 'Skip ingest-setup checks (SDK heartbeat, first report)')
   .option(
     '--qa-stories',
     'Check enabled QA stories for common setup issues: missing Firecrawl key, ' +
       'missing target URL, Slack not connected. Requires --server credentials.',
   )
-  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean }) => {
+  .option(
+    '--host-app',
+    'Verify host-app wiring: Mushi env vars, Cursor MCP config, Capacitor hybrid SDK notes.',
+  )
+  .option(
+    '--fix',
+    'Apply safe local fixes when checks fail: write missing .env.local lines and wire Cursor MCP config.',
+  )
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean; hostApp?: boolean; fix?: boolean }) => {
     const config = loadConfig()
-    const result = await runDoctor(config, { cwd: opts.cwd, server: opts.server, ingest: opts.ingest, qaStories: opts.qaStories })
+    const doctorOpts = { cwd: opts.cwd, server: opts.server, ingest: opts.ingest, qaStories: opts.qaStories, hostApp: opts.hostApp }
+    let result = await runDoctor(config, doctorOpts)
+
+    if (!result.ready && opts.fix && config.apiKey && config.projectId && config.endpoint) {
+      const connectResult = await runConnect({
+        apiKey: config.apiKey,
+        projectId: config.projectId,
+        endpoint: config.endpoint,
+        cwd: opts.cwd ?? process.cwd(),
+        writeEnv: true,
+        wireIde: true,
+      }, config)
+      for (const msg of connectResult.messages) console.log(msg)
+      // Re-run the checks so the printed result + exit code reflect the
+      // post-fix state. Without this the command reports the stale pre-fix
+      // failures and exits 1 even when every fix succeeded.
+      result = await runDoctor(config, doctorOpts)
+    }
+
     const { checks } = result
 
     if (opts.json) {
@@ -2614,6 +2730,50 @@ skills
   })
 
 const pipeline = program.command('pipeline').description('Manage skill pipeline runs')
+
+const consoleCmd = program.command('console').description('Live developer console for Mushi threads')
+
+consoleCmd
+  .command('watch <reportId>')
+  .description('Watch unified report timeline (alias for mushi reports thread --watch)')
+  .option('--json', 'NDJSON output for non-TTY')
+  .action(async (reportId: string, opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const fetchTimeline = async () => {
+      const result = await apiCall<{ report_id: string; timeline: Array<{
+        id: string; lane: string; at: string; title: string; body?: string; status?: string
+      }> }>(`/v1/sync/reports/${reportId}/timeline`, config)
+      if (!result.ok) die(result)
+      return result.data
+    }
+
+    if (opts.json || !process.stdout.isTTY) {
+      let lastLen = -1
+      for (;;) {
+        const data = await fetchTimeline()
+        if (data.timeline.length !== lastLen) {
+          console.log(JSON.stringify({ type: 'timeline', ...data }))
+          lastLen = data.timeline.length
+        }
+        await new Promise((r) => setTimeout(r, 3000))
+      }
+    }
+
+    let lastLen = -1
+    for (;;) {
+      const data = await fetchTimeline()
+      if (data.timeline.length !== lastLen) {
+        console.clear()
+        console.log(`Console · ${data.report_id}`)
+        for (const e of data.timeline) {
+          console.log(`${fmtDate(e.at)} [${e.lane}] ${e.title}`)
+          if (e.body) console.log(`  ${e.body}`)
+        }
+        lastLen = data.timeline.length
+      }
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+  })
 
 pipeline
   .command('start <reportId>')

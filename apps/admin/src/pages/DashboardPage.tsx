@@ -243,15 +243,9 @@ export function DashboardPage() {
                   stages with live counts, bottlenecks, and an animated
                   gradient edge out of the current focus stage so the eye
                   lands on the bottleneck without reading text. */}
-              <div className="hidden sm:block space-y-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
-                    Loop status &mdash; Plan, Do, Check, Act
-                  </h2>
-                  <span className="text-2xs text-fg-faint shrink-0">
-                    Plan → Do → Check → Act
-                  </span>
-                </div>
+              {/* PdcaFlow labels every stage directly — a heading above it
+                  would duplicate the same words already visible in the nodes. */}
+              <div className="hidden sm:block">
                 <PdcaFlow
                   variant="live"
                   stages={data.pdcaStages}

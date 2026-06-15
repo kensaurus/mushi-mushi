@@ -14,8 +14,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
 import { SetupNudge } from '../components/SetupNudge'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -26,8 +25,7 @@ import {
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import {
@@ -459,13 +457,7 @@ export function IntelligencePage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings."} />
 
       <IntelligenceStatusBanner
         stats={stats}
@@ -493,9 +485,7 @@ export function IntelligencePage() {
 
       {!ux.hideIntelligenceSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.digests ?? 'Digests'} value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} tooltip={digestsTooltip(stats)} detail={digestsDetail(stats)} to={intelligenceLinks.digests} />
           <StatCard label={copy?.statLabels?.activeJobs ?? 'Active jobs'} value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} tooltip={activeJobsTooltip(stats)} detail={activeJobsDetail(stats)} to={intelligenceLinks.activeJobs} />
@@ -507,7 +497,7 @@ export function IntelligencePage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'job_failed'

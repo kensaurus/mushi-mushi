@@ -14,8 +14,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useDriftUx, resolveQuickDriftTab } from '../lib/driftModeUx'
 import { useToast } from '../lib/toast'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -27,8 +26,7 @@ import {
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -329,13 +327,7 @@ export function DriftPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker."} />
 
       <DriftStatusBanner
         stats={stats}
@@ -360,9 +352,7 @@ export function DriftPage() {
         title={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.openFindings ?? 'Open findings'} value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} tooltip={openFindingsTooltip(stats)} detail={openFindingsDetail(stats)} to={driftLinks.openFindings} />
           <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalOpenTooltip(stats)} detail={criticalOpenDetail()} to={driftLinks.critical} />
@@ -374,7 +364,7 @@ export function DriftPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'critical_findings'
@@ -408,14 +398,14 @@ export function DriftPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+          {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Contracts are in sync"
               description={`${stats.snapshotCount} snapshot${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} edges tracked · 0 open findings.`}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'never_scanned' && (
+          {stats.topPriority === 'never_scanned' && (
             <RecommendedAction
               tone="info"
               title="Build your first contract baseline"
@@ -423,7 +413,7 @@ export function DriftPage() {
               cta={{ label: 'Open Scanner', to: '/drift?tab=scanner' }}
             />
           )}
-          {!ux.hideOverviewChrome && (stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
+          {(stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
             <RecommendedAction
               tone="info"
               title="Triage open drift findings"

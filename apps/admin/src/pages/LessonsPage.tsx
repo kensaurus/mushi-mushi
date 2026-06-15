@@ -19,8 +19,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Badge,
   Btn,
@@ -32,8 +31,7 @@ import {
   StatCard,
   FreshnessPill,
   RecommendedAction,
-  Card,
-} from '../components/ui'
+  Card, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -692,13 +690,7 @@ export function LessonsPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection."} />
 
       <LessonsStatusBanner
         stats={stats}
@@ -723,9 +715,7 @@ export function LessonsPage() {
         title={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.activeLessons ?? 'Active lessons'} value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} tooltip={activeLessonsTooltip(stats)} detail={activeLessonsDetail(stats)} to={lessonsLinks.activeLessons} />
           <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalLessonsTooltip(stats)} detail={criticalLessonsDetail()} to={lessonsLinks.critical} />
@@ -737,7 +727,7 @@ export function LessonsPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'critical_lessons'
@@ -771,14 +761,14 @@ export function LessonsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+          {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Lesson library is active"
               description={`${stats.activeLessons} promoted rules feeding PR context · ${stats.candidateClusters} clusters still forming.`}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'no_data' && (
+          {stats.topPriority === 'no_data' && (
             <RecommendedAction
               tone="info"
               title="Seed mistake memory with reports"
@@ -786,7 +776,7 @@ export function LessonsPage() {
               cta={{ label: 'Open Reports', to: '/reports' }}
             />
           )}
-          {!ux.hideOverviewChrome && (stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
+          {(stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
             <RecommendedAction
               tone="info"
               title="Promote a cluster to a lesson"

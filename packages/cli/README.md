@@ -152,15 +152,22 @@ real-catalog regression guard).
 
 ### `mushi doctor`
 
-Checks CLI and SDK health.  Without flags it verifies local config and endpoint
-reachability only.
+Checks CLI and SDK health. **Ingest and dispatch (server) checks run by
+default** — pass `--no-server` / `--no-ingest` to limit it to local checks.
 
 ```bash
-mushi doctor                  # local checks only
-mushi doctor --server         # + calls /preflight on the backend (all 4 dispatch checks)
-mushi doctor --ingest         # + calls /v1/sync/ingest-setup (API key → heartbeat → first report)
+mushi doctor                  # local + ingest + dispatch readiness (the full picture)
+mushi doctor --no-server      # skip the dispatch-readiness /preflight checks
+mushi doctor --no-ingest      # skip the ingest-setup checks (SDK heartbeat, first report)
+mushi doctor --fix            # apply safe local fixes, then re-run and report the post-fix state
 mushi doctor --json           # machine-readable JSON output (exits 1 if any check fails)
+mushi doctor --qa-stories     # also flag enabled QA stories with setup issues (needs server creds)
+mushi doctor --host-app       # also verify host-app wiring (env vars, Cursor MCP, Capacitor notes)
 ```
+
+`--fix` writes any missing `.env.local` lines and wires the Cursor MCP config
+(via `mushi connect`), then re-runs every check so the printed result and exit
+code reflect the post-fix state rather than the stale pre-fix failures.
 
 Local checks performed:
 
@@ -170,9 +177,10 @@ Local checks performed:
 | Endpoint reachability | `GET /v1/sdk/config?project_id=...` returns 200 |
 | SDK install | `@mushi-mushi/web` or framework-specific SDK is in `node_modules` |
 
-With `--server`, also calls `GET /v1/admin/projects/:id/preflight` (same 4 checks
-the admin console dispatch popover uses) and merges the results.  The four
-server checks (`key` values returned by the endpoint):
+The dispatch-readiness checks (on by default; skip with `--no-server`) call
+`GET /v1/admin/projects/:id/preflight` (the same 4 checks the admin console
+dispatch popover uses) and merge the results.  The four server checks (`key`
+values returned by the endpoint):
 
 | `key` | What it verifies |
 |---|---|
@@ -181,15 +189,16 @@ server checks (`key` values returned by the endpoint):
 | `anthropic` | A BYOK Anthropic key is stored in Supabase Vault (`project_settings.byok_anthropic_key_ref`) |
 | `autofix` | The autofix toggle is ON (`project_settings.autofix_enabled = true`) |
 
-`--server` requires `adminOrApiKey` credentials — set `MUSHI_API_KEY` to an
-admin key (not a public SDK key).
+The dispatch-readiness checks require `adminOrApiKey` credentials — set
+`MUSHI_API_KEY` to an admin key (not a public SDK key). If you only have an SDK
+key, pass `--no-server` to skip them.
 
-With `--ingest`, also calls `GET /v1/sync/ingest-setup` (authenticated with the
-SDK API key) and reports each **required ingest step** — project exists, active
-API key, SDK heartbeat, at least one ingested report — plus a
-`Last SDK heartbeat` diagnostic with the timestamp and endpoint host. This is
-the same payload `mushi connect --wait` polls, so a failing step here tells you
-exactly why the banner isn't showing up.
+The ingest checks (on by default; skip with `--no-ingest`) call
+`GET /v1/sync/ingest-setup` (authenticated with the SDK API key) and report each
+**required ingest step** — project exists, active API key, SDK heartbeat, at
+least one ingested report — plus a `Last SDK heartbeat` diagnostic with the
+timestamp and endpoint host. This is the same payload `mushi connect --wait`
+polls, so a failing step here tells you exactly why the banner isn't showing up.
 
 ### `mushi reset <projectId>`
 

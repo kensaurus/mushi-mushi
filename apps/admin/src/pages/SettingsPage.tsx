@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
+import { PageScopeHint,SnapshotSectionHint,Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
 import { ByokPanel } from '../components/settings/ByokPanel'
@@ -154,13 +154,7 @@ export function SettingsPage() {
     return (
       <div className="space-y-4">
         <PageHeaderBar title={copy?.title ?? 'Project settings'} />
-
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              'Per-project flags, LLM keys, SDK widget, and developer tools — scoped to the active project.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Per-project flags, LLM keys, SDK widget, and developer tools — scoped to the active project."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -206,9 +200,7 @@ export function SettingsPage() {
 
       {!ux.hideSettingsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.byok ?? 'BYOK keys'}

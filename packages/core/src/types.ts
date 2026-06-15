@@ -603,6 +603,8 @@ export interface MushiReport {
   timeline?: MushiTimelineEntry[];
   screenshotDataUrl?: string;
   selectedElement?: MushiSelectedElement;
+  /** rrweb / lite rolling-buffer events attached on submit when capture.replay is enabled. */
+  replayEvents?: unknown[];
 
   metadata?: Record<string, unknown>;
   sessionId?: string;
@@ -1266,6 +1268,29 @@ export interface MushiApiClient {
     reporterToken: string,
     note?: string,
   ): Promise<MushiApiResponse<{ outcome: Record<string, unknown> }>>;
+
+  /** List in-app notifications for the authenticated reporter. */
+  listNotifications(
+    reporterToken: string,
+    opts?: { since?: string; limit?: number },
+  ): Promise<MushiApiResponse<{ notifications: Array<Record<string, unknown>> }>>;
+
+  /** Mark a single reporter notification as read. */
+  markNotificationRead(
+    notificationId: string,
+    reporterToken: string,
+  ): Promise<MushiApiResponse<{ ok: boolean }>>;
+
+  /** List the reporter-facing feature board (public roadmap tickets). */
+  listReporterFeatureBoard(
+    reporterToken: string,
+  ): Promise<MushiApiResponse<{ tickets: Array<Record<string, unknown>> }>>;
+
+  /** Toggle the reporter's vote on a feature-board ticket. */
+  voteReporterFeatureBoard(
+    requestId: string,
+    reporterToken: string,
+  ): Promise<MushiApiResponse<{ voted: boolean; action: string }>>;
 
   // ─── Rewards program (P1) ───────────────────────────────────
 

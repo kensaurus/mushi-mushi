@@ -1,3 +1,4 @@
+import { compressScreenshotDataUrl } from './capture/compress-screenshot';
 import {
   type MushiConfig,
   type MushiWidgetConfig,
@@ -51,6 +52,12 @@ import {
   createDiscoveryCapture,
   type DiscoveryCapture,
 } from './capture';
+import { createReplayCapture, type ReplayCapture } from './capture/replay';
+import {
+  createScreenshotAnnotation,
+  type AnnotationSession,
+  type AnnotationTool,
+} from './capture/screenshot-annotation';
 import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
@@ -158,6 +165,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let elementSelector: ReturnType<typeof createElementSelector> | null = null;
   let discoveryCap: DiscoveryCapture | null = null;
   const timelineCap = createTimelineCapture();
+  let replayCap: ReplayCapture | null = null;
+  // Monotonic token guarding the async `createReplayCapture()` resolution.
+  // Two quick `updateConfig` calls (or a flip to 'off' mid-create) can resolve
+  // out of order; we only install the capture whose token is still current.
+  let replayGeneration = 0;
   let widget!: MushiWidget;
 
   function syncCaptureModules() {
@@ -265,6 +277,35 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       discoveryCap?.destroy();
       discoveryCap = null;
     }
+
+    const replayMode = activeConfig.capture?.replay ?? 'off';
+    if (replayMode === 'rrweb' || replayMode === 'lite') {
+      const generation = ++replayGeneration;
+      void createReplayCapture({
+        enabled: true,
+        redactSelectors: activeConfig.privacy?.redactSelectors,
+      }).then((cap) => {
+        // A newer sync (config change / flip to 'off') superseded this create
+        // while it was in flight — discard the stale capture rather than
+        // installing it over the current one (which would leak + mis-record).
+        if (generation !== replayGeneration) {
+          cap.destroy();
+          return;
+        }
+        replayCap?.destroy();
+        replayCap = cap;
+        // Start the rolling buffer immediately so it captures the lead-up to
+        // the bug (continuous), not just the window after the widget opens —
+        // by the time the user opens the widget the repro has already happened.
+        // The MAX_EVENTS / maxMs ring keeps it bounded.
+        replayCap.start();
+      });
+    } else {
+      // Invalidate any in-flight create so a late resolution doesn't reinstall.
+      replayGeneration++;
+      replayCap?.destroy();
+      replayCap = null;
+    }
   }
 
   const listeners = new Map<MushiEventType, Set<MushiEventHandler>>();
@@ -351,10 +392,17 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onOpen: () => {
       log.debug('Widget opened');
       void autoCaptureScreenshot('open');
+      // Idempotent safety-net: the buffer already records continuously from
+      // syncCaptureModules; this only matters if a host disabled then re-enabled
+      // capture between init and open.
+      replayCap?.start();
       emit('widget:opened');
     },
     onClose: () => {
       log.debug('Widget closed');
+      // Deliberately do NOT stop the rolling buffer here — it must keep
+      // recording so the next report still has the lead-up context. Teardown
+      // happens in destroy(). The ring buffer stays bounded by MAX_EVENTS/maxMs.
       if (pendingProactiveTrigger) {
         proactiveManager?.recordDismissal();
         emit('proactive:dismissed', { type: pendingProactiveTrigger });
@@ -374,6 +422,65 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.debug('Screenshot attachment removed');
       pendingScreenshot = null;
       widget.setScreenshotAttached(false);
+    },
+    onScreenshotAnnotateRequest: async (container: HTMLElement) => {
+      if (!pendingScreenshot) return;
+      // Re-entrancy guard: a second "Mark up" click while the editor is
+      // already mounted would stack a second canvas + toolbar on top.
+      if (container.childElementCount > 0) return;
+      let session: AnnotationSession;
+      try {
+        session = await createScreenshotAnnotation(pendingScreenshot, container);
+      } catch (err) {
+        log.warn('Screenshot annotation failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+      // Render an interactive tool palette + "Done" control. The previous
+      // implementation read `getDataUrl()` and destroyed the session in the
+      // same tick, so the user never got to draw — the screenshot was just
+      // silently downscaled/recompressed with zero annotations. We keep the
+      // session live until the user explicitly confirms.
+      const toolbar = document.createElement('div');
+      toolbar.className = 'mushi-annotate-toolbar';
+      const finish = (commit: boolean) => {
+        if (commit) {
+          pendingScreenshot = session.getDataUrl();
+          widget.setScreenshotAttached(true);
+        }
+        session.destroy();
+        toolbar.remove();
+      };
+      const tools: Array<{ id: AnnotationTool; label: string }> = [
+        { id: 'highlight', label: '\u270F\uFE0F Highlight' },
+        { id: 'blur', label: '\uD83D\uDD12 Blur' },
+        { id: 'arrow', label: '\u2197\uFE0F Arrow' },
+      ];
+      for (const toolDef of tools) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mushi-attach-btn';
+        btn.dataset.tool = toolDef.id;
+        btn.textContent = toolDef.label;
+        btn.addEventListener('click', () => {
+          session.setTool(toolDef.id);
+          toolbar
+            .querySelectorAll('button[data-tool]')
+            .forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+        toolbar.appendChild(btn);
+      }
+      // `highlight` is the session's default tool — reflect it in the UI.
+      toolbar.querySelector('button[data-tool="highlight"]')?.classList.add('active');
+      const doneBtn = document.createElement('button');
+      doneBtn.type = 'button';
+      doneBtn.className = 'mushi-attach-btn';
+      doneBtn.textContent = '\u2713 Done';
+      doneBtn.addEventListener('click', () => finish(true));
+      toolbar.appendChild(doneBtn);
+      container.insertBefore(toolbar, container.firstChild);
     },
     onElementSelectorRequest: async () => {
       if (!elementSelector || activeConfig.capture?.elementSelector === false) return;
@@ -416,6 +523,16 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const result = await apiClient.reopenReporterReport(reportId, getReporterToken(), note);
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not reopen report');
       return result.data?.outcome ?? null;
+    },
+    async onFeatureBoardRequest() {
+      const result = await apiClient.listReporterFeatureBoard(getReporterToken());
+      if (!result.ok) throw new Error(result.error?.message ?? 'Could not load community ideas');
+      return result.data?.tickets ?? [];
+    },
+    async onFeatureBoardVote(requestId) {
+      const result = await apiClient.voteReporterFeatureBoard(requestId, getReporterToken());
+      if (!result.ok) throw new Error(result.error?.message ?? 'Could not vote');
+      return result.data ?? { voted: true, action: 'added' };
     },
     onLeaderboardOpen() {
       widget.setLeaderboard(null, true);
@@ -638,6 +755,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         }
       : undefined;
 
+    const screenshotForWire = pendingScreenshot
+      ? (await compressScreenshotDataUrl(pendingScreenshot).catch(() => null))
+      : null;
+    if (pendingScreenshot && !screenshotForWire) {
+      log.warn('Screenshot dropped — could not compress under wire budget');
+    }
+
     const report: MushiReport = {
       id: newUuid(),
       projectId: config.projectId,
@@ -649,8 +773,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       networkLogs,
       performanceMetrics: activeConfig.capture?.performance === false ? undefined : perfCap?.getMetrics(),
       timeline: timelineCap.getEntries({ consoleLogs, networkLogs }),
-      screenshotDataUrl: pendingScreenshot ?? undefined,
+      screenshotDataUrl: screenshotForWire ?? undefined,
       selectedElement: pendingElement ?? undefined,
+      ...(replayCap
+        ? { replayEvents: replayCap.flush() as MushiReport['replayEvents'] }
+        : {}),
       metadata: {
         ...customMetadata,
         ...(userInfo ? { user: userInfo } : {}),
@@ -737,7 +864,28 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       return { reportId: null, queuedOffline: true };
     }
 
-    const result = await apiClient.submitReport(finalReport);
+    let result = await apiClient.submitReport(finalReport);
+    // Progressive degradation for an oversized payload. The size guard rejects
+    // before any network call, so a `PAYLOAD_TOO_LARGE` result never shrinks on
+    // a plain retry — shed the heaviest optional evidence (replay buffer first,
+    // then the screenshot) and try once more before giving up. Enqueuing an
+    // unshrinkable report would poison the offline queue forever.
+    if (!result.ok && result.error?.code === 'PAYLOAD_TOO_LARGE') {
+      if (Array.isArray(finalReport.replayEvents) && finalReport.replayEvents.length > 0) {
+        log.warn('Report too large — dropping replay buffer and retrying', {
+          reportId: finalReport.id,
+        });
+        finalReport = { ...finalReport, replayEvents: undefined };
+        result = await apiClient.submitReport(finalReport);
+      }
+      if (!result.ok && result.error?.code === 'PAYLOAD_TOO_LARGE' && finalReport.screenshotDataUrl) {
+        log.warn('Report still too large — dropping screenshot and retrying', {
+          reportId: finalReport.id,
+        });
+        finalReport = { ...finalReport, screenshotDataUrl: undefined };
+        result = await apiClient.submitReport(finalReport);
+      }
+    }
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
@@ -775,6 +923,25 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         // Swallow — never break a successful submit because Sentry's
         // scope API moved between point releases.
       }
+    } else if (
+      result.error?.code === 'PAYLOAD_TOO_LARGE' ||
+      result.error?.code === 'SERIALIZE_FAILED'
+    ) {
+      // Unshrinkable even after shedding replay + screenshot (or unserialisable
+      // entirely — e.g. circular ref). Drop it rather than enqueue: a
+      // re-measured multi-MB body would wedge the offline queue on every sync
+      // tick (the queue classifier also treats these codes as permanent as a
+      // second line of defence).
+      log.warn('Report exceeds size limit after degradation — dropping', {
+        reportId: finalReport.id,
+        error: result.error,
+      });
+      emit('report:failed', { reportId: finalReport.id, error: result.error });
+      breadcrumbs.add({
+        category: 'lifecycle',
+        level: 'error',
+        message: `Mushi report dropped — payload too large (${finalReport.id})`,
+      });
     } else {
       log.warn('Report failed, queuing for retry', { reportId: finalReport.id, error: result.error });
       await offlineQueue.enqueue(finalReport);
@@ -881,6 +1048,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       timelineCap.destroy();
       discoveryCap?.destroy();
       discoveryCap = null;
+      // Replay capture holds rrweb MutationObservers/listeners (or the lite
+      // click listener) that keep firing after teardown if not destroyed.
+      replayCap?.destroy();
+      replayCap = null;
       offlineQueue.stopAutoSync();
       detachAutoBreadcrumbs?.();
       detachAutoBreadcrumbs = null;

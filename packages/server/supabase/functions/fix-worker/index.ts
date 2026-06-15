@@ -83,7 +83,8 @@ import { createTrace } from '../_shared/observability.ts';
 import { log as rootLog, type Logger } from '../_shared/logger.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
-import { getPromptForStage } from '../_shared/prompt-ab.ts';
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { markPullRequestReady } from '../_shared/github.ts';
 
@@ -311,7 +312,8 @@ Deno.serve(
           .from('project_settings')
           .select(
             'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
-              'github_repo_url, codebase_repo_url, fix_branch_template',
+              'github_repo_url, codebase_repo_url, fix_branch_template, ' +
+              'autofix_max_spend_usd, autofix_max_dispatches_per_day, autofix_approval_cost_threshold_usd',
           )
           .eq('project_id', dispatch.project_id)
           .single(),
@@ -322,6 +324,50 @@ Deno.serve(
 
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
+
+      const budget = await checkAutofixBudget(db, dispatch.project_id, {
+        autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
+        autofix_max_dispatches_per_day: (settings?.autofix_max_dispatches_per_day as number | null) ?? null,
+        autofix_approval_cost_threshold_usd:
+          (settings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
+      }, { severity: report.severity as string | null, estimatedCostUsd: 0.25 });
+
+      if (!budget.allowed) {
+        await completeAttempt(db, fixAttemptId, {
+          status: 'failed',
+          error: budget.reason ?? 'Auto-fix budget exceeded',
+          files_changed: [],
+        });
+        await db.from('fix_dispatch_jobs').update({
+          status: 'skipped',
+          error: budget.reason,
+          finished_at: new Date().toISOString(),
+        }).eq('id', dispatch.id);
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, skipped: true, reason: budget.reason }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // `fix_dispatch_jobs` has no `approved` column — the approval signal is
+      // stored in the `dispatch_metadata` JSONB (set by the console approve action).
+      const dispatchApproved =
+        ((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}).approved === true;
+      if (budget.requiresApproval && !dispatchApproved) {
+        const approvalReason =
+          'Estimated dispatch cost exceeds approval threshold — approve in console before PR creation.';
+        await db.from('fix_dispatch_jobs').update({
+          status: 'skipped',
+          error: approvalReason,
+          finished_at: new Date().toISOString(),
+        }).eq('id', dispatch.id);
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, skipped: true, awaiting_approval: true, reason: approvalReason }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
 
       // Agent pre-flight: fix-worker can only run the LLM path today. Any
       // other autofix_agent (mcp, generic_mcp, codex) needs the Node-side
@@ -648,8 +694,11 @@ ${
       const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
       const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`;
 
-      try {
-        const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const MAX_OUTPUT_RETRIES = 2;
+      let lastLlmErr: unknown = null;
+      for (let attempt = 0; attempt <= MAX_OUTPUT_RETRIES; attempt++) {
+        try {
+          const { result, usedProvider } = await withAnthropicOrOpenAi(
           db,
           dispatch.project_id,
           async (anthropicResolved) => {
@@ -699,29 +748,40 @@ ${
         );
         fix = result;
         void usedProvider; // logged via usedModel
-      } catch (llmErr) {
-        if (llmErr instanceof LlmFailoverError) {
-          llmSpan.end({ error: llmErr.message });
-          throw new Error(`LLM call failed: ${llmErr.message}`);
+        lastLlmErr = null;
+        break;
+        } catch (llmErr) {
+          lastLlmErr = llmErr;
+          if (NoObjectGeneratedError.isInstance(llmErr) && attempt < MAX_OUTPUT_RETRIES) {
+            log.warn('Fix worker output validation failed — retrying', { attempt: attempt + 1 });
+            continue;
+          }
+          if (llmErr instanceof LlmFailoverError) {
+            llmSpan.end({ error: llmErr.message });
+            throw new Error(`LLM call failed: ${llmErr.message}`);
+          }
+          if (NoObjectGeneratedError.isInstance(llmErr)) {
+            const cause = llmErr.cause as
+              | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
+              | undefined;
+            log.warn('Fix worker structured-output schema violation', {
+              dispatchId: dispatch.id,
+              model: usedModel,
+              modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
+              zodIssues:
+                cause?.issues?.slice(0, 5).map((i) => ({
+                  path: i.path.join('.'),
+                  code: i.code,
+                  message: i.message,
+                })) ?? null,
+            });
+          }
+          llmSpan.end({ error: String(llmErr).slice(0, 500) });
+          throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
         }
-        if (NoObjectGeneratedError.isInstance(llmErr)) {
-          const cause = llmErr.cause as
-            | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
-            | undefined;
-          log.warn('Fix worker structured-output schema violation', {
-            dispatchId: dispatch.id,
-            model: usedModel,
-            modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
-            zodIssues:
-              cause?.issues?.slice(0, 5).map((i) => ({
-                path: i.path.join('.'),
-                code: i.code,
-                message: i.message,
-              })) ?? null,
-          });
-        }
-        llmSpan.end({ error: String(llmErr).slice(0, 500) });
-        throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
+      }
+      if (lastLlmErr) {
+        throw new Error(`LLM call failed after ${MAX_OUTPUT_RETRIES + 1} attempts`);
       }
       const llmLatencyMs = Date.now() - llmStart;
       llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: llmLatencyMs });

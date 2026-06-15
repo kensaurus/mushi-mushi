@@ -46,8 +46,7 @@ import {
 } from '../lib/statTooltips/feedback'
 import { feedbackLinks } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
-import {
-  Badge,
+import { PageScopeHint,SnapshotSectionHint,Badge,
   Btn,
   Card,
   ErrorAlert,
@@ -57,8 +56,7 @@ import {
   RelativeTime,
   Section,
   SegmentedControl,
-  StatCard,
-} from '../components/ui'
+  StatCard, } from '../components/ui'
 
 type ListFilter = 'all' | 'bug' | 'feature'
 
@@ -268,13 +266,7 @@ export function FeedbackPage() {
           Request feature
         </Btn>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app."} />
 
       <FeedbackStatusBanner
         stats={stats}
@@ -294,9 +286,7 @@ export function FeedbackPage() {
       />
 
       <Section title="FEEDBACK SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Total"

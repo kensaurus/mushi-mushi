@@ -14,6 +14,8 @@ export interface ChartFrameProps {
   yTickLabels: string[]
   /** One label per data point (ISO or bucket name). Sparse rendering on X-axis. */
   xLabels?: string[]
+  /** When set, X ticks align to categorical bar/ bucket centers (not span endpoints). */
+  xBucketCount?: number
   yAxisCaption?: string
   xAxisCaption?: string
   className?: string
@@ -24,6 +26,7 @@ export function ChartFrame({
   height,
   yTickLabels,
   xLabels,
+  xBucketCount,
   yAxisCaption,
   xAxisCaption,
   className = '',
@@ -70,26 +73,32 @@ export function ChartFrame({
                 />
               ))}
             </div>
-            <div className="relative z-[1] h-full w-full overflow-visible pb-px">{children}</div>
+            <div className="relative z-[1] h-full w-full overflow-visible px-0.5 pt-1 pb-px">{children}</div>
           </div>
 
           {xLabels && xLabels.length > 0 && (
             <div className="relative mt-1.5 h-6 border-t border-transparent">
               {xSparse.map(({ text, index, isToday }) => {
-                const isFirst = index === 0
-                const isEnd = index === xLast
-                const pct =
-                  xLabels.length <= 1 ? 0 : (index / (xLabels.length - 1)) * 100
-                const alignClass = isFirst
-                  ? 'left-0 items-start translate-x-0'
-                  : isEnd
-                    ? 'right-0 left-auto items-end translate-x-0'
-                    : 'items-center -translate-x-1/2'
+                const bucketed = xBucketCount != null && xBucketCount > 0
+                const pct = bucketed
+                  ? ((index + 0.5) / xBucketCount) * 100
+                  : xLabels.length <= 1
+                    ? 0
+                    : (index / (xLabels.length - 1)) * 100
+                const isFirst = !bucketed && index === 0
+                const isEnd = !bucketed && index === xLast
+                const alignClass = bucketed
+                  ? 'items-center -translate-x-1/2'
+                  : isFirst
+                    ? 'left-0 items-start translate-x-0'
+                    : isEnd
+                      ? 'right-0 left-auto items-end translate-x-0'
+                      : 'items-center -translate-x-1/2'
                 return (
                   <span
                     key={`${text}-${index}`}
                     className={`absolute flex flex-col ${alignClass}`}
-                    style={isEnd ? undefined : { left: `${pct}%` }}
+                    style={isEnd && !bucketed ? undefined : { left: `${pct}%` }}
                   >
                     <span
                       className="mb-0.5 h-1.5 w-px bg-edge-subtle"

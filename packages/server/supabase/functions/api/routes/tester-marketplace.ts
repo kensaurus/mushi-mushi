@@ -186,6 +186,98 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     return c.json(data ?? [])
   })
 
+  // GET /v1/public/roadmap/:projectSlug — public feature board (anon)
+  app.get('/v1/public/roadmap/:projectSlug', async (c) => {
+    const slug = c.req.param('projectSlug')!
+    const supabase = getServiceClient()
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id, name, slug')
+      .eq('slug', slug)
+      .maybeSingle()
+    if (!project) return c.json({ error: 'not_found' }, 404)
+
+    // Curated PII-free projection: never expose user_email / user_id /
+    // admin_response on the public (anon) roadmap. Only the idea + vote stats.
+    const { data: tickets, error } = await supabase
+      .from('feature_requests_with_stats')
+      .select('id, subject, body, status, vote_count, comment_count, created_at, shipped_at, shipped_note')
+      .eq('project_id', project.id)
+      .order('vote_count', { ascending: false })
+      .limit(100)
+    if (error) return c.json({ error: error.message }, 500)
+
+    // The view's vote_count only counts authenticated `feature_request_votes`.
+    // Anonymous roadmap votes land in `feature_request_reporter_votes`, so merge
+    // them in — otherwise a public vote returns 200 but never changes the count.
+    const ids = (tickets ?? []).map((t) => t.id as string)
+    const reporterVotes = new Map<string, number>()
+    if (ids.length) {
+      const { data: rv } = await supabase
+        .from('feature_request_reporter_votes')
+        .select('request_id')
+        .in('request_id', ids)
+      for (const row of rv ?? []) {
+        const rid = row.request_id as string
+        reporterVotes.set(rid, (reporterVotes.get(rid) ?? 0) + 1)
+      }
+    }
+    const merged = (tickets ?? [])
+      .map((t) => ({
+        ...t,
+        vote_count: (Number(t.vote_count) || 0) + (reporterVotes.get(t.id as string) ?? 0),
+      }))
+      .sort((a, b) => b.vote_count - a.vote_count)
+    return c.json({ project, tickets: merged })
+  })
+
+  // POST /v1/public/roadmap/:projectSlug/:id/vote — anonymous one-click vote
+  app.post('/v1/public/roadmap/:projectSlug/:id/vote', async (c) => {
+    const slug = c.req.param('projectSlug')!
+    const requestId = c.req.param('id')!
+    const body = await c.req.json().catch(() => ({})) as { visitorId?: string }
+    const visitor = body.visitorId?.trim() || c.req.header('x-forwarded-for') || 'anon'
+    const enc = new TextEncoder()
+    const hashBuf = await crypto.subtle.digest('SHA-256', enc.encode(`roadmap:${visitor}`))
+    const tokenHash = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, '0')).join('')
+
+    const supabase = getServiceClient()
+    const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).maybeSingle()
+    if (!project) return c.json({ error: 'not_found' }, 404)
+
+    // This endpoint is unauthenticated/public — never trust the :id param. Confirm
+    // the feature ticket actually belongs to this project before recording a vote,
+    // otherwise a foreign/invalid id could pollute another project's tallies.
+    const { data: ticket } = await supabase
+      .from('support_tickets')
+      .select('id')
+      .eq('id', requestId)
+      .eq('project_id', project.id)
+      .eq('category', 'feature')
+      .maybeSingle()
+    if (!ticket) return c.json({ error: 'not_found' }, 404)
+
+    const { data: existing } = await supabase
+      .from('feature_request_reporter_votes')
+      .select('id')
+      .eq('request_id', requestId)
+      .eq('reporter_token_hash', tokenHash)
+      .maybeSingle()
+
+    if (existing) {
+      await supabase.from('feature_request_reporter_votes').delete().eq('id', existing.id)
+      return c.json({ voted: false, action: 'removed' })
+    }
+
+    const { error: insErr } = await supabase.from('feature_request_reporter_votes').insert({
+      request_id: requestId,
+      project_id: project.id,
+      reporter_token_hash: tokenHash,
+    })
+    if (insErr) return c.json({ error: insErr.message }, 500)
+    return c.json({ voted: true, action: 'added' })
+  })
+
   // ── Tester-authenticated routes ──────────────────────────────
 
   // GET /v1/me/tester-status — camelCase response consumed by TesterHomePage

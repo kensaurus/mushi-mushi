@@ -15,7 +15,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
 import { useRealtimeReload } from '../lib/realtime'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Section,
   Card,
@@ -28,8 +28,7 @@ import { PageHeader,
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -891,13 +890,7 @@ export function ProjectsPage() {
           Refresh
         </Btn>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest."} />
 
       <ProjectsStatusBanner
         stats={stats}
@@ -915,9 +908,7 @@ export function ProjectsPage() {
       />
 
       <Section title="PROJECTS SNAPSHOT" freshness={{ at: fetchedAt, isValidating: validating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label="Projects"

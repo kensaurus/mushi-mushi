@@ -50,6 +50,38 @@ export function dbError(
   );
 }
 
+/** Canonical success envelope for admin routes. */
+export function jsonOk(
+  c: Context,
+  data: Record<string, unknown> | unknown[],
+  status = 200,
+): Response {
+  return c.json({ ok: true, data }, status);
+}
+
+/** Canonical error envelope for admin routes. */
+export function jsonError(
+  c: Context,
+  code: string,
+  message: string,
+  status = 400,
+  extra?: Record<string, unknown>,
+): Response {
+  return c.json({ ok: false, error: { code, message, ...extra } }, status);
+}
+
+export function jsonValidationError(c: Context, message: string): Response {
+  return jsonError(c, 'VALIDATION_ERROR', message, 400);
+}
+
+export function jsonNotFound(c: Context, message = 'Not found'): Response {
+  return jsonError(c, 'NOT_FOUND', message, 404);
+}
+
+export function jsonForbidden(c: Context, message = 'Forbidden'): Response {
+  return jsonError(c, 'FORBIDDEN', message, 403);
+}
+
 // `accessibleProjectIds` lives in `_shared/project-access.ts` so Edge
 // Functions outside `api/` (e.g. `inventory-crawler`) can reuse it
 // without forcing the deploy bundler to reach into `../api/` (it can't —

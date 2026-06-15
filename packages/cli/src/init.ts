@@ -24,7 +24,7 @@ import {
   type PackageManager,
 } from './detect.js'
 import { loadConfig, saveConfig } from './config.js'
-import { normalizeEndpoint, TEST_REPORT_FETCH_TIMEOUT_MS } from './endpoint.js'
+import { normalizeEndpoint, resolveCloudEndpoint, TEST_REPORT_FETCH_TIMEOUT_MS } from './endpoint.js'
 import { checkFreshness } from './freshness.js'
 import { detectWorkspaceHint, type WorkspaceHint } from './monorepo.js'
 import { MUSHI_CLI_VERSION } from './version.js'
@@ -90,14 +90,15 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     p.log.info(`Skipped install. Run \`${installCommand(pm, packagesToInstall)}\` yourself.`)
   }
 
+  const endpoint = resolveCloudEndpoint(options.endpoint)
   writeEnvFile(cwd, credentials.apiKey, credentials.projectId, framework)
-  persistCliConfig(credentials.apiKey, credentials.projectId)
+  persistCliConfig(credentials.apiKey, credentials.projectId, endpoint)
 
   const enableRewards = await maybeEnableRewards(options)
 
   printNextSteps(framework, credentials.apiKey, credentials.projectId, enableRewards)
 
-  await maybeSendTestReport(credentials, options)
+  await maybeSendTestReport(credentials, { ...options, endpoint })
 
   p.outro('Setup complete. Happy bug squashing 🐛')
 }
@@ -371,9 +372,9 @@ function warnIfMissingFromGitignore(cwd: string, envFile: string): void {
   }
 }
 
-function persistCliConfig(apiKey: string, projectId: string): void {
+function persistCliConfig(apiKey: string, projectId: string, endpoint: string): void {
   const existing = loadConfig()
-  saveConfig({ ...existing, apiKey, projectId })
+  saveConfig({ ...existing, apiKey, projectId, endpoint })
 }
 
 function printNextSteps(framework: Framework, apiKey: string, projectId: string, enableRewards = false): void {
@@ -430,19 +431,10 @@ async function maybeSendTestReport(
 
   if (!shouldSend) return
 
-  if (!options.endpoint) {
-    p.note(
-      'No endpoint configured — skipping test report.\n' +
-        'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
-      'Skipped',
-    )
-    return
-  }
+  const endpoint = normalizeEndpoint(resolveCloudEndpoint(options.endpoint))
 
   const spinner = p.spinner()
   spinner.start('Sending test report…')
-
-  const endpoint = normalizeEndpoint(options.endpoint)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TEST_REPORT_FETCH_TIMEOUT_MS)
 

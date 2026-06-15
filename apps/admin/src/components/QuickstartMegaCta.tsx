@@ -16,6 +16,7 @@
 
 import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { SEVERITY_TRAFFIC } from '../lib/severityTraffic'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
@@ -27,13 +28,6 @@ interface NextReport {
   description: string | null
   severity: string | null
   component: string | null
-}
-
-const SEVERITY_TONE: Record<string, { dot: string; label: string }> = {
-  critical: { dot: 'bg-danger', label: 'Critical' },
-  high: { dot: 'bg-warn', label: 'High' },
-  medium: { dot: 'bg-info', label: 'Medium' },
-  low: { dot: 'bg-fg-faint', label: 'Low' },
 }
 
 const SHOW_ON_PATHS = new Set(['/', '/reports', '/fixes'])
@@ -119,7 +113,7 @@ export function QuickstartMegaCta() {
   if (!cta) return null
 
   const sevTone = 'severity' in cta && cta.severity
-    ? SEVERITY_TONE[cta.severity] ?? SEVERITY_TONE.medium
+    ? { dot: SEVERITY_TRAFFIC[cta.severity as keyof typeof SEVERITY_TRAFFIC]?.bg ?? SEVERITY_TRAFFIC.medium.bg, label: SEVERITY_TRAFFIC[cta.severity as keyof typeof SEVERITY_TRAFFIC]?.label ?? 'Medium' }
     : null
 
   const ringTone =

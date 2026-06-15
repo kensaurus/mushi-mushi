@@ -34,6 +34,8 @@ import {
   EmptyState,
   RelativeTime,
 } from '../components/ui'
+import { useActivationStatus, isActivationCockpitV2Enabled } from '../lib/useActivationStatus'
+import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Drawer } from '../components/Drawer'
 import { Modal } from '../components/Modal'
@@ -864,6 +866,9 @@ interface PendingReviewStory {
 
 export function QaCoveragePage() {
   const projectId = useActiveProjectId()
+  const activationEnabled = isActivationCockpitV2Enabled()
+  const activation = useActivationStatus(projectId)
+  const qaStep = activation.getStep('first_qa_story_passing')
   const { success: toastSuccess, error: toastError } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const highlightId = searchParams.get('highlight') ?? searchParams.get('story') ?? ''
@@ -940,6 +945,23 @@ export function QaCoveragePage() {
 
   return (
     <div className="space-y-5">
+      {activationEnabled && qaStep && !qaStep.complete ? (
+        <Card className="p-3 border-dashed border-brand/25 bg-brand/5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-fg">QA setup nudge</p>
+              <p className="text-2xs text-fg-muted mt-0.5">
+                {activation.topPriority?.label
+                  ? `Activation says: ${activation.topPriority.label}. QA stories catch regressions before users do.`
+                  : 'Write a plain-English test that runs on a schedule — optional but high leverage.'}
+              </p>
+            </div>
+            <Link to="/onboarding?tab=steps">
+              <Btn size="sm" variant="ghost">View setup receipt →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
       <PageHeaderBar
         title="QA Coverage"
         projectScope={null}

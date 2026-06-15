@@ -1,8 +1,8 @@
 export const SEVERITY: Record<string, string> = {
   critical: 'bg-danger-muted text-danger border border-danger/20',
-  high:     'bg-warn-muted text-warn border border-warn/20',
-  medium:   'bg-warn-muted/60 text-warn/80 border border-warn/15',
-  low:      'bg-info-muted text-info border border-info/20',
+  high:     'bg-warn-muted text-[var(--color-warning-foreground)] border border-warn/20',
+  medium:   'bg-brand-subtle text-brand border border-brand/20',
+  low:      'bg-ok-muted text-ok border border-ok/20',
 }
 
 export const STATUS: Record<string, string> = {

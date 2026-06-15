@@ -129,15 +129,26 @@ export function FixesStatusBanner({
   }
 
   if (stats.topPriority === 'waiting') {
+    const hasAttempts = stats.totalAttempts > 0
     return (
       <StatusBannerShell
         tone="brand"
-        title="No fix attempts yet"
+        title={
+          hasAttempts
+            ? plainBanner
+              ? `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} on record`
+              : `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} — none in flight`
+            : 'No fix attempts yet'
+        }
         subtitle={
           stats.topPriorityLabel ??
-          (plainBanner
-            ? 'Send a bug from Reports to draft your first pull request.'
-            : 'Dispatch a classified report to start the auto-fix loop.')
+          (hasAttempts
+            ? plainBanner
+              ? 'Open Attempts to review history or dispatch another fix from Reports.'
+              : 'Nothing is running right now — review past attempts or send a new report to the pipeline.'
+            : plainBanner
+              ? 'Send a bug from Reports to draft your first pull request.'
+              : 'Dispatch a classified report to start the auto-fix loop.')
         }
         action={
           <Link to="/reports">

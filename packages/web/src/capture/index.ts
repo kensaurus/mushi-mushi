@@ -12,3 +12,9 @@ export {
   normalizeRoute,
   normalizeSegment,
 } from './discovery';
+export { createReplayCapture, type ReplayCapture, type ReplayCaptureOptions } from './replay';
+export {
+  createScreenshotAnnotation,
+  type AnnotationSession,
+  type AnnotationTool,
+} from './screenshot-annotation';

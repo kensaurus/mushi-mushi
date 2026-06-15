@@ -14,7 +14,6 @@ import { apiFetch } from './supabase'
 import { useRealtimeReload } from './realtime'
 import { getActiveProjectIdSnapshot, useActiveProjectSignal } from './activeProject'
 import type { DashboardData } from '../components/dashboard/types'
-import { inboxOpenActionCount } from './actionInboxFromDashboard'
 
 export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 
@@ -103,6 +102,10 @@ interface JudgeStatsResp {
   disagreementCount?: number
 }
 
+interface InboxStatsResp {
+  openActions?: number
+}
+
 function countHealthIssues(dashboard: DashboardData | undefined): number {
   const integrations = dashboard?.integrations
   if (!Array.isArray(integrations)) return 0
@@ -131,6 +134,7 @@ export function useNavCounts(): NavCounts {
       flaggedRes,
       feedbackRes,
       judgeRes,
+      inboxStatsRes,
     ] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
@@ -146,6 +150,7 @@ export function useNavCounts(): NavCounts {
       apiFetch<DeviceCountResp>('/v1/admin/anti-gaming/devices?flagged=true&count_only=1'),
       apiFetch<FeedbackSummaryResp>('/v1/admin/support/tickets/summary'),
       apiFetch<JudgeStatsResp>('/v1/admin/judge/stats'),
+      apiFetch<InboxStatsResp>('/v1/admin/inbox/stats'),
     ])
     const summary = summaryRes.ok ? summaryRes.data : null
     const reports = reportsRes.ok ? reportsRes.data : null
@@ -160,13 +165,16 @@ export function useNavCounts(): NavCounts {
     const flaggedDevices = flaggedRes.ok ? (flaggedRes.data?.count ?? 0) : 0
     const feedbackWithReply = feedbackRes.ok ? (feedbackRes.data?.with_reply ?? 0) : 0
     const judgeDisagreements = judgeRes.ok ? (judgeRes.data?.disagreementCount ?? 0) : 0
+    const inboxOpenActions = inboxStatsRes.ok
+      ? (inboxStatsRes.data?.openActions ?? 0)
+      : 0
     setCounts({
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
       fixesFailed: summary?.failed ?? 0,
       prsOpen: summary?.prsOpen ?? 0,
       regressedActions: regressed,
-      inboxOpenActions: inboxOpenActionCount(dashboard),
+      inboxOpenActions,
       notificationsUnread: notifUnread,
       queueFailed,
       healthIssues: countHealthIssues(dashboard),

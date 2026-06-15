@@ -17,7 +17,7 @@ import { PDCA_STAGES } from '../../lib/pdca'
 import { Card } from '../ui'
 import { LineSparkline } from '../charts'
 import type { PdcaStage, PdcaStageId, PdcaStageTone } from './types'
-import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
+import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 
 interface Props {
   stages: PdcaStage[]
@@ -40,14 +40,10 @@ export function PdcaCockpit({ stages, focusStage }: Props) {
   if (stages.length === 0) return null
   return (
     <section aria-label="Loop status" className="mb-3">
-      <div className="flex items-baseline justify-between mb-1.5">
-        <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
-          Loop status &mdash; Plan, Do, Check, Act
-        </h2>
-        <InlineProof className="border-0 bg-transparent px-0 py-0">
-          One loop · Plan → Do → Check → Act
-        </InlineProof>
-      </div>
+      {/* Lightweight section label; each StageTile card provides visual grounding. */}
+      <h2 className="mb-2 text-2xs font-medium uppercase tracking-wider text-fg-faint">
+        Loop status &mdash; Plan, Do, Check, Act
+      </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         {stages.map((stage, i) => (

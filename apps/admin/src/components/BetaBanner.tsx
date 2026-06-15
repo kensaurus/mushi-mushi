@@ -101,7 +101,7 @@ export function BetaBanner() {
             <span className="inline-flex shrink-0 items-center rounded border border-lime/60 bg-lime/20 px-1.5 py-px font-mono text-3xs font-bold uppercase tracking-[0.18em] text-lime">
               Beta
             </span>
-            <span className="min-w-0 text-pretty text-xs font-medium leading-snug text-lime/80">
+            <span className="min-w-0 truncate text-xs font-medium leading-snug text-lime/80">
               Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
             </span>
           </span>

@@ -20,8 +20,7 @@ import {
 } from '../lib/statTooltips/query'
 import { queryLinks } from '../lib/statCardLinks'
 import { SetupNudge } from '../components/SetupNudge'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Btn,
@@ -34,8 +33,7 @@ import {
   Kbd,
   Tooltip,
   Badge,
-  StatCard,
-} from '../components/ui'
+  StatCard, } from '../components/ui'
 import {
   ContainedBlock,
   InlineProof,
@@ -983,11 +981,7 @@ export function QueryPage() {
     return (
       <div className="space-y-4">
         <PageHeader title={copy?.title ?? 'Ask Your Data'} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Natural-language or raw SQL analytics against approved tables."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -1014,13 +1008,7 @@ export function QueryPage() {
           {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
         </Badge>
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Natural-language or raw SQL analytics against approved tables."} />
 
       {(stats.schemaDegraded || stats.errors24h > 0) && (
         <QueryStatusBanner
@@ -1099,9 +1087,7 @@ export function QueryPage() {
       )}
 
       <Section title="Query snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Runs 24h"

@@ -12,8 +12,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
-import {
-  Card,
+import { SnapshotSectionHint,Card,
   Section,
   Badge,
   Btn,
@@ -26,12 +25,10 @@ import {
   RelativeTime,
   Pct,
   FreshnessPill,
-  SegmentedControl,
-} from '../components/ui'
+  SegmentedControl, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import {
   ActionPill,
-  ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
@@ -561,6 +558,12 @@ export function HealthPage() {
       />
       )}
 
+      {/* RecommendedAction is always shown on the overview tab — it gives every
+          mode (quickstart/beginner/advanced) an actionable next step rather than
+          leaving the page blank below the KPI snapshot. PageHero (PDCA chrome)
+          is still advanced-only. */}
+      {activeTab === 'overview' && recommendedAction}
+
       {activeTab === 'overview' && !ux.hideOverviewChrome && (
         <>
           <PageHero
@@ -617,15 +620,12 @@ export function HealthPage() {
             }}
           />
 
-          {recommendedAction}
         </>
       )}
 
       {!ux.hideHealthSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.calls ?? 'LLM calls'}

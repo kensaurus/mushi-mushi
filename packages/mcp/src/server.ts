@@ -229,6 +229,28 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   )
 
   server.registerTool(
+    'get_report_timeline',
+    {
+      title: titleOf('get_report_timeline'),
+      description: descOf('get_report_timeline'),
+      annotations: annotationsFor('get_report_timeline'),
+      inputSchema: { reportId: z.string().describe('The report UUID') },
+    },
+    async (args) => jsonText(await apiCall(`/v1/sync/reports/${args.reportId}/timeline`)),
+  )
+
+  server.registerTool(
+    'get_two_way_comms_health',
+    {
+      title: titleOf('get_two_way_comms_health'),
+      description: descOf('get_two_way_comms_health'),
+      annotations: annotationsFor('get_two_way_comms_health'),
+      inputSchema: {},
+    },
+    async () => jsonText(await apiCall('/v1/sync/two-way-health')),
+  )
+
+  server.registerTool(
     'search_reports',
     {
       title: titleOf('search_reports'),
@@ -565,6 +587,128 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         })),
         diagnostic: data.diagnostic ?? null,
         summary,
+      })
+    },
+  )
+
+  server.registerTool(
+    'diagnose_connection',
+    {
+      title: titleOf('diagnose_connection'),
+      description: descOf('diagnose_connection'),
+      annotations: annotationsFor('diagnose_connection'),
+      inputSchema: {},
+    },
+    async () => {
+      const issues: Array<{ check: string; detail: string; fix: string }> = []
+
+      if (!apiKey?.startsWith('mushi_')) {
+        issues.push({
+          check: 'mcp_api_key',
+          detail: 'MCP server API key missing or malformed',
+          fix: 'Run `mushi connect` to write MUSHI_API_KEY into .cursor/mcp.json, then restart the MCP server.',
+        })
+      }
+      if (!projectId) {
+        issues.push({
+          check: 'mcp_project_id',
+          detail: 'No projectId configured on the MCP server',
+          fix: 'Add MUSHI_PROJECT_ID to .cursor/mcp.json (copy UUID from console → Projects).',
+        })
+      }
+      if (!apiEndpoint) {
+        issues.push({
+          check: 'mcp_endpoint',
+          detail: 'No API endpoint configured',
+          fix: 'Set MUSHI_API_ENDPOINT to your `…/functions/v1/api` URL in .cursor/mcp.json.',
+        })
+      }
+
+      let healthOk = false
+      if (apiEndpoint) {
+        try {
+          const healthRes = await doFetch(`${apiEndpoint.replace(/\/$/, '')}/health`, {
+            signal: AbortSignal.timeout(5000),
+          })
+          healthOk = healthRes.status === 200
+          if (!healthOk) {
+            issues.push({
+              check: 'endpoint_health',
+              detail: `GET /health → HTTP ${healthRes.status}`,
+              fix: 'Verify MUSHI_API_ENDPOINT and that the Supabase edge function is deployed.',
+            })
+          }
+        } catch (err) {
+          issues.push({
+            check: 'endpoint_health',
+            detail: err instanceof Error ? err.message : String(err),
+            fix: 'Check network connectivity and the endpoint URL in .cursor/mcp.json.',
+          })
+        }
+      }
+
+      let ingestReady = false
+      let dispatchReady = false
+      try {
+        const ingest = await apiCall<{
+          ready: boolean
+          steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>
+        }>('/v1/sync/ingest-setup')
+        ingestReady = ingest.ready
+        if (!ingest.ready) {
+          const failed = ingest.steps.filter((s) => s.required && !s.complete)
+          issues.push({
+            check: 'ingest_setup',
+            detail: `Incomplete: ${failed.map((s) => s.label).join(', ')}`,
+            fix: failed[0]?.hint ?? 'Paste the SDK snippet, start your dev server, submit a test report.',
+          })
+        }
+      } catch (err) {
+        issues.push({
+          check: 'ingest_setup',
+          detail: err instanceof Error ? err.message : String(err),
+          fix: 'Confirm API key is active for this project (Projects → API Keys).',
+        })
+      }
+
+      if (projectId) {
+        try {
+          const preflight = await apiCall<{
+            ready: boolean
+            checks: Array<{ label: string; ready: boolean; hint: string }>
+          }>(`/v1/admin/projects/${projectId}/preflight`)
+          dispatchReady = preflight.ready
+          if (!preflight.ready) {
+            const failed = preflight.checks.filter((c) => !c.ready)
+            issues.push({
+              check: 'dispatch_preflight',
+              detail: `Blocked: ${failed.map((c) => c.label).join(', ')}`,
+              fix: failed[0]?.hint ?? 'Open Settings → Integrations and complete GitHub + BYOK setup.',
+            })
+          }
+        } catch {
+          // Dispatch preflight is optional for ingest-only setups
+        }
+      }
+
+      const ready = issues.length === 0 && healthOk && ingestReady
+      const nextAction = issues[0]?.fix
+        ?? (ready
+          ? 'Connection healthy — SDK ingest is working. Submit a report to confirm end-to-end.'
+          : 'Run `mushi doctor` in your app repo for a full local checklist.')
+
+      return jsonText({
+        ready,
+        healthOk,
+        ingestReady,
+        dispatchReady,
+        endpoint: apiEndpoint ?? null,
+        projectId: projectId ?? null,
+        issues,
+        nextAction,
+        summary: ready
+          ? 'MCP credentials valid; ingest pipeline ready.'
+          : `Connection issue — ${issues[0]?.check ?? 'unknown'}: ${nextAction}`,
       })
     },
   )
@@ -980,6 +1124,25 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.resource(
+    'activation_status',
+    'mushi://activation',
+    {
+      description:
+        'Unified setup posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action.',
+    },
+    async () => {
+      const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''
+      return {
+        contents: [{
+          uri: 'mushi://activation',
+          mimeType: 'application/json',
+          text: JSON.stringify(await apiCall(`/v1/admin/activation${qs}`), null, 2),
+        }],
+      }
+    },
+  )
+
   // --- Prompts ---------------------------------------------------------
 
   server.prompt(
@@ -1046,6 +1209,31 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             `Then output exactly 5 bullets, in priority order, each formatted as:\n` +
             `\`**Action** — why it matters — suggested tool call\`\n\n` +
             `Prefer items that are bottlenecks or critical severity. Skip filler.`,
+        },
+      }],
+    }),
+  )
+
+  server.prompt(
+    'mushi_setup',
+    'Diagnose why Mushi setup is stuck and return the single next command or console step to unblock it.',
+    {},
+    () => ({
+      messages: [{
+        role: 'user',
+        content: {
+          type: 'text',
+          text:
+            `You are a Mushi onboarding copilot. Use the MCP tools:\n` +
+            `1. Read mushi://activation for unified setup posture.\n` +
+            `2. Read project://integration-health if GitHub or Sentry looks blocked.\n` +
+            `3. Call get_activation_status if the resource is unavailable.\n\n` +
+            `Then output:\n` +
+            `- **Status:** one sentence on what is done vs blocked\n` +
+            `- **Next step:** the single highest-leverage action (console link or CLI command)\n` +
+            `- **Prove it:** how the user verifies the step worked\n` +
+            `- **If still stuck:** one diagnostic command (e.g. mushi doctor --fix)\n\n` +
+            `Be specific. No generic advice.`,
         },
       }],
     }),
@@ -1486,6 +1674,38 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       )
       return jsonText({ ok: true, message: `Step ${step_index} → ${args.status}` })
     },
+  )
+
+  server.registerTool(
+    'get_activation_status',
+    {
+      title: titleOf('get_activation_status'),
+      description: descOf('get_activation_status'),
+      annotations: annotationsFor('get_activation_status'),
+      inputSchema: {
+        project_id: z.string().optional().describe('Optional project UUID override'),
+      },
+    },
+    async (args) => {
+      const qs = args.project_id ? `?project_id=${encodeURIComponent(args.project_id)}` : ''
+      const data = await apiCall<unknown>(`/v1/admin/activation${qs}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_reporter_thread',
+    {
+      title: titleOf('get_reporter_thread'),
+      description: descOf('get_reporter_thread'),
+      annotations: annotationsFor('get_reporter_thread'),
+      inputSchema: { reportId: z.string().describe('The report UUID') },
+    },
+    // The reporter thread is the `comments` lane of the unified report
+    // timeline. There is no standalone admin `/comments` route (only the
+    // reporter-token-gated `/v1/reporter/reports/:id/comments`), so we read the
+    // admin-authed timeline, which also carries fix / QA / status lanes.
+    async (args) => jsonText(await apiCall(`/v1/admin/reports/${args.reportId}/timeline`)),
   )
 
   // Apply scope filtering if granted scopes were provided.

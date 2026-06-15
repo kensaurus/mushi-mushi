@@ -14,8 +14,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
 import { SetupNudge } from '../components/SetupNudge'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Card,
   Section,
@@ -28,8 +27,7 @@ import {
   StatCard,
   RelativeTime,
   FreshnessPill,
-  RecommendedAction,
-} from '../components/ui'
+  RecommendedAction, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -369,13 +367,7 @@ export function ResearchPage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions."} />
 
       <ResearchStatusBanner
         stats={stats}
@@ -400,9 +392,7 @@ export function ResearchPage() {
         title={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.sessions ?? 'Sessions'} value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} tooltip={sessionsTooltip(stats)} detail={sessionsDetail()} to={researchLinks.sessions} />
           <StatCard label={copy?.statLabels?.snippets ?? 'Snippets'} value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} tooltip={snippetsTooltip(stats)} detail={snippetsDetail()} to={researchLinks.snippets} />
@@ -428,7 +418,7 @@ export function ResearchPage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
@@ -470,14 +460,14 @@ export function ResearchPage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+              {stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"
                   title="Research pipeline healthy"
                   description={stats.topPriorityLabel ?? `${stats.sessions} sessions with Firecrawl ready.`}
                 />
               )}
-              {!ux.hideOverviewChrome && (stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'firecrawl_untested') && (
+              {(stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'firecrawl_untested') && (
                 <RecommendedAction
                   tone="info"
                   title="Configure Firecrawl first"
@@ -485,7 +475,7 @@ export function ResearchPage() {
                   cta={{ label: 'Open Firecrawl settings', to: '/settings?tab=firecrawl' }}
                 />
               )}
-              {!ux.hideOverviewChrome && (stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
+              {(stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
                 <RecommendedAction
                   tone="urgent"
                   title="Fix Firecrawl before searching"
@@ -493,7 +483,7 @@ export function ResearchPage() {
                   cta={{ label: 'Fix in Settings', to: '/settings?tab=firecrawl' }}
                 />
               )}
-              {!ux.hideOverviewChrome && stats.topPriority === 'ready_no_sessions' && (
+              {stats.topPriority === 'ready_no_sessions' && (
                 <RecommendedAction
                   tone="info"
                   title="Run your first search"

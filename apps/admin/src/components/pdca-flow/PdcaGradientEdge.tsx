@@ -26,8 +26,9 @@ const STROKE_BASE = 3.25
 const STROKE_ACTIVE = 4.5
 // The loop-back cubic bezier dips this many flow-px below the node row.
 // Must be < (canvas height − node height) so fitView keeps the arc in frame.
-// Must fit inside live canvas: insetY + nodeHeight + LOOP_DEPTH + marker < canvas h.
-const LOOP_DEPTH = 96
+// Canvas is now 320px (live) — LOOP_DEPTH=80 leaves adequate clearance:
+// ~16px insetY + 148px nodeH + 80px arc + 12px marker ≈ 256px < 320px.
+const LOOP_DEPTH = 80
 
 function PdcaGradientEdgeInner({
   id,
@@ -171,15 +172,19 @@ function PdcaGradientEdgeInner({
 
       {edgeData.edgeLabel && (
         <EdgeLabelRenderer>
+          {/* Label pill colour matches the source stage — same convention as PulseArrow.
+              Using sourceColor (not targetColor) so "Triage→Fix" reads as a Plan output,
+              not a Do input — it belongs to the stage it's leaving. */}
           <div
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY - 12}px)`,
               pointerEvents: 'none',
+              borderColor: edgeData.sourceColor ?? '#60a5fa',
             }}
-            className="rounded-full border border-edge/70 bg-surface-overlay/95 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wider shadow-sm"
+            className="rounded-full border bg-surface-overlay/95 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wider shadow-sm"
           >
-            <span style={{ color: edgeData.targetColor ?? '#60a5fa' }}>{edgeData.edgeLabel}</span>
+            <span style={{ color: edgeData.sourceColor ?? '#60a5fa' }}>{edgeData.edgeLabel}</span>
           </div>
         </EdgeLabelRenderer>
       )}

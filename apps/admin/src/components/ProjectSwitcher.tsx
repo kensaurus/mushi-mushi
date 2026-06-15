@@ -25,6 +25,7 @@ import { ActiveProjectStatusChip } from './ActiveProjectStatusChip'
 import { sdkOriginFromSetupProject } from '../lib/resolveProjectDomain'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { buildProjectSetupTooltip } from '../lib/projectMetaTooltips'
+import { headerDropdownPanelClass } from '../lib/appChrome'
 import { MetricTooltipContent, Tooltip } from './ui'
 
 export function ProjectSwitcher() {
@@ -156,7 +157,7 @@ export function ProjectSwitcher() {
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
+          className={`${headerDropdownPanelClass} w-80 max-w-[calc(100vw-2rem)]`}
         >
           <ul role="listbox" className="max-h-80 overflow-y-auto divide-y divide-edge-subtle/60">
             {projects.map((p) => {

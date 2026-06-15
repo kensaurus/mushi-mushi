@@ -181,7 +181,9 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-fg-tertiary">No channels found — make sure the Mushi app is added to at least one channel.</p>
+              <p className="rounded-sm border border-warn/30 bg-warn/10 px-2.5 py-2 text-xs text-warn">
+                No channels found — invite the Mushi bot to at least one Slack channel first.
+              </p>
             )}
           </div>
         </div>

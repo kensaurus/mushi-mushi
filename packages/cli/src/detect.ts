@@ -317,6 +317,7 @@ export function detectFramework(cwd: string, pkg: PackageJson | null): Framework
   if (deps.has('@angular/core')) return FRAMEWORKS.angular
   if (deps.has('expo')) return FRAMEWORKS.expo
   if (deps.has('react-native')) return FRAMEWORKS['react-native']
+  if (deps.has('@capacitor/core') && deps.has('react')) return FRAMEWORKS.react
   if (deps.has('@capacitor/core')) return FRAMEWORKS.capacitor
   if (deps.has('svelte')) return FRAMEWORKS.svelte
   if (deps.has('vue')) return FRAMEWORKS.vue

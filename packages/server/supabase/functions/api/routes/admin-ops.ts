@@ -2035,9 +2035,11 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         t.admin_response.trim().length > 0,
     ).length;
     const shipped = rows.filter((t) => t.shipped_in_release_id != null).length;
+    const reopened = rows.filter((t) => t.status === 'reopened').length;
+    const votes = rows.filter((t) => t.category === 'feature').length;
     return c.json({
       ok: true,
-      data: { total: rows.length, active, with_reply: withReply, shipped },
+      data: { total: rows.length, active, with_reply: withReply, shipped, reopened, votes },
     });
   });
 

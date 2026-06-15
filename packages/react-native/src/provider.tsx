@@ -60,7 +60,18 @@ import { MushiFloatingButton } from './components/MushiFloatingButton'
 export interface MushiRNConfig {
   projectId: string
   apiKey: string
+  /** @deprecated Prefer `apiEndpoint` — kept for backward compatibility */
   endpoint?: string
+  /** Canonical Mushi API base URL (e.g. https://xyz.supabase.co/functions/v1/api) */
+  apiEndpoint?: string
+  /** Lifecycle callbacks for host-app integration (replaces polling in HHTP etc.) */
+  callbacks?: {
+    onReportSubmitted?: (reportId: string) => void
+    onReportQueued?: (reportId: string) => void
+    onReportSynced?: (reportId: string) => void
+    onReporterReply?: (reportId: string, commentId: string) => void
+    onFixStatusChanged?: (reportId: string, status: string) => void
+  }
   widget?: {
     trigger?: 'shake' | 'button' | 'both' | 'manual' | 'auto' | 'edge-tab' | 'hidden' | 'attach'
     shakeThreshold?: number
@@ -158,15 +169,19 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
   )
 
   // Validate: an explicitly empty string is a misconfiguration.
-  if (config.endpoint !== undefined && config.endpoint.trim() === '') {
+  const rawEndpoint = config.apiEndpoint ?? config.endpoint
+  if (rawEndpoint !== undefined && rawEndpoint.trim() === '') {
     throw new Error(
-      '[MushiProvider] endpoint is set to an empty string. ' +
-        'Set endpoint to your Supabase edge function URL, ' +
+      '[MushiProvider] apiEndpoint is set to an empty string. ' +
+        'Set apiEndpoint to your Supabase edge function URL, ' +
         'e.g. https://xyz.supabase.co/functions/v1/api, or omit it to use the cloud default.',
     )
   }
+  if (config.endpoint && !config.apiEndpoint && __DEV__) {
+    console.warn('[MushiProvider] `endpoint` is deprecated — use `apiEndpoint` instead.')
+  }
   // Defer to @mushi-mushi/core's DEFAULT_API_ENDPOINT when not provided.
-  const apiEndpoint = config.endpoint ?? DEFAULT_API_ENDPOINT
+  const apiEndpoint = rawEndpoint ?? DEFAULT_API_ENDPOINT
 
   useEffect(() => {
     if (config.capture?.console !== false) {
@@ -184,6 +199,10 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
       maxSize: config.storage?.maxQueueSize,
       apiEndpoint,
       apiKey: config.apiKey,
+      // `onReportSynced` fires here — when a previously-queued report actually
+      // drains to the server — not on the direct-submit path (where it would be
+      // indistinguishable from `onReportSubmitted` and thus meaningless).
+      onSynced: (reportId) => config.callbacks?.onReportSynced?.(reportId),
     })
 
     queueRef.current.flush().catch(() => {})
@@ -358,10 +377,15 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
 
       const result = await client.submitReport(report)
       if (!result.ok) {
+        // Fire `onReportQueued` only after the report is actually persisted —
+        // `enqueue` can no-op (AsyncStorage unavailable) or evict under cap.
         await queueRef.current?.enqueue(report)
+        config.callbacks?.onReportQueued?.(report.id)
+      } else {
+        config.callbacks?.onReportSubmitted?.(report.id)
       }
     },
-    [config.projectId, apiEndpoint],
+    [config.projectId, config.callbacks, apiEndpoint],
   )
 
   // v0.10.0: user identity state (was missing, causing workarounds in glot.it)
