@@ -625,7 +625,7 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
   P: 'bg-info/15 text-info border border-info/35',
   D: 'bg-brand/15 text-brand border border-brand/35',
-  C: 'bg-warn/15 text-warn border border-warn/35',
+  C: 'bg-warn-muted/50 text-warning-foreground border border-warn/35',
   A: 'bg-ok/15 text-ok border border-ok/35',
 }
 

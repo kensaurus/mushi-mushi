@@ -20,6 +20,49 @@ export interface OnboardingSignals {
   mergedFixCount: number;
 }
 
+/**
+ * Single source of truth for the onboarding checklist. Both the empty-project
+ * branch (which reports totals) and the populated branch (which reports
+ * per-step completion) derive their counts from this array, so the two can
+ * never drift out of sync.
+ */
+type StepMeta = {
+  id: string;
+  label: string;
+  required: boolean;
+  complete: (s: OnboardingSignals) => boolean;
+};
+
+const ONBOARDING_STEPS: StepMeta[] = [
+  { id: 'project_created', label: 'Create your first project', required: true, complete: () => true },
+  { id: 'api_key_generated', label: 'Generate an API key', required: true, complete: (s) => s.hasKey },
+  { id: 'sdk_installed', label: 'Install the SDK in your app', required: true, complete: (s) => s.hasSdk },
+  {
+    id: 'first_report_received',
+    label: 'Receive your first bug report',
+    required: true,
+    complete: (s) => s.reportCount > 0,
+  },
+  { id: 'github_connected', label: 'Connect GitHub', required: false, complete: (s) => s.hasGithub },
+  { id: 'sentry_connected', label: 'Connect Sentry (optional)', required: false, complete: (s) => s.hasSentry },
+  { id: 'byok_anthropic', label: 'Add your Anthropic key (optional)', required: false, complete: (s) => s.hasByok },
+  {
+    id: 'first_fix_dispatched',
+    label: 'Dispatch your first auto-fix',
+    required: false,
+    complete: (s) => s.fixCount > 0,
+  },
+  {
+    id: 'first_qa_story_passing',
+    label: 'Set up a QA story (optional)',
+    required: false,
+    complete: (s) => s.hasQaPassing,
+  },
+];
+
+const ONBOARDING_REQUIRED_TOTAL = ONBOARDING_STEPS.filter((step) => step.required).length;
+const ONBOARDING_OPTIONAL_TOTAL = ONBOARDING_STEPS.length - ONBOARDING_REQUIRED_TOTAL;
+
 export function buildOnboardingStatsPayload(input: {
   hasAnyProject: boolean;
   adminHost: string | null;
@@ -32,11 +75,11 @@ export function buildOnboardingStatsPayload(input: {
       projectId: null,
       projectName: null,
       requiredComplete: 0,
-      requiredTotal: 4,
+      requiredTotal: ONBOARDING_REQUIRED_TOTAL,
       stepsComplete: 0,
-      stepsTotal: 8,
+      stepsTotal: ONBOARDING_STEPS.length,
       optionalComplete: 0,
-      optionalTotal: 4,
+      optionalTotal: ONBOARDING_OPTIONAL_TOTAL,
       setupDone: false,
       nextStepId: 'project_created' as string | null,
       nextStepLabel: 'Create your first project' as string | null,
@@ -53,33 +96,12 @@ export function buildOnboardingStatsPayload(input: {
   }
 
   const s = input.signals;
-  type StepDef = { id: string; label: string; complete: boolean; required: boolean };
-  const steps: StepDef[] = [
-    { id: 'project_created', label: 'Create your first project', complete: true, required: true },
-    { id: 'api_key_generated', label: 'Generate an API key', complete: s.hasKey, required: true },
-    { id: 'sdk_installed', label: 'Install the SDK in your app', complete: s.hasSdk, required: true },
-    {
-      id: 'first_report_received',
-      label: 'Receive your first bug report',
-      complete: s.reportCount > 0,
-      required: true,
-    },
-    { id: 'github_connected', label: 'Connect GitHub', complete: s.hasGithub, required: false },
-    { id: 'sentry_connected', label: 'Connect Sentry (optional)', complete: s.hasSentry, required: false },
-    { id: 'byok_anthropic', label: 'Add your Anthropic key (optional)', complete: s.hasByok, required: false },
-    {
-      id: 'first_fix_dispatched',
-      label: 'Dispatch your first auto-fix',
-      complete: s.fixCount > 0,
-      required: false,
-    },
-    {
-      id: 'first_qa_story_passing',
-      label: 'Set up a QA story (optional)',
-      complete: s.hasQaPassing,
-      required: false,
-    },
-  ];
+  const steps = ONBOARDING_STEPS.map((step) => ({
+    id: step.id,
+    label: step.label,
+    complete: step.complete(s),
+    required: step.required,
+  }));
 
   const requiredSteps = steps.filter((step) => step.required);
   const optionalSteps = steps.filter((step) => !step.required);

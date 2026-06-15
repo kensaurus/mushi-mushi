@@ -14,6 +14,7 @@ import { buildFixPipelineStages, fixStatusStripeClass } from './fixPipelineStage
 import { ciBadge, type FixAttempt } from './types'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { IconChevronDown, IconChevronUp } from '../icons'
+import { FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 
 const AGENT_LABEL: Record<string, string> = {
   cursor_cloud: 'Cursor',
@@ -94,18 +95,18 @@ function FixRowViewInner({
         data-testid={index === 0 ? 'fix-row' : undefined}
         data-tour-id={index === 0 ? 'fix-card' : undefined}
       >
-        <td className="w-1 p-0 align-stretch">
+        <td className={`${FIXES_TABLE_COL.stripe} p-0 align-stretch`}>
           <span className={`block w-1 min-h-[2.75rem] ${stripe}`} aria-hidden />
         </td>
-        <td className="px-2 py-2 align-middle min-w-[8rem]">
-          <div className="flex flex-col gap-0.5">
-            <Badge className={`w-fit ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
+        <td className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 align-middle whitespace-nowrap`}>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <Badge className={`w-fit max-w-full min-w-0 truncate text-2xs ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
               {pipelineStatusLabel(fix.status)}
             </Badge>
-            <span className="text-3xs text-fg-faint font-mono">{agentShort}</span>
+            <span className="text-2xs text-fg-faint font-mono truncate">{agentShort}</span>
           </div>
         </td>
-        <td className="px-2 py-2 align-middle max-w-[18rem]">
+        <td className={`${FIXES_TABLE_COL.report} ${TABLE_CELL.pxLead} py-2 align-middle min-w-0 overflow-hidden`}>
           <div className="min-w-0 space-y-0.5">
             <Link
               to={`/reports/${fix.report_id}`}
@@ -122,12 +123,12 @@ function FixRowViewInner({
           </div>
         </td>
         {!compactTable ? (
-          <td className="px-2 py-2 align-middle w-[7.5rem]">
+          <td className={`${FIXES_TABLE_COL.pipeline} ${TABLE_CELL.pxMeta} py-2 align-middle whitespace-nowrap`}>
             <PipelineStrip stages={stages} compact />
           </td>
         ) : null}
         {!compactTable ? (
-          <td className="px-2 py-2 align-middle hidden md:table-cell">
+          <td className={`${FIXES_TABLE_COL.ci} ${TABLE_CELL.pxMeta} py-2 align-middle hidden md:table-cell`}>
             <div className="flex items-center gap-1.5 flex-wrap">
               {fix.agent === 'cursor_cloud' && fix.cursor_agent_id && (
                 <CursorAgentBadge agentId={fix.cursor_agent_id} />
@@ -146,10 +147,10 @@ function FixRowViewInner({
             </div>
           </td>
         ) : null}
-        <td className="px-2 py-2 align-middle text-right tabular-nums whitespace-nowrap">
+        <td className={`${FIXES_TABLE_COL.started} ${TABLE_CELL.pxMeta} py-2 align-middle text-right tabular-nums whitespace-nowrap`}>
           <RelativeTime value={fix.started_at} className="text-2xs text-fg-muted" />
         </td>
-        <td className="px-2 py-2 align-middle text-right w-36">
+        <td className={`${FIXES_TABLE_COL.action} ${TABLE_CELL.pxMeta} py-2 align-middle text-right whitespace-nowrap`}>
           <div
             className="flex items-center justify-end gap-1"
             onClick={(e) => e.stopPropagation()}

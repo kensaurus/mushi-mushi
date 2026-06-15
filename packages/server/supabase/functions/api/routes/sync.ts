@@ -26,7 +26,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth } from '../../_shared/auth.ts'
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
-import { normalizeSyncStatus, isReporterFixedStatus } from '../../_shared/report-status.ts'
+import { normalizeSyncStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
@@ -373,10 +373,13 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     // Mirrors the same trigger that reports-dashboard.ts fires from the admin UI,
     // so CLI triage also notifies the end-user widget.
     const canonicalStatus = status ? (normalizeSyncStatus(status) ?? status) : undefined
+    // Compare on the stored canonical form so a legacy `resolved` row PATCHed
+    // with `resolved` (stored as `fixed`) is treated as a no-op, not a fresh
+    // `fixed` transition that re-fires a reporter notification.
     if (
       canonicalStatus &&
       (isReporterFixedStatus(canonicalStatus) || canonicalStatus === 'dismissed') &&
-      existing.status !== updates['status']
+      toStoredStatus(existing.status) !== updates['status']
     ) {
       const notifType = isReporterFixedStatus(canonicalStatus) ? 'fixed' : 'dismissed'
       // reporter_token_hash is not on existing (select was minimal) — re-fetch it.

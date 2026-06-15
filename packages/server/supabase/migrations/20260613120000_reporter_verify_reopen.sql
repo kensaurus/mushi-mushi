@@ -76,7 +76,6 @@ AS $$
 DECLARE
   v_report public.reports%ROWTYPE;
   v_child_id uuid;
-  v_already boolean;
 BEGIN
   IF p_signal IS NULL OR p_signal NOT IN (
     'confirms', 'wrong_target', 'agent_fixed_wrong_thing', 'already_fixed', 'noise', 'not_fixed'
@@ -205,3 +204,8 @@ $$;
 
 REVOKE ALL ON FUNCTION public.mushi_apply_reporter_feedback(uuid, text, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.mushi_apply_reporter_feedback(uuid, text, text, text) TO service_role;
+
+-- Flush PostgREST's in-memory schema + config cache so the new columns / RPC
+-- are visible immediately after deploy (repo convention for structural migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

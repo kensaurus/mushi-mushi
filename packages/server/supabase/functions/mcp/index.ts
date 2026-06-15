@@ -628,6 +628,192 @@ const TOOLS: Record<string, ToolDef> = {
       }
     },
   },
+
+  // ── Sentry-like triage + project context tools ─────────────────────────────
+
+  list_projects: {
+    scope: 'mcp:read',
+    description:
+      'List the Mushi projects accessible to this API key. Returns project id, name, and created date. For multi-project tokens this lists all accessible projects; for single-project keys it returns only the bound project.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (_args, ctx) => {
+      return apiCall('/v1/admin/mcp/projects', { headers: ctx.authHeaders })
+    },
+  },
+
+  get_project_context: {
+    scope: 'mcp:read',
+    description:
+      'Return a rich context snapshot for a project: ingest health, SDK heartbeat, autofix readiness, open-report counts, and active integrations. Combine with get_recent_reports before triaging.',
+    inputSchema: {
+      type: 'object',
+      properties: { project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project)' } },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'project_id is required')
+      const qs = new URLSearchParams()
+      if (pid) qs.set('project_id', pid)
+
+      const [preflightRes, activationRes] = await Promise.allSettled([
+        apiCall<unknown>(`/v1/admin/projects/${encodeURIComponent(pid)}/preflight`, { headers: ctx.authHeaders }),
+        apiCall<unknown>(`/v1/admin/activation?${qs}`, { headers: ctx.authHeaders }),
+      ])
+
+      return {
+        project_id: pid,
+        preflight: preflightRes.status === 'fulfilled' ? preflightRes.value : { error: String(preflightRes.reason) },
+        activation: activationRes.status === 'fulfilled' ? activationRes.value : { error: String(activationRes.reason) },
+      }
+    },
+  },
+
+  get_pipeline_logs: {
+    scope: 'mcp:read',
+    description:
+      'Pull recent log entries from the Mushi pipeline services (fix-worker, pipeline, qa-story-runner). Accepts project_id, service, since (ISO timestamp), limit (max 200), level (all/info/warn/error) filters.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project)' },
+        service: {
+          type: 'string',
+          enum: ['all', 'fix-worker', 'pipeline', 'qa-story-runner'],
+          description: 'Filter by service name',
+        },
+        since: { type: 'string', description: 'ISO timestamp — only events after this time' },
+        limit: { type: 'number', description: 'Max entries to return (default 50, max 200)' },
+        level: {
+          type: 'string',
+          enum: ['all', 'info', 'warn', 'error'],
+          description: 'Min severity filter',
+        },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'project_id is required')
+      const qs = new URLSearchParams()
+      if (args.service && args.service !== 'all') qs.set('service', args.service as string)
+      if (args.since) qs.set('since', args.since as string)
+      qs.set('limit', String(Math.min((args.limit as number) ?? 50, 200)))
+      if (args.level) qs.set('level', args.level as string)
+      return apiCall(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?${qs}`, { headers: ctx.authHeaders })
+    },
+  },
+
+  get_report_evidence: {
+    scope: 'mcp:read',
+    description:
+      'Return the focused evidence package for a single bug report: screenshot URL, console logs, network excerpts, environment info, user comments, and browser/OS data. Lighter than get_report_detail — skips the full classification/fix history.',
+    inputSchema: {
+      type: 'object',
+      required: ['report_id'],
+      properties: { report_id: { type: 'string', description: 'Report UUID' } },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      requireString(args.report_id, 'report_id')
+      const [reportRes, timelineRes] = await Promise.allSettled([
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}`, { headers: ctx.authHeaders }),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/timeline`, { headers: ctx.authHeaders }),
+      ])
+
+      const report = reportRes.status === 'fulfilled' ? reportRes.value : null
+      const timeline = timelineRes.status === 'fulfilled' ? timelineRes.value : null
+      const evidence = report
+        ? {
+            id: report.id,
+            title: report.title,
+            description: report.description,
+            status: report.status,
+            severity: report.severity,
+            category: report.category,
+            screenshot_url: (report.evidence as Record<string, unknown> | null)?.screenshot_url ?? null,
+            console_logs: (report.evidence as Record<string, unknown> | null)?.console ?? null,
+            network_requests: (report.evidence as Record<string, unknown> | null)?.network ?? null,
+            environment: report.environment ?? null,
+            user_agent: report.user_agent ?? null,
+            user_comments: report.comments ?? null,
+            created_at: report.created_at,
+          }
+        : { error: String((reportRes as PromiseRejectedResult).reason) }
+
+      return { evidence, reporter_thread: timeline ?? { error: String((timelineRes as PromiseRejectedResult).reason) } }
+    },
+  },
+
+  triage_issue: {
+    scope: 'mcp:read',
+    description:
+      'Read-only orchestration tool that combines report detail, evidence, similar bugs, fix context, blast radius, recent pipeline logs, and recommended next actions into a single triage packet. This is the primary entry point for agent-driven bug investigation.',
+    inputSchema: {
+      type: 'object',
+      required: ['report_id'],
+      properties: {
+        report_id: { type: 'string', description: 'Report UUID to triage' },
+        project_id: { type: 'string', description: 'Project UUID — for log context (falls back to key-bound project)' },
+        include_logs: { type: 'boolean', description: 'Include recent pipeline warnings/errors (default true)' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      requireString(args.report_id, 'report_id')
+      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      const includeLogs = args.include_logs !== false
+
+      const [reportRes, timelineRes, similarRes, fixCtxRes, blastRes, logsRes] = await Promise.allSettled([
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}`, { headers: ctx.authHeaders }),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/timeline`, { headers: ctx.authHeaders }),
+        apiCall<unknown>('/v1/admin/reports/similarity', {
+          method: 'POST',
+          headers: ctx.authHeaders,
+          body: JSON.stringify({ report_id: args.report_id }),
+        }).catch(() => null),
+        pid
+          ? apiCall<unknown>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/fix-context`, { headers: ctx.authHeaders }).catch(() => null)
+          : Promise.resolve(null),
+        pid
+          ? apiCall<unknown>(`/v1/admin/reports/${encodeURIComponent(args.report_id as string)}/blast-radius`, { headers: ctx.authHeaders }).catch(() => null)
+          : Promise.resolve(null),
+        includeLogs && pid
+          ? apiCall<unknown>(`/v1/admin/mcp/logs/${encodeURIComponent(pid)}?limit=20&level=warn`, { headers: ctx.authHeaders }).catch(() => null)
+          : Promise.resolve(null),
+      ])
+
+      const report = reportRes.status === 'fulfilled' ? reportRes.value : null
+      const severity = report?.severity ?? 'unknown'
+      const status = report?.status ?? 'unknown'
+
+      const actions: Array<{ action: string; reason: string }> = []
+      if (status === 'open' || status === 'triage') {
+        actions.push({ action: 'dispatch_fix', reason: 'Report is open — initiate an automated fix attempt.' })
+      } else if (status === 'fixing') {
+        actions.push({ action: 'get_fix_context', reason: 'Fix is in progress — check fix context for details.' })
+      } else if (status === 'fixed') {
+        actions.push({ action: 'close_report', reason: 'Fix has been applied — verify and close the report.' })
+      }
+      if (severity === 'critical' || severity === 'high') {
+        actions.push({ action: 'get_blast_radius', reason: 'High severity — check blast radius for affected scope.' })
+      }
+
+      return {
+        report: report ?? { error: String((reportRes as PromiseRejectedResult).reason) },
+        evidence_thread: timelineRes.status === 'fulfilled' ? timelineRes.value : null,
+        similar_reports: similarRes.status === 'fulfilled' ? similarRes.value : null,
+        fix_context: fixCtxRes.status === 'fulfilled' ? fixCtxRes.value : null,
+        blast_radius: blastRes.status === 'fulfilled' ? blastRes.value : null,
+        pipeline_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
+        recommended_actions: actions,
+        triage_summary: report
+          ? `[${severity?.toString().toUpperCase()}] "${report.title ?? report.id}" — status: ${status}. ${actions.length} recommended action(s).`
+          : 'Could not fetch report.',
+      }
+    },
+  },
 }
 
 // ----------------------------------------------------------------------------

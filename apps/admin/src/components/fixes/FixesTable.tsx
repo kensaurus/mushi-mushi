@@ -8,15 +8,19 @@ import { ResponsiveTable, TableDensityToggle } from '../ResponsiveTable'
 import { FixRowView } from './FixRowView'
 import { FixDetailPanel } from './FixDetailPanel'
 import type { FixAttempt } from './types'
+import { FIXES_STICKY_LEAD, FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 
-interface InventoryActionSummary {
-  actionNodeId: string
-  actionLabel: string
+interface InventoryActionNodeLike {
+  actionNodeId?: string
+  id?: string
+  actionLabel?: string
+  label?: string
   actionDescription?: string | null
   pagePath?: string | null
   storyTitle?: string | null
   expectedOutcome?: Record<string, unknown> | null
   status?: string | null
+  metadata?: Record<string, unknown>
 }
 
 interface Props {
@@ -25,7 +29,7 @@ interface Props {
   timelines: Record<string, FixTimelineEvent[]>
   traceUrlFor: (traceId: string | null | undefined) => string | null
   inFlightReportIds: Set<string>
-  inventoryActions: Record<string, InventoryActionSummary | null | undefined>
+  inventoryActions: Record<string, InventoryActionNodeLike | null | undefined>
   onToggle: (fixId: string) => void
   onRetry: (reportId: string) => void
   compactTable?: boolean
@@ -68,21 +72,37 @@ export function FixesTable({
           </span>
         </div>
       )}
-      <ResponsiveTable stickyFirstColumn ariaLabel="Fix attempts">
-        <table className="w-full text-sm">
+      <ResponsiveTable
+        ariaLabel="Fix attempts"
+        stickyLeadColumns={3}
+        stickyOffsets={FIXES_STICKY_LEAD}
+      >
+        <table
+          className={`w-full table-fixed border-collapse text-sm ${compactTable ? 'min-w-[44rem]' : 'min-w-[56rem]'}`}
+          aria-label="Fix attempts"
+        >
+          <colgroup>
+            <col className={FIXES_TABLE_COL.stripe} />
+            <col className={FIXES_TABLE_COL.status} />
+            <col className={FIXES_TABLE_COL.report} />
+            {!compactTable ? <col className={FIXES_TABLE_COL.pipeline} /> : null}
+            {!compactTable ? <col className={FIXES_TABLE_COL.ci} /> : null}
+            <col className={FIXES_TABLE_COL.started} />
+            <col className={FIXES_TABLE_COL.action} />
+          </colgroup>
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
-              <th scope="col" className="w-1 p-0" aria-label="Status stripe" />
-              <th scope="col" className="px-2 py-2 text-left font-medium w-28">Status</th>
-              <th scope="col" className="px-2 py-2 text-left font-medium">Report</th>
+              <th scope="col" className={`${FIXES_TABLE_COL.stripe} p-0`} aria-label="Status stripe" />
+              <th scope="col" className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 text-left font-medium`}>Status</th>
+              <th scope="col" className={`${FIXES_TABLE_COL.report} ${TABLE_CELL.pxLead} py-2 text-left font-medium`}>Report</th>
               {!compactTable ? (
-                <th scope="col" className="px-2 py-2 text-left font-medium w-32">Pipeline</th>
+                <th scope="col" className={`${FIXES_TABLE_COL.pipeline} ${TABLE_CELL.pxMeta} py-2 text-left font-medium`}>Pipeline</th>
               ) : null}
               {!compactTable ? (
-                <th scope="col" className="px-2 py-2 text-left font-medium hidden md:table-cell">CI / Agent</th>
+                <th scope="col" className={`${FIXES_TABLE_COL.ci} ${TABLE_CELL.pxMeta} py-2 text-left font-medium hidden md:table-cell`}>CI / Agent</th>
               ) : null}
-              <th scope="col" className="px-2 py-2 text-right font-medium w-24">Started</th>
-              <th scope="col" className="px-2 py-2 text-right font-medium w-36">
+              <th scope="col" className={`${FIXES_TABLE_COL.started} ${TABLE_CELL.pxMeta} py-2 text-right font-medium`}>Started</th>
+              <th scope="col" className={`${FIXES_TABLE_COL.action} ${TABLE_CELL.pxMeta} py-2 text-right font-medium`}>
                 {actionLabels?.nextStepHeader ?? 'Actions'}
               </th>
             </tr>
@@ -97,13 +117,13 @@ export function FixesTable({
                   ? undefined
                   : rawInv
                     ? {
-                        actionNodeId: rawInv.actionNodeId,
-                        actionLabel: rawInv.actionLabel,
-                        actionDescription: rawInv.actionDescription,
-                        pagePath: rawInv.pagePath,
-                        storyTitle: rawInv.storyTitle,
-                        expectedOutcome: rawInv.expectedOutcome,
-                        status: rawInv.status,
+                        actionNodeId: (rawInv.actionNodeId ?? rawInv.id ?? nodeId ?? 'unknown') as string,
+                        actionLabel: (rawInv.actionLabel ?? rawInv.label ?? 'Unknown action') as string,
+                        actionDescription: rawInv.actionDescription ?? (rawInv.metadata?.['action'] as string | null) ?? null,
+                        pagePath: rawInv.pagePath ?? (rawInv.metadata?.['page_path'] as string | null) ?? null,
+                        storyTitle: rawInv.storyTitle ?? (rawInv.metadata?.['story_title'] as string | null) ?? null,
+                        expectedOutcome: (rawInv.expectedOutcome ?? (rawInv.metadata?.['expected_outcome'] as Record<string, unknown> | null) ?? null),
+                        status: rawInv.status ?? (rawInv.metadata?.['status'] as string | null) ?? null,
                       }
                     : null
 

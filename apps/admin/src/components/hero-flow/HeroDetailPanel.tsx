@@ -67,7 +67,7 @@ const TILE_COLORS = {
 
 const TONE_CLASS: Record<string, string> = {
   ok:      'bg-ok-muted/20 text-ok border border-ok/30',
-  warn:    'bg-warn/15 text-warn border border-warn/30',
+  warn:    'bg-warn-muted/50 text-warning-foreground border border-warn/30',
   crit:    'bg-err/15 text-err border border-err/30',
   info:    'bg-info-muted/20 text-info border border-info/30',
   neutral: 'bg-surface-overlay text-fg-muted border border-edge-subtle',

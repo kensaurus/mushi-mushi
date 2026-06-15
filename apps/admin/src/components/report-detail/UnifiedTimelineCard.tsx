@@ -7,7 +7,7 @@ const LANE_PILL: Record<UnifiedTimelineLane, string> = {
   reporter_comment: 'bg-info-muted text-info',
   admin_comment: 'bg-warn-muted text-warn',
   fix: 'bg-ok-muted text-ok',
-  qa: 'bg-accent/15 text-accent',
+  qa: 'bg-accent-muted/55 text-accent-foreground',
   skill_pipeline: 'bg-brand/10 text-brand',
   ask_mushi: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }

@@ -1,17 +1,23 @@
-// mcp-admin.ts — MCP setup stats for the admin console KPI strip
+// mcp-admin.ts — MCP setup stats and MCP-scoped API routes
 //
 // Admin (JWT, project-scoped via X-Mushi-Project-Id):
 //   GET /v1/admin/mcp/stats — key counts, scope coverage, SDK heartbeat
+//
+// API-key callers (adminOrApiKey mcp:read):
+//   GET /v1/admin/mcp/projects — list projects accessible to this key
+//   GET /v1/admin/mcp/logs/:projectId — recent pipeline events for a project
 
 import { Hono } from 'npm:hono@4'
-import { jwtAuth } from '../../_shared/auth.ts'
+import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { resolveOwnedProject } from '../shared.ts'
+import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
-const TOOL_COUNT = 22
-const RESOURCE_COUNT = 3
-const PROMPT_COUNT = 3
+// Keep in sync with packages/mcp/src/catalog.ts counts.
+// Update when tools/resources/prompts are added.
+const TOOL_COUNT = 73
+const RESOURCE_COUNT = 8
+const PROMPT_COUNT = 4
 
 function hasMcpRead(scopes: string[]): boolean {
   return scopes.includes('mcp:write') || scopes.includes('mcp:read')
@@ -177,4 +183,281 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       },
     })
   })
+
+  // ── MCP-scoped project list (API key + JWT) ────────────────────────────────
+  // Returns only the project(s) accessible to the caller's credentials.
+  // API-key callers see exactly their bound project; JWT admins see all their
+  // projects. This lets `list_projects` tool work for both auth methods.
+  parent.get('/v1/admin/mcp/projects', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const db = getServiceClient()
+    const authMethod = c.get('authMethod') as string | undefined
+    const projectId = c.get('projectId') as string | undefined
+
+    if (authMethod === 'apiKey' && projectId) {
+      // API-key caller: return just their bound project
+      const { data: project, error } = await db
+        .from('projects')
+        .select('id, name, created_at, updated_at')
+        .eq('id', projectId)
+        .maybeSingle()
+
+      if (error) {
+        return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+      }
+      return c.json({
+        ok: true,
+        data: { projects: project ? [project] : [], total: project ? 1 : 0 },
+      })
+    }
+
+    // JWT caller: return all projects owned by this user
+    const userId = c.get('userId') as string
+    const projectIds = await ownedProjectIds(db, userId)
+
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: { projects: [], total: 0 } })
+    }
+
+    const { data: projects, error } = await db
+      .from('projects')
+      .select('id, name, created_at, updated_at')
+      .in('id', projectIds)
+      .order('name', { ascending: true })
+
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    }
+
+    return c.json({
+      ok: true,
+      data: { projects: projects ?? [], total: (projects ?? []).length },
+    })
+  })
+
+  // ── MCP pipeline logs (API key + JWT) ─────────────────────────────────────
+  // Returns recent pipeline events for a project, aggregated from fix_events,
+  // processing_queue, and qa_story_runs. Read-only; project-scoped; scrubbed.
+  //
+  // Query params: service, since, limit (max 200), level
+  parent.get(
+    '/v1/admin/mcp/logs/:projectId',
+    adminOrApiKey({ scope: 'mcp:read' }),
+    async (c) => {
+      const db = getServiceClient()
+      const authMethod = c.get('authMethod') as string | undefined
+      const callerProjectId = c.get('projectId') as string | undefined
+      const targetProjectId = c.req.param('projectId')
+      if (!targetProjectId) {
+        return c.json(
+          { ok: false, error: { code: 'PROJECT_ID_REQUIRED', message: 'Project ID is required.' } },
+          400,
+        )
+      }
+
+      // Scope guard: API-key callers may only query their own bound project.
+      if (authMethod === 'apiKey' && callerProjectId && callerProjectId !== targetProjectId) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INSUFFICIENT_SCOPE',
+              message: 'API key is not bound to the requested project.',
+            },
+          },
+          403,
+        )
+      }
+
+      // JWT callers: verify ownership
+      if (authMethod === 'jwt') {
+        const userId = c.get('userId') as string
+        const ownedIds = await ownedProjectIds(db, userId)
+        if (!ownedIds.includes(targetProjectId)) {
+          return c.json(
+            { ok: false, error: { code: 'NOT_FOUND', message: 'Project not found.' } },
+            404,
+          )
+        }
+      }
+
+      const rawLimit = parseInt(c.req.query('limit') ?? '50', 10)
+      const limit = Math.min(isNaN(rawLimit) ? 50 : rawLimit, 200)
+      const since = c.req.query('since') // ISO timestamp
+      const service = c.req.query('service') ?? 'all'
+      const level = c.req.query('level') ?? 'all'
+
+      const entries: Array<{
+        id: string
+        service: string
+        level: string
+        message: string
+        ts: string
+        detail?: Record<string, unknown> | null
+      }> = []
+
+      // ── fix_events (service=fix-worker) ───────────────────────────────────
+      if (service === 'all' || service === 'fix-worker') {
+        let q = db
+          .from('fix_events')
+          .select('id, kind, status, label, detail, at, fix_attempt_id')
+          .order('at', { ascending: false })
+          .limit(Math.min(limit, 50))
+
+        if (since) q = q.gt('at', since)
+
+        // Filter by project via fixes -> reports using parameterized PostgREST calls.
+        const { data: reportRows, error: reportErr } = await db
+          .from('reports')
+          .select('id')
+          .eq('project_id', targetProjectId)
+          .limit(500)
+        if (reportErr) return dbError(c, reportErr)
+
+        const reportIds = (reportRows ?? []).map((row) => row.id as string).filter(Boolean)
+        let fixEvts: Array<{
+          id: string
+          kind: string | null
+          status: string | null
+          label: string | null
+          detail: Record<string, unknown> | null
+          at: string | null
+          fix_attempt_id: string | null
+        }> = []
+        if (reportIds.length > 0) {
+          const { data: attempts, error: attemptsErr } = await db
+            .from('fix_attempts')
+            .select('id')
+            .in('report_id', reportIds)
+            .limit(500)
+          if (attemptsErr) return dbError(c, attemptsErr)
+
+          const attemptIds = (attempts ?? []).map((row) => row.id as string).filter(Boolean)
+          if (attemptIds.length > 0) {
+            const { data: scopedFixEvts, error: fixEventsErr } = await q.in('fix_attempt_id', attemptIds)
+            if (fixEventsErr) return dbError(c, fixEventsErr)
+            fixEvts = (scopedFixEvts ?? []) as typeof fixEvts
+          }
+        }
+        for (const ev of fixEvts ?? []) {
+          const isError = (ev.status ?? '') === 'error' || (ev.kind ?? '').includes('error')
+          const entryLevel = isError ? 'error' : 'info'
+          if (level === 'all' || level === entryLevel || (level === 'warn' && isError)) {
+            entries.push({
+              id: `fix:${ev.id}`,
+              service: 'fix-worker',
+              level: entryLevel,
+              message: [ev.kind, ev.label].filter(Boolean).join(' — '),
+              ts: ev.at as string,
+              detail: (ev.detail as Record<string, unknown> | null) ?? null,
+            })
+          }
+        }
+      }
+
+      // ── processing_queue (service=pipeline) ───────────────────────────────
+      if (service === 'all' || service === 'pipeline') {
+        let pq = db
+          .from('processing_queue')
+          .select('id, status, error_message, updated_at, created_at')
+          .eq('project_id', targetProjectId)
+          .order('updated_at', { ascending: false })
+          .limit(Math.min(limit, 50))
+
+        if (since) pq = pq.gt('updated_at', since)
+
+        const wantErrors = level === 'error' || level === 'warn' || level === 'all'
+        if (level === 'error' || level === 'warn') {
+          pq = pq.eq('status', 'failed')
+        }
+
+        const { data: queueRows } = await pq
+        for (const row of queueRows ?? []) {
+          const entryLevel =
+            (row.status as string) === 'failed'
+              ? 'error'
+              : (row.status as string) === 'processing'
+                ? 'info'
+                : 'info'
+          if (!wantErrors && entryLevel !== 'info') continue
+          entries.push({
+            id: `queue:${row.id}`,
+            service: 'pipeline',
+            level: entryLevel,
+            message:
+              (row.error_message as string | null) ??
+              `Queue item status: ${row.status as string}`,
+            ts: (row.updated_at ?? row.created_at) as string,
+          })
+        }
+      }
+
+      // ── qa_story_runs (service=qa-story-runner) ────────────────────────────
+      if (service === 'all' || service === 'qa-story-runner') {
+        let qsr = db
+          .from('qa_story_runs')
+          .select('id, status, error_message, latency_ms, started_at, completed_at, story_id')
+          .order('started_at', { ascending: false })
+          .limit(Math.min(limit, 50))
+
+        if (since) qsr = qsr.gt('started_at', since)
+        if (level === 'error' || level === 'warn') {
+          qsr = qsr.eq('status', 'failed')
+        }
+
+        // Scope to project via a parameterized story lookup.
+        const { data: storyRows, error: storiesErr } = await db
+          .from('qa_stories')
+          .select('id')
+          .eq('project_id', targetProjectId)
+          .limit(500)
+        if (storiesErr) return dbError(c, storiesErr)
+
+        const storyIds = (storyRows ?? []).map((row) => row.id as string).filter(Boolean)
+        let storyRuns: Array<{
+          id: string
+          status: string | null
+          error_message: string | null
+          latency_ms: number | null
+          started_at: string | null
+          completed_at: string | null
+          story_id: string | null
+        }> = []
+        if (storyIds.length > 0) {
+          const { data: scopedStoryRuns, error: storyRunsErr } = await qsr.in('story_id', storyIds)
+          if (storyRunsErr) return dbError(c, storyRunsErr)
+          storyRuns = (scopedStoryRuns ?? []) as typeof storyRuns
+        }
+        for (const run of storyRuns ?? []) {
+          const isFailed = (run.status as string) === 'failed'
+          const entryLevel = isFailed ? 'error' : 'info'
+          if ((level === 'error' || level === 'warn') && !isFailed) continue
+          entries.push({
+            id: `qa:${run.id}`,
+            service: 'qa-story-runner',
+            level: entryLevel,
+            message: isFailed
+              ? `QA run failed: ${(run.error_message as string | null) ?? 'unknown error'}`
+              : `QA run ${run.status as string} (${run.latency_ms as number | null}ms)`,
+            ts: (run.started_at ?? run.completed_at) as string,
+          })
+        }
+      }
+
+      // Sort merged entries by ts descending and cap at limit
+      entries.sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0))
+      const paged = entries.slice(0, limit)
+
+      return c.json({
+        ok: true,
+        data: {
+          project_id: targetProjectId,
+          service,
+          level,
+          since: since ?? null,
+          entries: paged,
+          count: paged.length,
+        },
+      })
+    },
+  )
 }

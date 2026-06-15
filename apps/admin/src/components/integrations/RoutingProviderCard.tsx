@@ -85,11 +85,11 @@ export function RoutingProviderCard({
               <h3 className="text-sm font-semibold text-fg">{provider.label}</h3>
               <HealthPill status={existing ? PLATFORM_STATUS_MAP[probeStatus] : undefined} />
               {existing && !existing.is_active && (
-                <Badge className="bg-warn/10 text-warn border border-warn/30">Paused</Badge>
+                <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">Paused</Badge>
               )}
               {existing && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
                 <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
-                  <Badge className="bg-warn/10 text-warn border border-warn/30">Stale</Badge>
+                  <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">Stale</Badge>
                 </Tooltip>
               )}
             </div>

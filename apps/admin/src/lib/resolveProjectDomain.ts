@@ -189,9 +189,9 @@ export function projectInitials(name: string): string {
 const INITIALS_CHIP_THEMES = [
   'bg-info/15 text-info border-info/35',
   'bg-brand/15 text-brand border-brand/35',
-  'bg-warn/15 text-warn border-warn/35',
+  'bg-warn-muted/50 text-warning-foreground border-warn/35',
   'bg-ok/15 text-ok border-ok/35',
-  'bg-accent/15 text-accent border-accent/35',
+  'bg-accent-muted/55 text-accent-foreground border-accent/35',
 ] as const
 
 /** Stable accent so the same project always gets the same initials colour. */

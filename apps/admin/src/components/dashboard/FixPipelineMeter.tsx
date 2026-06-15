@@ -39,7 +39,7 @@ export function FixPipelineMeter({ fixSummary }: Props) {
   }
 
   const hasFailure = failed > 0
-  const primaryHref = hasFailure ? '/fixes?status=failed' : openPrs > 0 ? '/fixes' : '/fixes'
+  const primaryHref = hasFailure ? '/fixes?status=failed' : openPrs > 0 ? '/fixes?status=open_pr' : '/fixes'
   const primaryLabel = hasFailure
     ? `${failed} failed — retry`
     : openPrs > 0
@@ -91,9 +91,9 @@ export function FixPipelineMeter({ fixSummary }: Props) {
         to={primaryHref}
         className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
           hasFailure
-            ? 'border-danger/40 bg-danger/10 text-danger hover:bg-danger/15'
+            ? 'border-danger/40 bg-danger-muted/50 text-danger-foreground hover:bg-danger/15'
             : openPrs > 0
-              ? 'border-ok/35 bg-ok/10 text-ok hover:bg-ok/15'
+              ? 'border-ok/35 bg-ok-muted/50 text-ok-foreground hover:bg-ok/15'
               : 'border-edge-subtle bg-surface-overlay/30 text-fg-secondary hover:bg-surface-overlay/50 hover:text-fg'
         }`}
       >

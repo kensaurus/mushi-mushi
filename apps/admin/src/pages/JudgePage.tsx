@@ -700,9 +700,9 @@ export function JudgePage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
+                ? 'bg-danger-muted/50 text-danger-foreground'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
+                  ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
                     ? 'bg-brand/15 text-brand'
                     : 'bg-surface-overlay text-fg-muted'
@@ -1048,7 +1048,7 @@ export function JudgePage() {
                   next.delete('filter')
                   setSearchParams(next, { replace: true })
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-warn/40 bg-warn/10 text-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-warn/40 bg-warn-muted/50 text-warning-foreground hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60"
                 aria-label="Clear disagreement filter"
               >
                 <span>Disagreements only</span>
