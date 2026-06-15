@@ -277,6 +277,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
 
     const status = c.req.query('status');
     const category = c.req.query('category');
+    const userCategory = c.req.query('user_category');
     const severity = c.req.query('severity');
     const component = c.req.query('component');
     const reporter = c.req.query('reporter');
@@ -333,6 +334,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       else query = query.eq('status', status);
     }
     if (category) query = query.eq('category', category);
+    if (userCategory) query = query.eq('user_category', userCategory);
     if (severity) query = query.eq('severity', severity);
     if (component) query = query.eq('component', component);
     if (reporter) query = query.eq('reporter_token_hash', reporter);
@@ -482,7 +484,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const threshold = Math.min(Math.max(Number(body.threshold) || 0.2, 0), 1);
 
     try {
-      const { createEmbedding } = await import('../_shared/embeddings.ts');
+      const { createEmbedding } = await import('../../_shared/embeddings.ts');
       const embedding = await createEmbedding(query, { projectId: projectIds[0] });
       const embeddingLiteral = `[${embedding.join(',')}]`;
 

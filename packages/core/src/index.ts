@@ -22,6 +22,7 @@ export type {
   MushiReportCategory,
   MushiReportStatus,
   MushiReport,
+  MushiCustomCategory,
   MushiReportBuilder,
   MushiEnvironment,
   MushiConsoleEntry,

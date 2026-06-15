@@ -58,6 +58,25 @@ export const CATEGORY_BADGE: Record<string, string> = {
   other: CHIP_TONE.neutral,
 }
 
+/**
+ * Human-readable label for a category id.
+ * Falls back to title-casing the raw id for custom categories
+ * not present in `CATEGORY_LABELS`.
+ */
+export function categoryLabel(id: string | null | undefined): string {
+  if (!id) return 'Other'
+  return CATEGORY_LABELS[id] ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Badge class for a category id.
+ * Falls back to `neutral` tone for unknown custom categories.
+ */
+export function categoryBadge(id: string | null | undefined): string {
+  if (!id) return CHIP_TONE.neutral
+  return CATEGORY_BADGE[id] ?? CHIP_TONE.neutral
+}
+
 /** Styling for LLM confidence percentage chips (0–1). */
 export function confidenceBadgeClass(c: number | null | undefined): string {
   if (c == null) return CHIP_TONE.neutral

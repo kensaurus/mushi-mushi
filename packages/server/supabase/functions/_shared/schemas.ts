@@ -7,6 +7,12 @@ export const reportSubmissionSchema = z.object({
   id: z.string().optional(),
   projectId: z.string(),
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']),
+  /**
+   * Custom category id set by the host app when `widget.categories` is
+   * configured. Stored as `reports.user_category` so the console can
+   * filter by it independently of the LLM-assigned `category`.
+   */
+  userCategory: z.string().max(128).optional(),
   description: z.string().min(20, 'Description must be at least 20 characters').max(5000),
   userIntent: z.coerce.string().optional(),
 
