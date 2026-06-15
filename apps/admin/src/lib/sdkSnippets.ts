@@ -543,7 +543,7 @@ app.onError(
 // After install, run:  npx cap sync
 import { Mushi } from '@mushi-mushi/capacitor'
 
-await Mushi.init({
+await Mushi.configure({
 ${capLines.join('\n')}
 })`
 }
