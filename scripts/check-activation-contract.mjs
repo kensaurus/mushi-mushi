@@ -37,7 +37,12 @@ assert(mcpCatalog.includes('mushi_setup'), 'MCP catalog lists mushi_setup prompt
 
 const hook = read('apps/admin/src/lib/useActivationStatus.ts')
 assert(hook.includes('VITE_ACTIVATION_COCKPIT_V2'), 'activation cockpit flag documented')
-assert(!hook.includes("!== 'false'") || hook.includes("!== 'false'"), 'activation defaults enabled')
+// The cockpit must be enabled-by-default: the flag is opt-OUT (only the
+// literal string 'false' disables it) and the hook returns `true` when the
+// env var is unset. Assert both so a regression that flips the default off
+// (e.g. `=== 'true'` or `return false`) actually fails this gate.
+assert(hook.includes("!== 'false'"), "activation flag uses the opt-out `!== 'false'` guard")
+assert(/return true\b/.test(hook), 'activation defaults enabled when the flag is unset')
 
 if (failed) process.exit(1)
 console.log('[ok] activation contract checks passed')

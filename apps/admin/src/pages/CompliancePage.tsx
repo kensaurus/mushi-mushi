@@ -96,12 +96,12 @@ interface Evidence {
 
 const STATUS_CHIP: Record<Evidence['status'], string> = {
   pass: 'bg-ok/15 text-ok border border-ok/30',
-  warn: 'bg-warn/15 text-warn border border-warn/30',
-  fail: 'bg-danger/15 text-danger border border-danger/30',
+  warn: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
+  fail: 'bg-danger-muted/50 text-danger-foreground border border-danger/30',
 }
 
 const DSAR_STATUS_CHIP: Record<Dsar['status'], string> = {
-  pending: 'bg-warn/15 text-warn border border-warn/30',
+  pending: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
   in_progress: 'bg-info/15 text-info border border-info/30',
   completed: 'bg-ok/15 text-ok border border-ok/30',
   rejected: 'bg-fg-faint/20 text-fg-muted border border-edge-subtle',
@@ -580,7 +580,7 @@ export function CompliancePage() {
         {stats.soc2Entitlement ? (
           <Badge className="bg-ok-muted text-ok">SOC 2 enabled</Badge>
         ) : (
-          <Badge className="bg-warn/10 text-warn">{stats.planDisplayName} — upgrade for compliance</Badge>
+          <Badge className="bg-warn-muted/50 text-warning-foreground">{stats.planDisplayName} — upgrade for compliance</Badge>
         )}
         <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">
           Refresh evidence

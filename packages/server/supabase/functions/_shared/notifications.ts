@@ -87,6 +87,15 @@ async function loadReporterPrefs(
   }
 }
 
+/**
+ * Claim a delivery slot for (report, type, channel). The UNIQUE constraint on
+ * those three columns makes the ledger idempotent. On a conflict (23505) we
+ * load the existing row instead of giving up:
+ *   - `sent` / `skipped` → terminal, return null (idempotent no-op).
+ *   - `pending` / `failed` → bump `attempts`, re-arm to `pending`, reuse the id
+ *     so a previously-failed delivery can actually be retried (the whole point
+ *     of the `attempts` column + retry-ledger intent).
+ */
 async function claimDeliverySlot(
   db: SupabaseClient,
   projectId: string,
@@ -111,12 +120,45 @@ async function claimDeliverySlot(
     .select('id')
     .maybeSingle()
 
-  if (error) {
-    if (error.code === '23505') return null
+  if (!error) return data?.id ?? null
+
+  if (error.code !== '23505') {
     notifLog.error('delivery_claim_failed', { type, channel, error: error.message })
     return null
   }
-  return data?.id ?? null
+
+  // Conflict: a delivery row already exists for this (report, type, channel).
+  const { data: existing, error: selErr } = await db
+    .from('notification_deliveries')
+    .select('id, status, attempts')
+    .eq('report_id', reportId)
+    .eq('notification_type', type)
+    .eq('channel', channel)
+    .maybeSingle()
+
+  if (selErr || !existing) {
+    if (selErr) notifLog.error('delivery_conflict_lookup_failed', { type, channel, error: selErr.message })
+    return null
+  }
+
+  // Already delivered (or deliberately skipped) → idempotent no-op.
+  if (existing.status === 'sent' || existing.status === 'skipped') return null
+
+  const { error: updErr } = await db
+    .from('notification_deliveries')
+    .update({
+      status: 'pending',
+      attempts: (typeof existing.attempts === 'number' ? existing.attempts : 0) + 1,
+      payload,
+      error_message: null,
+    })
+    .eq('id', existing.id)
+
+  if (updErr) {
+    notifLog.error('delivery_retry_arm_failed', { type, channel, error: updErr.message })
+    return null
+  }
+  return existing.id as string
 }
 
 async function markDelivery(
@@ -221,7 +263,12 @@ export async function createNotification(
   const message = payload.message || buildNotificationMessage(type, payload)
   const fullPayload = { ...payload, message }
 
-  const channels: NotificationChannel[] = ['in_app']
+  // Build the channel list from the reporter's persisted opt-ins. `in_app`
+  // defaults on (DEFAULT_CHANNEL_PREFS) but must be honoured when explicitly
+  // disabled — hard-coding it here made `channels.in_app = false` a dead
+  // setting.
+  const channels: NotificationChannel[] = []
+  if (prefs.channels.in_app) channels.push('in_app')
   if (prefs.channels.email && prefs.email) channels.push('email')
   if (prefs.channels.push) channels.push('push')
 
@@ -244,9 +291,12 @@ export async function createNotification(
     }
 
     if (channel === 'email' && prefs.email) {
+      // Tenant-neutral subject — this fan-out serves every project, not just
+      // glot.it. Keep the product name generic so cross-tenant emails read
+      // correctly.
       const result = await sendEmailNotification(
         prefs.email,
-        `glot.it / Mushi — ${type.replace(/_/g, ' ')}`,
+        `Mushi — ${type.replace(/_/g, ' ')}`,
         message,
       )
       await markDelivery(db, deliveryId, result.ok ? 'sent' : 'failed', result.error)

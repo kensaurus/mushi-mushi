@@ -178,7 +178,7 @@ interface Invoice {
 const STATUS_TONE: Record<string, string> = {
   active: 'bg-ok-muted text-ok',
   trialing: 'bg-brand-subtle text-brand',
-  past_due: 'bg-warn/10 text-warn',
+  past_due: 'bg-warn-muted/50 text-warning-foreground',
   canceled: 'bg-surface-overlay text-fg-muted',
   unpaid: 'bg-danger-subtle text-danger',
   free: 'bg-surface-overlay text-fg-muted',
@@ -189,7 +189,7 @@ const TIER_TONE: Record<string, string> = {
   hobby: 'bg-surface-overlay text-fg-muted',
   starter: 'bg-brand-subtle text-brand',
   pro: 'bg-ok-muted text-ok',
-  enterprise: 'bg-warn/10 text-warn border border-warn/30',
+  enterprise: 'bg-warn-muted/50 text-warning-foreground border border-warn/30',
 }
 
 const formatMoney = (amountMinor: number, currency: string) => {
@@ -716,7 +716,7 @@ function ProjectBillingCard({
               </>
             )}
             {project.subscription?.cancel_at_period_end && (
-              <Badge className="bg-warn/10 text-warn border border-warn/30">
+              <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">
                 Cancels at period end
               </Badge>
             )}
@@ -937,7 +937,7 @@ interface UsageHeadline {
 
 const USAGE_CHIP_TONE: Record<UsageTone, string> = {
   ok: 'bg-ok-muted text-ok',
-  warn: 'bg-warn/10 text-warn',
+  warn: 'bg-warn-muted/50 text-warning-foreground',
   danger: 'bg-danger-subtle text-danger',
   muted: 'bg-surface-overlay text-fg-muted',
 }
@@ -1439,7 +1439,7 @@ interface SupportTicket {
 }
 
 const TICKET_STATUS_TONE: Record<SupportTicket['status'], string> = {
-  open: 'bg-warn/10 text-warn',
+  open: 'bg-warn-muted/50 text-warning-foreground',
   in_progress: 'bg-brand-subtle text-brand',
   resolved: 'bg-ok-muted text-ok',
   closed: 'bg-surface-overlay text-fg-muted',

@@ -1009,7 +1009,7 @@ export function QaCoveragePage() {
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-fg">🧪 TDD Tests Pending Review</span>
           {pendingReview.length > 0 && (
-            <span className="text-2xs bg-warn/15 text-warn px-1.5 py-0.5 rounded-full">{pendingReview.length}</span>
+            <span className="text-2xs bg-warn-muted/50 text-warning-foreground px-1.5 py-0.5 rounded-full">{pendingReview.length}</span>
           )}
         </div>
         <p className="text-2xs text-fg-muted">

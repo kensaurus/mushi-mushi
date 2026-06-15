@@ -10,6 +10,13 @@
 
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  confidenceBarTone,
+  confidencePercent,
+  confidenceTextTone,
+  CONFIDENCE_SEGMENT_COUNT,
+  confidenceSegmentFilled,
+} from '../reports/reportMetricViz'
 
 // ─── ContainedBlock ───────────────────────────────────────────
 // Inset tinted card for contextual data blocks.
@@ -54,8 +61,8 @@ type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand'
 const CHIP_TONE: Record<ChipTone, string> = {
   neutral: 'bg-surface-overlay text-fg-muted border-edge',
   ok:      'bg-ok/15 text-ok border-ok/35',
-  warn:    'bg-warn/15 text-warn border-warn/35',
-  danger:  'bg-danger/15 text-danger border-danger/35',
+  warn:    'bg-warn-muted/50 text-warning-foreground border-warn/35',
+  danger:  'bg-danger-muted/50 text-danger-foreground border-danger/35',
   info:    'bg-info/15 text-info border-info/35',
   brand:   'bg-brand-subtle text-brand border-brand/35',
 }
@@ -188,17 +195,27 @@ export interface ConfidenceMeterProps {
 }
 
 export function ConfidenceMeter({ confidence, className = '' }: ConfidenceMeterProps) {
-  const pct = confidence != null ? Math.max(0, Math.min(1, confidence)) * 100 : 0
-  const tone = pct >= 70 ? 'bg-ok' : pct >= 40 ? 'bg-warn' : 'bg-danger'
+  const pct = confidencePercent(confidence)
+  if (pct == null || confidence == null) {
+    return <span className={`text-2xs text-fg-faint ${className}`}>—</span>
+  }
+
+  const barTone = confidenceBarTone(confidence)
+  const textTone = confidenceTextTone(pct)
+
   return (
     <div className={`flex items-center gap-1.5 ${className}`}>
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-raised">
-        <div
-          className={`h-full rounded-full transition-all ${tone}`}
-          style={{ width: `${pct}%` }}
-        />
+      <div className="flex h-1.5 w-16 gap-px overflow-hidden rounded-full bg-surface-raised p-px">
+        {Array.from({ length: CONFIDENCE_SEGMENT_COUNT }, (_, i) => (
+          <span
+            key={i}
+            className={`flex-1 rounded-[1px] motion-safe:transition-colors ${
+              confidenceSegmentFilled(pct, i) ? barTone : 'bg-edge-subtle/80'
+            }`}
+          />
+        ))}
       </div>
-      <span className="text-2xs tabular-nums text-fg-muted">{confidence != null ? `${Math.round(pct)}%` : '—'}</span>
+      <span className={`text-2xs tabular-nums font-mono font-medium ${textTone}`}>{pct}%</span>
     </div>
   )
 }

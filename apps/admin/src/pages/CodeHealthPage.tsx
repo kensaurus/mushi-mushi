@@ -76,7 +76,7 @@ function SeverityBadge({ severity }: { severity: GodFileFinding['severity'] }) {
   if (severity === 'error')
     return <Badge className="bg-danger-subtle text-danger">Error</Badge>
   if (severity === 'warn')
-    return <Badge className="bg-warn/10 text-warn">Warn</Badge>
+    return <Badge className="bg-warn-muted/50 text-warning-foreground">Warn</Badge>
   return <Badge className="bg-surface-overlay text-fg-secondary">Info</Badge>
 }
 

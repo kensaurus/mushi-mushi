@@ -277,7 +277,7 @@ export function CostPage() {
             {stats.totalCalls > 0 ? (
               <Badge className="bg-ok-muted text-ok">Telemetry on</Badge>
             ) : (
-              <Badge className="bg-warn/10 text-warn">No calls yet</Badge>
+              <Badge className="bg-warn-muted/50 text-warning-foreground">No calls yet</Badge>
             )}
           </>
         )}

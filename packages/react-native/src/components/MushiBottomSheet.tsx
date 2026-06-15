@@ -64,6 +64,12 @@ const CATEGORIES = [
   { key: 'other', emoji: '💬', label: 'Other' },
 ] as const
 
+// Reporter-fixed/terminal statuses that should surface the verify ("Yes,
+// fixed") / reopen ("Not fixed") row. Mirrors the web widget, which treats
+// `resolved` (CLI alias) and `verified` (already-confirmed, still reopenable on
+// regression) as fixed-ish alongside `fixed`.
+const VERIFIABLE_STATUSES = new Set(['fixed', 'resolved', 'verified'])
+
 export interface MushiBottomSheetProps {
   visible: boolean
   onClose: () => void
@@ -98,13 +104,6 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   // Local shadow of the screenshot so we can clear it from inside the sheet
   const [screenshotAttached, setScreenshotAttached] = useState(true)
 
-  useEffect(() => {
-    if (visible) {
-      setScreenshotAttached(true)
-      if (sheetTab === 'inbox') void loadInbox()
-    }
-  }, [visible, sheetTab])
-
   const loadInbox = useCallback(async () => {
     if (!mushi?.listMyReports) return
     setInboxLoading(true)
@@ -115,6 +114,13 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
       setInboxLoading(false)
     }
   }, [mushi])
+
+  useEffect(() => {
+    if (visible) {
+      setScreenshotAttached(true)
+      if (sheetTab === 'inbox') void loadInbox()
+    }
+  }, [visible, sheetTab, loadInbox])
 
   const openThread = useCallback(async (reportId: string) => {
     setSelectedReportId(reportId)
@@ -293,7 +299,9 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       <Text style={{ color: colors.text }}>{c.body}</Text>
                     </View>
                   ))}
-                  {inboxReports.find((r) => r.id === selectedReportId)?.status === 'fixed' && (
+                  {VERIFIABLE_STATUSES.has(
+                    inboxReports.find((r) => r.id === selectedReportId)?.status ?? '',
+                  ) && (
                     <View style={s.verifyRow}>
                       <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.accent }]} onPress={() => submitFeedback('confirms')}>
                         <Text style={s.submitText}>Yes, fixed</Text>

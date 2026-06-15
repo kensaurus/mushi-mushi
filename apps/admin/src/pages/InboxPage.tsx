@@ -286,10 +286,10 @@ export function InboxPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
+                ? 'bg-danger-muted/50 text-danger-foreground'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : 'bg-info/10 text-info'
+                  ? 'bg-warn-muted/50 text-warning-foreground'
+                  : 'bg-info-muted/50 text-info-foreground'
           }
         >
           {bannerSeverity === 'ok'

@@ -15,6 +15,7 @@ import {
   ContainedBlock,
   MetaChip,
 } from '../report-detail/ReportSurface'
+import { ReportCodeText } from './ReportCodeText'
 import type { ReportBreadcrumb, ReportSentryContext } from '../report-detail/types'
 import {
   STATUS,
@@ -130,7 +131,7 @@ export function ReportPreviewDrawer({ previewId, onClose }: Props) {
                 </MetaChip>
                 {report.component && (
                   <MetaChip label="Component">
-                    <code className="font-mono text-brand">{report.component}</code>
+                    <ReportCodeText title={report.component}>{report.component}</ReportCodeText>
                   </MetaChip>
                 )}
               </div>

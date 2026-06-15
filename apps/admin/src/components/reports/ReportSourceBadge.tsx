@@ -15,6 +15,7 @@
  */
 
 import { Tooltip } from '../ui'
+import { ReportCodeText } from './ReportCodeText'
 import type { ReportRow } from './types'
 
 interface Props {
@@ -68,7 +69,7 @@ function captureLabel(trigger: string | null | undefined): { label: string; tone
   if (trigger === 'captureException' || trigger === 'captureMessage' || trigger.startsWith('node-')) {
     return {
       label: 'server',
-      tone: 'bg-warn/10 text-warn border-warn/30',
+      tone: 'bg-warn-muted/50 text-warning-foreground border-warn/30',
       tooltip:
         'Forwarded from a backend service via @mushi-mushi/node (Express/Hono/Fastify middleware or direct captureException call). The user may never have seen this surface.',
     }
@@ -76,7 +77,7 @@ function captureLabel(trigger: string | null | undefined): { label: string; tone
   if (trigger === 'shake') {
     return {
       label: 'shake',
-      tone: 'bg-accent/10 text-accent border-accent/30',
+      tone: 'bg-accent-muted/60 text-[var(--color-accent-foreground)] border-accent/35',
       tooltip:
         'User shook their device to file a report — strong "I really feel something is off" signal from mobile testers.',
     }
@@ -164,12 +165,10 @@ export function ReportSourceBadge({ row }: Props) {
       </Tooltip>
       {where && (
         <Tooltip content={row.environment?.url ?? where}>
-          <span
-            className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-muted cursor-help max-w-[18rem] truncate"
-            title={where}
-          >
-            <span className="text-fg-faint mr-0.5" aria-hidden="true">@</span>
-            {where}
+          <span className="cursor-help">
+            <ReportCodeText title={row.environment?.url ?? where} className="max-w-[18rem]">
+              {where}
+            </ReportCodeText>
           </span>
         </Tooltip>
       )}

@@ -45,10 +45,10 @@ interface RegisterResult {
 
 const REGISTRATION_TONE: Record<string, string> = {
   registered: 'bg-ok-muted text-ok',
-  pending: 'bg-warn/10 text-warn',
+  pending: 'bg-warn-muted/50 text-warning-foreground',
   failed: 'bg-danger-subtle text-danger',
   disabled: 'bg-surface-overlay text-fg-muted',
-  manual_required: 'bg-info/10 text-info',
+  manual_required: 'bg-info-muted/50 text-info-foreground',
 };
 
 export function SsoPage() {

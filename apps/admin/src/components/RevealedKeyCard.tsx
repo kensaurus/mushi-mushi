@@ -170,7 +170,7 @@ export function RevealedKeyCard({
             data-testid={`revealed-key-mode-${tab.id}`}
             className={`text-2xs px-2 py-1 rounded-sm border transition-colors ${
               mode === tab.id
-                ? 'bg-accent-muted text-accent border-accent/40'
+                ? 'bg-accent-muted/70 text-accent-foreground border-accent/40'
                 : 'bg-surface-raised text-fg-muted border-edge-subtle hover:text-fg'
             }`}
           >

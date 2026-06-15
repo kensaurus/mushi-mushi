@@ -8,6 +8,22 @@ export const editorialTokens = {
 }
 
 /**
+ * Canonical brand asset paths (relative to this package's src/).
+ * Import these constants when referencing SVG logos in code so any
+ * rename or refactor shows up as a type error everywhere at once.
+ */
+export const BRAND_ASSETS = {
+  /** Full horizontal wordmark — stamp + "Mushi Mushi" text (240×56) */
+  logoWordmark: new URL('./logo.svg', import.meta.url).pathname,
+  /** Wordmark for dark/inverted surfaces (240×56) */
+  logoWordmarkDark: new URL('./logo-dark.svg', import.meta.url).pathname,
+  /** Wide single-line banner with tagline (540×64) */
+  logoWide: new URL('./logo-wide.svg', import.meta.url).pathname,
+  /** Standalone 虫 stamp mark — 512×512, for plugin icons and favicons */
+  logoMark: new URL('./logo-mark.svg', import.meta.url).pathname,
+}
+
+/**
  * Canonical name for the public tester bounty marketplace.
  * Use this constant instead of hard-coding on any UI surface, doc, or copy.
  * Full name: "Mushi Bounties" — sub-product of mushi-mushi for crowd-testing.

@@ -875,11 +875,11 @@ export function ProjectsPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'warn'
-                ? 'bg-warn/10 text-warn'
+                ? 'bg-warn-muted/50 text-warning-foreground'
                 : bannerSeverity === 'brand'
                   ? 'bg-brand/15 text-brand'
                   : bannerSeverity === 'info'
-                    ? 'bg-info/10 text-info'
+                    ? 'bg-info-muted/50 text-info-foreground'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -1629,7 +1629,7 @@ const METRIC_TONE: Record<
   },
   sdk: {
     cell: 'bg-accent/10',
-    icon: 'bg-accent/15 text-accent',
+    icon: 'bg-accent-muted/55 text-accent-foreground',
     value: 'text-fg',
   },
 }
@@ -1941,7 +1941,7 @@ function ProjectContextRail({ project }: { project: Project }) {
             )}
             {sentryConnected && (
               <Badge
-                className="inline-flex items-center gap-1 border border-accent/30 bg-accent/10 text-accent"
+                className="inline-flex items-center gap-1 border border-accent/30 bg-accent-muted/55 text-accent-foreground"
                 title={
                   sentryReports > 0
                     ? `${sentryReports} report${sentryReports === 1 ? '' : 's'} with Sentry trace in the last 30 days`

@@ -46,12 +46,12 @@ export const CONSOLE_LEVEL_PILL: Record<
   { pill: string; row: string; dot: string }
 > = {
   error: {
-    pill: 'bg-danger/15 text-danger border border-danger/35 ring-1 ring-danger/10',
+    pill: 'bg-danger-muted/50 text-danger-foreground border border-danger/35 ring-1 ring-danger/10',
     row: 'border-l-danger/60 bg-danger/[0.04]',
     dot: 'bg-danger',
   },
   warn: {
-    pill: 'bg-warn/15 text-warn border border-warn/35 ring-1 ring-warn/10',
+    pill: 'bg-warn-muted/50 text-warning-foreground border border-warn/35 ring-1 ring-warn/10',
     row: 'border-l-warn/55 bg-warn/[0.04]',
     dot: 'bg-warn',
   },

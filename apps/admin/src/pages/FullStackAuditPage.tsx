@@ -65,7 +65,7 @@ function SeverityBadge({ severity }: { severity: AuditFinding['severity'] }) {
   if (severity === 'error')
     return <Badge className="bg-danger-subtle text-danger">Error</Badge>
   if (severity === 'warn')
-    return <Badge className="bg-warn/10 text-warn">Warn</Badge>
+    return <Badge className="bg-warn-muted/50 text-warning-foreground">Warn</Badge>
   return <Badge className="bg-surface-overlay text-fg-secondary">Info</Badge>
 }
 
@@ -74,7 +74,7 @@ function SeverityBadge({ severity }: { severity: AuditFinding['severity'] }) {
 function GateStatusBadge({ status }: { status: string }) {
   if (status === 'pass') return <Badge className="bg-ok-muted text-ok">Pass</Badge>
   if (status === 'fail') return <Badge className="bg-danger-subtle text-danger">Fail</Badge>
-  if (status === 'warn') return <Badge className="bg-warn/10 text-warn">Warn</Badge>
+  if (status === 'warn') return <Badge className="bg-warn-muted/50 text-warning-foreground">Warn</Badge>
   return <Badge className="bg-surface-overlay text-fg-secondary">{status}</Badge>
 }
 

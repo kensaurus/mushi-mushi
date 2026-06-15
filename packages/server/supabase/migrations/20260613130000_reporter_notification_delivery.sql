@@ -52,3 +52,8 @@ CREATE POLICY notification_deliveries_deny_all ON public.notification_deliveries
 
 COMMENT ON TABLE public.notification_deliveries IS
   'Idempotent delivery ledger — one row per (report, type, channel). Retries bump attempts; failures are logged, never thrown.';
+
+-- Flush PostgREST's in-memory schema + config cache so the new tables / policies
+-- are visible immediately after deploy (repo convention for structural migrations).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

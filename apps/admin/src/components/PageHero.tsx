@@ -147,10 +147,10 @@ const SEVERITY_STYLE: Record<
   Severity,
   { ring: string; bg: string; text: string; dot: string }
 > = {
-  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted/15',      text: 'text-ok',     dot: 'bg-ok' },
-  info:    { ring: 'border-info/40',    bg: 'bg-info-muted/15',    text: 'text-info',   dot: 'bg-info' },
-  warn:    { ring: 'border-warn/40',    bg: 'bg-warn/10',          text: 'text-warn',   dot: 'bg-warn' },
-  crit:    { ring: 'border-err/40',     bg: 'bg-err/10',           text: 'text-err',    dot: 'bg-err' },
+  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted/15',      text: 'text-ok-foreground',     dot: 'bg-ok' },
+  info:    { ring: 'border-info/40',    bg: 'bg-info-muted/15',    text: 'text-info-foreground',   dot: 'bg-info' },
+  warn:    { ring: 'border-warn/40',    bg: 'bg-warn-muted/15',    text: 'text-warning-foreground', dot: 'bg-warn' },
+  crit:    { ring: 'border-err/40',     bg: 'bg-danger-muted/15',  text: 'text-danger-foreground', dot: 'bg-err' },
   neutral: { ring: 'border-edge',       bg: 'bg-surface-raised/40', text: 'text-fg',    dot: 'bg-fg-muted' },
 }
 
