@@ -34,6 +34,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
+import { Card } from '../components/ui'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
@@ -213,26 +214,41 @@ export function SkillPipelinesPage() {
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-4">
-        {tab === 'catalog' && (
-          <CatalogTab
-            projectId={projectId}
-            addToast={addToast}
-            initialSkillSlug={skillSlug}
-            onPipelineStarted={(runId) => setTab('pipelines', { run: runId })}
-            onSkillChange={(slug) => setTab('catalog', { skill: slug ?? undefined })}
-            onGoToSources={() => setTab('sources')}
-          />
+        {!projectId ? (
+          <Card className="p-6 border-dashed border-edge">
+            <h2 className="text-sm font-semibold text-fg">Pick a project first</h2>
+            <p className="mt-1 text-xs text-fg-muted">
+              Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link to="/onboarding" className="text-xs text-brand underline">Open setup cockpit</Link>
+              <Link to="/skills?tab=sources" className="text-xs text-fg-muted underline">Manage skill sources</Link>
+            </div>
+          </Card>
+        ) : (
+          <>
+            {tab === 'catalog' && (
+              <CatalogTab
+                projectId={projectId}
+                addToast={addToast}
+                initialSkillSlug={skillSlug}
+                onPipelineStarted={(runId) => setTab('pipelines', { run: runId })}
+                onSkillChange={(slug) => setTab('catalog', { skill: slug ?? undefined })}
+                onGoToSources={() => setTab('sources')}
+              />
+            )}
+            {tab === 'pipelines' && (
+              <PipelinesTab
+                projectId={projectId}
+                addToast={addToast}
+                initialRunId={pipelineRunId}
+                onOpenSkill={(slug) => setTab('catalog', { skill: slug })}
+                onGoToCatalog={() => setTab('catalog', { skill: 'audit-uiux-design-system' })}
+              />
+            )}
+            {tab === 'sources' && <SourcesTab projectId={projectId} addToast={addToast} />}
+          </>
         )}
-        {tab === 'pipelines' && (
-          <PipelinesTab
-            projectId={projectId}
-            addToast={addToast}
-            initialRunId={pipelineRunId}
-            onOpenSkill={(slug) => setTab('catalog', { skill: slug })}
-            onGoToCatalog={() => setTab('catalog', { skill: 'audit-uiux-design-system' })}
-          />
-        )}
-        {tab === 'sources' && <SourcesTab projectId={projectId} addToast={addToast} />}
       </div>
     </div>
   )

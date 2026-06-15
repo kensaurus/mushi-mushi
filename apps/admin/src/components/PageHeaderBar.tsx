@@ -37,6 +37,7 @@
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
+import { isDevFacingHint } from '../lib/devHintCopy'
 import { PageHelpBanner, Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 
@@ -150,7 +151,7 @@ export function PageHeaderBar({
         )}
       </div>
 
-      {description && (
+      {description && !isDevFacingHint(description) && (
         <p className="mt-0.5 max-w-none text-xs leading-relaxed text-fg-muted text-pretty">
           {description}
         </p>

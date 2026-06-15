@@ -3,8 +3,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Section, StatCard } from '../ui'
-import { ContainedBlock } from '../report-detail/ReportSurface'
+import { Section, StatCard, SnapshotSectionHint } from '../ui'
 import type { FixesStats } from './FixesStatsTypes'
 import {
   completedDetail,
@@ -51,11 +50,7 @@ export function FixesSnapshotStrip({
       title={sectionTitle}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
-      {description && (
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-xs leading-relaxed text-fg-muted">{description}</p>
-        </ContainedBlock>
-      )}
+      <SnapshotSectionHint text={description} />
       <div className={`grid grid-cols-2 gap-2 ${compact ? 'sm:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-6'}`}>
         {!compact ? (
           <StatCard

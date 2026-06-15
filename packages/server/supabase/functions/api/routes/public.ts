@@ -43,6 +43,7 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 
 export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -1495,6 +1496,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     if (error) return dbError(c, error);
     return c.json({ ok: true });
   });
+
+  registerReporterFeatureBoardRoutes(app, resolveReporterTokenHash);
 
   // ══════════════════════════════════════════════════════════════════════════
   // POST /v1/ingest/spans — OTel trace-context span ingest (Phase 4)

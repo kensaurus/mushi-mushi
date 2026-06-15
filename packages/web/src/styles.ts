@@ -801,6 +801,19 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       outline: 2px solid ${widgetAccent};
       outline-offset: 2px;
     }
+    .mushi-annotate-host {
+      flex-basis: 100%;
+      margin-top: 8px;
+    }
+    .mushi-annotate-host:empty {
+      margin-top: 0;
+    }
+    .mushi-annotate-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
     @keyframes mushi-spin {
       to { transform: rotate(360deg); }
     }

@@ -34,6 +34,7 @@ import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { resolveNextStepTo } from '../../_shared/activation-status.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -617,7 +618,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const project = resolvedProject.project;
     const pid = project.id;
 
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes] = await Promise.all([
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, qaRes] = await Promise.all([
       db
         .from('project_api_keys')
         .select(
@@ -638,6 +639,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         .limit(100),
       db.from('fix_attempts').select('id, merged_at').eq('project_id', pid).limit(200),
       db.from('project_repos').select('project_id').eq('project_id', pid).limit(1),
+      db
+        .from('qa_stories')
+        .select('id, last_run_status')
+        .eq('project_id', pid)
+        .eq('last_run_status', 'passed')
+        .limit(1),
     ]);
 
     const hasKey = (keysRes.data ?? []).length > 0;
@@ -674,6 +681,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const hasGithub = Boolean(settings?.github_repo_url) || (reposRes.data ?? []).length > 0;
     const hasSentry = Boolean(settings?.sentry_org_slug);
     const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+    const hasQaPassing = (qaRes.data ?? []).length > 0;
     const reportCount = reports.length;
     const fixes = fixesRes.data ?? [];
     const fixCount = fixes.length;
@@ -699,6 +707,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         complete: fixCount > 0,
         required: false,
       },
+      {
+        id: 'first_qa_story_passing',
+        label: 'Set up a QA story (optional)',
+        complete: hasQaPassing,
+        required: false,
+      },
     ];
 
     const requiredSteps = steps.filter((s) => s.required);
@@ -722,6 +736,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
         setupDone,
         nextStepId: nextRequired?.id ?? null,
         nextStepLabel: nextRequired?.label ?? null,
+        nextStepTo: resolveNextStepTo(nextRequired?.id),
         sdkInstalled: hasSdk,
         sdkHostMismatch,
         adminEndpointHost: adminHost,
@@ -782,7 +797,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     // SDK heartbeat (`last_seen_*`) so the dashboard can prove the SDK has
     // reached THIS backend without waiting for a real user-triggered report —
     // see migration 20260505000000_project_api_keys_last_seen.sql for rationale.
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, codebaseFilesRes] = await Promise.all([
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, codebaseFilesRes, qaRes] = await Promise.all([
       db
         .from('project_api_keys')
         .select(
@@ -810,6 +825,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       // transferring payload. Used by ExplorePage to determine the "not indexed
       // yet" empty state.
       db.from('project_codebase_files').select('project_id').in('project_id', projectIds),
+      db
+        .from('qa_stories')
+        .select('project_id')
+        .in('project_id', projectIds)
+        .eq('last_run_status', 'passed')
+        .limit(500),
     ]);
 
     const keyByProject = new Set<string>();
@@ -890,6 +911,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       }
     }
 
+    const qaPassingByProject = new Set<string>();
+    for (const q of qaRes.data ?? []) qaPassingByProject.add(q.project_id);
+
     type StepId =
       | 'project_created'
       | 'api_key_generated'
@@ -952,6 +976,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       const hasSentry = Boolean(settings?.sentry_org_slug);
       const hasByok = Boolean(settings?.byok_anthropic_key_ref);
       const hasSlack = Boolean(settings?.slack_channel_id) || Boolean(settings?.slack_webhook_url);
+      const hasQaPassing = qaPassingByProject.has(p.id);
       const fixCount = fixesByProject.get(p.id) ?? 0;
       const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0;
 
@@ -1047,7 +1072,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
           id: 'first_qa_story_passing',
           label: 'Set up a QA story (optional)',
           description: 'Write a plain-English test that runs on a schedule — catch regressions before your users do.',
-          complete: false, // Live signal: query qa_stories with last_run_status='passed' in a future pass
+          complete: hasQaPassing,
           required: false,
           cta_to: '/qa-coverage',
           cta_label: 'Create QA story',

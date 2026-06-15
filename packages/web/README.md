@@ -25,6 +25,9 @@ Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM 
 - **Report fatigue prevention** — session limits, cooldowns, permanent suppression
 - **Privacy controls** (0.9.1+) — `privacy.maskSelectors`, `privacy.blockSelectors`, `privacy.allowUserRemoveScreenshot` for selector-level screenshot redaction and a one-tap "Remove screenshot" button in the panel
 - **Repro timeline** (0.10+) — auto-captures route changes, clicks, and SDK lifecycle into a normalised `MushiReport.timeline`; pair with `Mushi.setScreen({ name, route, feature })` for screen-level grouping in the admin
+- **Session replay** (1.11+) — opt-in `capture.replay: 'rrweb' | 'lite' | 'sentry' | 'off'` records a rolling buffer that attaches to the report on submit. rrweb masks all text and inputs by default, records continuously from init, and trims while preserving the most recent full snapshot so replays stay playable. Default `'off'`
+- **Screenshot annotation** (1.11+) — a "Mark up" button in the panel opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting
+- **Payload size guard** (1.11+) — reports are size-checked client-side; oversized payloads are progressively degraded (drop replay buffer → drop screenshot) and dropped with a `report:failed` event if still too large, so a single large report can never wedge the offline queue
 - **Two-way replies** (0.11+) — the panel ships a "Your reports" view that polls comments authored by the dev team and lets the reporter reply, all signed with HMAC against the public API key (no auth user required)
 - **Passive inventory discovery** (0.12+) — opt-in `capture.discoverInventory` ships throttled, PII-free observations (route template, page title, `[data-testid]` values, recent fetch paths, query-param **keys** only, sha256 of user/session id) to `POST /v1/sdk/discovery`. The Mushi server aggregates them into a 30-day `discovery_observed_inventory` view and Claude Sonnet drafts a first-pass `inventory.yaml` proposal you can accept on `/inventory ▸ Discovery`. See `MushiDiscoverInventoryConfig` in [`@mushi-mushi/core`](../core)
 - **SDK observability** (1.0+) — Sentry-style breadcrumb buffer, sticky tags, and a structured `Mushi.captureException(err)` that auto-attaches them. `installAutoBreadcrumbs()` ships route changes, `console.error/warn`, and `[data-testid]` clicks for free. PII is scrubbed from breadcrumb messages and tag string values at report-snapshot time, before anything leaves the browser
@@ -343,6 +346,31 @@ Mushi.init({
 `blockSelectors` removes them entirely. `allowUserRemoveScreenshot` adds a
 "Remove screenshot" affordance next to the attachment chip in the panel, so the
 reporter can yank a screenshot they didn't realise contained sensitive data.
+
+### Session replay (1.11+)
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  capture: {
+    // 'rrweb'  — full DOM replay via rrweb (lazy-loaded; text + inputs masked)
+    // 'lite'   — dependency-free fallback (coarse mutation + interaction log)
+    // 'sentry' — reuse an already-installed @sentry/replay session
+    // 'off'    — default
+    replay: 'rrweb',
+  },
+});
+```
+
+The buffer records **continuously from init** (so it captures the moments leading
+up to a report, not just after the panel opens) and is trimmed to a rolling
+window while preserving the most recent full snapshot — replays stay playable.
+All text and inputs are masked by default. The events ride along on
+`MushiReport.replayEvents`; the server only persists them when the project has
+opted into replay storage. If a report grows too large, the replay buffer is the
+first thing dropped (then the screenshot) before the report itself is ever
+discarded — see **Payload size guard** above.
 
 ### Repro timeline and `setScreen()`
 

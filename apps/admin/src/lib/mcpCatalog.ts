@@ -73,6 +73,15 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Show me everything you know about this report.',
   },
   {
+    name: 'get_report_timeline',
+    title: 'Unified report timeline',
+    description:
+      'Ordered timeline merging reporter comments, fix events, QA runs, skill pipeline steps, and Ask Mushi turns for one report.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What happened on this report thread end-to-end?',
+  },
+  {
     name: 'search_reports',
     title: 'Search reports',
     description:
@@ -215,6 +224,17 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Is the SDK installed and ingesting reports? Why is my banner still missing?',
+  },
+  {
+    name: 'diagnose_connection',
+    title: 'Connection diagnose (CLI + MCP + SDK)',
+    description:
+      'Validate the MCP server credentials (endpoint, API key, projectId), ping /health, ' +
+      'run ingest-setup and dispatch preflight, and return the single best next action when ' +
+      'anything fails. Use when the user asks "why aren\'t my reports showing up?".',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Why is my Mushi setup broken — what exact step should I fix next?',
   },
   // --- Write / agentic ----------------------------------------------------
   {
@@ -390,6 +410,15 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
       'the loop has already learned to handle, and which still need human attention.',
     scope: 'mcp:read',
   },
+  {
+    name: 'activation_status',
+    uri: 'mushi://activation',
+    title: 'Activation cockpit status',
+    description:
+      'Unified setup posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. ' +
+      'Agents should read this before guessing which onboarding step is blocking the user.',
+    scope: 'mcp:read',
+  },
 ]
 
 export interface PromptSpec {
@@ -417,5 +446,12 @@ export const PROMPT_CATALOG: PromptSpec[] = [
     title: 'What should I focus on?',
     description: 'Five-item priority list drawn from the dashboard + recent classified queue.',
     useCase: '/triage_next_steps — agent tells you where to start your day.',
+  },
+  {
+    name: 'mushi_setup',
+    title: 'Diagnose Mushi setup',
+    description:
+      'Walk through activation status, integration health, and the single next command to unblock setup.',
+    useCase: '/mushi_setup — agent diagnoses why setup is stuck without guessing.',
   },
 ]

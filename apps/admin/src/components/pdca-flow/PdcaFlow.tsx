@@ -65,10 +65,11 @@ import type { ActivityItem } from '../dashboard/types'
 const NODE_TYPES = { pdcaStep: PdcaStepNode }
 const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 
-// Horizontal-row layout: nodes (148px tall) + loop-back arc (~110px below)
-// + fitView padding. Keep enough room for the activity-log panel too.
+// Horizontal-row layout: nodes (148px tall) + loop-back arc (~96px below)
+// + fitView padding. Canvas must be tall enough that overflow-y-clip never
+// truncates the loop arc — insetY + nodeH + LOOP_DEPTH + marker < canvas h.
 const VARIANT_HEIGHT: Record<PdcaFlowVariant, string> = {
-  live:        'h-[288px] sm:h-[304px]',
+  live:        'h-[320px] sm:h-[340px]',
   onboarding:  'h-[300px] sm:h-[320px]',
 }
 

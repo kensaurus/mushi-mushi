@@ -9,11 +9,19 @@ export class AsyncStorageQueue {
   private maxSize: number
   private apiEndpoint: string
   private apiKey: string
+  private onSynced?: (reportId: string) => void
 
-  constructor(config: { maxSize?: number; apiEndpoint: string; apiKey: string }) {
+  constructor(config: {
+    maxSize?: number
+    apiEndpoint: string
+    apiKey: string
+    /** Fired once per queued report that drains successfully to the server. */
+    onSynced?: (reportId: string) => void
+  }) {
     this.maxSize = config.maxSize ?? 50
     this.apiEndpoint = config.apiEndpoint
     this.apiKey = config.apiKey
+    this.onSynced = config.onSynced
   }
 
   async enqueue(report: object): Promise<void> {
@@ -44,6 +52,14 @@ export class AsyncStorageQueue {
       const ok = await sendWithRetry(item, this.apiEndpoint, this.apiKey)
       if (ok) {
         flushed++
+        const reportId = (item.report as { id?: unknown }).id
+        if (typeof reportId === 'string') {
+          try {
+            this.onSynced?.(reportId)
+          } catch {
+            // A host callback must never break the drain loop.
+          }
+        }
       } else {
         remaining.push(item)
         break

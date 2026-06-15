@@ -73,6 +73,15 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Show me everything you know about this report.',
   },
   {
+    name: 'get_report_timeline',
+    title: 'Unified report timeline',
+    description:
+      'Ordered timeline merging reporter comments, fix events, QA runs, skill pipeline steps, and Ask Mushi turns for one report.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What happened on this report thread end-to-end?',
+  },
+  {
     name: 'search_reports',
     title: 'Search reports',
     description:
@@ -215,6 +224,17 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Is the SDK installed and ingesting reports? Why is my banner still missing?',
+  },
+  {
+    name: 'diagnose_connection',
+    title: 'Connection diagnose (CLI + MCP + SDK)',
+    description:
+      'Validate the MCP server credentials (endpoint, API key, projectId), ping /health, ' +
+      'run ingest-setup and dispatch preflight, and return the single best next action when ' +
+      'anything fails. Use when the user asks "why aren\'t my reports showing up?".',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Why is my Mushi setup broken — what exact step should I fix next?',
   },
   // --- Write / agentic ----------------------------------------------------
   {
@@ -390,6 +410,15 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
       'the loop has already learned to handle, and which still need human attention.',
     scope: 'mcp:read',
   },
+  {
+    name: 'activation_status',
+    uri: 'mushi://activation',
+    title: 'Activation cockpit status',
+    description:
+      'Unified setup posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. ' +
+      'Agents should read this before guessing which onboarding step is blocking the user.',
+    scope: 'mcp:read',
+  },
 ]
 
 export interface PromptSpec {
@@ -417,6 +446,13 @@ export const PROMPT_CATALOG: PromptSpec[] = [
     title: 'What should I focus on?',
     description: 'Five-item priority list drawn from the dashboard + recent classified queue.',
     useCase: '/triage_next_steps — agent tells you where to start your day.',
+  },
+  {
+    name: 'mushi_setup',
+    title: 'Diagnose Mushi setup',
+    description:
+      'Walk through activation status, integration health, and the single next command to unblock setup.',
+    useCase: '/mushi_setup — agent diagnoses why setup is stuck without guessing.',
   },
 ]
 
@@ -524,6 +560,18 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Reply to a reporter asking for more info or confirming a fix.',
   },
   {
+    name: 'get_two_way_comms_health',
+    title: 'Two-way communication health',
+    description:
+      'Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, ' +
+      'app version/platform last seen, unread reporter messages, recent reporter replies, ' +
+      'and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app ' +
+      'to confirm reports land in the console and admin/MCP replies reach the in-app widget.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is two-way reporter communication working for this host app?',
+  },
+  {
     name: 'list_qa_story_runs',
     title: 'Recent QA story runs',
     description:
@@ -614,6 +662,28 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'I just opened the PR — mark step 2 as passed and link the PR.',
+  },
+
+  {
+    name: 'get_activation_status',
+    title: 'Activation cockpit status',
+    description:
+      'Unified setup posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action. ' +
+      'Use this first when the user says setup is broken or they cannot connect.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What is blocking this project from going live?',
+  },
+  {
+    name: 'get_reporter_thread',
+    title: 'Reporter feedback thread',
+    description:
+      'Fetch the unified timeline for a report — the reporter/admin comment thread ' +
+      '(including verify/reopen signals) plus fix, QA, and status lanes. ' +
+      'Use when triaging whether an end user still sees a bug as unfixed.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What did the reporter say after we marked this fixed?',
   },
 
   // ── Full-Stack Audit tools (Phase 5) ────────────────────────────────────────

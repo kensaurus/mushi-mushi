@@ -363,6 +363,7 @@ export async function ingestReport(
 
   let screenshotUrl: string | null = null;
   let screenshotPath: string | null = null;
+  let replayPath: string | null = null;
 
   if (report.screenshotDataUrl) {
     try {
@@ -387,6 +388,43 @@ export async function ingestReport(
       }
     } catch (err) {
       log.error('Screenshot upload failed', { err: String(err) });
+    }
+  }
+
+  const replayEvents = (report as { replayEvents?: unknown[] }).replayEvents;
+  const replayMeta: Record<string, unknown> = {};
+  if (Array.isArray(replayEvents) && replayEvents.length > 0) {
+    // Enforce the per-project replay-capture gate server-side. Replay events can
+    // carry DOM/PII, so never persist them unless the project explicitly opted in
+    // via `project_settings.sdk_capture_replay` — even if a stale or tampered SDK
+    // attaches them to the payload.
+    const { data: replaySetting } = await db
+      .from('project_settings')
+      .select('sdk_capture_replay')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (replaySetting?.sdk_capture_replay === true) {
+      replayMeta.replayEventCount = replayEvents.length;
+      // Keep a capped inline copy for console playback when object storage is unavailable.
+      if (replayEvents.length <= 120) {
+        replayMeta.replayEvents = replayEvents;
+      }
+      try {
+        const json = JSON.stringify(replayEvents);
+        const bytes = new TextEncoder().encode(json);
+        if (bytes.byteLength <= 1_500_000) {
+          const key = `${projectId}/replays/${crypto.randomUUID()}.json`;
+          const adapter = await getStorageAdapter(projectId);
+          const result = await adapter.upload({
+            key,
+            body: bytes,
+            contentType: 'application/json',
+          });
+          replayPath = result.storagePath;
+        }
+      } catch (err) {
+        log.error('Replay upload failed', { err: String(err) });
+      }
     }
   }
 
@@ -438,6 +476,7 @@ export async function ingestReport(
     ...(breadcrumbsCol ? { breadcrumbs: breadcrumbsCol } : {}),
     ...(tagsCol ? { tags: tagsCol } : {}),
     ...(richSentryContext ? { sentry: richSentryContext } : {}),
+    ...(replayPath ? { replayPath, ...replayMeta } : replayMeta),
   };
 
   // If the SDK included a W3C traceparent (either from the page's APM or

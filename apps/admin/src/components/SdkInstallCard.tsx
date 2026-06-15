@@ -30,7 +30,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card } from './ui'
+import { ConnectionStatus } from './ConnectionStatus'
+import { RevealedKeyCard } from './RevealedKeyCard'
+import { Card, Btn } from './ui'
 import { CodePanel } from './CodePanel'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
@@ -56,14 +58,15 @@ interface Props {
   /** The project's external `project_id` (the value the SDK sends back to the
    *  ingest endpoint) — not the internal UUID. */
   projectId: string
-  /** Plaintext API key, only available the moment after a mint. Anything else
-   *  (page reload, navigating away and back, second visit) renders the
-   *  `mushi_xxx` placeholder, with surrounding copy pointing the user to
-   *  Projects → Mint key. */
+  /** Plaintext API key, only available the moment after a mint. */
   apiKey?: string | null
+  /** Active key prefixes (e.g. `mushi_a1b2c3d4`) when the full secret is not in memory. */
+  keyPrefixes?: string[]
   /** When true, drops outer padding and the descriptive subhead so the card
    *  reads as a sub-block inside another card rather than a full section. */
   compact?: boolean
+  /** Show live connection / ingest status chip above the snippet. */
+  showConnectionStatus?: boolean
 }
 
 const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -153,7 +156,7 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
   }
 }
 
-export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
+export function SdkInstallCard({ projectId, apiKey, keyPrefixes, compact, showConnectionStatus = false }: Props) {
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
@@ -165,9 +168,37 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
   const [savingConfig, setSavingConfig] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
-  const code = useMemo(() => renderSnippet(framework, projectId, apiKey, config), [framework, projectId, apiKey, config])
+  const [fetchedPrefixes, setFetchedPrefixes] = useState<string[]>([])
+  const [rotating, setRotating] = useState(false)
+  const [rotatedKey, setRotatedKey] = useState<string | null>(null)
+
+  const activePrefixes = keyPrefixes ?? fetchedPrefixes
+  const snippetKey = apiKey ?? (activePrefixes[0] ? `${activePrefixes[0]}…` : null)
+
+  const code = useMemo(() => renderSnippet(framework, projectId, snippetKey, config), [framework, projectId, snippetKey, config])
   const install = installCommand(framework)
   const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
+
+  useEffect(() => {
+    if (apiKey || (keyPrefixes && keyPrefixes.length > 0)) return
+    let cancelled = false
+    void apiFetch<{ projects: Array<{ id: string; api_keys: Array<{ key_prefix: string; is_active: boolean }> }> }>(
+      '/v1/admin/projects',
+    ).then((res) => {
+      if (cancelled || !res.ok || !res.data) return
+      // `/v1/admin/projects` keys each row by internal `id` (no `project_id`
+      // field); `projectId` passed into this card is that same internal UUID.
+      const row = res.data.projects.find((p) => p.id === projectId)
+      const prefixes = (row?.api_keys ?? [])
+        .filter((k) => k.is_active)
+        .map((k) => k.key_prefix)
+        .filter(Boolean)
+      setFetchedPrefixes(prefixes)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [apiKey, keyPrefixes, projectId])
 
   useEffect(() => {
     let cancelled = false
@@ -250,8 +281,55 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
     config.native.triggerMode === DEFAULT_SDK_CONFIG.native.triggerMode &&
     config.native.minDescriptionLength === DEFAULT_SDK_CONFIG.native.minDescriptionLength
 
+  async function rotateKey() {
+    setRotating(true)
+    setSaveMessage(null)
+    const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys/rotate`, {
+      method: 'POST',
+    })
+    setRotating(false)
+    if (res.ok && res.data?.key) {
+      setRotatedKey(res.data.key)
+      setFetchedPrefixes([res.data.prefix])
+      invalidateApiCache('/v1/admin/projects')
+    } else {
+      setSaveMessage(res.error?.message ?? 'Key rotation failed')
+    }
+  }
+
   return (
     <Card className={compact ? 'p-3 space-y-4' : 'p-5 space-y-5'}>
+      {showConnectionStatus && (
+        <div className="flex flex-wrap items-center gap-2">
+          <ConnectionStatus compact />
+          <span className="text-2xs text-fg-muted">Shows ✓ when the SDK heartbeat or first report lands.</span>
+        </div>
+      )}
+
+      {!apiKey && activePrefixes.length > 0 && (
+        <div className="rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2 text-2xs text-fg-secondary flex flex-wrap items-center gap-2">
+          <span>
+            Active API key{activePrefixes.length > 1 ? 's' : ''}:{' '}
+            {activePrefixes.map((p) => (
+              <code key={p} className="mx-0.5 px-1 py-0.5 rounded bg-surface-overlay font-mono">{p}…</code>
+            ))}
+            . Full secret shown once at mint/rotate.
+          </span>
+          <Btn size="sm" variant="ghost" disabled={rotating} onClick={() => void rotateKey()}>
+            {rotating ? 'Rotating…' : 'Rotate key'}
+          </Btn>
+        </div>
+      )}
+
+      {rotatedKey && (
+        <RevealedKeyCard
+          projectId={projectId}
+          projectName="project"
+          apiKey={rotatedKey}
+          scopes={['ingest']}
+          onDismiss={() => setRotatedKey(null)}
+        />
+      )}
       {!compact && (
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>

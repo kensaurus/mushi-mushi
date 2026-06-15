@@ -19,8 +19,7 @@ import { useMarketplaceUx, resolveQuickMarketplaceTab } from '../lib/marketplace
 import { marketplaceLinks } from '../lib/statCardLinks'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
-import {
-  PageHeader,
+import { PageScopeHint,SnapshotSectionHint,PageHeader,
   PageHelp,
   Btn,
   Badge,
@@ -34,8 +33,7 @@ import {
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
-  RelativeTime,
-} from '../components/ui'
+  RelativeTime, } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -443,12 +441,7 @@ export function MarketplacePage() {
     return (
       <div className="space-y-4">
         <PageHeader title={copy?.title ?? 'Marketplace'} />
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              'Install signed webhook plugins that react when reports classify or fixes land.'}
-          </p>
-        </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Install signed webhook plugins that react when reports classify or fixes land."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -534,13 +527,7 @@ export function MarketplacePage() {
           </>
         )}
       </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.'}
-        </p>
-      </ContainedBlock>
+      <PageScopeHint text={copy?.description ?? "Install signed webhook plugins that react when reports classify or fixes land."} />
 
       <MarketplaceStatusBanner
         stats={stats}
@@ -566,9 +553,7 @@ export function MarketplacePage() {
         title={copy?.sections?.snapshot ?? 'MARKETPLACE SNAPSHOT'}
         freshness={{ at: lastFetchedAt, isValidating }}
       >
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.catalog ?? 'Catalog'}
@@ -616,7 +601,7 @@ export function MarketplacePage() {
       </Section>
       )}
 
-      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'delivery_failures'
@@ -669,7 +654,7 @@ export function MarketplacePage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
+          {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="Plugins delivering"
@@ -677,7 +662,7 @@ export function MarketplacePage() {
               cta={{ label: 'View delivery log', to: '/marketplace?tab=deliveries' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'no_plugins_installed' && (
+          {stats.topPriority === 'no_plugins_installed' && (
             <RecommendedAction
               tone="info"
               title="Install your first plugin"
@@ -685,7 +670,7 @@ export function MarketplacePage() {
               cta={{ label: 'Browse catalog', to: '/marketplace?tab=browse' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'delivery_failures' && (
+          {stats.topPriority === 'delivery_failures' && (
             <RecommendedAction
               tone="urgent"
               title="Debug failed webhook deliveries"
@@ -693,7 +678,7 @@ export function MarketplacePage() {
               cta={{ label: 'Open Deliveries', to: '/marketplace?tab=deliveries' }}
             />
           )}
-          {!ux.hideOverviewChrome && stats.topPriority === 'plugins_paused' && (
+          {stats.topPriority === 'plugins_paused' && (
             <RecommendedAction
               tone="info"
               title="Resume paused plugins"

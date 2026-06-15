@@ -741,7 +741,9 @@ export function FixesPage() {
             </div>
           )}
 
-          {summary && <FixSummaryRow summary={summary} successRate={successRate} />}
+          {summary && (ux.isAdvanced || ux.hideFixesSnapshot) && (
+            <FixSummaryRow summary={summary} successRate={successRate} />
+          )}
 
           <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
         </>

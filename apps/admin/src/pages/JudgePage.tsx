@@ -4,8 +4,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
-import {
-  ErrorAlert,
+import { SnapshotSectionHint,ErrorAlert,
   EmptyState,
   Btn,
   Badge,
@@ -16,8 +15,7 @@ import {
   type ResultChipTone,
   FreshnessPill,
   SegmentedControl,
-  StatCard,
-} from '../components/ui'
+  StatCard, } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { JudgeStatusBanner, isJudgeStatusBannerCritical } from '../components/judge/JudgeStatusBanner'
 import {
@@ -822,9 +820,7 @@ export function JudgePage() {
 
       {!ux.hideJudgeSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <ContainedBlock tone="muted" className="mb-3">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
-        </ContainedBlock>
+        <SnapshotSectionHint text={activeTabMeta.description} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label={copy?.statLabels?.week ?? 'This week'}

@@ -31,6 +31,7 @@ import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
+import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { NextBestAction } from './NextBestAction'
@@ -60,7 +61,7 @@ import { useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
-import { mobileNavBelowAppChromeClass } from '../lib/appChrome'
+import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
 
 interface NavItem {
   label: string
@@ -210,7 +211,7 @@ const NAV: NavSection[] = [
       { label: 'Iterate',       path: '/iterate',       icon: IconIterate,      beginner: true },
       { label: 'Skill Pipelines', path: '/skills',     icon: IconSkills,       beginner: true, quickstartLabel: 'Skill catalog' },
       { label: 'Integrations',  path: '/integrations/config',  icon: IconIntegrations, beginner: true },
-      { label: 'MCP',           path: '/mcp',           icon: IconMcp,          beginner: true },
+      { label: 'MCP',           path: '/mcp',           icon: IconMcp,          beginner: true, quickstartLabel: 'Agent help' },
       { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
       { label: 'Notifications', path: '/notifications', icon: IconBell },
     ],
@@ -682,6 +683,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const navCounts = useNavCounts()
   const projectSnapshots = useProjectSnapshots()
   const activeProjectId = useActiveProjectId()
+  const setupStatus = useSetupStatus(activeProjectId)
   const activeProjectSnapshot = activeProjectId
     ? projectSnapshots.byId.get(activeProjectId)
     : undefined
@@ -859,11 +861,21 @@ export function Layout({ children }: { children: ReactNode }) {
 
   let visibleNav: NavSection[]
   if (isQuickstart) {
+    const activationDone = setupStatus.selectors.done
+    const allowedPaths = new Set([
+      '/onboarding',
+      '/inbox',
+      '/feedback',
+      '/reports',
+      '/fixes',
+      '/mcp',
+    ])
     const quickItems: NavItem[] = NAV.flatMap((s) =>
       s.items
         .filter(visibleByRole)
         .filter(visibleByFeature)
         .filter(i => i.quickstartLabel !== undefined)
+        .filter(i => activationDone || allowedPaths.has(i.path))
         .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
     )
     visibleNav = [
@@ -1373,7 +1385,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         {/* Mobile header */}
-        <header className="md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 bg-surface-root overflow-visible relative z-20">
+        <header className={`md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
@@ -1395,7 +1407,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Desktop sub-header — search left; controls + switchers right */}
-        {!focusMode && <header className="hidden md:flex items-center gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60 overflow-visible relative z-20">
+        {!focusMode && <header className={`hidden md:flex items-center gap-3 px-5 py-1.5 border-b border-edge/40 ${appChromeHeaderClass}`}>
           <div className="min-w-0 shrink-0">
             <SearchButton />
           </div>
@@ -1460,7 +1472,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>}
 
         <PageHelpProvider>
-          <main id="main-content" className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-surface">
+          <main id="main-content" className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-surface ${appChromeMainClass}`}>
             <div className="w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base">
               {!focusMode && <QuickstartMegaCta />}
               {!focusMode && (

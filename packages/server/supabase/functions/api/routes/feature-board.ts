@@ -17,8 +17,10 @@ import type { Context } from 'npm:hono@4'
 import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
+import { adminOrApiKey } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
+import { createNotification } from '../../_shared/notifications.ts'
 import type { Variables } from '../types.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
@@ -149,13 +151,27 @@ function projectIdFromRequest(c: Context<{ Variables: Variables }>): string | nu
     c.req.query('project_id') ??
     c.req.header('x-mushi-project-id') ??
     c.req.header('X-Mushi-Project-Id') ??
+    // API-key callers (CLI/MCP) don't send a project header — the key itself
+    // is scoped to one project, which `adminOrApiKey` stamps onto the context.
+    (c.get('projectId') as string | undefined) ??
     null
   )
 }
 
 function featureBoardRoutes() {
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuth, requireProjectAccess)
+  // Reads (GET) accept either a console JWT or an operator API key with
+  // `mcp:read` (the CLI's `mushi feedback board` + MCP tooling). Writes
+  // (vote / comment / ship) stay console-JWT-only — an API key must never
+  // mutate the board. This split keeps existing console flows unchanged.
+  r.use(
+    '*',
+    (c, next) =>
+      c.req.method === 'GET'
+        ? adminOrApiKey({ scope: 'mcp:read' })(c, next)
+        : requireAuth(c, next),
+    requireProjectAccess,
+  )
 
   function db() {
     return getServiceClient()
@@ -401,6 +417,31 @@ function featureBoardRoutes() {
       releaseId,
       notification: notifResult,
     })
+
+    // Notify voters (reporter + authenticated) via existing notification fan-out.
+    const { data: reporterVotes } = await db()
+      .from('feature_request_reporter_votes')
+      .select('reporter_token_hash')
+      .eq('request_id', requestId)
+    const { data: userVotes } = await db()
+      .from('feature_request_votes')
+      .select('user_id')
+      .eq('request_id', requestId)
+
+    for (const v of reporterVotes ?? []) {
+      await createNotification(
+        db(),
+        projectId,
+        requestId,
+        v.reporter_token_hash,
+        'fixed',
+        {
+          message: `A feature you voted for shipped: ${ticket.subject}`,
+          reportId: requestId,
+        },
+      )
+    }
+    void userVotes
 
     return jsonOk(c, { shipped: true, notification: notifResult })
   })

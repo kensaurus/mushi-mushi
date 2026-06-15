@@ -14,6 +14,7 @@
  */
 
 import { Tooltip } from '../ui'
+import { SEVERITY_TRAFFIC } from '../../lib/severityTraffic'
 
 /** Canonical stage order. `dismissed` is a terminal off-loop state and
  *  rendered as a single muted bar instead of a stepper. */
@@ -58,13 +59,6 @@ interface StatusStepperProps {
   size?: 'compact' | 'full'
 }
 
-const ACTIVE_TONE: Record<string, string> = {
-  critical: 'bg-danger',
-  high: 'bg-warn',
-  medium: 'bg-info',
-  low: 'bg-info',
-}
-
 export function StatusStepper({
   status,
   severity,
@@ -84,7 +78,9 @@ export function StatusStepper({
   }
 
   const activeIdx = STATUS_TO_INDEX[status] ?? 0
-  const activeTone = ACTIVE_TONE[severity ?? ''] ?? 'bg-brand'
+  const activeTone = severity
+    ? (SEVERITY_TRAFFIC[severity as keyof typeof SEVERITY_TRAFFIC]?.bg ?? 'bg-brand')
+    : 'bg-brand'
 
   const activeLabel = STEP_LABELS[STATUS_STEPS[activeIdx]]
 
@@ -100,7 +96,7 @@ export function StatusStepper({
           <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
         </span>
       )}
-      <div className={`flex items-center gap-0.5 w-full ${size === 'compact' ? 'min-w-[7rem]' : ''}`}>
+      <div className={`flex items-center gap-0.5 w-full max-w-full ${size === 'compact' ? 'min-w-0' : ''}`}>
         {STATUS_STEPS.map((step, i) => {
           const completed = i < activeIdx
           const active = i === activeIdx
