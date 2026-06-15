@@ -18,7 +18,7 @@ import {
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
-import { statusLabel, severityLabel, CATEGORY_LABELS, CATEGORY_BADGE } from '../lib/tokens'
+import { statusLabel, severityLabel, categoryLabel, categoryBadge } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
@@ -481,10 +481,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
                 <InfoHint content="What the reporter said the issue was about, before LLM classification." />
               </div>
               <div className="mt-1">
-                <Badge
-                  className={CATEGORY_BADGE[report.user_category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
-                >
-                  {CATEGORY_LABELS[report.user_category] ?? report.user_category}
+                <Badge className={categoryBadge(report.user_category)}>
+                  {categoryLabel(report.user_category)}
                 </Badge>
               </div>
             </div>

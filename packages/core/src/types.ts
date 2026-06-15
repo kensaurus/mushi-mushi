@@ -137,6 +137,52 @@ export interface MushiWidgetConfig {
    * avoidSelectors: ['[data-mobile-header]', '#sign-in-cta']
    */
   avoidSelectors?: string[];
+  /**
+   * Override the default five-category picker with a custom category list.
+   * When set, the widget renders these categories instead of the built-in
+   * `bug / slow / visual / confusing / other` set.
+   *
+   * Each custom category maps onto one of the five built-in `MushiReportCategory`
+   * values via `baseCategory` (defaults to `'other'`). The custom id is
+   * preserved as `userCategory` on the report so the Mushi console can filter
+   * by it independently of the LLM-assigned `category`.
+   *
+   * Deep-link helpers (`open`, `openWith`, `report`) accept the custom `id`
+   * in addition to the built-in enum values when this option is set.
+   *
+   * When absent, behaviour is identical to the historical defaults (backward-compatible).
+   */
+  categories?: MushiCustomCategory[];
+}
+
+/**
+ * Descriptor for a single entry in a host-app custom category list.
+ * Passed as `widget.categories` to `Mushi.init()`.
+ */
+export interface MushiCustomCategory {
+  /** Unique identifier used in `openWith(id)` / `report({ category: id })`. */
+  id: string;
+  /** Human-readable label shown in the category picker step. */
+  label: string;
+  /** Optional helper text shown beneath the label. */
+  description?: string;
+  /**
+   * Localised intent options displayed on the second step ("What happened?").
+   * When omitted, the widget skips the intent step and goes straight to
+   * the description.
+   */
+  intents?: string[];
+  /**
+   * Emoji or single-character icon rendered next to the label in the picker.
+   * Falls back to a neutral bubble when absent.
+   */
+  icon?: string;
+  /**
+   * Which built-in `MushiReportCategory` value this custom category maps to
+   * for server-side classification. Defaults to `'other'`.
+   * The custom `id` is always preserved in `report.userCategory`.
+   */
+  baseCategory?: MushiReportCategory;
 }
 
 /** Optional flat link in the rich banner action row (admin-console BetaBanner style). */
@@ -593,6 +639,13 @@ export interface MushiReport {
   id: string;
   projectId: string;
   category: MushiReportCategory;
+  /**
+   * Custom category identifier set by the host app via `widget.categories`.
+   * Preserved as `reports.user_category` on the server so the Mushi console
+   * can filter by it independently of the LLM-assigned `category`.
+   * Not set when the host uses the default built-in category set.
+   */
+  userCategory?: string;
   description: string;
   userIntent?: string;
 
@@ -1044,9 +1097,12 @@ export interface MushiSDKInstance {
    * feature-request shortcut. Pass `{ category }` to deep-link into a
    * specific bug intent, or `{ featureRequest: true }` to deep-link into
    * the feature-request description step (skips intent picker).
+   *
+   * When `widget.categories` is configured, `category` also accepts a
+   * custom category `id` from that list.
    */
   report(options?: {
-    category?: MushiReportCategory;
+    category?: MushiReportCategory | string;
     featureRequest?: boolean;
   }): void;
   on(event: MushiEventType, handler: MushiEventHandler): () => void;
@@ -1055,7 +1111,12 @@ export interface MushiSDKInstance {
   setScreen(screen: { name: string; route?: string; feature?: string }): void;
   isOpen(): boolean;
   open(): void;
-  openWith(category: MushiReportCategory): void;
+  /**
+   * Open the widget deep-linked to a specific category. Accepts a built-in
+   * `MushiReportCategory` value or a custom category `id` when
+   * `widget.categories` is configured.
+   */
+  openWith(category: MushiReportCategory | string): void;
   show(): void;
   hide(): void;
   attachTo(selectorOrElement: string | Element, options?: MushiWidgetConfig): () => void;

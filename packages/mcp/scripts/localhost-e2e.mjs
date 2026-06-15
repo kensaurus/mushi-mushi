@@ -19,13 +19,23 @@
  */
 
 import http from 'node:http'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const serverPath = join(__dirname, '..', 'dist', 'index.js')
+const distDir = join(__dirname, '..', 'dist')
+const serverPath = join(distDir, 'index.js')
+
+// Derive expected counts from the built catalog so this test stays green
+// when new tools/resources/prompts are added — never hardcode them.
+const { TOOL_CATALOG, TDD_TOOL_CATALOG, RESOURCE_CATALOG, PROMPT_CATALOG } = await import(
+  pathToFileURL(join(distDir, 'catalog.js')).href
+)
+const EXPECTED_TOOLS = [...(TOOL_CATALOG ?? []), ...(TDD_TOOL_CATALOG ?? [])].length
+const EXPECTED_RESOURCES = (RESOURCE_CATALOG ?? []).length
+const EXPECTED_PROMPTS = (PROMPT_CATALOG ?? []).length
 
 const PROJECT_ID = 'proj_e2e_00000000-0000-0000-0000-000000000000'
 const API_KEY_READ = 'mushi_localhost_read_key'
@@ -198,9 +208,9 @@ async function run() {
     const { tools } = await client.listTools()
     const { resources } = await client.listResources()
     const { prompts } = await client.listPrompts()
-    check('13 tools advertised', tools.length, 13)
-    check('3 resources advertised', resources.length, 3)
-    check('3 prompts advertised', prompts.length, 3)
+    check(`${EXPECTED_TOOLS} tools advertised`, tools.length, EXPECTED_TOOLS)
+    check(`${EXPECTED_RESOURCES} resources advertised`, resources.length, EXPECTED_RESOURCES)
+    check(`${EXPECTED_PROMPTS} prompts advertised`, prompts.length, EXPECTED_PROMPTS)
 
     console.log('\nTools — read')
     const recent = jsonFromTool(await client.callTool({ name: 'get_recent_reports', arguments: { limit: 5 } }))
@@ -290,8 +300,7 @@ async function run() {
     await badClient.close()
 
     console.log('\nPrompts')
-    const list = await (await client['_transport']?.send)
-    // list prompts was already checked in handshake — nothing else protocol-specific to assert without a model
+    // prompts/list already validated in handshake above — correct count asserted there
   } finally {
     server.close()
   }

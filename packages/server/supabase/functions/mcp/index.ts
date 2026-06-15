@@ -337,6 +337,51 @@ const TOOLS: Record<string, ToolDef> = {
       })
     },
   },
+  get_blast_radius: {
+    scope: 'mcp:read',
+    description:
+      'Return the blast radius for a codebase node: all downstream dependents and their weighted impact scores. ' +
+      'Use this to understand how far a change (or bug fix) propagates before deciding to dispatch a fix.',
+    inputSchema: {
+      type: 'object',
+      required: ['nodeId'],
+      properties: { nodeId: { type: 'string', description: 'Graph node ID (component, file, or function label)' } },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      requireString(args.nodeId, 'nodeId')
+      return apiCall(`/v1/admin/graph/blast-radius/${encodeURIComponent(args.nodeId as string)}`, {
+        headers: ctx.authHeaders,
+      })
+    },
+  },
+
+  get_knowledge_graph: {
+    scope: 'mcp:read',
+    description:
+      'Traverse the codebase knowledge graph from a seed node. Returns nodes and edges within the given depth. ' +
+      'Depth 1 = direct dependents; depth 2 = transitive. Max depth 3.',
+    inputSchema: {
+      type: 'object',
+      required: ['seed'],
+      properties: {
+        seed: { type: 'string', description: 'Starting node label (e.g. component name, file path)' },
+        depth: { type: 'number', description: 'Traversal depth (default 2, max 3)' },
+        project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project)' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      requireString(args.seed, 'seed')
+      const qs = new URLSearchParams()
+      qs.set('seed', args.seed as string)
+      qs.set('depth', String(Math.min((args.depth as number) ?? 2, 3)))
+      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      if (pid) qs.set('projectId', pid)
+      return apiCall(`/v1/admin/graph/traverse?${qs}`, { headers: ctx.authHeaders })
+    },
+  },
+
   run_nl_query: {
     scope: 'mcp:read',
     description:
