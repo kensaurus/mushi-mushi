@@ -1,5 +1,5 @@
 import { Badge, DefinitionChips, LongFormText } from '../ui'
-import { CATEGORY_BADGE, CATEGORY_LABELS } from '../../lib/tokens'
+import { categoryBadge, categoryLabel } from '../../lib/tokens'
 import { IconUser } from '../icons'
 import { EmptySectionMessage } from './ReportClassification'
 import { ContainedBlock } from './ReportSurface'
@@ -19,13 +19,8 @@ export function UserReportFields({ report }: { report: ReportDetail }) {
               label: 'User category',
               hint: 'What the reporter said the issue was about, before LLM classification.',
               value: (
-                <Badge
-                  className={
-                    CATEGORY_BADGE[report.user_category] ??
-                    'bg-surface-overlay text-fg-secondary border border-edge-subtle'
-                  }
-                >
-                  {CATEGORY_LABELS[report.user_category] ?? report.user_category}
+                <Badge className={categoryBadge(report.user_category)}>
+                  {categoryLabel(report.user_category)}
                 </Badge>
               ),
             },

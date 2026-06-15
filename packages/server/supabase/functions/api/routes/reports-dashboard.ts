@@ -23,7 +23,7 @@ import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
 import { awardPoints, getReputation } from '../../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
-import { normalizeAdminStatus, isReporterFixedStatus } from '../../_shared/report-status.ts';
+import { normalizeAdminStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue, resolveExternalIssue } from '../../_shared/integrations.ts';
@@ -277,6 +277,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
 
     const status = c.req.query('status');
     const category = c.req.query('category');
+    const userCategory = c.req.query('user_category');
     const severity = c.req.query('severity');
     const component = c.req.query('component');
     const reporter = c.req.query('reporter');
@@ -333,6 +334,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       else query = query.eq('status', status);
     }
     if (category) query = query.eq('category', category);
+    if (userCategory) query = query.eq('user_category', userCategory);
     if (severity) query = query.eq('severity', severity);
     if (component) query = query.eq('component', component);
     if (reporter) query = query.eq('reporter_token_hash', reporter);
@@ -705,8 +707,11 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       .in('project_id', projectIds);
     if (error) return dbError(c, error);
 
-    // Award reputation points on status transitions
-    if (report && updates.status && updates.status !== report.status) {
+    // Award reputation points on status transitions. Compare on the stored
+    // canonical form (resolved is persisted as fixed) so a legacy `resolved`
+    // row being canonicalized to `fixed` isn't treated as a real transition —
+    // otherwise it would re-award points and re-fire a `fixed` notification.
+    if (report && updates.status && updates.status !== toStoredStatus(report.status)) {
       const newStatus = updates.status as string;
       try {
         void dispatchPluginEvent(db, report.project_id, 'report.status_changed', {

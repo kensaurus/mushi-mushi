@@ -1,67 +1,88 @@
+import { CHIP_TONE } from './chipTone'
+
 export const SEVERITY: Record<string, string> = {
-  critical: 'bg-danger-muted text-danger border border-danger/20',
-  high:     'bg-warn-muted text-[var(--color-warning-foreground)] border border-warn/20',
-  medium:   'bg-brand-subtle text-brand border border-brand/20',
-  low:      'bg-ok-muted text-ok border border-ok/20',
+  critical: CHIP_TONE.danger,
+  high: CHIP_TONE.warn,
+  medium: CHIP_TONE.brandSubtle,
+  low: CHIP_TONE.ok,
 }
 
 export const STATUS: Record<string, string> = {
-  new:        'bg-warn-muted text-warn border border-warn/20',
-  queued:     'bg-warn-muted/70 text-warn border border-warn/15',
-  classified: 'bg-ok-muted text-ok border border-ok/20',
-  fixing:     'bg-accent-muted text-accent border border-accent/20',
-  fixed:      'bg-info-muted text-info border border-info/20',
-  verified:   'bg-ok-muted text-ok border border-ok/20',
-  reopened:   'bg-warn-muted text-warn border border-warn/20',
-  resolved:   'bg-ok-muted text-ok border border-ok/20',
-  dismissed:  'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  new: CHIP_TONE.warnSubtle,
+  queued: 'bg-warn-muted/60 text-warning-foreground border border-warn/20',
+  classified: CHIP_TONE.okSubtle,
+  fixing: CHIP_TONE.accentSubtle,
+  fixed: CHIP_TONE.infoSubtle,
+  verified: CHIP_TONE.okSubtle,
+  reopened: CHIP_TONE.warnSubtle,
+  resolved: CHIP_TONE.okSubtle,
+  dismissed: CHIP_TONE.neutral,
 }
 
 export const PIPELINE_STATUS: Record<string, string> = {
-  pending:    'bg-warn-muted text-warn',
-  running:    'bg-info-muted text-info',
-  exporting:  'bg-info-muted text-info',
-  exported:   'bg-info-muted text-info',
-  training:   'bg-accent-muted text-accent',
-  trained:    'bg-accent-muted text-accent',
-  validating: 'bg-info-muted text-info',
-  validated:  'bg-ok-muted text-ok',
-  promoted:   'bg-ok-muted text-ok',
-  rejected:   'bg-danger-muted text-danger',
-  completed:         'bg-ok-muted text-ok',
-  merged:            'bg-ok-muted text-ok',
-  failed:            'bg-danger-muted text-danger',
-  error:             'bg-danger-muted text-danger',
-  dead_letter:       'bg-danger-muted text-danger',
-  skipped:                    'bg-warn-muted text-warn',
-  skipped_no_context:         'bg-warn-muted text-warn',
-  skipped_no_sandbox:         'bg-warn-muted text-warn',
-  skipped_unsupported_agent:  'bg-warn-muted text-warn',
+  pending: CHIP_TONE.warnSubtle,
+  running: CHIP_TONE.infoSubtle,
+  exporting: CHIP_TONE.infoSubtle,
+  exported: CHIP_TONE.infoSubtle,
+  training: CHIP_TONE.accentSubtle,
+  trained: CHIP_TONE.accentSubtle,
+  validating: CHIP_TONE.infoSubtle,
+  validated: CHIP_TONE.okSubtle,
+  promoted: CHIP_TONE.okSubtle,
+  rejected: CHIP_TONE.dangerSubtle,
+  completed: CHIP_TONE.okSubtle,
+  merged: CHIP_TONE.okSubtle,
+  failed: CHIP_TONE.dangerSubtle,
+  error: CHIP_TONE.dangerSubtle,
+  dead_letter: CHIP_TONE.dangerSubtle,
+  skipped: CHIP_TONE.warnSubtle,
+  skipped_no_context: CHIP_TONE.warnSubtle,
+  skipped_no_sandbox: CHIP_TONE.warnSubtle,
+  skipped_unsupported_agent: CHIP_TONE.warnSubtle,
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  bug:       'Bug',
-  slow:      'Slow',
-  visual:    'Visual',
+  bug: 'Bug',
+  slow: 'Slow',
+  visual: 'Visual',
   confusing: 'Confusing UX',
-  other:     'Other',
+  other: 'Other',
 }
 
 /** Badge chrome per category — pairs with `SEVERITY` for scan-friendly triage rows. */
 export const CATEGORY_BADGE: Record<string, string> = {
-  bug:       'bg-danger-muted/35 text-danger border border-danger/25',
-  slow:      'bg-warn-muted/40 text-warn border border-warn/20',
-  visual:    'bg-info-muted/40 text-info border border-info/20',
-  confusing: 'bg-accent-muted/40 text-accent border border-accent/25',
-  other:     'bg-surface-overlay text-fg-secondary border border-edge-subtle',
+  bug: CHIP_TONE.dangerSubtle,
+  slow: CHIP_TONE.warnSubtle,
+  visual: CHIP_TONE.infoSubtle,
+  confusing: CHIP_TONE.accentSubtle,
+  other: CHIP_TONE.neutral,
+}
+
+/**
+ * Human-readable label for a category id.
+ * Falls back to title-casing the raw id for custom categories
+ * not present in `CATEGORY_LABELS`.
+ */
+export function categoryLabel(id: string | null | undefined): string {
+  if (!id) return 'Other'
+  return CATEGORY_LABELS[id] ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Badge class for a category id.
+ * Falls back to `neutral` tone for unknown custom categories.
+ */
+export function categoryBadge(id: string | null | undefined): string {
+  if (!id) return CHIP_TONE.neutral
+  return CATEGORY_BADGE[id] ?? CHIP_TONE.neutral
 }
 
 /** Styling for LLM confidence percentage chips (0–1). */
 export function confidenceBadgeClass(c: number | null | undefined): string {
-  if (c == null) return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-  if (c >= 0.85) return 'bg-ok-muted/50 text-ok border border-ok/25'
-  if (c >= 0.65) return 'bg-warn-muted/50 text-warn border border-warn/20'
-  return 'bg-danger-muted/40 text-danger border border-danger/25'
+  if (c == null) return CHIP_TONE.neutral
+  if (c >= 0.85) return CHIP_TONE.okSubtle
+  if (c >= 0.65) return CHIP_TONE.warnSubtle
+  return CHIP_TONE.dangerSubtle
 }
 
 /**
@@ -85,13 +106,13 @@ export function pctToneClass(
 ): string {
   if (value == null || Number.isNaN(value)) return 'text-fg-muted'
   if (direction === 'higher-better') {
-    if (value >= 90) return 'text-ok'
-    if (value >= 70) return 'text-warn'
-    return 'text-danger'
+    if (value >= 90) return 'text-ok-foreground'
+    if (value >= 70) return 'text-warning-foreground'
+    return 'text-danger-foreground'
   }
-  if (value <= 1) return 'text-ok'
-  if (value <= 5) return 'text-warn'
-  return 'text-danger'
+  if (value <= 1) return 'text-ok-foreground'
+  if (value <= 5) return 'text-warning-foreground'
+  return 'text-danger-foreground'
 }
 
 /**
@@ -155,7 +176,6 @@ export const STATUS_LABELS: Record<string, string> = {
   verified:   'Verified',
   reopened:   'Reopened',
   dismissed:  'Dismissed',
-  // SDK ingest aliases — normalised server-side but displayed here until migrated
   submitted:  'New',
   pending:    'New',
   triaged:    'Classified',
@@ -237,3 +257,5 @@ export const SCORE_COLORS: Record<string, string> = {
   component: 'oklch(0.72 0.19 155)',
   repro:     'oklch(0.80 0.15 80)',
 }
+
+export { CHIP_TONE, LINK_ACCENT, LINK_BRAND, META_CHIP_TONE } from './chipTone'

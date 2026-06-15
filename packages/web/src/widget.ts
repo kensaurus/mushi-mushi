@@ -11,6 +11,7 @@
  */
 
 import type {
+  MushiCustomCategory,
   MushiReportCategory,
   MushiReporterComment,
   MushiReporterReport,
@@ -202,7 +203,13 @@ export interface WidgetCallbacks {
    * `void` still work — the widget falls back to the legacy stamp.
    */
   onSubmit(
-    data: { category: MushiReportCategory; description: string; intent?: string },
+    data: {
+      category: MushiReportCategory;
+      /** Set when the host configured `widget.categories` — the raw custom id chosen by the user. */
+      userCategory?: string;
+      description: string;
+      intent?: string;
+    },
   ): void | Promise<WidgetSubmitOutcome | void>;
   onOpen(): void;
   onClose(): void;
@@ -229,7 +236,12 @@ export class MushiWidget {
   private locale: MushiLocale;
   private isOpen = false;
   private step: WidgetStep = 'category';
-  private selectedCategory: MushiReportCategory | null = null;
+  /**
+   * The selected category id. May be a built-in `MushiReportCategory` or a
+   * custom id from `config.categories`. Cast to `MushiReportCategory` only
+   * after resolving through `resolveBaseCategory()`.
+   */
+  private selectedCategory: string | null = null;
   private selectedIntent: string | null = null;
   /**
    * True when the user took the "Feature request" shortcut. We track this
@@ -334,6 +346,7 @@ export class MushiWidget {
       featureRequestLabel: config.featureRequestLabel ?? '',
       featureRequestDescription: config.featureRequestDescription ?? '',
       avoidSelectors: config.avoidSelectors ?? [],
+      categories: config.categories ?? [],
     };
     this.callbacks = callbacks;
     // Passing undefined when locale is 'auto' lets getLocale() resolve via
@@ -393,6 +406,7 @@ export class MushiWidget {
       // that fetch resolves, so this pass-through is what makes server-driven
       // banner copy actually render.
       ...(config.bannerConfig !== undefined ? { bannerConfig: config.bannerConfig } : {}),
+      ...(config.categories !== undefined ? { categories: config.categories } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     // Re-sync host chrome in case zIndex changed.
@@ -402,7 +416,42 @@ export class MushiWidget {
     this.render();
   }
 
-  open(options?: { category?: MushiReportCategory; featureRequest?: boolean }): void {
+  // ─── Custom category helpers ──────────────────────────────────────────────
+
+  /** Find a custom category entry by id. Returns undefined for built-in ids. */
+  private resolveCustomCategory(id: string): MushiCustomCategory | undefined {
+    return this.config.categories?.find((c) => c.id === id);
+  }
+
+  /**
+   * Map a (possibly custom) category id to the built-in `MushiReportCategory`
+   * used for the report wire format. Falls back to `'other'`.
+   */
+  private resolveBaseCategory(id: string): MushiReportCategory {
+    const BUILTIN: MushiReportCategory[] = ['bug', 'slow', 'visual', 'confusing', 'other'];
+    if (BUILTIN.includes(id as MushiReportCategory)) return id as MushiReportCategory;
+    const custom = this.resolveCustomCategory(id);
+    return custom?.baseCategory ?? 'other';
+  }
+
+  /** Icon for the selected category — custom entry's icon or built-in emoji. */
+  private categoryIcon(id: string): string {
+    const custom = this.resolveCustomCategory(id);
+    if (custom?.icon) return custom.icon;
+    return CATEGORY_ICONS[id as MushiReportCategory] ?? '💬';
+  }
+
+  /** Label for the selected category — custom entry label or built-in i18n string. */
+  private categoryLabel(id: string): string {
+    const custom = this.resolveCustomCategory(id);
+    if (custom) return custom.label;
+    const t = this.locale;
+    return t.step1.categories[id as MushiReportCategory] ?? id;
+  }
+
+  // ─── Open / close ─────────────────────────────────────────────────────────
+
+  open(options?: { category?: MushiReportCategory | string; featureRequest?: boolean }): void {
     if (this.isOpen) return;
     this.isOpen = true;
     this.screenshotAttached = false;
@@ -427,7 +476,9 @@ export class MushiWidget {
     } else if (options?.category) {
       this.selectedCategory = options.category;
       this.selectedIntent = null;
-      this.step = 'intent';
+      // Custom categories with no intents go straight to the description step.
+      const custom = this.resolveCustomCategory(options.category);
+      this.step = (custom && (!custom.intents || custom.intents.length === 0)) ? 'details' : 'intent';
     } else {
       this.selectedCategory = null;
       this.selectedIntent = null;
@@ -1244,13 +1295,31 @@ export class MushiWidget {
 
   private renderCategoryStep(): string {
     const t = this.locale;
-    const categories = (['bug', 'slow', 'visual', 'confusing', 'other'] as MushiReportCategory[])
-      .map((id) => `
-        <button type="button" class="mushi-option-btn" data-category="${id}" role="radio" aria-checked="false">
-          <span class="mushi-option-icon" aria-hidden="true">${CATEGORY_ICONS[id]}</span>
+    // When the host supplies custom categories, render those instead of the
+    // built-in five. The feature-request shortcut is still shown above them
+    // unless explicitly disabled (consistent UX regardless of category set).
+    const categoryEntries: Array<{ id: string; icon: string; label: string; desc: string }> =
+      this.config.categories && this.config.categories.length > 0
+        ? this.config.categories.map((c) => ({
+            id: c.id,
+            icon: c.icon ?? '💬',
+            label: c.label,
+            desc: c.description ?? '',
+          }))
+        : (['bug', 'slow', 'visual', 'confusing', 'other'] as MushiReportCategory[]).map((id) => ({
+            id,
+            icon: CATEGORY_ICONS[id],
+            label: t.step1.categories[id],
+            desc: t.step1.categoryDescriptions[id],
+          }));
+
+    const categories = categoryEntries
+      .map(({ id, icon, label, desc }) => `
+        <button type="button" class="mushi-option-btn" data-category="${escapeHtml(id)}" role="radio" aria-checked="false">
+          <span class="mushi-option-icon" aria-hidden="true">${icon}</span>
           <div class="mushi-option-text">
-            <span class="mushi-option-label">${t.step1.categories[id]}</span>
-            <span class="mushi-option-desc">${t.step1.categoryDescriptions[id]}</span>
+            <span class="mushi-option-label">${escapeHtml(label)}</span>
+            ${desc ? `<span class="mushi-option-desc">${escapeHtml(desc)}</span>` : ''}
           </div>
           <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
         </button>
@@ -1501,21 +1570,28 @@ export class MushiWidget {
 
   private renderIntentStep(): string {
     const t = this.locale;
-    const cat = this.selectedCategory!;
-    const intents = t.step2.intents[cat] || [];
+    const catId = this.selectedCategory!;
+    // For custom categories, use their declared intents; for built-in categories
+    // use the i18n-localised intent list.
+    const customEntry = this.resolveCustomCategory(catId);
+    const intents: string[] = customEntry?.intents
+      ?? (t.step2.intents[catId as MushiReportCategory] || []);
 
     const options = intents.map((intent) => `
-      <button type="button" class="mushi-intent-btn" data-intent="${intent}">
-        ${intent}
+      <button type="button" class="mushi-intent-btn" data-intent="${escapeHtml(intent)}">
+        ${escapeHtml(intent)}
       </button>
     `).join('');
+
+    const icon = this.categoryIcon(catId);
+    const label = this.categoryLabel(catId);
 
     return `
       ${this.renderHeader({ title: t.step2.heading, showBack: true, step: STEP_NUMBER.intent })}
       <div class="mushi-body">
         <div class="mushi-selected-category">
-          <span aria-hidden="true">${CATEGORY_ICONS[cat]}</span>
-          <span>${t.step1.categories[cat]}</span>
+          <span aria-hidden="true">${icon}</span>
+          <span>${escapeHtml(label)}</span>
         </div>
         <div class="mushi-intents">
           ${options}
@@ -1932,8 +2008,12 @@ export class MushiWidget {
 
     panel.querySelectorAll('[data-category]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.selectedCategory = (btn as HTMLElement).dataset.category as MushiReportCategory;
-        this.step = 'intent';
+        const catId = (btn as HTMLElement).dataset.category ?? 'other';
+        this.selectedCategory = catId;
+        // Custom categories with no declared intents go straight to the
+        // description step (intent picker would be empty).
+        const custom = this.resolveCustomCategory(catId);
+        this.step = (custom && (!custom.intents || custom.intents.length === 0)) ? 'details' : 'intent';
         this.render();
       });
     });
@@ -2022,8 +2102,14 @@ export class MushiWidget {
       // host returns void we use the historic 500 ms transition.
       const outcomeP = (async () => {
         try {
+          const catId = this.selectedCategory!;
+          const baseCategory = this.resolveBaseCategory(catId);
+          // Only set userCategory when the host uses a custom category list
+          // and the id differs from the resolved base (avoids redundant duplication).
+          const isCustomCat = this.config.categories && this.config.categories.length > 0;
           const ret = this.callbacks.onSubmit({
-            category: this.selectedCategory!,
+            category: baseCategory,
+            ...(isCustomCat ? { userCategory: catId } : {}),
             description,
             intent: this.selectedIntent ?? undefined,
           });
