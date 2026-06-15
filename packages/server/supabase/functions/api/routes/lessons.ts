@@ -22,7 +22,7 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { jwtAuth, apiKeyAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
+import { jwtAuth, apiKeyAuth, adminOrApiKey, getOrgIdFromContext } from '../../_shared/auth.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
 export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
@@ -163,9 +163,14 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   });
 
   // ─── List lessons ────────────────────────────────────────────────────────
-  app.get('/v1/admin/lessons', jwtAuth, async (c) => {
+  app.get('/v1/admin/lessons', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const db = getServiceClient()
-    const projectId = c.req.query('projectId') ?? c.req.header('x-mushi-project-id') ?? null
+    const authMethod = c.get('authMethod') as string | undefined
+    const callerProjectId = c.get('projectId') as string | undefined
+    const projectId =
+      authMethod === 'apiKey'
+        ? callerProjectId
+        : (c.req.query('projectId') ?? c.req.header('x-mushi-project-id') ?? null)
     const orgId = await getOrgIdFromContext(c)
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 500)
     const offset = parseInt(c.req.query('offset') ?? '0')
@@ -351,11 +356,16 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     top_k: z.number().int().min(1).max(50).default(15),
   })
 
-  app.post('/v1/admin/lessons/query', jwtAuth, async (c) => {
+  app.post('/v1/admin/lessons/query', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const body = querySchema.safeParse(await c.req.json())
     if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
 
-    const { diff_text, max_tokens, project_id, top_k } = body.data
+    const authMethod = c.get('authMethod') as string | undefined
+    const callerProjectId = c.get('projectId') as string | undefined
+    const { diff_text, max_tokens, top_k } = body.data
+    const project_id = authMethod === 'apiKey'
+      ? callerProjectId
+      : body.data.project_id
     const db = getServiceClient()
 
     // Embed the diff text

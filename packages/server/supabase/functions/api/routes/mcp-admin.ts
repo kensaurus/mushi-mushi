@@ -299,22 +299,16 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       if (service === 'all' || service === 'fix-worker') {
         let q = db
           .from('fix_events')
-          .select('id, kind, status, label, detail, at, fix_attempt_id')
+          .select('id, kind, status, label, detail, at, fix_attempt_id, fix_attempts!inner(project_id)')
+          .eq('fix_attempts.project_id', targetProjectId)
           .order('at', { ascending: false })
           .limit(Math.min(limit, 50))
 
         if (since) q = q.gt('at', since)
 
-        // Filter by project via fixes -> reports using parameterized PostgREST calls.
-        const { data: reportRows, error: reportErr } = await db
-          .from('reports')
-          .select('id')
-          .eq('project_id', targetProjectId)
-          .limit(500)
-        if (reportErr) return dbError(c, reportErr)
-
-        const reportIds = (reportRows ?? []).map((row) => row.id as string).filter(Boolean)
-        let fixEvts: Array<{
+        const { data: scopedFixEvts, error: fixEventsErr } = await q
+        if (fixEventsErr) return dbError(c, fixEventsErr)
+        const fixEvts = (scopedFixEvts ?? []) as Array<{
           id: string
           kind: string | null
           status: string | null
@@ -322,22 +316,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
           detail: Record<string, unknown> | null
           at: string | null
           fix_attempt_id: string | null
-        }> = []
-        if (reportIds.length > 0) {
-          const { data: attempts, error: attemptsErr } = await db
-            .from('fix_attempts')
-            .select('id')
-            .in('report_id', reportIds)
-            .limit(500)
-          if (attemptsErr) return dbError(c, attemptsErr)
-
-          const attemptIds = (attempts ?? []).map((row) => row.id as string).filter(Boolean)
-          if (attemptIds.length > 0) {
-            const { data: scopedFixEvts, error: fixEventsErr } = await q.in('fix_attempt_id', attemptIds)
-            if (fixEventsErr) return dbError(c, fixEventsErr)
-            fixEvts = (scopedFixEvts ?? []) as typeof fixEvts
-          }
-        }
+        }>
         for (const ev of fixEvts ?? []) {
           const isError = (ev.status ?? '') === 'error' || (ev.kind ?? '').includes('error')
           const entryLevel = isError ? 'error' : 'info'
@@ -396,6 +375,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
         let qsr = db
           .from('qa_story_runs')
           .select('id, status, error_message, latency_ms, started_at, completed_at, story_id')
+          .eq('project_id', targetProjectId)
           .order('started_at', { ascending: false })
           .limit(Math.min(limit, 50))
 
@@ -404,16 +384,9 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
           qsr = qsr.eq('status', 'failed')
         }
 
-        // Scope to project via a parameterized story lookup.
-        const { data: storyRows, error: storiesErr } = await db
-          .from('qa_stories')
-          .select('id')
-          .eq('project_id', targetProjectId)
-          .limit(500)
-        if (storiesErr) return dbError(c, storiesErr)
-
-        const storyIds = (storyRows ?? []).map((row) => row.id as string).filter(Boolean)
-        let storyRuns: Array<{
+        const { data: scopedStoryRuns, error: storyRunsErr } = await qsr
+        if (storyRunsErr) return dbError(c, storyRunsErr)
+        const storyRuns = (scopedStoryRuns ?? []) as Array<{
           id: string
           status: string | null
           error_message: string | null
@@ -421,12 +394,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
           started_at: string | null
           completed_at: string | null
           story_id: string | null
-        }> = []
-        if (storyIds.length > 0) {
-          const { data: scopedStoryRuns, error: storyRunsErr } = await qsr.in('story_id', storyIds)
-          if (storyRunsErr) return dbError(c, storyRunsErr)
-          storyRuns = (scopedStoryRuns ?? []) as typeof storyRuns
-        }
+        }>
         for (const run of storyRuns ?? []) {
           const isFailed = (run.status as string) === 'failed'
           const entryLevel = isFailed ? 'error' : 'info'
