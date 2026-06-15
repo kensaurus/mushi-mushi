@@ -424,7 +424,7 @@ export function StoragePage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {!existing ? (
-                  <span className="inline-flex rounded px-2 py-0.5 text-3xs bg-info-muted/50 text-info-foreground border border-info/30">
+                  <span className="inline-flex rounded px-2 py-0.5 text-2xs bg-info-muted/50 text-info-foreground border border-info/30">
                     Using cluster default — save to override
                   </span>
                 ) : (

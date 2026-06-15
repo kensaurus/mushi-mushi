@@ -1,10 +1,37 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.12",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.12.1",
+      "1.12.0"
+    ],
     "highlights": [
+      {
+        "title": "New:",
+        "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
+      },
+      {
+        "title": "Hardening:",
+        "description": "the offline retry queue now treats `PAYLOAD_TOO_LARGE` and `SERIALIZE_FAILED` as permanent failures, so a single oversized report can no longer poison-pill the queue and block every later report."
+      },
+      {
+        "title": "New — session replay:",
+        "description": "opt-in `capture.replay: 'rrweb' | 'lite' | 'sentry' | 'off'` records a rolling buffer that attaches to the report on submit. rrweb recording masks all text and inputs by default (`maskAllText` + `maskAllInputs`), records continuously from init, and trims the buffer while preserving the most recent full snapshot so replays stay playable. `'off'` is the default."
+      },
+      {
+        "title": "New — screenshot annotation:",
+        "description": "the report panel's \"Mark up\" button opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting. The annotation session stays open until the reporter confirms with \"Done\"; touch strokes now resolve correctly on lift (`touchend`)."
+      },
+      {
+        "title": "New — screenshot compression",
+        "description": "before upload to keep payloads small."
+      },
+      {
+        "title": "Hardening:",
+        "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
+      },
       {
         "title": "New:",
         "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
@@ -30,7 +57,16 @@
         "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.12.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.12.1"
+      }
+    ]
   },
   {
     "majorMinor": "1.11",
@@ -499,13 +535,39 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.17.1",
       "0.17.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "New:",
+        "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
+      },
+      {
+        "title": "Hardening:",
+        "description": "the offline retry queue now treats `PAYLOAD_TOO_LARGE` and `SERIALIZE_FAILED` as permanent failures, so a single oversized report can no longer poison-pill the queue and block every later report."
+      },
+      {
+        "title": "New — session replay:",
+        "description": "opt-in `capture.replay: 'rrweb' | 'lite' | 'sentry' | 'off'` records a rolling buffer that attaches to the report on submit. rrweb recording masks all text and inputs by default (`maskAllText` + `maskAllInputs`), records continuously from init, and trims the buffer while preserving the most recent full snapshot so replays stay playable. `'off'` is the default."
+      },
+      {
+        "title": "New — screenshot annotation:",
+        "description": "the report panel's \"Mark up\" button opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting. The annotation session stays open until the reporter confirms with \"Done\"; touch strokes now resolve correctly on lift (`touchend`)."
+      },
+      {
+        "title": "New — screenshot compression",
+        "description": "before upload to keep payloads small."
+      },
+      {
+        "title": "Hardening:",
+        "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.17.0"
+        "version": "0.17.1"
       }
     ]
   },
@@ -529,6 +591,8 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.15.2",
+      "0.15.1",
       "0.15.0"
     ],
     "highlights": [
@@ -547,6 +611,30 @@
       {
         "title": "plugin-cursor-cloud",
         "description": "handles `skill_pipeline.step.dispatched` by running the step's pre-composed context packet as a Cursor Cloud agent, storing the agent run id on the step, and checking the step back in. Emits a clear warning when `MUSHI_API_KEY` or `repoUrl` is unset so dispatches can no longer fail silently."
+      },
+      {
+        "title": "New:",
+        "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
+      },
+      {
+        "title": "Hardening:",
+        "description": "the offline retry queue now treats `PAYLOAD_TOO_LARGE` and `SERIALIZE_FAILED` as permanent failures, so a single oversized report can no longer poison-pill the queue and block every later report."
+      },
+      {
+        "title": "New — session replay:",
+        "description": "opt-in `capture.replay: 'rrweb' | 'lite' | 'sentry' | 'off'` records a rolling buffer that attaches to the report on submit. rrweb recording masks all text and inputs by default (`maskAllText` + `maskAllInputs`), records continuously from init, and trims the buffer while preserving the most recent full snapshot so replays stay playable. `'off'` is the default."
+      },
+      {
+        "title": "New — screenshot annotation:",
+        "description": "the report panel's \"Mark up\" button opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting. The annotation session stays open until the reporter confirms with \"Done\"; touch strokes now resolve correctly on lift (`touchend`)."
+      },
+      {
+        "title": "New — screenshot compression",
+        "description": "before upload to keep payloads small."
+      },
+      {
+        "title": "Hardening:",
+        "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
       }
     ],
     "packages": [
@@ -556,7 +644,7 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.15.0"
+        "version": "0.15.2"
       }
     ]
   },
@@ -565,6 +653,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.14.1",
       "0.14.0"
     ],
     "highlights": [],
@@ -572,6 +661,10 @@
       {
         "name": "@mushi-mushi/cli",
         "version": "0.14.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.14.1"
       },
       {
         "name": "@mushi-mushi/react-native",
@@ -588,6 +681,30 @@
       "0.13.0"
     ],
     "highlights": [
+      {
+        "title": "New:",
+        "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
+      },
+      {
+        "title": "Hardening:",
+        "description": "the offline retry queue now treats `PAYLOAD_TOO_LARGE` and `SERIALIZE_FAILED` as permanent failures, so a single oversized report can no longer poison-pill the queue and block every later report."
+      },
+      {
+        "title": "New — session replay:",
+        "description": "opt-in `capture.replay: 'rrweb' | 'lite' | 'sentry' | 'off'` records a rolling buffer that attaches to the report on submit. rrweb recording masks all text and inputs by default (`maskAllText` + `maskAllInputs`), records continuously from init, and trims the buffer while preserving the most recent full snapshot so replays stay playable. `'off'` is the default."
+      },
+      {
+        "title": "New — screenshot annotation:",
+        "description": "the report panel's \"Mark up\" button opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting. The annotation session stays open until the reporter confirms with \"Done\"; touch strokes now resolve correctly on lift (`touchend`)."
+      },
+      {
+        "title": "New — screenshot compression",
+        "description": "before upload to keep payloads small."
+      },
+      {
+        "title": "Hardening:",
+        "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
+      },
       {
         "title": "Rewards subsystem",
         "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
@@ -611,14 +728,6 @@
       {
         "title": "`mushi project create`",
         "description": "command: provisions a new Mushi project, mints an API key with `mcp:read+write` scope, and writes `.env.local` + `.cursor/mcp.json`."
-      },
-      {
-        "title": "`mushi doctor`",
-        "description": "pre-flight checks — verifies CLI config, endpoint reachability, SDK install, and optional server preflight."
-      },
-      {
-        "title": "`mushi nudge`",
-        "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
       }
     ],
     "packages": [
@@ -628,7 +737,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.13.0"
+        "version": "0.13.1"
       },
       {
         "name": "@mushi-mushi/react-native",

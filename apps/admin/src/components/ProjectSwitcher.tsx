@@ -140,7 +140,7 @@ export function ProjectSwitcher() {
           sdk_origin={sdkOriginFromSetupProject(active)}
           size={14}
         />
-        <span className="text-3xs uppercase tracking-wider text-fg-muted hidden sm:inline">Project</span>
+        <span className="text-2xs uppercase tracking-wider text-fg-muted hidden sm:inline">Project</span>
         <span className="font-medium truncate max-w-[12rem]">{active.project_name}</span>
         <ActiveProjectStatusChip snapshot={snapshots.byId.get(active.project_id)} />
         <svg

@@ -45,7 +45,7 @@ export function SearchButton() {
         <path d="m20 20-3-3" strokeLinecap="round" />
       </svg>
       <span className="hidden sm:inline">Search</span>
-      <span className="hidden md:flex items-center gap-0.5 text-3xs text-fg-muted">
+      <span className="hidden md:flex items-center gap-0.5 text-2xs text-fg-muted">
         <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
         <Kbd>K</Kbd>
       </span>

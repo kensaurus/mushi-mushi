@@ -76,8 +76,15 @@ if (!existsSync(readmePath)) {
   }
 }
 
-// 3-4. dist files
-for (const distFile of ['dist/index.js', 'dist/catalog.js', 'dist/server.js']) {
+// 3-4. dist files and declaration files referenced by package exports.
+for (const distFile of [
+  'dist/index.js',
+  'dist/index.d.ts',
+  'dist/catalog.js',
+  'dist/catalog.d.ts',
+  'dist/server.js',
+  'dist/server.d.ts',
+]) {
   const abs = resolve(mcpPkg, distFile)
   if (!existsSync(abs)) {
     fail(`${distFile} not found — run pnpm --filter @mushi-mushi/mcp build first`)

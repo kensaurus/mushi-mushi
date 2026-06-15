@@ -337,7 +337,7 @@ function HistoryItem({
       >
         <span className="inline-flex items-center gap-1.5 w-full min-w-0">
           {row.mode === 'raw' && (
-            <span className="inline-flex shrink-0 px-1 py-0.5 rounded-[2px] text-3xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
+            <span className="inline-flex shrink-0 px-1 py-0.5 rounded-[2px] text-2xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
           )}
           <span className="line-clamp-2">{row.prompt}</span>
         </span>
@@ -1350,7 +1350,7 @@ export function QueryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {run.mode === 'raw' && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-3xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-[3px] text-2xs font-mono font-medium bg-warn-muted/50 text-warning-foreground border border-warn/20">SQL</span>
                           )}
                           <p className="text-sm text-fg font-medium break-words line-clamp-3">
                             {run.question}

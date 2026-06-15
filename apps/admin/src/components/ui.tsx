@@ -3298,7 +3298,7 @@ export function DataTableCell({
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-3xs font-mono font-medium text-fg-secondary bg-surface-overlay border border-edge rounded-sm">
+    <kbd className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-2xs font-mono font-medium text-fg-secondary bg-surface-overlay border border-edge rounded-sm">
       {children}
     </kbd>
   )

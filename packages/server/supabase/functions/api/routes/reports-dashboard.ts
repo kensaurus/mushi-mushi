@@ -484,7 +484,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const threshold = Math.min(Math.max(Number(body.threshold) || 0.2, 0), 1);
 
     try {
-      const { createEmbedding } = await import('../_shared/embeddings.ts');
+      const { createEmbedding } = await import('../../_shared/embeddings.ts');
       const embedding = await createEmbedding(query, { projectId: projectIds[0] });
       const embeddingLiteral = `[${embedding.join(',')}]`;
 

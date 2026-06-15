@@ -103,7 +103,7 @@ function FixRowViewInner({
             <Badge className={`w-fit max-w-full min-w-0 truncate text-2xs ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
               {pipelineStatusLabel(fix.status)}
             </Badge>
-            <span className="text-3xs text-fg-faint font-mono truncate">{agentShort}</span>
+            <span className="text-2xs text-fg-faint font-mono truncate">{agentShort}</span>
           </div>
         </td>
         <td className={`${FIXES_TABLE_COL.report} ${TABLE_CELL.pxLead} py-2 align-middle min-w-0 overflow-hidden`}>

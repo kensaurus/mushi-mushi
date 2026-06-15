@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "1.12.0",
+  "version": "1.12.1",
   "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
   "license": "MIT",
   "type": "module",
@@ -9,24 +9,14 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
     },
     "./test-utils": {
-      "import": {
-        "types": "./dist/test-utils.d.ts",
-        "default": "./dist/test-utils.js"
-      },
-      "require": {
-        "types": "./dist/test-utils.d.cts",
-        "default": "./dist/test-utils.cjs"
-      }
+      "types": "./dist/test-utils.d.ts",
+      "import": "./dist/test-utils.js",
+      "require": "./dist/test-utils.cjs"
     }
   },
   "files": [
