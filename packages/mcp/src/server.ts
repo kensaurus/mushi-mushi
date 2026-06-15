@@ -765,7 +765,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: {
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
         service: z
-          .enum(['classify-report', 'fix-worker', 'qa-story-runner', 'mcp', 'webhook', 'api', 'all'])
+          .enum(['fix-worker', 'qa-story-runner', 'pipeline', 'all'])
           .optional()
           .describe('Pipeline service to filter (default: all).'),
         since: z.string().optional().describe('ISO-8601 timestamp — return only entries after this time.'),
@@ -1163,12 +1163,15 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
     async (args) => {
       const pid = args.project_id ?? projectId
-      const params = new URLSearchParams()
-      params.set('diff_text', args.diff_text)
-      if (args.max_tokens !== undefined) params.set('max_tokens', String(args.max_tokens))
-      if (args.top_k !== undefined) params.set('top_k', String(args.top_k))
-      if (pid) params.set('projectId', pid)
-      const data = await apiCall<unknown>(`/v1/admin/lessons/query?${params}`)
+      const data = await apiCall<unknown>('/v1/admin/lessons/query', {
+        method: 'POST',
+        body: JSON.stringify({
+          diff_text: args.diff_text,
+          ...(args.max_tokens !== undefined ? { max_tokens: args.max_tokens } : {}),
+          ...(args.top_k !== undefined ? { top_k: args.top_k } : {}),
+          ...(pid ? { project_id: pid } : {}),
+        }),
+      })
       return jsonText(data)
     },
   )

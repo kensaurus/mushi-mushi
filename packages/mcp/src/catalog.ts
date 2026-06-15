@@ -385,8 +385,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_pipeline_logs',
     title: 'Recent pipeline logs',
     description:
-      'Pull recent log entries from the Mushi pipeline services: classify-report, fix-worker, qa-story-runner, ' +
-      'mcp, webhook, api, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level ' +
+      'Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. ' +
+      'Accepts project_id, service, since (ISO-8601), limit (max 200), and level ' +
       '(info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, ' +
       'and a trace_id/report_id when available. ' +
       'Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent.',
