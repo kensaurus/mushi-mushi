@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { FeedbackModal } from './FeedbackModal'
 import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
 import { Link } from 'react-router-dom'
@@ -27,6 +28,8 @@ function readDismissedAt(): number | null {
 }
 
 export function BetaBanner() {
+  const location = useLocation()
+  const isTesterPortal = location.pathname === '/tester' || location.pathname.startsWith('/tester/')
   const [dismissed, setDismissed] = useState(true)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackType, setFeedbackType] = useState<'bug' | 'feature'>('bug')
@@ -57,9 +60,13 @@ export function BetaBanner() {
       ro.disconnect()
       setBetaBannerOffset(0)
     }
-  }, [dismissed])
+  }, [dismissed, isTesterPortal])
 
-  if (dismissed) return null
+  useEffect(() => {
+    if (isTesterPortal) setBetaBannerOffset(0)
+  }, [isTesterPortal])
+
+  if (isTesterPortal || dismissed) return null
 
   function handleDismiss() {
     try {
@@ -122,7 +129,7 @@ export function BetaBanner() {
               onClick={() => openFeedback('feature')}
               className="px-2 py-0.5 font-medium text-lime/70 hover:text-lime transition-colors"
             >
-              ✨ Feature request
+              Feature request
             </button>
             <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
             <Link

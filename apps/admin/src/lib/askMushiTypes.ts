@@ -17,11 +17,24 @@ export type AskMushiIntent =
   | 'cite'
   | 'why-failed'
 
+export type AskMushiMode = 'chat' | 'navigate'
+
+export interface NavStep {
+  text: string
+  path?: string
+}
+
+export interface NavTarget {
+  label: string
+  path: string
+  why?: string
+}
+
 /** Structured backend reply. The clarify branch is rendered as chips
  *  instead of prose — clicking a chip is the same as typing the option as
  *  the next user message. */
 export type AskMushiReply =
-  | { kind: 'answer'; text: string }
+  | { kind: 'answer'; text: string; steps?: NavStep[]; navTargets?: NavTarget[] }
   | { kind: 'clarify'; question: string; options: string[] }
 
 /** Per-message LLM telemetry surfaced under each assistant bubble. Mirrors
@@ -70,6 +83,7 @@ export interface AskMushiSendBody {
   route: string
   context: AskMushiContextPayload | null
   intent: AskMushiIntent
+  mode?: AskMushiMode
   /** Backend caps to last 20; the client sends the full local thread so
    *  the backend can choose its own summarisation strategy if it grows. */
   messages: Array<{ role: Role; content: string }>

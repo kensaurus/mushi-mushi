@@ -10,7 +10,13 @@
 import { Hono } from 'npm:hono@4'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
+import {
+  dbError,
+  ownedProjectIds,
+  callerProjectIds,
+  enumerateAccessibleProjectIds,
+  resolveOwnedProject,
+} from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 // Keep in sync with packages/mcp/src/catalog.ts counts.
@@ -210,9 +216,9 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       })
     }
 
-    // JWT caller: return all projects owned by this user
+    // JWT caller: return every accessible project (ignore pinned header).
     const userId = c.get('userId') as string
-    const projectIds = await callerProjectIds(c, db, userId)
+    const projectIds = await enumerateAccessibleProjectIds(c, db, userId)
 
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { projects: [], total: 0 } })
@@ -407,6 +413,44 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
               ? `QA run failed: ${(run.error_message as string | null) ?? 'unknown error'}`
               : `QA run ${run.status as string} (${run.latency_ms as number | null}ms)`,
             ts: (run.started_at ?? run.finished_at) as string,
+          })
+        }
+      }
+
+      // ── mcp_tool_invocations (service=mcp) ─────────────────────────────────
+      if (service === 'all' || service === 'mcp') {
+        let mcpQ = db
+          .from('mcp_tool_invocations')
+          .select('id, tool_name, scope, transport, status, duration_ms, request_id, error_code, created_at')
+          .eq('project_id', targetProjectId)
+          .order('created_at', { ascending: false })
+          .limit(Math.min(limit, 100))
+
+        if (since) mcpQ = mcpQ.gt('created_at', since)
+        if (level === 'error' || level === 'warn') {
+          mcpQ = mcpQ.eq('status', 'error')
+        }
+
+        const { data: mcpRows, error: mcpErr } = await mcpQ
+        if (mcpErr) return dbError(c, mcpErr)
+        for (const row of mcpRows ?? []) {
+          const isError = (row.status as string) === 'error'
+          const entryLevel = isError ? 'error' : 'info'
+          if ((level === 'error' || level === 'warn') && !isError) continue
+          entries.push({
+            id: `mcp:${row.id}`,
+            service: 'mcp',
+            level: entryLevel,
+            message: isError
+              ? `MCP tool ${row.tool_name as string} failed (${row.error_code as string | null ?? 'error'})`
+              : `MCP tool ${row.tool_name as string} (${row.duration_ms as number}ms)`,
+            ts: row.created_at as string,
+            detail: {
+              tool_name: row.tool_name,
+              scope: row.scope,
+              transport: row.transport,
+              request_id: row.request_id,
+            },
           })
         }
       }

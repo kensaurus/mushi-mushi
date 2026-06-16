@@ -17,6 +17,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import { createLogger } from '@mushi-mushi/core'
 import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, type McpScope } from './catalog.js'
 import { MUSHI_SERVER_METADATA } from './branding.js'
 import { toolMatchesFeatures, type FeatureFilter } from './feature-groups.js'
@@ -82,6 +83,10 @@ export interface MushiServerConfig {
 export function createMushiServer(config: MushiServerConfig): McpServer {
   const { version, apiEndpoint, apiKey, projectId } = config
   const doFetch = config.fetch ?? globalThis.fetch
+  const apiLog = createLogger({
+    scope: 'mushi:mcp:api',
+    level: (process.env.MUSHI_LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error' | undefined) ?? 'info',
+  })
 
   // Short-circuit for empty scope list: return a bare server with no tools
   // capability. The MCP SDK only advertises `tools` when at least one tool
@@ -98,6 +103,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   }
 
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
+    const requestId = crypto.randomUUID().slice(0, 12)
+    const started = Date.now()
     const res = await doFetch(`${apiEndpoint}${path}`, {
       ...options,
       headers: {
@@ -107,11 +114,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         // and for transparent proxies that strip X-Mushi-* headers.
         'Authorization': `Bearer ${apiKey}`,
         'X-Mushi-Api-Key': apiKey,
+        'X-Request-Id': requestId,
         ...(projectId ? { 'X-Mushi-Project-Id': projectId } : {}),
         ...(options?.headers ?? {}),
       },
     })
 
+    const durationMs = Date.now() - started
     const text = await res.text()
     let body: unknown = null
     if (text) {
@@ -126,6 +135,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const envelope = body as ApiEnvelope<T> | null
       const code = envelope?.error?.code ?? `HTTP_${res.status}`
       const message = envelope?.error?.message ?? text.slice(0, 500) ?? `Request failed with ${res.status}`
+      apiLog.warn('api.failed', { path, requestId, status: res.status, durationMs, code })
       throw new MushiApiError(res.status, code, message)
     }
 
@@ -134,11 +144,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (!envelope.ok) {
         const code = envelope.error?.code ?? 'API_ERROR'
         const message = envelope.error?.message ?? 'API returned ok=false'
+        apiLog.warn('api.failed', { path, requestId, status: res.status, durationMs, code })
         throw new MushiApiError(res.status, code, message)
       }
+      apiLog.info('api.done', { path, requestId, status: res.status, durationMs })
       return (envelope.data ?? ({} as T)) as T
     }
 
+    apiLog.info('api.done', { path, requestId, status: res.status, durationMs })
     return body as T
   }
 
@@ -2335,6 +2348,106 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
       const qs = args.force ? '?force=1' : ''
       const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/tour${qs}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'search_codebase',
+    {
+      title: titleOf('search_codebase', CODEBASE_TOOL_CATALOG),
+      description: descOf('search_codebase', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('search_codebase', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        query: z.string().describe('Plain-English search query'),
+        k: z.number().optional().describe('Number of results (default 8, max 20)'),
+        scope_prefix: z.string().optional().describe('Optional subdirectory scope prefix'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/search`, {
+        method: 'POST',
+        body: JSON.stringify({
+          query: args.query,
+          k: args.k ?? 8,
+          scope_prefix: args.scope_prefix ?? undefined,
+        }),
+      })
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_codebase_domains',
+    {
+      title: titleOf('get_codebase_domains', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_codebase_domains', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_codebase_domains', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        force: z.boolean().optional().describe('Bypass cache and regenerate'),
+        scope_prefix: z.string().optional().describe('Optional subdirectory scope prefix'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const qs = new URLSearchParams()
+      if (args.force) qs.set('force', '1')
+      if (args.scope_prefix) qs.set('scope_prefix', args.scope_prefix)
+      const suffix = qs.toString() ? `?${qs}` : ''
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/domains${suffix}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'analyze_codebase_impact',
+    {
+      title: titleOf('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
+      description: descOf('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('analyze_codebase_impact', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        paths: z.array(z.string()).optional().describe('Changed file paths'),
+        source: z.enum(['last_push', 'compare', 'fix']).optional().describe('Auto-resolve changed paths'),
+        compare: z.string().optional().describe('GitHub compare range base...head'),
+        fix_id: z.string().optional().describe('Fix attempt UUID for PR changed files'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const qs = new URLSearchParams()
+      if (args.paths?.length) qs.set('paths', args.paths.join(','))
+      if (args.source === 'last_push') qs.set('ref', 'last_push')
+      if (args.compare) qs.set('compare', args.compare)
+      if (args.fix_id) qs.set('fix_id', args.fix_id)
+      if (!qs.toString()) {
+        throw new MushiApiError(400, 'BAD_REQUEST', 'Provide paths, source=last_push, compare, or fix_id')
+      }
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/impact?${qs}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'analyze_wiki_knowledge',
+    {
+      title: titleOf('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
+      description: descOf('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('analyze_wiki_knowledge', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/knowledge/graph`)
       return jsonText(data)
     },
   )

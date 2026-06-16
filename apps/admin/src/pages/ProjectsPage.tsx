@@ -38,9 +38,11 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { canCreateProject, viewerRoleHint } from '../lib/orgPermissions'
 import { useCreateProject } from '../lib/useCreateProject'
 import { useUpdateProject } from '../lib/useUpdateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useActiveOrgId, type OrganizationSummary } from '../components/OrgSwitcher'
 import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
 import { ProjectFolderTabRail } from '../components/projects/ProjectFolderTabRail'
 import {
@@ -432,10 +434,19 @@ export function ProjectsPage() {
 
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<{ projects: Project[]; admin_host: string | null }>(
     '/v1/admin/projects',
+    { scope: 'enumeration' },
   )
   const { data: statsData, reload: reloadStats, lastFetchedAt: statsFetchedAt, isValidating: statsValidating } = usePageData<ProjectsStats>(
     '/v1/admin/projects/stats',
+    { scope: 'enumeration' },
   )
+  const activeOrgId = useActiveOrgId()
+  const { data: orgData } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
+    scope: 'none',
+  })
+  const activeOrg = orgData?.organizations?.find((o) => o.id === activeOrgId) ?? null
+  const activeTeamName = activeOrg?.name ?? null
+  const activeOrgRole = activeOrg?.role ?? null
   const stats = { ...EMPTY_PROJECTS_STATS, ...statsData }
   const fetchedAt = statsFetchedAt ?? lastFetchedAt
   const validating = isValidating || statsValidating
@@ -477,13 +488,16 @@ export function ProjectsPage() {
           : 1,
   })
 
+  const canManageProjects = canCreateProject(activeOrgRole)
+  const roleHint = viewerRoleHint(activeOrgRole)
+
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: 'Overview' },
       { id: 'list' as const, label: 'Your projects', count: stats.projectCount || undefined },
-      { id: 'create' as const, label: 'New project' },
+      ...(canManageProjects ? [{ id: 'create' as const, label: 'New project' }] : []),
     ],
-    [stats.projectCount],
+    [stats.projectCount, canManageProjects],
   )
 
   const {
@@ -794,8 +808,14 @@ export function ProjectsPage() {
         </div>
         <Btn
           onClick={createProject}
-          disabled={creating || !newName.trim()}
-          title={!newName.trim() ? 'Enter a project name to continue' : undefined}
+          disabled={creating || !newName.trim() || !canManageProjects}
+          title={
+            !canManageProjects
+              ? (roleHint ?? 'You cannot create projects in this team')
+              : !newName.trim()
+                ? 'Enter a project name to continue'
+                : undefined
+          }
         >
           {creating ? 'Creating...' : 'Create project'}
         </Btn>
@@ -875,11 +895,11 @@ export function ProjectsPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'warn'
-                ? 'bg-warn-muted/50 text-warning-foreground'
+                ? 'bg-warn-muted text-warning-foreground'
                 : bannerSeverity === 'brand'
-                  ? 'bg-brand/15 text-brand'
+                  ? 'bg-brand-subtle text-brand'
                   : bannerSeverity === 'info'
-                    ? 'bg-info-muted/50 text-info-foreground'
+                    ? 'bg-info-muted text-info-foreground'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -894,6 +914,8 @@ export function ProjectsPage() {
 
       <ProjectsStatusBanner
         stats={stats}
+        activeTeamName={activeTeamName}
+        roleHint={roleHint}
         onTab={setTab}
         onRefresh={reloadAll}
         refreshing={validating}
@@ -965,10 +987,10 @@ export function ProjectsPage() {
         <Card
           className={`space-y-3 p-4 ${
             stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
-              ? 'border-warn/30 bg-warn/5'
+              ? 'border-warn/30'
               : stats.topPriority === 'no_projects'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-info/30 bg-info/5'
+                ? 'border-brand/30'
+                : 'border-info/30'
           }`}
         >
           <SignalChip
@@ -1053,9 +1075,9 @@ export function ProjectsPage() {
               cta={{ label: 'View projects', to: '/projects?tab=list' }}
             />
           )}
-          <div className="overflow-hidden rounded-md border border-edge-subtle/60 bg-surface-root/30">
-            <div className="grid grid-cols-1 gap-px bg-edge-subtle/40 sm:grid-cols-3">
-              <ContainedBlock tone="ok" className="rounded-none border-0 bg-surface-root/80 p-3">
+          <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
+            <div className="grid grid-cols-1 gap-px bg-edge-subtle sm:grid-cols-3">
+              <div className="bg-surface-raised p-3">
                 <SignalChip tone="ok" className="uppercase tracking-wide">Ingest coverage</SignalChip>
                 <p className="mt-1 text-lg font-semibold tabular-nums text-ok">
                   {stats.projectCount > 0
@@ -1065,15 +1087,15 @@ export function ProjectsPage() {
                 <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
                   {stats.projectsWithReports}/{stats.projectCount} projects with reports
                 </InlineProof>
-              </ContainedBlock>
-              <ContainedBlock tone="info" className="rounded-none border-0 bg-surface-root/80 p-3">
+              </div>
+              <div className="bg-surface-raised p-3">
                 <SignalChip tone="info" className="uppercase tracking-wide">SDK heartbeats</SignalChip>
                 <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.sdkConnectedCount}</p>
                 <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
                   {stats.staleKeyCount} active keys never seen
                 </InlineProof>
-              </ContainedBlock>
-              <ContainedBlock tone="brand" className="rounded-none border-0 bg-surface-root/80 p-3">
+              </div>
+              <div className="bg-surface-raised p-3">
                 <SignalChip tone="brand" className="uppercase tracking-wide">Active context</SignalChip>
                 <p className="mt-1 text-sm font-semibold text-fg-primary truncate">
                   {stats.activeProjectName ?? 'None selected'}
@@ -1085,7 +1107,7 @@ export function ProjectsPage() {
                       : 'No reports yet'
                     : 'Switch on list tab'}
                 </InlineProof>
-              </ContainedBlock>
+              </div>
             </div>
           </div>
         </div>
@@ -1134,7 +1156,7 @@ export function ProjectsPage() {
                 onSelect={setActive}
               />
               <div
-                className="min-w-0 flex-1 lg:border-l lg:border-edge-subtle lg:bg-surface-raised/20"
+                className="min-w-0 flex-1 lg:border-l lg:border-edge-subtle lg:bg-surface-raised"
                 role="tabpanel"
                 aria-label={selectedProject ? `Details for ${selectedProject.name}` : 'Project details'}
               >
@@ -1144,7 +1166,7 @@ export function ProjectsPage() {
             const revealed = revealedKeys[project.id]
             return (
               <Card key={project.id} className="overflow-hidden rounded-none border-0 p-0 shadow-none lg:min-h-full">
-                <div className="flex flex-col gap-2 border-b border-edge-subtle/50 bg-surface-root/35 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       {renamingId === project.id ? (
@@ -1601,36 +1623,30 @@ type MetricTone = 'reports' | 'keys' | 'members' | 'activity' | 'created' | 'sdk
 
 const METRIC_TONE: Record<
   MetricTone,
-  { cell: string; icon: string; value: string }
+  { icon: string; value: string }
 > = {
   reports: {
-    cell: 'bg-info-muted/30',
-    icon: 'bg-info/20 text-info',
+    icon: 'bg-info-muted text-info',
     value: 'text-info',
   },
   keys: {
-    cell: 'bg-warn-muted/25',
-    icon: 'bg-warn/20 text-warn',
+    icon: 'bg-warn-muted text-warning-foreground',
     value: 'text-warn',
   },
   members: {
-    cell: 'bg-brand/8',
-    icon: 'bg-brand/15 text-brand',
+    icon: 'bg-brand-subtle text-brand',
     value: 'text-brand',
   },
   activity: {
-    cell: 'bg-ok-muted/25',
-    icon: 'bg-ok/20 text-ok',
+    icon: 'bg-ok-muted text-ok',
     value: 'text-ok',
   },
   created: {
-    cell: 'bg-surface-overlay/40',
     icon: 'bg-surface-overlay text-fg-muted',
     value: 'text-fg',
   },
   sdk: {
-    cell: 'bg-accent/10',
-    icon: 'bg-accent-muted/55 text-accent-foreground',
+    icon: 'bg-accent-muted text-accent-foreground',
     value: 'text-fg',
   },
 }
@@ -1640,9 +1656,9 @@ function ProjectMetricsRail({ project }: { project: Project }) {
   const hasSdk = project.sdk_status && project.sdk_status !== 'unknown'
 
   return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle/60 bg-surface-root/30">
+    <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
       <div
-        className={`grid grid-cols-2 gap-px bg-edge-subtle/40 sm:grid-cols-3 ${
+        className={`grid grid-cols-2 gap-px bg-edge-subtle sm:grid-cols-3 ${
           hasSdk ? 'lg:grid-cols-6' : 'lg:grid-cols-5'
         }`}
       >
@@ -1697,7 +1713,7 @@ function ProjectMetricsRail({ project }: { project: Project }) {
           />
         )}
       </div>
-      <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle/50 bg-surface-overlay/25 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
+      <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle bg-surface-overlay px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
         <span
           className="inline-flex shrink-0 items-center gap-1.5 text-2xs font-medium text-fg-muted"
           title="Paste as MUSHI_PROJECT_ID in .env.local or CI"
@@ -1731,7 +1747,7 @@ function MetricTile({
   const styles = METRIC_TONE[tone]
   return (
     <div
-      className={`flex min-w-0 flex-col gap-0.5 bg-surface-root/80 px-3 py-2.5 ${styles.cell}`}
+      className="flex min-w-0 flex-col gap-0.5 bg-surface-raised px-3 py-2.5"
       title={title ?? hint}
     >
       <div className="inline-flex min-w-0 items-center gap-1.5 text-2xs font-medium text-fg-muted">
@@ -1804,7 +1820,7 @@ function ProjectContextRail({ project }: { project: Project }) {
   })()
 
   return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle/60 bg-surface-root/25 text-xs">
+    <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised text-xs">
       {repo && repoLabel && (
         <ContextDetailRow label="Repository" icon={<IconGit className="h-4 w-4" />}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -1931,7 +1947,7 @@ function ProjectContextRail({ project }: { project: Project }) {
         <ContextDetailRow label="Integrations" icon={<IconIntegrations className="h-4 w-4" />}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {planTier && planTier !== 'free' && (
-              <Badge className="border border-brand/20 bg-brand/10 capitalize text-brand">
+              <Badge className="border border-brand/20 bg-brand-subtle capitalize text-brand">
                 {planTier}
               </Badge>
             )}
@@ -1942,7 +1958,7 @@ function ProjectContextRail({ project }: { project: Project }) {
             )}
             {sentryConnected && (
               <Badge
-                className="inline-flex items-center gap-1 border border-accent/30 bg-accent-muted/55 text-accent-foreground"
+                className="inline-flex items-center gap-1 border border-accent/30 bg-accent-muted text-accent-foreground"
                 title={
                   sentryReports > 0
                     ? `${sentryReports} report${sentryReports === 1 ? '' : 's'} with Sentry trace in the last 30 days`
@@ -1973,7 +1989,7 @@ function ContextDetailRow({
   children: ReactNode
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle/50 px-3 py-2.5 first:border-t-0 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-4">
+    <div className="grid grid-cols-1 gap-2 border-t border-edge-subtle px-3 py-2.5 first:border-t-0 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-4">
       <div className="inline-flex min-w-0 items-center gap-2 text-2xs font-semibold text-fg-muted">
         <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-overlay text-fg-muted">
           {icon}

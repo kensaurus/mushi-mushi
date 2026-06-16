@@ -1,5 +1,17 @@
 {
   "version": "5",
+  "specifiers": {
+    "jsr:@hono/hono@*": "4.12.24",
+    "jsr:@supabase/supabase-js@2": "2.108.1"
+  },
+  "jsr": {
+    "@hono/hono@4.12.24": {
+      "integrity": "a74a40f06ae6704ddd0e8e576f6da9d34666c3e1e0f5412a2c1ff800ffd092f4"
+    },
+    "@supabase/supabase-js@2.108.1": {
+      "integrity": "c31883d00e36c759796683f2974e99201c3039fc2e539e0c3a1dd6dfb370332d"
+    }
+  },
   "remote": {
     "https://deno.land/std@0.224.0/assert/_constants.ts": "a271e8ef5a573f1df8e822a6eb9d09df064ad66a4390f21b3e31f820a38e0975",
     "https://deno.land/std@0.224.0/assert/assert.ts": "09d30564c09de846855b7b071e62b5974b001bb72a4b797958fe0660e7849834",

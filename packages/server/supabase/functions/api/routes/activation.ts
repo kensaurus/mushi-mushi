@@ -8,7 +8,12 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
-import { callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import {
+  callerProjectIds,
+  enumerateAccessibleProjectIds,
+  resolveOwnedProject,
+  userCanAccessProject,
+} from '../shared.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
 import {
   buildTopPriority,
@@ -32,8 +37,8 @@ export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): v
       }
     })();
 
-    const accessibleIds = await callerProjectIds(c, db, userId);
-    if (accessibleIds.length === 0) {
+    const allAccessibleIds = await enumerateAccessibleProjectIds(c, db, userId);
+    if (allAccessibleIds.length === 0) {
       const emptyStats = buildOnboardingStatsPayload({
         hasAnyProject: false,
         adminHost,
@@ -76,7 +81,7 @@ export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): v
     const pid = project.id;
 
     const [setupData, statsPayload, preflight] = await Promise.all([
-      buildSetupResponse(db, userId, adminHost, accessibleIds),
+      buildSetupResponse(db, userId, adminHost, allAccessibleIds),
       buildOnboardingStatsForProject(db, userId, pid, adminHost),
       buildPreflightSummary(db, userId, pid),
     ]);

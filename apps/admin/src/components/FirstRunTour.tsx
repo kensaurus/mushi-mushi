@@ -5,7 +5,7 @@
  *            • the active project exists (post-onboarding)
  *            • the user is on the dashboard (so anchors are mounted)
  *
- *          Five stops with `data-tour-id` selectors so we never reach into
+ *          Six stops with `data-tour-id` selectors so we never reach into
  *          component internals — anchors are explicit on the consuming
  *          components. Stops 2–4 silently skip when the user has zero
  *          reports; the tour resumes from where it stopped after the first
@@ -21,7 +21,7 @@ import { useAuth } from '../lib/auth'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 
-type StopId = 'plan' | 'reports' | 'dispatch' | 'fixes' | 'mode'
+type StopId = 'plan' | 'reports' | 'dispatch' | 'fixes' | 'mode' | 'askMushi'
 
 interface Stop {
   id: StopId
@@ -77,6 +77,13 @@ const STOPS: Stop[] = [
     anchor: '[data-tour-id="mode-toggle"]',
     title: 'Switch modes anytime',
     body: 'Quick = 3 pages. Beginner = 9 pages with guidance. Advanced = the full 23-page console for power users.',
+  },
+  {
+    id: 'askMushi',
+    routes: ['/'],
+    anchor: '[data-tour-id="ask-mushi-launcher"]',
+    title: 'Ask Mushi — your AI guide',
+    body: 'The glowing chat icon opens Ask Mushi. Ask how any page works, run /explain on the current route, or press Cmd/Ctrl+J from anywhere in the console.',
   },
 ]
 

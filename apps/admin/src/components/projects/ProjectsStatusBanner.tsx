@@ -10,6 +10,10 @@ import type { ProjectsStats, ProjectsTabId } from './types'
 
 interface Props {
   stats: ProjectsStats
+  /** Active team from OrgSwitcher — shown in healthy/partial banners. */
+  activeTeamName?: string | null
+  /** Viewer/member guidance when destructive actions are hidden. */
+  roleHint?: string | null
   onTab?: (tab: ProjectsTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
@@ -22,20 +26,22 @@ function tabFromPath(path: string | null): ProjectsTabId | null {
   return null
 }
 
-export function ProjectsStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, onRefresh, refreshing }: Props) {
   const priority = stats.topPriority
   const label = stats.topPriorityLabel
   const actionTab = tabFromPath(stats.topPriorityTo)
   const viewing = stats.activeProjectName
+  const teamPrefix = activeTeamName ? `Team ${activeTeamName}` : null
+  const contextSuffix = [teamPrefix, viewing ? `viewing ${viewing}` : null].filter(Boolean).join(' · ')
 
   if (priority === 'no_projects') {
     return (
       <StatusBannerShell
         tone="info"
         title="No projects in this workspace yet"
-        subtitle={label}
+        subtitle={roleHint ?? label}
         action={
-          onTab ? (
+          roleHint ? undefined : onTab ? (
             <Btn size="sm" variant="primary" onClick={() => onTab('create')}>Create project</Btn>
           ) : (
             <Link to="/projects?tab=create">
@@ -89,7 +95,7 @@ export function ProjectsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pr
         subtitle={
           <>
             {label}
-            {viewing ? ` · viewing ${viewing}` : ''}
+            {contextSuffix ? ` · ${contextSuffix}` : ''}
           </>
         }
         action={

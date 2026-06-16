@@ -27,6 +27,7 @@ export interface CodebaseChatStreamHandlers {
     costUsd?: number
     inputTokens?: number
     outputTokens?: number
+    keySource?: 'byok' | 'env'
   }) => void
   onDone: () => void
   onError: (err: { code: string; message: string }) => void

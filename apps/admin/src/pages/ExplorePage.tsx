@@ -13,6 +13,19 @@ import '@xyflow/react/dist/style.css'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { useExploreUx, resolveQuickExploreTab } from '../lib/exploreModeUx'
+import {
+  resolveExploreTab,
+  primaryTabOf,
+  defaultTabForPrimary,
+  EXPLORE_PRIMARY_TABS,
+  EXPLORE_UNDERSTAND_VIEWS,
+  EXPLORE_MAP_VIEWS,
+  isUnderstandView,
+  isMapView,
+  type ExplorePrimaryTabId,
+  type ExploreUnderstandView,
+  type ExploreMapView,
+} from '../lib/exploreTabNavigation'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -23,6 +36,7 @@ import { PageScopeHint,SnapshotSectionHint,PageHeader,
   ErrorAlert,
   Section,
   StatCard,
+  StatGrid,
   FreshnessPill,
   Badge,
   Btn,
@@ -38,7 +52,10 @@ import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
 import { ExploreChatPanel } from '../components/explore/ExploreChatPanel'
 import { ExploreTourPanel } from '../components/explore/ExploreTourPanel'
 import { ExploreDomainsPanel } from '../components/explore/ExploreDomainsPanel'
+import { ExploreKnowledgePanel } from '../components/explore/ExploreKnowledgePanel'
+import { ExploreIndexScopePanel } from '../components/explore/ExploreIndexScopePanel'
 import { ExploreImpactControl } from '../components/explore/ExploreImpactControl'
+import { ExploreUnderstandEmpty } from '../components/explore/ExploreUnderstandEmpty'
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
@@ -71,34 +88,23 @@ import { exploreLinks } from '../lib/statCardLinks'
 
 type DensityMode = 'files' | 'symbols'
 
-const EXPLORE_TABS: Array<{ id: ExploreTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Posture banner, layer breakdown, and how indexing → graph → search fit together.',
+const EXPLORE_TAB_META: Record<ExploreTabId, { label: string; description: string }> = {
+  overview: {
+    label: 'Summary',
+    description: 'Posture banner, layer breakdown, and how indexing → map → search fit together.',
   },
-  { id: 'ask', label: 'Ask', description: 'Chat with your repo — grounded answers with file:line citations.' },
-  { id: 'tour', label: 'Tour', description: 'Guided onboarding walkthrough ordered by architectural dependencies.' },
-  { id: 'domains', label: 'Domains', description: 'Business domains, user flows, and the files that implement each step.' },
-  { id: 'graph', label: 'Graph', description: 'ReactFlow canvas — nodes coloured by architectural layer.' },
-  { id: 'layers', label: 'Layers', description: 'Horizontal Sankey lane (UI → Library → Backend → …).' },
-  { id: 'search', label: 'Search', description: 'Semantic search via embeddings — plain English queries.' },
-  { id: 'index', label: 'Index', description: 'Indexer debug — repo, webhook, last error, embedding coverage.' },
-]
+  ask: { label: 'Ask', description: 'Chat with your repo — grounded answers with file:line citations.' },
+  tour: { label: 'Tour', description: 'Guided onboarding walkthrough ordered by architectural dependencies.' },
+  domains: { label: 'Domains', description: 'Business domains, user flows, and the files that implement each step.' },
+  knowledge: { label: 'Knowledge', description: 'Wiki and docs knowledge graph — entities merged into Ask answers.' },
+  graph: { label: 'Graph', description: 'ReactFlow canvas — nodes coloured by architectural layer.' },
+  layers: { label: 'Layers', description: 'Horizontal Sankey lane (UI → Library → Backend → …).' },
+  search: { label: 'Search', description: 'Semantic search via embeddings — plain English queries.' },
+  index: { label: 'Index', description: 'Indexer debug — repo, webhook, last error, embedding coverage.' },
+}
 
-function resolveExploreTab(value: string | null): ExploreTabId {
-  if (
-    value === 'overview' ||
-    value === 'layers' ||
-    value === 'search' ||
-    value === 'index' ||
-    value === 'ask' ||
-    value === 'tour' ||
-    value === 'domains'
-  ) {
-    return value
-  }
-  return 'graph'
+function resolveExploreTabFromParams(value: string | null): ExploreTabId {
+  return resolveExploreTab(value)
 }
 
 function exploreErrorMessage(raw: string | null): string | null {
@@ -180,8 +186,9 @@ export function ExplorePage() {
   const projectId = urlProjectId ?? activeProjectId ?? ''
 
   const tabParam = searchParams.get('tab')
-  const activeTab = resolveExploreTab(tabParam)
-  const activeTabMeta = EXPLORE_TABS.find((t) => t.id === activeTab) ?? EXPLORE_TABS[1]
+  const activeTab = resolveExploreTabFromParams(tabParam)
+  const primaryTab = primaryTabOf(activeTab)
+  const activeTabMeta = EXPLORE_TAB_META[activeTab]
 
   const {
     data: statsData,
@@ -238,6 +245,13 @@ export function ExplorePage() {
       })
     },
     [setSearchParams],
+  )
+
+  const setPrimaryTab = useCallback(
+    (primary: ExplorePrimaryTabId) => {
+      setActiveTab(defaultTabForPrimary(primary))
+    },
+    [setActiveTab],
   )
 
   useEffect(() => {
@@ -468,20 +482,47 @@ export function ExplorePage() {
               ? 'ok'
               : 'info'
 
-  const tabOptions = useMemo(
+  const primaryTabOptions = useMemo(
     () =>
-      EXPLORE_TABS.map((t) => ({
+      EXPLORE_PRIMARY_TABS.filter((t) => !(ux.hideIndexTab && t.id === 'index')).map((t) => ({
         id: t.id,
         label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
-          t.id === 'graph' && stats.indexedFiles > 0
+          t.id === 'map' && stats.indexedFiles > 0
             ? stats.indexedFiles
             : t.id === 'search' && stats.withEmbeddings > 0
               ? stats.withEmbeddings
               : undefined,
       })),
-    [copy?.tabLabels, stats.indexedFiles, stats.withEmbeddings],
+    [copy?.tabLabels, stats.indexedFiles, stats.withEmbeddings, ux.hideIndexTab],
   )
+
+  const understandViewOptions = useMemo(
+    () =>
+      EXPLORE_UNDERSTAND_VIEWS.map((v) => ({
+        id: v.id,
+        label: copy?.tabLabels?.[v.id] ?? v.label,
+      })),
+    [copy?.tabLabels],
+  )
+
+  const mapViewOptions = useMemo(
+    () =>
+      EXPLORE_MAP_VIEWS.map((v) => ({
+        id: v.id,
+        label: copy?.tabLabels?.[v.id] ?? v.label,
+      })),
+    [copy?.tabLabels],
+  )
+
+  const isWorkbenchTab =
+    activeTab === 'ask' ||
+    activeTab === 'tour' ||
+    activeTab === 'domains' ||
+    activeTab === 'knowledge' ||
+    activeTab === 'graph' ||
+    activeTab === 'layers' ||
+    activeTab === 'search'
 
   usePublishPageContext({
     route: '/explore',
@@ -528,6 +569,24 @@ export function ExplorePage() {
         <EmptySectionMessage
           text="No project selected"
           hint="Select a project from the top bar to explore its codebase."
+        />
+      </div>
+    )
+  }
+
+  const accessDenied =
+    (error && error.includes('FORBIDDEN')) ||
+    (statsError && statsError.includes('FORBIDDEN'))
+
+  if (accessDenied) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title={copy?.title ?? 'Explore'} projectScope={stats.projectName ?? undefined} />
+        <ExploreUnderstandEmpty
+          error={{
+            code: 'FORBIDDEN',
+            message: 'You do not have access to this project’s codebase index.',
+          }}
         />
       </div>
     )
@@ -704,7 +763,7 @@ export function ExplorePage() {
   ) : null
 
   return (
-    <div className="space-y-4" data-testid="mushi-page-explore">
+    <div className="space-y-3 sm:space-y-4 min-w-0" data-testid="mushi-page-explore">
       <PageHelp
         title={copy?.help?.title ?? 'Codebase Atlas'}
         whatIsIt={
@@ -776,22 +835,49 @@ export function ExplorePage() {
       />
 
       {!ux.hideTabs && (
-      <SegmentedControl<ExploreTabId>
-        size="sm"
-        ariaLabel="Explore sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
+        <div className="space-y-2 min-w-0">
+          <SegmentedControl<ExplorePrimaryTabId>
+            size="sm"
+            wrap
+            ariaLabel="Explore sections"
+            value={primaryTab}
+            options={primaryTabOptions}
+            onChange={setPrimaryTab}
+            className="w-full sm:w-auto"
+          />
+          {primaryTab === 'understand' && isUnderstandView(activeTab) && (
+            <SegmentedControl<ExploreUnderstandView>
+              size="sm"
+              wrap
+              ariaLabel="Understand views"
+              value={activeTab}
+              options={understandViewOptions}
+              onChange={setActiveTab}
+              className="w-full sm:w-auto"
+            />
+          )}
+          {primaryTab === 'map' && isMapView(activeTab) && (
+            <SegmentedControl<ExploreMapView>
+              size="sm"
+              wrap
+              ariaLabel="Map views"
+              value={activeTab}
+              options={mapViewOptions}
+              onChange={setActiveTab}
+              className="w-full sm:w-auto"
+            />
+          )}
+        </div>
       )}
 
       {!ux.hideExploreSnapshot && (
       <Section
-        title={copy?.sections?.snapshot ?? 'EXPLORE SNAPSHOT'}
+        title={copy?.sections?.snapshot ?? (isWorkbenchTab ? 'At a glance' : 'EXPLORE SNAPSHOT')}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+        className={isWorkbenchTab ? 'xl:py-2.5' : undefined}
       >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {!isWorkbenchTab && <SnapshotSectionHint text={activeTabMeta.description} />}
+        <StatGrid minCol={isWorkbenchTab ? '8.5rem' : '10.5rem'}>
           <StatCard
             label={copy?.statLabels?.files ?? 'Files'}
             value={stats.indexedFiles}
@@ -824,7 +910,7 @@ export function ExplorePage() {
             detail={embeddingsDetail()}
             to={exploreLinks.embedded}
           />
-        </div>
+        </StatGrid>
       </Section>
       )}
 
@@ -953,8 +1039,10 @@ export function ExplorePage() {
         <ExploreDomainsPanel projectId={projectId} onFileClick={handleDomainFileClick} />
       )}
 
+      {activeTab === 'knowledge' && <ExploreKnowledgePanel projectId={projectId} />}
+
       {activeTab === 'search' && (
-        <div className={selectedNode ? 'grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-4 items-start' : ''}>
+        <div className={selectedNode ? 'grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] 2xl:grid-cols-[minmax(0,1fr)_24rem] items-start' : 'min-w-0'}>
           {stats.withEmbeddings === 0 && !loading && (
             <ContainedBlock tone="warn" className="mb-2">
               <p className="text-2xs text-warn">
@@ -986,6 +1074,7 @@ export function ExplorePage() {
 
       {activeTab === 'index' && (
         <div className="space-y-4">
+          <ExploreIndexScopePanel projectId={projectId} />
           <Card className="p-4 space-y-3">
             <p className="text-sm font-medium text-fg">Indexer debug</p>
             <ContainedBlock tone="muted">

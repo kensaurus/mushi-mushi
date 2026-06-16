@@ -30,11 +30,30 @@
 // ============================================================
 
 import type { Hono, Context } from 'npm:hono@4'
+import type { ContentfulStatusCode } from 'npm:hono@4/utils/http-status'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
+import { requireSuperAdmin } from '../../_shared/super-admin.ts'
+import { accessibleProjectIds } from '../../_shared/project-access.ts'
+import {
+  REDEMPTION_CATALOG,
+  resolveCatalogItem,
+  severityToBountyAction,
+  lookupBountyPoints,
+  requireSubmissionProjectAccess,
+  awardPointsChecked,
+  validateRedeemRequestBody,
+  resolveBudgetProjectId,
+  checkGiftCardKycAndCap,
+  checkPayoutSanctions,
+  checkDailyBountyCap,
+  buildWalletCatalogItems,
+  KYC_THRESHOLD_USD,
+  KYC_ANNUAL_CAP_USD,
+} from '../../_shared/tester-marketplace-helpers.ts'
 
 declare const Deno: { env: { get(name: string): string | undefined } }
 
@@ -102,13 +121,65 @@ async function forwardToSentryDsn(
 async function resolveTester(
   supabase: ReturnType<typeof getServiceClient>,
   authUserId: string,
-): Promise<{ id: string; country_code: string | null } | null> {
+): Promise<{ id: string; country_code: string | null; public_handle: string | null } | null> {
   const { data } = await supabase
     .from('mushi_testers')
-    .select('id, country_code')
+    .select('id, country_code, public_handle')
     .eq('auth_user_id', authUserId)
-    .single()
+    .maybeSingle()
   return data ?? null
+}
+
+/** Idempotent tester bootstrap — mirrors private.handle_new_tester_user(). */
+async function provisionTesterAccount(
+  supabase: ReturnType<typeof getServiceClient>,
+  authUserId: string,
+  opts?: { marketingOptIn?: boolean; acceptedTerms?: boolean },
+): Promise<{ id: string; created: boolean } | null> {
+  const { data: existing } = await supabase
+    .from('mushi_testers')
+    .select('id')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle()
+
+  if (existing?.id) {
+    return { id: existing.id, created: false }
+  }
+
+  if (opts?.acceptedTerms !== true) {
+    return null
+  }
+
+  const now = new Date().toISOString()
+  const { data: row, error } = await supabase
+    .from('mushi_testers')
+    .insert({
+      auth_user_id: authUserId,
+      marketing_opt_in: opts?.marketingOptIn ?? false,
+      terms_accepted_at: now,
+    })
+    .select('id')
+    .single()
+
+  if (error || !row?.id) {
+    rlog.error('provision_tester_failed', { authUserId, error: error?.message })
+    return null
+  }
+
+  await supabase.from('mushi_tester_profiles').upsert(
+    { tester_id: row.id },
+    { onConflict: 'tester_id' },
+  )
+  await supabase.from('tester_balances').upsert(
+    { tester_id: row.id, current_points: 0, total_points_lifetime: 0, total_points_30d: 0 },
+    { onConflict: 'tester_id' },
+  )
+  await supabase.from('tester_reputation').upsert(
+    { tester_id: row.id, score: 0 },
+    { onConflict: 'tester_id' },
+  )
+
+  return { id: row.id, created: true }
 }
 
 // ─── Route registration ───────────────────────────────────────
@@ -286,7 +357,21 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const supabase = getServiceClient()
     const tester = await resolveTester(supabase, authUserId)
 
-    if (!tester) return c.json({ ok: true, data: { isTester: false, handle: null, reputation: 0, balance: 0, totalEarned: 0, totalRedeemed: 0, acceptedSubmissions: 0, joinedApps: 0 } })
+    if (!tester) {
+      return c.json({ ok: true, data: {
+        isTester: false,
+        is_tester: false,
+        handle: null,
+        public_handle: null,
+        display_name: null,
+        reputation: 0,
+        balance: 0,
+        totalEarned: 0,
+        totalRedeemed: 0,
+        acceptedSubmissions: 0,
+        joinedApps: 0,
+      } })
+    }
 
     const [{ data: testerRow }, { data: balance }, { data: rep }, { count: joinedApps }, { count: acceptedSubs }] = await Promise.all([
       supabase.from('mushi_testers').select('public_handle, display_name').eq('id', tester.id).single(),
@@ -301,7 +386,10 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
 
     return c.json({ ok: true, data: {
       isTester: true,
+      is_tester: true,
       handle: testerRow?.public_handle ?? testerRow?.display_name ?? null,
+      public_handle: testerRow?.public_handle ?? null,
+      display_name: testerRow?.display_name ?? null,
       reputation: rep?.score ?? 0,
       balance: currentPts,
       totalEarned,
@@ -309,6 +397,35 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       acceptedSubmissions: acceptedSubs ?? 0,
       joinedApps: joinedApps ?? 0,
     } })
+  })
+
+  // POST /v1/tester/enroll — opt-in for existing auth users (e.g. admin → bounties)
+  app.post('/v1/tester/enroll', jwtAuth, async (c) => {
+    const authUserId = c.get('userId') as string
+    const supabase = getServiceClient()
+    let body: { marketingOptIn?: boolean; acceptedTerms?: boolean } = {}
+    try {
+      body = await c.req.json()
+    } catch {
+      /* empty body ok */
+    }
+
+    if (body.acceptedTerms !== true) {
+      return c.json({
+        ok: false,
+        error: { code: 'terms_required', message: 'You must accept the tester terms to enroll.' },
+      }, 400)
+    }
+
+    const provisioned = await provisionTesterAccount(supabase, authUserId, {
+      marketingOptIn: body.marketingOptIn === true,
+      acceptedTerms: true,
+    })
+    if (!provisioned) {
+      return c.json({ ok: false, error: { code: 'enroll_failed', message: 'Could not create tester account.' } }, 500)
+    }
+
+    return c.json({ ok: true, data: { enrolled: true, created: provisioned.created } })
   })
 
   // GET /v1/tester/me — camelCase response consumed by TesterSettingsPage
@@ -343,7 +460,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       country: testerRow?.country_code ?? null,
       kycStatus: kyc?.withholding_status ?? 'none',
       kycClearedAt: kyc?.tax_form_collected_at ?? null,
-      privacyPublicHandle: true,
+      privacyPublicHandle: testerRow?.public_leaderboard ?? true,
       privacyPublicLeaderboard: testerRow?.public_leaderboard ?? true,
     } })
   })
@@ -364,6 +481,9 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     if (typeof body.handle === 'string') testerUpdates.public_handle = body.handle.replace(/\s+/g, '-').toLowerCase().slice(0, 32)
     if (typeof body.country === 'string') testerUpdates.country_code = body.country.toUpperCase().slice(0, 2)
     if (typeof body.privacyPublicLeaderboard === 'boolean') testerUpdates.public_leaderboard = body.privacyPublicLeaderboard
+    if (typeof body.privacyPublicHandle === 'boolean') {
+      testerUpdates.public_leaderboard = body.privacyPublicHandle
+    }
 
     if (typeof body.bio === 'string') profileUpdates.bio = body.bio.slice(0, 500)
     if (Array.isArray(body.expertiseTags)) profileUpdates.expertise_tags = body.expertiseTags.slice(0, 10)
@@ -392,8 +512,8 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       { data: pendingRows },
       { data: tremendousEtaRows },
     ] = await Promise.all([
-      supabase.from('tester_balances').select('current_points, total_points_lifetime').eq('tester_id', tester.id).single(),
-      supabase.from('tester_kyc').select('withholding_status, tax_form_collected_at').eq('tester_id', tester.id).single(),
+      supabase.from('tester_balances').select('current_points, total_points_lifetime').eq('tester_id', tester.id).maybeSingle(),
+      supabase.from('tester_kyc').select('withholding_status, tax_form_collected_at').eq('tester_id', tester.id).maybeSingle(),
       supabase.from('tester_credit_ledger').select('id, delta_points, reason, created_at').eq('tester_id', tester.id).order('created_at', { ascending: false }).limit(20),
       // YTD gift-card USD (same logic as the redeem gate — cannot diverge)
       supabase.from('tester_redemptions')
@@ -437,42 +557,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       }
     }
 
-    const catalog: unknown[] = [
-      {
-        id: 'pro-1000', name: 'Mushi Pro credit — $13',
-        description: 'Apply 1,000 mushi-points toward your Mushi Pro subscription (1.3× premium).',
-        pointsCost: 1000, valueUsd: 13, category: 'pro', icon: '🚀',
-        isAvailable: true, etaHours: null,
-        conversionPreview: '1,000 pts × 1.3× = $13.00 Mushi Pro credit · arrives within 60s',
-      },
-      {
-        id: 'gc-amazon-10', name: 'Amazon gift card — $10',
-        description: '$10 Amazon.com gift card. Taxable at fair market value.',
-        pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '🛍️',
-        isAvailable: kycStatus !== 'rejected',
-        unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined,
-        etaHours: nextRedemptionEtaHours,
-        conversionPreview: `1,000 pts × 1.0× = $10 Amazon eGift · email arrives within ${nextRedemptionEtaHours ?? 24}h`,
-      },
-      {
-        id: 'gc-starbucks-10', name: 'Starbucks gift card — $10',
-        description: '$10 Starbucks eGift card.',
-        pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '☕',
-        isAvailable: kycStatus !== 'rejected',
-        unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined,
-        etaHours: nextRedemptionEtaHours,
-        conversionPreview: `1,000 pts × 1.0× = $10 Starbucks eGift · email arrives within ${nextRedemptionEtaHours ?? 24}h`,
-      },
-      {
-        id: 'gc-appstore-10', name: 'App Store gift card — $10',
-        description: '$10 Apple App Store & iTunes gift card.',
-        pointsCost: 1000, valueUsd: 10, category: 'giftcard', icon: '🍎',
-        isAvailable: kycStatus !== 'rejected',
-        unavailableReason: kycStatus === 'rejected' ? 'KYC rejected' : undefined,
-        etaHours: nextRedemptionEtaHours,
-        conversionPreview: `1,000 pts × 1.0× = $10 App Store eGift · email arrives within ${nextRedemptionEtaHours ?? 24}h`,
-      },
-    ]
+    const catalog = buildWalletCatalogItems(kycStatus, nextRedemptionEtaHours)
 
     const walletCurrentPts = balance?.current_points ?? 0
     const walletTotalEarned = balance?.total_points_lifetime ?? 0
@@ -481,9 +566,8 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       totalEarned: walletTotalEarned,
       totalRedeemed: walletTotalEarned - walletCurrentPts,
       ytdGiftCardUsd: ytdUsd,
-      // KYC thresholds exposed so the FE never hardcodes them
-      kycThresholdUsd: 400,
-      kycCapUsd: 599,
+      kycThresholdUsd: KYC_THRESHOLD_USD,
+      kycCapUsd: KYC_ANNUAL_CAP_USD,
       kycRequired: ytdUsd >= 400,
       kycCleared: kycStatus === 'cleared',
       nextRedemptionEtaHours,
@@ -821,6 +905,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const severity: string | undefined = (body.severity ?? undefined) as string | undefined
     const description: string = (body.description ?? '') as string
     const title: string = (body.title ?? description.slice(0, 80)) as string
+    const screenshotUrl: string | undefined = (body.screenshotUrl ?? body.screenshot_url ?? undefined) as string | undefined
 
     if (!appId && !appSlug) return c.json({ ok: false, error: { code: 'MISSING_PARAM', message: 'app_id or app_slug required' } }, 400)
     if (!description) return c.json({ error: 'description required' }, 400)
@@ -860,6 +945,10 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     // velocityResult.withheld means we'll create the submission but won't auto-award points.
     const withheldByVelocity = velocityResult.withheld
 
+    const bountyAction = severityToBountyAction(severity, submissionType)
+    const bounty = await lookupBountyPoints(supabase, app.id, bountyAction)
+    const expectedPoints = withheldByVelocity ? 0 : bounty.points
+
     // Create the tester_submissions row.
     // If velocity cap is exceeded, the submission is still created but marked withheld
     // so points are not auto-awarded until a reviewer approves.
@@ -872,6 +961,8 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
         severity,
         description,
         title,
+        screenshot_url: screenshotUrl ?? null,
+        points_awarded: expectedPoints,
         status: withheldByVelocity ? 'spam' : 'pending', // 'spam' withholds auto-award; reviewer can override
       })
       .select()
@@ -923,7 +1014,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     // through their own Sentry workflow. Non-blocking fire-and-forget.
     if (app.sentry_dsn) {
       forwardToSentryDsn(app.sentry_dsn, {
-        testerHandle: (tester as Record<string, unknown>).public_handle as string | null,
+        testerHandle: tester.public_handle,
         submissionId: submission.id,
         title,
         description,
@@ -947,28 +1038,16 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
 
   // GET /v1/tester/wallet/catalog
   app.get('/v1/tester/wallet/catalog', jwtAuth, async (c) => {
-    // Returns the Tremendous SKU catalog from mushi_runtime_config.
-    const supabase = getServiceClient()
-    const { data } = await supabase
-      .from('mushi_runtime_config')
-      .select('value')
-      .eq('key', 'tremendous_catalog')
-      .maybeSingle()
-
-    const catalog = data?.value ?? []
-    // Always add the closed-loop Mushi Pro option first.
-    const options = [
-      {
-        sku: 'mushi_pro_credit',
-        label: 'Mushi Pro credit',
-        description: '1,000 points → $13 of Mushi Pro (1.3× premium)',
-        face_values_usd: [10, 20, 50, 100],
-        premium_multiplier: 1.3,
-        kind: 'mushi_pro_credit',
-      },
-      ...(Array.isArray(catalog) ? catalog : []),
-    ]
-
+    const options = Object.entries(REDEMPTION_CATALOG).map(([id, entry]) => ({
+      id,
+      sku: entry.sku ?? entry.kind,
+      label: entry.label,
+      description: entry.description,
+      points_spent: entry.points_spent,
+      face_value_usd: entry.face_value_usd ?? null,
+      premium_multiplier: entry.premiumMultiplier ?? 1,
+      kind: entry.kind,
+    }))
     return c.json({ ok: true, data: options })
   })
 
@@ -979,102 +1058,94 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const tester = await resolveTester(supabase, authUserId)
     if (!tester) return c.json({ error: 'not_a_tester' }, 403)
 
-    const body = await c.req.json()
-
-    // Accept either the structured form { kind, points_spent, face_value_usd, sku }
-    // OR the catalog-item form { catalogItemId } sent by TesterWalletPage.
-    // Map catalogItemId → API fields to keep the frontend simple.
-    const CATALOG_ID_MAP: Record<string, { kind: string; points_spent: number; face_value_usd?: number; sku?: string }> = {
-      'pro-1000':       { kind: 'mushi_pro_credit', points_spent: 1000 },
-      'gc-amazon-10':   { kind: 'gift_card', points_spent: 1000, face_value_usd: 10, sku: 'amazon_10' },
-      'gc-starbucks-10':{ kind: 'gift_card', points_spent: 1000, face_value_usd: 10, sku: 'starbucks_10' },
-      'gc-appstore-10': { kind: 'gift_card', points_spent: 1000, face_value_usd: 10, sku: 'appstore_10' },
-    }
-
-    let { kind, points_spent, face_value_usd, sku } = body as {
+    const body = await c.req.json() as {
+      catalogItemId?: string
+      clientEventId?: string
       kind?: string
       points_spent?: number
       face_value_usd?: number
-      sku?: string
-      catalogItemId?: string
     }
 
-    if (!kind && body.catalogItemId) {
-      const mapped = CATALOG_ID_MAP[body.catalogItemId as string]
-      if (!mapped) {
-        return c.json({ ok: false, error: { code: 'invalid_catalog_item', message: 'Unknown catalog item' } }, 400)
+    const validated = validateRedeemRequestBody(body)
+    if (!validated.ok) {
+      return c.json({
+        ok: false,
+        error: { code: validated.code, message: validated.message },
+      }, validated.status as ContentfulStatusCode)
+    }
+
+    const { catalogItemId, clientEventId, entry } = validated
+    const { kind, points_spent: effectivePointsSpent, face_value_usd: faceValueUsd, sku } = entry
+    const premiumMultiplier = entry.premiumMultiplier ?? (kind === 'mushi_pro_credit' ? 1.3 : 1.0)
+    const idempotencyKey = `redeem:${tester.id}:${catalogItemId}:${clientEventId}`
+
+    const sanctions = checkPayoutSanctions(tester.country_code)
+    if (!sanctions.ok) {
+      return c.json({ ok: false, error: { code: sanctions.code, message: sanctions.message } }, 403)
+    }
+
+    if (kind === 'gift_card' && faceValueUsd) {
+      const kycGate = await checkGiftCardKycAndCap(supabase, tester.id, faceValueUsd)
+      if (!kycGate.ok) {
+        return c.json({ ok: false, error: { code: kycGate.code, message: kycGate.message } }, kycGate.status as ContentfulStatusCode)
       }
-      kind = mapped.kind
-      points_spent = mapped.points_spent
-      face_value_usd = mapped.face_value_usd
-      sku = mapped.sku
+
+      const budgetProjectId = await resolveBudgetProjectId(supabase, tester.id)
+      if (budgetProjectId) {
+        const { data: budget } = await supabase.rpc('check_marketplace_budget', {
+          p_project_id: budgetProjectId,
+          p_requested_amount_usd: faceValueUsd,
+        })
+        if (budget?.would_exceed === true) {
+          return c.json({
+            ok: false,
+            error: { code: 'budget_exceeded', message: 'This app\'s monthly gift-card budget is exhausted.' },
+          }, 402)
+        }
+      }
     }
 
-    if (!kind || !['mushi_pro_credit', 'gift_card', 'app_slot', 'api_quota'].includes(kind)) {
-      return c.json({ ok: false, error: { code: 'invalid_kind', message: 'Invalid redemption kind' } }, 400)
+    const { data: existingRedemption } = await supabase
+      .from('tester_redemptions')
+      .select('*')
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle()
+
+    if (existingRedemption) {
+      return c.json({ ok: true, data: existingRedemption }, 202)
     }
 
-    const effectivePointsSpent = points_spent ?? 1000
-
-    // Check balance.
     const { data: balance } = await supabase
       .from('tester_balances')
       .select('current_points')
       .eq('tester_id', tester.id)
-      .single()
+      .maybeSingle()
 
     if ((balance?.current_points ?? 0) < effectivePointsSpent) {
       return c.json({ ok: false, error: { code: 'insufficient_balance', message: 'Insufficient balance' } }, 400)
     }
 
-    // Gift-card specific checks.
-    if (kind === 'gift_card') {
-      // OFAC / sanctions check (Wave 9 defense-in-depth).
-      const giftCardSanctions = checkSanctions(tester.country_code)
-      if (giftCardSanctions.blocked) {
-        return c.json({ ok: false, error: { code: 'region_not_supported', message: giftCardSanctions.reason ?? 'Region not supported' } }, 403)
-      }
+    const deduct = await awardPointsChecked(supabase, {
+      testerId: tester.id,
+      deltaPoints: -effectivePointsSpent,
+      reason: 'redemption',
+      idempotencyKey: `deduct:${idempotencyKey}`,
+    })
 
-      // KYC threshold ($400).
-      if (face_value_usd) {
-        const { data: ytdData } = await supabase
-          .from('tester_redemptions')
-          .select('face_value_usd')
-          .eq('tester_id', tester.id)
-          .eq('kind', 'gift_card')
-          .in('status', ['complete', 'processing', 'pending'])
-          .gte('requested_at', `${new Date().getFullYear()}-01-01`)
-
-        const ytd = (ytdData ?? []).reduce((acc, r) => acc + (r.face_value_usd ?? 0), 0)
-
-        if (ytd + face_value_usd >= 400) {
-          const { data: kyc } = await supabase
-            .from('tester_kyc')
-            .select('withholding_status')
-            .eq('tester_id', tester.id)
-            .single()
-
-          if (!kyc || kyc.withholding_status !== 'cleared') {
-            return c.json(
-              { ok: false, error: { code: 'kyc_required', message: 'Identity verification required', ytd_total: ytd, threshold: 400 } },
-              402,
-            )
-          }
-        }
-      }
+    if (!deduct.ok) {
+      return c.json({
+        ok: false,
+        error: { code: deduct.error ?? 'deduction_failed', message: 'Could not deduct points for redemption.' },
+      }, 400)
     }
 
-    const premiumMultiplier = kind === 'mushi_pro_credit' ? 1.3 : 1.0
-    const idempotencyKey = `${tester.id}:${kind}:${Date.now()}`
-
-    // Create redemption row.
     const { data: redemption, error: redErr } = await supabase
       .from('tester_redemptions')
       .insert({
         tester_id: tester.id,
         kind,
         points_spent: effectivePointsSpent,
-        face_value_usd: face_value_usd ?? null,
+        face_value_usd: faceValueUsd ?? null,
         premium_multiplier: premiumMultiplier,
         status: 'pending',
         idempotency_key: idempotencyKey,
@@ -1082,37 +1153,31 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       .select()
       .single()
 
-    if (redErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: redErr.message } }, 500)
+    if (redErr) {
+      await awardPointsChecked(supabase, {
+        testerId: tester.id,
+        deltaPoints: effectivePointsSpent,
+        reason: 'reversal',
+        idempotencyKey: `refund:redeem-failed:${idempotencyKey}`,
+      })
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: redErr.message } }, 500)
+    }
 
-    // Deduct points.
-    await supabase.rpc('award_tester_points', {
-      p_tester_id: tester.id,
-      p_delta_points: -effectivePointsSpent,
-      p_reason: 'redemption',
-      p_idempotency_key: `deduct:${idempotencyKey}`,
-    })
-
-    // For gift_card: insert tremendous_orders row (picked up by cron).
-    if (kind === 'gift_card' && face_value_usd && sku) {
+    if (kind === 'gift_card' && faceValueUsd && sku) {
       await supabase.from('tremendous_orders').insert({
         tester_id: tester.id,
         redemption_id: redemption.id,
         status: 'pending',
-        amount_usd: face_value_usd,
+        amount_usd: faceValueUsd,
         sku,
       })
     }
 
-    // For closed-loop mushi_pro_credit / app_slot / api_quota:
-    // Apply a Stripe customer balance credit so it appears on the tester's
-    // next Mushi Pro invoice. Uses 1.3x premium multiplier (set above).
     if (kind !== 'gift_card') {
       try {
-        const { stripeFromEnv } = await import('../../_shared/stripe.ts')
-        const { createCustomerBalanceCredit } = await import('../../_shared/stripe.ts')
+        const { stripeFromEnv, createCustomerBalanceCredit } = await import('../../_shared/stripe.ts')
         const stripeCfg = stripeFromEnv()
 
-        // Look up the tester's Stripe customer ID from their auth account.
         const { data: userSubscription } = await supabase
           .from('subscriptions')
           .select('stripe_customer_id')
@@ -1122,22 +1187,28 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
           .maybeSingle()
 
         if (stripeCfg && userSubscription?.stripe_customer_id) {
-          const faceValueCents = Math.round(
-            (effectivePointsSpent / 100) * 100 * premiumMultiplier, // 1.3x premium
-          )
+          const faceValueCents = Math.round(effectivePointsSpent * premiumMultiplier)
           await createCustomerBalanceCredit(stripeCfg, {
             customerId: userSubscription.stripe_customer_id,
             amountCents: faceValueCents,
             currency: 'usd',
-            description: `Mushi Bounties: ${effectivePointsSpent.toLocaleString()} points → $${(faceValueCents / 100).toFixed(2)} Mushi Pro credit (1.3× premium)`,
+            description: `Mushi Bounties: ${effectivePointsSpent.toLocaleString()} points → Mushi Pro credit (${premiumMultiplier}× premium)`,
             idempotencyKey: `mbounty:credit:${redemption.id}`,
           })
         }
       } catch (err) {
-        rlog.warn('Stripe Pro credit failed — redemption still marked complete', {
+        rlog.warn('Stripe Pro credit failed — refunding points', {
           error: String(err),
           redemptionId: redemption.id,
         })
+        await supabase.from('tester_redemptions').update({ status: 'failed', failure_reason: 'stripe_credit_failed' }).eq('id', redemption.id)
+        await awardPointsChecked(supabase, {
+          testerId: tester.id,
+          deltaPoints: effectivePointsSpent,
+          reason: 'reversal',
+          idempotencyKey: `refund:stripe-failed:${idempotencyKey}`,
+        })
+        return c.json({ ok: false, error: { code: 'fulfillment_failed', message: 'Could not apply Pro credit.' } }, 500)
       }
 
       await supabase
@@ -1181,6 +1252,70 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     note: z.string().max(2000).optional(), // alias used by TesterSubmissionCard
   })
 
+  // GET /v1/admin/tester-submissions — org-scoped reviewer queue
+  app.get('/v1/admin/tester-submissions', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const projectId = c.req.query('projectId')
+    const status = c.req.query('status') ?? 'pending'
+    const page = Number(c.req.query('page') ?? '1')
+    const limit = 20
+
+    if (!projectId) {
+      return c.json({ ok: false, error: { code: 'missing_param', message: 'projectId is required' } }, 400)
+    }
+
+    const supabase = getServiceClient()
+    const allowed = await accessibleProjectIds(supabase, userId)
+    if (!allowed.includes(projectId)) {
+      return c.json({ ok: false, error: { code: 'forbidden', message: 'Forbidden' } }, 403)
+    }
+
+    const { data: app } = await supabase
+      .from('published_apps')
+      .select('id, name')
+      .eq('project_id', projectId)
+      .maybeSingle()
+
+    if (!app) return c.json({ ok: true, data: { items: [], total: 0 } })
+
+    let query = supabase
+      .from('tester_submissions')
+      .select(`
+        id, title, description, status, severity, submission_type, points_awarded,
+        created_at, reviewed_at, reviewer_note,
+        mushi_testers!tester_submissions_tester_id_fkey ( public_handle, display_name )
+      `, { count: 'exact' })
+      .eq('app_id', app.id)
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1)
+
+    if (status !== 'all') {
+      query = query.eq('status', status)
+    }
+
+    const { data, count } = await query
+
+    const items = (data ?? []).map((s) => {
+      const tester = s.mushi_testers as { public_handle?: string; display_name?: string } | null
+      return {
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        status: s.status,
+        severity: s.severity,
+        submission_type: s.submission_type,
+        points_awarded: s.points_awarded ?? 0,
+        submitted_at: s.created_at,
+        reviewed_at: s.reviewed_at,
+        reviewer_note: s.reviewer_note,
+        tester_handle: tester?.public_handle ?? tester?.display_name ?? null,
+        app_name: app.name,
+      }
+    })
+
+    return c.json({ ok: true, data: { items, total: count ?? 0 } })
+  })
+
   // deno-lint-ignore no-explicit-any
   async function handleReview(
     c: Context<any>,
@@ -1192,20 +1327,28 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     const body = await c.req.json().catch(() => ({}))
     const parsed = ReviewSchema.safeParse(body)
 
+    const access = await requireSubmissionProjectAccess(supabase, userId, id)
+    if (!access.ok) {
+      return c.json({ ok: false, error: { code: access.error } }, access.status)
+    }
+
     const { data: sub } = await supabase
       .from('tester_submissions')
-      .select('id, tester_id, app_id, points_awarded')
+      .select('id, tester_id, app_id, points_awarded, severity, submission_type, status')
       .eq('id', id)
       .single()
 
     if (!sub) return c.json({ error: 'submission_not_found' }, 404)
 
-    // Determine points and reputation delta.
+    const bountyAction = severityToBountyAction(sub.severity, sub.submission_type)
+    const bounty = await lookupBountyPoints(supabase, sub.app_id, bountyAction)
+    const basePoints = sub.points_awarded > 0 ? sub.points_awarded : bounty.points
+
     const pointsMap: Record<typeof action, number> = {
-      accepted:    sub.points_awarded > 0 ? sub.points_awarded : 50,
-      informative: Math.floor((sub.points_awarded > 0 ? sub.points_awarded : 50) * 0.5),
-      duplicate:   0,
-      spam:        0,
+      accepted: basePoints,
+      informative: Math.floor(basePoints * 0.5),
+      duplicate: 0,
+      spam: 0,
     }
     const repMap: Record<typeof action, { kind: string; delta: number }> = {
       accepted:    { kind: 'submission_accepted',    delta: 7 },
@@ -1214,10 +1357,19 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       spam:        { kind: 'submission_spam',        delta: -10 },
     }
 
-    const points = pointsMap[action]
+    let points = pointsMap[action]
     const repEvent = repMap[action]
 
-    // Update submission status.
+    if (action === 'accepted' && points > 0) {
+      const withinCap = await checkDailyBountyCap(supabase, sub.tester_id, sub.app_id, bountyAction, bounty.dailyCap)
+      if (!withinCap) {
+        return c.json({
+          ok: false,
+          error: { code: 'daily_cap_exceeded', message: 'Daily acceptance cap reached for this bounty tier.' },
+        }, 429)
+      }
+    }
+
     const reviewerNote = parsed.success ? (parsed.data.notes ?? parsed.data.note) : undefined
     await supabase
       .from('tester_submissions')
@@ -1233,19 +1385,20 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       })
       .eq('id', id)
 
-    // Award points if applicable.
     if (points > 0) {
-      await supabase.rpc('award_tester_points', {
-        p_tester_id: sub.tester_id,
-        p_delta_points: points,
-        p_reason: 'submission_accepted',
-        p_submission_id: sub.id,
-        p_app_id: sub.app_id,
-        p_idempotency_key: `review:${id}:${action}`,
+      const awarded = await awardPointsChecked(supabase, {
+        testerId: sub.tester_id,
+        deltaPoints: points,
+        reason: 'submission_accepted',
+        idempotencyKey: `review:${id}:${action}`,
+        submissionId: sub.id,
+        appId: sub.app_id,
       })
+      if (!awarded.ok && !awarded.idempotentSkip) {
+        return c.json({ ok: false, error: { code: 'award_failed', message: awarded.error ?? 'Could not award points' } }, 500)
+      }
     }
 
-    // Insert reputation event.
     await supabase.from('tester_reputation_events').insert({
       tester_id: sub.tester_id,
       kind: repEvent.kind,
@@ -1264,7 +1417,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
 
   // ── Withheld redemptions admin endpoints (AntiGamingPage) ────────────────────
   // GET /v1/admin/tester-redemptions/withheld — list redemptions with status='withheld'
-  app.get('/v1/admin/tester-redemptions/withheld', jwtAuth, async (c) => {
+  app.get('/v1/admin/tester-redemptions/withheld', jwtAuth, requireSuperAdmin, async (c) => {
     const supabase = getServiceClient()
     const { data, count } = await supabase
       .from('tester_redemptions')
@@ -1285,7 +1438,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
   })
 
   // POST /v1/admin/tester-redemptions/:id/approve — approve a withheld redemption
-  app.post('/v1/admin/tester-redemptions/:id/approve', jwtAuth, async (c) => {
+  app.post('/v1/admin/tester-redemptions/:id/approve', jwtAuth, requireSuperAdmin, async (c) => {
     const id = c.req.param('id')!
     const supabase = getServiceClient()
 
@@ -1323,7 +1476,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
   })
 
   // POST /v1/admin/tester-redemptions/:id/deny — deny + refund a withheld redemption
-  app.post('/v1/admin/tester-redemptions/:id/deny', jwtAuth, async (c) => {
+  app.post('/v1/admin/tester-redemptions/:id/deny', jwtAuth, requireSuperAdmin, async (c) => {
     const id = c.req.param('id')!
     const supabase = getServiceClient()
 
@@ -1366,7 +1519,12 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       ?? Deno.env.get('TREMENDOUS_WEBHOOK_SECRET')
       ?? ''
 
-    if (secret) {
+    if (!secret) {
+      rlog.warn('Tremendous webhook rejected — TREMENDOUS_WEBHOOK_SECRET not configured')
+      return c.json({ error: 'webhook_not_configured' }, 503)
+    }
+
+    {
       const sig = c.req.header('Tremendous-Signature') ?? ''
       const body = await c.req.text()
       // Verify using Web Crypto HMAC.
@@ -1387,10 +1545,6 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       let event: Record<string, unknown>
       try { event = JSON.parse(body) } catch { return c.json({ error: 'invalid_json' }, 400) }
       await handleTremendousEvent(supabase, event)
-    } else {
-      // No secret configured — accept all events (dev mode only).
-      const event = await c.req.json().catch(() => null)
-      if (event) await handleTremendousEvent(supabase, event as Record<string, unknown>)
     }
 
     return c.json({ ok: true })

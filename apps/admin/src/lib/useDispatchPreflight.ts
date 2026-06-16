@@ -106,8 +106,14 @@ export function useDispatchPreflight(projectId: string | null | undefined): Pref
     // Primary: Supabase Realtime on the two tables that gate dispatch readiness.
     // When a setting or repo row changes (any column), re-fetch the preflight
     // endpoint to get the consolidated view.
+    // Channel name MUST be unique per hook instance — Supabase reuses channels
+    // by name; a second `.on()` after `.subscribe()` throws and crashes the page.
+    const uid =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     const channel = supabase
-      .channel(`preflight:${projectId}`)
+      .channel(`preflight:${projectId}:${uid}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'project_settings', filter: `project_id=eq.${projectId}` },

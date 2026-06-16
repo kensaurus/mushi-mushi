@@ -51,6 +51,8 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 import { clearStoredInstanceConfig } from '../lib/env'
+import { IconChat } from '../components/icons'
+import { askMushiPanel } from '../lib/useAskMushiPanel'
 
 interface ApiKey {
   key: string
@@ -600,6 +602,46 @@ export function OnboardingPage() {
           </span>
         </div>
         <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
+        <section
+          aria-label="Meet Ask Mushi"
+          className="flex flex-col gap-3 rounded-md border border-brand/25 bg-brand/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              aria-hidden
+              className="ask-mushi-launcher ask-mushi-launcher--glow relative mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-brand/25 bg-brand/10 text-brand"
+            >
+              <IconChat className="h-4 w-4 relative z-[1]" />
+              <span
+                aria-hidden
+                className="ask-mushi-launcher__ring pointer-events-none absolute inset-0 rounded-md"
+              />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-fg">Meet Ask Mushi</h3>
+              <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
+                Your in-console AI guide — ask how any page works, run{' '}
+                <span className="font-mono text-fg-secondary">/explain</span> on the current route,
+                or press{' '}
+                <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
+                  Cmd/Ctrl+J
+                </kbd>
+                . Look for the glowing chat icon in the header after you open the dashboard.
+              </p>
+            </div>
+          </div>
+          <Btn
+            size="sm"
+            variant="primary"
+            className="shrink-0 self-start sm:self-center"
+            onClick={() => {
+              navigate('/dashboard')
+              window.setTimeout(() => askMushiPanel.open(), 400)
+            }}
+          >
+            Try Ask Mushi
+          </Btn>
+        </section>
       </section>
       ) : null}
         </>

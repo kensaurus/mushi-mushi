@@ -74,6 +74,7 @@ export async function getRelevantCodeWithReason(
     query_embedding: embedding,
     match_project: projectId,
     match_count: 5,
+    path_prefix: null,
   })
 
   if (error) {

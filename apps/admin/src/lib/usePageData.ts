@@ -64,13 +64,15 @@ export interface UsePageDataOptions<T> {
    * error UI rather than crashing inside a render commit.
    */
   schema?: ZodType<T>
+  /** Tenant header scope forwarded to apiFetch. Defaults to `project`. */
+  scope?: 'enumeration' | 'project' | 'none'
 }
 
 export function usePageData<T>(
   path: string | null,
   opts: UsePageDataOptions<T> = {},
 ): PageDataState<T> {
-  const { autoLoad = true, deps = [], schema } = opts
+  const { autoLoad = true, deps = [], schema, scope = 'project' } = opts
   const activeProjectSignal = useActiveProjectSignal()
   // OrgSwitcher updates the active org id in localStorage and apiFetch picks
   // it up for the cache key + X-Mushi-Org-Id header, but without subscribing
@@ -107,9 +109,20 @@ export function usePageData<T>(
   // of primitives without worrying about identity churn.
   const depKey = JSON.stringify(deps)
 
+  const lastContext = useRef(`${activeOrgSignal}:${activeProjectSignal}`)
+
   useEffect(() => {
     if (!path || !autoLoad) return
     aborted.current = false
+
+    const contextKey = `${activeOrgSignal}:${activeProjectSignal}`
+    const contextChanged = lastContext.current !== contextKey
+    if (contextChanged) {
+      lastContext.current = contextKey
+      hasLoadedOnce.current = false
+      setData(null)
+    }
+
     // Path swap → treat as a true first-paint. Drop the stale resource so
     // the consumer's `if (loading) return <Skeleton />` guard fires
     // instead of rendering the prior path's rows against the new URL.
@@ -135,6 +148,7 @@ export function usePageData<T>(
         const res = await apiFetch<T>(path, {
           ...(tick > 0 ? { cache: 'no-store' } : {}),
           ...(schema ? { schema } : {}),
+          scope,
         })
         if (aborted.current) return
         if (res.ok && res.data !== undefined) {
@@ -161,7 +175,7 @@ export function usePageData<T>(
     }
     // depKey is the JSON-serialised version of `deps`, so we intentionally
     // depend on it instead of `deps` itself to avoid array-identity churn.
-  }, [path, autoLoad, tick, depKey, schema, activeProjectSignal, activeOrgSignal])
+  }, [path, autoLoad, tick, depKey, schema, scope, activeProjectSignal, activeOrgSignal])
 
   return { data, loading, error, isValidating, lastFetchedAt, reload }
 }

@@ -13,6 +13,22 @@ import { useSyncExternalStore } from 'react'
 export const ACTIVE_PROJECT_STORAGE_KEY = 'mushi:active_project_id'
 export const ACTIVE_PROJECT_QUERY_PARAM = 'project'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export function isValidProjectId(value: string | null | undefined): value is string {
+  return typeof value === 'string' && UUID_RE.test(value)
+}
+
+export function clearActiveProject(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new CustomEvent(ACTIVE_PROJECT_EVENT, { detail: { projectId: null } }))
+}
+
 const ACTIVE_PROJECT_EVENT = 'mushi:active-project-change'
 const SERVER_SNAPSHOT = '__server__'
 
@@ -26,7 +42,17 @@ function readStorage(): string | null {
 }
 
 export function getActiveProjectIdSnapshot(): string | null {
-  return readStorage()
+  const raw = readStorage()
+  if (!raw) return null
+  if (!isValidProjectId(raw)) {
+    try {
+      window.localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+    return null
+  }
+  return raw
 }
 
 export function setActiveProjectIdSnapshot(projectId: string): void {

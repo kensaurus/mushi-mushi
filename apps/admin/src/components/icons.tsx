@@ -259,13 +259,6 @@ export function IconUser(p: IconProps) {
   </>)
 }
 
-export function IconSparkle(p: IconProps) {
-  return wrap(p, <>
-    <path d="M8 2v3M8 11v3M2 8h3M11 8h3" />
-    <path d="M8 4.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5L4.5 8l2.5-1z" />
-  </>)
-}
-
 export function IconGlobe(p: IconProps) {
   return wrap(p, <>
     <circle cx="8" cy="8" r="6" />
@@ -280,6 +273,15 @@ export function IconGauge(p: IconProps) {
     <path d="M3 11h10" />
     <path d="M8 11l3-3" strokeLinecap="round" />
     <circle cx="8" cy="11" r="0.8" fill="currentColor" stroke="none" />
+  </>)
+}
+
+/** Circle-i glyph for metric help triggers (StatCard, InfoHint). */
+export function IconInfo(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="8" cy="8" r="6" />
+    <line x1="8" y1="7.25" x2="8" y2="11" strokeLinecap="round" />
+    <circle cx="8" cy="5.35" r="0.65" fill="currentColor" stroke="none" />
   </>)
 }
 
@@ -320,6 +322,13 @@ export function IconCopy(p: IconProps) {
   return wrap(p, <>
     <rect x="5" y="5" width="8.5" height="8.5" rx="1" />
     <path d="M11 5V3.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1V10a1 1 0 0 0 1 1H5" />
+  </>)
+}
+
+export function IconEdit(p: IconProps) {
+  return wrap(p, <>
+    <path d="M10.5 2.5l1 1L5 10H3.5v-1.5L10.5 2.5z" strokeLinejoin="round" />
+    <path d="M9 4l1 1" />
   </>)
 }
 

@@ -1041,7 +1041,7 @@ export const COPY: CopyRegistry = {
     '/explore': {
       title: 'Map your codebase',
       description:
-        'Banner + EXPLORE SNAPSHOT first — Summary for posture, Graph/Layers/Search for the atlas, Index for debug.',
+        'Banner + EXPLORE SNAPSHOT first — Summary for posture, Understand (Ask/Tour/Domains/Knowledge), Map (Graph/Layers), Search, Index for debug.',
       sections: { snapshot: 'At a glance' },
       statLabels: {
         files: 'Files',
@@ -1059,9 +1059,12 @@ export const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
+        understand: 'Understand',
+        map: 'Map',
         ask: 'Ask',
         tour: 'Tour',
         domains: 'Domains',
+        knowledge: 'Knowledge',
         graph: 'Graph',
         layers: 'Layers',
         search: 'Search',
@@ -1071,12 +1074,13 @@ export const COPY: CopyRegistry = {
         title: 'About the codebase explorer',
         whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search and chat with plain English.',
         useCases: [
-          'Ask tab: "How does auth work?" with file:line citations',
-          'Tour tab: onboarding walkthrough that highlights the graph',
-          'Graph tab: canvas coloured by UI / Backend / Test layer',
-          'Search tab: semantic lookup once embeddings are populated',
+          'Understand → Ask: "How does auth work?" with file:line citations',
+          'Understand → Tour: onboarding walkthrough that highlights the map',
+          'Map → Graph: canvas coloured by UI / Backend / Test layer',
+          'Search: semantic lookup once embeddings are populated',
         ],
-        howToUse: 'Overview for posture. Ask/Tour/Domains to understand the repo. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.',
+        howToUse:
+          'Summary for posture. Understand (Ask / Tour / Domains) to learn the repo. Map (Graph / Layers) for structure. Search for plain-English lookup. Index when debugging sweeper errors.',
       },
     },
     '/connect': {
@@ -1648,7 +1652,7 @@ export const COPY: CopyRegistry = {
     },
     '/explore': {
       title: 'Codebase atlas',
-      description: 'Banner + EXPLORE SNAPSHOT — Overview | Ask | Tour | Domains | Graph | Layers | Search | Index.',
+      description: 'Summary | Understand (Ask/Tour/Domains/Knowledge) | Map (Graph/Layers) | Search | Index.',
     },
     '/connect': {
       title: 'Connect & Update',

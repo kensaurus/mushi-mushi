@@ -1,0 +1,26 @@
+{
+  "name": "@mushi-mushi/codebase-graph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Knowledge graph builder inspired by Understand-Anything core (MIT). Node-only analysis helpers.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

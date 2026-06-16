@@ -38,6 +38,14 @@
 export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText = ''): string {
   const isDark = theme === 'dark';
 
+  // Validate accent values against a safe CSS color format to prevent injection
+  // inside the shadow-DOM template literal.  Only #rrggbb / #rrggbbaa / #rgb /
+  // #rgba hex literals are accepted; everything else is ignored and falls back
+  // to the default palette.
+  const safeHex = (v: string): string => /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : '';
+  const safeAccent     = safeHex(accent);
+  const safeAccentText = safeHex(accentText);
+
   /* ── Tokens ──────────────────────────────────────────────────────────
      Named for the material they evoke (paper, ink, rule, widgetAccent)
      rather than the role (background, text, border) so the palette is
@@ -52,9 +60,9 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
   const ruleStrong   = isDark ? 'rgba(242,235,221,0.18)' : 'rgba(14,13,11,0.16)';
 
   // Accept colour override or fall back to vermillion defaults
-  const widgetAccent   = accent || (isDark ? '#FF5A47' : '#E03C2C');   // 朱 hanko red — signature accent
+  const widgetAccent   = safeAccent || (isDark ? '#FF5A47' : '#E03C2C');   // 朱 hanko red — signature accent
   const widgetAccentWash = isDark ? `${widgetAccent}1F` : `${widgetAccent}14`; // ~12% / ~8% opacity
-  const widgetAccentInk  = accentText || (isDark ? '#FFE5E0' : '#7A1F15'); // text on widgetAccent wash
+  const widgetAccentInk  = safeAccentText || (isDark ? '#FFE5E0' : '#7A1F15'); // text on widgetAccent wash
 
   /* Type stacks. Pure system stacks — no web-font fetch — but curated so
      every OS lands on a high-quality serif/mono rather than a generic
