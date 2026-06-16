@@ -423,7 +423,14 @@ public final class Mushi {
         button.setTitle("🐛", for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: 24)
         button.accessibilityLabel = "Report a bug"
-        button.backgroundColor = config.theme.dark ? .black : .systemBackground
+        // Respect theme.inherit: use traitCollection userInterfaceStyle
+        let resolvedDark: Bool
+        if config.theme.inherit {
+            resolvedDark = window.traitCollection.userInterfaceStyle == .dark
+        } else {
+            resolvedDark = config.theme.dark
+        }
+        button.backgroundColor = resolvedDark ? .black : .systemBackground
         button.tintColor = UIColor(hex: config.theme.accentColor) ?? .systemBlue
         button.layer.cornerRadius = 28
         button.layer.borderWidth = 1
@@ -448,6 +455,11 @@ public final class Mushi {
         }
         NSLayoutConstraint.activate(constraints)
         withLock { _floatingButton = button }
+
+        // Draggable FAB
+        if let dragConfig = config.draggable, dragConfig.enabled {
+            MushiFabDragController.attach(to: button, config: dragConfig, window: window)
+        }
     }
 
     @objc private func showWidgetFromButton() {

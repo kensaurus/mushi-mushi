@@ -13,7 +13,7 @@ Mushi is the **synthesis layer**: the one signal none of your existing tools cap
 [![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
 [![Server](https://img.shields.io/badge/server-BSL%201.1-orange.svg)](./packages/server/LICENSE)
 
-[Quick start](#try-it) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
+[Quick start](#try-it) · [Connect & Update hub](https://kensaur.us/mushi-mushi/admin/connect) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
 
 <a href="https://kensaur.us/mushi-mushi/admin/" title="Open the live admin demo — animated guided tour">
   <img src="./docs/screenshots/tour-pdca-loop.gif" alt="Animated guided tour through the logged-in admin console, walking the full Plan → Do → Check → Act loop." width="100%" />
@@ -50,6 +50,26 @@ A 60-second tour for product managers, designers, founders, and anyone who's eve
 - **Two-line install** — `npx mushi-mushi`. The wizard does the rest.
 
 If you're a developer skip ahead to [Try it](#try-it). If you're an operator or platform engineer, jump to [Operator-grade plumbing](#operator-grade-plumbing) for the production checklist.
+
+---
+
+## What's new — June 2026 (Connect hub, SDK upgrade PRs, MCP lean catalog)
+
+The console, CLI, MCP server, and SDK install path were unified around one **Connect & Update** surface so new projects go from zero to reporting bugs in one sitting — without hunting across Settings, Onboarding, and MCP pages.
+
+- **Connect & Update hub** (`/connect`) — one page wires GitHub, SDK install snippet, MCP deeplinks (**Add to Cursor** / **Add to VS Code**), CLI install copy, and per-package freshness chips. Beginner sidebar pins it as **Connect** under Start here.
+- **One-click SDK upgrade PR** — **Create Upgrade PR** reads your linked repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm stable (never `workspace:` / `file:` / git specifiers), opens a draft GitHub PR, and marks it ready. Backed by `sdk-upgrade-worker` + daily `sdk-versions-cron` (npm registry sync into `sdk_versions`). CLI equivalent: `mushi upgrade`.
+- **MCP lean catalog (72 tools)** — default installs expose `triage,fixes,inventory,setup,docs` via `MUSHI_FEATURES` (stdio) or `?features=` (hosted HTTP). Unified `diagnose_setup` + `search_mushi_docs` replace the old setup trilogy. Full catalog: `features=all`. Catalog sync guarded by `pnpm check:catalog-sync`.
+- **Skill Pipelines** (`/skills`) — attach a [cursor-kenji](https://github.com/kensaurus/cursor-kenji) / skills.sh skill to a report; run handoff or Cursor Cloud mode with live step updates. CLI: `mushi pipeline start|watch|checkin`.
+- **Console v2 density** — `PageHeaderBar` replaces stacked header + help chrome; neutral zinc frames (amber reserved for CTAs); 12px type floor on labels. See [`apps/admin/README.md`](./apps/admin/README.md#design-system-v2-2026-06--compact-console-grade-uiux).
+
+Quick path for a new repo:
+
+```bash
+npx mushi-mushi                    # wizard: SDK + env vars + optional test report
+mushi connect --wait --wire-ide    # ~/.mushirc + .env.local + .cursor/mcp.json + heartbeat
+# or open Admin → Connect & Update → Add to Cursor → Create Upgrade PR when GitHub is linked
+```
 
 ---
 
@@ -190,21 +210,21 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 <tr>
 <td align="center" width="16%">
 
-**~248K**
+**~279K**
 <br/>
 <sub>TypeScript Lines</sub>
 
 </td>
 <td align="center" width="16%">
 
-**1,079**
+**1,194**
 <br/>
 <sub>Source Files</sub>
 
 </td>
 <td align="center" width="16%">
 
-**41**
+**42**
 <br/>
 <sub>Workspace Packages</sub>
 
@@ -218,14 +238,14 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 </td>
 <td align="center" width="16%">
 
-**45**
+**47**
 <br/>
 <sub>Edge Functions</sub>
 
 </td>
 <td align="center" width="16%">
 
-**247**
+**256**
 <br/>
 <sub>SQL Migrations</sub>
 
@@ -234,7 +254,7 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 <tr>
 <td align="center">
 
-**16**
+**18**
 <br/>
 <sub>Pipeline Agents</sub>
 
@@ -416,11 +436,11 @@ A quick look at where you'll spend your time. Every panel is a click-through to 
       <sub><b>Knowledge graph</b> · component / page / release adjacency weighted by bug incidence — toggle <i>Surface</i> to overlay the positive inventory and see the dead corners</sub>
     </td>
     <td width="50%" align="center">
-      <a href="https://kensaur.us/mushi-mushi/admin/graph" title="Open graph in Surface mode">
-        <img alt="Graph in Surface mode — the same knowledge graph with the positive inventory (Page (inventory), User story, Element, Action node types) overlaid; subtitle reads SURFACE - INVENTORY OVERLAY · 83/119 nodes · 110/114 edges." src="./docs/screenshots/graph-surface-dark.png" width="100%">
+      <a href="https://kensaur.us/mushi-mushi/admin/connect" title="Open Connect & Update">
+        <img alt="Connect & Update — GitHub linked, SDK install card with live preview, MCP Add to Cursor, CLI copy, and Create Upgrade PR freshness chips." src="./docs/screenshots/connect-dark.png" width="100%">
       </a>
       <br>
-      <sub><b>Graph · Surface mode</b> · v2 — the same canvas, but every Page / Element / Action from <code>inventory.yaml</code> overlaid on the live knowledge graph so the dead corners light up</sub>
+      <sub><b>Connect & Update</b> · one hub for GitHub, SDK snippet + trigger preview, MCP deeplinks, CLI install, and <i>Create Upgrade PR</i> — semver-only bumps via <code>sdk-upgrade-worker</code></sub>
     </td>
   </tr>
 </table>
@@ -718,7 +738,7 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 247 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all SQL migrations from a bundled ConfigMap mirror (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet — see [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 
@@ -729,17 +749,21 @@ docker compose up -d
 Install Mushi skills in your Cursor or Claude Code project for one-command setup, usage, and debugging:
 
 ```bash
-# Install both Mushi skills at once
+# Install bundled skills from the monorepo (also on skills.sh)
 npx skills add kensaurus/mushi-mushi
 
 # Or individually
-npx skills add kensaurus/mushi-mushi/mushi-mushi   # Setup, config & TDD usage
-npx skills add kensaurus/mushi-mushi/mushi-debug   # Debug & fix issues
+npx skills add kensaurus/mushi-mushi/.cursor/skills/mushi-setup
+npx skills add kensaurus/mushi-mushi/.cursor/skills/mushi-debug
 ```
 
 Then in Cursor/Claude:
-- `/mushi-mushi` — guided setup, configuration, and TDD workflow
-- `/mushi-debug` — diagnose and fix issues
+
+- `/mushi-setup` — guided SDK install, MCP wiring, Connect hub walkthrough
+- `/mushi-debug` — diagnose ingest, MCP, QA runner, and pipeline failures
+- `/mushi-health` — pass/fail check across CLI, API, edge functions, BYOK keys
+
+The admin **Connect & Update** page (`/connect`) and **MCP** page (`/mcp`) mirror the same flows with one-click **Add to Cursor** deeplinks.
 
 ## Packages
 
@@ -767,8 +791,8 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | Package                                                                  | Purpose                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`@mushi-mushi/core`](./packages/core)                                   | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, **v2.1 `discoverInventory` types**                                                                                                                                                                           |
-| [`@mushi-mushi/cli`](./packages/cli)                                     | CLI for project setup (`mushi connect` one-shot wiring + heartbeat wait), report listing, triage, `doctor --ingest` health checks, and `mushi upgrade` SDK bumps                                                                                                                           |
-| [`@mushi-mushi/mcp`](./packages/mcp)                                     | MCP server — Cursor / Copilot / Claude read, triage, classify, dispatch fixes. **Both stdio (local) and Streamable HTTP (`/functions/v1/mcp`, hosted) transports per the 2025-03-26 spec.** Discoverable via `/.well-known/agent-card`, `/openapi.json`, and `/v1/a2a/tasks` (A2A v1.0.0). |
+| [`@mushi-mushi/cli`](./packages/cli)                                     | CLI — `init` wizard, `connect` one-shot wiring, `upgrade` SDK bumps, `doctor`, report triage, QA/TDD (`mushi qa`, `mushi tdd`), skill pipelines (`mushi pipeline`), fix merge |
+| [`@mushi-mushi/mcp`](./packages/mcp)                                     | MCP server — 72-tool catalog (lean default: triage/fixes/inventory/setup/docs), stdio + Streamable HTTP, feature groups, Cursor deeplink install. See [`packages/cursor-plugin`](./packages/cursor-plugin/) |
 | [`@mushi-mushi/mcp-ci`](./packages/mcp-ci)                               | GitHub Action — `gates`, `discover-api`, `discovery-status`, `propose`, `auth-bootstrap` (the v2 pre-release suite + new MCP CLI)                                                                                                                                                          |
 | [`@mushi-mushi/inventory-schema`](./packages/inventory-schema)           | **v2 source of truth** — Zod + JSON Schema for `inventory.yaml`, used by the admin ingester, gate runner, LLM proposer, and GitHub Action                                                                                                                                                  |
 | [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi)      | **v2 gate rules** — `no-dead-handler` (empty `onClick` etc.) and `no-mock-leak` (faker / "John Doe" arrays in non-test paths). Ships a `recommended` preset                                                                                                                                |

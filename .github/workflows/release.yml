@@ -321,6 +321,18 @@ jobs:
             echo "changelog: no drift to commit"
           fi
 
+      - name: Sync published versions to sdk_versions catalog
+        # Keep the console freshness chips accurate without hand-written
+        # migrations. On any failure we warn but do not fail the release —
+        # the daily sdk-versions-cron reconcile is the backstop.
+        if: steps.changesets.outputs.published == 'true'
+        continue-on-error: true
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/sync-sdk-versions.mjs
+
       - name: Published packages summary
         if: steps.changesets.outputs.published == 'true'
         env:

@@ -34,7 +34,7 @@ import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -232,7 +232,7 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
     const db = getServiceClient();
     // Teams v1: include org-member projects (the previous project_members-only
     // filter showed "0 dispatches" to invited team members).
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { dispatches: [] } });
     const { data: dispatches } = await db
       .from('fix_dispatch_jobs')

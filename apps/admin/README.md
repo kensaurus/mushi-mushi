@@ -292,13 +292,15 @@ Pure, dependency-free string utilities. Use these instead of inline `count === 1
 
 ## Information architecture (PDCA loop)
 
-The sidebar (`src/components/Layout.tsx`) groups the 24 admin pages into the same Plan → Do → Check → Act loop the README sells, so first-day users see the story instead of jargon-heavy nav items:
+The sidebar (`src/components/Layout.tsx`) groups admin pages into the Plan → Do → Check → Act loop. **June 2026** added **Connect & Update** (`/connect`) under **Start here** — the single hub for GitHub, SDK install, MCP deeplinks, CLI copy, and **Create Upgrade PR** (see [`ConnectPage.tsx`](./src/pages/ConnectPage.tsx), [`SdkUpgradeCTA`](./src/components/SdkUpgradeCTA.tsx), [`McpInstallButtons`](./src/components/McpInstallButtons.tsx)).
 
-- **Start here** — `Dashboard`, `Inbox`, `Get started`. The **Action Inbox** is pinned above the PDCA groups so Advanced-mode users land on a single "what should I do next?" surface the same way beginner users land on the Dashboard. Reachable via `⌘⇧I` / `Ctrl⇧I` from anywhere (SPA-nav so the toast queue, scroll, and focus survive the jump)
+The sidebar groups the 24+ admin pages into the same Plan → Do → Check → Act loop the README sells, so first-day users see the story instead of jargon-heavy nav items:
+
+- **Start here** — `Dashboard`, `Inbox`, `Get started`, **`Connect & Update`**. The **Action Inbox** is pinned above the PDCA groups so Advanced-mode users land on a single "what should I do next?" surface the same way beginner users land on the Dashboard. Reachable via `⌘⇧I` / `Ctrl⇧I` from anywhere (SPA-nav so the toast queue, scroll, and focus survive the jump)
 - **Plan — capture & classify** — `Reports`, `Graph`, `Anti-Gaming`, `Queue`
 - **Do — dispatch fixes** — `Fixes`, `Repo`, `Prompt Lab`
 - **Check — verify quality** — `Judge`, `Health`, `Intelligence`, `Research`
-- **Act — integrate & scale** — `Integrations`, `MCP`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
+- **Act — integrate & scale** — `Integrations`, **`Connect & Update`**, `MCP`, `Skill Pipelines`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
 - **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Members`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
 
 `SSO` and `Billing` deliberately sit in **Workspace**, not Act — they're one-time admin / account concerns that don't iterate every loop. Act is reserved for tabs that turn a verified fix into something the rest of the team's toolchain consumes.

@@ -21,6 +21,8 @@ data class MushiConfig(
     val triggerInset: TriggerInset = TriggerInset(),
     val proactive: ProactiveConfig = ProactiveConfig(),
     val pii: PIIConfig = PIIConfig(),
+    /** Set to enable a draggable floating button. null = fixed (default). */
+    val draggable: DraggableConfig? = null,
 )
 
 data class ProactiveConfig(
@@ -48,7 +50,18 @@ enum class TriggerMode { SHAKE, BUTTON, BOTH, NONE }
 
 data class Theme(
     val accentColor: String = "#22C55E",
-    val dark: Boolean = false
+    val dark: Boolean = false,
+    /** When true, detect the device's night mode at runtime instead of using `dark`. */
+    val inherit: Boolean = false,
+)
+
+/** Configuration for a draggable floating action button. */
+data class DraggableConfig(
+    val enabled: Boolean = true,
+    /** Snap the FAB to the nearest vertical edge on release. */
+    val snapToEdge: Boolean = true,
+    /** Save and restore FAB position across app restarts (SharedPreferences). */
+    val persist: Boolean = true,
 )
 
 data class TriggerInset(

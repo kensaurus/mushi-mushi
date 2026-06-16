@@ -61,6 +61,7 @@ import {
   formatCodeContext,
   type RagSkipReason,
 } from '../_shared/rag.ts';
+import { createPrFromFiles, generateFixBranchName } from '../_shared/github-pr.ts';
 
 function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
   switch (reason) {
@@ -86,7 +87,6 @@ import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
-import { markPullRequestReady } from '../_shared/github.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -843,7 +843,7 @@ ${
       const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
       if (!ghToken) {
         // Still record the LLM output so the user can copy/paste even without GH.
-        const branch = generateBranchName(
+        const branch = generateFixBranchName(
           dispatch.report_id,
           (settings as Record<string, unknown> | null)?.fix_branch_template as string | null,
           (report as Record<string, unknown> | null)?.category as string | null,
@@ -880,17 +880,28 @@ ${
       }
 
       const prSpan = trace.span('github.pr');
-      const prResult = await createDraftPr({
-        token: ghToken,
-        owner: repo.owner,
-        repo: repo.repo,
-        defaultBranch: repo.defaultBranch,
-        reportId: dispatch.report_id,
-        fix,
-        branchTemplate: (settings as Record<string, unknown> | null)?.fix_branch_template as string | null,
-        category: (report as Record<string, unknown> | null)?.category as string | null,
-        log,
-      });
+      const prBranch = generateFixBranchName(
+        dispatch.report_id,
+        (settings as Record<string, unknown> | null)?.fix_branch_template as string | null,
+        (report as Record<string, unknown> | null)?.category as string | null,
+      );
+      const prResult = await createPrFromFiles(
+        {
+          token: ghToken,
+          owner: repo.owner,
+          repo: repo.repo,
+          defaultBranch: repo.defaultBranch,
+          branch: prBranch,
+          title: fix.summary,
+          body: buildPrBody(fix, dispatch.report_id),
+          files: fix.files,
+          labels: ['mushi-autofix'],
+        },
+        {
+          info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>),
+          warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>),
+        },
+      );
       prSpan.end({ prUrl: prResult.url });
 
       // ---- 8. Persist + cleanup --------------------------------------------
@@ -1755,165 +1766,6 @@ Output a structured fix plan. Touch the minimum number of files. Match the exist
 // Contents and Pulls APIs are simple JSON-over-HTTPS calls.
 // ----------------------------------------------------------------------------
 
-interface PrResult {
-  url: string;
-  number: number;
-  branch: string;
-  commitSha: string;
-}
-
-interface CreatePrInput {
-  token: string;
-  owner: string;
-  repo: string;
-  defaultBranch: string;
-  reportId: string;
-  fix: FixOutput;
-  branchTemplate?: string | null;
-  category?: string | null;
-  log: Logger;
-}
-
-/**
- * Build a branch name from the project-configurable template.
- * Tokens: {date} = YYYY-MM-DD UTC, {category} = report category slug,
- *         {shortId} = first 8 chars of reportId.
- * Falls back to the legacy scheme when template is empty.
- */
-function generateBranchName(
-  reportId: string,
-  template?: string | null,
-  category?: string | null,
-): string {
-  const effectiveTemplate =
-    template && template.trim().length > 0
-      ? template.trim()
-      : null;
-
-  if (!effectiveTemplate) {
-    return `mushi/fix-${reportId.slice(0, 8)}-${Date.now().toString(36)}`;
-  }
-
-  const date = new Date().toISOString().slice(0, 10);
-  const categorySlug = (category ?? 'fix')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 20);
-  const shortId = reportId.slice(0, 8);
-
-  return effectiveTemplate
-    .replace('{date}', date)
-    .replace('{category}', categorySlug)
-    .replace('{shortId}', shortId);
-}
-
-async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
-  const { token, owner, repo, defaultBranch, reportId, fix, branchTemplate, category, log } = input;
-  const branch = generateBranchName(reportId, branchTemplate, category);
-
-  const baseHeaders = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'Content-Type': 'application/json',
-    'User-Agent': 'mushi-mushi-fix-worker/1.0',
-  };
-
-  // Fetch the SHA of the default branch tip so we can branch from it.
-  const refRes = await ghFetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
-    { headers: baseHeaders },
-  );
-  const baseSha = (refRes as { object: { sha: string } }).object.sha;
-
-  // Create the new branch. Idempotent: a retry or duplicate dispatch for the
-  // same report may find the branch already exists from a prior attempt.
-  try {
-    await ghFetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
-      method: 'POST',
-      headers: baseHeaders,
-      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes('Reference already exists')) throw err;
-    log.info('fix-worker: branch already exists, continuing', { branch, reportId });
-  }
-
-  // Commit each file. Sequential keeps the commit log readable; the diffs
-  // are small enough that parallelism isn't worth the rate-limit risk.
-  let lastCommitSha = baseSha;
-  for (const file of fix.files) {
-    // Need the existing file SHA if it exists (to update vs. create).
-    const existing = await ghFetchOptional(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`,
-      { headers: baseHeaders },
-    );
-    const existingSha =
-      existing && typeof (existing as Record<string, unknown>).sha === 'string'
-        ? (existing as { sha: string }).sha
-        : undefined;
-
-    const putRes = (await ghFetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}`,
-      {
-        method: 'PUT',
-        headers: baseHeaders,
-        body: JSON.stringify({
-          message: `mushi: ${file.reason}`,
-          content: btoa(unescape(encodeURIComponent(file.contents))),
-          branch,
-          ...(existingSha ? { sha: existingSha } : {}),
-        }),
-      },
-    )) as { commit: { sha: string } };
-    lastCommitSha = putRes.commit.sha;
-  }
-
-  // Open the draft PR. `draft: true` is the V5.3 default — humans approve.
-  const prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
-    method: 'POST',
-    headers: baseHeaders,
-    body: JSON.stringify({
-      title: fix.summary,
-      head: branch,
-      base: defaultBranch,
-      draft: true,
-      body: buildPrBody(fix, reportId),
-    }),
-  })) as { number: number; html_url: string };
-
-  // Draft PRs block CI merge APIs until marked ready. Human approval is still
-  // required — we only lift the draft gate so checks run and console merge works.
-  const readyResult = await markPullRequestReady(token, { owner, repo }, prRes.number);
-  if (!readyResult.ok) {
-    log.warn('fix-worker: could not mark PR ready for review', {
-      prNumber: prRes.number,
-      message: readyResult.message,
-    });
-  } else if (!readyResult.alreadyReady) {
-    log.info('fix-worker: marked draft PR ready for review', { prNumber: prRes.number });
-  }
-
-  // Best-effort labels: no-op on failure (e.g. permissions or label doesn't
-  // exist). The PR itself is the load-bearing artifact.
-  await ghFetchOptional(
-    `https://api.github.com/repos/${owner}/${repo}/issues/${prRes.number}/labels`,
-    {
-      method: 'POST',
-      headers: baseHeaders,
-      body: JSON.stringify({ labels: ['mushi-autofix'] }),
-    },
-  );
-
-  return {
-    url: prRes.html_url,
-    number: prRes.number,
-    branch,
-    commitSha: lastCommitSha,
-  };
-}
 
 function buildPrBody(fix: FixOutput, reportId: string): string {
   const fileList = fix.files.map((f) => `- \`${f.path}\` — ${f.reason}`).join('\n');
@@ -1936,24 +1788,3 @@ ${fileList}
 [Open report in admin console](mushi://reports/${reportId})`;
 }
 
-async function ghFetch(url: string, init: RequestInit): Promise<unknown> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub ${init.method ?? 'GET'} ${url} → ${res.status}: ${text.slice(0, 200)}`);
-  }
-  return res.json();
-}
-
-async function ghFetchOptional(url: string, init: RequestInit): Promise<unknown | null> {
-  const res = await fetch(url, init);
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    return null;
-  }
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
-}

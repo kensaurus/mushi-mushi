@@ -13,6 +13,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createRequire } from 'node:module'
 import { createLogger } from '@mushi-mushi/core'
 import { ALL_SCOPES, type McpScope } from './catalog.js'
+import { parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer } from './server.js'
 
 const require = createRequire(import.meta.url)
@@ -42,6 +43,8 @@ const parsedScopes = SCOPES_RAW
   : ALL_SCOPES
 const SCOPES: readonly McpScope[] =
   SCOPES_RAW && parsedScopes.length === 0 ? ALL_SCOPES : parsedScopes
+
+const FEATURES = parseFeaturesCsv(process.env.MUSHI_FEATURES)
 
 async function main() {
   if (!API_KEY) {
@@ -85,6 +88,7 @@ async function main() {
     apiKey: API_KEY,
     projectId: PROJECT_ID || undefined,
     scopes: SCOPES,
+    features: FEATURES,
   })
 
   const transport = new StdioServerTransport()
@@ -107,7 +111,7 @@ async function main() {
         const res = await fetch(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`, {
           headers: {
             'X-Mushi-Api-Key': API_KEY,
-            'X-Mushi-Project': PROJECT_ID,
+            'X-Mushi-Project-Id': PROJECT_ID,
           },
           signal: AbortSignal.timeout(10_000),
         })

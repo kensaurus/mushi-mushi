@@ -35,7 +35,7 @@ The chart's migration ConfigMap is rendered from `deploy/helm/migrations/`. That
 
 CI runs `pnpm check:helm-migrations` on every PR; a stale chart fails the build with a clear diff message instead of silently shipping a partial schema.
 
-If the chart ever exceeds the 1 MiB ConfigMap budget the sync script warns at ~900 KiB. Current footprint is ~918 KiB across 236 files (verified via `pnpm docs-stats` / `pnpm check:helm-migrations`).
+If the chart ever exceeds the 1 MiB ConfigMap budget the sync script warns at ~900 KiB. Current footprint is synced from `packages/server/supabase/migrations/` via `pnpm sync:helm-migrations` (247 mirrored files at last sync — run `pnpm check:helm-migrations` for the live count).
 
 ## Multi-region deployment
 

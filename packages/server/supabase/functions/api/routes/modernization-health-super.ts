@@ -38,7 +38,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, scopedOwnedProjectIds, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, scopedOwnedProjectIds, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -246,7 +246,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     const db = getServiceClient();
     // Teams v1: any member can probe an integration in an org they belong to.
     // Health probes are workspace-level — the precise project pick doesn't matter.
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
     const projectId = accessibleIds[0];
 

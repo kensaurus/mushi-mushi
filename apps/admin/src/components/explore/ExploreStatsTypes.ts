@@ -3,7 +3,15 @@
  * PURPOSE: Explore shell stats — banner + EXPLORE SNAPSHOT strip.
  */
 
-export type ExploreTabId = 'overview' | 'graph' | 'layers' | 'search' | 'index'
+export type ExploreTabId =
+  | 'overview'
+  | 'graph'
+  | 'layers'
+  | 'search'
+  | 'index'
+  | 'ask'
+  | 'tour'
+  | 'domains'
 
 export type ExploreLayerKey = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
 

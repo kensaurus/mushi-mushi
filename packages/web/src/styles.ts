@@ -35,7 +35,7 @@
  *   motion fully honoured, AA contrast in both themes, no external fonts.
  */
 
-export function getWidgetStyles(theme: 'light' | 'dark'): string {
+export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText = ''): string {
   const isDark = theme === 'dark';
 
   /* ── Tokens ──────────────────────────────────────────────────────────
@@ -47,11 +47,14 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
   const ink          = isDark ? '#F2EBDD' : '#0E0D0B';   // sumi black / cream type
   const inkMuted     = isDark ? '#928B7E' : '#5C5852';   // captions, descriptions
   const inkFaint     = isDark ? '#5A5650' : '#9A9489';   // disabled, separators
+  const inkDim       = isDark ? '#7A7268' : '#6E6760';   // dim text — replaces undefined var(--mushi-text-dim)
   const rule         = isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.10)';
   const ruleStrong   = isDark ? 'rgba(242,235,221,0.18)' : 'rgba(14,13,11,0.16)';
-  const widgetAccent   = isDark ? '#FF5A47' : '#E03C2C';   // 朱 hanko red — signature accent
-  const widgetAccentWash = isDark ? 'rgba(255,90,71,0.12)' : 'rgba(224,60,44,0.08)';
-  const widgetAccentInk  = isDark ? '#FFE5E0' : '#7A1F15'; // text on widgetAccent wash
+
+  // Accept colour override or fall back to vermillion defaults
+  const widgetAccent   = accent || (isDark ? '#FF5A47' : '#E03C2C');   // 朱 hanko red — signature accent
+  const widgetAccentWash = isDark ? `${widgetAccent}1F` : `${widgetAccent}14`; // ~12% / ~8% opacity
+  const widgetAccentInk  = accentText || (isDark ? '#FFE5E0' : '#7A1F15'); // text on widgetAccent wash
 
   /* Type stacks. Pure system stacks — no web-font fetch — but curated so
      every OS lands on a high-quality serif/mono rather than a generic
@@ -210,6 +213,33 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       transform: scale(0.92);
     }
 
+    /* ── Draggable FAB ──────────────────────────────────────────────────────
+       When draggable is enabled the trigger uses CSS translate to apply the
+       drag offset ON TOP of the existing inset positioning, so snapping and
+       safe-area clamp still work correctly via the inset vars.
+       --mushi-drag-active 0|1 gates the transform so non-draggable FABs are
+       completely unaffected. touch-action: none prevents browser pan/scroll
+       from racing the pointer capture. */
+    .mushi-trigger {
+      touch-action: none;
+      translate:
+        calc(var(--mushi-drag-active, 0) * var(--mushi-drag-x, 0px))
+        calc(var(--mushi-drag-active, 0) * var(--mushi-drag-y, 0px));
+    }
+    .mushi-trigger.dragging {
+      cursor: grabbing !important;
+      z-index: calc(var(--z, 99999) + 2);
+      transition: none !important;
+      box-shadow:
+        0 1px 0 ${rule},
+        0 20px 40px -12px rgba(14,13,11,0.55),
+        inset 0 -3px 0 ${widgetAccent};
+      opacity: 0.92;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mushi-trigger { transition: none !important; }
+    }
+
     @keyframes mushi-pulse {
       0%   { box-shadow: 0 0 0 0 ${widgetAccent}; opacity: 1; }
       70%  { box-shadow: 0 0 0 8px rgba(224,60,44,0); opacity: 0.5; }
@@ -220,7 +250,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       position: fixed;
       width: 384px;
       max-width: calc(100vw - 32px);
-      max-height: min(640px, calc(100vh - 120px));
+      max-height: min(640px, calc(100dvh - 120px - var(--mushi-keyboard-inset, 0px)));
       background: ${paper};
       border: 1px solid ${ruleStrong};
       border-radius: 6px;
@@ -232,6 +262,26 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       display: flex;
       flex-direction: column;
       transform-origin: var(--mushi-origin, bottom right);
+      transition: bottom 120ms ease, top 120ms ease, max-height 120ms ease;
+    }
+    /* Keyboard-safe: on narrow viewports lift above the keyboard */
+    .mushi-panel.keyboard-open {
+      bottom: calc(var(--mushi-keyboard-inset, 0px) + 8px) !important;
+    }
+    /* On narrow mobile, fill the width as a bottom sheet */
+    @media (max-width: 480px) {
+      .mushi-panel {
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        bottom: var(--mushi-keyboard-inset, 0px) !important;
+      }
+      .mushi-panel.keyboard-open {
+        bottom: calc(var(--mushi-keyboard-inset, 0px) + 4px) !important;
+      }
     }
     .mushi-panel.open  { animation: mushi-stamp-in 320ms ${easeStamp} both; }
     .mushi-panel.closed { display: none; }
@@ -1260,7 +1310,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
 
     .mushi-beta-perks li {
-      font-size: 10.5px;
+      font-size: 12px;
       color: ${widgetAccentInk};
       font-weight: 500;
     }
@@ -1272,8 +1322,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
 
     .mushi-changelog-summary {
-      font-size: 10.5px;
-      color: var(--mushi-text-dim);
+      font-size: 11px;
+      color: ${inkDim};
       cursor: pointer;
       list-style: none;
       display: flex;
@@ -1303,8 +1353,8 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
 
     .mushi-changelog-list li {
-      font-size: 10.5px;
-      color: var(--mushi-text-dim);
+      font-size: 11px;
+      color: ${inkDim};
       line-height: 1.5;
     }
 
@@ -1323,14 +1373,14 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
 
     .mushi-beta-success-line {
-      font-size: 11px;
-      color: var(--mushi-text-dim);
+      font-size: 12px;
+      color: ${widgetAccentInk};
       line-height: 1.5;
     }
 
     .mushi-beta-success-dim {
       opacity: 0.65;
-      font-size: 10.5px;
+      font-size: 12px;
     }
 
     /* ─── Banner launcher (trigger: 'banner') ─────────────────────────────── */
@@ -1346,7 +1396,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       gap: 10px;
       padding: 0 16px;
       font-family: ${fontMono};
-      font-size: 11.5px;
+      font-size: 12px;
       letter-spacing: 0.04em;
       white-space: nowrap;
       overflow: hidden;
@@ -1474,7 +1524,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 11.5px;
+      font-size: 12px;
       font-weight: 500;
       line-height: 1.3;
       opacity: 0.9;
@@ -1590,5 +1640,22 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       .mushi-success-stamp-label { opacity: 1; }
       .mushi-success-pts-award { opacity: 1; }
     }
+
+    .mushi-community-footer{display:flex;align-items:center;gap:8px;padding:10px 0 2px;border-top:1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'};margin-top:8px;flex-wrap:wrap}
+    .mushi-community-btn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mushi-link-btn{background:none;border:none;padding:4px 2px;cursor:pointer;color:${widgetAccent};font-size:12px;font-family:${fontMono};text-decoration:underline;text-underline-offset:2px}
+    .mushi-link-btn:hover{opacity:0.8}
+    .mushi-link-btn:focus-visible,.mushi-nav-item:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px;border-radius:2px}
+    .mushi-nav-item{display:block;width:100%;text-align:left;background:${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'};border:1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer;font-size:13px;color:${ink};transition:background .15s,border-color .15s}
+    .mushi-nav-item:hover{background:${isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)'}}
+    .mushi-account-card{display:flex;align-items:center;gap:12px;background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'};border-radius:10px;padding:12px 14px;margin-bottom:14px}
+    .mushi-account-avatar{width:40px;height:40px;border-radius:50%;background:${widgetAccentWash};color:${widgetAccentInk};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0}
+    .mushi-account-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .mushi-account-info strong{font:700 14px/1.3 inherit;color:${ink}}
+    .mushi-account-rank,.mushi-xapp-app-name,.mushi-label{font-size:12px;color:${inkDim};font-family:${fontMono}}
+    .mushi-account-rank{display:block}
+    .mushi-xapp-app-name{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px}
+    .mushi-xapp-group{margin-bottom:14px}
+    .mushi-label{display:block;font-weight:600;margin-bottom:6px}
   `;
 }

@@ -19,7 +19,7 @@
 
 import { Hono } from 'npm:hono@4'
 import type { Context } from 'npm:hono@4'
-import { requireAuth } from '../middleware/auth.ts'
+import { requireAuthOrApiKey } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
@@ -47,7 +47,6 @@ async function assertRunAccess(
   c: Context<{ Variables: Variables }>,
   runId: string,
 ): Promise<{ ok: true; projectId: string } | { ok: false; response: Response }> {
-  const userId = c.get('userId')
   const { data: run } = await db()
     .from('skill_pipeline_runs')
     .select('id, project_id')
@@ -58,7 +57,18 @@ async function assertRunAccess(
     return { ok: false, response: c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Run not found' } }, 404) }
   }
 
-  const allowed = await accessibleProjectIds(db(), userId)
+  const authMethod = c.get('authMethod') as string | undefined
+  const userId = c.get('userId') as string | undefined
+  let allowed: string[]
+  if (authMethod === 'apiKey') {
+    const bound = c.get('projectId') as string | undefined
+    allowed = bound ? [bound] : []
+  } else if (userId) {
+    allowed = await accessibleProjectIds(db(), userId)
+  } else {
+    return { ok: false, response: c.json({ ok: false, error: { code: 'UNAUTHENTICATED', message: 'Authentication required' } }, 401) }
+  }
+
   if (!allowed.includes(run.project_id as string)) {
     return { ok: false, response: c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Access denied' } }, 403) }
   }
@@ -72,7 +82,7 @@ export function registerSkillsRoutes(parent: Hono<{ Variables: Variables }>) {
 
 function skillsRoutes() {
   const r = new Hono<{ Variables: Variables }>()
-  r.use('*', requireAuth, requireProjectAccess)
+  r.use('*', requireAuthOrApiKey, requireProjectAccess)
 
   // ── Catalog ─────────────────────────────────────────────────────────────
 

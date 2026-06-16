@@ -27,7 +27,22 @@ The plugin also includes:
 - **`mushi-triage` skill** — teaches agents the safe triage order
 - **`mushi-mcp` rules** — least-privilege and safety guardrails for write tools
 
-## Installation (Cursor Marketplace)
+## Installation
+
+### Option A — One-click deeplink (fastest)
+
+Open your Mushi admin console → **Act → MCP → Setup tab** and click **"⚡ Add to Cursor"**. Cursor's "Install MCP server?" dialog opens with your project ID and a freshly-minted key pre-populated — just confirm.
+
+The deeplink format:
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=mushi-<project>&config=<base64>
+```
+
+A VS Code variant (**"Add to VS Code"**) is also available on the same page.
+
+> **Security:** The deeplink mints a **dedicated** MCP key (`mcp:write` or `mcp:read`), separate from the `report:write`-scoped SDK key your app embeds in its bundle. Never share those two keys — see [Security model](#security-model) below.
+
+### Option B — Cursor Marketplace
 
 Once published to the Cursor Marketplace, install via:
 
@@ -47,15 +62,24 @@ Optionally set a default project:
 MUSHI_PROJECT_ID=<your-project-uuid>
 ```
 
-## Manual installation
+### Option C — Manual
 
 1. Clone or download this directory.
-2. Copy `mcp.json` into your project's `.cursor/` folder (or merge into `.cursor/mcp.json`).
-3. Update the `url` in the `mushi` server entry with your Supabase edge function URL.
-4. Set `MUSHI_API_KEY` in your shell profile.
-5. Restart Cursor.
+2. Prefer **global** `~/.cursor/mcp.json` (Windows: `%USERPROFILE%\.cursor\mcp.json`) — do not duplicate `mushi` in every repo's `.cursor/mcp.json`.
+3. Copy or merge `mcp.json` from this package; set `url` to your Supabase `/functions/v1/mcp` endpoint.
+4. Set `MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, and (for stdio) `MUSHI_API_ENDPOINT` in your shell profile or Cursor environment variables.
+5. Use forward slashes in Windows paths inside JSON (`C:/Users/...`).
+6. Restart Cursor fully after edits.
 
-### stdio fallback (no hosted endpoint)
+Required HTTP headers for hosted MCP:
+
+| Header | Value |
+|--------|-------|
+| `X-Mushi-Api-Key` | Your `mcp:read` or `mcp:write` key |
+| `X-Mushi-Project-Id` | Project UUID |
+| `Authorization` | `Bearer <same key>` (optional but recommended) |
+
+### stdio fallback (Option C, no hosted endpoint)
 
 If you don't have a hosted Supabase endpoint, use the `mushi-stdio` server in `mcp.json`. This runs `npx @mushi-mushi/mcp` locally:
 
@@ -69,10 +93,13 @@ export MUSHI_PROJECT_ID=<your-project-uuid>
 
 | Scope | What it unlocks |
 |-------|----------------|
+| `report:write` | SDK ingest only (`/v1/reports`). **No admin access.** Use this for your app's runtime Mushi SDK key — never give this to an MCP client. |
 | `mcp:read` | All triage, evidence, context, and log tools (read-only) |
 | `mcp:write` | `dispatch_fix`, `close_report`, `set_report_status`, `reply_to_reporter`, and other mutating tools |
 
-**Recommended**: mint a `mcp:read` key for daily triage; escalate to `mcp:write` only when you need to dispatch fixes.
+**Key separation rule:** Your app's SDK key (`NEXT_PUBLIC_MUSHI_API_KEY` or equivalent) ships in client-side code and should carry **only** `report:write`. This scope is rejected by every admin route, so it cannot be abused for triage or fix dispatch even if someone extracts it from your bundle. Your MCP key (`mcp:read` or `mcp:write`) must be kept out of client-side bundles — store it in your global `~/.cursor/mcp.json` or shell profile.
+
+**Recommended**: use the "⚡ Add to Cursor" deeplink on the `/mcp` console page — it mints a dedicated MCP key and writes it into your Cursor config automatically, enforcing the separation above.
 
 Mint API keys at: **Mushi admin → Settings → Projects → API Keys**.
 

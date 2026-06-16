@@ -6,7 +6,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, resolveOwnedProject, ownedProjectIds } from '../shared.ts';
+import { dbError, resolveOwnedProject, ownedProjectIds, callerProjectIds } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -525,7 +525,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (contextPid !== pid) return c.json({ error: 'API key does not belong to this project' }, 403);
     } else {
       // JWT auth — verify the user owns the project
-      const ids = await ownedProjectIds(db, userId);
+      const ids = await callerProjectIds(c, db, userId);
       if (!ids.includes(pid)) return c.json({ error: 'Project not found or access denied' }, 403);
     }
 
@@ -1517,7 +1517,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }

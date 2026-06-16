@@ -17,6 +17,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@mushi-mushi/mcp": "workspace:*",
     "@mushi-mushi/brand": "workspace:*",
     "@mushi-mushi/marketing-ui": "workspace:*",
     "@mushi-mushi/web": "workspace:*",

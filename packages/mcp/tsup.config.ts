@@ -17,7 +17,12 @@ export default defineConfig([
     // Library entry — the catalog and server factory for consumers (admin UI,
     // smoke tests, parity guards). Exported as a separate chunk so importers
     // don't have to pull in the stdio entry-point side effects.
-    entry: { catalog: 'src/catalog.ts', server: 'src/server.ts' },
+    entry: {
+      catalog: 'src/catalog.ts',
+      server: 'src/server.ts',
+      branding: 'src/branding.ts',
+      'feature-groups': 'src/feature-groups.ts',
+    },
     format: ['esm'],
     dts: true,
     clean: false,

@@ -12,15 +12,18 @@
 
 import type {
   MushiCustomCategory,
+  MushiCrossAppReport,
+  MushiLeaderboardEntry,
   MushiReportCategory,
   MushiReporterComment,
   MushiReporterReport,
+  MushiTesterReputation,
   MushiWidgetConfig,
 } from '@mushi-mushi/core';
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 
-type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail' | 'leaderboard' | 'roadmap';
+type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail' | 'leaderboard' | 'roadmap' | 'account' | 'cross-app-reports';
 
 const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
   bug: '\u26A0\uFE0F',
@@ -160,6 +163,8 @@ const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
   'report-detail': 1,
   leaderboard: 1,
   roadmap: 1,
+  account: 1,
+  'cross-app-reports': 1,
 };
 
 /** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
@@ -226,6 +231,12 @@ export interface WidgetCallbacks {
   onFeatureBoardRequest?(): Promise<Array<Record<string, unknown>>>;
   onFeatureBoardVote?(requestId: string): Promise<{ voted: boolean; action: string }>;
   onLeaderboardOpen?(): void;
+  /** Request a magic-link sign-in for the in-widget Mushi community. */
+  onMushiSignIn?(email: string): Promise<{ ok: boolean; error?: string }>;
+  /** Fetch the global public leaderboard for the in-widget Mushi community. */
+  onGlobalLeaderboardOpen?(): void;
+  /** Fetch cross-app reports for the signed-in tester. */
+  onCrossAppReportsOpen?(): void;
 }
 
 export class MushiWidget {
@@ -308,6 +319,26 @@ export class MushiWidget {
   private lastSubmitQueuedOffline = false;
   /** Whether the user has clicked ✕ on the header banner this session. */
   private bannerDismissed = false;
+  /** Persisted FAB position when draggable is enabled. */
+  private fabPos: { x: number; y: number } | null = null;
+  /** Cleanup fn for visualViewport keyboard listener. */
+  private vvCleanup: (() => void) | null = null;
+  /** Mushi tester session JWT — set after in-widget sign-in or by mushi.ts. */
+  private testerJwt: string | null = null;
+  /** Tester identity (public_handle, display_name). */
+  private testerInfo: { id: string; public_handle: string | null; display_name: string | null } | null = null;
+  /** Cross-app reports for the signed-in tester. */
+  private crossAppReports: MushiCrossAppReport[] | null = null;
+  private crossAppLoading = false;
+  /** Global leaderboard entries (from mushi_testers, not org-scoped). */
+  private globalLeaderboard: MushiLeaderboardEntry[] | null = null;
+  private globalLeaderboardLoading = false;
+  /** Reputation for the signed-in tester. */
+  private testerReputation: MushiTesterReputation | null = null;
+  /** Whether an in-widget magic-link email was just sent. */
+  private magicLinkSent = false;
+  private magicLinkEmail = '';
+  private magicLinkError = '';
 
   constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
     this.config = {
@@ -347,6 +378,8 @@ export class MushiWidget {
       featureRequestDescription: config.featureRequestDescription ?? '',
       avoidSelectors: config.avoidSelectors ?? [],
       categories: config.categories ?? [],
+      accent: config.accent ?? '',
+      accentText: config.accentText ?? '',
     };
     this.callbacks = callbacks;
     // Passing undefined when locale is 'auto' lets getLocale() resolve via
@@ -708,6 +741,31 @@ export class MushiWidget {
     if (this.isOpen && this.step === 'leaderboard') this.render();
   }
 
+  // ── Community public setters (called by mushi.ts after API calls) ──────────
+
+  setTesterSession(jwt: string | null, info: { id: string; public_handle: string | null; display_name: string | null } | null): void {
+    this.testerJwt = jwt;
+    this.testerInfo = info;
+    if (this.isOpen) this.render();
+  }
+
+  setGlobalLeaderboard(entries: MushiLeaderboardEntry[] | null, loading = false): void {
+    this.globalLeaderboard = entries;
+    this.globalLeaderboardLoading = loading;
+    if (this.isOpen && (this.step === 'leaderboard' || this.step === 'account')) this.render();
+  }
+
+  setCrossAppReports(reports: MushiCrossAppReport[] | null, loading = false): void {
+    this.crossAppReports = reports;
+    this.crossAppLoading = loading;
+    if (this.isOpen && this.step === 'cross-app-reports') this.render();
+  }
+
+  setTesterReputation(rep: MushiTesterReputation | null): void {
+    this.testerReputation = rep;
+    if (this.isOpen && (this.step === 'account' || this.step === 'leaderboard')) this.render();
+  }
+
   destroy(): void {
     if (this.successTimer !== null) {
       clearTimeout(this.successTimer);
@@ -723,6 +781,7 @@ export class MushiWidget {
     }
     this.smartHideCleanup?.();
     this.smartHideCleanup = null;
+    this.teardownViewportHandlers();
     this.attachedLaunchers.forEach((cleanup) => cleanup());
     this.attachedLaunchers = [];
     this.removeSelectorHint();
@@ -1069,7 +1128,31 @@ export class MushiWidget {
   }
 
   private getTheme(): 'light' | 'dark' {
-    if (this.config.theme !== 'auto') return this.config.theme;
+    const t = this.config.theme;
+    if (t === 'light' || t === 'dark') return t;
+    if (t === 'inherit') {
+      // 1. Check <html> color-scheme attribute / computed style
+      const root = document.documentElement;
+      const colorScheme = root.getAttribute('data-color-scheme') ||
+        root.getAttribute('data-theme') ||
+        root.getAttribute('color-scheme') || '';
+      if (/dark/i.test(colorScheme)) return 'dark';
+      if (/light/i.test(colorScheme)) return 'light';
+      // 2. Check <html> class
+      if (root.classList.contains('dark')) return 'dark';
+      if (root.classList.contains('light')) return 'light';
+      // 3. Check computed background luminance
+      try {
+        const bg = getComputedStyle(root).backgroundColor;
+        const m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (m) {
+          const L = 0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3];
+          return L < 128 ? 'dark' : 'light';
+        }
+      } catch { /* ignore */ }
+      // 4. Fallback to OS preference
+    }
+    // 'auto' or unresolved 'inherit'
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       return 'dark';
     }
@@ -1084,7 +1167,7 @@ export class MushiWidget {
     this.shadow.innerHTML = '';
 
     const style = document.createElement('style');
-    style.textContent = getWidgetStyles(theme);
+    style.textContent = getWidgetStyles(theme, this.config.accent ?? '', this.config.accentText ?? '');
     this.shadow.appendChild(style);
 
     this.renderBanner();
@@ -1099,6 +1182,14 @@ export class MushiWidget {
       trigger.setAttribute('aria-expanded', String(this.isOpen));
       trigger.style.zIndex = String(this.config.zIndex);
       this.applyInsetVars(trigger);
+
+      // Apply persisted drag position
+      if (this.fabPos) {
+        trigger.style.setProperty('--mushi-drag-x', `${this.fabPos.x}px`);
+        trigger.style.setProperty('--mushi-drag-y', `${this.fabPos.y}px`);
+        trigger.style.setProperty('--mushi-drag-active', '1');
+      }
+
       trigger.addEventListener('click', () => {
         this.removeNudge();
         if (this.isOpen) this.close();
@@ -1117,6 +1208,33 @@ export class MushiWidget {
           this.nudgeTimer = setTimeout(() => this.removeNudge(), 2000);
         }
       });
+
+      // Keyboard arrow-key nudge for a11y
+      trigger.addEventListener('keydown', (e) => {
+        const draggableConfig = this.config.draggable;
+        if (!draggableConfig) return;
+        const STEP = 8;
+        const axis = typeof draggableConfig === 'object' ? (draggableConfig.axis ?? 'both') : 'both';
+        let dx = 0, dy = 0;
+        if (axis !== 'y') {
+          if (e.key === 'ArrowLeft') dx = -STEP;
+          else if (e.key === 'ArrowRight') dx = STEP;
+        }
+        if (axis !== 'x') {
+          if (e.key === 'ArrowUp') dy = -STEP;
+          else if (e.key === 'ArrowDown') dy = STEP;
+        }
+        if (dx !== 0 || dy !== 0) {
+          e.preventDefault();
+          const cur = this.fabPos ?? { x: 0, y: 0 };
+          this.moveFab(trigger, cur.x + dx, cur.y + dy, false);
+        }
+      });
+
+      if (this.config.draggable) {
+        this.attachDragHandlers(trigger);
+      }
+
       this.shadow.appendChild(trigger);
     }
 
@@ -1133,6 +1251,9 @@ export class MushiWidget {
       this.shadow.appendChild(panel);
       this.attachHandlers(panel);
       this.trapFocus(panel);
+      this.attachViewportHandlers(panel);
+    } else {
+      this.teardownViewportHandlers();
     }
   }
 
@@ -1201,6 +1322,209 @@ export class MushiWidget {
     }
   }
 
+  // ─── Draggable FAB ──────────────────────────────────────────────────────────
+
+  /** Storage key for the FAB position, scoped to projectId when available. */
+  private fabStorageKey(): string {
+    const id = (this.config as unknown as Record<string, unknown>)['projectId'] ?? '';
+    return `mushi_fab_pos${id ? `_${id}` : ''}`;
+  }
+
+  /** Move the FAB to the given translated offset (relative to the inset origin),
+   *  clamping inside viewport safe area, and optionally snap to nearest edge.
+   *
+   *  The FAB's CSS anchor can be any corner (bottom-right, bottom-left, …) so we
+   *  must derive the *base* position (CSS anchor with zero drag offset) to compute
+   *  correct clamp bounds and snap targets.  We do this by subtracting the
+   *  already-applied drag offset from the live getBoundingClientRect() value. */
+  private moveFab(trigger: HTMLElement, x: number, y: number, snap: boolean): void {
+    const axis = (() => {
+      const d = this.config.draggable;
+      if (!d) return 'both';
+      return typeof d === 'object' ? (d.axis ?? 'both') : 'both';
+    })();
+
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const btnW = trigger.offsetWidth || 52;
+    const btnH = trigger.offsetHeight || 52;
+    const safeL = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-left') || '0') || 0;
+    const safeR = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-right') || '0') || 0;
+    const safeT = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-top') || '0') || 0;
+    const safeB = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sai-bottom') || '0') || 0;
+    const margin = 8;
+
+    // Derive the CSS base position (without drag offset) so bounds / snap are
+    // correct regardless of which corner the FAB is anchored to.
+    const rect = trigger.getBoundingClientRect();
+    const prevDragX = this.fabPos?.x ?? 0;
+    const prevDragY = this.fabPos?.y ?? 0;
+    const baseLeft = rect.left - prevDragX;
+    const baseTop  = rect.top  - prevDragY;
+
+    // Clamp so button stays within the viewport safe-area on all four sides.
+    const minX = (safeL + margin) - baseLeft;
+    const maxX = (W - safeR - margin - btnW) - baseLeft;
+    const minY = (safeT + margin) - baseTop;
+    const maxY = (H - safeB - margin - btnH) - baseTop;
+
+    const newX = axis === 'y' ? 0 : Math.max(minX, Math.min(maxX, x));
+    const newY = axis === 'x' ? 0 : Math.max(minY, Math.min(maxY, y));
+
+    // Optional snap: snap FAB to the nearest left or right edge
+    let finalX = newX;
+    if (snap) {
+      const d = this.config.draggable;
+      const shouldSnap = d === true || (typeof d === 'object' && (d.snapToEdge ?? true));
+      if (shouldSnap && axis !== 'y') {
+        // Snap to nearest horizontal edge — use base position for the offset so
+        // the snap target is correct regardless of which side the FAB is anchored.
+        const center = rect.left + btnW / 2;
+        finalX = center < W / 2
+          ? (safeL + margin) - baseLeft              // snap to left edge
+          : (W - safeR - margin - btnW) - baseLeft;  // snap to right edge
+      }
+    }
+
+    this.fabPos = { x: finalX, y: newY };
+    trigger.style.setProperty('--mushi-drag-x', `${finalX}px`);
+    trigger.style.setProperty('--mushi-drag-y', `${newY}px`);
+    trigger.style.setProperty('--mushi-drag-active', '1');
+
+    // Persist
+    const d = this.config.draggable;
+    const shouldPersist = d === true || (typeof d === 'object' && (d.persist ?? true));
+    if (shouldPersist) {
+      try {
+        localStorage.setItem(this.fabStorageKey(), JSON.stringify(this.fabPos));
+      } catch { /* quota — ignore */ }
+    }
+  }
+
+  /** Load previously persisted FAB position. */
+  private loadFabPos(): void {
+    const d = this.config.draggable;
+    if (!d) return;
+    const shouldPersist = d === true || (typeof d === 'object' && (d.persist ?? true));
+    if (!shouldPersist) return;
+    try {
+      const raw = localStorage.getItem(this.fabStorageKey());
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          this.fabPos = parsed;
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  /** Attach Pointer Events-based drag to the trigger element. */
+  private attachDragHandlers(trigger: HTMLElement): void {
+    // Load persisted position on first mount
+    if (this.fabPos === null) this.loadFabPos();
+
+    let startX = 0, startY = 0;
+    let originX = 0, originY = 0;
+    let dragging = false;
+    let moved = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      // Only handle primary pointer (not right-click / stylus hover)
+      if (e.button !== 0 && e.pointerType !== 'touch') return;
+      trigger.setPointerCapture(e.pointerId);
+      startX = e.clientX;
+      startY = e.clientY;
+      const cur = this.fabPos ?? { x: 0, y: 0 };
+      originX = cur.x;
+      originY = cur.y;
+      dragging = true;
+      moved = false;
+    };
+
+    const DRAG_THRESHOLD = 6; // px movement before we consider it a drag
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        moved = true;
+        trigger.classList.add('dragging');
+        trigger.setAttribute('aria-grabbed', 'true');
+      }
+      if (moved) {
+        e.preventDefault();
+        this.moveFab(trigger, originX + dx, originY + dy, false);
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      trigger.classList.remove('dragging');
+      trigger.removeAttribute('aria-grabbed');
+      if (moved) {
+        // Snap on release
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        this.moveFab(trigger, originX + dx, originY + dy, true);
+        // Suppress the click that follows a drag
+        const suppressClick = (ev: Event) => {
+          ev.stopImmediatePropagation();
+          trigger.removeEventListener('click', suppressClick, { capture: true });
+        };
+        trigger.addEventListener('click', suppressClick, { capture: true });
+      }
+      moved = false;
+    };
+
+    trigger.addEventListener('pointerdown', onPointerDown);
+    trigger.addEventListener('pointermove', onPointerMove);
+    trigger.addEventListener('pointerup', onPointerUp);
+    trigger.addEventListener('pointercancel', onPointerUp);
+  }
+
+  // ─── Keyboard / visualViewport ──────────────────────────────────────────────
+
+  /** Lift the panel above the software keyboard using visualViewport. */
+  private attachViewportHandlers(panel: HTMLElement): void {
+    this.teardownViewportHandlers();
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const update = () => {
+      const keyboardInset = window.innerHeight - vv.height - vv.offsetTop;
+      if (keyboardInset > 50) {
+        // Keyboard is visible — lift panel above it
+        panel.style.setProperty('--mushi-keyboard-inset', `${Math.round(keyboardInset)}px`);
+        panel.classList.add('keyboard-open');
+        // Also scroll the focused textarea into view
+        const ta = panel.querySelector<HTMLElement>('textarea, input[type="text"]');
+        ta?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        panel.style.setProperty('--mushi-keyboard-inset', '0px');
+        panel.classList.remove('keyboard-open');
+      }
+    };
+
+    vv.addEventListener('resize', update, { passive: true });
+    vv.addEventListener('scroll', update, { passive: true });
+    // Also update on textarea focus/blur
+    const onFocus = () => requestAnimationFrame(update);
+    panel.addEventListener('focusin', onFocus);
+
+    this.vvCleanup = () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      panel.removeEventListener('focusin', onFocus);
+    };
+  }
+
+  private teardownViewportHandlers(): void {
+    this.vvCleanup?.();
+    this.vvCleanup = null;
+  }
+
   private renderStep(): string {
     switch (this.step) {
       case 'category': return this.renderCategoryStep();
@@ -1211,6 +1535,8 @@ export class MushiWidget {
       case 'report-detail': return this.renderReportDetailStep();
       case 'leaderboard': return this.renderLeaderboardStep();
       case 'roadmap': return this.renderRoadmapStep();
+      case 'account': return this.renderAccountStep();
+      case 'cross-app-reports': return this.renderCrossAppReportsStep();
     }
   }
 
@@ -1349,6 +1675,16 @@ export class MushiWidget {
         </button>` : ''}
         ${categories}
         ${this.rewardsState ? this.renderRewardsNudge() : ''}
+        <div class="mushi-community-footer">
+          <button type="button" class="mushi-link-btn mushi-community-btn" data-action="open-account">
+            ${this.testerInfo
+              ? `👤 ${escapeHtml(this.testerInfo.public_handle ?? this.testerInfo.display_name ?? 'My account')}`
+              : '🌐 Join community · Track reports across apps'}
+          </button>
+          ${this.rewardsState
+            ? `<button type="button" class="mushi-link-btn" data-action="open-leaderboard">🏆 Leaderboard</button>`
+            : ''}
+        </div>
       </div>
       ${this.renderStepIndicator(STEP_NUMBER.category)}
     `;
@@ -1507,25 +1843,144 @@ export class MushiWidget {
   }
 
   private renderLeaderboardStep(): string {
-    const myRank = this.rewardsState && this.leaderboardEntries
-      ? this.leaderboardEntries.findIndex((e) => e.display_name === 'You') + 1
-      : 0;
-    const rows = (this.leaderboardEntries ?? []).map((e, i) => `
-      <div class="mushi-lb-row ${i === 0 ? 'mushi-lb-top' : ''}">
-        <span class="mushi-lb-rank">#${i + 1}</span>
-        <span class="mushi-lb-name">${escapeHtml(e.display_name)}</span>
-        ${e.tier_name ? `<span class="mushi-lb-tier">${escapeHtml(e.tier_name)}</span>` : ''}
-        <span class="mushi-lb-pts">${e.total_points.toLocaleString()} pts</span>
+    // Show global leaderboard (cross-app) when available, fall back to org scope
+    const isGlobal = this.globalLeaderboard !== null || this.globalLeaderboardLoading;
+    const entries = isGlobal
+      ? (this.globalLeaderboard ?? [])
+      : (this.leaderboardEntries ?? []).map(e => ({
+          tester_id: '',
+          public_handle: null,
+          display_name: e.display_name,
+          rank: 0,
+          points_30d: e.points_30d,
+          total_points: e.total_points,
+        }));
+    const loading = isGlobal ? this.globalLeaderboardLoading : this.leaderboardLoading;
+
+    // Find caller's rank
+    const myRank = this.testerReputation?.rank ?? null;
+
+    const rows = entries.map((e, i) => {
+      const rank = (e as MushiLeaderboardEntry).rank || (i + 1);
+      const isMe = this.testerReputation && (e as MushiLeaderboardEntry).tester_id === this.testerReputation.tester_id;
+      return `
+        <div class="mushi-lb-row ${rank === 1 ? 'mushi-lb-top' : ''}${isMe ? ' mushi-lb-me' : ''}">
+          <span class="mushi-lb-rank">#${rank}</span>
+          <span class="mushi-lb-name">${escapeHtml((e as MushiLeaderboardEntry).public_handle ?? e.display_name ?? 'Anon')}</span>
+          <span class="mushi-lb-pts">${(e.points_30d ?? e.total_points).toLocaleString()} pts</span>
+        </div>
+      `;
+    }).join('');
+
+    const myRankBadge = myRank
+      ? `<div class="mushi-lb-myrank">You are ranked <strong>#${myRank}</strong> this month</div>`
+      : (!this.testerJwt ? `<button type="button" class="mushi-link-btn" data-action="open-account">Sign in to see your rank →</button>` : '');
+
+    return `
+      ${this.renderHeader({ title: '🏆 Global Leaderboard', showBack: true, eyebrow: 'Mushi · Community' })}
+      <div class="mushi-body">
+        ${loading ? '<p class="mushi-muted">Loading leaderboard…</p>' : ''}
+        ${!loading && !entries.length ? '<p class="mushi-muted">No contributors yet — be the first!</p>' : ''}
+        <div class="mushi-lb-list">${rows}</div>
+        ${myRankBadge}
+        <p class="mushi-lb-note">Global contributors this month · Points refresh monthly</p>
+      </div>
+    `;
+  }
+
+  private renderAccountStep(): string {
+    const tester = this.testerInfo;
+    if (tester) {
+      // Signed in — show account info + cross-app link
+      const handle = tester.public_handle ?? tester.display_name ?? 'Tester';
+      const rep = this.testerReputation;
+      return `
+        ${this.renderHeader({ title: '虫 Mushi Account', showBack: true, eyebrow: 'Mushi · Identity' })}
+        <div class="mushi-body">
+          <div class="mushi-account-card">
+            <div class="mushi-account-avatar">${escapeHtml(handle.charAt(0).toUpperCase())}</div>
+            <div class="mushi-account-info">
+              <strong>${escapeHtml(handle)}</strong>
+              ${rep ? `<span class="mushi-account-rank">Rank #${rep.rank ?? '—'} · ${(rep.points_30d ?? 0).toLocaleString()} pts this month</span>` : ''}
+            </div>
+          </div>
+          <button type="button" class="mushi-nav-item" data-action="open-cross-app-reports">
+            My reports across all apps →
+          </button>
+          <button type="button" class="mushi-nav-item" data-action="open-global-leaderboard">
+            View global leaderboard →
+          </button>
+          <button type="button" class="mushi-link-btn" data-action="sign-out-tester">Sign out</button>
+        </div>
+      `;
+    }
+
+    // Not signed in — magic-link form
+    if (this.magicLinkSent) {
+      return `
+        ${this.renderHeader({ title: '虫 Check your email', showBack: true, eyebrow: 'Mushi · Sign in' })}
+        <div class="mushi-body">
+          <p class="mushi-muted">We sent a sign-in link to <strong>${escapeHtml(this.magicLinkEmail)}</strong>. Click it to connect your reports across apps and join the community.</p>
+          <button type="button" class="mushi-link-btn" data-action="resend-magic-link">Resend email</button>
+          ${this.magicLinkError ? `<p class="mushi-error">${escapeHtml(this.magicLinkError)}</p>` : ''}
+        </div>
+      `;
+    }
+
+    return `
+      ${this.renderHeader({ title: '虫 Join the community', showBack: true, eyebrow: 'Mushi · Sign in' })}
+      <div class="mushi-body">
+        <p class="mushi-muted">Sign in to see your reports across all apps and climb the global leaderboard. No password needed.</p>
+        <label class="mushi-label" for="mushi-email-input">Email address</label>
+        <input
+          id="mushi-email-input"
+          type="email"
+          class="mushi-textarea"
+          data-role="magic-link-email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          value="${escapeHtml(this.magicLinkEmail)}"
+          style="padding: 10px 12px; height: auto; resize: none;"
+        />
+        ${this.magicLinkError ? `<p class="mushi-error">${escapeHtml(this.magicLinkError)}</p>` : ''}
+        <button type="button" class="mushi-submit" data-action="send-magic-link">
+          <span>Send sign-in link</span><span class="mushi-submit-arrow" aria-hidden="true">→</span>
+        </button>
+      </div>
+    `;
+  }
+
+  private renderCrossAppReportsStep(): string {
+    const reports = this.crossAppReports ?? [];
+    const grouped = new Map<string, { name: string; reports: MushiCrossAppReport[] }>();
+    for (const r of reports) {
+      const key = r.project_id ?? 'unknown';
+      if (!grouped.has(key)) grouped.set(key, { name: r.app_name ?? 'Unknown App', reports: [] });
+      grouped.get(key)!.reports.push(r);
+    }
+
+    const rows = [...grouped.entries()].map(([, group]) => `
+      <div class="mushi-xapp-group">
+        <h4 class="mushi-xapp-app-name">${escapeHtml(group.name)}</h4>
+        ${group.reports.map(r => {
+          const tone = reporterStatusTone(r.status);
+          return `
+            <div class="mushi-report-row" data-report-id="${escapeHtml(r.id)}" tabindex="0" role="button">
+              <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusShort(r.status))}</span>
+              <span class="mushi-report-title">${escapeHtml(r.title ?? r.category)}</span>
+              <span class="mushi-report-when">${escapeHtml(formatRelativeTime(r.created_at))}</span>
+            </div>
+          `;
+        }).join('')}
       </div>
     `).join('');
+
     return `
-      ${this.renderHeader({ title: '🏆 Leaderboard', showBack: true, eyebrow: 'Mushi · Contributors' })}
+      ${this.renderHeader({ title: 'My reports', showBack: true, eyebrow: 'Mushi · All apps' })}
       <div class="mushi-body">
-        ${this.leaderboardLoading ? '<p class="mushi-muted">Loading leaderboard…</p>' : ''}
-        ${!this.leaderboardLoading && !this.leaderboardEntries?.length ? '<p class="mushi-muted">No contributors yet — be the first!</p>' : ''}
-        <div class="mushi-lb-list">${rows}</div>
-        ${myRank > 0 ? `<p class="mushi-lb-myrank">You are ranked #${myRank}</p>` : ''}
-        <p class="mushi-lb-note">Top contributors this month · Points refresh monthly</p>
+        ${this.crossAppLoading ? '<p class="mushi-muted">Loading your reports…</p>' : ''}
+        ${!this.crossAppLoading && !reports.length ? '<p class="mushi-muted">No reports filed yet.</p>' : ''}
+        ${rows}
       </div>
     `;
   }
@@ -1963,6 +2418,50 @@ export class MushiWidget {
     panel.querySelector('[data-action="open-leaderboard"]')?.addEventListener('click', () => {
       this.step = 'leaderboard';
       this.callbacks.onLeaderboardOpen?.();
+      this.callbacks.onGlobalLeaderboardOpen?.();
+      this.render();
+    });
+
+    // Community: open account step
+    panel.querySelector('[data-action="open-account"]')?.addEventListener('click', () => {
+      this.step = 'account';
+      this.render();
+    });
+
+    // Community: navigate within account step
+    panel.querySelector('[data-action="open-cross-app-reports"]')?.addEventListener('click', () => {
+      this.step = 'cross-app-reports';
+      this.crossAppLoading = true;
+      this.crossAppReports = null;
+      this.render();
+      this.callbacks.onCrossAppReportsOpen?.();
+    });
+
+    panel.querySelector('[data-action="open-global-leaderboard"]')?.addEventListener('click', () => {
+      this.step = 'leaderboard';
+      this.callbacks.onGlobalLeaderboardOpen?.();
+      this.render();
+    });
+
+    // Community: magic-link sign-in
+    panel.querySelector('[data-action="send-magic-link"]')?.addEventListener('click', () => {
+      void this.handleMagicLinkSend(panel);
+    });
+
+    panel.querySelector('[data-action="resend-magic-link"]')?.addEventListener('click', () => {
+      this.magicLinkSent = false;
+      this.magicLinkError = '';
+      this.render();
+    });
+
+    panel.querySelector('[data-action="sign-out-tester"]')?.addEventListener('click', () => {
+      this.testerJwt = null;
+      this.testerInfo = null;
+      this.testerReputation = null;
+      this.crossAppReports = null;
+      this.magicLinkSent = false;
+      this.magicLinkEmail = '';
+      this.step = 'category';
       this.render();
     });
 
@@ -2316,6 +2815,29 @@ export class MushiWidget {
     } catch (err) {
       this.reporterError = err instanceof Error ? err.message : 'Could not send reply.';
       this.reporterLoading = false;
+      this.render();
+    }
+  }
+
+  /* ── Community: magic-link sign-in ───────────────────────────────── */
+
+  private async handleMagicLinkSend(panel: HTMLElement): Promise<void> {
+    const emailInput = panel.querySelector('[data-role="magic-link-email"]') as HTMLInputElement | null;
+    const email = (emailInput?.value ?? this.magicLinkEmail).trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.magicLinkError = 'Please enter a valid email address.';
+      this.render();
+      return;
+    }
+    this.magicLinkEmail = email;
+    this.magicLinkError = '';
+    this.render();
+    try {
+      await this.callbacks.onMushiSignIn?.(email);
+      this.magicLinkSent = true;
+      this.render();
+    } catch (err) {
+      this.magicLinkError = err instanceof Error ? err.message : 'Could not send sign-in link. Try again.';
       this.render();
     }
   }

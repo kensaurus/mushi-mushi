@@ -60,7 +60,10 @@ function extractEntries(content) {
  *     scope: 'mcp:read',
  */
 function extractHostedTools(content) {
-  const toolsSection = content.split('const TOOLS')[1]?.split('function handleInitialize')[0] ?? ''
+  const toolsSection =
+    content.split('const BASE_TOOLS')[1]?.split('/** Full catalog')[0] ??
+    content.split('const TOOLS')[1]?.split('function handleInitialize')[0] ??
+    ''
   const entries = []
   let pendingName = null
   for (const line of toolsSection.split('\n')) {
@@ -82,14 +85,24 @@ function extractHostedTools(content) {
 const canonicalContent = read('packages/mcp/src/catalog.ts')
 const adminContent = read('apps/admin/src/lib/mcpCatalog.ts')
 const hostedContent = read('packages/server/supabase/functions/mcp/index.ts')
+const manifestContent = read('packages/server/supabase/functions/mcp/hosted-tool-manifest.json')
 
 const canonicalEntries = extractEntries(canonicalContent)
 const canonicalMap = new Map(canonicalEntries.map((t) => [t.name, t.scope]))
 
-const adminEntries = extractEntries(adminContent)
+const adminReexportsCanonical =
+  /from\s+['"]@mushi-mushi\/mcp\/catalog['"]/.test(adminContent)
+const adminEntries = adminReexportsCanonical ? canonicalEntries : extractEntries(adminContent)
 const adminMap = new Map(adminEntries.map((t) => [t.name, t.scope]))
 
-const hostedTools = extractHostedTools(hostedContent)
+const hostedTools = (() => {
+  const byName = new Map()
+  for (const t of extractHostedTools(hostedContent)) byName.set(t.name, t)
+  for (const [name, def] of Object.entries(JSON.parse(manifestContent))) {
+    if (!byName.has(name)) byName.set(name, { name, scope: def.scope })
+  }
+  return [...byName.values()]
+})()
 
 // ─── Checks ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +130,7 @@ console.log(`   Hosted MCP (packages/server/supabase/functions/mcp/index.ts): ${
 
 // CHECK 1: Hosted tools must exist in canonical catalog with matching scope
 console.log(`\n── Check 1: Hosted MCP ⊆ Canonical catalog ────────────────────────────────`)
+const strictFullParity = process.argv.includes('--strict-full-parity')
 let hostedOk = 0
 for (const hosted of hostedTools) {
   const canonicalScope = canonicalMap.get(hosted.name)
@@ -130,10 +144,16 @@ for (const hosted of hostedTools) {
 }
 if (hostedOk > 0) info(`${hostedOk} hosted tools match canonical catalog`)
 
-// Informational: canonical entries not in hosted (expected — hosted is a subset)
+// Informational: canonical entries not in hosted (expected unless --strict-full-parity)
 const canonicalNotInHosted = canonicalEntries.filter((t) => !hostedTools.find((h) => h.name === t.name))
 if (canonicalNotInHosted.length > 0) {
-  info(`${canonicalNotInHosted.length} canonical entries not yet in hosted MCP (hosted is a subset — this is expected)`)
+  if (strictFullParity) {
+    for (const t of canonicalNotInHosted) {
+      fail(`Canonical tool "${t.name}" missing from hosted MCP — add to mcp/index.ts BASE_TOOLS or hosted-tool-manifest.json`)
+    }
+  } else {
+    info(`${canonicalNotInHosted.length} canonical entries not yet in hosted MCP (hosted is a subset — this is expected)`)
+  }
 }
 
 // CHECK 2: Admin catalog must not have entries absent from canonical
@@ -151,13 +171,15 @@ for (const admin of adminEntries) {
 }
 if (adminOk > 0) info(`${adminOk} admin entries match canonical catalog`)
 
-// Informational: canonical entries not in admin (admin is intentionally a subset)
+// Informational: canonical entries not in admin (subset allowed unless re-exporting canonical)
 const canonicalNotInAdmin = canonicalEntries.filter((t) => !adminMap.has(t.name))
-if (canonicalNotInAdmin.length > 0) {
+if (canonicalNotInAdmin.length > 0 && !adminReexportsCanonical) {
   warn(`${canonicalNotInAdmin.length} canonical entries not mirrored in admin mcpCatalog.ts (admin is intentionally a subset — update admin when the MCP page should show new tools):`)
   for (const t of canonicalNotInAdmin) {
     process.stderr.write(`   - ${t.name}\n`)
   }
+} else if (adminReexportsCanonical) {
+  info('Admin catalog re-exports @mushi-mushi/mcp/catalog (full parity)')
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

@@ -50,7 +50,7 @@ import {
   type RateLimiter,
   type RateLimitVerdict,
 } from '../../_shared/inventory-guards.ts'
-import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import { ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
 
 interface IngestBody {
   yaml?: string
@@ -137,7 +137,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty })
     }
