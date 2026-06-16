@@ -3,28 +3,76 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mushi Web Playground</title>
+    <title>Mushi SDK — Feature Test Harness</title>
     <style>
       :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b0b0d; color: #f5f5f7; }
-      main { max-width: 32rem; padding: 2rem; text-align: center; }
-      h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
-      p { color: #a1a1aa; line-height: 1.6; }
-      kbd { background: #1f1f23; border: 1px solid #2e2e33; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.85em; }
-      button { margin-top: 1.25rem; padding: 0.6rem 1.1rem; border: 0; border-radius: 8px; background: #6366f1; color: white; font-weight: 600; cursor: pointer; }
-      button:hover { background: #4f46e5; }
+      body { margin: 0; min-height: 100vh; background: var(--bg, #f9f9fb); color: var(--fg, #111); padding: 1.5rem; box-sizing: border-box; }
+      @media (prefers-color-scheme: dark) { body { --bg: #0b0b0d; --fg: #f5f5f7; } }
+      h1 { font-size: 1.4rem; margin: 0 0 0.5rem; }
+      h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; opacity: 0.7; }
+      .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+      button {
+        padding: 0.5rem 0.9rem; border: 1px solid rgba(128,128,128,0.3);
+        border-radius: 8px; background: transparent; color: inherit;
+        font-size: 0.85rem; cursor: pointer; font-weight: 500;
+      }
+      button.primary { background: #6366f1; color: white; border-color: #6366f1; }
+      button.active { background: #10b981; color: white; border-color: #10b981; }
+      button:hover { opacity: 0.8; }
+      .status { margin-top: 1.5rem; font-size: 0.8rem; font-family: ui-monospace, monospace; }
+      .status p { margin: 0.15rem 0; opacity: 0.6; }
+      .hint { margin-top: 1rem; font-size: 0.8rem; opacity: 0.5; line-height: 1.5; }
+      /* test content blocks to verify FAB doesn't block content */
+      .content-blocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+      .block { padding: 1rem; border: 1px solid rgba(128,128,128,0.2); border-radius: 8px; font-size: 0.8rem; min-height: 80px; }
+      /* keyboard test area */
+      .keyboard-test { margin-top: 1.5rem; }
+      .keyboard-test input { width: 100%; padding: 0.6rem; font-size: 1rem; border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; background: transparent; color: inherit; box-sizing: border-box; }
     </style>
   </head>
   <body>
-    <main>
-      <h1>Mushi Mushi 🪲</h1>
-      <p>
-        Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> to open the
-        bug-report widget — or click the button. The report goes to the
-        sandbox project on Mushi Cloud and resets nightly.
-      </p>
-      <button id="open">Report a bug</button>
-    </main>
+    <h1>Mushi SDK Feature Test Harness</h1>
+    <p style="opacity:0.6; font-size:0.85rem; margin: 0 0 1rem">Tests: draggable FAB · theme inherit · keyboard lift · community features</p>
+
+    <h2>Widget Mode</h2>
+    <div class="controls">
+      <button data-mode="default">Default</button>
+      <button data-mode="draggable">Draggable FAB</button>
+      <button data-mode="theme-inherit">Theme: inherit</button>
+      <button data-mode="theme-accent">Theme: accent</button>
+      <button data-mode="all-features">All features</button>
+    </div>
+
+    <h2>Actions</h2>
+    <div class="controls">
+      <button class="primary" id="open">Open Widget</button>
+      <button id="toggle-dark">Toggle Dark</button>
+    </div>
+
+    <h2>Content to reveal (drag FAB away if it blocks)</h2>
+    <div class="content-blocks">
+      <div class="block">Block A — bottom-right area normally blocked by FAB</div>
+      <div class="block">Block B — important CTA here</div>
+      <div class="block">Block C — form submit button</div>
+      <div class="block">Block D — navigation link</div>
+      <div class="block">Block E — chat button</div>
+      <div class="block">Block F — sign-in button</div>
+    </div>
+
+    <div class="keyboard-test">
+      <h2>Keyboard overlap test</h2>
+      <p style="font-size:0.8rem; opacity:0.6">Open widget, navigate to "details" step, then tap the textarea — keyboard must not cover it</p>
+      <input type="text" placeholder="Also test: focus here → keyboard covers panel?" />
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div class="hint">
+      <strong>Drag test:</strong> Drag the 🐛 FAB button anywhere. It should snap to nearest edge on release and remember position on reload.<br>
+      <strong>Theme test:</strong> In "theme-inherit" mode, FAB and panel should match this page's colors.<br>
+      <strong>Community test:</strong> Open widget → success step → click leaderboard / community link.<br>
+      <kbd>Ctrl+Shift+B</kbd> also opens the widget.
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

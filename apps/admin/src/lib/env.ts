@@ -41,14 +41,15 @@ export function saveAndApplyInstanceConfig(config: {
   supabaseAnonKey?: string
 }): void {
   try {
-    localStorage.setItem(STORAGE_KEY_MODE, config.mode)
-    if (config.mode === 'self-hosted' && config.supabaseUrl) {
-      localStorage.setItem(STORAGE_KEY_URL, config.supabaseUrl)
-    }
-    if (config.mode === 'self-hosted' && config.supabaseAnonKey) {
-      localStorage.setItem(STORAGE_KEY_KEY, config.supabaseAnonKey)
-    }
-    if (config.mode === 'cloud') {
+    if (config.mode === 'self-hosted') {
+      const url = stripTrailingSlash((config.supabaseUrl ?? '').trim())
+      const key = (config.supabaseAnonKey ?? '').trim()
+      if (!isValidBackendUrl(url) || !key) return
+      localStorage.setItem(STORAGE_KEY_MODE, config.mode)
+      localStorage.setItem(STORAGE_KEY_URL, url)
+      localStorage.setItem(STORAGE_KEY_KEY, key)
+    } else {
+      localStorage.setItem(STORAGE_KEY_MODE, config.mode)
       localStorage.removeItem(STORAGE_KEY_URL)
       localStorage.removeItem(STORAGE_KEY_KEY)
     }
@@ -97,15 +98,67 @@ export const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
 // Trailing slashes are normalized so `${url}/functions/v1/api` never produces `//`.
 const stripTrailingSlash = (s: string) => s.replace(/\/+$/, '')
 
+/** Supabase Cloud project refs are exactly 20 lowercase alphanumeric characters. */
+const SUPABASE_CLOUD_REF_RE = /^[a-z0-9]{20}$/
+
+/**
+ * Validate a backend URL before persisting or resolving against it.
+ * Rejects typo'd Supabase refs (e.g. 24-char garbage in localStorage) that
+ * produce `Failed to fetch` on every admin API call.
+ */
+export function isValidBackendUrl(url: string): boolean {
+  const trimmed = stripTrailingSlash(url.trim())
+  if (!trimmed) return false
+  try {
+    const parsed = new URL(trimmed)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    const host = parsed.hostname
+    if (!host) return false
+    if (host.endsWith('.supabase.co')) {
+      const ref = host.slice(0, -'.supabase.co'.length)
+      return SUPABASE_CLOUD_REF_RE.test(ref)
+    }
+    // Self-hosted / custom domain — any resolvable hostname is fine.
+    return host.includes('.') || host === 'localhost'
+  } catch {
+    return false
+  }
+}
+
+function clearStoredKeysOnly(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_MODE)
+    localStorage.removeItem(STORAGE_KEY_URL)
+    localStorage.removeItem(STORAGE_KEY_KEY)
+  } catch { /* private browsing */ }
+}
+
+/** Drop corrupt runtime overrides so RESOLVED_* fall back to cloud defaults. */
+function sanitizeStoredInstanceConfig(): ReturnType<typeof getStoredInstanceConfig> {
+  const stored = getStoredInstanceConfig()
+  if (!stored) return null
+  if (stored.mode === 'cloud') return stored
+  const url = stripTrailingSlash((stored.supabaseUrl ?? '').trim())
+  const key = (stored.supabaseAnonKey ?? '').trim()
+  if (!isValidBackendUrl(url) || !key) {
+    clearStoredKeysOnly()
+    return null
+  }
+  return { ...stored, supabaseUrl: url, supabaseAnonKey: key }
+}
+
 // Stored config (runtime override) takes precedence over build-time env vars.
-const _storedAtLoad = getStoredInstanceConfig()
+const _storedAtLoad = sanitizeStoredInstanceConfig()
 
 export const RESOLVED_SUPABASE_URL = stripTrailingSlash(
   // User explicitly chose Mushi Cloud → skip env vars (they may point to a
   // self-hosted instance) and go straight to the cloud constant.
   (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_URL) ||
   (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseUrl) ||
-  (import.meta.env.VITE_SUPABASE_URL ?? '').trim() ||
+  (() => {
+    const envUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
+    return envUrl && isValidBackendUrl(envUrl) ? envUrl : ''
+  })() ||
   CLOUD_SUPABASE_URL,
 )
 export const RESOLVED_SUPABASE_ANON_KEY =
@@ -114,8 +167,22 @@ export const RESOLVED_SUPABASE_ANON_KEY =
   (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseAnonKey) ||
   (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() ||
   CLOUD_SUPABASE_ANON_KEY
-export const RESOLVED_API_URL = stripTrailingSlash(
-  (import.meta.env.VITE_API_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/api`,
+export const RESOLVED_API_URL = stripTrailingSlash(resolveApiUrl())
+
+function resolveApiUrl(): string {
+  const explicit = (import.meta.env.VITE_API_URL ?? '').trim()
+  // Dev: route API through the Vite `/functions` proxy (any localhost port).
+  if (import.meta.env.DEV) {
+    if (!explicit || explicit.includes('.supabase.co')) {
+      return '/functions/v1/api'
+    }
+  }
+  return explicit || `${RESOLVED_SUPABASE_URL}/functions/v1/api`
+}
+
+/** Hosted Streamable HTTP MCP endpoint (Cursor remote / cloud orchestrators). */
+export const RESOLVED_MCP_HTTP_URL = stripTrailingSlash(
+  (import.meta.env.VITE_MCP_HTTP_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/mcp`,
 )
 
 // Langfuse host used to build click-through URLs from fix attempts and LLM

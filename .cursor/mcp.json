@@ -1,0 +1,4 @@
+{
+  "_comment": "Mushi MCP is configured globally in ~/.cursor/mcp.json with a dedicated mcp:write key. Do not add project-level mushi entries here — they create duplicate connections. Run 'npx mushi-mushi setup --ide cursor' or use the console deeplink to configure your personal key.",
+  "mcpServers": {}
+}

@@ -16,9 +16,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
-import { TOOL_CATALOG, TDD_TOOL_CATALOG, type McpScope } from '../catalog.js'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, type McpScope } from '../catalog.js'
 
-const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
+const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG]
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 /** Fixture only — not a real credential (gitleaks-safe naming). */

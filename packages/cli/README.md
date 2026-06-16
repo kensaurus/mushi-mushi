@@ -100,6 +100,10 @@ Reads `package.json`, checks the npm registry for each installed
 `@mushi-mushi/*` package, and runs the right install command for your package
 manager (npm / pnpm / yarn / bun) to bump them to the latest stable release.
 
+**Console equivalent:** **Connect & Update → Create Upgrade PR** opens a GitHub
+draft PR for the linked repo (backed by `sdk-upgrade-worker`). Use the CLI for
+local bumps; use the PR flow when you want review + CI on the dependency change.
+
 ```bash
 mushi upgrade               # plan + install
 mushi upgrade --dry-run     # print the install command without running it
@@ -310,4 +314,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

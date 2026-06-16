@@ -46,6 +46,7 @@ import {
   Dimensions,
   Platform,
   KeyboardAvoidingView,
+  ScrollView,
   useColorScheme,
   type ViewStyle,
   type TextStyle,
@@ -95,7 +96,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [category, setCategory] = useState<string | null>(null)
   const [description, setDescription] = useState('')
   const [phase, setPhase] = useState<'form' | 'sending' | 'sent'>('form')
-  const [sheetTab, setSheetTab] = useState<'report' | 'inbox'>('report')
+  const [sheetTab, setSheetTab] = useState<'report' | 'inbox' | 'community'>('report')
   const [inboxReports, setInboxReports] = useState<Array<{ id: string; status: string; summary?: string | null; description?: string }>>([])
   const [inboxLoading, setInboxLoading] = useState(false)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
@@ -235,8 +236,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const activeScreenshot = screenshotDataUrl && screenshotAttached ? screenshotDataUrl : null
 
   const colors = dark
-    ? { bg: '#1c1c1e', text: '#f2f2f7', sub: '#8e8e93', card: '#2c2c2e', accent: '#0a84ff', border: '#38383a', backdrop: 'rgba(0,0,0,0.6)' }
-    : { bg: '#ffffff', text: '#1c1c1e', sub: '#8e8e93', card: '#f2f2f7', accent: '#007aff', border: '#e5e5ea', backdrop: 'rgba(0,0,0,0.35)' }
+    ? { bg: '#1c1c1e', text: '#f2f2f7', sub: '#8e8e93', card: '#2c2c2e', accent: '#0a84ff', border: '#38383a', backdrop: 'rgba(0,0,0,0.6)', disabled: '#3a3a3c', disabledText: '#636366' }
+    : { bg: '#ffffff', text: '#1c1c1e', sub: '#8e8e93', card: '#f2f2f7', accent: '#007aff', border: '#e5e5ea', backdrop: 'rgba(0,0,0,0.35)', disabled: '#d1d1d6', disabledText: '#8e8e93' }
 
   const canSubmit = !!category && description.trim().length > 0 && phase === 'form'
 
@@ -244,7 +245,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {/* Backdrop */}
         <Animated.View
@@ -267,7 +269,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 
           {/* Tab row */}
           <View style={s.tabRow}>
-            {(['report', 'inbox'] as const).map((tab) => (
+            {(['report', 'inbox', 'community'] as const).map((tab) => (
               <TouchableOpacity
                 key={tab}
                 onPress={() => {
@@ -278,14 +280,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 style={[s.tabBtn, sheetTab === tab && { borderBottomColor: colors.accent }]}
               >
                 <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.accent : colors.sub }]}>
-                  {tab === 'report' ? 'Report' : 'Inbox'}
+                  {tab === 'report' ? 'Report' : tab === 'inbox' ? 'Inbox' : '🌐'}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
           {sheetTab === 'inbox' ? (
-            <View style={s.body}>
+            <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
               {inboxLoading ? (
                 <Text style={{ color: colors.sub }}>Loading…</Text>
               ) : selectedReportId ? (
@@ -332,14 +334,37 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                   </TouchableOpacity>
                 ))
               )}
-            </View>
+            </ScrollView>
+          ) : sheetTab === 'community' ? (
+            <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
+              <Text style={[s.title, { color: colors.text }]}>🌐 Mushi Community</Text>
+              <Text style={{ color: colors.sub, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
+                Sign in to track your reports across apps and see the global leaderboard. No password needed.
+              </Text>
+              <TextInput
+                style={[s.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, minHeight: 48 }]}
+                placeholder="you@example.com"
+                placeholderTextColor={colors.sub}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="emailAddress"
+              />
+              <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]}>
+                <Text style={s.submitText}>Send sign-in link →</Text>
+              </TouchableOpacity>
+              <Text style={{ color: colors.sub, fontSize: 11, textAlign: 'center', marginTop: 12 }}>
+                We'll email you a one-tap sign-in link. No password, ever.
+              </Text>
+            </ScrollView>
           ) : phase === 'sent' ? (
             <View style={s.sentWrap}>
               <Text style={[s.sentEmoji]}>✅</Text>
               <Text style={[s.sentText, { color: colors.text }]}>Report sent!</Text>
             </View>
           ) : (
-            <View style={s.body}>
+            <ScrollView style={s.body} keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 24 }}>
               <Text style={[s.title, { color: colors.text }]}>Report an issue</Text>
 
               {/* Categories */}
@@ -428,14 +453,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 activeOpacity={0.8}
                 style={[
                   s.submitBtn,
-                  { backgroundColor: canSubmit ? colors.accent : colors.border },
+                  { backgroundColor: canSubmit ? colors.accent : colors.disabled },
                 ]}
               >
-                <Text style={s.submitText}>
+                <Text style={[s.submitText, !canSubmit && { color: colors.disabledText }]}>
                   {phase === 'sending' ? 'Sending…' : 'Submit'}
                 </Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           )}
         </Animated.View>
       </KeyboardAvoidingView>

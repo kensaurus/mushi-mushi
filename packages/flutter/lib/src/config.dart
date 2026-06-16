@@ -9,10 +9,21 @@ class MushiTheme {
   const MushiTheme({
     this.accentColor = const Color(0xFF22C55E),
     this.dark = false,
+    this.inherit = false,
   });
 
   final Color accentColor;
   final bool dark;
+  /// When true, the SDK reads Brightness from the host app's Theme
+  /// and ignores the `dark` field.
+  final bool inherit;
+
+  bool resolvedDark(BuildContext context) {
+    if (inherit) {
+      return Theme.of(context).brightness == Brightness.dark;
+    }
+    return dark;
+  }
 }
 
 /// Top-level configuration. Mirrors the iOS/Android/JS SDK shape.
@@ -33,6 +44,9 @@ class MushiConfig {
     this.offlineQueueMaxBytes = 2 * 1024 * 1024,
     this.theme = const MushiTheme(),
     this.triggerInsets = const MushiTriggerInsets(),
+    this.draggable = false,
+    this.snapToEdge = true,
+    this.persistFabPosition = false,
   });
 
   final String projectId;
@@ -46,6 +60,12 @@ class MushiConfig {
   final int offlineQueueMaxBytes;
   final MushiTheme theme;
   final MushiTriggerInsets triggerInsets;
+  /// Allow the FAB to be dragged to a new position.
+  final bool draggable;
+  /// Snap the FAB to the nearest vertical edge after dragging.
+  final bool snapToEdge;
+  /// Persist FAB position across sessions via SharedPreferences.
+  final bool persistFabPosition;
 }
 
 @immutable

@@ -17,7 +17,10 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { TOOL_CATALOG, TDD_TOOL_CATALOG, type McpScope } from './catalog.js'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, type McpScope } from './catalog.js'
+import { MUSHI_SERVER_METADATA } from './branding.js'
+import { toolMatchesFeatures, type FeatureFilter } from './feature-groups.js'
+import { searchMushiDocs } from './docs-index.js'
 
 /**
  * Every admin endpoint returns `{ ok: boolean; data?: T; error?: { code, message } }`.
@@ -64,6 +67,11 @@ export interface MushiServerConfig {
    * network. Defaults to the global `fetch`.
    */
   fetch?: typeof fetch
+  /**
+   * Feature groups to expose (`'all'` = every tool including legacy aliases).
+   * Set via `MUSHI_FEATURES` env (CSV) on stdio; HTTP uses `?features=` query.
+   */
+  features?: FeatureFilter
 }
 
 /**
@@ -80,7 +88,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   // has been registered; returning before any registerTool call means the
   // client sees no `tools` capability and `tools/list` returns -32601.
   if (config.scopes !== undefined && config.scopes.length === 0) {
-    return new McpServer({ name: 'mushi-mushi', version })
+    return new McpServer({
+      name: MUSHI_SERVER_METADATA.name,
+      version,
+      title: MUSHI_SERVER_METADATA.title,
+      websiteUrl: MUSHI_SERVER_METADATA.websiteUrl,
+      icons: [...MUSHI_SERVER_METADATA.icons],
+    })
   }
 
   async function apiCall<T = unknown>(path: string, options?: RequestInit): Promise<T> {
@@ -93,7 +107,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         // and for transparent proxies that strip X-Mushi-* headers.
         'Authorization': `Bearer ${apiKey}`,
         'X-Mushi-Api-Key': apiKey,
-        ...(projectId ? { 'X-Mushi-Project': projectId } : {}),
+        ...(projectId ? { 'X-Mushi-Project-Id': projectId } : {}),
         ...(options?.headers ?? {}),
       },
     })
@@ -148,8 +162,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   }
 
   const server = new McpServer({
-    name: 'mushi-mushi',
+    name: MUSHI_SERVER_METADATA.name,
     version,
+    title: MUSHI_SERVER_METADATA.title,
+    websiteUrl: MUSHI_SERVER_METADATA.websiteUrl,
+    icons: [...MUSHI_SERVER_METADATA.icons],
   })
 
   /**
@@ -157,7 +174,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
    * `annotations` shape `registerTool` expects. Centralising this here means
    * we never forget to translate `readOnly` → `readOnlyHint` for a new tool.
    */
-  const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
+  const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG]
 
   function annotationsFor(name: string, catalog = ALL_TOOL_CATALOG): { title: string; readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean } {
     const spec = catalog.find((t) => t.name === name)
@@ -200,6 +217,14 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         category: z.string().optional().describe('Filter by category: bug, slow, visual, confusing, other'),
         severity: z.string().optional().describe('Filter by severity: critical, high, medium, low'),
         limit: z.number().optional().describe('Max reports to return (default 20, max 100)'),
+        project_id: z
+          .string()
+          .optional()
+          .describe(
+            'Project UUID — defaults to the server-configured project. ' +
+            'Useful when you have multiple projects and want to query a specific one by its ID. ' +
+            'Get IDs by calling list_projects or get_account_overview first.',
+          ),
       },
       outputSchema: {
         reports: z.array(z.unknown()),
@@ -212,7 +237,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (args.category) params.set('category', args.category)
       if (args.severity) params.set('severity', args.severity)
       params.set('limit', String(Math.min(args.limit ?? 20, 100)))
-      const data = await apiCall<{ reports: unknown[]; total: number }>(`/v1/admin/reports?${params}`)
+      const pid = args.project_id ?? projectId
+      const extraHeaders: Record<string, string> = pid && pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {}
+      const data = await apiCall<{ reports: unknown[]; total: number }>(`/v1/admin/reports?${params}`, {
+        headers: extraHeaders,
+      })
       return jsonResult(data)
     },
   )
@@ -224,8 +253,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_report_detail'),
       annotations: annotationsFor('get_report_detail'),
       inputSchema: { reportId: z.string().describe('The report UUID') },
+      outputSchema: { report: z.unknown() },
     },
-    async (args) => jsonText(await apiCall(`/v1/admin/reports/${args.reportId}`)),
+    async (args) => {
+      const data = await apiCall(`/v1/admin/reports/${args.reportId}`)
+      const res = jsonResult({ report: data })
+      return {
+        ...res,
+        resource_links: [
+          { uri: `project://reports/${args.reportId}`, title: `Report ${args.reportId.slice(0, 8)}…` },
+        ],
+      }
+    },
   )
 
   server.registerTool(
@@ -289,6 +328,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         query: z.string().describe('Component name, page path, or bug description'),
         limit: z.number().optional().describe('Max results (default 5, max 20)'),
       },
+      outputSchema: {
+        results: z.array(z.unknown()),
+      },
     },
     async (args) => {
       const data = await apiCall<{ results: unknown[] }>('/v1/admin/reports/similarity', {
@@ -300,7 +342,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ...(projectId ? { projectId } : {}),
         }),
       })
-      return jsonText(data)
+      return jsonResult(data)
     },
   )
 
@@ -311,10 +353,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('get_fix_context'),
       annotations: annotationsFor('get_fix_context'),
       inputSchema: { reportId: z.string().describe('The report UUID to fix') },
+      outputSchema: {
+        report: z.unknown(),
+        reproductionSteps: z.unknown(),
+        component: z.unknown(),
+        rootCause: z.unknown(),
+        bugOntologyTags: z.unknown(),
+      },
     },
     async (args) => {
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`)
-      return jsonText({
+      return jsonResult({
         report,
         reproductionSteps: report.reproduction_steps ?? [],
         component: report.component,
@@ -592,12 +641,151 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   )
 
   server.registerTool(
+    'diagnose_setup',
+    {
+      title: titleOf('diagnose_setup'),
+      description: descOf('diagnose_setup'),
+      annotations: annotationsFor('diagnose_setup'),
+      inputSchema: {
+        mode: z
+          .enum(['full', 'ingest', 'dispatch'])
+          .optional()
+          .describe('full (default) = ingest + dispatch; ingest = SDK pipeline only; dispatch = fix preflight only.'),
+        project_id: z.string().optional().describe('Project UUID for dispatch checks (defaults to configured project).'),
+        projectId: z.string().optional().describe('Alias for project_id.'),
+      },
+      outputSchema: {
+        mode: z.string(),
+        ready: z.boolean(),
+        summary: z.string(),
+        nextAction: z.string().optional(),
+        ingest: z.unknown().optional(),
+        dispatch: z.unknown().optional(),
+      },
+    },
+    async (args) => {
+      const mode = args.mode ?? 'full'
+      const resolvedId = args.project_id ?? args.projectId ?? projectId
+
+      if (mode === 'ingest') {
+        const data = await apiCall<{
+          ready: boolean
+          required_complete: number
+          required_total: number
+          project_id: string
+          project_name: string
+          steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
+          diagnostic?: Record<string, unknown>
+        }>('/v1/sync/ingest-setup')
+        const failed = data.steps.filter((s) => s.required && !s.complete)
+        const summary = data.ready
+          ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
+          : `Ingest incomplete — still need: ${failed.map((s) => s.label).join(', ')}.`
+        return jsonResult({
+          mode: 'ingest',
+          ready: data.ready,
+          summary,
+          nextAction: failed[0]?.hint,
+          ingest: {
+            projectId: data.project_id,
+            projectName: data.project_name,
+            requiredComplete: data.required_complete,
+            requiredTotal: data.required_total,
+            steps: data.steps,
+            diagnostic: data.diagnostic ?? null,
+          },
+        })
+      }
+
+      if (mode === 'dispatch') {
+        if (!resolvedId) {
+          throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required for dispatch mode')
+        }
+        const data = await apiCall<{
+          ready: boolean
+          checks: Array<{ key: string; ready: boolean; label: string; hint: string; fixHref: string }>
+          repoUrl: string | null
+        }>(`/v1/admin/projects/${resolvedId}/preflight`)
+        const failed = data.checks.filter((c) => !c.ready)
+        const summary = data.ready
+          ? `Project ${resolvedId} is ready to dispatch auto-fixes.`
+          : `Dispatch blocked — ${failed.map((c) => c.label).join(', ')}.`
+        return jsonResult({
+          mode: 'dispatch',
+          ready: data.ready,
+          summary,
+          nextAction: failed[0]?.hint,
+          dispatch: { repoUrl: data.repoUrl ?? null, checks: data.checks },
+        })
+      }
+
+      const ingest = await apiCall<{
+        ready: boolean
+        steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>
+        project_name?: string
+      }>('/v1/sync/ingest-setup')
+      let dispatchReady = true
+      let dispatchBlock: string | undefined
+      let dispatchChecks: unknown = null
+      if (resolvedId) {
+        try {
+          const preflight = await apiCall<{
+            ready: boolean
+            checks: Array<{ label: string; ready: boolean; hint: string }>
+          }>(`/v1/admin/projects/${resolvedId}/preflight`)
+          dispatchReady = preflight.ready
+          dispatchChecks = preflight.checks
+          if (!preflight.ready) {
+            const failed = preflight.checks.filter((c) => !c.ready)
+            dispatchBlock = failed[0]?.hint
+          }
+        } catch {
+          dispatchReady = false
+          dispatchBlock = 'Could not run dispatch preflight — verify project_id and API key scope.'
+        }
+      }
+      const ingestFailed = ingest.steps.filter((s) => s.required && !s.complete)
+      const ingestBlock = ingestFailed[0]?.hint
+      const ready = ingest.ready && dispatchReady
+      const nextAction = !ingest.ready
+        ? (ingestBlock ?? 'Complete SDK ingest setup.')
+        : !dispatchReady
+        ? (dispatchBlock ?? 'Complete dispatch preflight in Settings → Integrations.')
+        : 'All setup checks pass — submit a test report to confirm end-to-end.'
+      const summary = ready
+        ? 'Mushi ingest and dispatch setup look healthy.'
+        : !ingest.ready
+        ? `Ingest incomplete — ${ingestFailed.map((s) => s.label).join(', ')}.`
+        : 'Ingest OK; dispatch preflight still has blockers.'
+      return jsonResult({
+        mode: 'full',
+        ready,
+        summary,
+        nextAction,
+        ingest: { ready: ingest.ready, steps: ingest.steps },
+        dispatch: resolvedId ? { ready: dispatchReady, checks: dispatchChecks } : null,
+      })
+    },
+  )
+
+  server.registerTool(
     'diagnose_connection',
     {
       title: titleOf('diagnose_connection'),
       description: descOf('diagnose_connection'),
       annotations: annotationsFor('diagnose_connection'),
       inputSchema: {},
+      outputSchema: {
+        ready: z.boolean(),
+        healthOk: z.boolean(),
+        ingestReady: z.boolean(),
+        dispatchReady: z.boolean(),
+        endpoint: z.string().nullable(),
+        projectId: z.string().nullable(),
+        issues: z.array(z.unknown()),
+        nextAction: z.string(),
+        summary: z.string(),
+      },
     },
     async () => {
       const issues: Array<{ check: string; detail: string; fix: string }> = []
@@ -697,7 +885,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           ? 'Connection healthy — SDK ingest is working. Submit a report to confirm end-to-end.'
           : 'Run `mushi doctor` in your app repo for a full local checklist.')
 
-      return jsonText({
+      return jsonResult({
         ready,
         healthOk,
         ingestReady,
@@ -713,6 +901,36 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'search_mushi_docs',
+    {
+      title: titleOf('search_mushi_docs'),
+      description: descOf('search_mushi_docs'),
+      annotations: annotationsFor('search_mushi_docs'),
+      inputSchema: {
+        query: z.string().describe('Keywords to search official Mushi docs (guides, MCP, inventory, QA).'),
+        limit: z.number().int().min(1).max(20).optional().describe('Max results (default 8).'),
+      },
+      outputSchema: {
+        query: z.string(),
+        results: z.array(
+          z.object({
+            title: z.string(),
+            path: z.string(),
+            excerpt: z.string(),
+            score: z.number(),
+          }),
+        ),
+      },
+    },
+    async (args) => {
+      const query = args.query ?? ''
+      const hits = searchMushiDocs(query, args.limit ?? 8)
+      const results = hits.map(({ title, path, excerpt, score }) => ({ title, path, excerpt, score }))
+      return jsonResult({ query, results })
+    },
+  )
+
   // --- Sentry-like triage and project context tools -----------------------
 
   server.registerTool(
@@ -722,10 +940,53 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('list_projects'),
       annotations: annotationsFor('list_projects'),
       inputSchema: {},
+      outputSchema: {
+        projects: z.array(z.unknown()),
+        total: z.number().optional(),
+        _multi_project_hint: z.string().optional(),
+      },
     },
     async () => {
-      const data = await apiCall<unknown>('/v1/admin/mcp/projects')
-      return jsonText(data)
+      const data = await apiCall<{ projects: unknown[]; total?: number }>('/v1/admin/mcp/projects')
+      return jsonResult({
+        ...data,
+        _multi_project_hint:
+          'Each Mushi project uses a separate API key. To connect another project, ' +
+          'open the Mushi console → MCP → Setup, pick the project from the switcher, ' +
+          'and click "⚡ Add to Cursor". Each deeplink adds a uniquely-named server entry ' +
+          '(mushi-{project-name}-{id-prefix}) so all your projects appear in your IDE simultaneously.',
+      })
+    },
+  )
+
+  server.registerTool(
+    'get_account_overview',
+    {
+      title: titleOf('get_account_overview'),
+      description: descOf('get_account_overview'),
+      annotations: annotationsFor('get_account_overview'),
+      inputSchema: {},
+      outputSchema: {
+        projects: z.array(z.unknown()),
+        active_project_id: z.string().nullable(),
+        multi_project_hint: z.string(),
+      },
+    },
+    async () => {
+      const data = await apiCall<{ projects: unknown[]; total?: number }>('/v1/admin/mcp/projects')
+      const projects = Array.isArray(data?.projects) ? data.projects : []
+      return jsonResult({
+        projects,
+        active_project_id: projectId ?? null,
+        multi_project_hint:
+          projects.length <= 1
+            ? 'You are currently connected to one project. To connect additional Mushi projects, ' +
+              'open the Mushi console → switch to each project → MCP → Setup → "⚡ Add to Cursor". ' +
+              'Each click adds a uniquely-named entry (mushi-{name}-{id}) to your global ~/.cursor/mcp.json ' +
+              'so you can triage reports across all your apps from a single Cursor session.'
+            : `You have access to ${projects.length} projects. To connect any unconnected project, ` +
+              'open the Mushi console → switch to that project → MCP → Setup → "⚡ Add to Cursor".',
+      })
     },
   )
 
@@ -847,6 +1108,20 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
         include_logs: z.boolean().optional().describe('Include recent pipeline logs in triage packet (default: true).'),
       },
+      outputSchema: {
+        report_id: z.string(),
+        severity: z.unknown(),
+        category: z.unknown(),
+        status: z.unknown(),
+        report: z.unknown(),
+        reporter_thread: z.unknown().nullable(),
+        similar_bugs: z.unknown().nullable(),
+        fix_context: z.unknown().nullable(),
+        blast_radius: z.unknown().nullable(),
+        recent_logs: z.unknown().nullable(),
+        recommended_actions: z.array(z.unknown()),
+        triage_summary: z.string(),
+      },
     },
     async (args) => {
       const pid = args.project_id ?? projectId
@@ -897,7 +1172,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         })
       }
 
-      return jsonText({
+      const result = {
         report_id: args.report_id,
         severity,
         category,
@@ -910,7 +1185,17 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         recent_logs: logsRes.status === 'fulfilled' ? logsRes.value : null,
         recommended_actions: actions,
         triage_summary: `[${severity}] ${category} — status: ${status}. ${actions.length > 0 ? `Recommended: ${actions[0]?.action}.` : 'No action required.'}`,
-      })
+      }
+      const res = jsonResult(result)
+      // resource_links let MCP clients (Cursor, Claude Desktop) show a
+      // "View report" chip inline — navigates to the canonical resource URI.
+      return {
+        ...res,
+        resource_links: [
+          { uri: `project://reports/${args.report_id}`, title: `Report ${args.report_id.slice(0, 8)}…` },
+          ...(pid ? [{ uri: `project://dashboard`, title: 'Project dashboard' }] : []),
+        ],
+      }
     },
   )
 
@@ -1199,7 +1484,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
-  // --- Resources -------------------------------------------------------
+  // --- Resources (stdio only — hosted HTTP exposes these as separate tools) ---
 
   server.resource(
     'project_stats',
@@ -1318,7 +1603,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       contents: [{
         uri: 'privacy://status',
         mimeType: 'application/json',
-        text: JSON.stringify(await apiCall('/v1/admin/privacy/status'), null, 2),
+        text: JSON.stringify(await apiCall('/v1/admin/privacy-status'), null, 2),
       }],
     }),
   )
@@ -1335,7 +1620,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       contents: [{
         uri: 'evolution://history',
         mimeType: 'application/json',
-        text: JSON.stringify(await apiCall('/v1/admin/evolution/history'), null, 2),
+        text: projectId
+          ? JSON.stringify(
+              await apiCall(`/v1/admin/projects/${encodeURIComponent(projectId)}/evolution-history`),
+              null,
+              2,
+            )
+          : JSON.stringify({ ok: false, error: 'project_id required' }),
       }],
     }),
   )
@@ -1967,6 +2258,87 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async (args) => jsonText(await apiCall(`/v1/admin/reports/${args.reportId}/timeline`)),
   )
 
+  // ── Codebase Understand tools ─────────────────────────────────────────────
+
+  server.registerTool(
+    'ask_codebase',
+    {
+      title: titleOf('ask_codebase', CODEBASE_TOOL_CATALOG),
+      description: descOf('ask_codebase', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('ask_codebase', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        question: z.string().describe('Plain-English question about the repo'),
+        thread_id: z.string().optional().describe('Optional thread UUID to continue a conversation'),
+        file_path: z.string().optional().describe('Optional file path focus'),
+        symbol_name: z.string().optional().describe('Optional symbol name focus'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const body: Record<string, unknown> = {
+        messages: [{ role: 'user', content: args.question }],
+      }
+      if (args.thread_id) body.threadId = args.thread_id
+      if (args.file_path) {
+        body.fileFocus = {
+          file_path: args.file_path,
+          symbol_name: args.symbol_name ?? null,
+        }
+      }
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/chat`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_file_summary',
+    {
+      title: titleOf('get_file_summary', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_file_summary', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_file_summary', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        file_path: z.string().describe('Indexed file path'),
+        symbol_name: z.string().optional().describe('Optional symbol name within the file'),
+        force: z.boolean().optional().describe('Bypass cache and regenerate'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const qs = new URLSearchParams({ file_path: args.file_path })
+      if (args.symbol_name) qs.set('symbol_name', args.symbol_name)
+      if (args.force) qs.set('force', '1')
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/summary?${qs}`)
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
+    'get_codebase_tour',
+    {
+      title: titleOf('get_codebase_tour', CODEBASE_TOOL_CATALOG),
+      description: descOf('get_codebase_tour', CODEBASE_TOOL_CATALOG),
+      annotations: annotationsFor('get_codebase_tour', CODEBASE_TOOL_CATALOG),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project UUID (defaults to configured project)'),
+        force: z.boolean().optional().describe('Bypass cache and regenerate'),
+      },
+    },
+    async (args) => {
+      const pid = args.project_id ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'project_id is required')
+      const qs = args.force ? '?force=1' : ''
+      const data = await apiCall<unknown>(`/v1/admin/projects/${pid}/codebase/tour${qs}`)
+      return jsonText(data)
+    },
+  )
+
   // Apply scope filtering if granted scopes were provided.
   // All tools are registered above for readability; this block removes the
   // ones the caller's API key does not have access to. When `scopes` is
@@ -1974,16 +2346,24 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   // empty array, every tool is removed — the SDK then omits the `tools`
   // capability from the MCP handshake entirely.
   const grantedScopes = config.scopes
-  if (grantedScopes !== undefined) {
+  const featureFilter = config.features ?? 'all'
+  if (grantedScopes !== undefined || featureFilter !== 'all') {
     // Access the internal registry via a known-private field. This is
     // intentional: the SDK exposes no public "remove by name" method and
     // we need post-registration filtering to keep the registration code
     // readable. Cast once, filter, done.
     type ToolRegistry = Record<string, { remove(): void }>
     const toolRegistry = (server as unknown as { _registeredTools: ToolRegistry })._registeredTools
-    const allSpecs = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
+    const allSpecs = [
+      ...TOOL_CATALOG,
+      ...TDD_TOOL_CATALOG,
+      ...CODEBASE_TOOL_CATALOG,
+    ]
     for (const spec of allSpecs) {
-      if (!(grantedScopes as readonly string[]).includes(spec.scope)) {
+      if (grantedScopes !== undefined && !(grantedScopes as readonly string[]).includes(spec.scope)) {
+        toolRegistry[spec.name]?.remove()
+      }
+      if (featureFilter !== 'all' && !toolMatchesFeatures(spec.name, featureFilter)) {
         toolRegistry[spec.name]?.remove()
       }
     }

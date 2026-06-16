@@ -261,3 +261,17 @@ verify_jwt = false
 # last_health_check_at`. Auth is enforced inside the handler.
 [functions.integration-health-probe]
 verify_jwt = false
+
+# sdk-versions-cron runs daily at 02:30 UTC (pg_cron) to reconcile the
+# sdk_versions catalogue against the npm registry. Auth inside via
+# requireServiceRoleAuth; the pg_cron job sends the service-role bearer.
+[functions.sdk-versions-cron]
+verify_jwt = false
+
+# sdk-upgrade-worker is invoked fire-and-forget by the api function when a
+# user triggers a one-click SDK upgrade. It resolves the GitHub token, reads
+# the repo's package.json(s), bumps @mushi-mushi/* versions, and opens a
+# draft PR. Auth inside via requireServiceRoleAuth; only the api function
+# invokes it.
+[functions.sdk-upgrade-worker]
+verify_jwt = false

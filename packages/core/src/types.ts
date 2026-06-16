@@ -47,7 +47,16 @@ export interface MushiWidgetConfig {
    * banners. When set, these values win over `position` + numeric `inset`.
    */
   anchor?: MushiWidgetAnchor;
-  theme?: 'auto' | 'light' | 'dark';
+  theme?: 'auto' | 'light' | 'dark' | 'inherit';
+  /**
+   * Override the widget's primary accent colour (default: vermillion #E03C2C).
+   * Must be a CSS colour value that has sufficient contrast against both light
+   * and dark widget backgrounds. The widget derives a wash + accessible ink
+   * colour automatically, so only the base colour is required.
+   */
+  accent?: string;
+  /** Explicit text colour on the accent surface. Auto-computed when omitted. */
+  accentText?: string;
   triggerText?: string;
   expandedTitle?: string;
   mode?: 'simple' | 'conversational';
@@ -81,7 +90,16 @@ export interface MushiWidgetConfig {
   environments?: Partial<Record<'production' | 'staging' | 'development', 'always' | 'never' | 'manual'>>;
   /** Opt-in smart trigger behavior; planned to become the default in a later minor. */
   smartHide?: boolean | MushiWidgetSmartHideConfig;
-  draggable?: boolean;
+  /**
+   * Allow the FAB to be dragged and repositioned by the user.
+   * - `true`  — drag enabled, persisted to localStorage, snaps to nearest edge on release.
+   * - `false` — fixed position (default).
+   * - Object — fine-grained control:
+   *   - `persist`     save position per projectId (default true when draggable).
+   *   - `snapToEdge`  snap to the nearest left/right edge on release (default true).
+   *   - `axis`        constrain movement to one axis (`'x'`, `'y'`, or `'both'` default).
+   */
+  draggable?: boolean | { persist?: boolean; snapToEdge?: boolean; axis?: 'both' | 'x' | 'y' };
   /** Show the tiny "Powered by Mushi vX" footer inside the widget panel. */
   brandFooter?: boolean;
   /** How the widget should surface SDK freshness warnings. Defaults to auto. */
@@ -1402,6 +1420,27 @@ export interface MushiApiClient {
     }>;
     meta: { project_name: string };
   }>>;
+
+  // ─── Cross-app community (in-widget Mushi identity) ──────────
+
+  /** Link the anonymous reporter_token_hash to the caller's mushi_testers row. */
+  sendMagicLink(email: string): Promise<MushiApiResponse<{ ok: boolean }>>;
+  linkReporterToken(reporterTokenHash: string, jwt: string): Promise<MushiApiResponse<{ ok: boolean; linked: number }>>;
+
+  /** All reports filed by the signed-in tester, across all projects. */
+  getCrossAppReports(
+    jwt: string,
+    opts?: { limit?: number; offset?: number },
+  ): Promise<MushiApiResponse<{ reports: MushiCrossAppReport[] }>>;
+
+  /** The signed-in tester's global rank + points. */
+  getMyReputation(jwt: string): Promise<MushiApiResponse<{ reputation: MushiTesterReputation | null }>>;
+
+  /** Top-N global tester leaderboard (no auth required). */
+  getPublicLeaderboard(limit?: number): Promise<MushiApiResponse<{ leaderboard: MushiLeaderboardEntry[] }>>;
+
+  /** Whether the caller has a mushi_testers row. */
+  getTesterStatus(jwt: string): Promise<MushiApiResponse<{ is_tester: boolean; tester: { id: string; public_handle: string | null; display_name: string | null } | null }>>;
 }
 
 /**
@@ -1478,6 +1517,43 @@ export interface MushiHallOfFameEntry {
   email_hash: string | null;
   tier_slug: string | null;
   tier_name: string | null;
+  points_30d: number;
+  total_points: number;
+}
+
+// ── Cross-app community types ─────────────────────────────────────────────────
+
+/** A report filed by the current tester, across any project. */
+export interface MushiCrossAppReport {
+  id: string;
+  short_id: string | null;
+  title: string | null;
+  category: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  project_id: string | null;
+  app_name: string | null;
+  app_slug: string | null;
+}
+
+/** A single entry in the global tester leaderboard. */
+export interface MushiLeaderboardEntry {
+  tester_id: string;
+  public_handle: string | null;
+  display_name: string | null;
+  rank: number;
+  points_30d: number;
+  total_points: number;
+  badge_slug?: string | null;
+}
+
+/** The caller's global reputation snapshot. */
+export interface MushiTesterReputation {
+  tester_id: string;
+  public_handle: string | null;
+  display_name: string | null;
+  rank: number | null;
   points_30d: number;
   total_points: number;
 }

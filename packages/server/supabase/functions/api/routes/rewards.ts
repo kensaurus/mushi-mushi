@@ -29,7 +29,7 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
+import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputation.ts'
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
@@ -127,6 +127,20 @@ async function getOrgIdForProject(db: ReturnType<typeof getServiceClient>, proje
 // Takes the X-Mushi-Org-Id header (required for admin reward routes).
 function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefined } }): string | null {
   return c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null
+}
+
+/** Admin JWT supplies X-Mushi-Org-Id; MCP API keys resolve org via bound project_id. */
+async function resolveRewardsOrgId(c: {
+  req: { header: (k: string) => string | undefined }
+  get: (k: string) => unknown
+}): Promise<string | null> {
+  const fromHeader = getOrgIdFromContext(c)
+  if (fromHeader) return fromHeader
+  if (c.get('authMethod') === 'apiKey') {
+    const projectId = c.get('projectId') as string | undefined
+    if (projectId) return getOrgIdForProject(getServiceClient(), projectId)
+  }
+  return null
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1120,8 +1134,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ===========================================================
   // ADMIN: GET /v1/admin/rewards/leaderboard
   // ===========================================================
-  app.get('/v1/admin/rewards/leaderboard', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
+  app.get('/v1/admin/rewards/leaderboard', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const orgId = await resolveRewardsOrgId(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
     const range = c.req.query('range') === 'all' ? 'all' : '30d'
@@ -1564,8 +1578,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // P3 MCP: POST /v1/admin/rewards/bonus-points
   // Award ad-hoc bonus points to a contributor (MCP write surface).
   // ===========================================================
-  app.post('/v1/admin/rewards/bonus-points', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
+  app.post('/v1/admin/rewards/bonus-points', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const orgId = await resolveRewardsOrgId(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
     let raw: unknown
@@ -1628,8 +1642,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // P3 MCP: POST /v1/admin/rewards/set-tier
   // Manually override a contributor's tier (MCP write surface).
   // ===========================================================
-  app.post('/v1/admin/rewards/set-tier', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
+  app.post('/v1/admin/rewards/set-tier', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const orgId = await resolveRewardsOrgId(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
     let raw: unknown

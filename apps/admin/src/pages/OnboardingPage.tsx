@@ -50,6 +50,7 @@ import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
+import { clearStoredInstanceConfig } from '../lib/env'
 
 interface ApiKey {
   key: string
@@ -358,7 +359,31 @@ export function OnboardingPage() {
   }, [ux.hideOverviewTab, copy?.tabLabels, stats])
 
   if (setup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
-  if (setup.error) return <ErrorAlert message={setup.error} onRetry={reloadAll} />
+  if (setup.error) {
+    const isNetwork =
+      setup.error.includes('Failed to fetch') ||
+      setup.error.includes('NETWORK_ERROR') ||
+      setup.error.includes('NetworkError')
+    return (
+      <ErrorAlert
+        title={isNetwork ? 'Cannot reach the Mushi backend' : undefined}
+        message={setup.error}
+        onRetry={reloadAll}
+        actions={
+          isNetwork
+            ? [{ label: 'Reset to Mushi Cloud', onClick: () => clearStoredInstanceConfig() }]
+            : undefined
+        }
+      >
+        {isNetwork && (
+          <p className="text-xs text-danger/80 mt-2">
+            A saved self-hosted URL may be wrong. Resetting clears local overrides and reloads
+            against Mushi Cloud.
+          </p>
+        )}
+      </ErrorAlert>
+    )
+  }
   if (statsError) return <ErrorAlert message={`Failed to load setup stats: ${statsError}`} onRetry={reloadAll} />
 
   return (

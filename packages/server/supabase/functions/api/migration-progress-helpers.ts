@@ -40,11 +40,9 @@ const KNOWN_SLUG_SET = new Set<string>(KNOWN_GUIDE_SLUGS);
 export const PROGRESS_SOURCES = ['docs', 'admin', 'cli'] as const;
 export type ProgressSource = (typeof PROGRESS_SOURCES)[number];
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { isUuid } from './ids.ts';
 
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_RE.test(value);
-}
+export { isUuid };
 
 export function isProgressSource(value: unknown): value is ProgressSource {
   return typeof value === 'string' && (PROGRESS_SOURCES as readonly string[]).includes(value);

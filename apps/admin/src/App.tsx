@@ -59,6 +59,7 @@ const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => (
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
+const ConnectPage = lazy(() => import('./pages/ConnectPage').then(m => ({ default: m.ConnectPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const SetupCopilotPage = lazy(() => import('./pages/SetupCopilotPage').then(m => ({ default: m.SetupCopilotPage })))
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
@@ -405,6 +406,7 @@ export function App() {
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />
+                  <Route path="/connect" element={<ConnectPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/setup-copilot" element={<SetupCopilotPage />} />
                   <Route path="/feedback" element={<FeedbackPage />} />

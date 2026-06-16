@@ -76,6 +76,14 @@ const LAUNCHER_VERSION = readPkgVersion('../../packages/launcher/package.json')
 const BUILD_SHA = readGitSha()
 const BUILD_DATE = new Date().toISOString().slice(0, 10)
 
+// Local dev: proxy Supabase Edge Functions through Vite so any dev port (6464,
+// 5180, …) avoids browser CORS preflight failures against the cloud API.
+const DEV_SUPABASE_TARGET = (
+  process.env.VITE_SUPABASE_URL ??
+  process.env.VITE_CLOUD_SUPABASE_URL ??
+  'https://dxptnwrhwsqckaftyymj.supabase.co'
+).replace(/\/+$/, '')
+
 // Sentry sourcemap upload runs only when all three env vars are set. CI sets
 // them via GitHub Secrets; local dev leaves them unset so builds stay offline.
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN
@@ -142,6 +150,9 @@ export default defineConfig({
       // built dist rather than failing static import analysis. The package is
       // always built before starting dev (pnpm --filter @mushi-mushi/web build).
       '@mushi-mushi/web': path.resolve(__dirname, '../../packages/web/dist/index.js'),
+      // @mushi-mushi/web lazy-loads rrweb at runtime; stub in admin dev so HMR
+      // does not fail when the optional dep is not installed in this app.
+      rrweb: path.resolve(__dirname, './src/stubs/rrweb.ts'),
     },
   },
   optimizeDeps: {
@@ -205,6 +216,12 @@ export default defineConfig({
       allow: [searchForWorkspaceRoot(process.cwd())],
     },
     proxy: {
+      // Same-origin proxy for Edge Functions — see resolveApiUrl() in env.ts.
+      '/functions': {
+        target: DEV_SUPABASE_TARGET,
+        changeOrigin: true,
+        secure: true,
+      },
       // Forward the testers public marketplace to its own Next.js dev server.
       // Run `pnpm --filter @mushi-mushi/testers dev` on port 3001 separately.
       '/mushi-mushi/testers': {

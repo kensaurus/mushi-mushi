@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -35,6 +35,10 @@ import { PageHero } from '../components/PageHero'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
 import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
+import { ExploreChatPanel } from '../components/explore/ExploreChatPanel'
+import { ExploreTourPanel } from '../components/explore/ExploreTourPanel'
+import { ExploreDomainsPanel } from '../components/explore/ExploreDomainsPanel'
+import { ExploreImpactControl } from '../components/explore/ExploreImpactControl'
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
@@ -52,6 +56,7 @@ import {
   type ExploreTabId,
 } from '../components/explore/ExploreStatsTypes'
 import type { ExploreEdge, ExploreLayer, ExploreNode, ExplorePayload, ExploreSearchHit } from '../components/explore/exploreTypes'
+import type { AskSeed, CodebaseCitation, TourStop } from '../components/explore/exploreUnderstandTypes'
 import {
   backendLayerDetail,
   backendLayerTooltip,
@@ -72,6 +77,9 @@ const EXPLORE_TABS: Array<{ id: ExploreTabId; label: string; description: string
     label: 'Overview',
     description: 'Posture banner, layer breakdown, and how indexing → graph → search fit together.',
   },
+  { id: 'ask', label: 'Ask', description: 'Chat with your repo — grounded answers with file:line citations.' },
+  { id: 'tour', label: 'Tour', description: 'Guided onboarding walkthrough ordered by architectural dependencies.' },
+  { id: 'domains', label: 'Domains', description: 'Business domains, user flows, and the files that implement each step.' },
   { id: 'graph', label: 'Graph', description: 'ReactFlow canvas — nodes coloured by architectural layer.' },
   { id: 'layers', label: 'Layers', description: 'Horizontal Sankey lane (UI → Library → Backend → …).' },
   { id: 'search', label: 'Search', description: 'Semantic search via embeddings — plain English queries.' },
@@ -79,7 +87,15 @@ const EXPLORE_TABS: Array<{ id: ExploreTabId; label: string; description: string
 ]
 
 function resolveExploreTab(value: string | null): ExploreTabId {
-  if (value === 'overview' || value === 'layers' || value === 'search' || value === 'index') {
+  if (
+    value === 'overview' ||
+    value === 'layers' ||
+    value === 'search' ||
+    value === 'index' ||
+    value === 'ask' ||
+    value === 'tour' ||
+    value === 'domains'
+  ) {
     return value
   }
   return 'graph'
@@ -157,6 +173,7 @@ function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
 export function ExplorePage() {
   const copy = usePageCopy('/explore')
   const ux = useExploreUx()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const urlProjectId = searchParams.get('project')
   const activeProjectId = useActiveProjectId()
@@ -184,6 +201,9 @@ export function ExplorePage() {
   const [activeLayerFilter, setActiveLayerFilter] = useState<ExploreLayer | null>(null)
   const [filenameFilter, setFilenameFilter] = useState('')
   const [searchSeedQuery, setSearchSeedQuery] = useState('')
+  const [askSeed, setAskSeed] = useState<AskSeed | null>(null)
+  const [tourStopOrder, setTourStopOrder] = useState<number | null>(null)
+  const [impactActive, setImpactActive] = useState(false)
   const densityRef = useRef(density)
   densityRef.current = density
 
@@ -369,6 +389,66 @@ export function ExplorePage() {
     [setActiveTab],
   )
 
+  const handleAskAboutFile = useCallback(
+    (filePath: string, symbolName: string | null) => {
+      const focus = symbolName ? `symbol ${symbolName} in ` : ''
+      setAskSeed({
+        question: `What does ${focus}${filePath} do and what depends on it?`,
+        fileFocus: { file_path: filePath, symbol_name: symbolName },
+      })
+      setActiveTab('ask')
+    },
+    [setActiveTab],
+  )
+
+  const handleCitationClick = useCallback(
+    (citation: CodebaseCitation) => {
+      const match =
+        allNodes.find(
+          (n) =>
+            n.metadata.file_path === citation.file_path &&
+            (citation.symbol_name == null || n.metadata.symbol_name === citation.symbol_name),
+        ) ??
+        allNodes.find((n) => n.metadata.file_path === citation.file_path) ??
+        null
+      setSelectedNode(match)
+      setHighlightIds(match ? new Set([match.id]) : new Set())
+      setActiveTab('graph')
+    },
+    [allNodes, setActiveTab],
+  )
+
+  const handleTourStop = useCallback(
+    (stop: TourStop) => {
+      setTourStopOrder(stop.order)
+      setHighlightIds(new Set(stop.node_ids))
+      setSelectedNode(null)
+      setActiveTab('graph')
+    },
+    [setActiveTab],
+  )
+
+  const handleDomainFileClick = useCallback(
+    (filePath: string) => {
+      const match = allNodes.find((n) => n.metadata.file_path === filePath) ?? null
+      setSelectedNode(match)
+      setHighlightIds(match ? new Set([match.id]) : new Set())
+      setActiveTab('graph')
+    },
+    [allNodes, setActiveTab],
+  )
+
+  const handleImpact = useCallback((nodeIds: Set<string>) => {
+    setHighlightIds(nodeIds)
+    setImpactActive(nodeIds.size > 0)
+    setSelectedNode(null)
+  }, [])
+
+  const clearImpact = useCallback(() => {
+    setHighlightIds(new Set())
+    setImpactActive(false)
+  }, [])
+
   const toggleLayerFilter = useCallback((layer: ExploreLayer) => {
     setActiveLayerFilter((prev) => (prev === layer ? null : layer))
     setSelectedNode(null)
@@ -409,7 +489,17 @@ export function ExplorePage() {
     summary: `${activeTabMeta.label} · ${stats.indexedFiles} files · ${stats.withEmbeddings} embedded`,
     filters: { tab: activeTab, density },
     criticalCount: stats.topPriority === 'error' ? 1 : 0,
-    actions: [{ id: 'explore-refresh', label: 'Refresh', hint: 'Re-fetch stats + graph', run: reloadAll }],
+    questions: [
+      'How does auth work in this repo?',
+      'Which files would break if I changed the API layer?',
+      'Walk me through the main user flows.',
+    ],
+    actions: [
+      { id: 'explore-refresh', label: 'Refresh atlas', hint: 'Re-fetch stats + graph', run: reloadAll },
+      { id: 'explore-ask', label: 'Ask about codebase', hint: 'Open Ask tab', run: () => setActiveTab('ask') },
+      { id: 'explore-tour', label: 'Start codebase tour', hint: 'Guided walkthrough', run: () => setActiveTab('tour') },
+      { id: 'explore-connect', label: 'Install / update SDK', hint: 'Connect & Update hub', run: () => navigate('/connect') },
+    ],
   })
 
   if (statsLoading && !statsData) {
@@ -535,6 +625,15 @@ export function ExplorePage() {
             </div>
           </div>
         )}
+
+        {projectId && stats.codebaseIndexEnabled && (
+          <ExploreImpactControl
+            projectId={projectId}
+            active={impactActive}
+            onImpact={(ids) => handleImpact(ids)}
+            onClear={clearImpact}
+          />
+        )}
       </div>
     ) : null
 
@@ -552,6 +651,7 @@ export function ExplorePage() {
         <ActionPill tone="brand" onClick={() => setActiveTab('index')}>
           Open Index tab
         </ActionPill>
+        <ActionPill to="/connect">Connect &amp; index</ActionPill>
         <ActionPill to="/settings">Settings</ActionPill>
       </ActionPillRow>
     </div>
@@ -569,9 +669,11 @@ export function ExplorePage() {
       {selectedNode && (
         <ExploreSymbolPanel
           node={selectedNode}
+          projectId={projectId}
           onClear={() => setSelectedNode(null)}
           onViewInGraph={handleViewInGraph}
           onFindSimilar={handleFindSimilar}
+          onAskAboutFile={handleAskAboutFile}
         />
       )}
     </div>
@@ -591,9 +693,11 @@ export function ExplorePage() {
       {selectedNode && (
         <ExploreSymbolPanel
           node={selectedNode}
+          projectId={projectId}
           onClear={() => setSelectedNode(null)}
           onViewInGraph={handleViewInGraph}
           onFindSimilar={handleFindSimilar}
+          onAskAboutFile={handleAskAboutFile}
         />
       )}
     </div>
@@ -784,6 +888,25 @@ export function ExplorePage() {
             </Card>
           ) : null}
 
+          {stats.topPriority === 'ready' && stats.indexedFiles > 0 && (
+            <Card className="p-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-fg">New teammate?</p>
+                <p className="text-xs text-fg-muted mt-0.5">
+                  Start the guided tour or ask plain-English questions about the repo.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Btn size="sm" variant="primary" onClick={() => setActiveTab('tour')}>
+                  Start tour
+                </Btn>
+                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('ask')}>
+                  Ask a question
+                </Btn>
+              </div>
+            </Card>
+          )}
+
           {stats.topLanguages?.length > 0 && (
             <Card className="p-4">
               <p className="text-2xs font-medium text-fg-muted uppercase tracking-wider mb-2">Top languages</p>
@@ -808,6 +931,28 @@ export function ExplorePage() {
         </>
       )}
 
+      {activeTab === 'ask' && (
+        <ExploreChatPanel
+          projectId={projectId}
+          seed={askSeed}
+          onSeedConsumed={() => setAskSeed(null)}
+          onCitationClick={handleCitationClick}
+        />
+      )}
+
+      {activeTab === 'tour' && (
+        <ExploreTourPanel
+          projectId={projectId}
+          activeStopOrder={tourStopOrder}
+          onSelectStop={handleTourStop}
+          onStartTour={() => setActiveTab('graph')}
+        />
+      )}
+
+      {activeTab === 'domains' && (
+        <ExploreDomainsPanel projectId={projectId} onFileClick={handleDomainFileClick} />
+      )}
+
       {activeTab === 'search' && (
         <div className={selectedNode ? 'grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-4 items-start' : ''}>
           {stats.withEmbeddings === 0 && !loading && (
@@ -828,9 +973,11 @@ export function ExplorePage() {
             <div className="sticky top-4">
               <ExploreSymbolPanel
                 node={selectedNode}
+                projectId={projectId}
                 onClear={() => setSelectedNode(null)}
                 onViewInGraph={handleViewInGraph}
                 onFindSimilar={handleFindSimilar}
+                onAskAboutFile={handleAskAboutFile}
               />
             </div>
           )}

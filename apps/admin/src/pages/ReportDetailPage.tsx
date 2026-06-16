@@ -68,6 +68,9 @@ import { DispatchPreflightBanner } from '../components/reports/DispatchPreflight
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import { canMergeFix, pickPrimaryFixAttempt } from '../lib/mergeFix'
 import { MergeFixPreflight } from '../components/fixes/MergeFixPreflight'
+import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
+import { useProjectSnapshots } from '../lib/useProjectSnapshots'
+import type { SdkStatus } from '../components/SdkVersionBadge'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -611,6 +614,10 @@ const PLATFORM_BADGE: Record<string, string> = {
  * density of EnvironmentFields so the two panels feel like one surface.
  */
 function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
+  const snapshots = useProjectSnapshots()
+  const preflight = useDispatchPreflight(report.project_id)
+  const snapshot = report.project_id ? snapshots.byId.get(report.project_id) : undefined
+  const githubReady = preflight.checks.find((c) => c.key === 'github')?.ready ?? false
   const platform = (report.environment?.platform ?? '').toLowerCase()
   const rows: Array<{ label: string; value: string }> = [
     report.sdk_package  ? { label: 'SDK',         value: report.sdk_package }  : null,
@@ -622,23 +629,35 @@ function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
   if (rows.length === 0) return null
 
   return (
-    <div className="space-y-1.5">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-center gap-3">
-          <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
-          {row.label === 'Platform' ? (
-            <span
-              className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-            >
-              {row.value}
-            </span>
-          ) : (
-            <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
-              {row.value}
-            </code>
-          )}
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center gap-3">
+            <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
+            {row.label === 'Platform' ? (
+              <span
+                className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+              >
+                {row.value}
+              </span>
+            ) : (
+              <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
+                {row.value}
+              </code>
+            )}
+          </div>
+        ))}
+      </div>
+      {report.sdk_version && snapshot && (
+        <SdkUpgradeCTA
+          package_={report.sdk_package ?? snapshot.sdk_package ?? null}
+          observedVersion={report.sdk_version}
+          latestVersion={snapshot.sdk_latest_version ?? null}
+          status={(snapshot.sdk_status ?? 'unknown') as SdkStatus}
+          projectId={githubReady && report.project_id ? report.project_id : null}
+          compact
+        />
+      )}
     </div>
   )
 }

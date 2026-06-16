@@ -21,5 +21,6 @@ import { dirname, resolve } from 'node:path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const delegatePath = resolve(__dirname, '../packages/mcp/scripts/check-catalog-sync.mjs')
 
-const child = spawn(process.execPath, [delegatePath], { stdio: 'inherit' })
+const args = ['--strict-full-parity']
+const child = spawn(process.execPath, [delegatePath, ...args], { stdio: 'inherit' })
 child.on('exit', (code) => process.exit(code ?? 0))

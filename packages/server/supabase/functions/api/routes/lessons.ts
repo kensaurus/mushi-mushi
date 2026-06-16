@@ -23,7 +23,7 @@ import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, apiKeyAuth, adminOrApiKey, getOrgIdFromContext } from '../../_shared/auth.ts'
-import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import { ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
 
 export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
@@ -56,7 +56,7 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }

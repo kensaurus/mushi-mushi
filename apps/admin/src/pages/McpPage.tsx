@@ -65,6 +65,14 @@ import {
   toolsTooltip,
 } from '../lib/statTooltips/mcp'
 import { mcpLinks } from '../lib/statCardLinks'
+import { RESOLVED_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
+import {
+  buildCursorDeeplink,
+  buildVsCodeDeeplink,
+  buildHttpConfig,
+  buildStdioConfig,
+  projectServerName,
+} from '../lib/cursorDeeplink'
 
 const TABS: Array<{ id: McpTabId; label: string; description: string }> = [
   {
@@ -95,7 +103,7 @@ const CATALOG_TABS: Array<{ id: CatalogTabId; label: string }> = [
   { id: 'prompts', label: 'Prompts' },
 ]
 
-const MUSHI_CLOUD_API = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+const MUSHI_CLOUD_API = RESOLVED_API_URL
 
 interface UseCase {
   title: string
@@ -128,6 +136,16 @@ const USE_CASES: UseCase[] = [
     title: 'Ask production data in English',
     ask: 'Which components had the most critical bugs this week?',
     calls: ['run_nl_query'],
+  },
+  {
+    title: 'Triage across all my apps',
+    ask: 'What are my most urgent bugs across all my projects?',
+    calls: ['get_account_overview', 'get_recent_reports (project_id=X)', 'get_recent_reports (project_id=Y)'],
+  },
+  {
+    title: 'New project check-in',
+    ask: 'Is the SDK sending data? Any critical issues?',
+    calls: ['list_projects', 'get_project_context', 'ingest_setup_check'],
   },
 ]
 
@@ -178,19 +196,48 @@ function hintBadges(spec: ToolSpec) {
   return chips
 }
 
+function buildSdkInstallSnippet(pkgManager: 'npm' | 'yarn' | 'pnpm'): string {
+  const cmds: Record<'npm' | 'yarn' | 'pnpm', string> = {
+    npm: 'npm install @mushi-mushi/web',
+    yarn: 'yarn add @mushi-mushi/web',
+    pnpm: 'pnpm add @mushi-mushi/web',
+  }
+  return cmds[pkgManager]
+}
+
+function buildSdkInitSnippet(projectId: string): string {
+  return `import Mushi from '@mushi-mushi/web';
+
+// Call once at app startup (e.g. in _app.tsx / main.tsx).
+// Use a report:write key — NOT your MCP key.
+Mushi.init({
+  apiKey: 'mushi_<your-report-write-key>',
+  projectId: '${projectId}',
+});
+
+// Identify users so reports are tied to real people:
+Mushi.identify({ id: user.id, email: user.email });`
+}
+
 function buildCursorJson(projectId: string, projectName: string): string {
+  const serverName = projectServerName(projectId, projectName)
   return JSON.stringify(
     {
       mcpServers: {
-        [`mushi-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32)}`]: {
-          command: 'npx',
-          args: ['-y', '@mushi-mushi/mcp'],
-          env: {
-            MUSHI_API_ENDPOINT: MUSHI_CLOUD_API,
-            MUSHI_API_KEY: 'paste-your-mushi-api-key-here',
-            MUSHI_PROJECT_ID: projectId,
-          },
-        },
+        [serverName]: buildStdioConfig(projectId, 'paste-your-mushi-api-key-here', MUSHI_CLOUD_API),
+      },
+    },
+    null,
+    2,
+  )
+}
+
+function buildHttpCursorJson(projectId: string, projectName: string): string {
+  const serverName = projectServerName(projectId, projectName)
+  return JSON.stringify(
+    {
+      mcpServers: {
+        [serverName]: buildHttpConfig(projectId, 'paste-your-mushi-api-key-here', RESOLVED_MCP_HTTP_URL),
       },
     },
     null,
@@ -204,6 +251,8 @@ function buildEnvBlock(projectId: string): string {
     `MUSHI_API_ENDPOINT=${MUSHI_CLOUD_API}`,
     'MUSHI_API_KEY=paste-your-mushi-api-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
+    '# Optional: lean tool set (default in admin snippets). Omit or set to "all" for full catalog.',
+    'MUSHI_FEATURES=triage,fixes,inventory,setup,docs',
     '',
   ].join('\n')
 }
@@ -286,14 +335,19 @@ export function McpPage() {
   const catalogParam = searchParams.get('catalog')
   const catalogTab: CatalogTabId = isCatalogTabId(catalogParam) ? catalogParam : 'tools'
 
-  const [snippetMode, setSnippetMode] = useState<'cursor' | 'env'>('cursor')
+  const [snippetMode, setSnippetMode] = useState<'cursor' | 'env' | 'http'>('cursor')
   const [copied, setCopied] = useState(false)
+  const [testingConnection, setTestingConnection] = useState(false)
+  const [connectionTestResult, setConnectionTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [monorepoNote, setMonorepoNote] = useState<string | null>(null)
   const [monoWarnings, setMonoWarnings] = useState<string[]>([])
   const [detectOpen, setDetectOpen] = useState(false)
   const [detectText, setDetectText] = useState('')
   const [mintingKey, setMintingKey] = useState(false)
+  const [mintingDeeplink, setMintingDeeplink] = useState<'cursor' | 'vscode' | null>(null)
+  const [mintingProjectId, setMintingProjectId] = useState<string | null>(null)
   const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
+  const [sdkSnippetLang, setSdkSnippetLang] = useState<'npm' | 'yarn' | 'pnpm'>('npm')
   const detectTaRef = useRef<HTMLTextAreaElement>(null)
 
   const projectsPath = activeProjectId ? '/v1/admin/projects' : null
@@ -359,38 +413,126 @@ export function McpPage() {
     }
   }
 
+  async function mintMcpKey(scopes: string[], targetProjectId?: string): Promise<string | null> {
+    const pid = targetProjectId ?? activeProjectId
+    if (!pid) return null
+    const res = await apiFetch<{ key: string; prefix: string }>(
+      `/v1/admin/projects/${pid}/keys`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ scopes }),
+        idempotencyKey: crypto.randomUUID(),
+      },
+    )
+    if (!res.ok || !res.data?.key) {
+      toast.error('Could not mint MCP key', res.error?.message ?? 'Unknown error')
+      return null
+    }
+    if (!targetProjectId || targetProjectId === activeProjectId) reloadAll()
+    return res.data.key
+  }
+
   async function mintMcpReadKey() {
     if (!activeProjectId) return
     setMintingKey(true)
     try {
-      const res = await apiFetch<{ key: string; prefix: string }>(
-        `/v1/admin/projects/${activeProjectId}/keys`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ scopes: ['mcp:read'] }),
-          idempotencyKey: crypto.randomUUID(),
-        },
-      )
-      if (!res.ok || !res.data?.key) {
-        toast.error('Could not mint MCP key', res.error?.message ?? 'Unknown error')
-        return
-      }
-      setRevealedMcpKey(res.data.key)
+      const key = await mintMcpKey(['mcp:read'])
+      if (!key) return
+      setRevealedMcpKey(key)
       try {
-        await navigator.clipboard.writeText(res.data.key)
+        await navigator.clipboard.writeText(key)
         toast.success('mcp:read key copied', 'Paste into your MCP snippet — it will not be shown again.')
       } catch {
         toast.success('mcp:read key minted', 'Copy it now — it will not be shown again.')
       }
-      reloadAll()
     } finally {
       setMintingKey(false)
     }
   }
 
+  async function mintMcpWriteKey() {
+    if (!activeProjectId) return
+    setMintingKey(true)
+    try {
+      const key = await mintMcpKey(['mcp:write'])
+      if (!key) return
+      setRevealedMcpKey(key)
+      try {
+        await navigator.clipboard.writeText(key)
+        toast.success('mcp:write key copied', 'Paste into your MCP snippet — it will not be shown again.')
+      } catch {
+        toast.success('mcp:write key minted', 'Copy it now — it will not be shown again.')
+      }
+    } finally {
+      setMintingKey(false)
+    }
+  }
+
+  async function openDeeplink(ide: 'cursor' | 'vscode', writeScope: boolean, targetProjectId?: string, targetProjectName?: string) {
+    const pid = targetProjectId ?? activeProjectId
+    if (!pid) return
+    setMintingDeeplink(ide)
+    setMintingProjectId(pid)
+    try {
+      const key = await mintMcpKey(writeScope ? ['mcp:write'] : ['mcp:read'], pid)
+      if (!key) return
+      if (!targetProjectId || targetProjectId === activeProjectId) setRevealedMcpKey(key)
+      const projectLabel = targetProjectName ?? displayName
+      const deeplink =
+        ide === 'cursor'
+          ? buildCursorDeeplink(pid, projectLabel, key, MUSHI_CLOUD_API)
+          : buildVsCodeDeeplink(pid, projectLabel, key, MUSHI_CLOUD_API)
+      window.open(deeplink, '_self')
+      toast.success(
+        `${ide === 'cursor' ? 'Cursor' : 'VS Code'} install launched`,
+        `A fresh ${writeScope ? 'mcp:write' : 'mcp:read'} key for "${projectLabel}" has been minted. Server name: ${projectServerName(pid, projectLabel)}`,
+      )
+    } finally {
+      setMintingDeeplink(null)
+      setMintingProjectId(null)
+    }
+  }
+
   const projectId = activeProject?.id ?? activeProjectId ?? '<your-project-id>'
   const displayName = activeProject?.name ?? projectName ?? 'project'
-  const snippet = snippetMode === 'cursor' ? buildCursorJson(projectId, displayName) : buildEnvBlock(projectId)
+  const snippet =
+    snippetMode === 'cursor'
+      ? buildCursorJson(projectId, displayName)
+      : snippetMode === 'http'
+        ? buildHttpCursorJson(projectId, displayName)
+        : buildEnvBlock(projectId)
+
+  async function testMcpConnection() {
+    if (!activeProjectId) return
+    setTestingConnection(true)
+    setConnectionTestResult(null)
+    try {
+      const res = await apiFetch<{ tool_count: number; expected: number; healthy: boolean }>(
+        '/v1/admin/mcp/test-connection',
+      )
+      if (!res.ok || !res.data) {
+        setConnectionTestResult({
+          ok: false,
+          message: res.error?.message ?? 'Connection probe failed.',
+        })
+        return
+      }
+      const { tool_count: count, expected, healthy } = res.data
+      setConnectionTestResult({
+        ok: healthy,
+        message: healthy
+          ? `Connected — ${count} tools advertised.`
+          : `Partial — only ${count}/${expected} tools (deploy may be stale).`,
+      })
+    } catch (err) {
+      setConnectionTestResult({
+        ok: false,
+        message: err instanceof Error ? err.message : 'Connection failed',
+      })
+    } finally {
+      setTestingConnection(false)
+    }
+  }
 
   const readTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:read')
   const writeTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:write')
@@ -542,11 +684,21 @@ export function McpPage() {
           size="sm"
           variant="ghost"
           data-testid="mcp-mint-key-link"
-          loading={mintingKey}
+          loading={mintingKey && mintingDeeplink === null}
           disabled={!activeProjectId}
           onClick={() => void mintMcpReadKey()}
         >
           Mint mcp:read key
+        </Btn>
+        <Btn
+          size="sm"
+          variant="ghost"
+          data-testid="mcp-mint-write-key-link"
+          loading={mintingKey && mintingDeeplink === null}
+          disabled={!activeProjectId}
+          onClick={() => void mintMcpWriteKey()}
+        >
+          Mint mcp:write key
         </Btn>
       </PageHeader>
       <PageScopeHint text={copy?.description ?? "Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools."} />
@@ -840,19 +992,64 @@ export function McpPage() {
                 />
               </div>
 
-              {!hasReadKey && (
-                <div className="pt-1 space-y-2">
-                  <Btn size="sm" data-testid="mcp-status-mint" loading={mintingKey} onClick={() => void mintMcpReadKey()}>
-                    Mint mcp:read key here
-                    <IconArrowRight className="h-3.5 w-3.5 ml-1" />
+              <div className="pt-1 space-y-3">
+                {!hasReadKey && (
+                  <div className="space-y-2">
+                    <Btn size="sm" data-testid="mcp-status-mint" loading={mintingKey && mintingDeeplink === null} onClick={() => void mintMcpReadKey()}>
+                      Mint mcp:read key here
+                      <IconArrowRight className="h-3.5 w-3.5 ml-1" />
+                    </Btn>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Btn
+                    size="sm"
+                    variant="primary"
+                    data-testid="mcp-add-to-cursor"
+                    loading={mintingDeeplink === 'cursor'}
+                    disabled={!activeProjectId}
+                    onClick={() => void openDeeplink('cursor', false)}
+                    title="Mints a new mcp:read key and opens Cursor's one-click MCP install dialog"
+                  >
+                    ⚡ Add to Cursor
                   </Btn>
-                  {revealedMcpKey ? (
-                    <ContainedBlock tone="muted">
-                      <p className="text-2xs text-fg-muted">Key minted — paste into snippet below. Not shown again after you leave.</p>
-                    </ContainedBlock>
-                  ) : null}
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    data-testid="mcp-add-to-cursor-write"
+                    loading={mintingDeeplink === 'cursor'}
+                    disabled={!activeProjectId}
+                    onClick={() => void openDeeplink('cursor', true)}
+                    title="Mints a new mcp:write key (can dispatch fixes) and opens Cursor's install dialog"
+                  >
+                    Add to Cursor (+ write)
+                  </Btn>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    data-testid="mcp-add-to-vscode"
+                    loading={mintingDeeplink === 'vscode'}
+                    disabled={!activeProjectId}
+                    onClick={() => void openDeeplink('vscode', false)}
+                    title="Mints a new mcp:read key and opens VS Code's one-click MCP install dialog"
+                  >
+                    Add to VS Code
+                  </Btn>
                 </div>
-              )}
+                <ContainedBlock tone="muted">
+                  <p className="text-2xs text-fg-muted">
+                    <strong>"Add to Cursor"</strong> mints a fresh key and opens your IDE's install dialog — no copy-paste needed.
+                    The key is embedded in the deeplink and will not be shown again unless you save it.
+                  </p>
+                </ContainedBlock>
+                {revealedMcpKey ? (
+                  <ContainedBlock tone="muted">
+                    <p className="text-2xs text-fg-muted">
+                      Key minted — paste into your snippet if the deeplink did not open your IDE. Not shown again after you leave.
+                    </p>
+                  </ContainedBlock>
+                ) : null}
+              </div>
             </Card>
 
             <Card className="p-5 space-y-4" data-testid="mcp-install">
@@ -953,9 +1150,9 @@ export function McpPage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-1 border-b border-edge-subtle pb-2">
+              <div className="flex items-center gap-1 border-b border-edge-subtle pb-2 flex-wrap">
                 <ConfigHelp helpId="mcp.snippet_mode" />
-                {(['cursor', 'env'] as const).map((m) => (
+                {(['cursor', 'http', 'env'] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
@@ -967,25 +1164,68 @@ export function McpPage() {
                         : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
                     }`}
                   >
-                    {m === 'cursor' ? '.cursor/mcp.json' : '.env.local'}
+                    {m === 'cursor' ? 'Stdio (.cursor/mcp.json)' : m === 'http' ? 'Hosted HTTP' : '.env.local'}
                   </button>
                 ))}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  loading={testingConnection}
+                  onClick={() => void testMcpConnection()}
+                  data-testid="mcp-test-connection"
+                >
+                  Test connection
+                </Btn>
+                <Link
+                  to="/docs-bridge?topic=cli-setup"
+                  className="text-xs text-brand hover:underline"
+                >
+                  CLI: mushi setup --ide cursor
+                </Link>
+                {connectionTestResult && (
+                  <Badge
+                    className={
+                      connectionTestResult.ok
+                        ? 'bg-ok-muted text-ok border border-ok/30'
+                        : 'bg-danger-muted text-danger-foreground border border-danger/30'
+                    }
+                  >
+                    {connectionTestResult.message}
+                  </Badge>
+                )}
               </div>
 
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
-                    {snippetMode === 'cursor' ? 'Drop into your IDE settings' : 'Drop into your repo root'}
+                    {snippetMode === 'cursor'
+                      ? 'Stdio — drop into IDE settings (recommended — shows Mushi icon in Cursor)'
+                      : snippetMode === 'http'
+                        ? 'Hosted HTTP — no subprocess (URL host may show Supabase icon in Cursor; use stdio for branding)'
+                        : 'Drop into your repo root'}
                   </SignalChip>
                   <CopyButton
                     onCopy={() =>
                       copySnippet(
                         snippet,
-                        snippetMode === 'cursor' ? '.cursor/mcp.json block' : '.env.local block',
+                        snippetMode === 'cursor'
+                          ? '.cursor/mcp.json block'
+                          : snippetMode === 'http'
+                            ? 'Hosted HTTP MCP block'
+                            : '.env.local block',
                       )
                     }
                     copied={copied}
-                    label={snippetMode === 'cursor' ? 'Copy .cursor/mcp.json block' : 'Copy .env.local block'}
+                    label={
+                      snippetMode === 'cursor'
+                        ? 'Copy .cursor/mcp.json block'
+                        : snippetMode === 'http'
+                          ? 'Copy hosted HTTP block'
+                          : 'Copy .env.local block'
+                    }
                     copiedLabel="Snippet copied"
                     data-testid="mcp-snippet-copy"
                   />
@@ -999,24 +1239,141 @@ export function McpPage() {
               </div>
             </Card>
 
-            {activeProjectId && (
-              <Card className="p-5 space-y-4">
+            {/* Multi-project connections */}
+            {projectsQuery.data && projectsQuery.data.projects.length > 0 && (
+              <Card className="p-5 space-y-4" data-testid="mcp-multi-project">
                 <div>
-                  <h3 className="text-sm font-semibold text-fg">Or wire end users to this project</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold text-fg">Connect all your projects</h3>
+                    <Badge className="bg-info-muted text-info border border-info/30 text-2xs">
+                      {projectsQuery.data.projects.length} project{projectsQuery.data.projects.length === 1 ? '' : 's'}
+                    </Badge>
+                  </div>
                   <ContainedBlock tone="muted" className="mt-2">
-                    <p className="text-xs text-fg-muted">
-                      MCP connects coding agents. The bug-capture SDK connects real users in your app.
-                      Install snippets live on the{' '}
-                      <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`} className="text-accent underline">
-                        Onboarding → SDK
-                      </Link>{' '}
-                      wizard (canonical path with connection status + live preview).
+                    <p className="text-xs text-fg-muted leading-relaxed">
+                      Each Mushi project uses its own API key and gets a uniquely-named MCP server entry
+                      (<span className="font-mono text-fg-secondary">mushi-{'{'}name{'}'}-{'{'}id{'}'}</span>).
+                      Click <strong>"⚡ Add to Cursor"</strong> for each project below — all of them will appear
+                      simultaneously in your IDE so you can triage bugs across all your apps in one session.
                     </p>
                   </ContainedBlock>
                 </div>
-                <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`}>
-                  <Btn variant="ghost" size="sm">Open SDK install wizard →</Btn>
-                </Link>
+                <div className="space-y-2">
+                  {projectsQuery.data.projects.map((p) => {
+                    const serverSlug = projectServerName(p.id, p.name)
+                    const isActive = p.id === activeProjectId
+                    const isMintingThis = mintingProjectId === p.id
+                    return (
+                      <div
+                        key={p.id}
+                        className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 ${
+                          isActive ? 'border-brand/30 bg-brand/5' : 'border-edge-subtle bg-surface-raised/20'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-fg truncate">{p.name}</span>
+                            {isActive && (
+                              <Badge className="bg-brand/15 text-brand border border-brand/20 text-2xs">active</Badge>
+                            )}
+                          </div>
+                          <p className="text-2xs text-fg-faint font-mono truncate mt-0.5">{serverSlug}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Btn
+                            size="sm"
+                            variant={isActive ? 'primary' : 'ghost'}
+                            loading={isMintingThis && mintingDeeplink === 'cursor'}
+                            disabled={!!(mintingDeeplink && !isMintingThis)}
+                            onClick={() => void openDeeplink('cursor', true, p.id, p.name)}
+                            title={`Add ${p.name} to Cursor as "${serverSlug}"`}
+                          >
+                            {isActive ? '⚡ Add to Cursor' : 'Add to Cursor'}
+                          </Btn>
+                          <Btn
+                            size="sm"
+                            variant="ghost"
+                            loading={isMintingThis && mintingDeeplink === 'vscode'}
+                            disabled={!!(mintingDeeplink && !isMintingThis)}
+                            onClick={() => void openDeeplink('vscode', true, p.id, p.name)}
+                            title={`Add ${p.name} to VS Code as "${serverSlug}"`}
+                          >
+                            VS Code
+                          </Btn>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <ContainedBlock tone="muted">
+                  <p className="text-2xs text-fg-muted">
+                    Once connected, call <span className="font-mono text-fg-secondary">get_account_overview</span> on
+                    any server to see all your projects and their health. Ask the agent:
+                    <em className="not-italic text-fg-secondary"> "What are my most urgent bugs across all projects?"</em>
+                  </p>
+                </ContainedBlock>
+              </Card>
+            )}
+
+            {/* SDK install for end users */}
+            {activeProjectId && (
+              <Card className="p-5 space-y-4" data-testid="mcp-sdk-install">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold text-fg">Wire your app (SDK)</h3>
+                    <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle text-2xs">
+                      end users → Mushi
+                    </Badge>
+                  </div>
+                  <ContainedBlock tone="muted" className="mt-2">
+                    <p className="text-xs text-fg-muted leading-relaxed">
+                      The MCP connects <em>your coding agent</em> to Mushi. The SDK connects
+                      <em> real users in your app</em> so their bug reports flow into the triage queue.
+                      Use a <strong>report:write</strong> key for the SDK — never your MCP key.
+                    </p>
+                  </ContainedBlock>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center gap-1 mb-1.5">
+                      {(['npm', 'yarn', 'pnpm'] as const).map((pm) => (
+                        <button
+                          key={pm}
+                          type="button"
+                          onClick={() => setSdkSnippetLang(pm)}
+                          className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
+                            sdkSnippetLang === pm
+                              ? 'bg-brand text-brand-fg font-medium'
+                              : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
+                          }`}
+                        >
+                          {pm}
+                        </button>
+                      ))}
+                    </div>
+                    <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 text-2xs font-mono text-fg-secondary overflow-auto select-all">
+                      {buildSdkInstallSnippet(sdkSnippetLang)}
+                    </pre>
+                  </div>
+                  <div>
+                    <p className="text-2xs text-fg-faint uppercase tracking-wide font-medium mb-1">Init snippet</p>
+                    <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap select-all max-h-52">
+                      {buildSdkInitSnippet(projectId)}
+                    </pre>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void copySnippet(buildSdkInstallSnippet(sdkSnippetLang), 'Install command')}
+                  >
+                    Copy install command
+                  </Btn>
+                  <Link to={`/onboarding?tab=sdk&project=${activeProjectId}`}>
+                    <Btn variant="ghost" size="sm">Open SDK wizard →</Btn>
+                  </Link>
+                </div>
               </Card>
             )}
           </div>

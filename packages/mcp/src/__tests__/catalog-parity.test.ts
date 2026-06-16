@@ -3,10 +3,10 @@
  * PURPOSE: Contract test that validates the catalog is internally consistent:
  *
  *   1. Every tool registered via `createMushiServer()` appears in
- *      TOOL_CATALOG + TDD_TOOL_CATALOG (no ghost tools).
+ *      TOOL_CATALOG + TDD_TOOL_CATALOG + CODEBASE_TOOL_CATALOG (no ghost tools).
  *
- *   2. Every tool in TOOL_CATALOG + TDD_TOOL_CATALOG is registered in
- *      `createMushiServer()` (no orphaned catalog entries).
+ *   2. Every tool in those catalogs is registered in `createMushiServer()`
+ *      (no orphaned catalog entries).
  *
  *   3. Every resource registered appears in RESOURCE_CATALOG.
  *
@@ -26,11 +26,16 @@ import { createMushiServer } from '../server.js'
 import {
   TOOL_CATALOG,
   TDD_TOOL_CATALOG,
+  CODEBASE_TOOL_CATALOG,
   RESOURCE_CATALOG,
   PROMPT_CATALOG,
 } from '../catalog.js'
 
-const ALL_TOOL_CATALOG = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG]
+const ALL_TOOL_CATALOG = [
+  ...TOOL_CATALOG,
+  ...TDD_TOOL_CATALOG,
+  ...CODEBASE_TOOL_CATALOG,
+]
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const TEST_TOKEN = 'fixture-token-not-a-secret'
 const PROJECT_ID = 'proj_00000000-0000-0000-0000-000000000000'
@@ -71,7 +76,7 @@ describe('Catalog parity — full scope', () => {
     ;({ client } = await buildClient())
   })
 
-  it('server exposes exactly the tools in TOOL_CATALOG + TDD_TOOL_CATALOG', async () => {
+  it('server exposes exactly the tools in TOOL_CATALOG + TDD_TOOL_CATALOG + CODEBASE_TOOL_CATALOG', async () => {
     const { tools } = await client.listTools()
     const serverNames = new Set(tools.map((t) => t.name))
     const catalogNames = new Set(ALL_TOOL_CATALOG.map((t) => t.name))

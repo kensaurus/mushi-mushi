@@ -1408,6 +1408,7 @@ export function ProjectsPage() {
                         latestVersion={project.sdk_latest_version ?? null}
                         stackLabel={project.slug}
                         compact
+                        projectId={project.primary_repo ? project.id : null}
                       />
                     )}
                     <VerifySetupPanel

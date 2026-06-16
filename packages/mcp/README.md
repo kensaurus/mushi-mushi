@@ -26,7 +26,19 @@ That command reads `~/.mushirc`, writes `.cursor/mcp.json` with the `mushi` serv
 
 ## Quick start
 
-### 0. One-liner (recommended)
+### 0. One-click (fastest) — "Add to Cursor" deeplink
+
+The Mushi admin console (**Admin → MCP → Setup tab**) generates a one-click deeplink that opens Cursor's "Install MCP server?" dialog with your project ID and a freshly-minted `mcp:write` key already embedded:
+
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=mushi-<project>&config=<base64>
+```
+
+Click **"⚡ Add to Cursor"** (or **"Add to VS Code"**) — Cursor prompts you to confirm, then writes the server block into your global `mcp.json` automatically. No copy-pasting.
+
+> **Security note:** The deeplink mints a dedicated `mcp:write` key (or `mcp:read` for read-only), separate from your app's SDK key. Your SDK key (the `report:write`-scoped key your app sends bug reports with) should never carry `mcp:write` — it would expose admin-level triage and fix dispatch to anyone who extracted it from your browser bundle. The deeplink mint enforces this separation automatically. See [API key scopes](#api-key-scopes) below.
+
+### 1. One-liner CLI (recommended for first-time setup)
 
 ```bash
 # First: make sure you've logged in
@@ -38,7 +50,7 @@ npx mushi-mushi setup --ide claude          # Claude Code / Claude Desktop
 npx mushi-mushi setup --ide cursor --with-rules  # also write .cursorrules
 ```
 
-### 1. With Claude Desktop (manual)
+### 2. With Claude Desktop (manual)
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -67,7 +79,7 @@ Restart Claude Desktop. You should see a hammer icon in the chat input — click
 >
 > Or visit **Admin → MCP** in the console for a one-click pre-filled config snippet.
 
-### 2. With Cursor
+### 3. With Cursor (manual)
 
 In Cursor settings, open **MCP** → **Add new MCP server** and paste:
 
@@ -85,7 +97,7 @@ Then set the same three environment variables:
 
 Without `MUSHI_PROJECT_ID` the server starts but scoped tools return an empty result with a message pointing you here.
 
-### 3. From the command line
+### 4. From the command line
 
 ```bash
 MUSHI_API_KEY=mushi_xxxxxxxxxxxxxxxxxxxx \
@@ -95,24 +107,56 @@ npx -y @mushi-mushi/mcp@latest
 
 The server speaks stdio MCP transport by default — your client launches it as a subprocess.
 
-### 4. Hosted Streamable HTTP (no subprocess) — 2026-05-09 release
+### 5. Hosted Streamable HTTP (no subprocess) — 2026-05-09 release
 
 The Mushi backend now exposes the same tool catalog over the **Streamable HTTP** transport from the MCP 2025-03-26 spec at `/functions/v1/mcp`. Use this when you want to skip the local subprocess — typical for OpenAI Agents SDK, ChatGPT Agent, hosted CrewAI, or any orchestrator that talks remote MCP:
 
 ```jsonc
-// .cursor/mcp.json — example
+// .cursor/mcp.json — example (hosted HTTP)
 {
   "mcpServers": {
     "mushi-mushi-hosted": {
+      "type": "http",
       "url": "https://<your-ref>.supabase.co/functions/v1/mcp",
       "headers": {
+        "Authorization": "Bearer mushi_xxxxxxxxxxxxxxxxxxxx",
         "X-Mushi-Api-Key": "mushi_xxxxxxxxxxxxxxxxxxxx",
-        "X-Mushi-Project": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        "X-Mushi-Project-Id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       }
     }
   }
 }
 ```
+
+> **Cursor icon:** HTTP MCP URLs on `*.supabase.co` often show the **Supabase favicon** in Cursor settings — not a Mushi bug. Use **stdio** (`command` + `npx @mushi-mushi/mcp`) for the red 虫 stamp, or set `"icon": "https://kensaur.us/mushi-mushi/integrations/mushi-mark-512.png"` in your server block. The hosted endpoint also emits MCP `serverInfo.icons` and serves inline SVG at `?icon=1`.
+
+### Feature groups (`?features=` / `MUSHI_FEATURES`)
+
+Full catalog is **72 tools** (64 core + 8 project-context tools). New installs default to a lean set via:
+
+- **Stdio:** `MUSHI_FEATURES=triage,fixes,inventory,setup,docs`
+- **HTTP:** `?features=triage,fixes,inventory,setup,docs` on the MCP URL
+
+Append `legacy` to keep deprecated aliases (`setup_check`, `ingest_setup_check`, …). Use `features=all` for the full catalog.
+
+New unified tools: `diagnose_setup` (replaces setup trilogy), `search_mushi_docs` (keyword doc search).
+
+Append `?read_only=1` to the URL to hide write tools (Supabase-parity mode).
+
+## Cursor config hygiene
+
+1. **One global MCP config** — keep `mushi` in `~/.cursor/mcp.json` only. Do **not** duplicate `mushi` / `mushi-stdio` in per-project `.cursor/mcp.json` (prevents connection storms). Project repos may ship `{}` or a comment pointing to the global file.
+2. **Windows paths** — use forward slashes in JSON (`C:/Users/...`) or escaped backslashes (`C:\\Users\\...`). Raw `\f`, `\n`, `\t` in paths corrupt JSON.
+3. **Multi-project** — either one HTTP server per project (distinct server name + `X-Mushi-Project-Id`) or one stdio server and pass `project_id` on each tool call.
+4. **After editing global config** — fully restart Cursor (MCP panel must reload).
+
+| Header | Role |
+|--------|------|
+| `Authorization: Bearer <key>` | Auth (optional duplicate of API key) |
+| `X-Mushi-Api-Key` | Auth (preferred for MCP clients) |
+| `X-Mushi-Project-Id` | **Project scope** — required for API-key callers |
+
+~~`X-Mushi-Project`~~ is deprecated for project UUID (collision with legacy slug header).
 
 The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text/event-stream` per content negotiation), opens an SSE stream on GET for server-pushed notifications, and accepts DELETE for session termination. Auth is the same dual-mode API-key / JWT used everywhere else on `/v1/admin/*`.
 
@@ -267,6 +311,7 @@ Honest scorecard against the MCP 2025-10 spec:
 - ✅ **Stdio transport** — default for local editor integration.
 - ✅ **Streamable HTTP transport (2025-03-26 spec)** — hosted at `/functions/v1/mcp` on the Mushi backend; same tool catalog, no local subprocess. The previous "⏳" entry shipped in the 2026-05-09 release.
 - ✅ **Spec traceability for `dispatch_fix`** — the `dispatch_fix` tool input schema now accepts `inventoryActionNodeId`, and `get_fix_context` surfaces the inventory `Action` (with `expected_outcome`) the report was classified against. External orchestrators can read the contract before drafting a fix and pass the anchor back at dispatch time.
+- ✅ **Structured output (`outputSchema` + `structuredContent`)** — the four highest-value tools (`triage_issue`, `get_report_detail`, `get_similar_bugs`, `get_fix_context`) now declare a Zod-derived `outputSchema` and return `structuredContent` alongside the text envelope. Clients that support structured output (Cursor, Claude Desktop) can bind the typed result directly; others fall back to the text content unchanged. Also adds `resource_links` on `triage_issue` pointing to the report and dashboard resources so clients can follow up without re-constructing URIs.
 - ⏳ **Resource subscriptions / `notifications/resources/list_changed`** — the spec supports live-updating resources (e.g. dashboard numbers that push rather than poll). Worth adding once Cursor + Claude Desktop both ship client support (currently patchy).
 - ⏳ **Sampling / elicitation** — letting the server ask the client to run an LLM call (e.g. to draft a commit message from the fix context). Not yet wired; would let us move some orchestrator LLM spend from server-side to the user's own subscription.
 
@@ -287,7 +332,8 @@ The page is the recommended first stop for a new team member — it takes about 
 
 - The server runs locally; your API key never leaves your machine except in calls to your configured `MUSHI_API_ENDPOINT`.
 - **Scope keys tightly.** Give MCP the smallest scope that works — `mcp:read` is fine for 90% of agent loops.
-- Never paste a service-role key or a `report:write` SDK key — the former bypasses RLS, the latter is rejected by admin routes anyway.
+- **Keep your SDK key (`report:write`) separate from your MCP key.** Your app's Mushi SDK key is embedded in client-side code (e.g. `NEXT_PUBLIC_MUSHI_API_KEY`) and should carry only `report:write` scope. This scope is intentionally rejected by every admin route — so even if extracted from a browser bundle, it cannot triage, dispatch fixes, or mutate report status. Mint a dedicated `mcp:write` key for Cursor/Claude (use the **"⚡ Add to Cursor"** deeplink on the `/mcp` console page — it mints one automatically). If you discover your public SDK key carries `mcp:write`, rotate it immediately.
+- Never paste a service-role key — it bypasses RLS on every table.
 - Rotate keys from the admin console if a laptop is lost — the denormalised owner binding is rebuilt automatically on rotation.
 - The server logs to stderr; redirect to a file if you need an audit trail.
 
@@ -301,7 +347,7 @@ Real `Client ↔ Server` handshake over `InMemoryTransport` with a mocked `fetch
 
 ```bash
 pnpm --filter @mushi-mushi/mcp test
-# 18/18 pass — handshake, tool contracts, envelope unwrapping, scope errors, annotation contract
+# 49/49 pass — handshake, tool contracts, envelope unwrapping, scope errors, annotation contract, outputSchema, catalog parity
 ```
 
 ### Layer 2 — Stdio smoke test (verifies the built bin boots)
@@ -404,4 +450,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 43 edge functions · 234 SQL migrations · 13 outbound plugins · 11 inbound adapters. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
