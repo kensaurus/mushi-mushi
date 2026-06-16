@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Btn } from '../ui'
-import { IconSparkle } from '../icons'
+import { IconQaCoverage } from '../icons'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import type { ReportDetail } from './types'
@@ -39,7 +39,7 @@ export function GenerateTestButton({ report }: GenerateTestButtonProps) {
       size="sm"
       onClick={handleGenerate}
       loading={loading}
-      leadingIcon={<IconSparkle />}
+      leadingIcon={<IconQaCoverage />}
       title="Generate a Playwright regression test from this report"
     >
       Generate test

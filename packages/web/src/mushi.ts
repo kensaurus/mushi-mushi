@@ -596,36 +596,50 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     async onGlobalLeaderboardOpen() {
       widget.setGlobalLeaderboard(null, true);
-      const jwt = readTesterJwt();
-      const res = await apiClient.getPublicLeaderboard(50);
-      const rawEntries = res.ok
-        ? (res.data as { leaderboard?: Array<{ tester_id: string; rank: number; public_handle: string | null; display_name: string | null; points_30d: number; total_points?: number; badge_slug?: string }> })?.leaderboard ?? []
-        : [];
-      const entries = rawEntries.map((e) => ({
-        tester_id: e.tester_id,
-        rank: e.rank,
-        public_handle: e.public_handle,
-        display_name: e.display_name,
-        points_30d: e.points_30d,
-        total_points: e.total_points ?? 0,
-        badge: e.badge_slug,
-      }));
-      widget.setGlobalLeaderboard(entries, false);
-      if (jwt) {
-        const repRes = await apiClient.getMyReputation(jwt);
-        if (repRes.ok && repRes.data) {
-          const repData = repRes.data as { reputation?: MushiTesterReputation };
-          if (repData.reputation) widget.setTesterReputation(repData.reputation);
+      try {
+        const jwt = readTesterJwt();
+        const res = await apiClient.getPublicLeaderboard(50);
+        const rawEntries = res.ok
+          ? (res.data as { leaderboard?: Array<{ tester_id: string; rank: number; public_handle: string | null; display_name: string | null; points_30d: number; total_points?: number; badge_slug?: string }> })?.leaderboard ?? []
+          : [];
+        const entries = rawEntries.map((e) => ({
+          tester_id: e.tester_id,
+          rank: e.rank,
+          public_handle: e.public_handle,
+          display_name: e.display_name,
+          points_30d: e.points_30d,
+          total_points: e.total_points ?? 0,
+          badge: e.badge_slug,
+        }));
+        widget.setGlobalLeaderboard(entries, false);
+        if (jwt) {
+          const repRes = await apiClient.getMyReputation(jwt);
+          if (repRes.ok && repRes.data) {
+            const repData = repRes.data as { reputation?: MushiTesterReputation };
+            if (repData.reputation) widget.setTesterReputation(repData.reputation);
+          }
         }
+      } catch {
+        // Network error — clear loading so the spinner doesn't spin forever
+        widget.setGlobalLeaderboard([], false);
       }
     },
 
     async onCrossAppReportsOpen() {
       const jwt = readTesterJwt();
       if (!jwt) { widget.setCrossAppReports([], false); return; }
-      const res = await apiClient.getCrossAppReports(jwt);
-      const reports = res.ok ? (res.data as { reports?: Parameters<typeof widget.setCrossAppReports>[0] })?.reports ?? [] : [];
-      widget.setCrossAppReports(reports, false);
+      try {
+        const res = await apiClient.getCrossAppReports(jwt);
+        const reports = res.ok ? (res.data as { reports?: Parameters<typeof widget.setCrossAppReports>[0] })?.reports ?? [] : [];
+        widget.setCrossAppReports(reports, false);
+      } catch {
+        // Network error — clear loading so the spinner doesn't spin forever
+        widget.setCrossAppReports([], false);
+      }
+    },
+
+    onTesterSignOut(): void {
+      clearTesterJwt();
     },
   }, MUSHI_SDK_VERSION);
   syncCaptureModules();

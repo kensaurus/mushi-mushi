@@ -12,6 +12,7 @@ export type ExploreTabId =
   | 'ask'
   | 'tour'
   | 'domains'
+  | 'knowledge'
 
 export type ExploreLayerKey = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
 

@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
+import { Btn, Toggle } from '../ui/forms'
 
 interface NotifPrefs {
   'report.classified': boolean
@@ -43,7 +44,7 @@ const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label:
   {
     key: 'report.classified',
     label: 'Report classified',
-    description: 'Notify when a bug report is triaged by AI (respects severity filter below)',
+    description: 'Notify when a bug report is triaged by AI',
   },
   {
     key: 'fix.dispatched',
@@ -105,67 +106,67 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
 
   if (loading) {
     return (
-      <div className="space-y-2">
-        {EVENTS.map((e) => <div key={e.key} className="h-10 rounded-lg bg-surface-hover animate-pulse" />)}
+      <div className="overflow-hidden rounded-md border border-edge-subtle divide-y divide-edge-subtle">
+        {EVENTS.map((e) => (
+          <div key={e.key} className="h-14 bg-surface-overlay motion-safe:animate-pulse" />
+        ))}
       </div>
     )
   }
 
   return (
-    <div className="space-y-1">
-      {EVENTS.map((event) => (
-        <div
-          key={event.key}
-          className="flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 hover:bg-surface-hover transition-colors"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-fg truncate">{event.label}</p>
-            <p className="text-xs text-fg-tertiary truncate">{event.description}</p>
-          </div>
-          <button
-            role="switch"
-            aria-checked={prefs[event.key]}
-            onClick={() => toggle(event.key)}
-            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-brand/30 ${
-              prefs[event.key] ? 'bg-brand' : 'bg-border'
-            }`}
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised divide-y divide-edge-subtle">
+        {EVENTS.map((event) => (
+          <div
+            key={event.key}
+            className="flex items-start justify-between gap-4 px-3 py-3 min-h-11"
           >
-            <span
-              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow ring-0 transition-transform ${
-                prefs[event.key] ? 'translate-x-4' : 'translate-x-0'
-              }`}
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-xs font-semibold text-fg">{event.label}</p>
+              <p className="text-2xs text-fg-muted leading-snug mt-0.5">{event.description}</p>
+            </div>
+            <Toggle
+              checked={prefs[event.key]}
+              onChange={() => toggle(event.key)}
+              ariaLabel={event.label}
             />
-          </button>
-        </div>
-      ))}
-
-      {/* Severity threshold for report.classified */}
-      {prefs['report.classified'] && (
-        <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 bg-surface-hover/50">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-fg">Minimum severity for report alerts</p>
-            <p className="text-xs text-fg-tertiary">Only send report.classified notifications at or above this severity</p>
           </div>
-          <select
-            className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-brand/30"
-            value={prefs.report_severity_min}
-            onChange={(e) => setPrefs((p) => ({ ...p, report_severity_min: e.target.value as NotifPrefs['report_severity_min'] }))}
-          >
-            {SEVERITY_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-            ))}
-          </select>
-        </div>
-      )}
+        ))}
 
-      <div className="pt-2">
-        <button
-          className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:bg-brand/90 disabled:opacity-50 transition-colors"
-          disabled={saving}
-          onClick={handleSave}
-        >
-          {saving ? 'Saving…' : 'Save preferences'}
-        </button>
+        {prefs['report.classified'] && (
+          <div className="flex flex-col gap-2 px-3 py-3 bg-surface-overlay sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-fg">Minimum severity for report alerts</p>
+              <p className="text-2xs text-fg-muted leading-snug mt-0.5">
+                Only send report-classified notifications at or above this level
+              </p>
+            </div>
+            <select
+              className="w-full sm:w-auto shrink-0 bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors"
+              value={prefs.report_severity_min}
+              onChange={(e) =>
+                setPrefs((p) => ({
+                  ...p,
+                  report_severity_min: e.target.value as NotifPrefs['report_severity_min'],
+                }))
+              }
+              aria-label="Minimum severity for report alerts"
+            >
+              {SEVERITY_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-edge-subtle/80 pt-3">
+        <Btn type="button" variant="primary" size="md" loading={saving} onClick={() => void handleSave()}>
+          Save preferences
+        </Btn>
       </div>
     </div>
   )

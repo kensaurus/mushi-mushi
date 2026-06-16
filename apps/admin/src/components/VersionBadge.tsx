@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/VersionBadge.tsx
- * PURPOSE: Replaces the cryptic ✦ "What's new" icon in the desktop header
+ * PURPOSE: Replaces the cryptic "What's new" icon in the desktop header
  *          with a tangible version pill (`SDK 0.9.0 · Admin 0.1.0`) that
  *          reveals a rich popover on hover/focus showing:
  *            - All package versions + build SHA + build date
@@ -36,7 +36,6 @@ import {
   IconIterate,
   IconNetwork,
   IconReleases,
-  IconSparkle,
   IconStorage,
   IconTerminal,
 } from './icons'
@@ -482,7 +481,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           <PopoverSection>
             <SectionDivider
               label="Latest release"
-              icon={IconSparkle}
+              icon={IconReleases}
               theme={ACCENT_THEMES.brand}
               trailing={
                 whatsNew.hasUnread ? (

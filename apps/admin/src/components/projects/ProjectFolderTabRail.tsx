@@ -57,8 +57,8 @@ function FolderTabButton({
           'inline-flex shrink-0 max-w-[14rem] items-center gap-2 rounded-md border px-2.5 py-2 text-left',
           'motion-safe:transition-[background-color,border-color,box-shadow]',
           isActive
-            ? 'border-brand/50 bg-brand/10 shadow-sm'
-            : 'border-edge-subtle bg-surface-overlay/40 hover:border-edge hover:bg-surface-raised',
+            ? 'border-brand/50 bg-surface-raised ring-1 ring-brand/25 shadow-sm'
+            : 'border-edge-subtle bg-surface-raised hover:border-edge hover:bg-surface-overlay',
         ].join(' ')}
         title={project.name}
       >
@@ -89,7 +89,7 @@ function FolderTabButton({
         'motion-safe:transition-[background-color,border-color,box-shadow]',
         isActive
           ? 'relative z-10 -mr-px border border-brand/25 border-r-0 border-l-[3px] border-l-brand bg-surface-raised shadow-sm'
-          : 'border border-transparent border-l-[3px] border-l-transparent hover:bg-surface-overlay/55',
+          : 'border border-transparent border-l-[3px] border-l-transparent hover:bg-surface-overlay',
       ].join(' ')}
       title={project.name}
     >

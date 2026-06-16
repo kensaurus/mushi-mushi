@@ -70,6 +70,7 @@ import { userCanAccessProject } from '../shared.ts';
 import { sanitizeSseString, toSseEvent, sseHeartbeat } from '../../_shared/sse.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { childTraceparent, extractInboundTraceparent } from '../../_shared/trace.ts';
+import { log } from '../../_shared/logger.ts';
 
 interface FixDispatchRow {
   id: string;
@@ -440,7 +441,7 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
       }
 
       invokeFixWorker(job.id).catch((err) => {
-        console.warn('[a2a-tasks] worker invocation failed', { taskId: job.id, err: String(err) });
+        log.warn('worker invocation failed', { scope: 'a2a-tasks', taskId: job.id, err: String(err) });
       });
 
       return c.json(rowToA2ATask(job as FixDispatchRow), 201);

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Btn, Card } from '../ui'
+import { Btn, Card, Badge } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
-import type { CodebaseUnderstandError, DomainView } from './exploreUnderstandTypes'
+import type { CodebaseUnderstandError, DomainExtractionSource, DomainView } from './exploreUnderstandTypes'
 
 interface Props {
   projectId: string
@@ -11,6 +11,7 @@ interface Props {
 
 export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
   const [domains, setDomains] = useState<DomainView[]>([])
+  const [source, setSource] = useState<DomainExtractionSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<CodebaseUnderstandError | null>(null)
   const [expandedDomain, setExpandedDomain] = useState<string | null>(null)
@@ -19,7 +20,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
     if (!projectId) return
     setLoading(true)
     setError(null)
-    const res = await apiFetch<{ domains: DomainView[] }>(
+    const res = await apiFetch<{ domains: DomainView[]; source?: DomainExtractionSource }>(
       `/v1/admin/projects/${projectId}/codebase/domains${force ? '?force=1' : ''}`,
     )
     setLoading(false)
@@ -28,6 +29,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
       return
     }
     setDomains(res.data?.domains ?? [])
+    setSource(res.data?.source ?? null)
     if (res.data?.domains?.[0]) setExpandedDomain(res.data.domains[0].id)
   }, [projectId])
 
@@ -35,7 +37,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
     void load()
   }, [load])
 
-  if (error && (error.code === 'NO_LLM_KEY' || error.code === 'INDEX_DISABLED')) {
+  if (error && (error.code === 'NO_LLM_KEY' || error.code === 'INDEX_DISABLED' || error.code === 'FORBIDDEN')) {
     return <ExploreUnderstandEmpty error={error} onRetry={() => void load()} />
   }
 
@@ -61,13 +63,23 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-fg-secondary">
           Business domains → user flows → implementation files (LLM-extracted from the index).
         </p>
-        <Btn size="sm" variant="ghost" onClick={() => void load(true)} loading={loading}>
-          Refresh
-        </Btn>
+        <div className="flex items-center gap-2 shrink-0">
+          {source === 'fallback' && (
+            <Badge className="bg-warn/15 text-[var(--color-warning-foreground)]">
+              Layer fallback
+            </Badge>
+          )}
+          {source === 'llm' && (
+            <Badge className="bg-ok/15 text-ok">LLM extracted</Badge>
+          )}
+          <Btn size="sm" variant="ghost" onClick={() => void load(true)} loading={loading}>
+            Refresh
+          </Btn>
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">

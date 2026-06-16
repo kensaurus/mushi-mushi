@@ -3,7 +3,9 @@ import { cors } from 'npm:hono@4/cors';
 import type { Variables } from './types.ts';
 
 import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
+import { requestLoggingMiddleware } from '../_shared/request-logging.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
+import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
@@ -60,6 +62,8 @@ ensureSentry('api');
 const app = new Hono<{ Variables: Variables }>().basePath('/api');
 
 app.onError(sentryHonoErrorHandler);
+
+app.use('*', requestLoggingMiddleware());
 
 // SEC (Wave S1 / D-18 + S-5): split CORS policy.
 //
@@ -265,6 +269,26 @@ app.use('/v1/public/*', cors({ origin: '*' }));
 app.use('/.well-known/*', cors({ origin: '*' }));
 app.use('/health', cors({ origin: '*' }));
 
+// Community tester endpoints: called directly from the SDK widget, which runs
+// on arbitrary host app domains. Must be CORS-open so preflight succeeds.
+// Auth is enforced per-route via jwtAuth middleware — CORS and auth are orthogonal.
+app.use(
+  '/v1/tester/*',
+  cors({
+    origin: '*',
+    allowHeaders: ['Content-Type', 'Authorization', 'baggage', 'sentry-trace'],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+  }),
+);
+app.use(
+  '/v1/me/*',
+  cors({
+    origin: '*',
+    allowHeaders: ['Content-Type', 'Authorization', 'baggage', 'sentry-trace'],
+    allowMethods: ['GET', 'OPTIONS'],
+  }),
+);
+
 // Admin paths: allowlist. Hono's cors() already reflects the request Origin
 // back as Access-Control-Allow-Origin when it matches; unknown origins get
 // no ACAO header so the browser blocks the response.
@@ -468,6 +492,7 @@ registerBillingProjectsQueueGraphRoutes(app);
 registerActivationRoutes(app);
 
 registerAskMushiRoutes(app);
+registerConsoleKnowledgeRoutes(app);
 
 registerQueryFixesRepoRoutes(app);
 

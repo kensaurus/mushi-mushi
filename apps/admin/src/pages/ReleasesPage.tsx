@@ -58,7 +58,7 @@ import {
   type ReleasesStats,
   type ReleasesTabId,
 } from '../components/releases/ReleasesStatsTypes'
-import { IconSparkle, IconChevronRight } from '../components/icons'
+import { IconReleases, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
@@ -177,7 +177,7 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
             variant="primary"
             loading={loading}
             onClick={handleDraft}
-            leadingIcon={<IconSparkle className="h-3.5 w-3.5" aria-hidden="true" />}
+            leadingIcon={<IconReleases className="h-3.5 w-3.5" aria-hidden="true" />}
           >
             Generate draft with AI
           </Btn>

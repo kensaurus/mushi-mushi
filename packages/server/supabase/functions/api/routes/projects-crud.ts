@@ -1,0 +1,1098 @@
+import type { Hono } from 'npm:hono@4';
+import type { Variables } from '../types.ts';
+import { getServiceClient } from '../../_shared/db.ts';
+import { log } from '../../_shared/logger.ts';
+import { reportMessage } from '../../_shared/sentry.ts';
+import { compareSemver, resolveSdkFreshnessStatus } from '../../_shared/sdk-version-compare.ts';
+import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
+import { logAudit } from '../../_shared/audit.ts';
+import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
+
+export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>): void {
+  // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
+  // shared.ts rejects seed/test rows like `a0000000-0000-0000-0000-000000000001`
+  // because the version nibble is `0`. We need to delete those, so be
+  // permissive at the boundary and let the DB enforce key shape.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  app.get('/v1/admin/projects', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    // Teams v1: a user can see every project in any organization they're a
+    // member of, plus any legacy project they directly own (covers
+    // pre-org-backfill rows). The previous `.eq('owner_id', userId)` filter
+    // showed "0 projects" to every team member who wasn't also the owner —
+    // so an invited collaborator hit /onboarding and couldn't reach the org's
+    // real projects (verified in production: kensaurus@gmail.com saw 0 of
+    // 3 projects despite being a confirmed member of test@mushimushi.dev's
+    // org). `accessibleProjectIds` is the canonical helper already used by
+    // /v1/admin/billing/* and the entitlements layer; the projects list is
+    // the only owner-only filter that hadn't been migrated.
+    // Must enumerate ALL accessible projects — not callerProjectIds, which
+    // honours X-Mushi-Project-Id and would hide every other row once the
+    // user picks a project in ProjectSwitcher (chicken-and-egg trap).
+    const accessibleIds = await enumerateAccessibleProjectIds(c, db, userId);
+    if (accessibleIds.length === 0) return c.json({ ok: true, data: { projects: [] } });
+
+    // Pull the projects + the user's role in each project's org so the FE can
+    // gate destructive actions (delete project, manage members) on org role
+    // without a second round-trip per row.
+    const [{ data: projectRows }, { data: memberships }] = await Promise.all([
+      db
+        .from('projects')
+        // `plan_tier` and `data_residency_region` are surfaced so the FE
+        // can render plan / region badges next to each project — both are
+        // already stored on the row but were never plumbed through, so
+        // ProjectsPage had no way to show "this project is on Pro, EU".
+        // Boost shipped 2026-05-07 along with the repo + codebase joins
+        // below.
+        .select('id, name, slug, created_at, organization_id, plan_tier, data_residency_region')
+        .in('id', accessibleIds)
+        .order('created_at', { ascending: false }),
+      db
+        .from('organization_members')
+        .select('organization_id, role')
+        .eq('user_id', userId),
+    ]);
+
+    const roleByOrg = new Map<string, string>();
+    for (const m of memberships ?? []) roleByOrg.set(m.organization_id, m.role);
+
+    const projects = (projectRows ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      created_at: p.created_at,
+      organization_id: p.organization_id,
+      plan_tier: (p as { plan_tier?: string | null }).plan_tier ?? null,
+      data_residency_region:
+        (p as { data_residency_region?: string | null }).data_residency_region ?? null,
+      // null for legacy owned-but-not-in-org rows; FE treats that as 'owner'.
+      organization_role: p.organization_id ? roleByOrg.get(p.organization_id) ?? null : null,
+    }));
+
+    const projectIds = projects.map((p) => p.id);
+
+    // `latestReports` is one query per project so each project gets its true
+    // most-recent report. The previous single-query approach with a global
+    // `limit(projectIds.length * 2)` would silently report `last_report_at: null`
+    // for any project whose newest report was older than the top N rows of a
+    // sibling project — see UX audit: glot.it showed "last report never" despite
+    // having 31 reports because mushi-mushi (sister project) had pushed it past
+    // the limit window.
+    // PDCA bottleneck rollup is computed per-project so the projects list can
+    // show "where this project is stuck" inline. previously
+    // the only signal was last_report_at, which doesn't tell the user whether
+    // they need to triage, ship a fix, or wire integrations.
+    const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000).toISOString();
+
+    // 30-day rollup window for the severity breakdown surfaced on the
+    // projects list. A month is enough to outweigh a single
+    // late-night spike but short enough to reflect "the current state of
+    // this project". Reusing this constant rather than re-deriving it
+    // inline so the FE help-copy ("last 30 days") and the SQL filter
+    // can never drift.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+    const [
+      reportCounts,
+      allKeys,
+      members,
+      latestReports,
+      planBacklogs,
+      doFlights,
+      checkPending,
+      repos,
+      codebaseFileRows,
+      severityRows,
+      projectSettingsRows,
+    ] = await Promise.all([
+        db
+          .from('reports')
+          .select('project_id', { count: 'exact', head: false })
+          .in('project_id', projectIds),
+        // Pull `last_seen_*` per-key alongside the existing identity columns so
+        // ProjectsPage's SdkHealthSummary can render per-key connectivity
+        // status without a second round-trip. The same heartbeat columns power
+        // the dashboard onboarding checklist (see the dashboard route's
+        // setup_steps[id=sdk_installed].diagnostic). Missing on /projects was a
+        // discovery gap surfaced by the 2026-05-07 SDK integration audit:
+        // "I generated a key 4 days ago, why am I seeing 0 reports?" — the
+        // answer (`last_seen_at IS NULL`, key never connected) was already in
+        // the row, just never exposed where users look.
+        db
+          .from('project_api_keys')
+          .select(
+            'id, project_id, key_prefix, created_at, is_active, scopes, label, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
+          )
+          .in('project_id', projectIds)
+          .order('created_at', { ascending: false }),
+        db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
+        Promise.all(
+          projectIds.map((pid) =>
+            db
+              .from('reports')
+              // Pull the SDK identity columns alongside `created_at` so the FE
+              // can compare the project's most-recently-observed SDK version
+              // against the latest published version (joined below) and
+              // surface "outdated" / "deprecated" badges per row. Without
+              // this the ProjectsPage SDK install card had no way to tell
+              // a project was running 0.7 against a 0.9 catalog except by
+              // making the operator open the report and read the metadata
+              // by hand.
+              .select('created_at, sdk_package, sdk_version')
+              .eq('project_id', pid)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+              .then((r) => ({
+                project_id: pid,
+                created_at: r.data?.created_at ?? null,
+                sdk_package: (r.data as { sdk_package?: string | null } | null)?.sdk_package ?? null,
+                sdk_version: (r.data as { sdk_version?: string | null } | null)?.sdk_version ?? null,
+              })),
+          ),
+        ),
+        db
+          .from('reports')
+          .select('project_id')
+          .in('project_id', projectIds)
+          .eq('status', 'new')
+          .lt('created_at', oneHourAgo),
+        db
+          .from('fix_attempts')
+          .select('project_id, status')
+          .in('project_id', projectIds)
+          .in('status', ['pending', 'running', 'pr_open', 'failed']),
+        db
+          .from('classification_evaluations')
+          .select('report_id, project_id, classification_agreed, created_at')
+          .in('project_id', projectIds)
+          .gte('created_at', fourteenDaysAgo),
+        // Repo connections for the "About this project" surface on
+        // ProjectsPage. We pull every connected repo (a project can
+        // legitimately wire up multiple) but the FE picks the primary
+        // one for the row chip and shows the full list in the
+        // configurator. `last_index_*` columns drive the freshness
+        // badge so users notice when their codebase index has gone
+        // stale (e.g. the OpenAI rate-limit case observed on glot-it
+        // 2026-05-07: indexing failed and there was no surface that
+        // told them).
+        db
+          .from('project_repos')
+          .select(
+            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at',
+          )
+          .in('project_id', projectIds)
+          .order('is_primary', { ascending: false })
+          .order('created_at', { ascending: true }),
+        // Codebase index footprint per project. Counts of indexed files
+        // are a real "is this thing wired up" signal — a project with
+        // an attached repo but zero indexed files is a project where
+        // codebase-aware features (RAG-augmented triage, fix
+        // suggestions, ontology mapping) silently degrade. We pull only
+        // the project_id column so the row count stays cheap; the
+        // aggregation happens in JS below.
+        db
+          .from('project_codebase_files')
+          .select('project_id')
+          .in('project_id', projectIds),
+        // Severity breakdown over the last 30 days, plus signal data
+        // for the new ProjectsPage chips: 7-day report trend (this
+        // 7d vs prior 7d) and "Sentry connected" detection (≥1
+        // report in 30d carries a Sentry trace id). All bucketed in
+        // JS — Postgres-side `group by` would need a fresh RPC and
+        // these series are tiny (≤ project_count × 30d × few KB).
+        db
+          .from('reports')
+          .select('project_id, severity, created_at, sentry_trace_id')
+          .in('project_id', projectIds)
+          .gte('created_at', thirtyDaysAgo),
+        db
+          .from('project_settings')
+          .select('project_id, github_repo_url')
+          .in('project_id', projectIds),
+      ]);
+
+    const settingsGithubByProject: Record<string, string | null> = {};
+    for (const s of projectSettingsRows.data ?? []) {
+      settingsGithubByProject[s.project_id] =
+        (s as { github_repo_url?: string | null }).github_repo_url ?? null;
+    }
+
+    const countMap: Record<string, number> = {};
+    for (const r of reportCounts.data ?? [])
+      countMap[r.project_id] = (countMap[r.project_id] ?? 0) + 1;
+
+    const keyMap: Record<string, Array<Record<string, unknown>>> = {};
+    for (const k of allKeys.data ?? []) {
+      if (!keyMap[k.project_id]) keyMap[k.project_id] = [];
+      keyMap[k.project_id].push({
+        id: k.id,
+        key_prefix: k.key_prefix,
+        created_at: k.created_at,
+        is_active: k.is_active,
+        revoked: !k.is_active,
+        scopes: (k as any).scopes ?? [],
+        label: (k as any).label ?? null,
+        // Heartbeat columns — the SDK populates these on every authenticated
+        // request via apiKeyAuth. `null` on an active key === created but
+        // never used; a stale timestamp + a `last_seen_endpoint_host` that
+        // doesn't match this admin's host === SDK pointed at a different
+        // backend. Both diagnostics are rendered by SdkHealthSummary.
+        last_seen_at: (k as { last_seen_at?: string | null }).last_seen_at ?? null,
+        last_seen_origin: (k as { last_seen_origin?: string | null }).last_seen_origin ?? null,
+        last_seen_user_agent:
+          (k as { last_seen_user_agent?: string | null }).last_seen_user_agent ?? null,
+        last_seen_endpoint_host:
+          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
+      });
+    }
+
+    const memberMap: Record<string, Array<{ user_id: string; role: string }>> = {};
+    for (const m of members.data ?? []) {
+      if (!memberMap[m.project_id]) memberMap[m.project_id] = [];
+      memberMap[m.project_id].push({ user_id: m.user_id, role: m.role });
+    }
+
+    const lastReportMap: Record<string, string> = {};
+    // Per-project most-recently-observed SDK identity, drawn from the same
+    // single-row `latestReports` query as `lastReportMap`. We keep these as
+    // sibling maps (instead of nesting them on a single tuple) because the
+    // FE consumes them independently — `last_report_at` is a freshness
+    // signal, while `(sdk_package, sdk_version)` drives the outdated-SDK
+    // badge below.
+    const lastSdkPackageMap: Record<string, string | null> = {};
+    const lastSdkVersionMap: Record<string, string | null> = {};
+    for (const r of latestReports) {
+      if (r.created_at) lastReportMap[r.project_id] = r.created_at;
+      if (r.sdk_package) lastSdkPackageMap[r.project_id] = r.sdk_package;
+      if (r.sdk_version) lastSdkVersionMap[r.project_id] = r.sdk_version;
+    }
+
+    // Latest published version per @mushi-mushi/* package. Sourced from the
+    // `sdk_versions` catalogue (populated by the publish workflow — see
+    // `20260429000000_sdk_versions.sql`). One row per package, picking the
+    // most recently released version. The FE compares each project's
+    // last-seen `sdk_version` against this map to render "Up to date /
+    // Outdated / Deprecated" feedback in the project row.
+    //
+    // Done as a single query (not per-project) because the catalogue is
+    // tiny (one row per package) and shared across every row — a project
+    // running @mushi-mushi/web@0.7 is "outdated" the same way regardless of
+    // which org owns it.
+    const { data: sdkCatalogRows } = await db
+      .from('sdk_versions')
+      .select('package, version, deprecated, deprecation_message, released_at')
+      .order('released_at', { ascending: false });
+
+    interface LatestSdk {
+      version: string;
+      deprecated: boolean;
+      deprecation_message: string | null;
+      released_at: string;
+    }
+    const latestSdkVersions: Record<string, LatestSdk> = {};
+    for (const row of sdkCatalogRows ?? []) {
+      // Multiple catalogue rows per package (history). Pick the highest
+      // semver — released_at alone can lie when migrations backfill old rows.
+      const existing = latestSdkVersions[row.package];
+      const candidate: LatestSdk = {
+        version: row.version,
+        deprecated: !!row.deprecated,
+        deprecation_message:
+          (row as { deprecation_message?: string | null }).deprecation_message ?? null,
+        released_at: row.released_at,
+      };
+      if (!existing || compareSemver(candidate.version, existing.version) > 0) {
+        latestSdkVersions[row.package] = candidate;
+      }
+    }
+
+    const planBacklogMap: Record<string, number> = {};
+    for (const r of planBacklogs.data ?? []) {
+      planBacklogMap[r.project_id] = (planBacklogMap[r.project_id] ?? 0) + 1;
+    }
+
+    const fixInflightMap: Record<string, number> = {};
+    const fixFailedMap: Record<string, number> = {};
+    for (const f of doFlights.data ?? []) {
+      if (f.status === 'failed') {
+        fixFailedMap[f.project_id] = (fixFailedMap[f.project_id] ?? 0) + 1;
+      } else {
+        fixInflightMap[f.project_id] = (fixInflightMap[f.project_id] ?? 0) + 1;
+      }
+    }
+
+    const checkDisagreeMap: Record<string, number> = {};
+    for (const e of checkPending.data ?? []) {
+      if (e.classification_agreed === false) {
+        checkDisagreeMap[e.project_id] = (checkDisagreeMap[e.project_id] ?? 0) + 1;
+      }
+    }
+
+    // Repo rollups. The first row per project is the "primary" repo
+    // (Postgres ordering guarantees `is_primary DESC, created_at ASC`).
+    // Everything else is exposed as the `repos[]` list so the FE can
+    // surface "+2 more" without a second round-trip when a project has
+    // a monorepo + sister repos.
+    interface RepoRow {
+      id: string;
+      project_id: string;
+      repo_url: string | null;
+      role: string | null;
+      default_branch: string | null;
+      is_primary: boolean | null;
+      indexing_enabled: boolean | null;
+      last_indexed_at: string | null;
+      last_index_attempt_at: string | null;
+      last_index_error: string | null;
+      github_app_installation_id: number | null;
+      created_at: string;
+    }
+    const reposByProject: Record<string, RepoRow[]> = {};
+    for (const r of (repos.data ?? []) as RepoRow[]) {
+      if (!reposByProject[r.project_id]) reposByProject[r.project_id] = [];
+      reposByProject[r.project_id].push(r);
+    }
+
+    const codebaseFileCount: Record<string, number> = {};
+    for (const row of codebaseFileRows.data ?? []) {
+      codebaseFileCount[row.project_id] = (codebaseFileCount[row.project_id] ?? 0) + 1;
+    }
+
+    // Severity breakdown over `thirtyDaysAgo`. We accept any string for
+    // `severity` since the column is plain text — the FE collapses
+    // unknown values into an "other" bucket so a misclassified report
+    // never breaks the chip row.
+    //
+    // Same loop folds in two adjacent signals so we don't pay for
+    // re-iteration on a list that can carry 5–10K rows on a busy
+    // project: (a) Sentry-connected detection — true when ≥1 report
+    // in 30d carries a `sentry_trace_id`; (b) 7-day vs prior-7-day
+    // count for the trend arrow on the project row.
+    interface SeverityRow {
+      project_id: string;
+      severity: string | null;
+      created_at?: string | null;
+      sentry_trace_id?: string | null;
+    }
+    const severityByProject: Record<string, Record<string, number>> = {};
+    const sentryConnectedCount: Record<string, number> = {};
+    const last7Count: Record<string, number> = {};
+    const prev7Count: Record<string, number> = {};
+    const sevenDaysAgoMs = Date.now() - 7 * 86_400_000;
+    const fourteenDaysAgoMs = Date.now() - 14 * 86_400_000;
+    for (const r of (severityRows.data ?? []) as SeverityRow[]) {
+      const sev = (r.severity ?? 'unknown').toLowerCase();
+      if (!severityByProject[r.project_id]) severityByProject[r.project_id] = {};
+      severityByProject[r.project_id][sev] =
+        (severityByProject[r.project_id][sev] ?? 0) + 1;
+      if (r.sentry_trace_id) {
+        sentryConnectedCount[r.project_id] =
+          (sentryConnectedCount[r.project_id] ?? 0) + 1;
+      }
+      if (r.created_at) {
+        const tsMs = new Date(r.created_at).getTime();
+        if (tsMs >= sevenDaysAgoMs) {
+          last7Count[r.project_id] = (last7Count[r.project_id] ?? 0) + 1;
+        } else if (tsMs >= fourteenDaysAgoMs) {
+          prev7Count[r.project_id] = (prev7Count[r.project_id] ?? 0) + 1;
+        }
+      }
+    }
+
+    const enriched = (projects ?? []).map((p) => {
+      const keys = keyMap[p.id] ?? [];
+      const planCount = planBacklogMap[p.id] ?? 0;
+      const doInflight = fixInflightMap[p.id] ?? 0;
+      const doFailed = fixFailedMap[p.id] ?? 0;
+      const disagreements = checkDisagreeMap[p.id] ?? 0;
+      // Pick the single most-urgent stage so the FE can render one bottleneck
+      // pill per row without a chart. Mirrors the dashboard focusStage logic
+      // but scoped per-project.
+      let bottleneckStage: 'plan' | 'do' | 'check' | 'act' | null = null;
+      let bottleneckLabel: string | null = null;
+      if (doFailed > 0) {
+        bottleneckStage = 'do';
+        bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'fix needs' : 'fixes need'} retry`;
+      } else if (planCount > 5) {
+        bottleneckStage = 'plan';
+        bottleneckLabel = `${planCount} reports waiting > 1h to triage`;
+      } else if (disagreements > 3) {
+        bottleneckStage = 'check';
+        bottleneckLabel = `${disagreements} judge ${disagreements === 1 ? 'disagrees' : 'disagree'} with classifier`;
+      } else if (doInflight > 0) {
+        bottleneckStage = 'do';
+        bottleneckLabel = `${doInflight} ${doInflight === 1 ? 'fix in flight' : 'fixes in flight'}`;
+      } else if (planCount > 0) {
+        bottleneckStage = 'plan';
+        bottleneckLabel = `${planCount} ${planCount === 1 ? 'report waiting' : 'reports waiting'} > 1h`;
+      }
+      // SDK freshness — only meaningful when at least one report has
+      // landed (otherwise we have no version to compare against). The FE
+      // treats `sdk_status: 'unknown'` as "no data yet, don't paint a
+      // badge" so projects in their first 60 seconds don't blink red
+      // before the first ingest arrives.
+      const sdkPackage = lastSdkPackageMap[p.id] ?? null;
+      const sdkVersion = lastSdkVersionMap[p.id] ?? null;
+      const latestForPackage = sdkPackage ? latestSdkVersions[sdkPackage] ?? null : null;
+      const sdkStatus = resolveSdkFreshnessStatus({
+        sdkPackage,
+        sdkVersion,
+        catalogVersion: latestForPackage?.version ?? null,
+        catalogDeprecated: !!latestForPackage?.deprecated,
+      });
+      // Repos for "About this project" surface. Primary first, others
+      // trailing. We expose `github_app_connected` as a boolean rather
+      // than the installation id so the FE can render a "Connected via
+      // GitHub App" badge without leaking the integer (which is mostly
+      // identifying for the install but not useful in the row chip).
+      const projectRepos = reposByProject[p.id] ?? [];
+      const repos = projectRepos.map((r) => ({
+        id: r.id,
+        repo_url: r.repo_url,
+        role: r.role,
+        default_branch: r.default_branch,
+        is_primary: !!r.is_primary,
+        indexing_enabled: !!r.indexing_enabled,
+        last_indexed_at: r.last_indexed_at,
+        last_index_attempt_at: r.last_index_attempt_at,
+        last_index_error: r.last_index_error,
+        github_app_connected: r.github_app_installation_id != null,
+      }));
+      const settingsGithubUrl = settingsGithubByProject[p.id] ?? null;
+      const primaryRepo =
+        repos[0] ??
+        (settingsGithubUrl
+          ? {
+              id: 'settings-fallback',
+              repo_url: settingsGithubUrl,
+              role: 'primary',
+              default_branch: null,
+              is_primary: true,
+              indexing_enabled: false,
+              last_indexed_at: null,
+              last_index_attempt_at: null,
+              last_index_error: null,
+              github_app_connected: true,
+            }
+          : null);
+
+      const indexedFileCount = codebaseFileCount[p.id] ?? 0;
+
+      // Severity buckets — rolled up to the four canonical buckets
+      // we use everywhere else (critical / major / minor / trivial)
+      // plus an `other` catch-all so misclassified rows don't get
+      // dropped silently.
+      const sevRaw = severityByProject[p.id] ?? {};
+      const severity_breakdown_30d = {
+        critical: sevRaw['critical'] ?? 0,
+        major: sevRaw['major'] ?? 0,
+        minor: sevRaw['minor'] ?? 0,
+        trivial: sevRaw['trivial'] ?? 0,
+        other:
+          Object.entries(sevRaw)
+            .filter(([k]) => !['critical', 'major', 'minor', 'trivial'].includes(k))
+            .reduce((acc, [, v]) => acc + v, 0),
+        total: Object.values(sevRaw).reduce((acc, v) => acc + v, 0),
+      };
+
+      const last7d = last7Count[p.id] ?? 0;
+      const prev7d = prev7Count[p.id] ?? 0;
+      // Trend: relative delta in count from last 7d vs the prior 7d.
+      // We expose direction + magnitude separately so the FE can pick
+      // a chip style without re-deriving thresholds. `flat` covers the
+      // small-noise case where both counts are tiny (≤1 each) — the
+      // signal isn't meaningful below that floor.
+      const trendDelta = last7d - prev7d;
+      let trendDirection: 'up' | 'down' | 'flat' = 'flat';
+      if (last7d <= 1 && prev7d <= 1) {
+        trendDirection = 'flat';
+      } else if (trendDelta > 0) {
+        trendDirection = 'up';
+      } else if (trendDelta < 0) {
+        trendDirection = 'down';
+      }
+      const sentryReports = sentryConnectedCount[p.id] ?? 0;
+      return {
+        ...p,
+        report_count: countMap[p.id] ?? 0,
+        api_keys: keys,
+        active_key_count: keys.filter((k) => k.is_active).length,
+        member_count: (memberMap[p.id] ?? []).length,
+        members: memberMap[p.id] ?? [],
+        last_report_at: lastReportMap[p.id] ?? null,
+        pdca_bottleneck: bottleneckStage,
+        pdca_bottleneck_label: bottleneckLabel,
+        sdk_package: sdkPackage,
+        sdk_version: sdkVersion,
+        sdk_latest_version: latestForPackage?.version ?? null,
+        sdk_deprecation_message: latestForPackage?.deprecation_message ?? null,
+        sdk_status: sdkStatus,
+        primary_repo: primaryRepo,
+        repos,
+        indexed_file_count: indexedFileCount,
+        severity_breakdown_30d,
+        // 2026-05-07 SDK observability boost — surfaced on the projects
+        // list so the user can see "Sentry is wired up" + "trend is
+        // accelerating" without opening a single project.
+        sentry_connected: sentryReports > 0,
+        sentry_connected_reports_30d: sentryReports,
+        trend_7d: {
+          last7d,
+          prev7d,
+          delta: trendDelta,
+          direction: trendDirection,
+        },
+      };
+    });
+
+    // The host that *this* admin response was served from. The frontend
+    // compares it to each key's `last_seen_endpoint_host` to detect the
+    // common mis-config "SDK is talking to a different backend" — usually
+    // a stale `NEXT_PUBLIC_MUSHI_API_ENDPOINT` left over from local dev,
+    // or a CI build that baked in a staging endpoint. Mirrors the dashboard
+    // route's adminHost capture (~line 513).
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null;
+      } catch {
+        return null;
+      }
+    })();
+
+    // Surface the latest-known SDK version per package alongside the
+    // enriched projects so the FE can render outdated-SDK feedback even
+    // for project rows that haven't ingested a report yet (the "install
+    // snippet" already shows a version — let the badge agree with the
+    // catalog instead of the SDK's own bundled metadata).
+    return c.json({
+      ok: true,
+      data: { projects: enriched, admin_host: adminHost, latest_sdk_versions: latestSdkVersions },
+    });
+  });
+
+  app.get('/v1/admin/projects/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const accessibleIds = await enumerateAccessibleProjectIds(c, db, userId);
+    const activeProjectHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null;
+
+    const empty = {
+      projectCount: 0,
+      activeKeyCount: 0,
+      projectsWithReports: 0,
+      sdkConnectedCount: 0,
+      neverIngestedCount: 0,
+      reportsLast24h: 0,
+      reportsLast30d: 0,
+      activeProjectId: activeProjectHint,
+      activeProjectName: null as string | null,
+      activeProjectHasReports: false,
+      activeProjectSdkConnected: false,
+      staleKeyCount: 0,
+      topPriority: 'no_projects' as
+        | 'no_projects'
+        | 'never_ingested'
+        | 'no_sdk_heartbeat'
+        | 'partial_ingest'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    if (accessibleIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { data: keyRows, error: keyErr },
+      { data: reportProjectRows, error: reportProjErr },
+      { count: reports24h, error: r24Err },
+      { count: reports30d, error: r30Err },
+      { data: activeProjectRow },
+    ] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('project_id, is_active, last_seen_at')
+        .in('project_id', accessibleIds),
+      db.from('reports').select('project_id').in('project_id', accessibleIds),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', accessibleIds)
+        .gte('created_at', since24h),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', accessibleIds)
+        .gte('created_at', since30d),
+      activeProjectHint && accessibleIds.includes(activeProjectHint)
+        ? db.from('projects').select('name').eq('id', activeProjectHint).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    if (keyErr) return dbError(c, keyErr);
+    if (reportProjErr) return dbError(c, reportProjErr);
+    if (r24Err) return dbError(c, r24Err);
+    if (r30Err) return dbError(c, r30Err);
+
+    const activeKeyCount = (keyRows ?? []).filter((k) => k.is_active !== false).length;
+    const sdkConnectedProjects = new Set<string>();
+    let staleKeyCount = 0;
+    for (const k of keyRows ?? []) {
+      const lastSeen = (k as { last_seen_at?: string | null }).last_seen_at;
+      if (lastSeen) {
+        sdkConnectedProjects.add(k.project_id as string);
+      } else if (k.is_active !== false) {
+        staleKeyCount += 1;
+      }
+    }
+    const projectsWithReportsSet = new Set<string>();
+    for (const r of reportProjectRows ?? []) {
+      projectsWithReportsSet.add(r.project_id as string);
+    }
+
+    const projectCount = accessibleIds.length;
+    const projectsWithReports = projectsWithReportsSet.size;
+    const sdkConnectedCount = sdkConnectedProjects.size;
+    const neverIngestedCount = Math.max(0, projectCount - projectsWithReports);
+
+    const activeProjectId =
+      activeProjectHint && accessibleIds.includes(activeProjectHint) ? activeProjectHint : null;
+    const activeProjectName = (activeProjectRow as { name?: string } | null)?.name ?? null;
+    const activeProjectHasReports = activeProjectId
+      ? projectsWithReportsSet.has(activeProjectId)
+      : false;
+    const activeProjectSdkConnected = activeProjectId
+      ? sdkConnectedProjects.has(activeProjectId)
+      : false;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (projectCount === 0) {
+      topPriority = 'no_projects';
+      topPriorityLabel = 'Create a project, mint an API key, and send a test report to prove ingest.';
+      topPriorityTo = '/projects?tab=create';
+    } else if (projectsWithReports === 0) {
+      topPriority = 'never_ingested';
+      topPriorityLabel = `${projectCount} project${projectCount === 1 ? '' : 's'} exist but none have ingested a report — mint a key and use Test report on a project card.`;
+      topPriorityTo = '/projects?tab=list';
+    } else if (sdkConnectedCount === 0) {
+      topPriority = 'no_sdk_heartbeat';
+      topPriorityLabel = 'Reports are landing but no API key shows a SDK heartbeat — expand a project card and compare endpoint host vs this admin.';
+      topPriorityTo = '/projects?tab=list';
+    } else if (neverIngestedCount > 0) {
+      topPriority = 'partial_ingest';
+      topPriorityLabel = `${neverIngestedCount} project${neverIngestedCount === 1 ? '' : 's'} never ingested · ${projectsWithReports}/${projectCount} receiving reports · ${sdkConnectedCount} with SDK heartbeat.`;
+      topPriorityTo = '/projects?tab=list';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${projectCount} project${projectCount === 1 ? '' : 's'} ingesting · ${activeKeyCount} active key${activeKeyCount === 1 ? '' : 's'} · ${reports24h ?? 0} report${(reports24h ?? 0) === 1 ? '' : 's'} in 24h.`;
+      topPriorityTo = '/reports';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        projectCount,
+        activeKeyCount,
+        projectsWithReports,
+        sdkConnectedCount,
+        neverIngestedCount,
+        reportsLast24h: reports24h ?? 0,
+        reportsLast30d: reports30d ?? 0,
+        activeProjectId,
+        activeProjectName,
+        activeProjectHasReports,
+        activeProjectSdkConnected,
+        staleKeyCount,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
+  app.post('/v1/admin/projects', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const { name } = (await c.req.json()) as { name: string };
+    const db = getServiceClient();
+
+    if (!name?.trim()) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Name required' } },
+        400,
+      );
+    }
+
+    // Teams v1 added a NOT NULL `organization_id` to `projects`, but this
+    // POST kept inserting with only `owner_id`. Result: every "Create
+    // project" call returned 500 in production (verified 2026-04-28: kept
+    // logging `code 23502 — null value in column "organization_id"`).
+    // Resolve the active org from the same `X-Mushi-Org-Id` header the FE
+    // already sends for every other org-scoped call. Fall back to the
+    // user's first org membership (oldest first, owner roles preferred)
+    // when no header is set so that legacy SDK calls keep working.
+    const orgIdHint = c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null;
+    if (orgIdHint && !UUID_RE.test(orgIdHint)) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'INVALID_ORGANIZATION_ID', message: 'X-Mushi-Org-Id must be a UUID' },
+        },
+        400,
+      );
+    }
+
+    const { data: memberships } = await db
+      .from('organization_members')
+      .select('organization_id, role, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    const memberOrgs = memberships ?? [];
+    let organizationId: string | null = null;
+    if (orgIdHint) {
+      const match = memberOrgs.find((m) => m.organization_id === orgIdHint);
+      if (!match) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'You are not a member of the requested organization',
+            },
+          },
+          403,
+        );
+      }
+      // Only owners and admins can create projects in an org. Members and
+      // viewers get a clear 403 instead of a confusing DB error.
+      if (match.role !== 'owner' && match.role !== 'admin') {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only org owners or admins can create projects',
+            },
+          },
+          403,
+        );
+      }
+      organizationId = match.organization_id;
+    } else {
+      // No hint: pick the user's oldest org where they're owner/admin so
+      // the new project lands somewhere they can manage.
+      const writable = memberOrgs.find((m) => m.role === 'owner' || m.role === 'admin');
+      organizationId = writable?.organization_id ?? null;
+    }
+
+    // Lazy bootstrap: a brand-new signup may have arrived before the
+    // `on_auth_user_created_personal_org` trigger could materialise
+    // their personal workspace (or the trigger may have failed — the
+    // 20260520300000_personal_org_on_signup migration intentionally
+    // swallows exceptions so a bad trigger run never blocks signup).
+    // Rather than dead-end the user on "NO_ORGANIZATION" with no
+    // recovery path in the UI, materialise the personal org on the
+    // fly via the same idempotent helper the trigger uses, then
+    // continue. Only triggers when (a) the caller didn't pass an
+    // explicit org hint AND (b) they have zero writable memberships
+    // — never silently widens scope of an explicit choice.
+    if (!organizationId && !orgIdHint) {
+      // The factory lives in `private.bootstrap_personal_org` (same
+      // convention as touch_org_member_activity / has_org_role etc),
+      // but PostgREST only exposes schemas listed in `api.schemas`
+      // (default: public, graphql_public). To avoid widening the
+      // PostgREST allowlist just for this one call, we ship a thin
+      // SECURITY DEFINER wrapper at `public.bootstrap_personal_org`
+      // (migration 20260520310000_personal_org_public_wrapper) that
+      // delegates to the private function. The wrapper is service-role
+      // only so an authenticated user can never call it with someone
+      // else's user id.
+      const { data: personalOrgId, error: bootstrapErr } = await db
+        .rpc('bootstrap_personal_org', { p_user_id: userId });
+      if (!bootstrapErr && typeof personalOrgId === 'string') {
+        organizationId = personalOrgId;
+      } else if (bootstrapErr) {
+        // Surface the DB error so it shows up in Sentry / postgres logs
+        // — the user still sees the friendlier NO_ORGANIZATION below.
+        try {
+          reportMessage(
+            `admin.projects.create.bootstrap_personal_org failed: ${bootstrapErr.message}`,
+            'warning',
+          );
+        } catch {
+          // Sentry init can race on cold-start of the edge function.
+          // We must never let a telemetry failure prevent the user
+          // from seeing the actionable error message below.
+        }
+      }
+    }
+
+    if (!organizationId) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NO_ORGANIZATION',
+            message: 'You need to be an owner or admin of an organization to create a project',
+          },
+        },
+        400,
+      );
+    }
+
+    // Slug derivation:
+    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
+    //      trailing dashes — the historical shape.
+    //   2. If the user typed something like "!!!" or all-emoji that
+    //      reduces to an empty string, fall back to a short random tail
+    //      so we never write an empty slug. Empty slugs broke the slug
+    //      UNIQUE constraint as soon as a second emoji-named project
+    //      landed AND surfaced in the URL as `/projects//settings`,
+    //      which the React Router stopped resolving cleanly.
+    //   3. Cap the length at 48 chars so the slug fits in the URL bar
+    //      and in the audit log without truncation. Random suffixes
+    //      append AFTER the trim so a long-name + collision retry
+    //      below stays under the column cap.
+    let slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 48);
+    if (!slug) {
+      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
+    }
+    const { data, error } = await db
+      .from('projects')
+      .insert({
+        name: name.trim(),
+        slug,
+        owner_id: userId,
+        organization_id: organizationId,
+      })
+      .select('id')
+      .single();
+
+    if (error) return dbError(c, error);
+
+    await db.from('project_settings').insert({ project_id: data.id });
+    // Membership is the source-of-truth for "can this user dispatch fixes /
+    // see traces / etc". Without this row the owner can read via owner_id but
+    // member-gated endpoints (fixes/dispatch) reject them. Always seed.
+    await db
+      .from('project_members')
+      .upsert(
+        { project_id: data.id, user_id: userId, role: 'owner' },
+        { onConflict: 'project_id,user_id' },
+      );
+
+    return c.json({ ok: true, data: { id: data.id, slug } }, 201);
+  });
+
+  // Rename a project. Owner and admin in the project's org can change the
+  // display name; legacy ownerless-org projects fall back to `owner_id`.
+  // Slug is NOT mutable here on purpose — it shows up in shareable Reports
+  // / Settings deep-links, in the X-API-Key auth flow's audit trail, and
+  // in the type-the-slug delete confirmation. A cosmetic rename should
+  // never break those. If we ever need slug edits, ship a separate
+  // explicit "Change project handle" flow that owners only can use.
+  app.patch('/v1/admin/projects/:id', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (name.length < 1 || name.length > 120) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_NAME', message: 'Name must be 1-120 characters.' } },
+        400,
+      );
+    }
+
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('id, name, slug, organization_id, owner_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectErr) return dbError(c, projectErr);
+    if (!project) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Same authz tiers as DELETE: org owner/admin OR legacy direct owner.
+    let allowed = false;
+    if (project.organization_id) {
+      const { data: membership } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', project.organization_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const role = membership?.role ?? null;
+      allowed = role === 'owner' || role === 'admin';
+    } else if (project.owner_id === userId) {
+      allowed = true;
+    }
+    if (!allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only org owners or admins can rename a project',
+          },
+        },
+        403,
+      );
+    }
+
+    const { data: updated, error: updateErr } = await db
+      .from('projects')
+      .update({ name, updated_at: new Date().toISOString() })
+      .eq('id', projectId)
+      .select('id, name, slug')
+      .single();
+    if (updateErr || !updated) {
+      return dbError(c, updateErr ?? { message: 'project_update_failed' });
+    }
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'project', projectId, {
+      previousName: project.name,
+      name,
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { project: updated } });
+  });
+
+  // Permanently deletes a project. All FKs to `projects.id` use ON DELETE
+  // CASCADE so this single statement removes reports, comments, fix_attempts,
+  // api_keys, settings, members, integrations, billing_subscriptions, etc.
+  // (54 cascading tables as of 2026-04-28). This is irreversible.
+  //
+  // Authz: only an org `owner` or `admin` can delete a project. `member`
+  // and `viewer` get a 403. Solo accounts (legacy `owner_id` rows with no
+  // org row) fall back to `owner_id == userId`.
+  //
+  // UX defense: the FE ships a type-the-slug-to-confirm modal. The backend
+  // also accepts an optional `{ confirm_slug }` body and rejects mismatches
+  // so a stolen JWT or a broken FE can't blow away a project with a single
+  // verb-only request.
+  //
+  // Audit: `audit_logs` cascades with the project, so a row written there
+  // would die with the data it documents. Log the deletion event to Sentry
+  // (`category=project.deleted`) so monitoring keeps the receipt.
+  app.delete('/v1/admin/projects/:id', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as { confirm_slug?: string };
+
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('id, name, slug, organization_id, owner_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectErr) return dbError(c, projectErr);
+    if (!project) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Belt-and-suspenders: if FE sent a confirm_slug it MUST match. Treat
+    // a mismatch as a hard 400, never silently delete.
+    if (body.confirm_slug !== undefined && body.confirm_slug !== project.slug) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'SLUG_MISMATCH',
+            message: `confirm_slug must equal "${project.slug}"`,
+          },
+        },
+        400,
+      );
+    }
+
+    // Resolve the caller's role in this project's org. Two-tier authz:
+    //   • Org-backed project (the new normal) → require role in
+    //     {owner, admin}.
+    //   • Legacy ownerless-org project → fall back to owner_id match.
+    let allowed = false;
+    if (project.organization_id) {
+      const { data: membership } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', project.organization_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const role = membership?.role ?? null;
+      allowed = role === 'owner' || role === 'admin';
+    } else if (project.owner_id === userId) {
+      allowed = true;
+    }
+
+    if (!allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only org owners or admins can delete a project',
+          },
+        },
+        403,
+      );
+    }
+
+    const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
+    if (deleteErr) return dbError(c, deleteErr);
+
+    // Sentry breadcrumb-style log. Real monitoring hook: filter by
+    // `category:project.deleted` to spot accidental mass-deletions.
+    try {
+      log.info('project.deleted', {
+        project_id: project.id,
+        project_slug: project.slug,
+        project_name: project.name,
+        organization_id: project.organization_id,
+        deleted_by: userId,
+      });
+    } catch {
+      // Logger failures must never block the delete from succeeding.
+    }
+
+    return c.json({
+      ok: true,
+      data: { id: project.id, slug: project.slug, name: project.name },
+    });
+  });
+
+}

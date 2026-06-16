@@ -20,6 +20,16 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'inventory.settings.update'
   | 'report.bulk_undone'
   | 'settings.deleted'
+  | 'fix_dispatch.cancelled'
+  | 'mcp.tool_called'
+  | 'mcp.tool_failed'
+  | 'org.context_switched'
+  | 'project.context_switched'
+  | 'org.member_role_changed'
+  | 'org.invite_resent'
+  | 'org.invite_revoked'
+  | 'project.created'
+  | 'project.deleted'
 
 export async function logAudit(
   db: SupabaseClient,
@@ -31,6 +41,15 @@ export async function logAudit(
   metadata?: Record<string, unknown>,
   context?: { email?: string; actorType?: string; ip?: string; userAgent?: string },
 ): Promise<void> {
+  auditLog.audit(action, {
+    projectId,
+    actorId,
+    actorType: context?.actorType ?? 'user',
+    resourceType,
+    resourceId,
+    ...(context?.ip ? { ip: context.ip } : {}),
+  })
+
   await db.from('audit_logs').insert({
     project_id: projectId,
     actor_id: actorId,

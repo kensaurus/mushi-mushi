@@ -18,6 +18,20 @@ npx mushi-mushi setup --ide cursor
 
 That command reads `~/.mushirc`, writes `.cursor/mcp.json` with the `mushi` server block, and prints "Done — restart Cursor and ask: `list mushi tools`". No copy-pasting environment variables.
 
+### Codebase Understand tools (indexed repos)
+
+When codebase indexing is enabled on a project, these MCP tools ground on `project_codebase_files` (+ wiki chunks when configured):
+
+| Tool | Scope | Purpose |
+|------|-------|---------|
+| `ask_codebase` | write | Plain-English Q&A with file:line citations |
+| `get_file_summary` | read | Lazy plain-English file/symbol summary |
+| `get_codebase_tour` | read | Dependency-ordered onboarding tour |
+| `search_codebase` | read | Semantic (or scoped) embedding search |
+| `get_codebase_domains` | read | Business domain / flow map |
+| `analyze_codebase_impact` | read | Diff impact (paths, last push, compare, fix PR) |
+| `analyze_wiki_knowledge` | read | Wiki/docs knowledge graph |
+
 > **What this is, and what it isn't**
 >
 > - **This package** (`@mushi-mushi/mcp`) is the MCP **server** — runs locally next to your editor, talks to the Mushi API, and presents bug reports as MCP tools/resources to your coding agent. Always install it by its scoped name (`npx -y @mushi-mushi/mcp@latest`) — the bare `mushi-mcp` name was never published to npm.

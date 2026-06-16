@@ -7,6 +7,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createEmbedding } from './embeddings.ts'
 import { formatCodeContext, type CodeContext } from './rag.ts'
+import { pathMatchesScope, type CodebaseScopeSettings } from './codebase-scope.ts'
 
 export interface CodebaseCitation {
   file_path: string
@@ -63,6 +64,25 @@ export interface DomainView {
   name: string
   description: string
   flows: DomainFlow[]
+}
+
+export type ExploreLayer = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
+
+/** Heuristic architectural layer from file path — shared by explore graph + stats. */
+export function detectExploreLayer(filePath: string): ExploreLayer {
+  const p = filePath.toLowerCase().replace(/\\/g, '/')
+  if (/(^|\/)(tests?|__tests?__|spec|e2e|cypress|playwright)\//.test(p) || /\.(test|spec)\.[jt]sx?$/.test(p)) return 'test'
+  if (/(^|\/)(server|api|edge-function|supabase\/functions|backend|routes?)\//.test(p)) return 'backend'
+  if (/(^|\/)(app|pages?|screens?|views?|components?|layouts?|ui)\//u.test(p) || /\.(tsx|jsx)$/u.test(p)) return 'ui'
+  if (/(^|\/)(lib|libs?|utils?|helpers?|hooks?|contexts?|shared|common|core)\//u.test(p)) return 'lib'
+  if (
+    /(^|\/)(config|configs?|tooling|scripts?|deploy|\.github|build)\//u.test(p) ||
+    /\.(json|yaml|yml|toml|mjs|cjs)$/u.test(p) ||
+    /^(vite|next|tailwind|tsconfig|package|turbo)/.test(p.split('/').pop() ?? '')
+  ) {
+    return 'config'
+  }
+  return 'other'
 }
 
 const IMPORT_RE = /(?:import\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\))/g
@@ -258,10 +278,22 @@ export function buildCodebaseChatSystemPrompt(args: {
   codeContext: string
   citations: CodebaseCitation[]
   fileFocus?: { file_path: string; symbol_name?: string | null } | null
+  outputLanguage?: string
+  personaDepth?: 'quick' | 'beginner' | 'advanced'
 }): string {
   const focusLine = args.fileFocus
     ? `\nThe user is focused on \`${args.fileFocus.file_path}${args.fileFocus.symbol_name ? `#${args.fileFocus.symbol_name}` : ''}\`. Prioritize explaining that file/symbol.\n`
     : ''
+  const langLine =
+    args.outputLanguage && args.outputLanguage !== 'en'
+      ? `\nRespond in ${args.outputLanguage} unless quoting code identifiers.\n`
+      : ''
+  const depthLine =
+    args.personaDepth === 'quick'
+      ? '\nKeep answers very short (2–4 sentences).\n'
+      : args.personaDepth === 'beginner'
+        ? '\nAssume the reader is new to the codebase — define jargon and avoid acronyms.\n'
+        : ''
 
   return [
     'You are a codebase understanding assistant for the Mushi admin console.',
@@ -272,6 +304,8 @@ export function buildCodebaseChatSystemPrompt(args: {
     '',
     `Project: ${args.projectName ?? 'unknown'}`,
     focusLine,
+    langLine,
+    depthLine,
     '--- Retrieved code context ---',
     args.codeContext || '(no matching code chunks — index may be empty or query too vague)',
     '',
@@ -315,42 +349,84 @@ export function isSummaryStale(cachedHash: string | null, currentHash: string | 
   return cachedHash !== currentHash
 }
 
+export async function getProjectCodebaseScope(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<CodebaseScopeSettings & { output_language: string }> {
+  const { data } = await db
+    .from('project_settings')
+    .select('codebase_index_scope_paths, codebase_index_exclude_globs, codebase_output_language')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  return {
+    scope_paths: (data?.codebase_index_scope_paths as string[] | null) ?? null,
+    exclude_globs: (data?.codebase_index_exclude_globs as string[] | null) ?? null,
+    output_language: (data?.codebase_output_language as string | null) ?? 'en',
+  }
+}
+
 export async function retrieveCodeForQuestion(
   db: SupabaseClient,
   projectId: string,
   query: string,
   k = 12,
-): Promise<{ files: CodeContext[]; reason: string }> {
+  opts?: { scopePrefix?: string | null; includeWiki?: boolean },
+): Promise<{ files: CodeContext[]; wikiChunks: Array<{ article_path: string; title: string | null; preview: string; similarity: number }>; reason: string }> {
   const trimmed = query.trim()
-  if (!trimmed) return { files: [], reason: 'empty_query' }
+  if (!trimmed) return { files: [], wikiChunks: [], reason: 'empty_query' }
+
+  const scope = await getProjectCodebaseScope(db, projectId)
+  const pathPrefix =
+    opts?.scopePrefix?.trim() ||
+    (scope.scope_paths?.length === 1 ? scope.scope_paths[0] : null) ||
+    null
 
   let embedding: number[]
   try {
     embedding = await createEmbedding(trimmed, { projectId })
   } catch {
-    return { files: [], reason: 'embedding_failed' }
+    return { files: [], wikiChunks: [], reason: 'embedding_failed' }
   }
 
   const { data: hits, error } = await db.rpc('match_codebase_files', {
     query_embedding: embedding,
     match_project: projectId,
     match_count: k,
+    path_prefix: pathPrefix,
   })
-  if (error) return { files: [], reason: 'rpc_failed' }
+  if (error) return { files: [], wikiChunks: [], reason: 'rpc_failed' }
 
-  const mapped = (hits ?? []).map((f: Record<string, unknown>) => ({
-    filePath: f.file_path as string,
-    preview: f.content_preview as string,
-    componentTag: f.component_tag as string | undefined,
-    similarity: f.similarity as number,
-    symbolName: (f.symbol_name as string | null | undefined) ?? null,
-    signature: (f.signature as string | null | undefined) ?? null,
-    lineStart: (f.line_start as number | null | undefined) ?? null,
-    lineEnd: (f.line_end as number | null | undefined) ?? null,
-  }))
+  const mapped = (hits ?? [])
+    .map((f: Record<string, unknown>) => ({
+      filePath: f.file_path as string,
+      preview: f.content_preview as string,
+      componentTag: f.component_tag as string | undefined,
+      similarity: f.similarity as number,
+      symbolName: (f.symbol_name as string | null | undefined) ?? null,
+      signature: (f.signature as string | null | undefined) ?? null,
+      lineStart: (f.line_start as number | null | undefined) ?? null,
+      lineEnd: (f.line_end as number | null | undefined) ?? null,
+    }))
+    .filter((f: { filePath: string }) => pathMatchesScope(f.filePath, scope))
 
-  if (mapped.length === 0) return { files: [], reason: 'no_matches' }
-  return { files: mapped, reason: 'ok' }
+  let wikiChunks: Array<{ article_path: string; title: string | null; preview: string; similarity: number }> = []
+  if (opts?.includeWiki !== false) {
+    const { data: wikiHits } = await db.rpc('match_knowledge_chunks', {
+      query_embedding: embedding,
+      match_project: projectId,
+      match_count: Math.min(4, k),
+      source_id: null,
+    })
+    wikiChunks = (wikiHits ?? []).map((w: Record<string, unknown>) => ({
+      article_path: w.article_path as string,
+      title: (w.title as string | null) ?? null,
+      preview: String(w.body ?? '').slice(0, 1200),
+      similarity: w.similarity as number,
+    }))
+  }
+
+  if (mapped.length === 0 && wikiChunks.length === 0) return { files: [], wikiChunks: [], reason: 'no_matches' }
+  return { files: mapped, wikiChunks, reason: 'ok' }
 }
 
 export async function getIndexFingerprint(
@@ -378,8 +454,12 @@ export async function getIndexFingerprint(
 export async function loadExploreGraph(
   db: SupabaseClient,
   projectId: string,
+  opts?: { scopePrefix?: string | null },
 ): Promise<{ nodes: ExploreGraphNode[]; edges: ExploreGraphEdge[] }> {
-  const { data: rows } = await db
+  const scope = await getProjectCodebaseScope(db, projectId)
+  const pathPrefix = opts?.scopePrefix?.trim() || null
+
+  let query = db
     .from('project_codebase_files')
     .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, last_modified')
     .eq('project_id', projectId)
@@ -388,18 +468,13 @@ export async function loadExploreGraph(
     .order('file_path')
     .limit(5000)
 
-  const fileRows = rows ?? []
-  type ExploreLayer = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
-
-  function detectLayer(filePath: string): ExploreLayer {
-    const p = filePath.toLowerCase().replace(/\\/g, '/')
-    if (/(^|\/)(tests?|__tests?__|spec|e2e|cypress|playwright)\//.test(p) || /\.(test|spec)\.[jt]sx?$/.test(p)) return 'test'
-    if (/(^|\/)(server|api|edge-function|supabase\/functions|backend|routes?)\//.test(p)) return 'backend'
-    if (/(^|\/)(app|pages?|screens?|views?|components?|layouts?|ui)\//u.test(p) || /\.(tsx|jsx)$/u.test(p)) return 'ui'
-    if (/(^|\/)(lib|libs?|utils?|helpers?|hooks?|contexts?|shared|common|core)\//u.test(p)) return 'lib'
-    if (/(^|\/)(config|configs?|tooling|scripts?|deploy|\.github|build)\//u.test(p) || /\.(json|yaml|yml|toml|mjs|cjs)$/u.test(p)) return 'config'
-    return 'other'
+  if (pathPrefix) {
+    query = query.or(`file_path.eq.${pathPrefix},file_path.like.${pathPrefix}/%`)
   }
+
+  const { data: rows } = await query
+
+  const fileRows = (rows ?? []).filter((r) => pathMatchesScope(String(r.file_path), scope))
 
   const nodes: ExploreGraphNode[] = fileRows.map((r) => ({
     id: r.id,
@@ -408,7 +483,7 @@ export async function loadExploreGraph(
     metadata: {
       file_path: r.file_path,
       symbol_name: null,
-      layer: detectLayer(r.file_path),
+      layer: detectExploreLayer(r.file_path),
       content_preview: r.content_preview ?? null,
     },
   }))

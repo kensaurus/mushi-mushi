@@ -28,7 +28,7 @@ import { Btn, Loading, Tooltip } from './ui'
 import { usePageContext, contextFilterChips, type PageContext } from '../lib/pageContext'
 import { formatLlmCost } from '../lib/format'
 import { langfuseTraceUrl, RESOLVED_API_URL, RESOLVED_SUPABASE_ANON_KEY } from '../lib/env'
-import { debugLog } from '../lib/debug'
+import { debugLog, debugError } from '../lib/debug'
 import { AskMushiComposer } from './AskMushiComposer'
 import { ClarifyChips } from './ClarifyChips'
 import { ContainedBlock, InlineProof, SignalChip } from './report-detail/ReportSurface'
@@ -45,8 +45,8 @@ import type {
   AskMushiThreadSummary,
   AskMushiIntent,
 } from '../lib/askMushiTypes'
-import type { SlashCommand } from '../lib/askMushiCommands'
-import { SLASH_COMMANDS } from '../lib/askMushiCommands'
+import { useTheme } from '../lib/useTheme'
+import { askMushiShikiThemes, formatAssistantMarkdown } from '../lib/askMushiTerminalTheme'
 
 interface Props {
   open: boolean
@@ -54,6 +54,10 @@ interface Props {
   /** Current route path — sent as a fallback when no page has published
    *  richer context via `usePublishPageContext`. */
   route: string
+  /** Optional seed message from Cmd+K "Continue in sidebar" (composer pre-fill). */
+  seedMessage?: string | null
+  /** When set, hydrate the palette assist thread instead of starting empty. */
+  seedThreadId?: string | null
 }
 
 function uuid(): string {
@@ -75,9 +79,11 @@ function buildContextPayload(activeCtx: PageContext | null) {
   }
 }
 
-export function AskMushiSidebar({ open, onClose, route }: Props) {
+export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadId }: Props) {
   const pageCtx = usePageContext()
   const activeCtx = pageCtx && pageCtx.route === route ? pageCtx : null
+  const { resolved: appTheme } = useTheme()
+  const shikiTheme = useMemo(() => askMushiShikiThemes(appTheme), [appTheme])
 
   const [messages, setMessages] = useState<AskMushiMessage[]>([])
   const [input, setInput] = useState('')
@@ -91,15 +97,25 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const inflightRef = useRef<AbortController | null>(null)
   const streamRef = useRef<AskMushiStreamHandle | null>(null)
+  const paletteHandoffRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      paletteHandoffRef.current = null
+      return
+    }
+    if (seedThreadId) return
+    if (seedMessage?.trim()) {
+      setInput(seedMessage.trim())
+    }
     const t = setTimeout(() => {
-      const ta = document.querySelector<HTMLTextAreaElement>('[data-ask-mushi-textarea]')
+      const ta = document.querySelector<HTMLTextAreaElement>(
+        'form textarea:not([readonly])',
+      )
       ta?.focus()
     }, 120)
     return () => clearTimeout(t)
-  }, [open])
+  }, [open, seedMessage, seedThreadId])
 
   useEffect(() => {
     if (open) return
@@ -151,6 +167,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
       const body: AskMushiSendBody = {
         threadId,
         route,
+        mode: 'chat',
         context: ctxPayload,
         intent: intentOverride ?? intent,
         messages: next.map((m) => ({ role: m.role, content: m.content })),
@@ -170,6 +187,69 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
         streaming: useStream,
         anonKeyPrefix: RESOLVED_SUPABASE_ANON_KEY.slice(0, 10) + '…',
       })
+      const appendPostAssistant = (data: AskMushiSendResponse) => {
+        if (data.threadId && data.threadId !== threadId) setThreadId(data.threadId)
+        const reply = data.reply
+        const assistant: AskMushiMessage = {
+          id: uuid(),
+          role: 'assistant',
+          content: data.message.content,
+          model: data.model,
+          fallbackUsed: data.fallbackUsed,
+          inputTokens: data.inputTokens,
+          outputTokens: data.outputTokens,
+          cacheReadTokens: data.cacheReadTokens,
+          cacheCreateTokens: data.cacheCreateTokens,
+          costUsd: data.costUsd,
+          latencyMs: data.latencyMs,
+          clarify:
+            reply.kind === 'clarify'
+              ? { question: reply.question, options: reply.options }
+              : null,
+        }
+        setMessages((prev) => [...prev, assistant])
+      }
+
+      const runPostTurn = async () => {
+        const ctrl = new AbortController()
+        inflightRef.current = ctrl
+        try {
+          const res = await apiFetch<AskMushiSendResponse>('/v1/admin/ask-mushi/messages', {
+            method: 'POST',
+            body: JSON.stringify(body),
+            signal: ctrl.signal,
+          })
+          if (ctrl.signal.aborted) return
+          if (!res.ok || !res.data) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: uuid(),
+                role: 'assistant',
+                content: `(couldn't reach the assistant: ${res.error?.message ?? 'unknown error'})`,
+              },
+            ])
+            return
+          }
+          appendPostAssistant(res.data)
+        } catch (e) {
+          if (ctrl.signal.aborted) return
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uuid(),
+              role: 'assistant',
+              content: `(network error: ${e instanceof Error ? e.message : 'unknown'})`,
+            },
+          ])
+        } finally {
+          if (inflightRef.current === ctrl) inflightRef.current = null
+          setPending(false)
+          setIntentOverride(null)
+          setModelOverride(null)
+        }
+      }
+
       if (useStream) {
         const assistantId = uuid()
         setMessages((prev) => [
@@ -223,22 +303,12 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
               setModelOverride(null)
             },
             onError: (err) => {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId
-                    ? {
-                        ...m,
-                        content: m.content || `(stream error: ${err.message})`,
-                        streaming: false,
-                      }
-                    : m,
-                ),
-              )
-              setPending(false)
-              // Same reasoning as onDone — overrides are scoped to one
-              // turn, regardless of whether the stream succeeded.
-              setIntentOverride(null)
-              setModelOverride(null)
+              debugError('ask-mushi:stream', 'Stream failed — falling back to POST', err)
+              streamRef.current?.cancel()
+              // Drop the empty/half-rendered streaming bubble; POST will append
+              // a complete assistant turn (same contract as non-stream path).
+              setMessages((prev) => prev.filter((m) => m.id !== assistantId))
+              void runPostTurn()
             },
           })
           streamRef.current = handle
@@ -251,64 +321,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
       }
 
       // Non-stream path — single round-trip POST.
-      const ctrl = new AbortController()
-      inflightRef.current = ctrl
-      try {
-        const res = await apiFetch<AskMushiSendResponse>('/v1/admin/ask-mushi/messages', {
-          method: 'POST',
-          body: JSON.stringify(body),
-          signal: ctrl.signal,
-        })
-        if (ctrl.signal.aborted) return
-        if (!res.ok || !res.data) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: uuid(),
-              role: 'assistant',
-              content: `(couldn't reach the assistant: ${res.error?.message ?? 'unknown error'})`,
-            },
-          ])
-          return
-        }
-        const data = res.data
-        if (data.threadId && data.threadId !== threadId) setThreadId(data.threadId)
-        const reply = data.reply
-        const assistant: AskMushiMessage = {
-          id: uuid(),
-          role: 'assistant',
-          content: data.message.content,
-          model: data.model,
-          fallbackUsed: data.fallbackUsed,
-          inputTokens: data.inputTokens,
-          outputTokens: data.outputTokens,
-          cacheReadTokens: data.cacheReadTokens,
-          cacheCreateTokens: data.cacheCreateTokens,
-          costUsd: data.costUsd,
-          latencyMs: data.latencyMs,
-          clarify:
-            reply.kind === 'clarify'
-              ? { question: reply.question, options: reply.options }
-              : null,
-        }
-        setMessages((prev) => [...prev, assistant])
-      } catch (e) {
-        if (ctrl.signal.aborted) return
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: uuid(),
-            role: 'assistant',
-            content: `(network error: ${e instanceof Error ? e.message : 'unknown'})`,
-          },
-        ])
-      } finally {
-        if (inflightRef.current === ctrl) inflightRef.current = null
-        setPending(false)
-        // Reset overrides — they only apply to one turn at a time.
-        setIntentOverride(null)
-        setModelOverride(null)
-      }
+      await runPostTurn()
     },
     [messages, pending, route, activeCtx, threadId, intentOverride, modelOverride],
   )
@@ -396,6 +409,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
     setHistoryOpen(false)
     inflightRef.current?.abort()
     streamRef.current?.cancel()
+    setInput('')
     setPending(true)
     try {
       const res = await apiFetch<{
@@ -414,12 +428,33 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
           langfuse_trace_id: string | null
           meta: Record<string, unknown> | null
         }>
-      }>(`/v1/admin/ask-mushi/threads/${id}`)
-      if (!res.ok || !res.data) return
+      }>(`/v1/admin/ask-mushi/threads/${id}`, { cache: 'no-store' })
+      if (!res.ok || !res.data) {
+        setMessages([
+          {
+            id: uuid(),
+            role: 'system',
+            content: 'Could not load that thread. Open **History** and try again.',
+          },
+        ])
+        return
+      }
+      if (res.data.messages.length === 0) {
+        setThreadId(id)
+        setMessages([
+          {
+            id: uuid(),
+            role: 'system',
+            content: 'That thread is empty — send a message to continue it.',
+          },
+        ])
+        return
+      }
       const hydrated: AskMushiMessage[] = res.data.messages.map((m) => ({
         id: m.id,
         role: m.role,
-        content: m.content,
+        content:
+          m.role === 'assistant' ? formatAssistantMarkdown(m.content) : m.content,
         model: m.model,
         fallbackUsed: m.fallback_used,
         inputTokens: m.input_tokens,
@@ -444,6 +479,14 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!open || !seedThreadId) return
+    if (paletteHandoffRef.current === seedThreadId) return
+    paletteHandoffRef.current = seedThreadId
+    setInput('')
+    void hydrateThread(seedThreadId)
+  }, [open, seedThreadId, hydrateThread])
+
   const title = activeCtx?.title ?? route
 
   return (
@@ -452,10 +495,12 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
       onClose={onClose}
       width="md"
       dimmed={false}
+      surface="ask-mushi"
+      panelClassName="ask-mushi-terminal"
       title={
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="shrink-0">Ask Mushi</span>
-          <span className="text-2xs font-mono text-fg-faint truncate">· {title}</span>
+        <div className="flex items-center gap-2 min-w-0 ask-mushi-header-title">
+          <span className="shrink-0 font-mono tracking-tight">&gt; Ask Mushi</span>
+          <span className="text-2xs font-mono truncate">· {title}</span>
         </div>
       }
       headerAction={
@@ -506,7 +551,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
             </div>
           )}
           {messages.length > 0 && (
-            <InlineProof className="px-3 py-1 flex items-center gap-2 border-t border-edge/40 bg-surface-overlay/20 font-mono tabular-nums">
+            <InlineProof className="ask-mushi-thread-meta px-3 py-1 flex items-center gap-2 border-t border-edge/40 font-mono tabular-nums">
               <span className="text-fg-secondary">This thread:</span>
               <SignalChip tone="neutral">{(threadTotals.latency / 1000).toFixed(1)}s</SignalChip>
               <SignalChip tone="neutral">{threadTotals.tokens.toLocaleString()} tok</SignalChip>
@@ -551,7 +596,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
         </div>
       }
     >
-      <div ref={scrollRef} className="h-full overflow-y-auto px-4 py-3 space-y-3">
+      <div ref={scrollRef} className="ask-mushi-scroll h-full overflow-y-auto px-4 py-3 space-y-3">
         {historyOpen && (
           <HistoryPopover
             route={route}
@@ -562,6 +607,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
         )}
 
         {activeCtx &&
+          messages.length === 0 &&
           (activeCtx.summary ||
             contextFilterChips(activeCtx.filters).length > 0 ||
             activeCtx.selection) && <ContextStrip ctx={activeCtx} />}
@@ -572,6 +618,8 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
             ctx={activeCtx}
             onSuggest={(t) => setInput(t)}
             onSend={(t) => { void sendTurn(t) }}
+            onResumeThread={(id) => { void hydrateThread(id) }}
+            resuming={pending}
           />
         )}
 
@@ -579,6 +627,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
           <MessageRow
             key={m.id}
             message={m}
+            shikiTheme={shikiTheme}
             onCopy={() => navigator.clipboard?.writeText(m.content)}
             onClarifyPick={pickClarify}
             disabled={pending}
@@ -598,29 +647,32 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
 function ContextStrip({ ctx }: { ctx: PageContext }) {
   const chips = contextFilterChips(ctx.filters)
   return (
-    <section aria-label="Page context sent with each message">
-      <ContainedBlock tone="muted" label="Page context" className="space-y-1.5">
-        {ctx.summary && <div className="text-fg-secondary">{ctx.summary}</div>}
-        {chips.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {chips.map((c) => (
-              <span key={`${c.key}:${c.value}`} title={`Filter: ${c.key} = ${c.value}`}>
-                <SignalChip tone="neutral" className="font-mono">
-                  {c.key}: {c.value}
-                </SignalChip>
-              </span>
-            ))}
-          </div>
-        )}
-        {ctx.selection && (
-          <InlineProof className="border-0 bg-transparent px-0 py-0">
-            <span className="text-fg-faint">Focus:</span>{' '}
-            <span className="text-fg-secondary">{ctx.selection.kind}</span>
-            <span className="text-fg-faint"> · </span>
-            <span className="font-mono text-fg-secondary">{ctx.selection.label}</span>
-          </InlineProof>
-        )}
-      </ContainedBlock>
+    <section aria-label="Page context sent with each message" className="ask-mushi-context-strip">
+      <p className="ask-mushi-context-strip__label">Page context</p>
+      {ctx.summary && (
+        <p className="ask-mushi-context-strip__summary">{ctx.summary}</p>
+      )}
+      {chips.length > 0 && (
+        <div className="ask-mushi-context-strip__chips">
+          {chips.map((c) => (
+            <span
+              key={`${c.key}:${c.value}`}
+              className="ask-mushi-context-chip font-mono"
+              title={`Filter: ${c.key} = ${c.value}`}
+            >
+              {c.key}: {c.value}
+            </span>
+          ))}
+        </div>
+      )}
+      {ctx.selection && (
+        <p className="ask-mushi-context-strip__focus">
+          <span className="ask-mushi-context-strip__focus-label">Focus</span>
+          <span>{ctx.selection.kind}</span>
+          <span className="ask-mushi-context-strip__focus-sep">·</span>
+          <span className="font-mono">{ctx.selection.label}</span>
+        </p>
+      )}
     </section>
   )
 }
@@ -632,6 +684,9 @@ interface EmptyPromptProps {
   onSuggest: (t: string) => void
   /** Send a message immediately without stopping at the composer (suggestion buttons). */
   onSend: (t: string) => void
+  /** Load a prior thread from the server (Resume recent). */
+  onResumeThread: (threadId: string) => void
+  resuming?: boolean
 }
 
 // Curated subset of slash commands surfaced as chips in the empty state.
@@ -645,7 +700,7 @@ const QUICK_SLASH_CHIPS: { command: string; label: string; hint: string }[] = [
   { command: '/draft-pr-summary', label: 'PR summary', hint: 'Draft a Markdown PR description.' },
 ]
 
-function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
+function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }: EmptyPromptProps) {
   const suggestions =
     ctx?.questions && ctx.questions.length > 0 ? ctx.questions : suggestionsFor(route)
   const actions = ctx?.actions ?? []
@@ -675,9 +730,9 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
       <div className="flex items-start gap-2.5">
         <span
           aria-hidden
-          className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md bg-brand/10 border border-brand/30 text-brand text-base leading-none"
+          className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md bg-brand/10 border border-brand/30 text-brand font-mono text-xs leading-none"
         >
-          ✦
+          &gt;
         </span>
         <div className="min-w-0">
           <p className="text-xs font-medium text-fg leading-snug">
@@ -774,38 +829,39 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
           quiet (no header), null = still loading (we skip rendering for
           one tick to avoid layout flash). */}
       {recent && recent.length > 0 && (
-        <section aria-label="Recent threads on this page" className="border-t border-edge/40 pt-3">
-          <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
-            Resume recent
-          </p>
-          <ul className="space-y-1">
+        <section aria-label="Recent threads on this page" className="ask-mushi-resume-section">
+          <p className="ask-mushi-section-label">Resume recent</p>
+          <ul className="space-y-1.5">
             {recent.map((t) => (
               <li key={t.threadId}>
                 <button
                   type="button"
-                  onClick={() => onSuggest(`(resume thread ${t.threadId})`)}
-                  className="w-full text-left rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 hover:bg-surface-overlay motion-safe:transition-colors"
-                  title={`Reopen ${t.title || '(empty thread)'} in the History menu`}
+                  disabled={resuming}
+                  onClick={() => onResumeThread(t.threadId)}
+                  className="ask-mushi-resume-btn w-full text-left rounded-sm px-2.5 py-2 motion-safe:transition-colors disabled:opacity-50"
+                  title={`Reopen ${t.title || '(empty thread)'}`}
                 >
-                  <div className="text-2xs text-fg-secondary truncate">
+                  <div className="ask-mushi-resume-btn__title truncate">
                     {t.title || '(empty thread)'}
                   </div>
-                  <div className="text-3xs flex items-center gap-1.5 font-mono mt-0.5">
-                    <InlineProof className="border-0 bg-transparent px-0 py-0 inline-flex flex-wrap gap-1.5">
-                      <SignalChip tone="neutral">{new Date(t.lastAt).toLocaleString()}</SignalChip>
-                      <SignalChip tone="neutral">{t.messageCount} msg</SignalChip>
-                      {t.totalCostUsd > 0 && (
-                        <SignalChip tone="brand">{formatLlmCost(t.totalCostUsd)}</SignalChip>
-                      )}
-                    </InlineProof>
+                  <div className="ask-mushi-resume-btn__meta flex flex-wrap items-center gap-1.5 font-mono mt-1">
+                    <span>{new Date(t.lastAt).toLocaleString()}</span>
+                    <span className="opacity-60">·</span>
+                    <span>{t.messageCount} msg</span>
+                    {t.totalCostUsd > 0 && (
+                      <>
+                        <span className="opacity-60">·</span>
+                        <span className="ask-mushi-resume-btn__cost">{formatLlmCost(t.totalCostUsd)}</span>
+                      </>
+                    )}
                   </div>
                 </button>
               </li>
             ))}
           </ul>
-          <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-3xs">
-            Use the History menu in the header to reload one in full.
-          </InlineProof>
+          <p className="ask-mushi-resume-hint mt-1.5">
+            Or use <strong>History</strong> in the header for older threads.
+          </p>
         </section>
       )}
     </div>
@@ -814,39 +870,40 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
 
 interface MessageRowProps {
   message: AskMushiMessage
+  shikiTheme: ReturnType<typeof askMushiShikiThemes>
   onCopy: () => void
   onClarifyPick: (option: string) => void
   disabled?: boolean
 }
 
-function MessageRow({ message, onCopy, onClarifyPick, disabled }: MessageRowProps) {
+function MessageRow({ message, shikiTheme, onCopy, onClarifyPick, disabled }: MessageRowProps) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
+  const assistantBody = useMemo(
+    () => (isUser ? message.content : formatAssistantMarkdown(message.content)),
+    [isUser, message.content],
+  )
   if (isSystem) {
     return (
-      <ContainedBlock tone="muted" className="text-center italic text-3xs">
+      <p className="ask-mushi-system-msg text-center italic text-2xs px-2 py-1">
         {message.content}
-      </ContainedBlock>
+      </p>
     )
   }
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1`}>
       <div
-        className={`max-w-[88%] rounded-sm px-2.5 py-1.5 text-xs leading-relaxed ${
-          isUser
-            ? 'bg-brand/15 text-fg border border-brand/30 whitespace-pre-wrap'
-            : 'bg-surface-overlay text-fg-secondary border border-edge/60'
-        }`}
+        className={`ask-mushi-msg ask-mushi-msg--${isUser ? 'user' : 'assistant'} max-w-[88%] rounded-sm px-2.5 py-1.5 text-xs leading-relaxed`}
       >
         {isUser ? (
-          message.content
+          <span className="whitespace-pre-wrap">{message.content}</span>
         ) : (
           <Streamdown
             className="prose-mushi"
             parseIncompleteMarkdown={Boolean(message.streaming)}
-            shikiTheme={['github-dark', 'github-dark']}
+            shikiTheme={shikiTheme}
           >
-            {message.content || (message.streaming ? '…' : '')}
+            {assistantBody || (message.streaming ? '…' : '')}
           </Streamdown>
         )}
       </div>
@@ -890,7 +947,7 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
   if (message.costUsd != null) parts.push(formatLlmCost(message.costUsd))
   if (message.fallbackUsed) parts.push('fallback')
   return (
-    <InlineProof className="font-mono tabular-nums flex items-center gap-1.5 border-0 bg-transparent px-0 py-0">
+    <InlineProof className="ask-mushi-msg-meta font-mono tabular-nums flex items-center gap-1.5 border-0 bg-transparent px-0 py-0">
       <span>{parts.join(' · ')}</span>
       {traceUrl && (
         <Tooltip content={`Open Langfuse trace ${message.langfuseTraceId}`}>
@@ -910,11 +967,11 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
 
 function MessageActions({ message, onCopy }: { message: AskMushiMessage; onCopy: () => void }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="ask-mushi-msg-actions flex items-center gap-1.5">
       <button
         type="button"
         onClick={onCopy}
-        className="text-3xs text-fg-faint hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
+        className="text-2xs motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
       >
         Copy
       </button>
@@ -962,11 +1019,11 @@ function HistoryPopover({
 
   return (
     <section
-      className="rounded-md border border-edge bg-surface-raised shadow-card p-2 text-xs"
+      className="ask-mushi-history-popover rounded-md border p-2 text-xs"
       aria-label="Recent threads"
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint">
+        <span className="ask-mushi-section-label">
           Recent on {route}
         </span>
         <button
@@ -986,18 +1043,22 @@ function HistoryPopover({
               <button
                 type="button"
                 onClick={() => onPick(t.threadId)}
-                className={`w-full text-left rounded-sm px-2 py-1 hover:bg-surface-overlay motion-safe:transition-colors ${
-                  t.threadId === currentThreadId ? 'border border-brand/30' : ''
+                className={`ask-mushi-history-item w-full text-left rounded-sm px-2 py-1.5 motion-safe:transition-colors ${
+                  t.threadId === currentThreadId ? 'ask-mushi-history-item--active' : ''
                 }`}
               >
-                <div className="text-xs text-fg-secondary truncate">{t.title || '(empty)'}</div>
-                <InlineProof className="border-0 bg-transparent px-0 py-0 mt-0.5 inline-flex flex-wrap gap-1 font-mono">
-                  <SignalChip tone="neutral">{new Date(t.lastAt).toLocaleString()}</SignalChip>
-                  <SignalChip tone="neutral">{t.messageCount} msg</SignalChip>
+                <div className="ask-mushi-resume-btn__title truncate">{t.title || '(empty)'}</div>
+                <div className="ask-mushi-resume-btn__meta flex flex-wrap gap-1 font-mono mt-0.5">
+                  <span>{new Date(t.lastAt).toLocaleString()}</span>
+                  <span className="opacity-60">·</span>
+                  <span>{t.messageCount} msg</span>
                   {t.totalCostUsd > 0 && (
-                    <SignalChip tone="brand">{formatLlmCost(t.totalCostUsd)}</SignalChip>
+                    <>
+                      <span className="opacity-60">·</span>
+                      <span className="ask-mushi-resume-btn__cost">{formatLlmCost(t.totalCostUsd)}</span>
+                    </>
                   )}
-                </InlineProof>
+                </div>
               </button>
             </li>
           ))}

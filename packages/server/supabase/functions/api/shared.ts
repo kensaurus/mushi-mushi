@@ -9,6 +9,7 @@ import type { getServiceClient } from '../_shared/db.ts';
 import { reportError } from '../_shared/sentry.ts';
 import {
   accessibleProjectIds as _accessibleProjectIds,
+  accessibleProjectIdsInOrganization as _accessibleProjectIdsInOrganization,
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
 import { isUuid } from './ids.ts';
@@ -110,6 +111,32 @@ export function jsonForbidden(c: Context, message = 'Forbidden'): Response {
 // existing callers in `api/routes/*` working without churn.
 export const accessibleProjectIds = _accessibleProjectIds;
 export const ownedProjectIds = _ownedProjectIds;
+
+/**
+ * Full accessible project set for enumeration endpoints (project list,
+ * setup/switcher, org-wide stats).
+ *
+ * Scoping contract (mirrors Supabase / Vercel team dashboards):
+ *   - **Never** honours `X-Mushi-Project-Id` — the picker must always list
+ *     every project the user can reach in the active team context.
+ *   - **Optionally** honours `X-Mushi-Org-Id` when the admin console has a
+ *     team selected — narrows the list to that org's projects only.
+ *   - Returns `[]` when the org header names an org the caller does not
+ *     belong to (fail closed).
+ *
+ * Data pages (reports, fixes, …) continue to use {@link callerProjectIds}
+ * which applies the pinned project header on top of this set.
+ */
+export async function enumerateAccessibleProjectIds(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<string[]> {
+  const requestedOrg = requestedOrganizationId(c);
+  if (!requestedOrg) return ownedProjectIds(db, userId);
+  if (!UUID_RE.test(requestedOrg)) return [];
+  return _accessibleProjectIdsInOrganization(db, userId, requestedOrg);
+}
 
 /**
  * Single-project authorization check used by detail/mutation endpoints.
@@ -401,3 +428,168 @@ export async function scopedOwnedProjectIds(
 }
 
 export const resolveAccessibleProject = resolveOwnedProject;
+
+export type OrgRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export type AccessibleOrgResolution =
+  | { ok: true; organizationId: string; role: OrgRole }
+  | { ok: false; response: Response };
+
+/**
+ * Validates `X-Mushi-Org-Id` for JWT callers (membership gate, fail closed).
+ * API-key callers resolve org from the bound project and reject header mismatches.
+ */
+export async function resolveAccessibleOrg(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<AccessibleOrgResolution> {
+  const requested = requestedOrganizationId(c);
+
+  if (c.get('authMethod') === 'apiKey') {
+    const boundProjectId = c.get('projectId') as string | undefined;
+    if (!boundProjectId) {
+      return { ok: false, response: jsonForbidden(c, 'API key missing project binding') };
+    }
+    const { data: project } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', boundProjectId)
+      .maybeSingle();
+    const orgFromProject = (project?.organization_id as string | null) ?? null;
+    if (!orgFromProject) {
+      return {
+        ok: false,
+        response: jsonError(c, 'PROJECT_NO_ORG', 'Project has no organization', 422),
+      };
+    }
+    if (requested && requested !== orgFromProject) {
+      return { ok: false, response: jsonForbidden(c, 'Organization scope mismatch for API key') };
+    }
+    c.set('organizationId', orgFromProject);
+    return { ok: true, organizationId: orgFromProject, role: 'owner' };
+  }
+
+  if (!requested) {
+    return { ok: false, response: jsonError(c, 'ORG_REQUIRED', 'X-Mushi-Org-Id required', 400) };
+  }
+  if (!UUID_RE.test(requested)) {
+    return { ok: false, response: jsonValidationError(c, 'organization_id must be a UUID') };
+  }
+
+  const { data: membership } = await db
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', requested)
+    .eq('user_id', userId)
+    .maybeSingle();
+  const role = (membership?.role as OrgRole | undefined) ?? null;
+  if (!role) {
+    return { ok: false, response: jsonForbidden(c, 'Access to this organization is not allowed') };
+  }
+
+  c.set('organizationId', requested);
+  return { ok: true, organizationId: requested, role };
+}
+
+export type TargetProjectAccessResult =
+  | {
+      ok: true;
+      projectId: string;
+      organizationId: string | null;
+      role: OrgRole;
+    }
+  | { ok: false; response: Response };
+
+/**
+ * Fail-closed access check for a specific project id (body, query, header, or URL).
+ * API-key callers stay bound to the key project; JWT callers use org/project membership.
+ */
+export async function assertTargetProjectAccess(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+): Promise<TargetProjectAccessResult> {
+  if (!UUID_RE.test(projectId)) {
+    return {
+      ok: false,
+      response: jsonValidationError(c, 'project_id must be a UUID'),
+    };
+  }
+
+  const scopeErr = assertCallerProjectScope(c, projectId);
+  if (scopeErr) return { ok: false, response: scopeErr };
+
+  if (c.get('authMethod') === 'apiKey') {
+    const { data: row } = await db
+      .from('projects')
+      .select('id, organization_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (!row) return { ok: false, response: jsonNotFound(c, 'Project not found') };
+    c.set('projectId', row.id);
+    if (row.organization_id) c.set('organizationId', row.organization_id);
+    return {
+      ok: true,
+      projectId: row.id,
+      organizationId: (row.organization_id as string | null) ?? null,
+      role: 'owner',
+    };
+  }
+
+  const access = await userCanAccessProject(db, userId, projectId);
+  if (!access.allowed || !access.role) {
+    return { ok: false, response: jsonForbidden(c, 'Access to this project is not allowed') };
+  }
+
+  const requestedOrg = requestedOrganizationId(c);
+  const { data: row } = await db
+    .from('projects')
+    .select('organization_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (requestedOrg && row?.organization_id && requestedOrg !== row.organization_id) {
+    return { ok: false, response: jsonForbidden(c, 'Project is not in the active organization') };
+  }
+
+  c.set('projectId', projectId);
+  if (row?.organization_id) c.set('organizationId', row.organization_id);
+  return {
+    ok: true,
+    projectId,
+    organizationId: (row?.organization_id as string | null) ?? null,
+    role: access.role,
+  };
+}
+
+/**
+ * Project-data list scope: intersect optional org + project headers with accessible ids.
+ * Returns `[]` on mismatch (empty state, not cross-tenant leak).
+ */
+export async function intersectOrgAndProjectScope(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<string[]> {
+  if (c.get('authMethod') === 'apiKey') {
+    return callerProjectIds(c, db, userId);
+  }
+
+  const requestedOrg = requestedOrganizationId(c);
+  const requestedProject = requestedProjectId(c);
+
+  let projectIds = await ownedProjectIds(db, userId);
+
+  if (requestedOrg) {
+    if (!UUID_RE.test(requestedOrg)) return [];
+    projectIds = await _accessibleProjectIdsInOrganization(db, userId, requestedOrg);
+  }
+
+  if (requestedProject) {
+    if (!UUID_RE.test(requestedProject)) return [];
+    return projectIds.includes(requestedProject) ? [requestedProject] : [];
+  }
+
+  return projectIds;
+}

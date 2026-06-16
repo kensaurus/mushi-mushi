@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { useExploreUx } from '../../lib/exploreModeUx'
@@ -100,6 +100,12 @@ export function ExploreSymbolPanel({
   const [summary, setSummary] = useState<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState<CodebaseUnderstandError | null>(null)
+
+  useEffect(() => {
+    setSummary(null)
+    setSummaryLoading(false)
+    setSummaryError(null)
+  }, [node?.id])
 
   const loadSummary = useCallback(async () => {
     if (!node || !projectId) return
@@ -244,6 +250,21 @@ export function ExploreSymbolPanel({
               {lineCount != null && (
                 <span className="text-3xs text-fg-faint tabular-nums">{lineCount.toLocaleString()}</span>
               )}
+            </div>
+          </>
+        )}
+        {node.metadata.language_notes && node.metadata.language_notes.length > 0 && (
+          <>
+            <span className="text-3xs text-fg-faint col-span-2">Language concepts</span>
+            <div className="col-span-2 flex flex-wrap gap-1">
+              {node.metadata.language_notes.map((note) => (
+                <span
+                  key={note}
+                  className="text-3xs px-1.5 py-0.5 rounded border border-info/30 bg-info/10 text-info"
+                >
+                  {note}
+                </span>
+              ))}
             </div>
           </>
         )}

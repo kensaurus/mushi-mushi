@@ -9,6 +9,9 @@
  * boolean for opt-in once we ship the WASM bundle.
  */
 
+import type { CodebaseScopeSettings } from './codebase-scope.ts'
+import { pathMatchesScope } from './codebase-scope.ts'
+
 export type Language = 'ts' | 'tsx' | 'js' | 'jsx' | 'py' | 'go' | 'rs' | 'unknown'
 
 export interface SymbolChunk {
@@ -162,9 +165,11 @@ const SKIP_PATHS = [
   /\.map$/,
 ]
 
-export function shouldIndex(filePath: string): boolean {
+export function shouldIndex(filePath: string, scope?: CodebaseScopeSettings | null): boolean {
   if (SKIP_PATHS.some(rx => rx.test(filePath))) return false
-  return detectLanguage(filePath) !== 'unknown'
+  if (detectLanguage(filePath) === 'unknown') return false
+  if (scope && !pathMatchesScope(filePath, scope)) return false
+  return true
 }
 
 export async function sha256Hex(input: string): Promise<string> {

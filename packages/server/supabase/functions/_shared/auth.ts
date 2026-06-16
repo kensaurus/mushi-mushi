@@ -1,5 +1,6 @@
 import type { Context, Next } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
+import { mergeLogContext, type LogContext } from './log-context.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -12,11 +13,18 @@ export interface ProjectContext {
  * into every Edge Function just for this one query.
  */
 interface ApiKeyRow {
+  id?: string
+  key_prefix?: string | null
   project_id: string
   is_active: boolean
   scopes: string[] | null
   owner_user_id: string | null
   projects: { name: string } | null
+}
+
+function applyLogContext(c: Context, patch: LogContext): void {
+  const prev = c.get('logContext') as LogContext | undefined
+  c.set('logContext', mergeLogContext(prev, patch))
 }
 
 /**
@@ -269,7 +277,7 @@ async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
   const keyHash = await hashApiKey(apiKey)
   const { data, error } = await db
     .from('project_api_keys')
-    .select('project_id, is_active, scopes, owner_user_id, projects!inner(name)')
+    .select('id, key_prefix, project_id, is_active, scopes, owner_user_id, projects!inner(name)')
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
@@ -320,6 +328,15 @@ async function authenticateApiKey(
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')
   c.set('apiKeyScopes', scopes)
   c.set('authMethod', 'apiKey')
+  if (keyRow.id) c.set('apiKeyId', keyRow.id)
+  if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
+  applyLogContext(c, {
+    authMethod: 'apiKey',
+    projectId: keyRow.project_id,
+    userId: ownerId,
+    apiKeyId: keyRow.id,
+    apiKeyPrefix: keyRow.key_prefix ?? undefined,
+  })
   return null
 }
 
@@ -344,12 +361,15 @@ export async function apiKeyAuth(c: Context, next: Next) {
 
   const { data, error } = await db
     .from('project_api_keys')
-    .select('project_id, is_active, scopes, projects!inner(name)')
+    .select('id, key_prefix, project_id, is_active, scopes, projects!inner(name)')
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
 
-  const keyRow = data as Pick<ApiKeyRow, 'project_id' | 'is_active' | 'scopes' | 'projects'> | null
+  const keyRow = data as Pick<
+    ApiKeyRow,
+    'id' | 'key_prefix' | 'project_id' | 'is_active' | 'scopes' | 'projects'
+  > | null
   if (error || !keyRow) {
     return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
   }
@@ -372,6 +392,14 @@ export async function apiKeyAuth(c: Context, next: Next) {
   c.set('projectId', keyRow.project_id)
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')
   c.set('apiKeyScopes', keyRow.scopes ?? [])
+  if (keyRow.id) c.set('apiKeyId', keyRow.id)
+  if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
+  applyLogContext(c, {
+    authMethod: 'apiKey',
+    projectId: keyRow.project_id,
+    apiKeyId: keyRow.id,
+    apiKeyPrefix: keyRow.key_prefix ?? undefined,
+  })
   await next()
 }
 
@@ -409,6 +437,7 @@ export async function jwtAuth(c: Context, next: Next) {
   c.set('userId', user.id)
   c.set('userEmail', user.email)
   c.set('authMethod', 'jwt')
+  applyLogContext(c, { authMethod: 'jwt', userId: user.id })
 
   // Membership activity heartbeat. The admin SPA stamps every API call
   // with `X-Mushi-Org-Id` for the active workspace; pairing that with

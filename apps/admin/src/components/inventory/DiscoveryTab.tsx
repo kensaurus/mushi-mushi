@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { Btn, Card, Badge, ErrorAlert, Input } from '../ui'
+import { IconNote } from '../icons'
 import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -169,7 +170,7 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
           : ready
             ? 'Claude will draft inventory.yaml'
             : undefined,
-        icon: <SparkleIcon />,
+        icon: <IconNote size={16} />,
       },
       {
         id: 'accept',
@@ -451,7 +452,7 @@ Mushi.init({
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div className="shrink-0 w-10 h-10 rounded-lg bg-brand/20 ring-1 ring-brand/40 text-brand flex items-center justify-center">
-            <SparkleIcon />
+            <IconNote size={16} />
           </div>
           <div className="min-w-0">
             <SignalChip tone="brand" className="mb-1.5 uppercase tracking-wider text-3xs">Step 3 — Propose</SignalChip>
@@ -659,23 +660,6 @@ function EyeIcon() {
         strokeLinejoin="round"
       />
       <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
-    </svg>
-  )
-}
-function SparkleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M8 2L9 6L13 7L9 8L8 12L7 8L3 7L7 6L8 2Z"
-        fill="currentColor"
-        stroke="currentColor"
-        strokeWidth="0.8"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12.5 11L13 12.5L14.5 13L13 13.5L12.5 15L12 13.5L10.5 13L12 12.5L12.5 11Z"
-        fill="currentColor"
-      />
     </svg>
   )
 }

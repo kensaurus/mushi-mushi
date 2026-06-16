@@ -9,7 +9,8 @@
  *   org doesn't have the entitlement.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
@@ -32,6 +33,21 @@ interface BountyTier {
   action: string
   points_per_event: number
   enabled: boolean
+  daily_cap?: number | null
+  lifetime_cap_per_tester?: number | null
+}
+
+interface TargetingConfig {
+  country_codes: string[]
+  languages: string[]
+  expertise_tags: string[]
+  reputation_min: number
+  min_age: number | null
+}
+
+interface MarketplaceSettings {
+  marketplace_monthly_budget_usd: number
+  marketplace_max_testers: number
 }
 
 interface PublishedApp {
@@ -84,12 +100,20 @@ export function PublishingTab() {
     projectId ? `/v1/admin/published-apps/${projectId}` : null,
   )
 
-  const { data: bounties, loading: bLoading } = usePageData<BountyTier[]>(
+  const { data: bounties, loading: bLoading, reload: reloadBounties } = usePageData<BountyTier[]>(
     projectId ? `/v1/admin/published-apps/${projectId}/bounties` : null,
   )
 
-  const { data: stats, loading: sLoading } = usePageData<BountyStats>(
+  const { data: stats, loading: sLoading, reload: reloadStats } = usePageData<BountyStats>(
     projectId ? `/v1/admin/published-apps/${projectId}/stats` : null,
+  )
+
+  const { data: targeting, loading: tLoading, reload: reloadTargeting } = usePageData<TargetingConfig | null>(
+    projectId ? `/v1/admin/published-apps/${projectId}/targeting` : null,
+  )
+
+  const { data: marketplaceSettings, loading: mLoading, reload: reloadSettings } = usePageData<MarketplaceSettings>(
+    projectId ? `/v1/admin/published-apps/${projectId}/marketplace-settings` : null,
   )
 
   // Form state — synced from API data on first load
@@ -101,6 +125,30 @@ export function PublishingTab() {
   const [saving, setSaving]       = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [formReady, setFormReady] = useState(false)
+  const [savingBounties, setSavingBounties] = useState(false)
+  const [savingTargeting, setSavingTargeting] = useState(false)
+  const [savingBudget, setSavingBudget] = useState(false)
+
+  const [bountyDraft, setBountyDraft] = useState<Array<{
+    action: string
+    label: string
+    color: string
+    points_per_event: number
+    enabled: boolean
+    daily_cap: string
+    lifetime_cap_per_tester: string
+  }>>([])
+
+  const [countryCodes, setCountryCodes] = useState('')
+  const [languages, setLanguages] = useState('')
+  const [expertiseTags, setExpertiseTags] = useState('')
+  const [reputationMin, setReputationMin] = useState('0')
+  const [minAge, setMinAge] = useState('')
+  const [targetingReady, setTargetingReady] = useState(false)
+
+  const [monthlyBudget, setMonthlyBudget] = useState('')
+  const [maxTesters, setMaxTesters] = useState('')
+  const [budgetReady, setBudgetReady] = useState(false)
 
   // Populate form once data arrives
   const populateForm = useCallback((app: PublishedApp) => {
@@ -115,6 +163,51 @@ export function PublishingTab() {
   if (!formReady && data) {
     populateForm(data)
   }
+
+  useEffect(() => {
+    const rows = BOUNTY_ACTIONS.map(({ action, label, pts, color }) => {
+      const override = (bounties ?? []).find(b => b.action === action)
+      return {
+        action,
+        label,
+        color,
+        points_per_event: override?.points_per_event ?? pts,
+        enabled: override?.enabled ?? true,
+        daily_cap: override?.daily_cap != null ? String(override.daily_cap) : '',
+        lifetime_cap_per_tester: override?.lifetime_cap_per_tester != null
+          ? String(override.lifetime_cap_per_tester)
+          : '',
+      }
+    })
+    setBountyDraft(rows)
+  }, [bounties])
+
+  useEffect(() => {
+    if (targetingReady || tLoading) return
+    if (targeting === undefined) return
+    setCountryCodes((targeting?.country_codes ?? []).join(', '))
+    setLanguages((targeting?.languages ?? []).join(', '))
+    setExpertiseTags((targeting?.expertise_tags ?? []).join(', '))
+    setReputationMin(String(targeting?.reputation_min ?? 0))
+    setMinAge(targeting?.min_age != null ? String(targeting.min_age) : '')
+    setTargetingReady(true)
+  }, [targeting, tLoading, targetingReady])
+
+  useEffect(() => {
+    if (budgetReady || mLoading) return
+    if (!marketplaceSettings) return
+    setMonthlyBudget(String(marketplaceSettings.marketplace_monthly_budget_usd ?? 0))
+    setMaxTesters(String(marketplaceSettings.marketplace_max_testers ?? 0))
+    setBudgetReady(true)
+  }, [marketplaceSettings, mLoading, budgetReady])
+
+  const parseCsv = (raw: string) =>
+    raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
+
+  const pendingCountHint = useMemo(
+    () => (stats?.submissions_30d ?? 0) > 0,
+    [stats?.submissions_30d],
+  )
 
   // ── Mutations ──────────────────────────────────────────────
 
@@ -178,6 +271,87 @@ export function PublishingTab() {
       }
     } finally {
       setPublishing(false)
+    }
+  }
+
+  async function handleSaveBounties() {
+    if (!projectId || bountyDraft.length === 0) return
+    setSavingBounties(true)
+    try {
+      const payload = {
+        bounties: bountyDraft.map(row => ({
+          action: row.action,
+          points_per_event: row.points_per_event,
+          enabled: row.enabled,
+          daily_cap: row.daily_cap ? Number(row.daily_cap) : null,
+          lifetime_cap_per_tester: row.lifetime_cap_per_tester
+            ? Number(row.lifetime_cap_per_tester)
+            : null,
+        })),
+      }
+      const res = await apiFetch(`/v1/admin/published-apps/${projectId}/bounties`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        toast.success('Bounty schedule saved.')
+        reloadBounties()
+        reloadStats()
+      } else {
+        toast.error(res.error?.message ?? 'Could not save bounties.')
+      }
+    } finally {
+      setSavingBounties(false)
+    }
+  }
+
+  async function handleSaveTargeting() {
+    if (!projectId) return
+    setSavingTargeting(true)
+    try {
+      const res = await apiFetch(`/v1/admin/published-apps/${projectId}/targeting`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          country_codes: parseCsv(countryCodes).map(c => c.toUpperCase()),
+          languages: parseCsv(languages),
+          expertise_tags: parseCsv(expertiseTags),
+          reputation_min: Number(reputationMin) || 0,
+          min_age: minAge ? Number(minAge) : null,
+        }),
+      })
+      if (res.ok) {
+        toast.success('Targeting rules saved.')
+        setTargetingReady(false)
+        reloadTargeting()
+      } else {
+        toast.error(res.error?.message ?? 'Could not save targeting.')
+      }
+    } finally {
+      setSavingTargeting(false)
+    }
+  }
+
+  async function handleSaveBudget() {
+    if (!projectId) return
+    setSavingBudget(true)
+    try {
+      const res = await apiFetch(`/v1/admin/published-apps/${projectId}/marketplace-settings`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          marketplace_monthly_budget_usd: Number(monthlyBudget) || 0,
+          marketplace_max_testers: Number(maxTesters) || 0,
+        }),
+      })
+      if (res.ok) {
+        toast.success('Budget settings saved.')
+        setBudgetReady(false)
+        reloadSettings()
+        reloadStats()
+      } else {
+        toast.error(res.error?.message ?? 'Could not save budget.')
+      }
+    } finally {
+      setSavingBudget(false)
     }
   }
 
@@ -246,6 +420,12 @@ export function PublishingTab() {
           )}
         </div>
         <div className="flex gap-2 shrink-0">
+          <Link
+            to="/rewards/tester-review"
+            className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:border-fg-muted transition-colors"
+          >
+            Review submissions
+          </Link>
           {isLive ? (
             <Btn variant="ghost" size="sm" loading={publishing} onClick={handlePause}>
               Pause
@@ -260,15 +440,29 @@ export function PublishingTab() {
         </div>
       </div>
 
-      {/* ── Stats row (only when there are submissions) ── */}
-      {!sLoading && stats && stats.submissions_30d > 0 && (
+      {/* ── Stats + budget ── */}
+      {!sLoading && stats && (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <StatCard label="Testers" value={stats.active_testers} />
           <StatCard label="Submissions (30d)" value={stats.submissions_30d} />
           <StatCard label="Accepted (30d)" value={stats.accepted_30d} />
           <StatCard label="Points spent (30d)" value={stats.points_spent_30d.toLocaleString()} />
-          <StatCard label="Budget used" value={`${Math.round(stats.monthly_budget_used_pct)}%`} />
+          <StatCard
+            label="Budget used"
+            value={`${Math.round(stats.monthly_budget_used_pct)}%`}
+            hint={stats.monthly_budget_usd > 0 ? `$${stats.monthly_budget_usd} cap` : 'No cap set'}
+          />
         </div>
+      )}
+
+      {!pendingCountHint && !sLoading && (
+        <p className="text-xs text-fg-muted">
+          Publish your listing, set bounties, then{' '}
+          <Link to="/rewards/tester-review" className="text-brand hover:underline">
+            review submissions
+          </Link>{' '}
+          as testers join.
+        </p>
       )}
 
       {/* ── Listing form ── */}
@@ -346,47 +540,200 @@ export function PublishingTab() {
         </Card>
       </Section>
 
-      {/* ── Bounty schedule (read-only preview; editable via the Tier ladder tab) ── */}
+      {/* ── Budget & caps ── */}
+      <Section title="Payout budget">
+        {mLoading ? (
+          <TableSkeleton rows={2} />
+        ) : (
+          <Card>
+            <div className="grid gap-4 p-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1">
+                  Monthly gift-card budget (USD)
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={monthlyBudget}
+                  onChange={e => { setMonthlyBudget(e.target.value); setBudgetReady(false) }}
+                  placeholder="0 = no cap"
+                />
+                <p className="mt-1 text-2xs text-fg-faint">
+                  Mushi funds redemptions; this caps per-project Tremendous spend.
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1">
+                  Max active testers
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={maxTesters}
+                  onChange={e => { setMaxTesters(e.target.value); setBudgetReady(false) }}
+                  placeholder="0 = unlimited"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end border-t border-border/40 px-4 py-3">
+              <Btn variant="primary" size="sm" loading={savingBudget} onClick={handleSaveBudget}>
+                Save budget
+              </Btn>
+            </div>
+          </Card>
+        )}
+      </Section>
+
+      {/* ── Bounty schedule ── */}
       <Section title="Bounty schedule">
-        {bLoading ? (
+        {bLoading || bountyDraft.length === 0 ? (
           <TableSkeleton rows={5} />
         ) : (
           <Card>
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-4 py-2 text-left text-fg-muted font-medium uppercase tracking-wide">Action</th>
+                  <th className="px-4 py-2 text-left text-fg-muted font-medium uppercase tracking-wide">Severity</th>
                   <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Points</th>
-                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Daily cap</th>
+                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Enabled</th>
                 </tr>
               </thead>
               <tbody>
-                {BOUNTY_ACTIONS.map(({ action, label, pts, color }) => {
-                  const override = (bounties ?? []).find(b => b.action === action)
-                  const points = override?.points_per_event ?? pts
-                  const enabled = override?.enabled ?? true
-                  return (
-                    <tr key={action} className="border-t border-border/40">
-                      <td className={`px-4 py-2.5 font-medium ${color}`}>{label}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-fg">
-                        {points.toLocaleString()} pts
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {enabled ? (
-                          <Badge className="bg-ok-muted text-ok">Enabled</Badge>
+                {bountyDraft.map((row, idx) => (
+                  <tr key={row.action} className="border-t border-border/40">
+                    <td className={`px-4 py-2.5 font-medium ${row.color}`}>{row.label}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={10000}
+                        className="ml-auto w-24 text-right font-mono"
+                        value={row.points_per_event}
+                        onChange={e => {
+                          const v = Number(e.target.value)
+                          setBountyDraft(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, points_per_event: Number.isFinite(v) ? v : 0 } : r,
+                          ))
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <Input
+                        type="number"
+                        min={1}
+                        className="ml-auto w-20 text-right font-mono"
+                        placeholder="—"
+                        value={row.daily_cap}
+                        onChange={e => {
+                          setBountyDraft(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, daily_cap: e.target.value } : r,
+                          ))
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBountyDraft(prev => prev.map((r, i) =>
+                            i === idx ? { ...r, enabled: !r.enabled } : r,
+                          ))
+                        }}
+                        className="inline-flex"
+                      >
+                        {row.enabled ? (
+                          <Badge className="bg-ok-muted text-ok">On</Badge>
                         ) : (
-                          <Badge className="bg-surface-overlay text-fg-muted">Disabled</Badge>
+                          <Badge className="bg-surface-overlay text-fg-muted">Off</Badge>
                         )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-            <p className="px-4 py-3 text-xs text-fg-muted border-t border-border/40">
-              1,000 pts = $10 gift card (Tremendous) or $13 Mushi Pro credit (1.3× premium).
-              Configure overrides in the Tier ladder tab.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 px-4 py-3">
+              <p className="text-xs text-fg-muted">
+                1,000 pts ≈ $10 gift card or $13 Mushi Pro credit (1.3×). Points are stamped at submit time.
+              </p>
+              <Btn variant="primary" size="sm" loading={savingBounties} onClick={handleSaveBounties}>
+                Save bounties
+              </Btn>
+            </div>
+          </Card>
+        )}
+      </Section>
+
+      {/* ── Targeting ── */}
+      <Section title="Tester targeting">
+        {tLoading ? (
+          <TableSkeleton rows={4} />
+        ) : (
+          <Card>
+            <div className="space-y-4 p-4">
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1">
+                  Country codes (ISO-2, comma-separated)
+                </label>
+                <Input
+                  value={countryCodes}
+                  onChange={e => { setCountryCodes(e.target.value); setTargetingReady(false) }}
+                  placeholder="US, CA, GB — empty = all countries"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1">
+                  Languages (comma-separated)
+                </label>
+                <Input
+                  value={languages}
+                  onChange={e => { setLanguages(e.target.value); setTargetingReady(false) }}
+                  placeholder="en, ja — empty = all languages"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-fg-muted mb-1">
+                  Expertise tags (comma-separated)
+                </label>
+                <Input
+                  value={expertiseTags}
+                  onChange={e => { setExpertiseTags(e.target.value); setTargetingReady(false) }}
+                  placeholder="mobile, accessibility — empty = open to all"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-fg-muted mb-1">
+                    Minimum reputation
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={reputationMin}
+                    onChange={e => { setReputationMin(e.target.value); setTargetingReady(false) }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-fg-muted mb-1">
+                    Minimum age (optional)
+                  </label>
+                  <Input
+                    type="number"
+                    min={13}
+                    max={100}
+                    value={minAge}
+                    onChange={e => { setMinAge(e.target.value); setTargetingReady(false) }}
+                    placeholder="13+"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end pt-2">
+                <Btn variant="primary" size="sm" loading={savingTargeting} onClick={handleSaveTargeting}>
+                  Save targeting
+                </Btn>
+              </div>
+            </div>
           </Card>
         )}
       </Section>

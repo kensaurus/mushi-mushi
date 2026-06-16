@@ -230,4 +230,14 @@ export interface ReportDetail {
   app_version?: string | null
   /** Skill recommendations from classify-report Stage 2. */
   recommended_skills?: Array<{ slug: string; title: string; rationale: string }> | null
+  /** Linked Mushi Bounties submission when report came from tester marketplace. */
+  tester_submission_id?: string | null
+  tester_submission?: {
+    id: string
+    status: 'pending' | 'accepted' | 'informative' | 'duplicate' | 'spam'
+    points_awarded: number
+    tester_handle: string | null
+    app_name: string | null
+    reviewer_note: string | null
+  } | null
 }

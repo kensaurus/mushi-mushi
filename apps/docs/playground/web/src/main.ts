@@ -21,8 +21,6 @@ if (themeParam === 'dark') {
   document.body.style.color = '#f5f5f7'
 }
 
-const DEMO_ENDPOINT = 'https://demo.api.mushimushi.dev'
-
 const configs: Record<TestConfig, Parameters<typeof MushiWidget>[0]> = {
   default: {
     trigger: 'auto',
@@ -50,13 +48,54 @@ const configs: Record<TestConfig, Parameters<typeof MushiWidget>[0]> = {
 
 const cfg = configs[testMode] ?? configs['all-features']
 
-// ─── Callbacks (with simulated submit) ───────────────────────────────────────
+// ─── Mock community data ─────────────────────────────────────────────────────
+const MOCK_LEADERBOARD = [
+  { tester_id: 'u1', rank: 1, display_name: 'Alice T.', public_handle: '@alice', points_30d: 450, total_points: 1200, badge_slug: 'gold' },
+  { tester_id: 'u2', rank: 2, display_name: 'Bob K.', public_handle: '@bobk', points_30d: 320, total_points: 980, badge_slug: 'silver' },
+  { tester_id: 'u3', rank: 3, display_name: 'Chen L.', public_handle: '@chenl', points_30d: 210, total_points: 730, badge_slug: 'silver' },
+  { tester_id: 'u4', rank: 4, display_name: 'Dana M.', public_handle: '@danam', points_30d: 180, total_points: 610, badge_slug: 'bronze' },
+  { tester_id: 'u5', rank: 5, display_name: 'Evan R.', public_handle: '@evanr', points_30d: 95, total_points: 430, badge_slug: 'bronze' },
+]
+
+const MOCK_CROSS_APP_REPORTS = [
+  {
+    id: 'r1', short_id: 'R001', title: 'Button not responding on mobile',
+    category: 'bug', status: 'fixing',
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    project_id: 'p-alpha', app_name: 'App Alpha', app_slug: 'app-alpha',
+  },
+  {
+    id: 'r2', short_id: 'R002', title: 'Visual glitch on nav bar at 375px',
+    category: 'visual', status: 'fixed',
+    created_at: new Date(Date.now() - 86400000).toISOString(), updated_at: new Date(Date.now() - 86400000).toISOString(),
+    project_id: 'p-beta', app_name: 'App Beta', app_slug: 'app-beta',
+  },
+  {
+    id: 'r3', short_id: 'R003', title: 'Profile page slow on 4G',
+    category: 'slow', status: 'open',
+    created_at: new Date(Date.now() - 172800000).toISOString(), updated_at: new Date(Date.now() - 172800000).toISOString(),
+    project_id: 'p-alpha', app_name: 'App Alpha', app_slug: 'app-alpha',
+  },
+]
+
+const MOCK_REPUTATION = {
+  tester_id: 'u1',
+  public_handle: '@alice',
+  display_name: 'Alice T.',
+  total_points: 1200,
+  points_30d: 450,
+  rank: 1,
+}
+
+// ─── Widget instance (declared early so callbacks can reference it) ───────────
+let widget: MushiWidget
+
+// ─── Callbacks ───────────────────────────────────────────────────────────────
 let submitCount = 0
 const callbacks: WidgetCallbacks = {
   onSubmit: async (data) => {
     submitCount++
-    log(`onSubmit: category=${data.category} desc="${data.description?.slice(0, 30)}…"`)
-    // Simulate network delay
+    log(`onSubmit #${submitCount}: category=${data.category} desc="${data.description?.slice(0, 30)}…"`)
     await new Promise(r => setTimeout(r, 800))
     const mockId = `QA-TEST-${Date.now()}`
     log(`Submit complete: reportId=${mockId}`)
@@ -65,37 +104,53 @@ const callbacks: WidgetCallbacks = {
   onOpen: () => log('Widget opened'),
   onClose: () => log('Widget closed'),
   onScreenshotRequest: () => undefined,
+
+  // ── Community: magic-link sign-in ─────────────────────────────────────────
   onMushiSignIn: async (email: string) => {
     log(`Magic link requested for: ${email}`)
     await new Promise(r => setTimeout(r, 500))
+    // After "sign in", push session + reputation + leaderboard (simulated)
+    setTimeout(() => {
+      widget?.setTesterSession('mock-jwt-token', {
+        id: 'u1',
+        public_handle: '@alice',
+        display_name: 'Alice T.',
+      })
+      widget?.setTesterReputation(MOCK_REPUTATION)
+      log('Tester session pushed to widget')
+    }, 300)
     return { ok: true }
   },
-  onFetchMyReports: async () => {
-    log('Fetching my reports…')
-    await new Promise(r => setTimeout(r, 600))
-    return {
-      reports: [
-        { id: 'r1', category: 'bug' as const, description: 'Test cross-app report from app A', status: 'fixing', createdAt: new Date().toISOString(), projectName: 'App Alpha' },
-        { id: 'r2', category: 'visual' as const, description: 'Visual glitch on nav bar in app B', status: 'fixed', createdAt: new Date(Date.now() - 86400000).toISOString(), projectName: 'App Beta' },
-      ]
-    }
-  },
-  onFetchLeaderboard: async () => {
+
+  // ── Community: opened global leaderboard → fetch + push data ─────────────
+  onGlobalLeaderboardOpen: () => {
     log('Fetching leaderboard…')
-    await new Promise(r => setTimeout(r, 400))
-    return {
-      entries: [
-        { tester_id: 'u1', rank: 1, display_name: 'Alice T.', public_handle: '@alice', points_30d: 450, total_points: 1200, tier_slug: 'gold' },
-        { tester_id: 'u2', rank: 2, display_name: 'Bob K.', public_handle: '@bobk', points_30d: 320, total_points: 980, tier_slug: 'silver' },
-        { tester_id: 'u3', rank: 3, display_name: 'Chen L.', public_handle: '@chenl', points_30d: 210, total_points: 730, tier_slug: 'silver' },
-      ]
-    }
+    widget?.setGlobalLeaderboard(null, true) // show loading state
+    setTimeout(() => {
+      widget?.setGlobalLeaderboard(MOCK_LEADERBOARD, false)
+      log(`Leaderboard pushed: ${MOCK_LEADERBOARD.length} entries`)
+    }, 600)
+  },
+
+  // ── Community: opened cross-app reports → fetch + push data ──────────────
+  onCrossAppReportsOpen: () => {
+    log('Fetching cross-app reports…')
+    widget?.setCrossAppReports(null, true) // show loading state
+    setTimeout(() => {
+      widget?.setCrossAppReports(MOCK_CROSS_APP_REPORTS, false)
+      log(`Cross-app reports pushed: ${MOCK_CROSS_APP_REPORTS.length} reports`)
+    }, 800)
   },
 }
 
 // ─── Create and mount widget ──────────────────────────────────────────────────
-const widget = new MushiWidget(cfg, callbacks)
+widget = new MushiWidget(cfg, callbacks)
 widget.mount()
+
+// Pre-load reputation for signed-in state (simulate already logged in)
+// Comment this out to test the sign-in flow instead
+// widget.setTesterSession('mock-jwt', { id: 'u1', public_handle: '@alice', display_name: 'Alice T.' })
+// widget.setTesterReputation(MOCK_REPUTATION)
 
 // ─── UI controls ─────────────────────────────────────────────────────────────
 document.getElementById('open')?.addEventListener('click', () => widget.open())
@@ -118,6 +173,20 @@ document.getElementById('toggle-dark')?.addEventListener('click', () => {
   u.searchParams.set('theme', themeParam === 'dark' ? 'light' : 'dark')
   widget.destroy()
   window.location.href = u.toString()
+})
+
+// Simulate pre-logged-in community user button
+document.getElementById('sim-login')?.addEventListener('click', () => {
+  widget.setTesterSession('mock-jwt-token', { id: 'u1', public_handle: '@alice', display_name: 'Alice T.' })
+  widget.setTesterReputation(MOCK_REPUTATION)
+  log('Simulated sign-in: Alice T. (@alice) — Gold tier')
+})
+
+// Simulate sign-out
+document.getElementById('sim-logout')?.addEventListener('click', () => {
+  widget.setTesterSession(null, null)
+  widget.setTesterReputation(null)
+  log('Simulated sign-out')
 })
 
 // ─── Status output ────────────────────────────────────────────────────────────

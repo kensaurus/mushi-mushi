@@ -555,7 +555,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       );
       return c.json({ ok: true, data: { status: result.status, detail: result.detail ?? null } });
     } catch (err) {
-      console.error('[probe] unhandled error:', String(err));
+      log.error('probe unhandled error', { scope: 'settings-research', err: String(err) });
       return c.json({ ok: false, error: { code: 'PROBE_ERROR', message: String(err) } }, 500);
     }
   });

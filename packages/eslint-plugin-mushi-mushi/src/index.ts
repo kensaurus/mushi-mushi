@@ -83,4 +83,3 @@ plugin.configs.legacy = {
 }
 
 export default plugin
-export { rules, recommendedRules }

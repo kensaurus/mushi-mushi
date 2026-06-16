@@ -34,7 +34,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card } from '../components/ui'
+import { Card, SurfacePanel } from '../components/ui'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
@@ -408,7 +408,7 @@ function CatalogTab({
           return (
             <section
               key={cat}
-              className={`border-l-2 pl-3 ${meta.accentClass}`}
+              className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
             >
               <SkillCategoryHeader meta={meta} count={catSkills.length} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -419,8 +419,8 @@ function CatalogTab({
                     className={[
                       'text-left p-3 rounded-lg border transition-colors',
                       selected?.slug === skill.slug
-                        ? 'border-brand bg-brand/5'
-                        : 'border-border bg-surface-2 hover:border-brand/40 hover:bg-surface-3',
+                        ? 'border-brand bg-surface-raised ring-1 ring-brand/30'
+                        : 'border-border bg-surface-raised hover:border-brand/40 hover:bg-surface-overlay',
                     ].join(' ')}
                   >
                     <div className="flex items-start gap-2">
@@ -448,7 +448,7 @@ function CatalogTab({
       {selected && (() => {
         const meta = getSkillCategoryMeta(selected.category)
         return (
-        <div className="w-80 flex-shrink-0 border border-border rounded-xl p-4 flex flex-col gap-3 bg-surface-2">
+        <SurfacePanel className="w-80 flex-shrink-0 rounded-xl p-4 flex flex-col gap-3">
           <div className="flex items-start gap-2.5">
             <span className={`flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
               <meta.Icon size={16} />
@@ -472,7 +472,7 @@ function CatalogTab({
           {selected.body_md && (
             <details className="text-2xs text-fg-muted">
               <summary className="cursor-pointer font-semibold text-fg">SKILL.md preview</summary>
-              <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-2xs bg-surface-3 rounded-lg p-2 border border-border">
+              <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-2xs bg-surface-overlay rounded-lg p-2 border border-border">
                 {selected.body_md.slice(0, 4000)}
                 {selected.body_md.length > 4000 ? '\n…' : ''}
               </pre>
@@ -540,7 +540,7 @@ function CatalogTab({
               {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline'}
             </button>
           </div>
-        </div>
+        </SurfacePanel>
         )
       })()}
     </div>
@@ -681,8 +681,8 @@ function PipelinesTab({
               className={[
                 'p-3 rounded-lg border transition-colors flex items-start gap-3',
                 selectedRun?.id === run.id
-                  ? 'border-brand bg-brand/5'
-                  : 'border-border bg-surface-2',
+                  ? 'border-brand bg-surface-raised ring-1 ring-brand/30'
+                  : 'border-border bg-surface-raised hover:bg-surface-overlay',
               ].join(' ')}
             >
               <button
@@ -800,7 +800,7 @@ function RunDetail({
   }
 
   return (
-    <div className="w-[560px] flex-shrink-0 border border-border rounded-xl flex flex-col bg-surface-2 overflow-hidden">
+    <SurfacePanel className="w-[560px] flex-shrink-0 rounded-xl flex flex-col overflow-hidden p-0">
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
         <StatusDot status={run.status} />
@@ -892,16 +892,16 @@ function RunDetail({
 
       {/* CLI handoff hint */}
       {run.mode === 'handoff' ? (
-        <div className="border-t border-border px-4 py-2 bg-surface-3 text-2xs text-fg-muted">
+        <div className="border-t border-border px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
           Dev: <code className="font-mono">mushi pipeline watch {run.id.slice(0, 8)}</code> · check in each step with{' '}
           <code className="font-mono">mushi pipeline checkin {run.id.slice(0, 8)} --step 0 --status passed</code>
         </div>
       ) : (
-        <div className="border-t border-border px-4 py-2 bg-surface-3 text-2xs text-fg-muted">
+        <div className="border-t border-border px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
           Cloud mode dispatches each step to Cursor Cloud automatically. Agents check in via MCP when done — or use the CLI checkin command above.
         </div>
       )}
-    </div>
+    </SurfacePanel>
   )
 }
 
@@ -995,7 +995,7 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
 
   return (
     <div className="flex flex-col gap-4 max-w-xl">
-      <div className="border border-border rounded-xl p-4 flex flex-col gap-3 bg-surface-2">
+      <SurfacePanel className="rounded-xl p-4 flex flex-col gap-3">
         <p className="text-sm font-semibold text-fg">Add skill source</p>
         <p className="text-xs text-fg-muted">Any GitHub repo containing <code className="font-mono">skills/*/SKILL.md</code> (skills.sh-compatible).</p>
         <div className="flex gap-2">
@@ -1017,7 +1017,7 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
             {adding ? 'Adding…' : 'Add source'}
           </button>
         </div>
-      </div>
+      </SurfacePanel>
 
       {sources.length === 0 ? (
         <div className="text-sm text-fg-muted flex flex-col gap-2">
@@ -1028,7 +1028,7 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
         </div>
       ) : (
         sources.map((src) => (
-          <div key={src.id} className="border border-border rounded-xl p-4 flex items-start gap-3 bg-surface-2">
+          <SurfacePanel key={src.id} className="rounded-xl p-4 flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-fg">{src.repo_slug}</p>
               <p className="text-2xs text-fg-muted">ref: {src.ref} · {src.enabled ? 'enabled' : 'disabled'}</p>
@@ -1059,7 +1059,7 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
                 {forceSyncingId === src.id ? 'Re-syncing…' : 'Full re-sync'}
               </button>
             </div>
-          </div>
+          </SurfacePanel>
         ))
       )}
     </div>
@@ -1106,7 +1106,7 @@ function SkeletonRows({ count }: { count: number }) {
   return (
     <div className="flex flex-col gap-2">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="h-14 rounded-lg bg-surface-3 animate-pulse" />
+        <div key={i} className="h-14 rounded-lg bg-surface-overlay animate-pulse" />
       ))}
     </div>
   )

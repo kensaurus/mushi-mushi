@@ -95,9 +95,11 @@ function FocusGlyph(props: IconProps) {
 interface Props {
   focusMode: boolean
   onToggleFocus: () => void
+  /** Hide focus-mode button (tester portal uses a slimmer footer). */
+  showFocus?: boolean
 }
 
-export function ThemeSidebarToggle({ focusMode, onToggleFocus }: Props) {
+export function ThemeSidebarToggle({ focusMode, onToggleFocus, showFocus = true }: Props) {
   const { resolved, setTheme } = useTheme()
   return (
     <div
@@ -106,6 +108,7 @@ export function ThemeSidebarToggle({ focusMode, onToggleFocus }: Props) {
       className="flex items-stretch gap-0.5 rounded-sm border border-edge/60 p-0.5"
     >
       <ThemeRadioGroup resolved={resolved} setTheme={setTheme} />
+      {showFocus && (
       <button
         type="button"
         onClick={onToggleFocus}
@@ -120,6 +123,7 @@ export function ThemeSidebarToggle({ focusMode, onToggleFocus }: Props) {
       >
         <FocusGlyph />
       </button>
+      )}
     </div>
   )
 }

@@ -49,8 +49,11 @@ function SimilarityBar({ score }: { score: number }) {
   )
 }
 
+type SearchMode = 'semantic' | 'name'
+
 export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuery, onSeedConsumed }: Props) {
   const [query, setQuery] = useState(seedQuery ?? '')
+  const [mode, setMode] = useState<SearchMode>('semantic')
   const [results, setResults] = useState<ExploreSearchHit[]>([])
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,7 +72,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
     try {
       const res = await apiFetch<{ results: ExploreSearchHit[]; query: string }>(
         `/v1/admin/projects/${projectId}/codebase/search`,
-        { method: 'POST', body: JSON.stringify({ query: q.trim(), k: 20 }) },
+        { method: 'POST', body: JSON.stringify({ query: q.trim(), k: 20, mode }) },
       )
       if (!res.ok) {
         setError(res.error?.message ?? 'Search failed')
@@ -89,7 +92,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
     } finally {
       setSearching(false)
     }
-  }, [projectId, onHighlight])
+  }, [projectId, onHighlight, mode])
 
   // Consume seed query from parent (e.g. "Find similar" button in symbol panel).
   // Only fires when seedQuery changes — intentionally excludes `query` and
@@ -136,6 +139,30 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
 
   return (
     <div className="space-y-3">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setMode('semantic')}
+          className={`text-2xs px-2.5 py-1 rounded-md border ${
+            mode === 'semantic'
+              ? 'border-brand/40 bg-brand/10 text-fg'
+              : 'border-edge-subtle text-fg-muted hover:text-fg'
+          }`}
+        >
+          Semantic
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('name')}
+          className={`text-2xs px-2.5 py-1 rounded-md border ${
+            mode === 'name'
+              ? 'border-brand/40 bg-brand/10 text-fg'
+              : 'border-edge-subtle text-fg-muted hover:text-fg'
+          }`}
+        >
+          Name
+        </button>
+      </div>
       {/* Search input */}
       <div className="relative">
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none" aria-hidden="true">

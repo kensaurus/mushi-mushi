@@ -16,6 +16,7 @@ import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from './supabase'
 import { ACTIVE_ORG_QUERY_PARAM, setActiveOrgIdSnapshot } from './activeOrg'
+import { ACTIVE_PROJECT_QUERY_PARAM, clearActiveProject } from './activeProject'
 import { useToast } from './toast'
 
 interface CreatedOrganization {
@@ -59,8 +60,10 @@ export function useCreateOrganization({ onCreated, autoSelect = true }: Options 
         toast.success('Team created', name)
         if (autoSelect) {
           setActiveOrgIdSnapshot(org.id)
+          clearActiveProject()
           const next = new URLSearchParams(searchParams)
           next.set(ACTIVE_ORG_QUERY_PARAM, org.id)
+          next.delete(ACTIVE_PROJECT_QUERY_PARAM)
           setSearchParams(next, { replace: true })
         }
         onCreated?.(org)

@@ -398,8 +398,8 @@ function InnerCanvas({
 export function ExploreCanvas(props: Props) {
   return (
     <div
-      className="border border-edge rounded-md bg-surface-root overflow-hidden"
-      style={{ height: 'clamp(480px, calc(100vh - 320px), 780px)' }}
+      className="border border-edge rounded-md bg-surface-root overflow-hidden min-w-0"
+      style={{ height: 'clamp(420px, calc(100dvh - 16rem), 920px)' }}
       role="region"
       aria-label={`Codebase atlas with ${props.nodeCount} files and ${props.edgeCount} import edges.`}
       tabIndex={0}

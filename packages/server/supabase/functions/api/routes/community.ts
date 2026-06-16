@@ -170,21 +170,5 @@ export function registerCommunityRoutes(app: Hono<{ Variables: Variables }>) {
     return c.json({ leaderboard })
   })
 
-  // ── GET /v1/me/tester-status ───────────────────────────────────────────────
-  // Returns whether the caller has a mushi_testers row (i.e. is a signed-in tester).
-  app.get('/v1/me/tester-status', jwtAuth, async (c) => {
-    const userId = c.get('userId')
-    if (!userId) return c.json({ is_tester: false, tester: null })
-
-    // Service client with an explicit auth_user_id filter — no auth.uid()
-    // dependency here, so service role is safe and avoids an RLS round-trip.
-    const supabase = getServiceClient()
-    const { data } = await supabase
-      .from('mushi_testers')
-      .select('id, public_handle, display_name, created_at')
-      .eq('auth_user_id', userId)
-      .maybeSingle()
-
-    return c.json({ is_tester: !!data, tester: data })
-  })
+  // GET /v1/me/tester-status — owned by tester-marketplace.ts (rich camelCase payload).
 }

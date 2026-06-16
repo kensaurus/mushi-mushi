@@ -186,3 +186,26 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
 
   return { id: traceId, span, score, end }
 }
+
+/** Attach a score to an existing Langfuse trace (e.g. user feedback on a prior turn). */
+export async function scoreExistingTrace(
+  traceId: string,
+  scoreName: string,
+  value: number,
+  comment?: string,
+): Promise<void> {
+  if (!isConfigured()) return
+  await langfuseApi('/ingestion', {
+    batch: [{
+      id: crypto.randomUUID(),
+      type: 'score-create',
+      timestamp: new Date().toISOString(),
+      body: {
+        traceId,
+        name: scoreName,
+        value,
+        comment,
+      },
+    }],
+  })
+}

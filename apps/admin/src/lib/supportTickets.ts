@@ -70,7 +70,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
 
 export const CATEGORY_EMOJI: Record<string, string> = {
   bug: '🐛',
-  feature: '✨',
+  feature: '',
   billing: '💳',
   other: '💬',
 }

@@ -53,7 +53,7 @@ import { IntelligenceReportCard } from '../components/intelligence/IntelligenceR
 import { usePublishPageContext } from '../lib/pageContext'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
-import { IconSparkle } from '../components/icons'
+import { IconIntelligence } from '../components/icons'
 import type {
   BenchmarkSettings,
   IntelligenceJob,
@@ -443,7 +443,7 @@ export function IntelligencePage() {
                 (!intelligenceUnlocked && !entitlements.loading)
               }
               loading={generating || stats.activeJobCount > 0}
-              leadingIcon={<IconSparkle className="h-3.5 w-3.5" aria-hidden="true" />}
+              leadingIcon={<IconIntelligence className="h-3.5 w-3.5" aria-hidden="true" />}
               title={
                 !activeProjectId
                   ? 'Select a project first'

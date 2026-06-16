@@ -26,11 +26,11 @@ type BlockTone = 'muted' | 'ok' | 'warn' | 'danger' | 'info' | 'brand' | 'neutra
 const BLOCK_TONE: Record<BlockTone, string> = {
   muted:   'bg-surface-overlay border-edge',
   neutral: 'bg-surface-overlay border-edge',
-  ok:      'bg-ok-muted/20 border-ok/20',
-  warn:    'bg-warn-muted/20 border-warn/20',
-  danger:  'bg-danger-muted/20 border-danger/20',
-  info:    'bg-info-muted/20 border-info/20',
-  brand:   'bg-brand/5 border-brand/20',
+  ok:      'bg-ok-muted border-ok/25',
+  warn:    'bg-warn-muted border-warn/25',
+  danger:  'bg-danger-muted border-danger/25',
+  info:    'bg-info-muted border-info/25',
+  brand:   'bg-brand-subtle border-brand/25',
 }
 
 export interface ContainedBlockProps {

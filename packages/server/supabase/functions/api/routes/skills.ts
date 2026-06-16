@@ -23,8 +23,10 @@ import { requireAuthOrApiKey } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
-import { composeRunPacket, resolveChain } from '../../_shared/skill-packet.ts'
+import { assertCallerProjectScope, assertTargetProjectAccess } from '../shared.ts'
+import { claimTenantRateLimit, logTenantContext, tenantContextFromHono } from '../../_shared/tenant-observability.ts'
 import { getRelevantCode } from '../../_shared/rag.ts'
+import { composeRunPacket, resolveChain } from '../../_shared/skill-packet.ts'
 import { dispatchPluginEvent } from '../../_shared/plugins.ts'
 import type { Variables } from '../types.ts'
 
@@ -63,6 +65,8 @@ async function assertRunAccess(
   if (authMethod === 'apiKey') {
     const bound = c.get('projectId') as string | undefined
     allowed = bound ? [bound] : []
+    const scopeErr = assertCallerProjectScope(c, run.project_id as string)
+    if (scopeErr) return { ok: false, response: scopeErr }
   } else if (userId) {
     allowed = await accessibleProjectIds(db(), userId)
   } else {
@@ -167,6 +171,10 @@ function skillsRoutes() {
         error: { code: 'BAD_REQUEST', message: 'project_id and repo_slug are required' },
       }, 400)
     }
+
+    const userId = c.get('userId') as string
+    const access = await assertTargetProjectAccess(c, db(), userId, projectId)
+    if (!access.ok) return access.response
 
     // Validate slug format: owner/repo
     if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(body.repo_slug)) {
@@ -297,7 +305,7 @@ function skillsRoutes() {
 
   // Start a pipeline run
   r.post('/pipelines', async (c) => {
-    const userId = c.get('userId')
+    const userId = c.get('userId') as string
     const body = await c.req.json()
     const projectId =
       (typeof body.project_id === 'string' ? body.project_id : null) ?? projectIdFromRequest(c)
@@ -309,6 +317,23 @@ function skillsRoutes() {
         ok: false,
         error: { code: 'BAD_REQUEST', message: 'project_id and root_skill_slug are required' },
       }, 400)
+    }
+
+    const access = await assertTargetProjectAccess(c, db(), userId, projectId)
+    if (!access.ok) return access.response
+
+    logTenantContext(tenantContextFromHono(c))
+
+    const rate = await claimTenantRateLimit(db(), `project:${projectId}:skill_pipeline_start`, 10, 3600)
+    if (!rate.allowed) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many pipeline runs for this project — try again later',
+          retry_after_sec: rate.retryAfterSec,
+        },
+      }, 429)
     }
 
     // Validate mode

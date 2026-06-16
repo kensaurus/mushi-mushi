@@ -412,6 +412,34 @@ The `sdk_versions` catalog is kept fresh via two paths:
 
 ---
 
+## Codebase Atlas (`/explore`)
+
+Server-hosted **Codebase Understand** surface in the admin console — parity with [Understand-Anything](https://github.com/Egonex-AI/Understand-Anything) commands.
+
+| Tab group | Routes | Backend |
+|-----------|--------|---------|
+| Summary | `overview` | `GET /v1/admin/explore/stats` |
+| Understand | `ask`, `tour`, `domains`, `knowledge` | `api/routes/codebase-understand.ts` |
+| Map | `graph`, `layers` | `GET …/codebase/explore` (+ UA graph JSON when `symbols=1`) |
+| Search | `search` | `POST …/codebase/search` (semantic + name modes) |
+| Index | `index` (Advanced mode) | scope settings + analyze job debug |
+
+**Workers & tables (Jun 2026):**
+
+| Object | Role |
+|--------|------|
+| `codebase-analyze-worker` | Builds UA-shaped graph JSON from `project_codebase_files`; enqueued on push + manual Re-analyze |
+| `project_codebase_graph` | Symbol-level graph JSONB per project |
+| `codebase_analyze_jobs` | Job queue (service-role only) |
+| `project_codebase_wiki_sources` / `…_knowledge_*` | Wiki ingest + RAG merge via `match_knowledge_chunks` |
+| `project_settings.codebase_index_scope_paths` | Scoped subdirectory indexing |
+
+**MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
+
+Graph builder concepts attributed to **Understand-Anything (MIT)** — see `packages/codebase-graph/README.md` and `_shared/codebase-graph-build.ts`.
+
+---
+
 ## ExecPlans
 
 Detailed, phase-by-phase implementation plans live in
