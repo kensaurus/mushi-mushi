@@ -30,7 +30,7 @@ import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
-import { useAdminMode, type AdminMode } from '../lib/mode'
+import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip } from './ui'
 import { RouteProgress } from './RouteProgress'
@@ -49,9 +49,10 @@ import { SidebarUserCard } from './SidebarUserCard'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { VersionBadge } from './VersionBadge'
-import { AskMushiSidebar } from './AskMushiSidebar'
+import { AskMushiLauncherButton } from './AskMushiLauncherButton'
 import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
+import { AskMushiSidebar } from './AskMushiSidebar'
 import { useAskMushiPanel } from '../lib/useAskMushiPanel'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
@@ -63,6 +64,7 @@ import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
 import { PortalToggle } from './PortalSwitcher'
+import { ModeToggle } from './ModeToggle'
 import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 
 interface NavItem {
@@ -963,7 +965,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <>
       {/* Brand — collapses to a single "M" stamp in compact mode so the
           rail still has a recognisable identity at the top. */}
-      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60`}>
+      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60 overflow-visible`}>
         {compact ? (
           <div className="space-y-1.5">
             <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
@@ -1455,16 +1457,10 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span aria-hidden className="font-mono text-xs leading-none">?</span>
                 </button>
               </Tooltip>
-              <Tooltip content="Ask Mushi (Cmd/Ctrl+J)" side="bottom">
-                <button
-                  type="button"
-                  onClick={() => askPanel.open()}
-                  aria-label="Open Ask Mushi"
-                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  <IconChat className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
+              <AskMushiLauncherButton
+                panelOpen={askPanel.isOpen}
+                onClick={() => askPanel.open()}
+              />
             </div>
             <VersionBadge whatsNew={whatsNew} />
             <span className="h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
@@ -1526,56 +1522,6 @@ export function Layout({ children }: { children: ReactNode }) {
         seedMessage={askPanel.seed}
         seedThreadId={askPanel.threadId}
       />
-    </div>
-  )
-}
-
-const MODE_OPTIONS: Array<{ id: AdminMode; label: string; hint: string }> = [
-  {
-    id: 'quickstart',
-    label: 'Quick',
-    hint: 'Quickstart: 3 pages + one big "Resolve next bug" button. The fastest path from a real bug to a draft PR.',
-  },
-  {
-    id: 'beginner',
-    label: 'Beginner',
-    hint: 'Beginner: 9 essential pages with guided next-best-action and plain-language copy.',
-  },
-  {
-    id: 'advanced',
-    label: 'Advanced',
-    hint: 'Advanced: full 23-page console with dense layouts and jargon-rich copy.',
-  },
-]
-
-function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: AdminMode) => void }) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Admin mode"
-      data-tour-id="mode-toggle"
-      className="mt-2 inline-flex max-w-full min-w-0 items-stretch gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
-    >
-      {MODE_OPTIONS.map((opt) => {
-        const active = opt.id === mode
-        return (
-          <Tooltip key={opt.id} content={opt.hint}>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onSelect(opt.id)}
-              className={`shrink-0 rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-                active
-                  ? 'bg-brand/25 text-brand shadow-sm ring-1 ring-brand/20 font-semibold'
-                  : 'text-fg-muted hover:bg-surface-overlay hover:text-fg-secondary'
-              }`}
-            >
-              {opt.label}
-            </button>
-          </Tooltip>
-        )
-      })}
     </div>
   )
 }

@@ -4,6 +4,7 @@
  */
 
 import { useSyncExternalStore } from 'react'
+import { markAskMushiIntroSeen } from './askMushiIntro'
 
 type Listener = () => void
 
@@ -32,11 +33,13 @@ function getSnapshot(): PanelState {
 
 export const askMushiPanel = {
   open(seed?: string) {
+    markAskMushiIntroSeen()
     state = { open: true, seed: seed ?? null, threadId: null }
     emit()
   },
   /** Continue Cmd+K assist in the sidebar with the existing server thread. */
   openFromPalette(seed: string, threadId: string) {
+    markAskMushiIntroSeen()
     state = { open: true, seed: seed.trim() || null, threadId }
     emit()
   },
@@ -45,9 +48,11 @@ export const askMushiPanel = {
     emit()
   },
   toggle() {
+    const opening = !state.open
+    if (opening) markAskMushiIntroSeen()
     state = {
       ...state,
-      open: !state.open,
+      open: opening,
       seed: state.open ? null : state.seed,
       threadId: state.open ? null : state.threadId,
     }

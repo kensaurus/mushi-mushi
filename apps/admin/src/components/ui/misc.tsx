@@ -348,10 +348,12 @@ function resolveTooltipSide(
   }
 
   if (preferred === 'auto') {
+    /** Sidebar chrome (~240px) — prefer opening tips into the main canvas. */
+    const inLeftChrome = anchor.right <= 280
     const ranked: Array<{ side: 'top' | 'bottom' | 'left' | 'right'; score: number }> = [
       { side: 'top', score: space.top },
       { side: 'bottom', score: space.bottom },
-      { side: 'right', score: space.right },
+      { side: 'right', score: space.right + (inLeftChrome ? 10_000 : 0) },
       { side: 'left', score: space.left },
     ]
     const viable = ranked.filter((c) => fits(c.side)).sort((a, b) => b.score - a.score)
@@ -414,9 +416,9 @@ function computeTooltipPortalPosition(
 export function Tooltip({
   content,
   children,
-  side = 'top',
+  side = 'auto',
   nowrap = true,
-  portal = false,
+  portal = true,
   className,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false)
@@ -430,9 +432,14 @@ export function Tooltip({
     const tip = tooltipRef.current
     if (!el) return
     const anchor = el.getBoundingClientRect()
-    const tipW = tip?.offsetWidth ?? 288
-    const tipH = tip?.offsetHeight ?? 96
-    const { left, top } = computeTooltipPortalPosition(anchor, tipW, tipH, side)
+    const tipW = tip?.offsetWidth ?? 0
+    const tipH = tip?.offsetHeight ?? 0
+    const { left, top } = computeTooltipPortalPosition(
+      anchor,
+      tipW || 200,
+      tipH || 40,
+      side,
+    )
     setPortalStyle({
       position: 'fixed',
       left,
@@ -460,16 +467,29 @@ export function Tooltip({
   useLayoutEffect(() => {
     if (!visible || !portal) return
     updatePortalPosition()
-    const raf = requestAnimationFrame(() => updatePortalPosition())
+    const raf1 = requestAnimationFrame(() => {
+      updatePortalPosition()
+      requestAnimationFrame(updatePortalPosition)
+    })
     const reposition = () => updatePortalPosition()
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
+    const tip = tooltipRef.current
+    let ro: ResizeObserver | undefined
+    if (tip && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(reposition)
+      ro.observe(tip)
+    }
     return () => {
-      cancelAnimationFrame(raf)
+      cancelAnimationFrame(raf1)
       window.removeEventListener('scroll', reposition, true)
       window.removeEventListener('resize', reposition)
+      ro?.disconnect()
     }
   }, [visible, portal, content, updatePortalPosition])
+
+  const resolvedSide =
+    side === 'auto' ? 'top' : side
 
   const positions = {
     top: 'bottom-full left-1/2 -translate-x-1/2 mb-1.5',
@@ -478,10 +498,12 @@ export function Tooltip({
     right: 'left-full top-1/2 -translate-y-1/2 ml-1.5',
   }
 
-  const wrapClass = nowrap ? 'whitespace-nowrap' : 'whitespace-normal text-left leading-snug'
+  const wrapClass = nowrap
+    ? 'whitespace-nowrap'
+    : 'whitespace-normal text-left leading-snug break-words [overflow-wrap:anywhere]'
   const widthClass = nowrap
-    ? 'max-w-[min(20rem,calc(100vw-2rem))]'
-    : 'min-w-[13rem] w-max max-w-[min(26rem,calc(100vw-1.5rem))]'
+    ? 'w-max max-w-[min(20rem,calc(100vw-24px))]'
+    : 'block w-max min-w-[10rem] max-w-[min(24rem,calc(100vw-24px))]'
   const tooltipNode = visible ? (
     <span
       ref={portal ? tooltipRef : undefined}
@@ -490,7 +512,7 @@ export function Tooltip({
       className={
         portal
           ? `${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
-          : `absolute ${positions[side === 'auto' ? 'top' : side]} z-[100] ${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
+          : `absolute ${positions[resolvedSide]} z-[100] ${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
       }
     >
       {content}

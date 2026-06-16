@@ -8,7 +8,7 @@ import type * as ActiveProjectModule from './activeProject'
 import type * as ActiveOrgModule from './activeOrg'
 
 vi.mock('./activeProject', async (importOriginal) => {
-  const actual = await importOriginal<ActiveProjectModule>()
+  const actual = await importOriginal<typeof ActiveProjectModule>()
   return {
     ...actual,
     getActiveProjectIdSnapshot: () => '11111111-1111-4111-8111-111111111111',
@@ -16,7 +16,7 @@ vi.mock('./activeProject', async (importOriginal) => {
 })
 
 vi.mock('./activeOrg', async (importOriginal) => {
-  const actual = await importOriginal<ActiveOrgModule>()
+  const actual = await importOriginal<typeof ActiveOrgModule>()
   return {
     ...actual,
     getActiveOrgIdSnapshot: () => '22222222-2222-4222-8222-222222222222',

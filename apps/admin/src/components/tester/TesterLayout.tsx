@@ -141,7 +141,7 @@ function renderSidebarNav(compact: boolean) {
 function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>['user'], signOut: () => void) {
   return (
     <>
-      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60`}>
+      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60 overflow-visible`}>
         {compact ? (
           <div className="space-y-1.5">
             <h1 className="text-center text-sm font-bold leading-none tracking-tight" aria-label="mushimushi bounties">

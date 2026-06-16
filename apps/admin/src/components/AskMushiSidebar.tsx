@@ -30,8 +30,9 @@ import { formatLlmCost } from '../lib/format'
 import { langfuseTraceUrl, RESOLVED_API_URL, RESOLVED_SUPABASE_ANON_KEY } from '../lib/env'
 import { debugLog, debugError } from '../lib/debug'
 import { AskMushiComposer } from './AskMushiComposer'
+import { SLASH_COMMANDS, type SlashCommand } from '../lib/askMushiCommands'
 import { ClarifyChips } from './ClarifyChips'
-import { ContainedBlock, InlineProof, SignalChip } from './report-detail/ReportSurface'
+import { InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { EmptySectionMessage } from './report-detail/ReportClassification'
 import {
   isAskMushiStreamingEnabled,
@@ -46,7 +47,7 @@ import type {
   AskMushiIntent,
 } from '../lib/askMushiTypes'
 import { useTheme } from '../lib/useTheme'
-import { askMushiShikiThemes, formatAssistantMarkdown } from '../lib/askMushiTerminalTheme'
+import { askMushiShikiThemes, formatAssistantMarkdown, formatThreadTitle } from '../lib/askMushiTerminalTheme'
 
 interface Props {
   open: boolean
@@ -531,23 +532,29 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
               while a chat is in progress so the page's contributed
               actions stay one click away mid-conversation. */}
           {activeCtx?.actions && activeCtx.actions.length > 0 && messages.length > 0 && (
-            <div className="border-t border-edge/40 bg-surface-overlay/30 px-3 py-1.5 flex flex-wrap gap-1.5">
-              {activeCtx.actions.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={a.run}
-                  title={a.hint}
-                  className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-0.5 text-3xs text-fg-secondary hover:border-edge hover:text-fg motion-safe:transition-colors"
-                >
-                  <span>{a.label}</span>
-                  {a.shortcut && (
-                    <kbd className="rounded-sm border border-edge-subtle px-1 font-mono text-3xs text-fg-faint">
-                      {a.shortcut}
-                    </kbd>
-                  )}
-                </button>
-              ))}
+            <div className="ask-mushi-quick-actions">
+              <span className="ask-mushi-quick-actions__label">Page actions</span>
+              <div className="ask-mushi-quick-actions__row">
+                {activeCtx.actions.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={a.run}
+                    title={a.hint}
+                    className="ask-mushi-quick-action-btn"
+                  >
+                    {a.id.includes('reload') || a.id.includes('refresh') ? (
+                      <span className="ask-mushi-quick-action-btn__icon" aria-hidden>
+                        ↻
+                      </span>
+                    ) : null}
+                    <span>{a.label}</span>
+                    {a.shortcut && (
+                      <kbd className="ask-mushi-quick-action-btn__kbd">{a.shortcut}</kbd>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {messages.length > 0 && (
@@ -730,28 +737,31 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
       <div className="flex items-start gap-2.5">
         <span
           aria-hidden
-          className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md bg-brand/10 border border-brand/30 text-brand font-mono text-xs leading-none"
+          className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md border font-mono text-xs leading-none"
+          style={{
+            borderColor: 'var(--am-accent-cyan)',
+            color: 'var(--am-accent-cyan)',
+            background: 'color-mix(in oklch, var(--am-accent-cyan) 12%, transparent)',
+          }}
         >
           &gt;
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-fg leading-snug">
+          <p className="ask-mushi-empty-intro text-sm font-medium leading-snug">
             Ask Mushi about{' '}
             {ctx?.title ? (
-              <span className="text-brand">{ctx.title}</span>
+              <span className="text-[var(--am-accent-cyan)]">{ctx.title}</span>
             ) : (
-              <code className="font-mono text-fg">{route}</code>
+              <code className="font-mono">{route}</code>
             )}
             .
           </p>
-          <ContainedBlock tone="muted" className="mt-0.5">
-            <p className="text-2xs text-fg-muted leading-snug">
-              The assistant sees your filters, focus, and the page's quick
-              actions. Use <code className="font-mono text-fg-secondary">/commands</code>{' '}
-              and <code className="font-mono text-fg-secondary">@mentions</code> in the
-              composer to steer the answer.
-            </p>
-          </ContainedBlock>
+          <p className="ask-mushi-empty-hint mt-1.5">
+            The assistant sees your filters, focus, and the page&apos;s quick
+            actions. Use <code className="font-mono text-[var(--am-accent-green)]">/commands</code>{' '}
+            and <code className="font-mono text-[var(--am-accent-green)]">@mentions</code> in the
+            composer to steer the answer.
+          </p>
         </div>
       </div>
 
@@ -759,9 +769,7 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
           slash registry. Clicking a chip seeds the composer with the
           slash token so the user can finish the prompt or hit Enter. */}
       <section aria-label="Quick commands">
-        <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
-          Try a command
-        </p>
+        <p className="ask-mushi-section-label">Try a command</p>
         <div className="flex flex-wrap gap-1.5">
           {QUICK_SLASH_CHIPS.map((c) => (
             <button
@@ -769,10 +777,10 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
               type="button"
               onClick={() => onSuggest(`${c.command} `)}
               title={c.hint}
-              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 py-0.5 text-2xs text-fg-secondary hover:border-brand/30 hover:bg-brand/5 hover:text-fg motion-safe:transition-colors"
+              className="ask-mushi-slash-chip"
             >
-              <span className="font-mono text-brand">{c.command}</span>
-              <span className="text-fg-faint">·</span>
+              <span className="ask-mushi-slash-chip__cmd">{c.command}</span>
+              <span className="opacity-60">·</span>
               <span>{c.label}</span>
             </button>
           ))}
@@ -782,16 +790,14 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
       {/* Page-aware suggestions — clicking sends immediately so the
           operator gets a response without an extra Enter press. */}
       <section aria-label="Suggested questions">
-        <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
-          Ask about this page
-        </p>
+        <p className="ask-mushi-section-label">Ask about this page</p>
         <div className="space-y-1.5">
           {suggestions.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => onSend(s)}
-              className="block w-full text-left rounded-sm border border-edge/60 px-2.5 py-1.5 text-xs text-fg-secondary hover:bg-surface-overlay/60 hover:border-edge hover:text-fg motion-safe:transition-colors"
+              className="ask-mushi-suggest-btn"
             >
               {s}
             </button>
@@ -800,24 +806,25 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
       </section>
 
       {actions.length > 0 && (
-        <section aria-label="Quick actions on this page" className="border-t border-edge/40 pt-3">
-          <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
-            Quick actions on this page
-          </p>
-          <div className="flex flex-wrap gap-1.5">
+        <section aria-label="Quick actions on this page" className="ask-mushi-resume-section">
+          <p className="ask-mushi-section-label">Page actions</p>
+          <div className="ask-mushi-quick-actions__row">
             {actions.map((a) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={a.run}
                 title={a.hint}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 py-1 text-2xs text-fg-secondary hover:border-edge hover:text-fg motion-safe:transition-colors"
+                className="ask-mushi-quick-action-btn"
               >
+                {a.id.includes('reload') || a.id.includes('refresh') ? (
+                  <span className="ask-mushi-quick-action-btn__icon" aria-hidden>
+                    ↻
+                  </span>
+                ) : null}
                 <span>{a.label}</span>
                 {a.shortcut && (
-                  <kbd className="rounded-sm border border-edge-subtle px-1 font-mono text-3xs text-fg-faint">
-                    {a.shortcut}
-                  </kbd>
+                  <kbd className="ask-mushi-quick-action-btn__kbd">{a.shortcut}</kbd>
                 )}
               </button>
             ))}
@@ -842,7 +849,7 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend, onResumeThread, resuming }
                   title={`Reopen ${t.title || '(empty thread)'}`}
                 >
                   <div className="ask-mushi-resume-btn__title truncate">
-                    {t.title || '(empty thread)'}
+                    {formatThreadTitle(t.title)}
                   </div>
                   <div className="ask-mushi-resume-btn__meta flex flex-wrap items-center gap-1.5 font-mono mt-1">
                     <span>{new Date(t.lastAt).toLocaleString()}</span>
@@ -893,13 +900,13 @@ function MessageRow({ message, shikiTheme, onCopy, onClarifyPick, disabled }: Me
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1`}>
       <div
-        className={`ask-mushi-msg ask-mushi-msg--${isUser ? 'user' : 'assistant'} max-w-[88%] rounded-sm px-2.5 py-1.5 text-xs leading-relaxed`}
+        className={`ask-mushi-msg ask-mushi-msg--${isUser ? 'user' : 'assistant'} max-w-[88%] rounded-sm px-2.5 py-2 leading-relaxed`}
       >
         {isUser ? (
           <span className="whitespace-pre-wrap">{message.content}</span>
         ) : (
           <Streamdown
-            className="prose-mushi"
+            className="prose-mushi prose-mushi-chat"
             parseIncompleteMarkdown={Boolean(message.streaming)}
             shikiTheme={shikiTheme}
           >
@@ -1047,7 +1054,7 @@ function HistoryPopover({
                   t.threadId === currentThreadId ? 'ask-mushi-history-item--active' : ''
                 }`}
               >
-                <div className="ask-mushi-resume-btn__title truncate">{t.title || '(empty)'}</div>
+                <div className="ask-mushi-resume-btn__title truncate">{formatThreadTitle(t.title)}</div>
                 <div className="ask-mushi-resume-btn__meta flex flex-wrap gap-1 font-mono mt-0.5">
                   <span>{new Date(t.lastAt).toLocaleString()}</span>
                   <span className="opacity-60">·</span>

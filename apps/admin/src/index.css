@@ -529,6 +529,41 @@ html[data-theme='dark'] [data-surface='ask-mushi'].ask-mushi-terminal {
   box-shadow: -4px 0 24px color-mix(in oklch, var(--am-accent-cyan) 12%, transparent);
   color: var(--am-text);
   font-family: ui-monospace, 'Cascadia Code', 'SF Mono', 'Consolas', monospace;
+  /* Bridge app tokens → terminal palette so .prose-mushi / Streamdown inherit light text on Monokai. */
+  --color-fg: var(--am-text);
+  --color-fg-secondary: var(--am-text);
+  --color-fg-muted: var(--am-text-muted);
+  --color-fg-faint: var(--am-text-faint);
+  --color-fg-primary: var(--am-text);
+  --color-brand: var(--am-accent-cyan);
+  --color-brand-hover: var(--am-accent-green);
+  --color-brand-subtle: color-mix(in oklch, var(--am-accent-cyan) 14%, var(--am-bg-inset));
+  --color-brand-fg: var(--am-bg);
+  --color-brand-foreground: var(--am-accent-cyan);
+  --color-surface-root: var(--am-bg);
+  --color-surface: var(--am-bg);
+  --color-surface-raised: var(--am-bg-raised);
+  --color-surface-overlay: var(--am-bg-inset);
+  --color-surface-2: var(--am-bg-raised);
+  --color-surface-3: var(--am-bg-inset);
+  --color-edge: var(--am-border);
+  --color-edge-subtle: var(--am-border);
+  --color-border: var(--am-border);
+  --color-border-subtle: var(--am-border);
+  --color-ok: var(--am-accent-green);
+  --color-warn: var(--am-accent-orange);
+  --color-info: var(--am-accent-cyan);
+  --color-accent: var(--am-accent-purple);
+  --color-accent-foreground: var(--am-accent-purple);
+  /* Streamdown / shadcn utility aliases */
+  --color-foreground: var(--am-text);
+  --color-muted-foreground: var(--am-text-muted);
+  --color-muted: var(--am-bg-raised);
+  --color-background: var(--am-bg-inset);
+  --color-sidebar: var(--am-bg-inset);
+  --color-sidebar-foreground: var(--am-text);
+  --color-primary: var(--am-accent-cyan);
+  --color-primary-foreground: var(--am-bg);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -613,15 +648,119 @@ html[data-theme='light'] [data-surface='ask-mushi'] .ask-mushi-msg--user {
   background: var(--am-bg-raised);
   border: 1px solid var(--am-border);
   color: var(--am-text);
+  font-size: 0.8125rem;
+  line-height: 1.6;
 }
 
-[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi {
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat {
+  color: var(--am-text);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi p,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat p,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi li,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat li,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi td,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat td {
   color: var(--am-text);
 }
-[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi code:not(pre code) {
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi strong,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat strong {
+  color: var(--am-accent-orange);
+  font-weight: 600;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi em,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat em {
+  color: var(--am-text-muted);
+}
+
+/* Beat global .prose-mushi rules (defined later in this file) — force terminal fg on all prose text. */
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi :where(
+  p, li, ul, ol, td, th, blockquote, h1, h2, h3, h4, span:not([style*='color'])
+),
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat :where(
+  p, li, ul, ol, td, th, blockquote, h1, h2, h3, h4, span:not([style*='color'])
+) {
+  color: var(--am-text) !important;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi :where(strong, b),
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat :where(strong, b) {
+  color: var(--am-accent-orange) !important;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi :where(h1, h2, h3),
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat :where(h1, h2, h3) {
+  color: var(--am-accent-yellow) !important;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi a,
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat a {
+  color: var(--am-accent-cyan) !important;
+}
+
+/* Empty-state + intro copy inside the terminal */
+[data-surface='ask-mushi'] .ask-mushi-empty-intro {
+  color: var(--am-text);
+}
+[data-surface='ask-mushi'] .ask-mushi-empty-hint {
+  color: var(--am-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+[data-surface='ask-mushi'] .ask-mushi-suggest-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--am-border);
+  border-radius: 4px;
+  background: var(--am-bg-inset);
+  color: var(--am-text);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+[data-surface='ask-mushi'] .ask-mushi-suggest-btn:hover {
+  border-color: var(--am-accent-cyan);
+  background: color-mix(in oklch, var(--am-accent-cyan) 8%, var(--am-bg-inset));
+  color: var(--am-accent-cyan);
+}
+[data-surface='ask-mushi'] .ask-mushi-slash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--am-border);
+  border-radius: 4px;
+  background: var(--am-bg-inset);
+  color: var(--am-text);
+  font-size: 0.75rem;
+}
+[data-surface='ask-mushi'] .ask-mushi-slash-chip:hover {
+  border-color: var(--am-accent-green);
   color: var(--am-accent-green);
-  background: color-mix(in oklch, var(--am-accent-green) 12%, transparent);
-  border: 1px solid color-mix(in oklch, var(--am-accent-green) 28%, transparent);
+}
+[data-surface='ask-mushi'] .ask-mushi-slash-chip__cmd {
+  color: var(--am-accent-green);
+  font-family: inherit;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi code:not(pre code),
+[data-surface='ask-mushi'] .ask-mushi-msg--assistant .prose-mushi-chat code:not(pre code) {
+  color: var(--am-accent-green);
+  background: color-mix(in oklch, var(--am-accent-green) 14%, var(--am-bg-inset));
+  border: 1px solid color-mix(in oklch, var(--am-accent-green) 32%, transparent);
+}
+
+/* Streamdown utility fallbacks (when token bridge is not enough) */
+[data-surface='ask-mushi'] .text-foreground {
+  color: var(--am-text) !important;
+}
+[data-surface='ask-mushi'] .text-muted-foreground {
+  color: var(--am-text-muted) !important;
+}
+[data-surface='ask-mushi'] .bg-muted,
+[data-surface='ask-mushi'] .bg-sidebar {
+  background-color: var(--am-bg-inset) !important;
+  color: var(--am-text) !important;
 }
 
 [data-surface='ask-mushi'] .ask-mushi-scroll section > p.text-3xs,
@@ -749,6 +888,10 @@ html[data-theme='dark'] [data-surface='ask-mushi'] .ask-mushi-msg-meta span.roun
 
 [data-surface='ask-mushi'] .ask-mushi-msg-meta {
   color: var(--am-text-muted) !important;
+  font-size: 0.6875rem;
+}
+[data-surface='ask-mushi'] .ask-mushi-msg-meta a {
+  color: var(--am-accent-cyan) !important;
 }
 
 /* Streamdown / Shiki code blocks inside the terminal */
@@ -776,18 +919,27 @@ html[data-theme='dark'] [data-surface='ask-mushi'] .ask-mushi-msg-meta span.roun
 
 [data-surface='ask-mushi'] .prose-mushi h1,
 [data-surface='ask-mushi'] .prose-mushi h2,
-[data-surface='ask-mushi'] .prose-mushi h3 {
+[data-surface='ask-mushi'] .prose-mushi h3,
+[data-surface='ask-mushi'] .prose-mushi-chat h1,
+[data-surface='ask-mushi'] .prose-mushi-chat h2,
+[data-surface='ask-mushi'] .prose-mushi-chat h3 {
   color: var(--am-accent-yellow);
 }
-[data-surface='ask-mushi'] .prose-mushi strong {
+[data-surface='ask-mushi'] .prose-mushi strong,
+[data-surface='ask-mushi'] .prose-mushi-chat strong {
   color: var(--am-accent-orange);
 }
-[data-surface='ask-mushi'] .prose-mushi a {
+[data-surface='ask-mushi'] .prose-mushi a,
+[data-surface='ask-mushi'] .prose-mushi-chat a {
   color: var(--am-accent-cyan);
 }
-[data-surface='ask-mushi'] .prose-mushi blockquote {
+[data-surface='ask-mushi'] .prose-mushi blockquote,
+[data-surface='ask-mushi'] .prose-mushi-chat blockquote {
   border-left-color: var(--am-accent-purple);
   color: var(--am-text-muted);
+}
+[data-surface='ask-mushi'] .prose-mushi-chat li::marker {
+  color: var(--am-accent-pink);
 }
 
 /* Page context strip — compact terminal HUD (empty state only) */
@@ -912,6 +1064,76 @@ html[data-theme='dark'] [data-surface='ask-mushi'] .ask-mushi-resume-btn__cost {
   border: 1px dashed var(--am-border);
   border-radius: 4px;
   background: color-mix(in oklch, var(--am-accent-yellow) 10%, var(--am-bg-inset));
+}
+
+/* Footer page quick actions (e.g. Refresh dashboard) */
+[data-surface='ask-mushi'] .ask-mushi-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.625rem;
+  border-top: 1px solid var(--am-border);
+  background: var(--am-bg-inset);
+  padding: 0.5rem 0.75rem;
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-actions__label {
+  flex-shrink: 0;
+  color: var(--am-text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-actions__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  min-width: 0;
+  flex: 1;
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.3125rem 0.625rem;
+  border: 1px solid var(--am-border-strong);
+  border-radius: 4px;
+  background: var(--am-bg-raised);
+  color: var(--am-text);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast, 150ms),
+    background-color var(--duration-fast, 150ms),
+    color var(--duration-fast, 150ms);
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-action-btn:hover {
+  border-color: var(--am-accent-cyan);
+  background: color-mix(in oklch, var(--am-accent-cyan) 10%, var(--am-bg-raised));
+  color: var(--am-accent-cyan);
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-action-btn__icon {
+  color: var(--am-accent-green);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-action-btn:hover .ask-mushi-quick-action-btn__icon {
+  color: var(--am-accent-cyan);
+}
+[data-surface='ask-mushi'] .ask-mushi-quick-action-btn__kbd {
+  margin-left: 0.125rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--am-border);
+  border-radius: 3px;
+  background: var(--am-bg-inset);
+  color: var(--am-text-muted);
+  font-family: inherit;
+  font-size: 0.625rem;
 }
 
 /* Scrollbar — thin, unobtrusive */
@@ -1394,6 +1616,68 @@ select, input, textarea {
 
 .mushi-pulse {
   animation: mushi-pulse-glow 2.4s var(--ease-out-expo) infinite;
+}
+
+/* Ask Mushi header launcher — brand glow until first open */
+@keyframes ask-mushi-launcher-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 color-mix(in oklch, var(--color-brand) 0%, transparent),
+      0 0 10px -2px color-mix(in oklch, var(--color-brand) 35%, transparent);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--color-brand) 22%, transparent),
+      0 0 18px -2px color-mix(in oklch, var(--color-brand) 55%, transparent);
+  }
+}
+
+.ask-mushi-launcher--glow {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-brand) 45%, transparent),
+    0 0 14px -3px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+.ask-mushi-launcher__ring {
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ask-mushi-launcher--glow .ask-mushi-launcher__ring {
+    animation: ask-mushi-launcher-glow 2.2s var(--ease-out-expo) infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-mushi-launcher--glow {
+    outline: 2px solid color-mix(in oklch, var(--color-brand) 65%, transparent);
+    outline-offset: 2px;
+  }
+  .ask-mushi-launcher__ring {
+    display: none;
+  }
+}
+
+@keyframes portal-toggle-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.portal-toggle__caret {
+  animation: portal-toggle-caret-blink 900ms step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-toggle__caret {
+    animation: none;
+    opacity: 0.6;
+  }
 }
 
 /* ---------------------------------------------------------------------------
