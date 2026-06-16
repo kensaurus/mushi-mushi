@@ -7,7 +7,7 @@ describe('askMushiShikiThemes', () => {
   })
 
   it('uses light Shiki theme on dark app theme (reverse terminal)', () => {
-    expect(askMushiShikiThemes('dark')).toEqual(['one-light-pro', 'one-light-pro'])
+    expect(askMushiShikiThemes('dark')).toEqual(['one-light', 'one-light'])
   })
 })
 
