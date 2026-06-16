@@ -1,11 +1,19 @@
 /**
- * TesterSubmissionsPage — view and manage tester's bug report submissions.
+ * TesterSubmissionsPage — view and submit bug reports against joined apps.
  */
-import { useState } from 'react'
-import { TesterLayout } from '../../components/tester/TesterLayout'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import {
+  TesterEmptyPanel,
+  TesterPageIntro,
+  TesterPanel,
+  TesterPrimaryCta,
+} from '../../components/tester/tester-ui'
 import { usePageData } from '../../lib/usePageData'
+import { TESTER_API_OPTS, normalizeListItems } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
-import { Btn } from '../../components/ui'
+import { useToast } from '../../lib/toast'
+import { Btn, Badge } from '../../components/ui'
 
 interface TesterSubmission {
   id: string
@@ -20,166 +28,254 @@ interface TesterSubmission {
   reviewerNote: string | null
 }
 
+interface JoinedAppOption {
+  id: string
+  name: string
+  slug: string
+  joined: boolean
+}
+
 const STATUS_LABELS: Record<TesterSubmission['status'], { label: string; tone: string }> = {
   pending:     { label: 'Pending review', tone: 'text-fg-muted' },
-  accepted:    { label: '✓ Accepted',     tone: 'text-ok' },
-  informative: { label: 'Informative',   tone: 'text-brand' },
-  duplicate:   { label: 'Duplicate',     tone: 'text-fg-faint' },
-  spam:        { label: '✗ Spam',         tone: 'text-danger' },
+  accepted:    { label: 'Accepted',       tone: 'text-ok' },
+  informative: { label: 'Informative',    tone: 'text-brand' },
+  duplicate:   { label: 'Duplicate',      tone: 'text-fg-faint' },
+  spam:        { label: 'Spam',           tone: 'text-danger' },
 }
 
 export function TesterSubmissionsPage() {
-  const { data: submissions, loading, reload } = usePageData<TesterSubmission[]>('/v1/tester/submissions')
+  const toast = useToast()
+  const [searchParams] = useSearchParams()
+  const prefillAppId = searchParams.get('appId') ?? ''
+  const openNew = searchParams.get('new') === '1'
+
+  const { data: subsRaw, loading, reload } = usePageData<{ items: TesterSubmission[]; total: number }>(
+    '/v1/tester/submissions',
+    TESTER_API_OPTS,
+  )
+  const { data: appsRaw } = usePageData<JoinedAppOption[] | { data: JoinedAppOption[] }>(
+    '/v1/tester/apps',
+    TESTER_API_OPTS,
+  )
+
+  const submissions = useMemo(() => normalizeListItems<TesterSubmission>(subsRaw), [subsRaw])
+  const joinedApps = useMemo(() => {
+    const apps = normalizeListItems<JoinedAppOption>(appsRaw)
+    return apps.filter((a) => a.joined)
+  }, [appsRaw])
+
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(openNew)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ appId: '', title: '', description: '', screenshotUrl: '' })
+  const [form, setForm] = useState({
+    appId: prefillAppId,
+    title: '',
+    description: '',
+    screenshotUrl: '',
+  })
+
+  useEffect(() => {
+    if (prefillAppId) {
+      setForm((f) => ({ ...f, appId: prefillAppId }))
+    }
+    if (openNew) setShowForm(true)
+  }, [prefillAppId, openNew])
 
   const handleSubmit = async () => {
-    if (!form.appId || !form.title || !form.description) return
+    if (!form.appId || !form.title.trim() || !form.description.trim()) return
     setSubmitting(true)
     try {
-      await apiFetch('/v1/tester/submissions', {
+      const res = await apiFetch('/v1/tester/submissions', {
         method: 'POST',
+        scope: 'none',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          appId: form.appId,
+          title: form.title.trim(),
+          description: form.description.trim(),
+          screenshotUrl: form.screenshotUrl.trim() || undefined,
+        }),
       })
-      setForm({ appId: '', title: '', description: '', screenshotUrl: '' })
-      setShowForm(false)
-      reload()
-    } catch {
-      // error handled by apiFetch toast
+      if (res.ok) {
+        toast.success('Bug report submitted — the developer will review it soon.')
+        setForm({ appId: joinedApps[0]?.id ?? '', title: '', description: '', screenshotUrl: '' })
+        setShowForm(false)
+        reload()
+      } else {
+        const code = res.error?.code
+        const msg = res.error?.message ?? 'Submission failed.'
+        if (code === 'not_subscribed' || msg.includes('not_subscribed')) {
+          toast.error('Join this app first before submitting a report.')
+        } else {
+          toast.error(msg)
+        }
+      }
     } finally {
       setSubmitting(false)
     }
   }
 
+  const pendingCount = submissions.filter((s) => s.status === 'pending').length
+
   return (
-    <TesterLayout>
-      <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-lg font-bold">My Submissions</h1>
-            <p className="text-sm text-fg-muted mt-0.5">
-              Track your bug reports and earned mushi-points.
-            </p>
-          </div>
-          <Btn onClick={() => setShowForm(v => !v)}>
-            {showForm ? 'Cancel' : '+ Report a bug'}
-          </Btn>
-        </div>
-
-        {showForm && (
-          <div className="rounded-lg border border-edge bg-surface p-4 space-y-3">
-            <p className="text-sm font-medium">Submit a bug report</p>
-            <div className="space-y-2">
-              <input
-                placeholder="App ID (from the Apps page)"
-                value={form.appId}
-                onChange={e => setForm(f => ({ ...f, appId: e.target.value }))}
-                className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
-              />
-              <input
-                placeholder="Bug title (one-liner summary)"
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
-              />
-              <textarea
-                placeholder="Steps to reproduce, expected vs actual behavior…"
-                rows={4}
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40 resize-y"
-              />
-              <input
-                placeholder="Screenshot URL (optional)"
-                value={form.screenshotUrl}
-                onChange={e => setForm(f => ({ ...f, screenshotUrl: e.target.value }))}
-                className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
-              />
-            </div>
-            <Btn
-              disabled={!form.appId || !form.title || !form.description || submitting}
-              onClick={handleSubmit}
-            >
-              {submitting ? 'Submitting…' : 'Submit bug report'}
+    <div className="space-y-6">
+      <TesterPageIntro
+        title="My reports"
+        description="Track submissions and file new bug reports for apps you've joined."
+        meta={
+          pendingCount > 0 ? (
+            <Badge className="border border-warn/30 bg-warn-muted text-warning-foreground">
+              {pendingCount} pending review
+            </Badge>
+          ) : undefined
+        }
+        actions={
+          joinedApps.length > 0 ? (
+            <Btn onClick={() => setShowForm((v) => !v)}>
+              {showForm ? 'Cancel' : '+ Report a bug'}
             </Btn>
-          </div>
-        )}
+          ) : (
+            <TesterPrimaryCta to="/tester/apps">Join an app first →</TesterPrimaryCta>
+          )
+        }
+      />
 
-        {loading && (
-          <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-16 rounded-lg bg-surface animate-pulse" />
-            ))}
-          </div>
-        )}
-
-        {!loading && (!submissions || submissions.length === 0) && (
-          <div className="rounded-lg border border-edge bg-surface p-8 text-center">
-            <p className="text-2xl mb-2">🐛</p>
-            <p className="text-sm font-medium text-fg">No submissions yet</p>
-            <p className="text-2xs text-fg-muted mt-1">
-              Join an app and report your first bug to start earning mushi-points.
-            </p>
-          </div>
-        )}
-
-        {!loading && submissions && submissions.length > 0 && (
+      {showForm && joinedApps.length > 0 && (
+        <TesterPanel className="space-y-3">
+          <p className="text-sm font-medium text-fg">Submit a bug report</p>
           <div className="space-y-2">
-            {submissions.map((sub) => {
-              const { label, tone } = STATUS_LABELS[sub.status]
-              const isExpanded = expandedId === sub.id
-              return (
-                <div
-                  key={sub.id}
-                  className="rounded-lg border border-edge bg-surface overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isExpanded ? null : sub.id)}
-                    className="w-full flex items-start justify-between gap-3 p-4 text-left hover:bg-surface-raised motion-safe:transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{sub.title}</p>
-                      <p className="text-2xs text-fg-muted mt-0.5">
-                        {sub.appName} · {new Date(sub.submittedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                      {sub.pointsAwarded !== null && sub.pointsAwarded > 0 && (
-                        <span className="text-2xs font-medium text-ok">
-                          +{sub.pointsAwarded} pts
-                        </span>
-                      )}
-                      <span className={`text-2xs font-medium ${tone}`}>{label}</span>
-                    </div>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="px-4 pb-4 pt-0 border-t border-edge space-y-2">
-                      <p className="text-xs text-fg-secondary whitespace-pre-wrap">{sub.description}</p>
-                      {sub.reviewerNote && (
-                        <div className="rounded-md bg-surface-root px-3 py-2">
-                          <p className="text-2xs text-fg-muted">
-                            <span className="font-medium text-fg">Reviewer note:</span> {sub.reviewerNote}
-                          </p>
-                        </div>
-                      )}
-                      {sub.reviewedAt && (
-                        <p className="text-2xs text-fg-faint">
-                          Reviewed {new Date(sub.reviewedAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            <label className="block text-2xs text-fg-muted" htmlFor="submission-app">
+              App
+            </label>
+            <select
+              id="submission-app"
+              value={form.appId}
+              onChange={(e) => setForm((f) => ({ ...f, appId: e.target.value }))}
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+            >
+              <option value="">Select a joined app…</option>
+              {joinedApps.map((app) => (
+                <option key={app.id} value={app.id}>
+                  {app.name}
+                </option>
+              ))}
+            </select>
+            <label className="block text-2xs text-fg-muted" htmlFor="submission-title">
+              Title
+            </label>
+            <input
+              id="submission-title"
+              placeholder="One-line summary of the bug"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+            />
+            <label className="block text-2xs text-fg-muted" htmlFor="submission-description">
+              Steps & details
+            </label>
+            <textarea
+              id="submission-description"
+              placeholder="Steps to reproduce, expected vs actual behavior…"
+              rows={4}
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              className="w-full resize-y rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+            />
+            <label className="block text-2xs text-fg-muted" htmlFor="submission-screenshot">
+              Screenshot URL (optional)
+            </label>
+            <input
+              id="submission-screenshot"
+              placeholder="https://…"
+              value={form.screenshotUrl}
+              onChange={(e) => setForm((f) => ({ ...f, screenshotUrl: e.target.value }))}
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+            />
           </div>
-        )}
-      </div>
-    </TesterLayout>
+          <Btn
+            disabled={!form.appId || !form.title.trim() || !form.description.trim() || submitting}
+            onClick={handleSubmit}
+          >
+            {submitting ? 'Submitting…' : 'Submit bug report'}
+          </Btn>
+        </TesterPanel>
+      )}
+
+      {loading && (
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-16 animate-pulse rounded-md bg-surface-overlay" />
+          ))}
+        </div>
+      )}
+
+      {!loading && submissions.length === 0 && (
+        <TesterEmptyPanel
+          title="No reports yet"
+          description="Join an app, test it like a real user, then submit your first bug report to start earning mushi-points."
+          action={<TesterPrimaryCta to="/tester/apps">Browse apps →</TesterPrimaryCta>}
+        />
+      )}
+
+      {!loading && submissions.length > 0 && (
+        <div className="space-y-2">
+          {submissions.map((sub) => {
+            const statusMeta = STATUS_LABELS[sub.status] ?? STATUS_LABELS.pending
+            const isExpanded = expandedId === sub.id
+            return (
+              <div key={sub.id} className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : sub.id)}
+                  className="flex w-full items-start justify-between gap-3 p-4 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-inset"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-fg">{sub.title}</p>
+                    <p className="mt-0.5 text-2xs text-fg-muted">
+                      {sub.appName} · {new Date(sub.submittedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {sub.pointsAwarded != null && sub.pointsAwarded > 0 && (
+                      <span className="text-2xs font-medium tabular-nums text-ok">
+                        +{sub.pointsAwarded.toLocaleString()} pts
+                      </span>
+                    )}
+                    <span className={`text-2xs font-medium ${statusMeta.tone}`}>{statusMeta.label}</span>
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="space-y-2 border-t border-edge-subtle px-4 pb-4 pt-0">
+                    <p className="pt-3 text-xs whitespace-pre-wrap text-fg-secondary">{sub.description}</p>
+                    {sub.reviewerNote && (
+                      <div className="rounded-md bg-surface-root px-3 py-2">
+                        <p className="text-2xs text-fg-muted">
+                          <span className="font-medium text-fg">Reviewer note:</span> {sub.reviewerNote}
+                        </p>
+                      </div>
+                    )}
+                    {sub.reviewedAt && (
+                      <p className="text-2xs text-fg-faint">
+                        Reviewed {new Date(sub.reviewedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!loading && joinedApps.length === 0 && (
+        <p className="text-xs text-fg-muted">
+          Need another app?{' '}
+          <Link to="/tester/apps" className="font-medium text-brand hover:underline">
+            Browse the catalog →
+          </Link>
+        </p>
+      )}
+    </div>
   )
 }

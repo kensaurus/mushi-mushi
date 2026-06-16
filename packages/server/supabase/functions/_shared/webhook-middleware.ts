@@ -57,6 +57,7 @@
 
 import type { Context } from 'jsr:@hono/hono'
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+import { log } from './logger.ts'
 
 type WebhookSource =
   | 'sentry' | 'sentry_seer' | 'github' | 'jira' | 'pagerduty'
@@ -245,7 +246,7 @@ export function createWebhookMiddleware(source: WebhookSource) {
     if (error || !data) {
       // Audit insert failure is non-fatal — do NOT block the webhook.
       // A compromised logging system should not take down ingest.
-      console.error('[webhook-middleware] audit insert failed:', error?.message)
+      log.error('audit insert failed', { scope: 'webhook-middleware', err: error?.message })
       return {
         id: crypto.randomUUID(),
         resolve: async () => {},

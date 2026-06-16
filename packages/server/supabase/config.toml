@@ -275,3 +275,11 @@ verify_jwt = false
 # invokes it.
 [functions.sdk-upgrade-worker]
 verify_jwt = false
+
+# codebase-analyze-worker builds UA-shaped graph JSON after push or manual
+# Re-analyze. Invoked fire-and-forget by api + webhooks-github-indexer.
+[functions.codebase-analyze-worker]
+verify_jwt = false
+
+[functions.console-knowledge-build]
+verify_jwt = false

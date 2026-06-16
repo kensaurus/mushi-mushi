@@ -5,6 +5,7 @@ import { sentryVitePlugin } from '@sentry/vite-plugin'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
+import { createDevLogger } from './vite.dev-logger.ts'
 
 // Base path is environment-driven so the same build works for:
 //   - local dev      (VITE_BASE_PATH unset → "/")
@@ -94,6 +95,7 @@ const sentryEnabled = Boolean(sentryAuthToken && sentryOrg && sentryProject)
 
 export default defineConfig({
   base: basePath,
+  customLogger: createDevLogger(),
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
     __SDK_WEB_VERSION__: JSON.stringify(SDK_WEB_VERSION),

@@ -57,6 +57,7 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
     try {
       await apiFetch('/v1/tester/kyc', {
         method: 'PUT',
+        scope: 'none',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jurisdiction,

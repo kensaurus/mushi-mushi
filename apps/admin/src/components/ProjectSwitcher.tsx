@@ -14,7 +14,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
+  clearActiveProject,
   getActiveProjectIdSnapshot,
+  isValidProjectId,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { useCreateProject } from '../lib/useCreateProject'
@@ -57,7 +59,14 @@ export function ProjectSwitcher() {
     if (projects.length === 0) return
     const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
     const fromStorage = getActiveProjectIdSnapshot()
-    const candidate = fromUrl ?? fromStorage
+    if (fromUrl && !isValidProjectId(fromUrl)) {
+      const next = new URLSearchParams(searchParams)
+      next.delete(ACTIVE_PROJECT_QUERY_PARAM)
+      setSearchParams(next, { replace: true })
+      clearActiveProject()
+    }
+    const candidate =
+      (fromUrl && isValidProjectId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = projects.find((p) => p.project_id === candidate)
     if (known) {
       if (fromStorage !== known.project_id) {
@@ -106,12 +115,22 @@ export function ProjectSwitcher() {
     )
   }
   if (setup.data.projects.length === 0) {
-    return null
+    return (
+      <Link
+        to="/projects"
+        className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+        title="No projects in this team yet"
+      >
+        <span className="truncate max-w-[12rem]">No projects yet</span>
+        <span aria-hidden className="text-fg-faint">→</span>
+      </Link>
+    )
   }
 
   const projects = setup.data.projects
+  const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
   const activeId =
-    searchParams.get(ACTIVE_PROJECT_QUERY_PARAM) ??
+    (fromUrl && isValidProjectId(fromUrl) ? fromUrl : null) ??
     getActiveProjectIdSnapshot() ??
     projects[0].project_id
   const active = projects.find((p) => p.project_id === activeId) ?? projects[0]

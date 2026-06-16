@@ -26,10 +26,12 @@
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
+import type { Context } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts'
+import { resolveAccessibleOrg } from '../shared.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { awardPointsForEndUser, invalidateRuleCache } from '../../_shared/reputation.ts'
 import { dispatchRewardWebhook } from '../../_shared/reward-webhooks.ts'
@@ -123,24 +125,23 @@ async function getOrgIdForProject(db: ReturnType<typeof getServiceClient>, proje
   return data?.organization_id ?? null
 }
 
-// ─── Helper: resolve org_id from JWT user ────────────────────
-// Takes the X-Mushi-Org-Id header (required for admin reward routes).
-function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefined } }): string | null {
-  return c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null
+// ─── Helper: resolve validated org for admin reward routes ───
+async function requireRewardsOrg(
+  c: Context,
+  userId: string,
+): Promise<{ ok: true; orgId: string } | { ok: false; response: Response }> {
+  const db = getServiceClient()
+  const resolved = await resolveAccessibleOrg(c, db, userId)
+  if (!resolved.ok) return { ok: false, response: resolved.response }
+  return { ok: true, orgId: resolved.organizationId }
 }
 
-/** Admin JWT supplies X-Mushi-Org-Id; MCP API keys resolve org via bound project_id. */
-async function resolveRewardsOrgId(c: {
-  req: { header: (k: string) => string | undefined }
-  get: (k: string) => unknown
-}): Promise<string | null> {
-  const fromHeader = getOrgIdFromContext(c)
-  if (fromHeader) return fromHeader
-  if (c.get('authMethod') === 'apiKey') {
-    const projectId = c.get('projectId') as string | undefined
-    if (projectId) return getOrgIdForProject(getServiceClient(), projectId)
-  }
-  return null
+/** Admin JWT supplies validated org; MCP API keys resolve org via bound project_id. */
+async function resolveRewardsOrgId(
+  c: Context,
+): Promise<{ ok: true; orgId: string } | { ok: false; response: Response }> {
+  const userId = (c.get('userId') as string | undefined) ?? ''
+  return requireRewardsOrg(c, userId)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -609,7 +610,8 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Workspace health summary for the rewards program banner + KPI strip.
   // ===========================================================
   app.get('/v1/admin/rewards/stats', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
+    const userId = c.get('userId') as string
+    const requestedOrg = c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null
     const projectIdHint =
       c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null
 
@@ -646,7 +648,11 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       topPriorityTo: null as string | null,
     }
 
-    if (!orgId) return c.json({ ok: true, data: empty })
+    if (!requestedOrg) return c.json({ ok: true, data: empty })
+
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -841,8 +847,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: GET /v1/admin/rewards/overview
   // ===========================================================
   app.get('/v1/admin/rewards/overview', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -900,8 +908,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: GET/PUT /v1/admin/rewards/rules
   // ===========================================================
   app.get('/v1/admin/rewards/rules', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     // Prefer explicit ?projectId query param, then X-Mushi-Project-Id header
     const projectId = c.req.query('projectId')
@@ -938,8 +948,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   })
 
   app.put('/v1/admin/rewards/rules', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -973,8 +985,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: GET/PUT /v1/admin/rewards/tiers
   // ===========================================================
   app.get('/v1/admin/rewards/tiers', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -988,8 +1002,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   })
 
   app.put('/v1/admin/rewards/tiers', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1072,8 +1088,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // contributor drawers.
   // ===========================================================
   app.get('/v1/admin/rewards/activity', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -1135,8 +1153,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: GET /v1/admin/rewards/leaderboard
   // ===========================================================
   app.get('/v1/admin/rewards/leaderboard', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
-    const orgId = await resolveRewardsOrgId(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const orgResolved = await resolveRewardsOrgId(c)
+    if (!orgResolved.ok) return orgResolved.response
+    const orgId = orgResolved.orgId
 
     const range = c.req.query('range') === 'all' ? 'all' : '30d'
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200)
@@ -1195,8 +1214,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: GET /v1/admin/rewards/contributors/:id
   // ===========================================================
   app.get('/v1/admin/rewards/contributors/:id', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const endUserId = c.req.param('id')!
     const db = getServiceClient()
@@ -1227,8 +1248,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: GET /v1/admin/rewards/webhooks
   // ===========================================================
   app.get('/v1/admin/rewards/webhooks', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -1244,8 +1267,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: POST /v1/admin/rewards/webhooks
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1290,8 +1315,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: DELETE /v1/admin/rewards/webhooks/:id
   // ===========================================================
   app.delete('/v1/admin/rewards/webhooks/:id', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     const db = getServiceClient()
@@ -1310,8 +1337,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // ADMIN: POST /v1/admin/rewards/webhooks/test
   // ===========================================================
   app.post('/v1/admin/rewards/webhooks/test', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     await dispatchRewardWebhook(db, orgId, {
@@ -1331,8 +1360,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // List quests for the org.
   // ===========================================================
   app.get('/v1/admin/rewards/quests', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -1366,8 +1397,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   })
 
   app.post('/v1/admin/rewards/quests', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1406,8 +1439,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // P3 ADMIN: DELETE /v1/admin/rewards/quests/:id
   // ===========================================================
   app.delete('/v1/admin/rewards/quests/:id', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     const db = getServiceClient()
@@ -1422,8 +1457,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Payout ledger for the org — admin liability dashboard.
   // ===========================================================
   app.get('/v1/admin/rewards/payouts', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -1442,8 +1479,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // List JWKS providers configured for this org's projects.
   // ===========================================================
   app.get('/v1/admin/rewards/identity-providers', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     // Fetch projects for this org, then join host_auth_providers
@@ -1479,8 +1518,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   })
 
   app.post('/v1/admin/rewards/identity-providers', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1525,8 +1566,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Toggle enabled or update fields.
   // ===========================================================
   app.patch('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     let raw: unknown
@@ -1579,8 +1622,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Award ad-hoc bonus points to a contributor (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/bonus-points', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgId = await resolveRewardsOrgId(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const orgResolved = await resolveRewardsOrgId(c)
+    if (!orgResolved.ok) return orgResolved.response
+    const orgId = orgResolved.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1643,8 +1687,9 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Manually override a contributor's tier (MCP write surface).
   // ===========================================================
   app.post('/v1/admin/rewards/set-tier', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const orgId = await resolveRewardsOrgId(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const orgResolved = await resolveRewardsOrgId(c)
+    if (!orgResolved.ok) return orgResolved.response
+    const orgId = orgResolved.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1704,8 +1749,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Retention analytics: did Champion+ users retain longer?
   // ===========================================================
   app.get('/v1/admin/rewards/retention-impact', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
 
@@ -1779,8 +1826,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Sandbox: simulate tier transition for a hypothetical activity log.
   // ===========================================================
   app.post('/v1/admin/rewards/simulate', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     let raw: unknown
     try { raw = await c.req.json() } catch {
@@ -1845,8 +1894,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // List open disputes for the org.
   // ===========================================================
   app.get('/v1/admin/rewards/disputes', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const db = getServiceClient()
     const { data, error } = await db
@@ -1865,8 +1916,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // Approve or deny a dispute.
   // ===========================================================
   app.post('/v1/admin/rewards/disputes/:id/resolve', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     let raw: unknown
@@ -1918,8 +1971,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   // P2 ADMIN: DELETE /v1/admin/rewards/identity-providers/:id
   // ===========================================================
   app.delete('/v1/admin/rewards/identity-providers/:id', jwtAuth, async (c) => {
-    const orgId = getOrgIdFromContext(c)
-    if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
 
     const id = c.req.param('id')!
     const db = getServiceClient()

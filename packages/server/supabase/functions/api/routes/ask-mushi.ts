@@ -14,6 +14,15 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts';
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts';
+import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts';
+import { createTrace, scoreExistingTrace } from '../../_shared/observability.ts';
+import {
+  buildConsoleAssistSystemPrompt,
+  detectNavigateMode,
+  retrieveConsoleHelp,
+  searchConsoleRoutes,
+  validateNavReply,
+} from '../../_shared/console-knowledge.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
 
 // ============================================================
@@ -57,22 +66,74 @@ interface AskMushiMessage {
 // Discriminated union for the structured assistant reply. Used by the
 // clarifying-question loop: when the request is ambiguous the model must
 // return `kind: 'clarify'` with chip-shaped options instead of guessing.
-const AskMushiReplySchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('answer'),
-    text: z.string().min(1).describe('The full answer in markdown.'),
-  }),
-  z.object({
-    kind: z.literal('clarify'),
-    question: z.string().min(1).max(200).describe('A single short clarifying question.'),
-    options: z
-      .array(z.string().min(1).max(80))
-      .min(2)
-      .max(4)
-      .describe('2–4 chip-shaped option labels the user can click.'),
-  }),
-]);
-type AskMushiReply = z.infer<typeof AskMushiReplySchema>;
+const NavStepSchema = z.object({
+  text: z.string().min(1).describe('One actionable step for the user.'),
+  path: z.string().describe('Admin console route path, e.g. /reports — empty string if N/A'),
+});
+
+const NavTargetSchema = z.object({
+  label: z.string().min(1).describe('Button label, e.g. Open Reports'),
+  path: z.string().min(1).describe('Route path from the route directory'),
+  why: z.string().describe('One-line reason to navigate there — empty string if N/A'),
+});
+
+/** Flat object schema — Anthropic structured output rejects discriminatedUnion oneOf. */
+const AskMushiReplyLlmSchema = z.object({
+  kind: z.enum(['answer', 'clarify']).describe('answer = direct reply; clarify = ask a follow-up'),
+  text: z.string().describe('Markdown answer when kind=answer; empty when clarify'),
+  steps: z
+    .array(NavStepSchema)
+    .max(8)
+    .describe('Numbered how-to steps when kind=answer; empty array when clarify'),
+  navTargets: z
+    .array(NavTargetSchema)
+    .max(5)
+    .describe('Deep-link buttons when kind=answer; empty array when clarify'),
+  question: z.string().describe('Clarifying question when kind=clarify; empty when answer'),
+  options: z
+    .array(z.string().min(1).max(80))
+    .max(4)
+    .describe('2–4 chip options when kind=clarify; empty array when answer'),
+});
+
+type AskMushiReply =
+  | {
+      kind: 'answer';
+      text: string;
+      steps?: Array<{ text: string; path?: string }>;
+      navTargets?: Array<{ label: string; path: string; why?: string }>;
+    }
+  | { kind: 'clarify'; question: string; options: string[] };
+
+function normalizeAskMushiReply(raw: z.infer<typeof AskMushiReplyLlmSchema>): AskMushiReply {
+  if (raw.kind === 'clarify') {
+    const options = (raw.options ?? []).map((o) => o.trim()).filter(Boolean).slice(0, 4);
+    const question = raw.question?.trim() || raw.text?.trim();
+    if (options.length >= 2 && question) {
+      return { kind: 'clarify', question, options };
+    }
+  }
+  const text = raw.text?.trim() || raw.question?.trim() || 'No answer available.';
+  const steps = (raw.steps ?? [])
+    .filter((s) => s.text?.trim())
+    .map((s) => ({
+      text: s.text.trim(),
+      ...(s.path?.trim() ? { path: s.path.trim() } : {}),
+    }));
+  const navTargets = (raw.navTargets ?? [])
+    .filter((t) => t.label?.trim() && t.path?.trim())
+    .map((t) => ({
+      label: t.label.trim(),
+      path: t.path.trim(),
+      ...(t.why?.trim() ? { why: t.why.trim() } : {}),
+    }));
+  return {
+    kind: 'answer',
+    text,
+    ...(steps.length ? { steps } : {}),
+    ...(navTargets.length ? { navTargets } : {}),
+  };
+}
 
 // Slash-command intent hints sent by the client. The backend uses them to
 // adjust token budgets / model picks; the prompt itself stays driven by
@@ -91,7 +152,7 @@ type AskMushiIntent = z.infer<typeof AskMushiIntentSchema>;
 // Mention tokens are emitted by the composer in the form `@kind:id`. We
 // resolve them into structured context blocks before the LLM call so the
 // model can answer about the entity without the user pasting an id.
-const MENTION_RE = /@(report|fix|branch|page):([a-zA-Z0-9_\-/.]+)/g;
+const MENTION_RE = /@(report|fix|branch|page|project):([a-zA-Z0-9_\-/.]+)/g;
 
 interface ResolvedMention {
   kind: string;
@@ -154,11 +215,30 @@ async function resolveMentions(
           block: `<context-block kind="branch" id="${id}">\n  name: ${id}\n</context-block>`,
         });
       } else if (kind === 'page') {
+        const routes = searchConsoleRoutes(id.replace(/^\//, ''), 1);
+        const match = routes.find((r) => r.path === id || r.path.startsWith(id)) ?? routes[0];
         out.push({
           kind,
           id,
-          block: `<context-block kind="page" id="${id}">\n  route: ${id}\n</context-block>`,
+          block: match
+            ? `<context-block kind="page" id="${id}">\n  route: ${match.path}\n  label: ${match.label}\n  description: ${match.description}\n</context-block>`
+            : `<context-block kind="page" id="${id}">\n  route: ${id}\n</context-block>`,
         });
+      } else if (kind === 'project') {
+        const { data } = await db
+          .from('projects')
+          .select('id, name')
+          .in('id', userProjectIds)
+          .or(`id.eq.${id},name.ilike.%${id}%`)
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          out.push({
+            kind: 'project',
+            id: data.id,
+            block: `<context-block kind="project" id="${data.id}">\n  name: ${data.name}\n</context-block>`,
+          });
+        }
       }
     } catch (err) {
       log.warn('ask-mushi mention resolution failed', {
@@ -301,6 +381,201 @@ async function loadAskMushiContextData(
   return { activeProject, userProjectIds, recentReportsBlock };
 }
 
+type AskMushiMode = 'chat' | 'navigate';
+
+interface LlmTurnResult {
+  reply: AskMushiReply;
+  usedModel: string;
+  fallbackUsed: boolean;
+  fallbackReason: string | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheCreate: number | null;
+  cacheRead: number | null;
+  langfuseTraceId: string;
+  keySource: 'byok' | 'env' | null;
+}
+
+async function runAskMushiLlmTurn(args: {
+  db: SupabaseClient;
+  projectId: string | null;
+  systemPrompt: string;
+  messages: AskMushiMessage[];
+  maxTokens: number;
+  traceName: string;
+  traceMeta: Record<string, unknown>;
+}): Promise<LlmTurnResult> {
+  const { db, projectId, systemPrompt, messages, maxTokens, traceName, traceMeta } = args;
+  const trace = createTrace(traceName, traceMeta);
+  const llmSpan = trace.span('generate');
+  const primaryModel = ASSIST_MODEL;
+  let usedModel = primaryModel;
+  let fallbackUsed = false;
+  let fallbackReason: string | null = null;
+  let keySource: 'byok' | 'env' | null = null;
+
+  const effectiveProjectId = projectId;
+
+  try {
+    if (!effectiveProjectId) {
+      // No active project — env-key fallback (same as pre-BYOK behaviour).
+      const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (anthropicKey) {
+        try {
+          const anthropic = createAnthropic({ apiKey: anthropicKey });
+          keySource = 'env';
+          const result = await generateObject({
+            model: anthropic(primaryModel),
+            schema: AskMushiReplyLlmSchema,
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt,
+                experimental_providerMetadata: {
+                  anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
+              },
+              ...messages.map((m) => ({ role: m.role, content: m.content })),
+            ],
+            maxTokens,
+          });
+          const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
+          llmSpan.end({
+            model: primaryModel,
+            inputTokens: result.usage?.promptTokens,
+            outputTokens: result.usage?.completionTokens,
+          });
+          await trace.end();
+          let reply = validateNavReply(
+            normalizeAskMushiReply(result.object as z.infer<typeof AskMushiReplyLlmSchema>),
+          ) as AskMushiReply;
+          return {
+            reply,
+            usedModel: primaryModel,
+            fallbackUsed: false,
+            fallbackReason: null,
+            inputTokens: result.usage?.promptTokens,
+            outputTokens: result.usage?.completionTokens,
+            cacheCreate: cache.cacheCreationInputTokens,
+            cacheRead: cache.cacheReadInputTokens,
+            langfuseTraceId: trace.id,
+            keySource,
+          };
+        } catch (err) {
+          fallbackUsed = true;
+          fallbackReason = err instanceof Error ? err.message : String(err);
+        }
+      }
+      const openaiKey = Deno.env.get('OPENAI_API_KEY');
+      if (!openaiKey) throw new Error('No LLM provider configured');
+      usedModel = ASSIST_FALLBACK;
+      fallbackUsed = true;
+      keySource = 'env';
+      const openai = createOpenAI({ apiKey: openaiKey });
+      const result = await generateObject({
+        model: openai(ASSIST_FALLBACK),
+        schema: AskMushiReplyLlmSchema,
+        system: systemPrompt,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        maxTokens,
+      });
+      llmSpan.end({
+        model: usedModel,
+        inputTokens: result.usage?.promptTokens,
+        outputTokens: result.usage?.completionTokens,
+      });
+      await trace.end();
+      const reply = validateNavReply(
+        normalizeAskMushiReply(result.object as z.infer<typeof AskMushiReplyLlmSchema>),
+      ) as AskMushiReply;
+      return {
+        reply,
+        usedModel,
+        fallbackUsed,
+        fallbackReason,
+        inputTokens: result.usage?.promptTokens,
+        outputTokens: result.usage?.completionTokens,
+        cacheCreate: null,
+        cacheRead: null,
+        langfuseTraceId: trace.id,
+        keySource,
+      };
+    }
+
+    const { result, usedProvider } = await withAnthropicOrOpenAi(
+      db,
+      effectiveProjectId,
+      async (key) => {
+        keySource = key.source;
+        const anthropic = createAnthropic({ apiKey: key.key });
+        return generateObject({
+          model: anthropic(primaryModel),
+          schema: AskMushiReplyLlmSchema,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+              experimental_providerMetadata: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            },
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+          ],
+          maxTokens,
+        });
+      },
+      async (key) => {
+        keySource = key.source;
+        usedModel = ASSIST_FALLBACK;
+        fallbackUsed = true;
+        fallbackReason = 'anthropic unavailable';
+        const openai = createOpenAI({ apiKey: key.key, baseURL: key.baseUrl });
+        return generateObject({
+          model: openai(ASSIST_FALLBACK),
+          schema: AskMushiReplyLlmSchema,
+          system: systemPrompt,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
+          maxTokens,
+        });
+      },
+    );
+
+    if (usedProvider === 'openai') {
+      usedModel = ASSIST_FALLBACK;
+      fallbackUsed = true;
+    }
+
+    const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
+    llmSpan.end({
+      model: usedModel,
+      inputTokens: result.usage?.promptTokens,
+      outputTokens: result.usage?.completionTokens,
+    });
+    await trace.end();
+
+    let reply = validateNavReply(
+      normalizeAskMushiReply(result.object as z.infer<typeof AskMushiReplyLlmSchema>),
+    ) as AskMushiReply;
+
+    return {
+      reply,
+      usedModel,
+      fallbackUsed,
+      fallbackReason,
+      inputTokens: result.usage?.promptTokens,
+      outputTokens: result.usage?.completionTokens,
+      cacheCreate: cache.cacheCreationInputTokens,
+      cacheRead: cache.cacheReadInputTokens,
+      langfuseTraceId: trace.id,
+      keySource,
+    };
+  } catch (err) {
+    llmSpan.end({ model: usedModel, error: err instanceof Error ? err.message : String(err) });
+    await trace.end();
+    throw err;
+  }
+}
+
 export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): void {
   // ── Endpoint: POST messages ──────────────────────────────────────────────
 
@@ -339,27 +614,26 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
     return null;
   }
 
-  async function handleAskMushiMessage(
+  async function handleAskMushiMessageBody(
     c: Context,
-    options: { legacyResponse?: boolean } = {},
-  ): Promise<Response> {
-    const userId = c.get('userId') as string;
-    const body = (await c.req.json().catch(() => null)) as {
+    body: {
       threadId?: string;
       route?: string;
       intent?: string;
+      mode?: string;
       context?: AskMushiContext;
       messages?: AskMushiMessage[];
-    } | null;
-    if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+    },
+    options: { legacyResponse?: boolean } = {},
+  ): Promise<Response> {
+    const userId = c.get('userId') as string;
+
+    if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json(
         { ok: false, error: { code: 'BAD_REQUEST', message: 'messages required' } },
         400,
       );
     }
-
-    const rateBlocked = await claimAskMushiRateLimit(userId);
-    if (rateBlocked) return rateBlocked;
 
     const route = typeof body.route === 'string' ? body.route : '/';
     const ctx: AskMushiContext = body.context ?? {};
@@ -399,15 +673,35 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       ? await resolveMentions(db, userProjectIds, lastUser.content)
       : [];
 
-    const systemPrompt = buildAskMushiSystemPrompt({
-      route,
-      ctx,
-      activeProjectName: activeProject?.name ?? null,
-      activeProjectId: activeProject?.id ?? null,
-      recentReportsBlock,
-      resolvedMentions,
-      intent,
-    });
+    const explicitMode = body.mode === 'navigate' || body.mode === 'chat' ? body.mode : undefined;
+    const navigateMode =
+      explicitMode === 'navigate' ||
+      (explicitMode !== 'chat' &&
+        lastUser &&
+        detectNavigateMode(lastUser.content, explicitMode));
+
+    let consoleChunks: Awaited<ReturnType<typeof retrieveConsoleHelp>>['chunks'] = [];
+    if (navigateMode && lastUser) {
+      const retrieved = await retrieveConsoleHelp(db, lastUser.content);
+      consoleChunks = retrieved.chunks;
+    }
+
+    const systemPrompt = navigateMode
+      ? buildConsoleAssistSystemPrompt({
+          route,
+          pageContext: ctx,
+          corpusChunks: consoleChunks,
+          activeProjectName: activeProject?.name ?? null,
+        })
+      : buildAskMushiSystemPrompt({
+          route,
+          ctx,
+          activeProjectName: activeProject?.name ?? null,
+          activeProjectId: activeProject?.id ?? null,
+          recentReportsBlock,
+          resolvedMentions,
+          intent,
+        });
 
     // Persist the user turn BEFORE calling the LLM. Two reasons:
     //  1. If the LLM call crashes we still have the prompt for replay.
@@ -437,99 +731,41 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
     void userInsert;
 
     const started = Date.now();
-    const primaryModel = ASSIST_MODEL;
-    let usedModel: string = primaryModel;
-    let fallbackUsed = false;
-    let fallbackReason: string | null = null;
-    // Token budget per intent — tldr stays cheap, pr-summary needs headroom.
     const maxTokens =
-      intent === 'tldr' ? 250 : intent === 'long' ? 1200 : intent === 'pr-summary' ? 1200 : 600;
+      intent === 'tldr' ? 250 : intent === 'long' ? 1200 : intent === 'pr-summary' ? 1200 : navigateMode ? 900 : 600;
 
     try {
-      let reply: AskMushiReply | null = null;
-      let inputTokens: number | undefined;
-      let outputTokens: number | undefined;
-      let cacheCreate: number | null = null;
-      let cacheRead: number | null = null;
+      const llmResult = await runAskMushiLlmTurn({
+        db,
+        projectId: activeProject?.id ?? null,
+        systemPrompt,
+        messages,
+        maxTokens,
+        traceName: navigateMode ? 'console-assist' : 'ask-mushi',
+        traceMeta: { route, mode: navigateMode ? 'navigate' : 'chat', projectId: activeProject?.id },
+      });
 
-      const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-      if (anthropicKey) {
-        try {
-          const anthropic = createAnthropic({ apiKey: anthropicKey });
-          const result = await generateObject({
-            model: anthropic(primaryModel),
-            schema: AskMushiReplySchema,
-            messages: [
-              {
-                role: 'system',
-                content: systemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
-                },
-              },
-              ...messages.map((m) => ({ role: m.role, content: m.content })),
-            ],
-            maxTokens,
-          });
-          reply = result.object as AskMushiReply;
-          inputTokens = result.usage?.promptTokens;
-          outputTokens = result.usage?.completionTokens;
-          const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
-          cacheCreate = cache.cacheCreationInputTokens;
-          cacheRead = cache.cacheReadInputTokens;
-        } catch (err) {
-          fallbackUsed = true;
-          fallbackReason = err instanceof Error ? err.message : String(err);
-        }
-      } else {
-        fallbackUsed = true;
-        fallbackReason = 'ANTHROPIC_API_KEY not set';
-      }
-
-      if (fallbackUsed) {
-        const openaiKey = Deno.env.get('OPENAI_API_KEY');
-        if (!openaiKey) {
-          return c.json(
-            {
-              ok: false,
-              error: {
-                code: 'LLM_UNAVAILABLE',
-                message: 'No LLM provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.',
-              },
-            },
-            503,
-          );
-        }
-        usedModel = ASSIST_FALLBACK;
-        const openai = createOpenAI({ apiKey: openaiKey });
-        const result = await generateObject({
-          model: openai(ASSIST_FALLBACK),
-          schema: AskMushiReplySchema,
-          system: systemPrompt,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          maxTokens,
-        });
-        reply = result.object as AskMushiReply;
-        inputTokens = result.usage?.promptTokens;
-        outputTokens = result.usage?.completionTokens;
-      }
-
-      if (!reply) {
-        return c.json(
-          { ok: false, error: { code: 'LLM_ERROR', message: 'Empty model reply' } },
-          500,
-        );
-      }
+      const {
+        reply,
+        usedModel,
+        fallbackUsed,
+        fallbackReason,
+        inputTokens,
+        outputTokens,
+        cacheCreate,
+        cacheRead,
+        langfuseTraceId,
+        keySource,
+      } = llmResult;
 
       const latencyMs = Date.now() - started;
       const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0);
 
-      // Telemetry write — same llm_invocations row Health/Billing read.
       void logLlmInvocation(db, {
         projectId: activeProject?.id ?? null,
         functionName: 'ask-mushi',
-        stage: 'ask-mushi',
-        primaryModel,
+        stage: navigateMode ? 'console-assist' : 'ask-mushi',
+        primaryModel: ASSIST_MODEL,
         usedModel,
         fallbackUsed,
         fallbackReason,
@@ -539,16 +775,26 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         outputTokens,
         cacheCreationInputTokens: cacheCreate,
         cacheReadInputTokens: cacheRead,
+        keySource,
+        langfuseTraceId,
       });
 
       const assistantContent = reply.kind === 'answer' ? reply.text : reply.question;
-      const meta: Record<string, unknown> = { kind: reply.kind, intent };
+      const meta: Record<string, unknown> = {
+        kind: reply.kind,
+        intent,
+        mode: navigateMode ? 'navigate' : 'chat',
+      };
       if (reply.kind === 'clarify') meta.options = reply.options;
+      if (reply.kind === 'answer') {
+        if (reply.steps?.length) meta.steps = reply.steps;
+        if (reply.navTargets?.length) meta.navTargets = reply.navTargets;
+      }
       if (resolvedMentions.length > 0) {
         meta.mentions = resolvedMentions.map((m) => ({ kind: m.kind, id: m.id }));
       }
+      meta.langfuseTraceId = langfuseTraceId;
 
-      // Persist the assistant turn — best-effort, never block the reply.
       void db
         .from('ask_mushi_messages')
         .insert({
@@ -571,6 +817,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
           cache_create_tokens: cacheCreate,
           cost_usd: costUsd,
           latency_ms: latencyMs,
+          langfuse_trace_id: langfuseTraceId,
           meta,
         })
         .then(({ error }) => {
@@ -611,17 +858,41 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       void logLlmInvocation(db, {
         projectId: activeProject?.id ?? null,
         functionName: 'ask-mushi',
-        stage: 'ask-mushi',
-        primaryModel,
-        usedModel,
-        fallbackUsed,
-        fallbackReason,
+        stage: navigateMode ? 'console-assist' : 'ask-mushi',
+        primaryModel: ASSIST_MODEL,
+        usedModel: ASSIST_MODEL,
+        fallbackUsed: false,
+        fallbackReason: null,
         status: 'error',
         errorMessage: msg,
         latencyMs,
       });
       return c.json({ ok: false, error: { code: 'LLM_ERROR', message: msg } }, 500);
     }
+  }
+
+  async function handleAskMushiMessage(
+    c: Context,
+    options: { legacyResponse?: boolean } = {},
+  ): Promise<Response> {
+    const userId = c.get('userId') as string;
+    const body = (await c.req.json().catch(() => null)) as {
+      threadId?: string;
+      route?: string;
+      intent?: string;
+      mode?: string;
+      context?: AskMushiContext;
+      messages?: AskMushiMessage[];
+    } | null;
+    if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_REQUEST', message: 'messages required' } },
+        400,
+      );
+    }
+    const rateBlocked = await claimAskMushiRateLimit(userId);
+    if (rateBlocked) return rateBlocked;
+    return handleAskMushiMessageBody(c, body, options);
   }
 
   app.post('/v1/admin/ask-mushi/messages', jwtAuth, (c) => handleAskMushiMessage(c));
@@ -639,6 +910,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       threadId?: string;
       route?: string;
       intent?: string;
+      mode?: string;
       context?: AskMushiContext;
       messages?: AskMushiMessage[];
     } | null;
@@ -649,10 +921,6 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       );
     }
 
-    // Same per-user hourly bucket as the non-stream endpoint. Without this
-    // a client could bypass the 300 rq/hr cap simply by always calling the
-    // stream variant — the cost envelope must apply equally regardless of
-    // transport.
     const rateBlocked = await claimAskMushiRateLimit(userId);
     if (rateBlocked) return rateBlocked;
 
@@ -667,6 +935,10 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         400,
       );
     }
+
+    // Navigate mode (structured steps/navTargets) is POST /messages only — Cmd+K
+    // palette uses mode: 'navigate'. Never redirect this SSE handler to JSON.
+
     const intentParse = AskMushiIntentSchema.safeParse(body.intent ?? 'default');
     const intent: AskMushiIntent = intentParse.success ? intentParse.data : 'default';
     const threadId =
@@ -1045,7 +1317,40 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
 
     const out: Array<{ kind: string; id: string; label: string; sublabel?: string }> = [];
 
-    // Reports: id prefix + description ilike. Cheap because both ((id text)
+    // Pages from console route directory
+    for (const r of searchConsoleRoutes(q, 6)) {
+      out.push({
+        kind: 'page',
+        id: r.path,
+        label: `@page:${r.path}`,
+        sublabel: r.label,
+      });
+    }
+
+    // Projects the user can access
+    try {
+      const { data: projects } = await db
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds)
+        .or(`name.ilike.%${q}%,id.ilike.${q}%`)
+        .order('created_at', { ascending: false })
+        .limit(4);
+      for (const p of projects ?? []) {
+        out.push({
+          kind: 'project',
+          id: p.id,
+          label: `@project:${String(p.id).slice(0, 8)}`,
+          sublabel: p.name,
+        });
+      }
+    } catch (err) {
+      log.warn('ask-mushi mentions: projects search failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // Reports: id prefix + description ilike.
     // and description) are indexed-as-text by PostgREST's default operators.
     try {
       const { data: reports } = await db
@@ -1091,7 +1396,29 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       });
     }
 
-    return c.json({ ok: true, data: { mentions: out } });
+    return c.json({ ok: true, data: { mentions: out.slice(0, 12) } });
+  });
+
+  // ── Endpoint: feedback (Langfuse score) ─────────────────────────────────
+
+  app.post('/v1/admin/ask-mushi/feedback', jwtAuth, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      traceId?: string;
+      helpful?: boolean;
+    } | null;
+    if (!body?.traceId || typeof body.helpful !== 'boolean') {
+      return c.json(
+        { ok: false, error: { code: 'BAD_REQUEST', message: 'traceId and helpful required' } },
+        400,
+      );
+    }
+    await scoreExistingTrace(
+      body.traceId,
+      'helpful',
+      body.helpful ? 1 : 0,
+      body.helpful ? 'thumbs up' : 'thumbs down',
+    );
+    return c.json({ ok: true, data: { recorded: true } });
   });
 
   // ── Back-compat: legacy /v1/admin/assist ─────────────────────────────────

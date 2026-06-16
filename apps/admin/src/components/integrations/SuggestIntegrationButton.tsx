@@ -6,7 +6,7 @@
  *          contact endpoint already handles feature requests.
  */
 
-import { IconSparkle } from '../icons'
+import { IconNote } from '../icons'
 
 interface Props {
   /** Which tab this lives on — used only for accessible labelling. */
@@ -29,7 +29,7 @@ export function SuggestIntegrationButton({ context, onSuggest }: Props) {
         className="ml-3 shrink-0 inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         aria-label="Suggest an integration"
       >
-        <IconSparkle size={12} />
+        <IconNote size={12} />
         Suggest an integration
       </button>
     </div>

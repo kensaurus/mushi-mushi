@@ -32,12 +32,44 @@ import {
   loadExploreGraph,
   orderTourStops,
   retrieveCodeForQuestion,
+  detectExploreLayer,
+  getProjectCodebaseScope,
   type DomainView,
   type ExploreGraphNode,
 } from '../../_shared/codebase-understand.ts'
+import { resolveImpactChangedPaths } from '../../_shared/codebase-impact-resolve.ts'
+import { enqueueCodebaseAnalyzeJob, runCodebaseAnalyzeJob } from '../../_shared/codebase-analyze-runner.ts'
 import { dbError, userCanAccessProject } from '../shared.ts'
 
 const routeLog = log.child('codebase-understand')
+
+function deriveThreadTitle(firstUserMessage: string): string {
+  const t = firstUserMessage.replace(/\s+/g, ' ').trim()
+  return t.slice(0, 120) || 'Untitled chat'
+}
+
+async function upsertCodebaseChatThread(
+  db: ReturnType<typeof getServiceClient>,
+  opts: { threadId: string; projectId: string; userId: string; firstUserContent?: string },
+) {
+  const now = new Date().toISOString()
+  const { data: existing } = await db
+    .from('codebase_chat_threads')
+    .select('title')
+    .eq('id', opts.threadId)
+    .maybeSingle()
+
+  const patch: Record<string, unknown> = {
+    id: opts.threadId,
+    project_id: opts.projectId,
+    user_id: opts.userId,
+    updated_at: now,
+  }
+  if (!existing?.title && opts.firstUserContent) {
+    patch.title = deriveThreadTitle(opts.firstUserContent)
+  }
+  await db.from('codebase_chat_threads').upsert(patch, { onConflict: 'id' })
+}
 
 async function assertProjectAccess(c: Context, projectId: string, userId: string) {
   const db = getServiceClient()
@@ -256,10 +288,12 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       const latencyMs = Date.now() - started
       const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0)
 
-      await db.from('codebase_chat_threads').upsert(
-        { id: threadId, project_id: projectId, user_id: userId, updated_at: new Date().toISOString() },
-        { onConflict: 'id' },
-      )
+      await upsertCodebaseChatThread(db, {
+        threadId,
+        projectId,
+        userId,
+        firstUserContent: lastUser.content,
+      })
       await db.from('codebase_chat_messages').insert([
         {
           thread_id: threadId,
@@ -433,10 +467,12 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         const latencyMs = Date.now() - started
         const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0)
 
-        await db.from('codebase_chat_threads').upsert(
-          { id: threadId, project_id: projectId, user_id: userId, updated_at: new Date().toISOString() },
-          { onConflict: 'id' },
-        )
+        await upsertCodebaseChatThread(db, {
+          threadId,
+          projectId,
+          userId,
+          firstUserContent: lastUser.content,
+        })
         await db.from('codebase_chat_messages').insert([
           { thread_id: threadId, project_id: projectId, user_id: userId, role: 'user', content: lastUser.content },
           {
@@ -473,7 +509,16 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
 
         await stream.write(
           toSseEvent(
-            { threadId, model: usedModel, citations, latencyMs, costUsd, inputTokens, outputTokens },
+            {
+              threadId,
+              model: usedModel,
+              citations,
+              latencyMs,
+              costUsd,
+              inputTokens,
+              outputTokens,
+              keySource,
+            },
             { event: 'meta' },
           ),
         )
@@ -780,7 +825,16 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         .eq('project_id', projectId)
         .maybeSingle()
       if (cached && cached.index_fingerprint === fingerprint) {
-        return c.json({ ok: true, data: { domains: cached.domains, cached: true, updated_at: cached.updated_at } })
+        const domains = (cached.domains ?? []) as DomainView[]
+        return c.json({
+          ok: true,
+          data: {
+            domains,
+            source: inferDomainSource(domains),
+            cached: true,
+            updated_at: cached.updated_at,
+          },
+        })
       }
     }
 
@@ -791,6 +845,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       .join('\n')
 
     let domains: DomainView[] = []
+    let domainSource: 'llm' | 'fallback' = 'llm'
 
     const llmErr = await assertLlmAvailable(c, projectId)
     if (llmErr) return llmErr
@@ -854,6 +909,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
 
     if (domains.length === 0) {
       domains = fallbackDomainsFromLayers(nodes)
+      domainSource = 'fallback'
     }
 
     await db.from('project_codebase_domains').upsert(
@@ -866,7 +922,338 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       { onConflict: 'project_id' },
     )
 
-    return c.json({ ok: true, data: { domains, cached: false, updated_at: new Date().toISOString() } })
+    return c.json({
+      ok: true,
+      data: { domains, source: domainSource, cached: false, updated_at: new Date().toISOString() },
+    })
+  })
+
+  // ── POST /codebase/analyze ───────────────────────────────────────────────
+  app.post('/v1/admin/projects/:id/codebase/analyze', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+    const indexErr = await assertIndexEnabled(c, projectId)
+    if (indexErr) return indexErr
+
+    const body = (await c.req.json().catch(() => ({}))) as { changed_paths?: string[] }
+    const db = getServiceClient()
+    const { jobId } = await enqueueCodebaseAnalyzeJob(db, {
+      projectId,
+      requestedBy: userId,
+      trigger: 'manual',
+      changedPaths: body.changed_paths,
+    })
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    if (supabaseUrl && serviceKey) {
+      fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ jobId }),
+      }).catch((err) => routeLog.warn('analyze worker invoke failed', { err: String(err) }))
+    } else {
+      void runCodebaseAnalyzeJob(db, jobId)
+    }
+
+    return c.json({ ok: true, data: { job_id: jobId, status: 'queued' } })
+  })
+
+  app.get('/v1/admin/projects/:id/codebase/analyze/:jobId', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const jobId = c.req.param('jobId')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const db = getServiceClient()
+    const { data, error } = await db
+      .from('codebase_analyze_jobs')
+      .select('id, status, trigger, changed_paths, plan, error, started_at, finished_at, created_at')
+      .eq('id', jobId)
+      .eq('project_id', projectId)
+      .maybeSingle()
+    if (error) return dbError(c, error)
+    if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Job not found' } }, 404)
+    return c.json({ ok: true, data })
+  })
+
+  // ── Codebase index settings (scope / output language) ────────────────────
+  app.get('/v1/admin/projects/:id/codebase/settings', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+    const scope = await getProjectCodebaseScope(getServiceClient(), projectId)
+    return c.json({
+      ok: true,
+      data: {
+        scope_paths: scope.scope_paths,
+        exclude_globs: scope.exclude_globs,
+        output_language: scope.output_language,
+      },
+    })
+  })
+
+  app.patch('/v1/admin/projects/:id/codebase/settings', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const body = (await c.req.json().catch(() => null)) as {
+      scope_paths?: string[] | null
+      exclude_globs?: string[] | null
+      output_language?: string
+    } | null
+
+    const db = getServiceClient()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (body && 'scope_paths' in body) patch.codebase_index_scope_paths = body.scope_paths
+    if (body && 'exclude_globs' in body) patch.codebase_index_exclude_globs = body.exclude_globs
+    if (body?.output_language?.trim()) patch.codebase_output_language = body.output_language.trim()
+
+    const { error } = await db.from('project_settings').upsert(
+      { project_id: projectId, ...patch },
+      { onConflict: 'project_id' },
+    )
+    if (error) return dbError(c, error)
+
+    const scope = await getProjectCodebaseScope(db, projectId)
+    return c.json({
+      ok: true,
+      data: {
+        scope_paths: scope.scope_paths,
+        exclude_globs: scope.exclude_globs,
+        output_language: scope.output_language,
+      },
+    })
+  })
+
+  // ── Wiki / knowledge sources ─────────────────────────────────────────────
+  app.get('/v1/admin/projects/:id/codebase/wiki/sources', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+    const db = getServiceClient()
+    const { data, error } = await db
+      .from('project_codebase_wiki_sources')
+      .select('id, kind, root_path, label, status, error, created_at, updated_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+    if (error) return dbError(c, error)
+    return c.json({ ok: true, data: { sources: data ?? [] } })
+  })
+
+  app.post('/v1/admin/projects/:id/codebase/wiki/sources', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const body = (await c.req.json().catch(() => null)) as {
+      kind?: 'repo_subpath' | 'upload' | 'url'
+      root_path?: string
+      label?: string
+    } | null
+    if (!body?.kind || !body.root_path?.trim()) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'kind and root_path required' } }, 400)
+    }
+
+    const db = getServiceClient()
+    const { data, error } = await db
+      .from('project_codebase_wiki_sources')
+      .insert({
+        project_id: projectId,
+        kind: body.kind,
+        root_path: body.root_path.trim(),
+        label: body.label?.trim() ?? null,
+        status: 'pending',
+      })
+      .select('id, kind, root_path, label, status')
+      .single()
+    if (error) return dbError(c, error)
+
+    const { jobId } = await enqueueCodebaseAnalyzeJob(db, {
+      projectId,
+      requestedBy: userId,
+      trigger: 'wiki_ingest',
+      changedPaths: [body.root_path.trim()],
+    })
+
+    return c.json({ ok: true, data: { source: data, analyze_job_id: jobId } })
+  })
+
+  app.get('/v1/admin/projects/:id/codebase/knowledge/graph', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+    const db = getServiceClient()
+    const { data, error } = await db
+      .from('project_codebase_knowledge_graph')
+      .select('id, source_id, graph, index_fingerprint, updated_at')
+      .eq('project_id', projectId)
+      .order('updated_at', { ascending: false })
+      .limit(5)
+    if (error) return dbError(c, error)
+    return c.json({ ok: true, data: { graphs: data ?? [] } })
+  })
+
+  // ── GET /codebase/chat/threads ───────────────────────────────────────────
+  app.get('/v1/admin/projects/:id/codebase/chat/threads', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const db = getServiceClient()
+    const limit = Math.min(Number(c.req.query('limit') ?? 30), 50)
+    const { data: threads, error } = await db
+      .from('codebase_chat_threads')
+      .select('id, title, created_at, updated_at')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(limit)
+
+    if (error) return dbError(c, error)
+
+    const threadIds = (threads ?? []).map((t) => t.id)
+    const previews = new Map<string, string>()
+    if (threadIds.length > 0) {
+      const { data: msgs } = await db
+        .from('codebase_chat_messages')
+        .select('thread_id, content, role, created_at')
+        .in('thread_id', threadIds)
+        .order('created_at', { ascending: false })
+      for (const m of msgs ?? []) {
+        if (!previews.has(m.thread_id) && m.role === 'user') {
+          previews.set(m.thread_id, String(m.content).slice(0, 120))
+        }
+      }
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        threads: (threads ?? []).map((t) => ({
+          ...t,
+          preview: previews.get(t.id) ?? t.title ?? null,
+        })),
+      },
+    })
+  })
+
+  // ── GET /codebase/chat/threads/:threadId/messages ────────────────────────
+  app.get('/v1/admin/projects/:id/codebase/chat/threads/:threadId/messages', readAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const threadId = c.req.param('threadId')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const db = getServiceClient()
+    const { data: thread, error: threadErr } = await db
+      .from('codebase_chat_threads')
+      .select('id, title, created_at, updated_at')
+      .eq('id', threadId)
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (threadErr) return dbError(c, threadErr)
+    if (!thread) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Thread not found' } }, 404)
+    }
+
+    const { data: messages, error: msgErr } = await db
+      .from('codebase_chat_messages')
+      .select(
+        'id, role, content, citations, model, input_tokens, output_tokens, cost_usd, latency_ms, created_at',
+      )
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true })
+
+    if (msgErr) return dbError(c, msgErr)
+
+    return c.json({
+      ok: true,
+      data: {
+        thread,
+        messages: messages ?? [],
+      },
+    })
+  })
+
+  // ── PATCH /codebase/chat/threads/:threadId ───────────────────────────────
+  app.patch('/v1/admin/projects/:id/codebase/chat/threads/:threadId', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const threadId = c.req.param('threadId')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const body = (await c.req.json().catch(() => null)) as { title?: string } | null
+    const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 200) : ''
+    if (!title) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'title required' } }, 400)
+    }
+
+    const db = getServiceClient()
+    const { data: thread, error: findErr } = await db
+      .from('codebase_chat_threads')
+      .select('id')
+      .eq('id', threadId)
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (findErr) return dbError(c, findErr)
+    if (!thread) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Thread not found' } }, 404)
+    }
+
+    const { error: updErr } = await db
+      .from('codebase_chat_threads')
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq('id', threadId)
+
+    if (updErr) return dbError(c, updErr)
+    return c.json({ ok: true, data: { id: threadId, title } })
+  })
+
+  // ── DELETE /codebase/chat/threads/:threadId ──────────────────────────────
+  app.delete('/v1/admin/projects/:id/codebase/chat/threads/:threadId', writeAuth, async (c) => {
+    const projectId = c.req.param('id')!
+    const threadId = c.req.param('threadId')!
+    const userId = c.get('userId') as string
+    const forbidden = await assertProjectAccess(c, projectId, userId)
+    if (forbidden) return forbidden
+
+    const db = getServiceClient()
+    const { data: thread, error: findErr } = await db
+      .from('codebase_chat_threads')
+      .select('id')
+      .eq('id', threadId)
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (findErr) return dbError(c, findErr)
+    if (!thread) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Thread not found' } }, 404)
+    }
+
+    const { error: delErr } = await db.from('codebase_chat_threads').delete().eq('id', threadId)
+    if (delErr) return dbError(c, delErr)
+    return c.json({ ok: true, data: { id: threadId, deleted: true } })
   })
 
   // ── GET /codebase/impact ─────────────────────────────────────────────────
@@ -877,32 +1264,64 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     if (forbidden) return forbidden
 
     const pathsParam = c.req.query('paths') ?? ''
-    const changedPaths = pathsParam
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean)
-    if (changedPaths.length === 0) {
-      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'paths query required' } }, 400)
+    const ref = c.req.query('ref') ?? undefined
+    const compare = c.req.query('compare') ?? undefined
+    const fixId = c.req.query('fix_id') ?? undefined
+
+    const hasAuto =
+      ref != null ||
+      compare != null ||
+      fixId != null ||
+      (pathsParam.trim() === '' && c.req.query('source') === 'last_push')
+
+    const resolved = await resolveImpactChangedPaths(getServiceClient(), projectId, {
+      pathsParam: pathsParam.trim() ? pathsParam : undefined,
+      ref: hasAuto && !compare && !fixId && !pathsParam.trim() ? (ref ?? 'last_push') : ref,
+      compare,
+      fixId,
+    })
+
+    if (!resolved.ok) {
+      const status =
+        resolved.code === 'NOT_FOUND' ? 404 :
+        resolved.code === 'BAD_REQUEST' ? 400 : 400
+      return c.json({ ok: false, error: { code: resolved.code, message: resolved.message } }, status)
+    }
+
+    if (resolved.data.changed_paths.length === 0) {
+      return c.json({
+        ok: true,
+        data: {
+          changed_paths: [],
+          source: resolved.data.source,
+          meta: resolved.data.meta ?? null,
+          affected_node_ids: [],
+          affected_file_paths: [],
+        },
+      })
     }
 
     const db = getServiceClient()
     const { nodes, edges } = await loadExploreGraph(db, projectId)
-    const impact = computeImportImpact(changedPaths, nodes, edges)
+    const impact = computeImportImpact(resolved.data.changed_paths, nodes, edges)
 
-    return c.json({ ok: true, data: { changed_paths: changedPaths, ...impact } })
+    return c.json({
+      ok: true,
+      data: {
+        changed_paths: resolved.data.changed_paths,
+        source: resolved.data.source,
+        meta: resolved.data.meta ?? null,
+        ...impact,
+      },
+    })
   })
 }
 
-type ExploreLayer = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
-
-function detectExploreLayer(filePath: string): ExploreLayer {
-  const p = filePath.toLowerCase().replace(/\\/g, '/')
-  if (/(^|\/)(tests?|__tests?__|spec|e2e|cypress|playwright)\//.test(p) || /\.(test|spec)\.[jt]sx?$/.test(p)) return 'test'
-  if (/(^|\/)(server|api|edge-function|supabase\/functions|backend|routes?)\//.test(p)) return 'backend'
-  if (/(^|\/)(app|pages?|screens?|views?|components?|layouts?|ui)\//u.test(p) || /\.(tsx|jsx)$/u.test(p)) return 'ui'
-  if (/(^|\/)(lib|libs?|utils?|helpers?|hooks?|contexts?|shared|common|core)\//u.test(p)) return 'lib'
-  if (/(^|\/)(config|configs?|tooling|scripts?|deploy|\.github|build)\//u.test(p) || /\.(json|yaml|yml|toml|mjs|cjs)$/u.test(p)) return 'config'
-  return 'other'
+function inferDomainSource(domains: DomainView[]): 'llm' | 'fallback' {
+  if (domains.length === 0) return 'fallback'
+  const layerIds = new Set(['ui', 'lib', 'backend', 'test', 'config', 'other'])
+  if (domains.every((d) => layerIds.has(d.id))) return 'fallback'
+  return 'llm'
 }
 
 function fallbackDomainsFromLayers(nodes: ExploreGraphNode[]): DomainView[] {

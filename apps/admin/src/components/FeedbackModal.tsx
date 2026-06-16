@@ -67,7 +67,7 @@ const TYPE_CONFIG: Record<FeedbackType, {
   },
   feature: {
     label: 'Request a feature',
-    emoji: '✨',
+    emoji: '',
     subjectPlaceholder: 'e.g. "Export reports to CSV" or "Dark mode"',
     bodyPlaceholder: 'Optional — a sentence is plenty.\n\nWhat problem would this solve?',
     incentive: 'Every idea reaches the roadmap directly. Takes 30 seconds.',
@@ -193,7 +193,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-edge-subtle">
           <div className="flex items-center gap-2">
-            <span className="text-base" aria-hidden>{config.emoji}</span>
+            <span className="text-base" aria-hidden>{config.emoji || null}</span>
             <h2 className="text-sm font-semibold text-fg">{submitted ? (type === 'bug' ? '🎉 ' : '🙌 ') + config.successHeadline : config.label}</h2>
           </div>
           <button
@@ -246,7 +246,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                       : 'border-transparent text-fg-muted hover:text-fg'
                   }`}
                 >
-                  {t === 'bug' ? '🐛 Report a bug' : '✨ Request a feature'}
+                  {TYPE_CONFIG[t].label}
                 </button>
               ))}
             </div>

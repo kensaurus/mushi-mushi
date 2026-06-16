@@ -1,15 +1,3 @@
-/**
- * FILE: packages/web/src/widget.ts
- * PURPOSE: The bug-capture widget — floating trigger + multi-step report
- *          panel — that mounts into a customer's app via `Mushi.init()`.
- *
- * DESIGN: Visual styling lives in `./styles.ts` ("Mushi Mushi Editorial":
- *         paper + sumi ink + 朱 vermillion, serif display + monospace
- *         metadata, ledger-style step counter, hanko stamp animation on
- *         success). This file owns the DOM structure, state, and all
- *         user-facing ARIA / keyboard wiring.
- */
-
 import type {
   MushiCustomCategory,
   MushiCrossAppReport,
@@ -22,222 +10,20 @@ import type {
 } from '@mushi-mushi/core';
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
+import { MUSHI_SDK_VERSION } from './version';
+import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, isSubmitShortcut } from './widget-helpers';
+import type {
+  WidgetCallbacks,
+  WidgetRewardsState,
+  WidgetStep,
+  WidgetSubmitOutcome,
+} from './widget-helpers';
 
-type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail' | 'leaderboard' | 'roadmap' | 'account' | 'cross-app-reports';
-
-const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
-  bug: '\u26A0\uFE0F',
-  slow: '\uD83D\uDC0C',
-  visual: '\uD83C\uDFA8',
-  confusing: '\uD83D\uDE15',
-  other: '\uD83D\uDCDD',
-};
-
-/**
- * Wire-format "feature request" intent string. Always written into the
- * report's `user_category` field (not `category`) so we don't have to
- * widen the DB CHECK constraint on `reports.category`. The widget UI
- * presents it as a first-class card alongside the five real categories
- * because beta apps live or die by how easy it is to file a feature
- * request — burying it as an intent under "Other" suppresses signal.
- */
-const FEATURE_REQUEST_INTENT = 'Feature request';
-
-type ReporterStatusTone = 'sent' | 'review' | 'fixing' | 'fixed' | 'closed' | 'unknown';
-
-/** Compact status pill copy for list rows. */
-function reporterStatusShort(status: string): string {
-  switch (status) {
-    case 'new':
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'Sent';
-    case 'classified':
-    case 'triaged':
-    case 'grouped':
-    case 'dispatched':
-      return 'Review';
-    case 'fixing':
-      return 'Fixing';
-    case 'fixed':
-    case 'resolved':
-    case 'completed':
-      return 'Fixed';
-    case 'dismissed':
-      return 'Closed';
-    default:
-      return status.replace(/_/g, ' ').slice(0, 12);
-  }
-}
-
-/** Map raw DB status to reporter-facing copy (detail views). */
-function reporterStatusLabel(status: string): string {
-  switch (status) {
-    case 'new':
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'Submitted';
-    case 'classified':
-    case 'triaged':
-    case 'grouped':
-    case 'dispatched':
-      return 'In review';
-    case 'fixing':
-      return 'Fix in progress';
-    case 'fixed':
-    case 'resolved':
-    case 'completed':
-      return 'Fixed — confirm?';
-    case 'verified':
-      return 'Verified';
-    case 'reopened':
-      return 'Reopened';
-    case 'dismissed':
-      return 'Closed';
-    default:
-      return status.replace(/_/g, ' ');
-  }
-}
-
-function reporterStatusTone(status: string): ReporterStatusTone {
-  switch (status) {
-    case 'new':
-    case 'queued':
-    case 'pending':
-    case 'submitted':
-      return 'sent';
-    case 'classified':
-    case 'triaged':
-    case 'grouped':
-    case 'dispatched':
-      return 'review';
-    case 'fixing':
-      return 'fixing';
-    case 'fixed':
-    case 'resolved':
-    case 'completed':
-      return 'fixed';
-    case 'verified':
-      return 'fixed';
-    case 'reopened':
-      return 'fixing';
-    case 'dismissed':
-      return 'closed';
-    default:
-      return 'unknown';
-  }
-}
-
-/** Human-readable relative time, e.g. "2h ago". */
-function formatRelativeTime(iso: string): string {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return '';
-  const diffMs = Date.now() - then;
-  if (diffMs < 0) return 'just now';
-  const sec = Math.floor(diffMs / 1000);
-  if (sec < 60) return 'just now';
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d ago`;
-  const week = Math.floor(day / 7);
-  if (week < 5) return `${week}w ago`;
-  return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-/** The two-digit padded step number used in the header ledger ("01 / 03"). */
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-
-const TOTAL_STEPS = 3;
-const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
-  category: 1,
-  intent: 2,
-  details: 3,
-  reports: 1,
-  'report-detail': 1,
-  leaderboard: 1,
-  roadmap: 1,
-  account: 1,
-  'cross-app-reports': 1,
-};
-
-/** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
- *  metaKey covers macOS, ctrlKey covers Windows/Linux/ChromeOS. */
-function isSubmitShortcut(e: KeyboardEvent): boolean {
-  return (e.metaKey || e.ctrlKey) && e.key === 'Enter';
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-export interface WidgetRewardsState {
-  tier: { slug: string; displayName: string; pointsThreshold: number } | null;
-  nextTier: { displayName: string; pointsThreshold: number } | null;
-  totalPoints: number;
-  /** Expected base points for a `report_submit` action (default 50). */
-  pointsForReport: number;
-}
-
-export interface WidgetSubmitOutcome {
-  /** Server-confirmed report id. When `null` the report was queued
-   *  offline / failed-and-queued for retry; the success step degrades
-   *  gracefully (no "track on console" link, just the receipt stamp). */
-  reportId: string | null;
-  /** Convenience flag for the widget to decide whether to render the
-   *  optimistic copy ("queued offline, we'll send it when you're back")
-   *  versus the confirmed copy ("received — track at #abc12345"). */
-  queuedOffline?: boolean;
-}
-
-export interface WidgetCallbacks {
-  /**
-   * Returns the outcome of the submission so the widget can render a
-   * real receipt (report id, deep link). Older callers that return
-   * `void` still work — the widget falls back to the legacy stamp.
-   */
-  onSubmit(
-    data: {
-      category: MushiReportCategory;
-      /** Set when the host configured `widget.categories` — the raw custom id chosen by the user. */
-      userCategory?: string;
-      description: string;
-      intent?: string;
-    },
-  ): void | Promise<WidgetSubmitOutcome | void>;
-  onOpen(): void;
-  onClose(): void;
-  onScreenshotRequest(): void;
-  onScreenshotRemove?(): void;
-  /** Optional markup pass (highlight / blur / arrow) before submit. */
-  onScreenshotAnnotateRequest?(container: HTMLElement): void | Promise<void>;
-  onElementSelectorRequest?(): void;
-  onReporterReportsRequest?(): Promise<MushiReporterReport[]>;
-  onReporterCommentsRequest?(reportId: string): Promise<MushiReporterComment[]>;
-  onReporterReply?(reportId: string, body: string): Promise<void>;
-  onReporterFeedback?(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null>;
-  onReporterReopen?(reportId: string, note?: string): Promise<Record<string, unknown> | null>;
-  onFeatureBoardRequest?(): Promise<Array<Record<string, unknown>>>;
-  onFeatureBoardVote?(requestId: string): Promise<{ voted: boolean; action: string }>;
-  onLeaderboardOpen?(): void;
-  /** Request a magic-link sign-in for the in-widget Mushi community. */
-  onMushiSignIn?(email: string): Promise<{ ok: boolean; error?: string }>;
-  /** Fetch the global public leaderboard for the in-widget Mushi community. */
-  onGlobalLeaderboardOpen?(): void;
-  /** Fetch cross-app reports for the signed-in tester. */
-  onCrossAppReportsOpen?(): void;
-}
+// Re-exported so existing `from './widget'` import sites and the package barrel
+// keep resolving these public contracts unchanged after the helper split.
+export type { WidgetCallbacks, WidgetRewardsState, WidgetSubmitOutcome } from './widget-helpers';
+import { renderBrandFooter, renderOutdatedBanner, renderStep } from './widget-render';
+import type { WidgetRenderCtx } from './widget-render';
 
 export class MushiWidget {
   private host: HTMLElement;
@@ -339,8 +125,9 @@ export class MushiWidget {
   private magicLinkSent = false;
   private magicLinkEmail = '';
   private magicLinkError = '';
+  private magicLinkSending = false; // double-submit guard
 
-  constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
+  constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = MUSHI_SDK_VERSION) {
     this.config = {
       position: config.position ?? 'bottom-right',
       anchor: config.anchor ?? {},
@@ -374,8 +161,8 @@ export class MushiWidget {
       dashboardUrl: config.dashboardUrl ?? '',
       responseSlaLabel: config.responseSlaLabel ?? '',
       featureRequestCard: config.featureRequestCard ?? true,
-      featureRequestLabel: config.featureRequestLabel ?? '',
-      featureRequestDescription: config.featureRequestDescription ?? '',
+      featureRequestLabel: config.featureRequestLabel || 'Feature request',
+      featureRequestDescription: config.featureRequestDescription || 'Suggest something new — even rough ideas help us prioritise',
       avoidSelectors: config.avoidSelectors ?? [],
       categories: config.categories ?? [],
       accent: config.accent ?? '',
@@ -432,8 +219,8 @@ export class MushiWidget {
       ...(config.dashboardUrl !== undefined ? { dashboardUrl: config.dashboardUrl } : {}),
       ...(config.responseSlaLabel !== undefined ? { responseSlaLabel: config.responseSlaLabel } : {}),
       ...(config.featureRequestCard !== undefined ? { featureRequestCard: config.featureRequestCard } : {}),
-      ...(config.featureRequestLabel !== undefined ? { featureRequestLabel: config.featureRequestLabel } : {}),
-      ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription } : {}),
+      ...(config.featureRequestLabel !== undefined ? { featureRequestLabel: config.featureRequestLabel || 'Feature request' } : {}),
+      ...(config.featureRequestDescription !== undefined ? { featureRequestDescription: config.featureRequestDescription || 'Suggest something new — even rough ideas help us prioritise' } : {}),
       // Runtime/dashboard config delivers bannerMessage/bannerLabel via
       // mergeRuntimeConfig → bannerConfig. The widget is constructed before
       // that fetch resolves, so this pass-through is what makes server-driven
@@ -978,7 +765,7 @@ export class MushiWidget {
     const richLayout = message.length > 0;
     const bugLabel = bc.bugCta   ?? '🐛 Report a bug';
     const showFeat = bc.featureCta !== false;
-    const featLabel = bc.featureCtaLabel ?? '✨ Request feature';
+    const featLabel = bc.featureCtaLabel ?? 'Request feature';
     const zIdx = bc.zIndex ?? (this.config.zIndex ?? 99999) - 1;
 
     const banner = document.createElement('div');
@@ -1183,13 +970,6 @@ export class MushiWidget {
       trigger.style.zIndex = String(this.config.zIndex);
       this.applyInsetVars(trigger);
 
-      // Apply persisted drag position
-      if (this.fabPos) {
-        trigger.style.setProperty('--mushi-drag-x', `${this.fabPos.x}px`);
-        trigger.style.setProperty('--mushi-drag-y', `${this.fabPos.y}px`);
-        trigger.style.setProperty('--mushi-drag-active', '1');
-      }
-
       trigger.addEventListener('click', () => {
         this.removeNudge();
         if (this.isOpen) this.close();
@@ -1236,6 +1016,19 @@ export class MushiWidget {
       }
 
       this.shadow.appendChild(trigger);
+      // Apply persisted drag position AFTER trigger is in the DOM so
+      // getBoundingClientRect() returns correct bounds and the position
+      // is clamped to the current viewport (stored positions from different
+      // viewport sizes are auto-corrected on first render).
+      // IMPORTANT: temporarily zero out this.fabPos so moveFab's baseLeft
+      // derivation treats the trigger as starting from its natural CSS position
+      // (no offset applied yet).  moveFab will re-set this.fabPos to the
+      // clamped value before returning.
+      if (this.fabPos && this.config.draggable) {
+        const savedPos = this.fabPos;
+        this.fabPos = { x: 0, y: 0 };
+        this.moveFab(trigger, savedPos.x, savedPos.y, false);
+      }
     }
 
     const panel = document.createElement('div');
@@ -1247,7 +1040,8 @@ export class MushiWidget {
     this.applyInsetVars(panel);
 
     if (this.isOpen) {
-      panel.innerHTML = `${this.renderOutdatedBanner()}${this.renderStep()}${this.renderBrandFooter()}`;
+      const ctx = this.renderCtx();
+      panel.innerHTML = `${renderOutdatedBanner(ctx)}${renderStep(ctx)}${renderBrandFooter(ctx)}`;
       this.shadow.appendChild(panel);
       this.attachHandlers(panel);
       this.trapFocus(panel);
@@ -1525,537 +1319,11 @@ export class MushiWidget {
     this.vvCleanup = null;
   }
 
-  private renderStep(): string {
-    switch (this.step) {
-      case 'category': return this.renderCategoryStep();
-      case 'intent': return this.renderIntentStep();
-      case 'details': return this.renderDetailsStep();
-      case 'success': return this.renderSuccessStep();
-      case 'reports': return this.renderReportsStep();
-      case 'report-detail': return this.renderReportDetailStep();
-      case 'leaderboard': return this.renderLeaderboardStep();
-      case 'roadmap': return this.renderRoadmapStep();
-      case 'account': return this.renderAccountStep();
-      case 'cross-app-reports': return this.renderCrossAppReportsStep();
-    }
-  }
-
-  private renderOutdatedBanner(): string {
-    if (!this.sdkFreshness) return '';
-    if (this.config.outdatedBanner === 'off' || this.config.outdatedBanner === 'console-only') return '';
-    const { latest, current, deprecated, message } = this.sdkFreshness;
-    if (!latest && !deprecated) return '';
-    return `
-      <div class="mushi-outdated" role="status">
-        <strong>Mushi SDK ${escapeHtml(current)}</strong>
-        ${latest ? `latest is ${escapeHtml(latest)}.` : 'needs attention.'}
-        ${message ? `<span>${escapeHtml(message)}</span>` : ''}
-      </div>
-    `;
-  }
-
-  private renderBrandFooter(): string {
-    if (this.config.brandFooter === false) return '';
-    return `<div class="mushi-brand-footer">Powered by Mushi v${escapeHtml(this.sdkVersion)}</div>`;
-  }
-
   /**
-   * Editorial masthead. Always carries:
-   *   • the brand mark (虫 kanji on vermillion, "MUSHI" in mono above)
-   *   • the page title (serif display)
-   *   • the close affordance
-   *
-   * On sub-steps it additionally renders a back button (replacing the
-   * "MUSHI" eyebrow with a "← BACK" mono link) and a step counter
-   * ledger ("02 / 03") on the far right.
+   * Minimum description length, lowered for CJK locales where each character
+   * carries more meaning. Used by both the view layer (via renderCtx) and the
+   * details-step input validation in attachHandlers.
    */
-  private renderHeader(opts: {
-    title: string;
-    showBack?: boolean;
-    step?: number;
-    eyebrow?: string;
-  }): string {
-    const t = this.locale;
-    const { title, showBack = false, step, eyebrow } = opts;
-
-    const eyebrowHtml = showBack
-      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190</button>`
-      : `<span class="mushi-header-eyebrow">${eyebrow ?? 'Mushi \u00B7 Report'}</span>`;
-
-    const counterHtml = step
-      ? `<span class="mushi-step-counter" aria-label="Step ${step} of ${TOTAL_STEPS}"><b>${pad2(step)}</b> / ${pad2(TOTAL_STEPS)}</span>`
-      : '';
-
-    return `
-      <div class="mushi-header">
-        <div class="mushi-header-mark" aria-hidden="true">\u866B</div>
-        <div class="mushi-header-titles">
-          ${eyebrowHtml}
-          <h3>${title}</h3>
-        </div>
-        <div class="mushi-header-meta">
-          ${counterHtml}
-          <button type="button" class="mushi-close" data-action="close" aria-label="${t.widget.close}">\u2715</button>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Numeral step indicator: "01 — 02 — 03", with the active step in
-   * vermillion serif and completed steps struck through in mono.
-   * Replaces the original three-dot indicator (a generic SaaS pattern).
-   */
-  private renderStepIndicator(currentStep: number): string {
-    const segments: string[] = [];
-    for (let i = 1; i <= TOTAL_STEPS; i++) {
-      const cls =
-        i < currentStep ? 'mushi-step-num done' :
-        i === currentStep ? 'mushi-step-num active' :
-        'mushi-step-num';
-      segments.push(`<span class="${cls}">${pad2(i)}</span>`);
-      if (i < TOTAL_STEPS) segments.push('<span class="mushi-step-sep" aria-hidden="true"></span>');
-    }
-    return `<div class="mushi-step-indicator" aria-hidden="true">${segments.join('')}</div>`;
-  }
-
-  private renderCategoryStep(): string {
-    const t = this.locale;
-    // When the host supplies custom categories, render those instead of the
-    // built-in five. The feature-request shortcut is still shown above them
-    // unless explicitly disabled (consistent UX regardless of category set).
-    const categoryEntries: Array<{ id: string; icon: string; label: string; desc: string }> =
-      this.config.categories && this.config.categories.length > 0
-        ? this.config.categories.map((c) => ({
-            id: c.id,
-            icon: c.icon ?? '💬',
-            label: c.label,
-            desc: c.description ?? '',
-          }))
-        : (['bug', 'slow', 'visual', 'confusing', 'other'] as MushiReportCategory[]).map((id) => ({
-            id,
-            icon: CATEGORY_ICONS[id],
-            label: t.step1.categories[id],
-            desc: t.step1.categoryDescriptions[id],
-          }));
-
-    const categories = categoryEntries
-      .map(({ id, icon, label, desc }) => `
-        <button type="button" class="mushi-option-btn" data-category="${escapeHtml(id)}" role="radio" aria-checked="false">
-          <span class="mushi-option-icon" aria-hidden="true">${escapeHtml(icon)}</span>
-          <div class="mushi-option-text">
-            <span class="mushi-option-label">${escapeHtml(label)}</span>
-            ${desc ? `<span class="mushi-option-desc">${escapeHtml(desc)}</span>` : ''}
-          </div>
-          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-        </button>
-      `).join('');
-
-    return `
-      ${this.renderHeader({ title: t.step1.heading, step: STEP_NUMBER.category })}
-      ${this.config.betaMode?.enabled ? this.renderBetaStrip() : ''}
-      <div class="mushi-body" role="radiogroup" aria-label="${t.step1.heading}">
-        <button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
-          <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
-          <div class="mushi-option-text">
-            <span class="mushi-option-label">Your reports${this.unreadCount() ? ` (${this.unreadCount()} new)` : ''}</span>
-            <span class="mushi-option-desc">See status, developer replies, and respond</span>
-          </div>
-          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-        </button>
-        ${this.renderFeatureRequestEntry()}
-        ${this.callbacks.onFeatureBoardRequest ? `
-        <button type="button" class="mushi-option-btn" data-action="roadmap">
-          <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDDF3\uFE0F</span>
-          <div class="mushi-option-text">
-            <span class="mushi-option-label">Community ideas</span>
-            <span class="mushi-option-desc">Vote on features and see what shipped</span>
-          </div>
-          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-        </button>` : ''}
-        ${categories}
-        ${this.rewardsState ? this.renderRewardsNudge() : ''}
-        <div class="mushi-community-footer">
-          <button type="button" class="mushi-link-btn mushi-community-btn" data-action="open-account">
-            ${this.testerInfo
-              ? `👤 ${escapeHtml(this.testerInfo.public_handle ?? this.testerInfo.display_name ?? 'My account')}`
-              : '🌐 Join community · Track reports across apps'}
-          </button>
-          ${this.rewardsState
-            ? `<button type="button" class="mushi-link-btn" data-action="open-leaderboard">🏆 Leaderboard</button>`
-            : ''}
-        </div>
-      </div>
-      ${this.renderStepIndicator(STEP_NUMBER.category)}
-    `;
-  }
-
-  /**
-   * First-class "Feature request" entry rendered at the top of the
-   * category step. Beta apps consistently get more useful signal when
-   * the user has a no-friction path to say "I wish this did X" — burying
-   * it as an intent under the "Other" category drops feature submissions
-   * by ~40% in industry studies (Userpilot, Usersnap 2025).
-   *
-   * Wire format: still routes through the standard `other` category with
-   * a `user_category = 'Feature request'` stamp, so we don't need a DB
-   * migration. The admin console filters on that string to surface the
-   * Feature-request swimlane.
-   */
-  private renderFeatureRequestEntry(): string {
-    const enabled = this.config.featureRequestCard !== false;
-    if (!enabled) return '';
-    const label = this.config.featureRequestLabel ?? 'Feature request';
-    const desc = this.config.featureRequestDescription
-      ?? 'Suggest something new — even rough ideas help us prioritise';
-    return `
-      <button
-        type="button"
-        class="mushi-option-btn mushi-feature-entry"
-        data-action="feature-request"
-        aria-label="${escapeHtml(label)}"
-      >
-        <span class="mushi-option-icon" aria-hidden="true">\u2728</span>
-        <div class="mushi-option-text">
-          <span class="mushi-option-label">${escapeHtml(label)}</span>
-          <span class="mushi-option-desc">${escapeHtml(desc)}</span>
-        </div>
-        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-      </button>
-    `;
-  }
-
-  /** Collapsible "What's new" changelog row. Closes the reporter feedback loop. */
-  private renderBetaChangelog(): string {
-    const entries = this.config.betaMode?.changelogItems;
-    if (!entries?.length) return '';
-    const latest = entries[0];
-    const items = latest.items.map((item) => `<li>\u2022 ${escapeHtml(item)}</li>`).join('');
-    const label = latest.date
-      ? `What\u2019s new in ${escapeHtml(latest.version)} \u00B7 ${escapeHtml(latest.date)}`
-      : `What\u2019s new in ${escapeHtml(latest.version)}`;
-    return `
-      <details class="mushi-changelog">
-        <summary class="mushi-changelog-summary">${label}</summary>
-        <ul class="mushi-changelog-list">${items}</ul>
-      </details>
-    `;
-  }
-
-  /**
-   * Discreet beta status strip: communicates "work in progress", invites
-   * feedback, and sets expectations — reducing user frustration while
-   * nudging the reciprocity instinct ("your reports help us build this").
-   */
-  private renderBetaStrip(): string {
-    const beta = this.config.betaMode!;
-    const appName = escapeHtml(beta.appName ?? 'This app');
-    const message = beta.message
-      ? escapeHtml(beta.message)
-      : `${appName} is in early development — updates ship weekly`;
-    const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
-    const perks = beta.perks ?? [];
-
-    return `
-      <div class="mushi-beta-strip" role="note" aria-label="Beta status">
-        <div class="mushi-beta-strip-row">
-          <span class="mushi-beta-tag" aria-hidden="true">BETA</span>
-          <span class="mushi-beta-msg">${message}</span>
-        </div>
-        ${email ? `<div class="mushi-beta-contact-hint">Reports go to ${email} · reviewed by the team</div>` : ''}
-        ${perks.length > 0 ? `
-          <ul class="mushi-beta-perks" aria-label="Beta tester perks">
-            ${perks.map((p) => `<li>\u2713 ${escapeHtml(p)}</li>`).join('')}
-          </ul>
-        ` : ''}
-        ${this.renderBetaChangelog()}
-      </div>
-    `;
-  }
-
-  private renderReportsStep(): string {
-    const reports = this.reporterReports.map((report) => {
-      const title = report.summary ?? report.description ?? `Report ${report.id.slice(0, 8)}`;
-      const tone = reporterStatusTone(report.status);
-      const when = formatRelativeTime(report.created_at);
-      const unread = report.unread_count && report.unread_count > 0
-        ? `<span class="mushi-unread-badge" aria-label="${report.unread_count} unread">${report.unread_count}</span>`
-        : '';
-      return `
-      <button type="button" class="mushi-report-row" data-report-id="${escapeHtml(report.id)}" aria-label="View report: ${escapeHtml(title)}">
-        <div class="mushi-report-main">
-          <span class="mushi-report-title">${escapeHtml(title)}</span>
-          <span class="mushi-report-meta">
-            <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusShort(report.status))}</span>
-            ${when ? `<span class="mushi-report-when">${escapeHtml(when)}</span>` : ''}
-            ${unread}
-          </span>
-        </div>
-        <span class="mushi-report-chevron" aria-hidden="true">\u203A</span>
-      </button>`;
-    }).join('');
-    const leaderboardBtn = this.rewardsState
-      ? `<button type="button" class="mushi-leaderboard-link" data-action="open-leaderboard">🏆 Leaderboard</button>`
-      : '';
-    return `
-      ${this.renderHeader({ title: 'Your reports', showBack: true, eyebrow: 'Mushi · Inbox' })}
-      <div class="mushi-body">
-        ${this.reporterLoading ? '<p class="mushi-muted">Loading reports…</p>' : ''}
-        ${this.reporterError ? `<p class="mushi-error-inline">${escapeHtml(this.reporterError)}</p>` : ''}
-        ${reports || (!this.reporterLoading ? '<p class="mushi-muted">No reports from this browser yet.</p>' : '')}
-        ${leaderboardBtn}
-      </div>
-    `;
-  }
-
-  private renderRoadmapStep(): string {
-    const rows = this.featureBoard.map((ticket) => {
-      const id = String(ticket.id ?? '');
-      const subject = escapeHtml(String(ticket.subject ?? 'Untitled idea'));
-      const votes = Number(ticket.vote_count ?? 0);
-      const shipped = Boolean(ticket.shipped_at);
-      const voted = Boolean(ticket.my_vote);
-      const status = shipped ? 'Shipped' : String(ticket.status_label ?? ticket.status ?? 'open');
-      return `
-        <div class="mushi-report-row mushi-roadmap-row">
-          <div class="mushi-report-main">
-            <span class="mushi-report-title">${subject}</span>
-            <span class="mushi-report-meta">
-              <span class="mushi-report-status">${escapeHtml(status)}</span>
-              <span class="mushi-report-when">${votes} vote${votes === 1 ? '' : 's'}</span>
-            </span>
-          </div>
-          ${this.callbacks.onFeatureBoardVote ? `
-            <button type="button" class="mushi-vote-btn" data-vote-id="${escapeHtml(id)}" aria-pressed="${voted}">
-              ${voted ? 'Voted' : 'Vote'}
-            </button>` : ''}
-        </div>`;
-    }).join('');
-
-    return `
-      ${this.renderHeader({ title: 'Community ideas', showBack: true, eyebrow: 'Mushi · Roadmap' })}
-      <div class="mushi-body">
-        ${this.reporterLoading ? '<p class="mushi-muted">Loading ideas…</p>' : ''}
-        ${this.reporterError ? `<p class="mushi-error-inline">${escapeHtml(this.reporterError)}</p>` : ''}
-        ${rows || (!this.reporterLoading ? '<p class="mushi-muted">No community ideas yet. Be the first to suggest one.</p>' : '')}
-      </div>
-    `;
-  }
-
-  private renderLeaderboardStep(): string {
-    // Show global leaderboard (cross-app) when available, fall back to org scope
-    const isGlobal = this.globalLeaderboard !== null || this.globalLeaderboardLoading;
-    const entries = isGlobal
-      ? (this.globalLeaderboard ?? [])
-      : (this.leaderboardEntries ?? []).map(e => ({
-          tester_id: '',
-          public_handle: null,
-          display_name: e.display_name,
-          rank: 0,
-          points_30d: e.points_30d,
-          total_points: e.total_points,
-        }));
-    const loading = isGlobal ? this.globalLeaderboardLoading : this.leaderboardLoading;
-
-    // Find caller's rank
-    const myRank = this.testerReputation?.rank ?? null;
-
-    const rows = entries.map((e, i) => {
-      const rank = (e as MushiLeaderboardEntry).rank || (i + 1);
-      const isMe = this.testerReputation && (e as MushiLeaderboardEntry).tester_id === this.testerReputation.tester_id;
-      return `
-        <div class="mushi-lb-row ${rank === 1 ? 'mushi-lb-top' : ''}${isMe ? ' mushi-lb-me' : ''}">
-          <span class="mushi-lb-rank">#${rank}</span>
-          <span class="mushi-lb-name">${escapeHtml((e as MushiLeaderboardEntry).public_handle ?? e.display_name ?? 'Anon')}</span>
-          <span class="mushi-lb-pts">${(e.points_30d ?? e.total_points).toLocaleString()} pts</span>
-        </div>
-      `;
-    }).join('');
-
-    const myRankBadge = myRank
-      ? `<div class="mushi-lb-myrank">You are ranked <strong>#${myRank}</strong> this month</div>`
-      : (!this.testerJwt ? `<button type="button" class="mushi-link-btn" data-action="open-account">Sign in to see your rank →</button>` : '');
-
-    return `
-      ${this.renderHeader({ title: '🏆 Global Leaderboard', showBack: true, eyebrow: 'Mushi · Community' })}
-      <div class="mushi-body">
-        ${loading ? '<p class="mushi-muted">Loading leaderboard…</p>' : ''}
-        ${!loading && !entries.length ? '<p class="mushi-muted">No contributors yet — be the first!</p>' : ''}
-        <div class="mushi-lb-list">${rows}</div>
-        ${myRankBadge}
-        <p class="mushi-lb-note">Global contributors this month · Points refresh monthly</p>
-      </div>
-    `;
-  }
-
-  private renderAccountStep(): string {
-    const tester = this.testerInfo;
-    if (tester) {
-      // Signed in — show account info + cross-app link
-      const handle = tester.public_handle ?? tester.display_name ?? 'Tester';
-      const rep = this.testerReputation;
-      return `
-        ${this.renderHeader({ title: '虫 Mushi Account', showBack: true, eyebrow: 'Mushi · Identity' })}
-        <div class="mushi-body">
-          <div class="mushi-account-card">
-            <div class="mushi-account-avatar">${escapeHtml(handle.charAt(0).toUpperCase())}</div>
-            <div class="mushi-account-info">
-              <strong>${escapeHtml(handle)}</strong>
-              ${rep ? `<span class="mushi-account-rank">Rank #${rep.rank ?? '—'} · ${(rep.points_30d ?? 0).toLocaleString()} pts this month</span>` : ''}
-            </div>
-          </div>
-          <button type="button" class="mushi-nav-item" data-action="open-cross-app-reports">
-            My reports across all apps →
-          </button>
-          <button type="button" class="mushi-nav-item" data-action="open-global-leaderboard">
-            View global leaderboard →
-          </button>
-          <button type="button" class="mushi-link-btn" data-action="sign-out-tester">Sign out</button>
-        </div>
-      `;
-    }
-
-    // Not signed in — magic-link form
-    if (this.magicLinkSent) {
-      return `
-        ${this.renderHeader({ title: '虫 Check your email', showBack: true, eyebrow: 'Mushi · Sign in' })}
-        <div class="mushi-body">
-          <p class="mushi-muted">We sent a sign-in link to <strong>${escapeHtml(this.magicLinkEmail)}</strong>. Click it to connect your reports across apps and join the community.</p>
-          <button type="button" class="mushi-link-btn" data-action="resend-magic-link">Resend email</button>
-          ${this.magicLinkError ? `<p class="mushi-error">${escapeHtml(this.magicLinkError)}</p>` : ''}
-        </div>
-      `;
-    }
-
-    return `
-      ${this.renderHeader({ title: '虫 Join the community', showBack: true, eyebrow: 'Mushi · Sign in' })}
-      <div class="mushi-body">
-        <p class="mushi-muted">Sign in to see your reports across all apps and climb the global leaderboard. No password needed.</p>
-        <label class="mushi-label" for="mushi-email-input">Email address</label>
-        <input
-          id="mushi-email-input"
-          type="email"
-          class="mushi-textarea"
-          data-role="magic-link-email"
-          placeholder="you@example.com"
-          autocomplete="email"
-          value="${escapeHtml(this.magicLinkEmail)}"
-          style="padding: 10px 12px; height: auto; resize: none;"
-        />
-        ${this.magicLinkError ? `<p class="mushi-error">${escapeHtml(this.magicLinkError)}</p>` : ''}
-        <button type="button" class="mushi-submit" data-action="send-magic-link">
-          <span>Send sign-in link</span><span class="mushi-submit-arrow" aria-hidden="true">→</span>
-        </button>
-      </div>
-    `;
-  }
-
-  private renderCrossAppReportsStep(): string {
-    const reports = this.crossAppReports ?? [];
-    const grouped = new Map<string, { name: string; reports: MushiCrossAppReport[] }>();
-    for (const r of reports) {
-      const key = r.project_id ?? 'unknown';
-      if (!grouped.has(key)) grouped.set(key, { name: r.app_name ?? 'Unknown App', reports: [] });
-      grouped.get(key)!.reports.push(r);
-    }
-
-    const rows = [...grouped.entries()].map(([, group]) => `
-      <div class="mushi-xapp-group">
-        <h4 class="mushi-xapp-app-name">${escapeHtml(group.name)}</h4>
-        ${group.reports.map(r => {
-          const tone = reporterStatusTone(r.status);
-          return `
-            <div class="mushi-report-row" data-report-id="${escapeHtml(r.id)}" tabindex="0" role="button">
-              <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusShort(r.status))}</span>
-              <span class="mushi-report-title">${escapeHtml(r.title ?? r.category)}</span>
-              <span class="mushi-report-when">${escapeHtml(formatRelativeTime(r.created_at))}</span>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `).join('');
-
-    return `
-      ${this.renderHeader({ title: 'My reports', showBack: true, eyebrow: 'Mushi · All apps' })}
-      <div class="mushi-body">
-        ${this.crossAppLoading ? '<p class="mushi-muted">Loading your reports…</p>' : ''}
-        ${!this.crossAppLoading && !reports.length ? '<p class="mushi-muted">No reports filed yet.</p>' : ''}
-        ${rows}
-      </div>
-    `;
-  }
-
-  private renderReportDetailStep(): string {
-    const report = this.reporterReports.find((r) => r.id === this.selectedReportId);
-    const status = report?.status ?? 'unknown';
-    const tone = reporterStatusTone(status);
-    const when = report?.created_at ? formatRelativeTime(report.created_at) : '';
-    const comments = this.reporterComments.map((comment) => `
-      <div class="mushi-thread-comment ${comment.author_kind}">
-        <strong>${escapeHtml(comment.author_kind === 'reporter' ? 'You' : (comment.author_name ?? 'Developer'))}</strong>
-        <p>${escapeHtml(comment.body)}</p>
-      </div>
-    `).join('');
-    return `
-      ${this.renderHeader({ title: 'Report thread', showBack: true, eyebrow: 'Mushi · Inbox' })}
-      <div class="mushi-body">
-        <div class="mushi-thread-summary">
-          <div class="mushi-thread-summary-meta">
-            <span class="mushi-report-status mushi-status-${tone}">${escapeHtml(reporterStatusLabel(status))}</span>
-            ${when ? `<span class="mushi-report-when">Reported ${escapeHtml(when)}</span>` : ''}
-          </div>
-          <p>${escapeHtml(report?.summary ?? report?.description ?? 'Report details')}</p>
-        </div>
-        <div class="mushi-thread">
-          ${this.reporterLoading ? '<p class="mushi-muted">Loading thread…</p>' : comments || '<p class="mushi-muted">No developer replies yet.</p>'}
-        </div>
-        ${['fixed', 'resolved', 'verified'].includes(status) ? `
-          <div class="mushi-verify-actions" role="group" aria-label="Fix verification">
-            <button type="button" class="mushi-intent-btn" data-action="reporter-confirms">Yes, fixed for me</button>
-            <button type="button" class="mushi-intent-btn" data-action="reporter-not-fixed">Not fixed yet</button>
-          </div>
-        ` : ''}
-        <textarea class="mushi-textarea" data-role="reporter-reply" rows="3" placeholder="Reply to the developer…"></textarea>
-        <button type="button" class="mushi-submit" data-action="reporter-reply">
-          <span>Reply</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
-        </button>
-      </div>
-    `;
-  }
-
-  private renderIntentStep(): string {
-    const t = this.locale;
-    const catId = this.selectedCategory!;
-    // For custom categories, use their declared intents; for built-in categories
-    // use the i18n-localised intent list.
-    const customEntry = this.resolveCustomCategory(catId);
-    const intents: string[] = customEntry?.intents
-      ?? (t.step2.intents[catId as MushiReportCategory] || []);
-
-    const options = intents.map((intent) => `
-      <button type="button" class="mushi-intent-btn" data-intent="${escapeHtml(intent)}">
-        ${escapeHtml(intent)}
-      </button>
-    `).join('');
-
-    const icon = this.categoryIcon(catId);
-    const label = this.categoryLabel(catId);
-
-    return `
-      ${this.renderHeader({ title: t.step2.heading, showBack: true, step: STEP_NUMBER.intent })}
-      <div class="mushi-body">
-        <div class="mushi-selected-category">
-          <span aria-hidden="true">${escapeHtml(icon)}</span>
-          <span>${escapeHtml(label)}</span>
-        </div>
-        <div class="mushi-intents">
-          ${options}
-        </div>
-      </div>
-      ${this.renderStepIndicator(STEP_NUMBER.intent)}
-    `;
-  }
-
   private effectiveMinLength(): number {
     const base = this.config.minDescriptionLength ?? 20;
     // CJK scripts pack more meaning per character. Halve the floor for Japanese,
@@ -2068,221 +1336,7 @@ export class MushiWidget {
     return isCjk ? Math.max(4, Math.floor(base / 2)) : base;
   }
 
-  private renderDetailsStep(): string {
-    const t = this.locale;
-    const minLen = this.effectiveMinLength();
-
-    const screenshotLabel = this.screenshotCapturing
-      ? t.step3.screenshotCapturing
-      : this.screenshotError
-        ? t.step3.screenshotFailed
-        : this.screenshotAttached
-          ? t.step3.screenshotAttached
-          : t.step3.screenshotButton;
-
-    const screenshotClass = [
-      'mushi-attach-btn',
-      this.screenshotAttached ? 'active' : '',
-      this.screenshotError ? 'error' : '',
-      this.screenshotCapturing ? 'loading' : '',
-    ].filter(Boolean).join(' ');
-
-    const elementLabel = this.elementCapturing
-      ? t.step3.elementCapturing
-      : this.elementSelected
-        ? t.step3.elementSelected
-        : t.step3.elementButton;
-
-    const elementClass = [
-      'mushi-attach-btn',
-      this.elementSelected ? 'active' : '',
-      this.elementCapturing ? 'loading' : '',
-    ].filter(Boolean).join(' ');
-
-    const exampleChips = t.step3.examplePrompts
-      .map((p) => `<button type="button" class="mushi-example-chip" data-example="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
-      .join('');
-
-    return `
-      ${this.renderHeader({ title: t.step3.heading, showBack: true, step: STEP_NUMBER.details })}
-      <div class="mushi-body">
-        <div class="mushi-example-chips" aria-label="Example prompts">${exampleChips}</div>
-        <div class="mushi-textarea-wrap">
-          <textarea
-            class="mushi-textarea"
-            placeholder="${t.step3.descriptionPlaceholder}"
-            rows="4"
-            aria-label="${t.step3.heading}"
-            autofocus
-          ></textarea>
-          <div class="mushi-char-counter" data-role="char-counter" aria-hidden="true">
-            <span data-role="char-current">0</span>/<span data-role="char-min">${minLen}</span>
-          </div>
-        </div>
-        <div class="mushi-attachments">
-          <button type="button" class="${screenshotClass}"
-            data-action="screenshot"
-            ${this.screenshotCapturing ? 'disabled' : ''}
-            aria-label="${escapeHtml(screenshotLabel)}"
-          >
-            ${this.screenshotCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83D\uDCF8'}
-            ${escapeHtml(screenshotLabel)}
-          </button>
-          ${this.screenshotAttached && this.allowScreenshotRemove
-            ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot" aria-label="Remove screenshot">\u2715 Remove</button>'
-            : ''}
-          ${this.screenshotAttached
-            ? '<button type="button" class="mushi-attach-btn" data-action="annotate-screenshot" aria-label="Mark up screenshot">\u270F Mark up</button><div class="mushi-annotate-host" data-role="annotate-host"></div>'
-            : ''}
-          <button type="button" class="${elementClass}"
-            data-action="element"
-            ${this.elementCapturing ? 'disabled' : ''}
-            aria-label="${escapeHtml(elementLabel)}"
-          >
-            ${this.elementCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83C\uDFAF'}
-            ${escapeHtml(elementLabel)}
-          </button>
-        </div>
-        <div class="mushi-error" style="display:none" role="alert"></div>
-      </div>
-      <div class="mushi-footer">
-        <span class="mushi-footer-hint" aria-hidden="true">\u2318 + ENTER \u2192 send</span>
-        <button type="button" class="mushi-submit" data-action="submit"${this.submitting ? ' disabled' : ''}>
-          <span>${this.submitting ? t.widget.submitting : t.widget.submit}</span>
-          <span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
-        </button>
-      </div>
-      ${this.renderStepIndicator(STEP_NUMBER.details)}
-    `;
-  }
-
-  /**
-   * Editorial success state: 朱印-style red stamp ring with the kanji
-   * 受 ("received") at its centre, the localised "thank you" string
-   * in serif below, and a mono ledger receipt ("REPORT · HH:MM:SS").
-   * The ring + label animations are defined in styles.ts so this stays
-   * pure markup and `prefers-reduced-motion` flips them to the final
-   * frame instantly.
-   */
-  private renderSuccessStep(): string {
-    const t = this.locale;
-    const stamp = this.submittedAt ?? new Date();
-    const time = stamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-
-    return `
-      ${this.renderHeader({ title: t.widget.title, eyebrow: 'Mushi \u00B7 Receipt' })}
-      <div class="mushi-body">
-        <div class="mushi-success">
-          <div class="mushi-success-stamp" aria-hidden="true">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"><circle cx="50" cy="50" r="44"/></svg>
-            <span class="mushi-success-stamp-label">\u53D7</span>
-          </div>
-          <div class="mushi-success-headline">${t.widget.submitted}</div>
-          <div class="mushi-success-meta">REPORT \u00B7 ${time}</div>
-          ${this.renderSuccessReceipt()}
-          ${this.rewardsState ? this.renderSuccessRewards() : ''}
-          ${this.config.betaMode?.enabled ? this.renderBetaSuccessFooter() : ''}
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Two-way receipt block. Until the host's `onSubmit` resolves with a
-   * server-confirmed report id, we show a discreet "delivering..." pill so
-   * the user knows their submission is still in flight. Once we have the
-   * id, we surface a short monospaced id + a copy button + an optional
-   * "Track on Mushi" deep link to `dashboardUrl/reports/<id>` so the user
-   * can watch the status walk through queued -> classified -> fixed in
-   * real time (Peak-End rule: the last impression sticks). If we never
-   * get an id (offline retry queue), we say so explicitly rather than
-   * pretending everything is fine.
-   */
-  private renderSuccessReceipt(): string {
-    if (this.lastSubmitQueuedOffline) {
-      return `
-        <div class="mushi-success-receipt" role="status">
-          <div class="mushi-success-receipt-row mushi-success-receipt-warn">
-            <span class="mushi-success-receipt-label">Queued offline</span>
-            <span class="mushi-success-receipt-hint">We&rsquo;ll send it the moment you&rsquo;re back online.</span>
-          </div>
-        </div>
-      `;
-    }
-
-    if (!this.lastReportId) {
-      return `
-        <div class="mushi-success-receipt" role="status">
-          <div class="mushi-success-receipt-row">
-            <span class="mushi-success-receipt-spinner" aria-hidden="true"></span>
-            <span class="mushi-success-receipt-hint">Delivering to the team\u2026</span>
-          </div>
-          ${this.renderSlaLine()}
-        </div>
-      `;
-    }
-
-    const idShort = `#${this.lastReportId.slice(0, 8)}`;
-    const dashboard = (this.config.dashboardUrl ?? '').replace(/\/$/, '');
-    const trackHref = dashboard ? `${dashboard}/reports/${encodeURIComponent(this.lastReportId)}` : '';
-
-    return `
-      <div class="mushi-success-receipt" role="status">
-        <div class="mushi-success-receipt-row">
-          <span class="mushi-success-receipt-label">Receipt</span>
-          <button
-            type="button"
-            class="mushi-success-receipt-id"
-            data-action="copy-report-id"
-            data-copy-id="${escapeHtml(this.lastReportId)}"
-            title="Copy report id ${escapeHtml(this.lastReportId)}"
-            aria-label="Copy report id ${escapeHtml(this.lastReportId)}"
-          >${escapeHtml(idShort)}<span class="mushi-success-receipt-copy" aria-hidden="true">\u2398</span></button>
-        </div>
-        ${trackHref ? `
-          <a
-            class="mushi-success-receipt-track"
-            href="${escapeHtml(trackHref)}"
-            target="_blank"
-            rel="noopener noreferrer"
-          >Track on Mushi <span aria-hidden="true">\u2197</span></a>
-        ` : ''}
-        ${this.renderSlaLine()}
-      </div>
-    `;
-  }
-
-  private renderSlaLine(): string {
-    const sla = (this.config.responseSlaLabel ?? '').trim();
-    if (sla) {
-      return `<div class="mushi-success-sla">${escapeHtml(sla)}</div>`;
-    }
-    // Default copy is intentionally vague but reassuring -- under-promise,
-    // over-deliver. Hosts that want a hard SLA set it via responseSlaLabel.
-    return `<div class="mushi-success-sla mushi-success-sla-default">A human will look at this within a working day.</div>`;
-  }
-
-  /**
-   * Reciprocity footer on the success step: closes the feedback loop by
-   * attributing where the report goes, sets a response expectation, and
-   * reinforces the "beta tester" identity (Peak-End Rule — the last thing
-   * the user sees shapes their entire impression of the interaction).
-   */
-  private renderBetaSuccessFooter(): string {
-    const beta = this.config.betaMode!;
-    const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
-    const appName = escapeHtml(beta.appName ?? 'the team');
-    return `
-      <div class="mushi-beta-success-footer" role="note" aria-label="Beta feedback acknowledgement">
-        ${email
-          ? `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${email}</div>`
-          : `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${appName}</div>`
-        }
-        <div class="mushi-beta-success-line mushi-beta-success-dim">We aim to review within 48h · thank you for helping build this</div>
-      </div>
-    `;
-  }
-
+  /** Tier accent colour for the rewards UI. */
   private tierColor(slug: string): string {
     const colors: Record<string, string> = {
       free: '#6b7280',
@@ -2293,69 +1347,57 @@ export class MushiWidget {
     return colors[slug] ?? '#6c47ff';
   }
 
-  /** Compact rewards nudge rendered at the bottom of the category-step body. */
-  private renderRewardsNudge(): string {
-    const { tier, nextTier, totalPoints, pointsForReport } = this.rewardsState!;
-    const tierName = tier?.displayName ?? 'Free';
-    const tierSlug = tier?.slug ?? 'free';
-    const color = this.tierColor(tierSlug);
-
-    let pct = 100;
-    let nextLabel = '';
-    if (nextTier) {
-      const base = tier?.pointsThreshold ?? 0;
-      const ceiling = nextTier.pointsThreshold;
-      pct = ceiling > base ? Math.round(Math.min(1, (totalPoints - base) / (ceiling - base)) * 100) : 100;
-      const remaining = Math.max(0, ceiling - totalPoints);
-      nextLabel = `${remaining.toLocaleString()} pts to ${escapeHtml(nextTier.displayName)}`;
-    }
-
-    return `
-      <div class="mushi-rewards-nudge" aria-label="Rewards progress">
-        <div class="mushi-rewards-row">
-          <span class="mushi-tier-pip" style="background:${color}" aria-hidden="true"></span>
-          <span class="mushi-rewards-tier-name">${escapeHtml(tierName)}</span>
-          <span class="mushi-rewards-pts-count">${totalPoints.toLocaleString()} pts</span>
-          <span class="mushi-rewards-pts-earn">+${pointsForReport} pts for a report</span>
-        </div>
-        ${nextTier ? `
-          <div class="mushi-tier-bar-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
-            <div class="mushi-tier-bar-fill" style="width:${pct}%"></div>
-          </div>
-          <div class="mushi-rewards-next-label">${nextLabel}</div>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  /** Points earned + tier progress shown on the success step. */
-  private renderSuccessRewards(): string {
-    const { tier, nextTier, totalPoints, pointsForReport } = this.rewardsState!;
-    const projected = totalPoints + pointsForReport;
-
-    let pctAfter = 100;
-    let nextLabel = '';
-    if (nextTier) {
-      const base = tier?.pointsThreshold ?? 0;
-      const ceiling = nextTier.pointsThreshold;
-      pctAfter = ceiling > base ? Math.round(Math.min(1, (projected - base) / (ceiling - base)) * 100) : 100;
-      const remaining = Math.max(0, ceiling - projected);
-      nextLabel = remaining > 0
-        ? `${remaining.toLocaleString()} pts to ${escapeHtml(nextTier.displayName)}`
-        : `\uD83C\uDF89 ${escapeHtml(nextTier.displayName)} reached!`;
-    }
-
-    return `
-      <div class="mushi-success-rewards">
-        <div class="mushi-success-pts-award">+${pointsForReport} pts</div>
-        ${nextTier ? `
-          <div class="mushi-tier-bar-track success-bar" role="progressbar" aria-valuenow="${pctAfter}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
-            <div class="mushi-tier-bar-fill" style="width:${pctAfter}%"></div>
-          </div>
-          <div class="mushi-rewards-next-label">${nextLabel}</div>
-        ` : ''}
-      </div>
-    `;
+  /**
+   * Build the read-only snapshot + bound helper closures the stateless view
+   * layer (widget-render.ts) renders from. Rebuilt once per render() pass so
+   * the HTML always reflects current state.
+   */
+  private renderCtx(): WidgetRenderCtx {
+    return {
+      config: this.config,
+      rewardsState: this.rewardsState,
+      lastReportId: this.lastReportId,
+      reporterLoading: this.reporterLoading,
+      locale: this.locale,
+      testerReputation: this.testerReputation,
+      testerInfo: this.testerInfo,
+      screenshotCapturing: this.screenshotCapturing,
+      screenshotAttached: this.screenshotAttached,
+      reporterError: this.reporterError,
+      magicLinkError: this.magicLinkError,
+      elementCapturing: this.elementCapturing,
+      submitting: this.submitting,
+      sdkFreshness: this.sdkFreshness,
+      screenshotError: this.screenshotError,
+      reporterReports: this.reporterReports,
+      magicLinkSending: this.magicLinkSending,
+      magicLinkEmail: this.magicLinkEmail,
+      globalLeaderboardLoading: this.globalLeaderboardLoading,
+      globalLeaderboard: this.globalLeaderboard,
+      elementSelected: this.elementSelected,
+      crossAppLoading: this.crossAppLoading,
+      callbacks: this.callbacks,
+      testerJwt: this.testerJwt,
+      submittedAt: this.submittedAt,
+      step: this.step,
+      selectedReportId: this.selectedReportId,
+      selectedCategory: this.selectedCategory,
+      sdkVersion: this.sdkVersion,
+      reporterComments: this.reporterComments,
+      magicLinkSent: this.magicLinkSent,
+      leaderboardLoading: this.leaderboardLoading,
+      leaderboardEntries: this.leaderboardEntries,
+      lastSubmitQueuedOffline: this.lastSubmitQueuedOffline,
+      featureBoard: this.featureBoard,
+      crossAppReports: this.crossAppReports,
+      allowScreenshotRemove: this.allowScreenshotRemove,
+      unreadCount: () => this.unreadCount(),
+      tierColor: (slug) => this.tierColor(slug),
+      resolveCustomCategory: (id) => this.resolveCustomCategory(id),
+      effectiveMinLength: () => this.effectiveMinLength(),
+      categoryLabel: (id) => this.categoryLabel(id),
+      categoryIcon: (id) => this.categoryIcon(id),
+    };
   }
 
   private attachHandlers(panel: HTMLElement): void {
@@ -2434,13 +1476,29 @@ export class MushiWidget {
       this.crossAppLoading = true;
       this.crossAppReports = null;
       this.render();
-      this.callbacks.onCrossAppReportsOpen?.();
+      if (this.callbacks.onCrossAppReportsOpen) {
+        this.callbacks.onCrossAppReportsOpen();
+      } else {
+        // No callback wired: clear loading so panel doesn't show a permanent spinner
+        this.crossAppLoading = false;
+        this.crossAppReports = [];
+        this.render();
+      }
     });
 
     panel.querySelector('[data-action="open-global-leaderboard"]')?.addEventListener('click', () => {
       this.step = 'leaderboard';
-      this.callbacks.onGlobalLeaderboardOpen?.();
+      this.globalLeaderboard = null;
+      this.globalLeaderboardLoading = true;
       this.render();
+      if (this.callbacks.onGlobalLeaderboardOpen) {
+        this.callbacks.onGlobalLeaderboardOpen();
+      } else {
+        // No callback wired: clear loading so panel doesn't spin forever
+        this.globalLeaderboardLoading = false;
+        this.globalLeaderboard = [];
+        this.render();
+      }
     });
 
     // Community: magic-link sign-in
@@ -2462,6 +1520,8 @@ export class MushiWidget {
       this.magicLinkSent = false;
       this.magicLinkEmail = '';
       this.step = 'category';
+      // Notify host to clear persisted JWT from storage
+      this.callbacks.onTesterSignOut?.();
       this.render();
     });
 
@@ -2822,6 +1882,7 @@ export class MushiWidget {
   /* ── Community: magic-link sign-in ───────────────────────────────── */
 
   private async handleMagicLinkSend(panel: HTMLElement): Promise<void> {
+    if (this.magicLinkSending) return; // double-submit guard
     const emailInput = panel.querySelector('[data-role="magic-link-email"]') as HTMLInputElement | null;
     const email = (emailInput?.value ?? this.magicLinkEmail).trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -2831,13 +1892,15 @@ export class MushiWidget {
     }
     this.magicLinkEmail = email;
     this.magicLinkError = '';
+    this.magicLinkSending = true;
     this.render();
     try {
       await this.callbacks.onMushiSignIn?.(email);
       this.magicLinkSent = true;
-      this.render();
     } catch (err) {
       this.magicLinkError = err instanceof Error ? err.message : 'Could not send sign-in link. Try again.';
+    } finally {
+      this.magicLinkSending = false;
       this.render();
     }
   }

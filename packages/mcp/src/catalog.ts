@@ -898,4 +898,40 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Give me an onboarding walkthrough of this codebase.',
   },
+  {
+    name: 'search_codebase',
+    title: 'Semantic codebase search',
+    description:
+      'Search indexed files by plain-English meaning via embeddings. Returns top-k file chunks with similarity scores.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Find files related to authentication or payment handling.',
+  },
+  {
+    name: 'get_codebase_domains',
+    title: 'Business domain map',
+    description:
+      'Extract business domains, flows, and steps mapped to file paths. Cached per index fingerprint.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What business domains does this codebase implement?',
+  },
+  {
+    name: 'analyze_codebase_impact',
+    title: 'Diff impact analysis',
+    description:
+      'Find files that depend on changed paths (reverse import graph). Supports manual paths, last push, GitHub compare, or fix PR files.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What breaks if I change lib/auth.ts?',
+  },
+  {
+    name: 'analyze_wiki_knowledge',
+    title: 'Wiki knowledge graph',
+    description:
+      'Return wiki/docs knowledge graph nodes and sources for the project. Use include_wiki on ask_codebase for RAG merge.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What docs entities exist for onboarding?',
+  },
 ]

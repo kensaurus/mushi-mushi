@@ -1469,7 +1469,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const projectId = stateRaw.trim()
     if (!projectId || projectId.length < 10) {
       // No project context — log the installation and redirect to the dashboard root
-      console.info('[github-app-callback] Installation received without project context', { installationId, setupAction })
+      log.info('installation received without project context', {
+        scope: 'github-app-callback',
+        installationId,
+        setupAction,
+      })
       return c.redirect(`${adminBase}/?github_installed=1`, 302)
     }
 
@@ -1489,14 +1493,23 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         github_app_installation_id: installationId,
         indexing_enabled: true,
       }).eq('id', repos.id)
-      console.info('[github-app-callback] Linked installation to repo', { installationId, repoId: repos.id, projectId })
+      log.info('linked installation to repo', {
+        scope: 'github-app-callback',
+        installationId,
+        repoId: repos.id,
+        projectId,
+      })
     } else {
       // No primary repo yet — store on project_settings for pickup when user adds a repo
       await db.from('project_settings').upsert({
         project_id: projectId,
         github_app_installation_id_pending: installationId,
       } as Record<string, unknown>, { onConflict: 'project_id' })
-      console.info('[github-app-callback] No primary repo — stored pending installation', { installationId, projectId })
+      log.info('no primary repo — stored pending installation', {
+        scope: 'github-app-callback',
+        installationId,
+        projectId,
+      })
     }
 
     // Auto-register the webhook on the repo using the installation token
@@ -1505,7 +1518,10 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     const privateKeyPem = Deno.env.get('GITHUB_APP_PRIVATE_KEY_PEM')
     if (appId && privateKeyPem && repos?.repo_url) {
       void autoRegisterWebhook({ appId, privateKeyPem, installationId, repoUrl: repos.repo_url, adminBase })
-        .catch((err: unknown) => console.warn('[github-app-callback] webhook auto-register failed (non-fatal)', String(err)))
+        .catch((err: unknown) => log.warn('webhook auto-register failed (non-fatal)', {
+          scope: 'github-app-callback',
+          err: String(err),
+        }))
     }
 
     return c.redirect(`${adminBase}/integrations/config?github_connected=1&installation_id=${installationId}`, 302)
@@ -1785,11 +1801,11 @@ async function autoRegisterWebhook(opts: {
     }),
   })
   if (hookRes.status === 422) {
-    console.info('[autoRegisterWebhook] Webhook already exists on repo', { owner, repo })
+    log.info('webhook already exists on repo', { scope: 'autoRegisterWebhook', owner, repo })
     return
   }
   if (!hookRes.ok) throw new Error(`Create webhook failed: ${hookRes.status}`)
-  console.info('[autoRegisterWebhook] Webhook registered', { owner, repo, hookUrl })
+  log.info('webhook registered', { scope: 'autoRegisterWebhook', owner, repo, hookUrl })
 }
 
 async function createGitHubAppJwt(appId: string, pemKey: string): Promise<string> {

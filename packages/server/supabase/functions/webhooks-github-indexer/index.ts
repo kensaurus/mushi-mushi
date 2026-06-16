@@ -1093,6 +1093,8 @@ app.post('/webhooks-github-indexer', async (c) => {
 
   const token = await mintInstallationToken(installationId);
   const projectId = project.project_id as string;
+  const { getProjectCodebaseScope } = await import('../_shared/codebase-understand.ts')
+  const indexScope = await getProjectCodebaseScope(db, projectId)
 
   // Emit `commit` fix_events if this push is on a branch we're tracking
   // (i.e. fix_attempts.branch == ref). Runs before the embedding pipeline so
@@ -1123,7 +1125,7 @@ app.post('/webhooks-github-indexer', async (c) => {
   const languageCounts: Record<string, number> = {};
 
   for (const path of removed) {
-    if (!shouldIndex(path)) continue;
+    if (!shouldIndex(path, indexScope)) continue;
     const { error } = await db
       .from('project_codebase_files')
       .update({ tombstoned_at: new Date().toISOString() })
@@ -1148,7 +1150,7 @@ app.post('/webhooks-github-indexer', async (c) => {
   }
   const pendingChunks: PendingPushChunk[] = [];
   for (const path of added) {
-    if (!shouldIndex(path)) continue;
+    if (!shouldIndex(path, indexScope)) continue;
     const source = await fetchFileContents(token, owner, repo, path, ref);
     if (!source) continue;
     for (const ch of chunk(path, source)) {
@@ -1229,6 +1231,43 @@ app.post('/webhooks-github-indexer', async (c) => {
     upsertFailures,
     tombstoneFailures,
   });
+
+  // Keep primary repo HEAD in sync for last-push diff impact + analyze jobs.
+  await db
+    .from('project_repos')
+    .update({ commit_sha: ref, updated_at: new Date().toISOString() })
+    .eq('project_id', projectId)
+    .eq('is_primary', true)
+
+  try {
+    const { invalidateCodebaseUnderstandCaches } = await import('../_shared/codebase-impact-resolve.ts')
+    await invalidateCodebaseUnderstandCaches(db, projectId)
+    const changedPaths = [...added]
+    if (changedPaths.length > 0) {
+      const { enqueueCodebaseAnalyzeJob } = await import('../_shared/codebase-analyze-runner.ts')
+      const { jobId } = await enqueueCodebaseAnalyzeJob(db, {
+        projectId,
+        trigger: 'webhook_push',
+        changedPaths,
+      })
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      if (supabaseUrl && serviceKey) {
+        fetch(`${supabaseUrl}/functions/v1/codebase-analyze-worker`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ jobId }),
+        }).catch((err) => log.warn('analyze worker invoke failed', { err: String(err) }))
+      }
+    }
+  } catch (err) {
+    log.warn('post-index analyze enqueue failed (non-fatal)', {
+      err: err instanceof Error ? err.message : String(err),
+    })
+  }
 
   // If every attempted write failed, fail loudly so the webhook is retried —
   // a silent 200 here is what masked the original onConflict mismatch.

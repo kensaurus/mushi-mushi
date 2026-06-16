@@ -18,6 +18,7 @@ import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { countChangedFields } from './settingsDiff'
 import { ContainedBlock } from '../report-detail/ReportSurface'
+import { ConsoleHelpPanel } from '../ConsoleHelpPanel'
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -100,6 +101,7 @@ export function GeneralPanel() {
   if (error) return <ErrorAlert message={`Failed to load settings: ${error}`} onRetry={reload} />
 
   return (
+    <>
     <SettingsPanelLayout
       fullWidth={
         <ContainedBlock tone="muted">
@@ -419,6 +421,8 @@ export function GeneralPanel() {
         </div>
       </Section>
     </SettingsPanelLayout>
+    <ConsoleHelpPanel />
+    </>
   )
 }
 

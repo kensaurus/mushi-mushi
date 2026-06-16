@@ -167,7 +167,8 @@ export function registerModernizationHealthSuperRoutes(app: Hono<{ Variables: Va
     await db.from('modernization_findings').update({ status: 'dispatched' }).eq('id', finding.id);
 
     invokeFixWorker(job.id).catch((err) => {
-      console.warn('[modernization] worker invocation failed', {
+      log.warn('worker invocation failed', {
+        scope: 'modernization',
         dispatchId: job.id,
         err: String(err),
       });

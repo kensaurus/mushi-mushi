@@ -51,6 +51,7 @@
 
 import type { Context } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
+import { log } from './logger.ts'
 
 /** 1 MiB — anything larger bypasses the cache (legitimate Mushi mutations
  * carry kilobytes, not megabytes). Tuned to fit comfortably in Edge runtime
@@ -208,13 +209,12 @@ export async function withIdempotency(
           { onConflict: 'user_id,key', ignoreDuplicates: false },
         )
       if (storeErr) {
-        console.warn('[idempotency] store failed (non-fatal):', storeErr.message)
+        log.warn('idempotency store failed (non-fatal)', { err: storeErr.message })
       }
     } catch (err) {
-      console.warn(
-        '[idempotency] store threw (non-fatal):',
-        err instanceof Error ? err.message : String(err),
-      )
+      log.warn('idempotency store threw (non-fatal)', {
+        err: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 

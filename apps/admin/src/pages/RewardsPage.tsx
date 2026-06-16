@@ -34,7 +34,7 @@ import {
   type DetailRowItem,
 } from '../components/ui'
 import {
-  IconSparkle,
+  IconRewards,
   IconUser,
   IconShield,
   IconGauge,
@@ -203,7 +203,7 @@ function OverviewTab() {
 
       <Section
         title="Tier distribution"
-        icon={<IconSparkle />}
+        icon={<IconRewards />}
         freshness={{ at: lastFetchedAt, isValidating }}
       >
         {tierEntries.length === 0 ? (
@@ -513,7 +513,7 @@ function TierLadderTab({ canEdit }: { canEdit: boolean }) {
 
       <Section
         title="Tier ladder"
-        icon={<IconSparkle />}
+        icon={<IconRewards />}
         freshness={{ at: lastFetchedAt, isValidating }}
         action={
           canEdit ? (
@@ -1737,7 +1737,7 @@ function QuestsTab({ canEdit }: { canEdit: boolean }) {
   return (
     <Section
       title="Quests"
-      icon={<IconSparkle />}
+      icon={<IconRewards />}
       action={
         canEdit ? (
           <Btn variant="ghost" size="sm" onClick={() => setShowForm(!showForm)}>New quest</Btn>

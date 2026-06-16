@@ -13,10 +13,9 @@ import { Btn, Tooltip } from './ui'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { buildCursorDeeplink, buildVsCodeDeeplink, projectServerName } from '../lib/cursorDeeplink'
-import { RESOLVED_MCP_HTTP_URL } from '../lib/env'
+import { RESOLVED_API_URL } from '../lib/env'
 
-const MUSHI_CLOUD_API =
-  typeof RESOLVED_MCP_HTTP_URL !== 'undefined' ? RESOLVED_MCP_HTTP_URL : ''
+const MUSHI_CLOUD_API = RESOLVED_API_URL
 
 async function mintMcpKey(
   scopes: string[],

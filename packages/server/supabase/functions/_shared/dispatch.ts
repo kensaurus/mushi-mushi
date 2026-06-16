@@ -16,6 +16,7 @@
  */
 
 import { getServiceClient } from './db.ts'
+import { log } from './logger.ts'
 
 export interface DispatchResult {
   ok: boolean
@@ -132,7 +133,8 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
   }
 
   invokeFixWorker(job.id).catch((err) => {
-    console.warn('[dispatch] worker invocation failed', {
+    log.warn('worker invocation failed', {
+      scope: 'dispatch',
       dispatchId: job.id,
       err: String(err),
     })

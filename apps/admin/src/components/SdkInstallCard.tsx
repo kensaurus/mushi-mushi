@@ -663,7 +663,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
                 {config.bannerFeatureCta && (
                   <>
                     <span style={{ opacity: 0.25 }}>|</span>
-                    <span style={{ cursor: 'pointer', opacity: 0.75 }}>✨ Feature</span>
+                    <span style={{ cursor: 'pointer', opacity: 0.75 }}>Feature</span>
                   </>
                 )}
                 <span style={{ opacity: 0.55, marginLeft: 2, cursor: 'pointer' }}>✕</span>
@@ -676,7 +676,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
               </span>
               {config.bannerFeatureCta && (
                 <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.10)', cursor: 'pointer' }}>
-                  ✨ Feature
+                  Feature
                 </span>
               )}
               <span style={{ opacity: 0.55, marginLeft: 'auto', cursor: 'pointer' }}>✕</span>

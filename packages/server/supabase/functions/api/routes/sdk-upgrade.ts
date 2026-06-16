@@ -27,10 +27,11 @@ import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts'
 import { dbError, userCanAccessProject } from '../shared.ts'
 import { runSdkUpgradeJob } from '../../_shared/sdk-upgrade-runner.ts'
+import { log } from '../../_shared/logger.ts'
 
 function scheduleSdkUpgradeRun(jobId: string): void {
   const run = runSdkUpgradeJob(jobId).catch((err) => {
-    console.warn('[sdk-upgrade] inline runner failed', { jobId, err: String(err) })
+    log.warn('inline runner failed', { scope: 'sdk-upgrade', jobId, err: String(err) })
   })
   const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
     .EdgeRuntime

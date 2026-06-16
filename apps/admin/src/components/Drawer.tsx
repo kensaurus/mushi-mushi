@@ -40,6 +40,10 @@ interface DrawerProps {
    *  `drawerBelowAppChromeClass` (clears beta banner + desktop sub-header).
    *  Pass a custom value only when a drawer needs a non-standard inset. */
   containerClassName?: string
+  /** Extra classes on the sliding panel (e.g. themed surfaces). */
+  panelClassName?: string
+  /** Sets `data-surface` on the panel for scoped theme CSS. */
+  surface?: string
 }
 
 export function Drawer({
@@ -54,6 +58,8 @@ export function Drawer({
   dismissible = true,
   dimmed = true,
   containerClassName,
+  panelClassName,
+  surface,
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const prevFocusRef = useRef<HTMLElement | null>(null)
@@ -151,7 +157,8 @@ export function Drawer({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`relative h-full ${WIDTH_CLASS[width]} bg-surface-root border-l border-edge/60 shadow-raised flex flex-col motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200 focus:outline-none`}
+        data-surface={surface}
+        className={`relative h-full ${WIDTH_CLASS[width]} bg-surface-root border-l border-edge/60 shadow-raised flex flex-col motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200 focus:outline-none${panelClassName ? ` ${panelClassName}` : ''}`}
       >
         {(title || headerAction) && (
           <header className="flex items-center gap-3 px-4 py-2.5 border-b border-edge/60">

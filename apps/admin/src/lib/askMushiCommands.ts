@@ -107,6 +107,20 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     effect: { kind: 'model-override', model: 'gpt' },
   },
   {
+    command: '/howto',
+    label: 'How-to guide',
+    hint: 'Ask for step-by-step console navigation help.',
+    aliases: ['guide', 'walkthrough', 'steps'],
+    effect: { kind: 'prepend', text: 'Give me step-by-step instructions for:' },
+  },
+  {
+    command: '/goto',
+    label: 'Go to page',
+    hint: 'Find which page has a feature.',
+    aliases: ['find', 'navigate', 'where'],
+    effect: { kind: 'prepend', text: 'Which page should I open to:' },
+  },
+  {
     command: '/clear',
     label: 'Clear conversation',
     hint: 'Start a new thread. Past turns stay in History.',

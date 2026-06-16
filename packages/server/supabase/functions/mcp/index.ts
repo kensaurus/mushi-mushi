@@ -69,6 +69,8 @@
  */
 
 import { withSentry } from '../_shared/sentry.ts'
+import { propagateRequestId } from '../_shared/internal-headers.ts'
+import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from './branding.ts'
 import { parseFeaturesParam, toolMatchesFeatures, type FeatureFilter } from './feature-groups.ts'
@@ -1049,6 +1051,9 @@ interface CallContext {
   /** When `?features=` is set, only tools in those groups are listed/callable. */
   features: FeatureFilter
   projectIdHint?: string
+  requestId: string
+  apiKeyId?: string
+  ownerUserId?: string
 }
 
 function effectiveScope(ctx: CallContext): 'mcp:read' | 'mcp:write' | null {
@@ -1175,6 +1180,7 @@ async function handleToolsCall(
   params: Record<string, unknown>,
   ctx: CallContext,
 ): Promise<unknown> {
+  const started = Date.now()
   const name = params.name
   if (typeof name !== 'string') throw new McpError(ERR_INVALID_PARAMS, 'tools/call requires a string `name`')
   const def = TOOLS[name]
@@ -1196,19 +1202,49 @@ async function handleToolsCall(
     )
   }
   const args = (params.arguments as Record<string, unknown> | undefined) ?? {}
-  const data = await def.handler(args, { authHeaders: ctx.authHeaders, projectIdHint: ctx.projectIdHint })
-  // Modern clients read structuredContent directly (no re-parse). Older
-  // clients fall back to the text content. Only emit structuredContent
-  // when the tool defines an outputSchema AND the data is an object —
-  // a bare array or scalar would fail downstream JSON-Schema validation.
-  const includeStructured = !!def.outputSchema && typeof data === 'object' && data !== null
-  const result: Record<string, unknown> = {
-    content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+
+  const recordOutcome = (status: 'ok' | 'error', errorCode?: string) => {
+    void recordMcpToolInvocation({
+      projectId: ctx.projectIdHint,
+      apiKeyId: ctx.apiKeyId,
+      toolName: name,
+      scope: callerScope,
+      transport: 'hosted',
+      status,
+      durationMs: Date.now() - started,
+      requestId: ctx.requestId,
+      args,
+      errorCode,
+      audit:
+        status === 'ok' && def.scope === 'mcp:write' && ctx.ownerUserId && ctx.projectIdHint
+          ? { actorId: ctx.ownerUserId, action: 'mcp.tool_called' }
+          : undefined,
+    })
   }
-  if (includeStructured) {
-    result.structuredContent = data
+
+  try {
+    const data = await def.handler(args, { authHeaders: ctx.authHeaders, projectIdHint: ctx.projectIdHint })
+    recordOutcome('ok')
+    // Modern clients read structuredContent directly (no re-parse). Older
+    // clients fall back to the text content. Only emit structuredContent
+    // when the tool defines an outputSchema AND the data is an object —
+    // a bare array or scalar would fail downstream JSON-Schema validation.
+    const includeStructured = !!def.outputSchema && typeof data === 'object' && data !== null
+    const result: Record<string, unknown> = {
+      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+    }
+    if (includeStructured) {
+      result.structuredContent = data
+    }
+    return result
+  } catch (err) {
+    const errorCode =
+      err instanceof McpError ? String(err.code)
+      : err instanceof Error && err.message ? err.message.slice(0, 120)
+      : 'INTERNAL'
+    recordOutcome('error', errorCode)
+    throw err
   }
-  return result
 }
 
 function handleResourcesList(): unknown {
@@ -1360,7 +1396,7 @@ TOOLS = {
 // header is present so we can refuse unauth at the MCP edge).
 // ----------------------------------------------------------------------------
 
-async function resolveAuth(req: Request): Promise<CallContext> {
+async function resolveAuth(req: Request, requestId: string): Promise<CallContext> {
   const url = new URL(req.url)
   const readOnlyMode = url.searchParams.get('read_only') === '1'
   const features = parseFeaturesParam(url.searchParams.get('features'))
@@ -1379,7 +1415,7 @@ async function resolveAuth(req: Request): Promise<CallContext> {
     // import @supabase/supabase-js here to keep the bundle tiny — the
     // table query is a single REST call.
     const res = await fetch(
-      `${supabaseUrl}/rest/v1/project_api_keys?key_hash=eq.${encodeURIComponent(keyHash)}&is_active=eq.true&select=project_id,scopes,owner_user_id`,
+      `${supabaseUrl}/rest/v1/project_api_keys?key_hash=eq.${encodeURIComponent(keyHash)}&is_active=eq.true&select=project_id,scopes,owner_user_id,id`,
       {
         headers: {
           apikey: serviceRoleKey,
@@ -1393,6 +1429,7 @@ async function resolveAuth(req: Request): Promise<CallContext> {
       project_id: string
       scopes: string[] | null
       owner_user_id: string | null
+      id: string
     }>
     const row = rows[0]
     if (!row) throw new McpError(ERR_INVALID_REQUEST, 'Invalid or revoked API key')
@@ -1404,15 +1441,21 @@ async function resolveAuth(req: Request): Promise<CallContext> {
       : null
     if (!scope) throw new McpError(ERR_INVALID_REQUEST, 'API key has no MCP scope')
     return {
-      authHeaders: {
-        'X-Mushi-Api-Key': apiKey,
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Mushi-Project-Id': row.project_id,
-      },
+      authHeaders: propagateRequestId(
+        {
+          'X-Mushi-Api-Key': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Mushi-Project-Id': row.project_id,
+        },
+        requestId,
+      ),
       scope,
       readOnlyMode,
       features,
       projectIdHint: row.project_id,
+      requestId,
+      apiKeyId: row.id,
+      ownerUserId: row.owner_user_id ?? undefined,
     }
   }
 
@@ -1425,10 +1468,11 @@ async function resolveAuth(req: Request): Promise<CallContext> {
     // which fails closed if the JWT is bad. JWT callers are owners, so
     // they get the implicit superset scope.
     return {
-      authHeaders: { Authorization: auth },
+      authHeaders: propagateRequestId({ Authorization: auth }, requestId),
       scope: 'mcp:write',
       readOnlyMode,
       features,
+      requestId,
     }
   }
 
@@ -1491,7 +1535,8 @@ async function handler(req: Request): Promise<Response> {
     // (resource changes, dispatch progress) it streams down this pipe.
     let ctx: CallContext
     try {
-      ctx = await resolveAuth(req)
+      const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
+      ctx = await resolveAuth(req, requestId)
     } catch (err) {
       const e = err as McpError
       return new Response(
@@ -1599,9 +1644,10 @@ async function handler(req: Request): Promise<Response> {
     )
   }
 
+  const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
   let ctx: CallContext
   try {
-    ctx = await resolveAuth(req)
+    ctx = await resolveAuth(req, requestId)
   } catch (err) {
     const e = err as McpError
     return new Response(

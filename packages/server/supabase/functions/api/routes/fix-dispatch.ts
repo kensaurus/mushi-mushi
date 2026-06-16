@@ -201,8 +201,8 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
       // progress. EdgeRuntime.waitUntil keeps the worker alive after the
       // dispatch response returns. If the worker invocation fails, the dispatch
       // row sits in 'queued' until a future cron-driven retry picks it up.
-      invokeFixWorker(job.id).catch((err) => {
-        console.warn('[fix-dispatch] worker invocation failed', {
+      invokeFixWorker(job.id, c.get('requestId') as string | undefined).catch((err) => {
+        log.warn('fix-dispatch worker invocation failed', {
           dispatchId: job.id,
           err: String(err),
         });
@@ -342,22 +342,19 @@ export function registerFixDispatchRoutes(app: Hono<{ Variables: Variables }>): 
 
     // Best-effort audit log. Failures here don't abort the cancel — the user
     // needs their cancel confirmed even if audit pipeline is having a bad day.
-    db.from('audit_logs')
-      .insert({
-        project_id: job.project_id,
-        actor_id: userId,
-        actor_email: userEmail,
-        action: 'fix_dispatch.cancelled',
-        resource_type: 'fix_dispatch_job',
-        resource_id: dispatchId,
-        metadata: {
-          previous_status: job.status,
-          fix_attempt_id: job.fix_attempt_id,
-        },
-      })
-      .then(({ error: auditErr }) => {
-        if (auditErr) console.warn('[audit_logs] cancel insert failed:', auditErr.message);
-      });
+    void logAudit(
+      db,
+      job.project_id,
+      userId,
+      'fix_dispatch.cancelled',
+      'fix_dispatch_job',
+      dispatchId,
+      {
+        previous_status: job.status,
+        fix_attempt_id: job.fix_attempt_id,
+      },
+      { email: userEmail ?? undefined },
+    );
 
     return c.json({ ok: true, data: { id: updated.id, status: updated.status } });
   });

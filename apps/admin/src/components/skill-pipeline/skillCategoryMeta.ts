@@ -18,7 +18,6 @@ import {
   IconShield,
   IconSkills,
   IconSliders,
-  IconSparkle,
   IconStorage,
   IconTerminal,
 } from '../icons'
@@ -65,7 +64,7 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
   enhance: {
     label: 'Enhance',
     hint: 'Polish UI, UX, SEO, PWA, and post-launch iteration',
-    Icon: IconSparkle,
+    Icon: IconSliders,
     badgeClass: 'bg-rose-500/15 text-rose-400',
     accentClass: 'border-l-rose-500/50',
   },
