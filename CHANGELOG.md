@@ -29,6 +29,15 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 - **Server** — (Supabase, mushi-mushi project): three new SECURITY DEFINER RPCs — `mushi_link_reporter_token`, `mushi_get_my_cross_app_reports`, `mushi_get_my_reputation`; magic-link route; public leaderboard route. Deployed + verified on remote.
 - **Community footer** — added to the category-select step: "Join community" entry-point + leaderboard shortcut.
 
+## v1.13.x
+
+Latest tag: `v1.13.0`
+
+### Packages bumped
+
+- `@mushi-mushi/core` → 1.13.0
+- `@mushi-mushi/web` → 1.13.0
+
 ## v1.12.x
 
 Latest tag: `v1.12.1`
