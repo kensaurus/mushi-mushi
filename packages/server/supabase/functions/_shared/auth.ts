@@ -264,6 +264,65 @@ function recordOrgMemberActivity(opts: {
     })
 }
 
+async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
+  const db = getServiceClient()
+  const keyHash = await hashApiKey(apiKey)
+  const { data, error } = await db
+    .from('project_api_keys')
+    .select('project_id, is_active, scopes, owner_user_id, projects!inner(name)')
+    .eq('key_hash', keyHash)
+    .eq('is_active', true)
+    .single()
+  if (error || !data) return null
+  return data as unknown as ApiKeyRow
+}
+
+async function authenticateApiKey(
+  c: Context,
+  apiKey: string,
+  requiredScope: McpScope,
+): Promise<Response | null> {
+  const keyRow = await lookupActiveApiKey(apiKey)
+  if (!keyRow) {
+    return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
+  }
+
+  const scopes = keyRow.scopes ?? []
+  const grants = scopes.includes(requiredScope) ||
+    (requiredScope === 'mcp:read' && scopes.includes('mcp:write'))
+  if (!grants) {
+    return c.json(
+      {
+        error: {
+          code: 'INSUFFICIENT_SCOPE',
+          message: `API key is missing required scope "${requiredScope}". Mint a new key with the correct scope or upgrade this one in the admin console.`,
+        },
+      },
+      403,
+    )
+  }
+
+  const ownerId = keyRow.owner_user_id
+  if (!ownerId) {
+    return c.json(
+      {
+        error: {
+          code: 'KEY_NOT_MIGRATED',
+          message: 'API key is missing owner metadata. Rotate the key to regenerate it.',
+        },
+      },
+      401,
+    )
+  }
+
+  c.set('userId', ownerId)
+  c.set('projectId', keyRow.project_id)
+  c.set('projectName', keyRow.projects?.name ?? 'Unknown')
+  c.set('apiKeyScopes', scopes)
+  c.set('authMethod', 'apiKey')
+  return null
+}
+
 /**
  * Middleware: validate API key from X-Mushi-Api-Key header.
  * Sets projectId and projectName on the Hono context. Records an SDK
@@ -274,7 +333,7 @@ function recordOrgMemberActivity(opts: {
  * accepts either an API key OR a user JWT and enforces scope.
  */
 export async function apiKeyAuth(c: Context, next: Next) {
-  const apiKey = c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project')
+  const apiKey = c.req.header('X-Mushi-Api-Key')
 
   if (!apiKey) {
     return c.json({ error: { code: 'MISSING_API_KEY', message: 'X-Mushi-Api-Key header required' } }, 401)
@@ -398,61 +457,26 @@ export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
   const requiredScope: McpScope = options.scope ?? 'mcp:read'
 
   return async function middleware(c: Context, next: Next) {
-    const apiKey = c.req.header('X-Mushi-Api-Key')
-    if (apiKey) {
-      const db = getServiceClient()
-      const keyHash = await hashApiKey(apiKey)
+    const explicitKey = c.req.header('X-Mushi-Api-Key')
+    const bearer = c.req.header('Authorization')?.startsWith('Bearer ')
+      ? c.req.header('Authorization')!.slice(7)
+      : null
 
-      const { data, error } = await db
-        .from('project_api_keys')
-        .select('project_id, is_active, scopes, owner_user_id, projects!inner(name)')
-        .eq('key_hash', keyHash)
-        .eq('is_active', true)
-        .single()
-
-      const keyRow = data as ApiKeyRow | null
-      if (error || !keyRow) {
-        return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
-      }
-
-      const scopes = keyRow.scopes ?? []
-      const grants = scopes.includes(requiredScope) ||
-        (requiredScope === 'mcp:read' && scopes.includes('mcp:write'))
-      if (!grants) {
-        return c.json(
-          {
-            error: {
-              code: 'INSUFFICIENT_SCOPE',
-              message: `API key is missing required scope "${requiredScope}". Mint a new key with the correct scope or upgrade this one in the admin console.`,
-            },
-          },
-          403,
-        )
-      }
-
-      const ownerId = keyRow.owner_user_id
-      if (!ownerId) {
-        // The denorm trigger runs on insert/update; a NULL here means a row
-        // predates the scope migration and was not backfilled. Fail closed —
-        // we can't safely scope queries without an owner id.
-        return c.json(
-          {
-            error: {
-              code: 'KEY_NOT_MIGRATED',
-              message: 'API key is missing owner metadata. Rotate the key to regenerate it.',
-            },
-          },
-          401,
-        )
-      }
-
-      c.set('userId', ownerId)
-      c.set('projectId', keyRow.project_id)
-      c.set('projectName', keyRow.projects?.name ?? 'Unknown')
-      c.set('apiKeyScopes', scopes)
-      c.set('authMethod', 'apiKey')
+    if (explicitKey) {
+      const authErr = await authenticateApiKey(c, explicitKey, requiredScope)
+      if (authErr) return authErr
       await next()
       return
+    }
+
+    if (bearer) {
+      const keyRow = await lookupActiveApiKey(bearer)
+      if (keyRow) {
+        const authErr = await authenticateApiKey(c, bearer, requiredScope)
+        if (authErr) return authErr
+        await next()
+        return
+      }
     }
 
     // Fall through to JWT — keeps existing console flows unchanged.

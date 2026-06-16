@@ -146,8 +146,18 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/mcp"><img src="./screenshots/mcp-dark.png" alt="MCP — Model Context Protocol page, 60-second 3-step bootstrap card, Install snippet card." /></a>
-    <p align="center"><b>MCP — Model Context Protocol</b> · <sub>per-project <code>.cursor/mcp.json</code> snippet pre-filled with the active <code>MUSHI_PROJECT_ID</code>, 13-tool catalog, 60s 3-step agent bootstrap.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/admin/connect"><img src="./screenshots/connect-dark.png" alt="Connect & Update — GitHub status, SDK install card with framework tabs and live banner preview, MCP Add to Cursor, CLI copy, Create Upgrade PR." /></a>
+    <p align="center"><b>Connect & Update</b> · <sub>June 2026 hub — GitHub link, SDK snippet, MCP deeplinks, CLI install, and semver-only upgrade PRs via <code>sdk-upgrade-worker</code></sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/skills"><img src="./screenshots/skills-dark.png" alt="Skill Pipelines — 85-skill catalog from cursor-kenji, workflow bundles, pipeline runs tab." /></a>
+    <p align="center"><b>Skill Pipelines</b> · <sub>skills.sh-compatible catalog synced daily; attach a skill chain to a report and stream step status over Realtime — handoff or Cursor Cloud mode</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/mcp"><img src="./screenshots/mcp-dark.png" alt="MCP — Model Context Protocol page with Add to Cursor deeplink, feature-group selector, and 72-tool catalog synced from packages/mcp/src/catalog.ts." /></a>
+    <p align="center"><b>MCP — Model Context Protocol</b> · <sub>lean default (<code>triage,fixes,inventory,setup,docs</code>), one-click Cursor deeplink, hosted Streamable HTTP at <code>/functions/v1/mcp</code>, catalog parity guarded by <code>pnpm check:catalog-sync</code>. The same install block also lives on <a href="https://kensaur.us/mushi-mushi/admin/connect">Connect & Update</a>.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/admin/integrations"><img src="./screenshots/integrations-dark.png" alt="Integrations page — Sentry / Langfuse / GitHub health-checked probes, Codebase indexing card, ROUTING DESTINATIONS." /></a>

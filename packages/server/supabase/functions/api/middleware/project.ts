@@ -25,6 +25,15 @@ export async function requireProjectAccess(
     return next()
   }
 
+  const authMethod = c.get('authMethod') as string | undefined
+  if (authMethod === 'apiKey') {
+    const bound = c.get('projectId') as string | undefined
+    if (!bound || projectId !== bound) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'Access to this project is not allowed' } }, 403)
+    }
+    return next()
+  }
+
   const userId = c.get('userId')
   if (!userId) {
     return c.json({ error: { code: 'UNAUTHENTICATED', message: 'Authentication required' } }, 401)

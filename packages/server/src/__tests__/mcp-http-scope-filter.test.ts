@@ -39,7 +39,12 @@ describe('mcp http edge function — scope filter parity (B3)', () => {
   })
 
   it('handleToolsCall delegates the scope check to isToolGrantedToScope (single source of truth)', () => {
-    expect(SOURCE).toMatch(/if \(!isToolGrantedToScope\(def\.scope, ctx\.scope\)\)/)
+    // The call path resolves the caller's scope via effectiveScope(ctx) so a
+    // read_only-mode mcp:write key is correctly downgraded to read before the
+    // grant check. Assert the guard runs against that resolved scope, not the
+    // raw ctx.scope.
+    expect(SOURCE).toMatch(/const callerScope = effectiveScope\(ctx\)/)
+    expect(SOURCE).toMatch(/if \(!isToolGrantedToScope\(def\.scope, callerScope\)\)/)
   })
 })
 

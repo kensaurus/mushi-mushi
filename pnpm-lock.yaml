@@ -53,6 +53,9 @@ importers:
       '@mushi-mushi/marketing-ui':
         specifier: workspace:*
         version: link:../../packages/marketing-ui
+      '@mushi-mushi/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mushi-mushi/web':
         specifier: workspace:*
         version: link:../../packages/web

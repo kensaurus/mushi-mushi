@@ -3,6 +3,8 @@ package dev.mushimushi.sdk
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.content.Intent
@@ -10,6 +12,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -226,6 +229,16 @@ object Mushi {
 
         val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
         val accent = runCatching { Color.parseColor(cfg.theme.accentColor) }.getOrDefault(Color.parseColor("#22C55E"))
+        val resolvedDark = when {
+            cfg.theme.inherit -> {
+                val nightMode = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                nightMode == Configuration.UI_MODE_NIGHT_YES
+            }
+            else -> cfg.theme.dark
+        }
+        val density = activity.resources.displayMetrics.density
+        val sizePx = (56 * density).toInt()
+
         val button = TextView(activity).apply {
             text = "\uD83D\uDC1B"
             textSize = 22f
@@ -235,21 +248,106 @@ object Mushi {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 28f
-                setColor(if (cfg.theme.dark) Color.BLACK else Color.WHITE)
+                setColor(if (resolvedDark) Color.BLACK else Color.WHITE)
                 setStroke(2, accent)
             }
-            setOnClickListener { showWidget() }
         }
-        val density = activity.resources.displayMetrics.density
-        val size = (56 * density).toInt()
-        val inset = cfg.triggerInset
-        val marginStart = ((inset.startDp ?: 20) * density).toInt()
-        val marginEnd = ((inset.endDp ?: 20) * density).toInt()
-        val bottom = (inset.bottomDp * density).toInt()
-        root.addView(button, FrameLayout.LayoutParams(size, size).apply {
-            gravity = Gravity.BOTTOM or if (inset.startDp != null) Gravity.START else Gravity.END
-            setMargins(marginStart, marginStart, marginEnd, bottom)
-        })
+
+        val dragCfg = cfg.draggable
+        if (dragCfg != null && dragCfg.enabled) {
+            val prefs: SharedPreferences = activity.getSharedPreferences("mushi_fab_prefs", Context.MODE_PRIVATE)
+            val savedX = if (dragCfg.persist) prefs.getFloat("fab_x", Float.NaN) else Float.NaN
+            val savedY = if (dragCfg.persist) prefs.getFloat("fab_y", Float.NaN) else Float.NaN
+            val inset = cfg.triggerInset
+            val defaultX = (root.width - sizePx - (inset.endDp ?: 20) * density).toFloat()
+            val defaultY = (root.height - sizePx - inset.bottomDp * density).toFloat()
+            val startX = if (!savedX.isNaN()) savedX else defaultX
+            val startY = if (!savedY.isNaN()) savedY else defaultY
+
+            root.addView(button, FrameLayout.LayoutParams(sizePx, sizePx))
+            // After layout, position the view
+            button.post {
+                val parentW = root.width.toFloat()
+                val parentH = root.height.toFloat()
+                val cx = startX.coerceIn(0f, parentW - sizePx)
+                val cy = startY.coerceIn(0f, parentH - sizePx)
+                button.translationX = cx
+                button.translationY = cy
+            }
+
+            var lastDownX = 0f
+            var lastDownY = 0f
+            var viewStartX = 0f
+            var viewStartY = 0f
+            var isDragging = false
+
+            button.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        isDragging = false
+                        lastDownX = event.rawX
+                        lastDownY = event.rawY
+                        viewStartX = v.translationX
+                        viewStartY = v.translationY
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - lastDownX
+                        val dy = event.rawY - lastDownY
+                        if (!isDragging && (Math.abs(dx) > 12 || Math.abs(dy) > 12)) {
+                            isDragging = true
+                        }
+                        if (isDragging) {
+                            val parentW = root.width.toFloat()
+                            val parentH = root.height.toFloat()
+                            val newX = (viewStartX + dx).coerceIn(0f, parentW - sizePx)
+                            val newY = (viewStartY + dy).coerceIn(0f, parentH - sizePx)
+                            v.translationX = newX
+                            v.translationY = newY
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (isDragging) {
+                            val parentW = root.width.toFloat()
+                            var finalX = v.translationX
+                            val finalY = v.translationY
+                            if (dragCfg.snapToEdge) {
+                                finalX = if (finalX + sizePx / 2 < parentW / 2) {
+                                    0f
+                                } else {
+                                    parentW - sizePx
+                                }
+                                v.animate().translationX(finalX).translationY(finalY).setDuration(200).start()
+                            }
+                            if (dragCfg.persist) {
+                                prefs.edit()
+                                    .putFloat("fab_x", finalX)
+                                    .putFloat("fab_y", finalY)
+                                    .apply()
+                            }
+                        } else {
+                            // Tap: show widget
+                            showWidget()
+                        }
+                        isDragging = false
+                        true
+                    }
+                    else -> false
+                }
+            }
+        } else {
+            button.setOnClickListener { showWidget() }
+            val inset = cfg.triggerInset
+            val marginStart = ((inset.startDp ?: 20) * density).toInt()
+            val marginEnd = ((inset.endDp ?: 20) * density).toInt()
+            val bottom = (inset.bottomDp * density).toInt()
+            root.addView(button, FrameLayout.LayoutParams(sizePx, sizePx).apply {
+                gravity = Gravity.BOTTOM or if (inset.startDp != null) Gravity.START else Gravity.END
+                setMargins(marginStart, marginStart, marginEnd, bottom)
+            })
+        }
+
         floatingButton = button
         floatingButtonOwner = activity
     }

@@ -10,12 +10,12 @@
 import { Hono } from 'npm:hono@4'
 import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
-import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 // Keep in sync with packages/mcp/src/catalog.ts counts.
 // Update when tools/resources/prompts are added.
-const TOOL_COUNT = 73
+const TOOL_COUNT = 72
 const RESOURCE_COUNT = 8
 const PROMPT_COUNT = 4
 
@@ -212,7 +212,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
 
     // JWT caller: return all projects owned by this user
     const userId = c.get('userId') as string
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
 
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { projects: [], total: 0 } })
@@ -271,7 +271,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       // JWT callers: verify ownership
       if (authMethod === 'jwt') {
         const userId = c.get('userId') as string
-        const ownedIds = await ownedProjectIds(db, userId)
+        const ownedIds = await callerProjectIds(c, db, userId)
         if (!ownedIds.includes(targetProjectId)) {
           return c.json(
             { ok: false, error: { code: 'NOT_FOUND', message: 'Project not found.' } },
@@ -374,7 +374,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       if (service === 'all' || service === 'qa-story-runner') {
         let qsr = db
           .from('qa_story_runs')
-          .select('id, status, error_message, latency_ms, started_at, completed_at, story_id')
+          .select('id, status, error_message, latency_ms, started_at, finished_at, story_id')
           .eq('project_id', targetProjectId)
           .order('started_at', { ascending: false })
           .limit(Math.min(limit, 50))
@@ -392,7 +392,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
           error_message: string | null
           latency_ms: number | null
           started_at: string | null
-          completed_at: string | null
+          finished_at: string | null
           story_id: string | null
         }>
         for (const run of storyRuns ?? []) {
@@ -406,7 +406,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
             message: isFailed
               ? `QA run failed: ${(run.error_message as string | null) ?? 'unknown error'}`
               : `QA run ${run.status as string} (${run.latency_ms as number | null}ms)`,
-            ts: (run.started_at ?? run.completed_at) as string,
+            ts: (run.started_at ?? run.finished_at) as string,
           })
         }
       }
@@ -428,4 +428,86 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       })
     },
   )
+
+  /** Live probe of hosted MCP — mints a short-lived read key server-side (no browser secret handling). */
+  parent.get('/v1/admin/mcp/test-connection', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const resolved = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'Select a project first.' } }, 400),
+    })
+    if ('response' in resolved) return resolved.response
+    const projectId = resolved.project.id as string
+
+    const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
+    const prefix = rawKey.slice(0, 12)
+    const keyHash = Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))),
+    )
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+
+    const { error: insertErr } = await db.from('project_api_keys').insert({
+      project_id: projectId,
+      key_hash: keyHash,
+      key_prefix: prefix,
+      label: 'mcp-test-probe',
+      scopes: ['mcp:read'],
+      is_active: true,
+    })
+    if (insertErr) return dbError(c, insertErr)
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    if (!supabaseUrl) {
+      return c.json({ ok: false, error: { code: 'MISCONFIGURED', message: 'SUPABASE_URL not set' } }, 500)
+    }
+
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/mcp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${rawKey}`,
+          'X-Mushi-Api-Key': rawKey,
+          'X-Mushi-Project-Id': projectId,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {},
+        }),
+      })
+      const body = (await res.json()) as {
+        result?: { tools?: unknown[] }
+        error?: { message?: string }
+      }
+      const count = body.result?.tools?.length ?? 0
+      if (!res.ok || body.error) {
+        return c.json({
+          ok: false,
+          error: {
+            code: 'MCP_PROBE_FAILED',
+            message: body.error?.message ?? `HTTP ${res.status} from hosted MCP`,
+          },
+        }, 502)
+      }
+      return c.json({
+        ok: true,
+        data: {
+          tool_count: count,
+          expected: TOOL_COUNT,
+          healthy: count >= TOOL_COUNT,
+        },
+      })
+    } finally {
+      await db
+        .from('project_api_keys')
+        .update({ is_active: false })
+        .eq('key_hash', keyHash)
+    }
+  })
 }

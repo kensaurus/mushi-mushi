@@ -33,7 +33,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, parseUuidParam } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -78,7 +78,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -471,7 +471,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     // Scope: every project the caller can access (owner OR org member).
     // Optional projectId narrows further; we still require it to be inside
     // the accessible set so a member can't NL-query a project they don't see.
-    let projectIds = await ownedProjectIds(db, userId);
+    let projectIds = await callerProjectIds(c, db, userId);
     if (body.projectId) {
       if (!projectIds.includes(body.projectId)) {
         return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
@@ -539,11 +539,13 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   });
 
   app.get('/v1/admin/reports/:id', adminOrApiKey(), async (c) => {
-    const reportId = c.req.param('id')!;
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const reportId = idParsed.value;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const { data, error } = await db
       .from('reports')
@@ -632,11 +634,13 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
 
   // Unified timeline — merges reporter comments, fixes, QA, pipelines, Ask Mushi.
   app.get('/v1/admin/reports/:id/timeline', adminOrApiKey(), async (c) => {
-    const reportId = c.req.param('id')!;
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const reportId = idParsed.value;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const { data: report, error } = await db
       .from('reports')
@@ -655,12 +659,14 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   });
 
   app.patch('/v1/admin/reports/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
-    const reportId = c.req.param('id')!;
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const reportId = idParsed.value;
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const allowedFields: Record<string, boolean> = {
       status: true,
@@ -820,7 +826,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     }
 
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json(
         { ok: false, error: { code: 'NO_PROJECTS', message: 'No accessible projects for this user' } },
@@ -1065,7 +1071,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     // Scope every write to projects this admin can still access so a stolen
     // undo call can't rewrite history across account boundaries. Teams v1:
     // org members with read access can also undo their own actions.
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json(
         { ok: false, error: { code: 'NO_PROJECTS', message: 'No accessible projects for this user' } },
@@ -1201,7 +1207,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       lastActivityKind: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -1462,7 +1468,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       lastActivityKind: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -1664,7 +1670,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     // Teams v1: dashboard shows every project the caller can access (owner
     // OR org member). The project name list is also returned to the FE so
     // the dashboard can render per-project breakouts — fetch both shapes.
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { empty: true } });
     }
@@ -2107,7 +2113,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -2260,7 +2266,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     // per project then bucket-merge in JS — RPC isn't variadic over project_ids.
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { weeks: [] } });
 
     const perProject = await Promise.all(
@@ -2318,7 +2324,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   app.get('/v1/admin/judge/evaluations', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { evaluations: [] } });
 
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200);
@@ -2389,7 +2395,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   app.get('/v1/admin/judge/distribution', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0)
       return c.json({ ok: true, data: { buckets: Array(10).fill(0), total: 0 } });
 
@@ -2412,7 +2418,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   app.post('/v1/admin/judge/run', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404);
     }
@@ -2439,7 +2445,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   app.get('/v1/admin/judge/prompts', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { prompts: [] } });
 
     const { data } = await db
@@ -2489,7 +2495,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
     const projectRes = await db
@@ -2589,7 +2595,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
   app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     // Prompts: include global defaults (project_id IS NULL) + this user's own.
     // §4: also expose auto-generated metadata + parent_version_id so the
@@ -2713,7 +2719,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string;
     const body = await c.req.json().catch(() => ({}));
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json(
         {
@@ -2771,7 +2777,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const id = c.req.param('id')!;
     const body = await c.req.json().catch(() => ({}));
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     const { data: existing } = await db
@@ -2836,7 +2842,7 @@ export function registerReportsDashboardRoutes(app: Hono<{ Variables: Variables 
     const userId = c.get('userId') as string;
     const id = c.req.param('id')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     const { data: existing } = await db
       .from('prompt_versions')

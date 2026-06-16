@@ -10,15 +10,17 @@ can execute without additional context.
 
 ## Agent Inventory
 
-<sub>16 pipeline agents · 45 edge functions · 241 SQL migrations — updated Jun 12 2026 (wave t: skill-driven triage pipelines — skill-sync agent + 4 new tables + MCP tools + CLI commands).</sub>
+<sub>18 pipeline agents · 47 edge functions · 243 SQL migrations — updated Jun 16 2026 (one-click SDK install & upgrade: sdk-upgrade-worker + sdk-versions-cron + Connect & Update hub + SdkUpgradeCTA PR action).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
-| `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix; auto-readies PR via GraphQL `markPullRequestAsReady` |
+| `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix; auto-readies PR via GraphQL `markPullRequestAsReady`. Refactored to import branch/commit/PR helpers from `_shared/github-pr.ts`. |
+| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
+| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. `requireServiceRoleAuth`. |
 | `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
-| `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | **NEW** Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
-| `test-gen-from-story` | `supabase/functions/test-gen-from-story/` | POST /stories/:id/generate-test | **NEW** User story → Playwright TypeScript test + Firecrawl YAML + draft GitHub PR + `qa_stories` row; gated by `automation_mode` |
+| `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
+| `test-gen-from-story` | `supabase/functions/test-gen-from-story/` | POST /stories/:id/generate-test | User story → Playwright TypeScript test + Firecrawl YAML + draft GitHub PR + `qa_stories` row; gated by `automation_mode` |
 | `test-gen-from-report` | `supabase/functions/test-gen-from-report/` | manual | LLM generates a Playwright test from a bug report + opens a PR |
 | `pdca-runner` | `supabase/functions/pdca-runner/` | queued runs / cron | Producer/Critic PDCA loop; **mode=qa_story_improve** analyzes failed qa_story_runs and proposes improved tests (source=pdca) |
 | `inventory-crawler` | `supabase/functions/inventory-crawler/` | cron / manual | Crawls app routes to populate `inventory_nodes` |
@@ -28,8 +30,8 @@ can execute without additional context.
 | `qa-story-runner` | `supabase/functions/qa-story-runner/` | cron (every minute) | Executes QA Coverage stories via Firecrawl / Browserbase / local; gates on `approval_status = 'approved'` |
 | `intelligence-report` | `supabase/functions/intelligence-report/` | cron | Weekly LLM narrative from KPI trends |
 | `a2a-push-notify` | `supabase/functions/a2a-push-notify/` | manual / other agents | Sends A2A protocol notifications to connected agents |
-| `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | **NEW** Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
-| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | **NEW** Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/cursor-kenji), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
+| `backend-drift-scanner` | `supabase/functions/backend-drift-scanner/` | cron daily 03:05 UTC | Snapshots each linked project's Supabase schema via read-only MCP, diffs vs previous snapshot, writes `gate_findings` of type `schema_drift` for dropped columns / missing RLS / unexpected table changes |
+| `skill-sync` | `supabase/functions/skill-sync/` | cron daily + POST /v1/admin/skills/sources/:id/sync | Fetches SKILL.md files from allowlisted GitHub repos (any skills.sh-compatible repo, default: kensaurus/cursor-kenji), parses frontmatter + chain_slugs, embeds descriptions (pgvector), upserts `agent_skills` catalog; secret-pattern scan guard; drives `classify-report` Stage 2 skill recommendation |
 
 ---
 
@@ -345,6 +347,68 @@ mushi fixes merge <fixId> [--method squash|merge|rebase]
 
 Admin UI: `MergeFixPreflight`, `FixCiFeedback`, `pickPrimaryFixAttempt()` in
 `apps/admin/src/lib/mergeFix.ts`.
+
+---
+
+## One-click SDK Install & Upgrade (Jun 2026)
+
+Extends the "one-click MCP install" to **SDK/CLI install and upgrades**. The
+headline capability is a **"Create Upgrade PR"** that opens a reviewed GitHub PR
+bumping `@mushi-mushi/*` in the connected repo, reusing the existing GitHub App
++ draft-PR machinery.
+
+### Architecture
+
+```
+Console "Create Upgrade PR" button
+ → POST /v1/admin/projects/:pid/sdk-upgrade (sdk-upgrade route)
+ → insert sdk_upgrade_jobs (queued)
+ → waitUntil → invoke sdk-upgrade-worker
+ → worker: resolveProjectGithubToken + Contents API + computeBumpPlan
+ → createPrFromFiles (_shared/github-pr.ts) → draft PR → markReady
+ → pr_url stored in sdk_upgrade_jobs
+ → GET /stream SSE polling → Console status chip → PR link
+```
+
+### New API routes
+
+| Route | Auth | Description |
+| ----- | ---- | ----------- |
+| `POST /v1/admin/projects/:pid/sdk-upgrade` | `adminOrApiKey(mcp:write)` | Enqueue upgrade job; fire-and-forget worker |
+| `GET /v1/admin/projects/:pid/sdk-upgrade/:id` | `adminOrApiKey(mcp:write)` | Poll job status |
+| `GET /v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey(mcp:write)` | SSE status stream |
+
+### New tables
+
+| Table | Purpose |
+|-------|---------|
+| `sdk_upgrade_jobs` | Tracks upgrade PR jobs; columns: `id, project_id, requested_by, status, pr_url, pr_number, branch, commit_sha, plan jsonb, error, timestamps`. RLS: service-role only. |
+
+### Shared modules
+
+| File | Role |
+|------|------|
+| `_shared/sdk-upgrade-plan.ts` | Pure `computeBumpPlan(pkg, latestVersions)` — mirrors CLI's `planUpgrade()` guards. Never replaces `workspace:` / `file:` / git specifiers. Always uses live npm registry at PR time. |
+| `_shared/github-pr.ts` | Generic `createPrFromFiles()` + `ghFetch` / `ghFetchOptional`. Shared by `fix-worker` and `sdk-upgrade-worker`. |
+
+### Frontend surfaces
+
+| Surface | Location | What it adds |
+|---------|----------|-------------|
+| `ConnectPage` | `apps/admin/src/pages/ConnectPage.tsx` (route `/connect`) | Unified hub: GitHub connect → SDK install → MCP install → CLI install → Update center with "Create Upgrade PR" |
+| `SdkUpgradeCTA` | `apps/admin/src/components/SdkUpgradeCTA.tsx` | Primary "Create Upgrade PR" button (when `projectId` supplied + GitHub connected); copy-cmd fallback always present |
+| `SdkUpgradeBanner` | `apps/admin/src/components/dashboard/SdkUpgradeBanner.tsx` | Dashboard nudge when active project SDK is outdated/deprecated |
+| `McpInstallButtons` | `apps/admin/src/components/McpInstallButtons.tsx` | Extracted from `McpPage` — reusable "Add to Cursor / VS Code" deeplink buttons |
+| `useSdkUpgrade` | `apps/admin/src/lib/useSdkUpgrade.ts` | React hook mirroring `useDispatchFix`: POST → SSE stream with poll fallback |
+
+### sdk_versions catalog sync
+
+The `sdk_versions` catalog is kept fresh via two paths:
+1. **publish-time** — `release.yml` runs `scripts/sync-sdk-versions.mjs` after
+   Changesets publish, posting the exact published versions via Supabase REST.
+2. **daily cron** — `sdk-versions-cron` edge function (02:30 UTC) queries the
+   npm registry for every `@mushi-mushi/*` package and upserts the latest stable
+   version. Backstop for publish-time sync failures.
 
 ---
 

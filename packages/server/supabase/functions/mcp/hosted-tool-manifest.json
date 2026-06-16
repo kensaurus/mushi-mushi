@@ -1,0 +1,355 @@
+{
+  "get_report_timeline": {
+    "scope": "mcp:read",
+    "description": "Ordered timeline for a report (comments, fixes, QA, status).",
+    "method": "GET",
+    "path": "/v1/sync/reports/{reportId}/timeline",
+    "required": ["reportId"]
+  },
+  "get_similar_bugs": {
+    "scope": "mcp:read",
+    "description": "Find similar bugs via pgvector search.",
+    "method": "POST",
+    "path": "/v1/admin/reports/similarity",
+    "required": ["query"],
+    "body": { "query": "{query}", "k": "{limit|5}", "threshold": 0.3, "projectId": "{projectIdHint}" }
+  },
+  "inventory_diff": {
+    "scope": "mcp:read",
+    "description": "Diff two inventory commits.",
+    "method": "GET",
+    "path": "/v1/admin/inventory/{projectId}/diff?from={fromSha}&to={toSha}",
+    "required": ["fromSha", "toSha"]
+  },
+  "graph_neighborhood": {
+    "scope": "mcp:read",
+    "description": "BFS graph neighborhood around a node.",
+    "method": "GET",
+    "path": "/v1/admin/graph/traverse?seed={seed}&depth={depth|2}"
+  },
+  "fix_suggest": {
+    "scope": "mcp:read",
+    "description": "Stage-2 suggested fix slice for a report.",
+    "method": "GET",
+    "path": "/v1/admin/reports/{reportId}",
+    "required": ["reportId"],
+    "transform": "fix_suggest"
+  },
+  "diagnose_connection": {
+    "scope": "mcp:read",
+    "description": "Validate MCP credentials and ingest/dispatch readiness.",
+    "method": "GET",
+    "path": "/v1/sync/ingest-setup",
+    "transform": "diagnose_connection"
+  },
+  "submit_fix_result": {
+    "scope": "mcp:write",
+    "description": "Record a fix outcome from an external agent.",
+    "method": "POST",
+    "path": "/v1/admin/fixes",
+    "required": ["reportId"],
+    "bodyPassthrough": true
+  },
+  "trigger_judge": {
+    "scope": "mcp:write",
+    "description": "Run Sonnet-as-Judge batch.",
+    "method": "POST",
+    "path": "/v1/admin/judge/run",
+    "bodyPassthrough": true
+  },
+  "test_gen_from_report": {
+    "scope": "mcp:write",
+    "description": "Generate Playwright test from report.",
+    "method": "POST",
+    "path": "/v1/admin/inventory/{projectId}/test-gen/from-report/{reportId}",
+    "required": ["reportId"]
+  },
+  "merge_fix": {
+    "scope": "mcp:write",
+    "description": "Squash-merge a fix PR.",
+    "method": "POST",
+    "path": "/v1/admin/fixes/{fixId}/merge",
+    "required": ["fixId"]
+  },
+  "refresh_ci": {
+    "scope": "mcp:read",
+    "description": "Refresh GitHub CI status for a fix.",
+    "method": "POST",
+    "path": "/v1/admin/fixes/{fixId}/refresh-ci",
+    "required": ["fixId"]
+  },
+  "reopen_report": {
+    "scope": "mcp:write",
+    "description": "Reopen a report for regression triage.",
+    "method": "PATCH",
+    "path": "/v1/sync/reports/{reportId}",
+    "required": ["reportId"],
+    "body": { "status": "reopened", "note": "{note}" }
+  },
+  "list_top_contributors": {
+    "scope": "mcp:read",
+    "description": "Top contributors leaderboard.",
+    "method": "GET",
+    "path": "/v1/admin/rewards/leaderboard?range={range|30d}&limit={limit|10}"
+  },
+  "award_bonus_points": {
+    "scope": "mcp:write",
+    "description": "Award bonus points to a contributor.",
+    "method": "POST",
+    "path": "/v1/admin/rewards/bonus-points",
+    "required": ["external_user_id", "points", "reason"],
+    "bodyPassthrough": true
+  },
+  "set_tier": {
+    "scope": "mcp:write",
+    "description": "Override contributor tier.",
+    "method": "POST",
+    "path": "/v1/admin/rewards/set-tier",
+    "bodyPassthrough": true
+  },
+  "setup_repo_for_mushi": {
+    "scope": "mcp:write",
+    "description": "Bootstrap Mushi repo files.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/repo/bootstrap",
+    "body": {}
+  },
+  "get_account_overview": {
+    "scope": "mcp:read",
+    "description": "Account overview for all accessible projects.",
+    "method": "GET",
+    "path": "/v1/admin/mcp/projects"
+  },
+  "project_dashboard": {
+    "scope": "mcp:read",
+    "description": "PDCA dashboard snapshot.",
+    "method": "GET",
+    "path": "/v1/admin/dashboard"
+  },
+  "project_stats": {
+    "scope": "mcp:read",
+    "description": "Report counts and breakdown.",
+    "method": "GET",
+    "path": "/v1/admin/stats"
+  },
+  "project_settings": {
+    "scope": "mcp:read",
+    "description": "Project configuration.",
+    "method": "GET",
+    "path": "/v1/admin/settings"
+  },
+  "privacy_status": {
+    "scope": "mcp:read",
+    "description": "Privacy posture for the project.",
+    "method": "GET",
+    "path": "/v1/admin/privacy-status"
+  },
+  "evolution_history": {
+    "scope": "mcp:read",
+    "description": "Evolution loop history.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/evolution-history"
+  },
+  "activation_status": {
+    "scope": "mcp:read",
+    "description": "Activation cockpit status.",
+    "method": "GET",
+    "path": "/v1/admin/activation?project_id={project_id}"
+  },
+  "project_integration_health": {
+    "scope": "mcp:read",
+    "description": "Integration channel health.",
+    "method": "GET",
+    "path": "/v1/admin/integrations/health"
+  },
+  "inventory_current": {
+    "scope": "mcp:read",
+    "description": "Current inventory snapshot.",
+    "method": "GET",
+    "path": "/v1/admin/inventory/{projectId}"
+  },
+  "map_user_stories": {
+    "scope": "mcp:write",
+    "description": "Map user stories from live app URL.",
+    "method": "POST",
+    "path": "/v1/admin/inventory/{projectId}/map-from-live",
+    "required": ["projectId", "baseUrl"],
+    "body": { "base_url": "{baseUrl}", "max_pages": "{maxPages}", "provider": "{provider}", "cursor_cloud_refine": "{cursorCloudRefine}" }
+  },
+  "get_map_run_status": {
+    "scope": "mcp:read",
+    "description": "Story map run status.",
+    "method": "GET",
+    "path": "/v1/admin/inventory/{projectId}/map-runs",
+    "required": ["projectId"]
+  },
+  "generate_tdd_from_story": {
+    "scope": "mcp:write",
+    "description": "Generate TDD test from user story.",
+    "method": "POST",
+    "path": "/v1/admin/inventory/{projectId}/stories/{storyNodeId}/generate-test",
+    "required": ["projectId", "storyNodeId"],
+    "bodyPassthrough": true
+  },
+  "improve_qa_story": {
+    "scope": "mcp:write",
+    "description": "PDCA improve failing QA stories.",
+    "method": "POST",
+    "path": "/v1/admin/pdca/improve-qa-stories",
+    "body": { "project_id": "{projectId}" }
+  },
+  "run_qa_story": {
+    "scope": "mcp:write",
+    "description": "Trigger manual QA story run.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/qa-stories/{qaStoryId}/run",
+    "required": ["projectId", "qaStoryId"]
+  },
+  "list_byok_keys": {
+    "scope": "mcp:read",
+    "description": "List BYOK API key pool.",
+    "method": "GET",
+    "path": "/v1/admin/byok/keys?project_id={projectId}",
+    "required": ["projectId"]
+  },
+  "add_byok_key": {
+    "scope": "mcp:write",
+    "description": "Add BYOK API key.",
+    "method": "POST",
+    "path": "/v1/admin/byok/keys",
+    "bodyPassthrough": true
+  },
+  "list_pending_review_stories": {
+    "scope": "mcp:read",
+    "description": "QA stories pending review.",
+    "method": "GET",
+    "path": "/v1/admin/inventory/{projectId}/stories/pending-review",
+    "required": ["projectId"]
+  },
+  "approve_qa_story": {
+    "scope": "mcp:write",
+    "description": "Approve or reject QA story.",
+    "method": "PATCH",
+    "path": "/v1/admin/inventory/{projectId}/stories/{qaStoryId}/approval",
+    "required": ["projectId", "qaStoryId", "status"],
+    "body": { "status": "{status}" }
+  },
+  "reply_to_reporter": {
+    "scope": "mcp:write",
+    "description": "Reply to bug reporter.",
+    "method": "POST",
+    "path": "/v1/sync/reports/{reportId}/reply",
+    "required": ["reportId", "message"],
+    "body": { "message": "{message}", "author_name": "{authorName}" }
+  },
+  "get_two_way_comms_health": {
+    "scope": "mcp:read",
+    "description": "Two-way reporter communication health.",
+    "method": "GET",
+    "path": "/v1/sync/two-way-health"
+  },
+  "list_qa_story_runs": {
+    "scope": "mcp:read",
+    "description": "Recent QA story runs.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit={limit|10}",
+    "required": ["storyId"]
+  },
+  "get_qa_story_run": {
+    "scope": "mcp:read",
+    "description": "QA story run detail.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/qa-stories/{storyId}/runs?limit=50",
+    "required": ["storyId", "runId"],
+    "transform": "qa_run_pick"
+  },
+  "test_notification_channel": {
+    "scope": "mcp:write",
+    "description": "Send test notification.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/integrations/{kind}/test",
+    "required": ["kind"]
+  },
+  "list_skills": {
+    "scope": "mcp:read",
+    "description": "List agent skills catalog.",
+    "method": "GET",
+    "path": "/v1/admin/skills?category={category}&q={search}&limit={limit|200}"
+  },
+  "get_skill": {
+    "scope": "mcp:read",
+    "description": "Get skill detail by slug.",
+    "method": "GET",
+    "path": "/v1/admin/skills/{slug}",
+    "required": ["slug"]
+  },
+  "start_skill_pipeline": {
+    "scope": "mcp:write",
+    "description": "Start skill pipeline run.",
+    "method": "POST",
+    "path": "/v1/admin/skills/pipelines",
+    "required": ["root_skill_slug"],
+    "bodyPassthrough": true
+  },
+  "get_pipeline_run": {
+    "scope": "mcp:read",
+    "description": "Get pipeline run detail.",
+    "method": "GET",
+    "path": "/v1/admin/skills/pipelines/{run_id}",
+    "required": ["run_id"]
+  },
+  "checkin_pipeline_step": {
+    "scope": "mcp:write",
+    "description": "Check in pipeline step status.",
+    "method": "POST",
+    "path": "/v1/admin/skills/pipelines/{run_id}/steps/{step_index}/checkin",
+    "required": ["run_id", "step_index", "status"],
+    "bodyPassthrough": true
+  },
+  "get_activation_status": {
+    "scope": "mcp:read",
+    "description": "Unified activation cockpit.",
+    "method": "GET",
+    "path": "/v1/admin/activation?project_id={project_id}"
+  },
+  "get_reporter_thread": {
+    "scope": "mcp:read",
+    "description": "Reporter comment thread timeline.",
+    "method": "GET",
+    "path": "/v1/admin/reports/{reportId}/timeline",
+    "required": ["reportId"]
+  },
+  "run_fullstack_audit": {
+    "scope": "mcp:write",
+    "description": "Run full-stack health audit.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{project_id}/audit",
+    "body": {}
+  },
+  "get_backend_health": {
+    "scope": "mcp:read",
+    "description": "Backend health for linked Supabase project.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{project_id}/backend/schema",
+    "transform": "backend_health"
+  },
+  "ask_codebase": {
+    "scope": "mcp:write",
+    "description": "Ask a plain-English question about the indexed codebase.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{project_id}/codebase/chat",
+    "bodyPassthrough": true
+  },
+  "get_file_summary": {
+    "scope": "mcp:read",
+    "description": "Plain-English summary for an indexed file.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{project_id}/codebase/summary"
+  },
+  "get_codebase_tour": {
+    "scope": "mcp:read",
+    "description": "Guided dependency-ordered codebase tour.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{project_id}/codebase/tour"
+  }
+}

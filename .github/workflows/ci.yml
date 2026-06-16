@@ -179,15 +179,21 @@ jobs:
       - name: MCP build
         run: pnpm --filter @mushi-mushi/mcp build
 
-      - name: MCP catalog sync
-        # Hard-fails if hosted MCP or admin catalog drifts from canonical.
-        run: pnpm check:catalog-sync
+      - name: MCP catalog sync (strict parity)
+        run: node packages/mcp/scripts/check-catalog-sync.mjs --strict-full-parity
 
       - name: MCP smoke (stdio)
         # Spawns the stdio binary and verifies it advertises the expected
         # tool/resource/prompt set from the catalog. Catches register-but-
         # not-catalog and catalog-but-not-register bugs before publish.
         run: pnpm --filter @mushi-mushi/mcp test:smoke
+
+      - name: MCP smoke (HTTP)
+        # Skips when MUSHI_MCP_HTTP_URL / MUSHI_MCP_API_KEY are unset.
+        run: pnpm --filter @mushi-mushi/mcp test:smoke-http
+        env:
+          MUSHI_MCP_HTTP_URL: ${{ secrets.MUSHI_MCP_HTTP_URL }}
+          MUSHI_MCP_API_KEY: ${{ secrets.MUSHI_MCP_E2E_API_KEY }}
 
       - name: Cursor plugin manifest validation
         # Validates the Cursor plugin bundle has a well-formed plugin.json

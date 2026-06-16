@@ -11,6 +11,7 @@ import {
   accessibleProjectIds as _accessibleProjectIds,
   ownedProjectIds as _ownedProjectIds,
 } from '../_shared/project-access.ts';
+import { isUuid } from './ids.ts';
 
 /**
  * capture a Supabase / Postgres error to Sentry AND return the
@@ -73,6 +74,24 @@ export function jsonError(
 
 export function jsonValidationError(c: Context, message: string): Response {
   return jsonError(c, 'VALIDATION_ERROR', message, 400);
+}
+
+/**
+ * Validate a path param is a UUID before hitting Postgres.
+ * Prevents 22P02 → 500 noise in Sentry when smoke tools pass slug ids like `rep_smoke`.
+ */
+export function parseUuidParam(
+  c: Context,
+  paramName = 'id',
+): { ok: true; value: string } | { ok: false; error: Response } {
+  const raw = c.req.param(paramName);
+  if (!raw || !isUuid(raw)) {
+    return {
+      ok: false,
+      error: jsonValidationError(c, `${paramName} must be a valid UUID`),
+    };
+  }
+  return { ok: true, value: raw };
 }
 
 export function jsonNotFound(c: Context, message = 'Not found'): Response {
@@ -214,6 +233,34 @@ export async function resolveOwnedProject(
   userId: string,
   options: ResolveOwnedProjectOptions = {},
 ): Promise<OwnedProjectResolution> {
+  // API-key callers are pinned to the key's project — never elevated via owner_id.
+  if (c.get('authMethod') === 'apiKey') {
+    const bound = c.get('projectId') as string | undefined;
+    if (!bound) {
+      return { response: jsonForbidden(c, 'API key missing project binding') };
+    }
+    const requested = options.overrideProjectId ?? requestedProjectId(c);
+    if (requested && requested !== bound) {
+      return { response: jsonForbidden(c, 'Project scope mismatch for API key') };
+    }
+    const { data: row } = await db
+      .from('projects')
+      .select('id, name, organization_id')
+      .eq('id', bound)
+      .maybeSingle();
+    if (!row) {
+      return {
+        response: c.json(
+          { ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found' } },
+          404,
+        ),
+      };
+    }
+    if (row.organization_id) c.set('organizationId', row.organization_id);
+    c.set('projectId', row.id);
+    return { project: { ...row, organization_role: 'owner' }, explicit: Boolean(requested) };
+  }
+
   // Named-resource routes (e.g. GET /projects/:id/…) pass the URL segment
   // directly rather than relying on headers/query-params.
   const requested = options.overrideProjectId ?? requestedProjectId(c);
@@ -298,17 +345,54 @@ export async function resolveOwnedProject(
 }
 
 /**
+ * Fail-closed project scope for list/search endpoints.
+ *
+ * - API-key auth (MCP / SDK): always `[key.project_id]`; mismatched
+ *   `project_id` query/header returns `[]` so list routes never leak rows.
+ * - JWT admin: honours `X-Mushi-Project-Id` when set; otherwise all owned.
+ */
+export async function callerProjectIds(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<string[]> {
+  if (c.get('authMethod') === 'apiKey') {
+    const bound = c.get('projectId') as string | undefined;
+    if (!bound) return [];
+    const requested = requestedProjectId(c);
+    if (requested && requested !== bound) return [];
+    return [bound];
+  }
+  return scopedOwnedProjectIds(c, db, userId);
+}
+
+/** Explicit 403 when a named-resource route targets a project outside API-key scope. */
+export function assertCallerProjectScope(c: Context, projectId: string): Response | null {
+  if (c.get('authMethod') !== 'apiKey') return null;
+  const bound = c.get('projectId') as string | undefined;
+  if (!bound || projectId !== bound) {
+    return jsonForbidden(c, 'Project scope mismatch for API key');
+  }
+  return null;
+}
+
+/**
  * List endpoints honour `X-Mushi-Project-Id` when the admin console sends it
  * (ProjectSwitcher). Without a header, returns all owned projects — legacy
- * behaviour for callers that don't scope. If the header names a project the
+ * behaviour for JWT callers that don't scope. If the header names a project the
  * caller doesn't own, returns [] so the UI renders an empty state instead of
  * leaking cross-project rows.
+ *
+ * Prefer {@link callerProjectIds} in routes behind `adminOrApiKey`.
  */
 export async function scopedOwnedProjectIds(
   c: Context,
   db: ReturnType<typeof getServiceClient>,
   userId: string,
 ): Promise<string[]> {
+  if (c.get('authMethod') === 'apiKey') {
+    return callerProjectIds(c, db, userId);
+  }
   const all = await ownedProjectIds(db, userId);
   const requested = requestedProjectId(c);
   if (!requested) return all;
