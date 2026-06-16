@@ -25,6 +25,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { log } from '../_shared/logger.ts'
 import { ANTHROPIC_SONNET, OPENAI_PRIMARY } from '../_shared/models.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
@@ -125,7 +126,7 @@ Deno.serve(
       .limit(MAX_REPORTS_PER_RUN)
 
     if (fetchErr) {
-      console.error('[mistake-clusterer] fetch error:', fetchErr.message)
+      log.error('fetch error', { scope: 'mistake-clusterer', err: fetchErr.message })
       return new Response(JSON.stringify({ error: fetchErr.message }), { status: 500 })
     }
 
@@ -307,7 +308,11 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
           await db.from('mistake_clusters').update(updatePayload).eq('id', clusterId)
         } catch (err) {
-          console.error(`[mistake-clusterer] coherence judge failed for cluster ${clusterId}:`, err)
+          log.error('coherence judge failed', {
+            scope: 'mistake-clusterer',
+            clusterId,
+            err: err instanceof Error ? err.message : String(err),
+          })
         }
       }
     }

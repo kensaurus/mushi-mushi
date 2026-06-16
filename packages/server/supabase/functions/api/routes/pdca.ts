@@ -16,7 +16,12 @@ import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
-import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import {
+  assertCallerProjectScope,
+  assertTargetProjectAccess,
+  callerProjectIds,
+  resolveOwnedProject,
+} from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 const app = new Hono<{ Variables: Variables }>()
@@ -38,7 +43,9 @@ async function assertRunAccess(
   c: Context<{ Variables: Variables }>,
   runId: string,
 ): Promise<{ ok: true; projectId: string } | { ok: false; response: Response }> {
-  const userId = c.get('userId')
+  const authMethod = c.get('authMethod') as string | undefined
+  const userId = c.get('userId') as string | undefined
+
   const { data: run, error } = await db()
     .from('pdca_runs')
     .select('id, project_id')
@@ -52,11 +59,21 @@ async function assertRunAccess(
     }
   }
 
-  const allowed = await accessibleProjectIds(db(), userId)
-  if (!allowed.includes(run.project_id as string)) {
+  if (authMethod === 'apiKey') {
+    const scopeErr = assertCallerProjectScope(c, run.project_id as string)
+    if (scopeErr) return { ok: false, response: scopeErr }
+  } else if (!userId) {
     return {
       ok: false,
-      response: c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Access denied' } }, 403),
+      response: c.json({ ok: false, error: { code: 'UNAUTHENTICATED', message: 'Authentication required' } }, 401),
+    }
+  } else {
+    const allowed = await accessibleProjectIds(db(), userId)
+    if (!allowed.includes(run.project_id as string)) {
+      return {
+        ok: false,
+        response: c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Access denied' } }, 403),
+      }
     }
   }
 
@@ -105,7 +122,7 @@ function pdcaRoutes() {
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db(), userId)
+    const projectIds = await callerProjectIds(c, db(), userId)
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty })
     }
@@ -251,6 +268,7 @@ function pdcaRoutes() {
   // Queue a new run
   r.post('/', async (c) => {
     const body = await c.req.json()
+    const userId = c.get('userId') as string
     const projectId =
       (typeof body.project_id === 'string' ? body.project_id : null) ?? projectIdFromRequest(c)
     const { target_url, goal, iterations_target, primary_model, judge_model, persona, target_score } =
@@ -265,6 +283,9 @@ function pdcaRoutes() {
         400,
       )
     }
+
+    const access = await assertTargetProjectAccess(c, db(), userId, projectId)
+    if (!access.ok) return access.response
 
     const { data, error } = await db()
       .from('pdca_runs')

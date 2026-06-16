@@ -158,6 +158,7 @@ Deno.serve(
         });
       }
       const log = rootLog.child('classify-report', { reportId, projectId });
+      log.info('job.start', { reportId, projectId });
 
       // SEC-7: Fail closed when the caller forgot to assert the air-gap contract
       // so a future refactor can't accidentally forward raw user strings and

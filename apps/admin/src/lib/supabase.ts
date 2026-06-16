@@ -10,8 +10,8 @@ import * as Sentry from '@sentry/react'
 import type { ZodType } from 'zod'
 import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
-import { getActiveProjectIdSnapshot } from './activeProject'
-import { getActiveOrgIdSnapshot } from './activeOrg'
+import { getActiveProjectIdSnapshot, isValidProjectId } from './activeProject'
+import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
 import { coerceApiResult, type ApiResult } from './apiEnvelope'
 
 const authOptions = {
@@ -37,15 +37,26 @@ const API_BASE = RESOLVED_API_URL
 let _cachedToken: string | null = null
 let _tokenExpiresAt = 0
 
-async function getAccessToken(): Promise<string | null> {
+async function getAccessToken(forceRefresh = false): Promise<string | null> {
   const now = Date.now() / 1000
-  if (_cachedToken && _tokenExpiresAt > now + 30) return _cachedToken
+  if (!forceRefresh && _cachedToken && _tokenExpiresAt > now + 30) return _cachedToken
 
   const { data } = await supabase.auth.getSession()
-  const session = data.session
+  let session = data.session
   if (!session) {
     _cachedToken = null
     return null
+  }
+
+  const expiresAt = session.expires_at ?? 0
+  if (forceRefresh || expiresAt <= now + 30) {
+    const { data: refreshed, error } = await supabase.auth.refreshSession()
+    if (!error && refreshed.session) {
+      session = refreshed.session
+    } else if (expiresAt <= now) {
+      _cachedToken = null
+      return null
+    }
   }
 
   _cachedToken = session.access_token
@@ -132,6 +143,13 @@ export interface ApiFetchOptions<T> extends RequestInit {
   schema?: ZodType<T>
   /** When set, sends Idempotency-Key on POST/PATCH/DELETE mutations. */
   idempotencyKey?: string
+  /**
+   * Tenant scope headers sent to the API:
+   * - `enumeration`: org only (project list / setup / switcher)
+   * - `project`: org + active project (default)
+   * - `none`: no tenant context headers
+   */
+  scope?: 'enumeration' | 'project' | 'none'
 }
 
 export async function apiFetch<T>(
@@ -191,21 +209,36 @@ async function doFetch<T>(
   debugLog('api', `${method} ${path}`)
 
   try {
-    const token = await getAccessToken()
-    const activeProjectId = getActiveProjectIdSnapshot()
-    const activeOrgId = getActiveOrgIdSnapshot()
+    const scope = options?.scope ?? 'project'
+    const storedProjectId = scope === 'project' ? getActiveProjectIdSnapshot() : null
+    const storedOrgId = scope === 'none' ? null : getActiveOrgIdSnapshot()
+    const activeProjectId =
+      storedProjectId && isValidProjectId(storedProjectId) ? storedProjectId : null
+    const activeOrgId = storedOrgId && isValidOrgId(storedOrgId) ? storedOrgId : null
 
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options?.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
-        ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),
-        ...options?.headers,
-      },
-    })
+    let res: Response | null = null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const token = await getAccessToken(attempt > 0)
+      res = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options?.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
+          ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),
+          ...options?.headers,
+        },
+      })
+      if (res.status !== 401 || attempt > 0) break
+      const peek = await res.clone().text()
+      if (!peek.includes('INVALID_TOKEN') && !peek.includes('MISSING_AUTH')) break
+      debugWarn('api', `${method} ${path} → 401, refreshing session and retrying once`)
+    }
+
+    if (!res) {
+      return { ok: false, error: { code: 'NETWORK_ERROR', message: 'Request failed' } }
+    }
 
     const ms = Math.round(performance.now() - t0)
 

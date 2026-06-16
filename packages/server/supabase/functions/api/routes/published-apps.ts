@@ -52,6 +52,23 @@ const TargetingSchema = z.object({
   reputation_min:  z.number().int().min(0).optional(),
 })
 
+const BountyRowSchema = z.object({
+  action: z.string().min(1).max(60),
+  points_per_event: z.number().int().min(0).max(10000),
+  daily_cap: z.number().int().positive().optional().nullable(),
+  lifetime_cap_per_tester: z.number().int().positive().optional().nullable(),
+  enabled: z.boolean().optional(),
+})
+
+const BountiesUpsertSchema = z.object({
+  bounties: z.array(BountyRowSchema).min(1).max(20),
+})
+
+const MarketplaceSettingsSchema = z.object({
+  marketplace_monthly_budget_usd: z.number().min(0).max(1_000_000).optional(),
+  marketplace_max_testers: z.number().int().min(0).max(100_000).optional(),
+})
+
 // ─── Helper: check entitlement ───────────────────────────────
 
 async function requireMarketplacePublish(
@@ -334,6 +351,118 @@ export function registerPublishedAppsRoutes(app: Hono<{ Variables: Variables }>)
       .order('action')
 
     return c.json({ ok: true, data: data ?? [] })
+  })
+
+  // PUT /v1/admin/published-apps/:projectId/bounties
+  app.put('/v1/admin/published-apps/:projectId/bounties', jwtAuth, async (c) => {
+    const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
+    const supabase = getServiceClient()
+
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
+
+    const body = await c.req.json()
+    const parsed = BountiesUpsertSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ ok: false, error: { code: 'INVALID_BODY', message: parsed.error.flatten() } }, 400)
+    }
+
+    const { data: app } = await supabase
+      .from('published_apps')
+      .select('id')
+      .eq('project_id', projectId)
+      .maybeSingle()
+
+    if (!app) return c.json({ ok: false, error: { code: 'not_found', message: 'Publish a listing first.' } }, 404)
+
+    for (const row of parsed.data.bounties) {
+      const { error } = await supabase
+        .from('published_app_bounties')
+        .upsert({
+          app_id: app.id,
+          action: row.action,
+          points_per_event: row.points_per_event,
+          daily_cap: row.daily_cap ?? null,
+          lifetime_cap_per_tester: row.lifetime_cap_per_tester ?? null,
+          enabled: row.enabled ?? true,
+        }, { onConflict: 'app_id,action' })
+
+      if (error) {
+        return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+      }
+    }
+
+    const { data } = await supabase
+      .from('published_app_bounties')
+      .select('*')
+      .eq('app_id', app.id)
+      .order('action')
+
+    return c.json({ ok: true, data: data ?? [] })
+  })
+
+  // GET /v1/admin/published-apps/:projectId/marketplace-settings
+  app.get('/v1/admin/published-apps/:projectId/marketplace-settings', jwtAuth, async (c) => {
+    const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
+    const supabase = getServiceClient()
+
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
+
+    const { data, error } = await supabase
+      .from('project_settings')
+      .select('marketplace_monthly_budget_usd, marketplace_max_testers')
+      .eq('project_id', projectId)
+      .maybeSingle()
+
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({
+      ok: true,
+      data: {
+        marketplace_monthly_budget_usd: data?.marketplace_monthly_budget_usd ?? 0,
+        marketplace_max_testers: data?.marketplace_max_testers ?? 0,
+      },
+    })
+  })
+
+  // PUT /v1/admin/published-apps/:projectId/marketplace-settings
+  app.put('/v1/admin/published-apps/:projectId/marketplace-settings', jwtAuth, async (c) => {
+    const projectId = c.req.param('projectId')!
+    const userId = c.get('userId') as string
+    const supabase = getServiceClient()
+
+    const access = await requirePublishedAppsAccess(supabase, projectId, userId)
+    if (!access.ok) return c.json({ error: access.error }, 403)
+
+    const body = await c.req.json()
+    const parsed = MarketplaceSettingsSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ ok: false, error: { code: 'INVALID_BODY', message: parsed.error.flatten() } }, 400)
+    }
+
+    const updates: Record<string, number> = {}
+    if (parsed.data.marketplace_monthly_budget_usd !== undefined) {
+      updates.marketplace_monthly_budget_usd = parsed.data.marketplace_monthly_budget_usd
+    }
+    if (parsed.data.marketplace_max_testers !== undefined) {
+      updates.marketplace_max_testers = parsed.data.marketplace_max_testers
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ ok: false, error: { code: 'INVALID_BODY', message: 'No settings provided' } }, 400)
+    }
+
+    const { data, error } = await supabase
+      .from('project_settings')
+      .update(updates)
+      .eq('project_id', projectId)
+      .select('marketplace_monthly_budget_usd, marketplace_max_testers')
+      .single()
+
+    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return c.json({ ok: true, data })
   })
 
   // GET /v1/admin/published-apps/:projectId/stats

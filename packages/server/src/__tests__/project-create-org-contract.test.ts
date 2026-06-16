@@ -29,7 +29,10 @@ function readApiFile(relative: string): string {
 }
 
 describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)', () => {
-  const route = readApiFile('routes/billing-projects-queue-graph.ts');
+  // The POST /v1/admin/projects handler moved out of the former
+  // billing-projects-queue-graph.ts god-file into the cohesive projects-crud.ts
+  // module during the Jun 2026 route split. The contract is unchanged.
+  const route = readApiFile('routes/projects-crud.ts');
 
   function sliceCreateHandler(): string {
     const start = route.indexOf("app.post('/v1/admin/projects'");

@@ -8,11 +8,11 @@ import { InlineProof } from './report-detail/ReportSurface'
 export type StatusBannerTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
 
 const BANNER_SHELL: Record<StatusBannerTone, { border: string; bg: string; dot: string; title: string }> = {
-  info: { border: 'border-info/30', bg: 'bg-info/5', dot: 'bg-info', title: 'text-info' },
-  brand: { border: 'border-brand/30', bg: 'bg-brand/5', dot: 'bg-brand', title: 'text-brand' },
-  danger: { border: 'border-danger/30', bg: 'bg-danger/5', dot: 'bg-danger', title: 'text-danger' },
-  warn: { border: 'border-warn/30', bg: 'bg-warn/5', dot: 'bg-warn', title: 'text-warn' },
-  ok: { border: 'border-ok/30', bg: 'bg-ok/5', dot: 'bg-ok', title: 'text-ok' },
+  info: { border: 'border-info/30', bg: 'bg-surface-raised', dot: 'bg-info', title: 'text-info' },
+  brand: { border: 'border-brand/30', bg: 'bg-surface-raised', dot: 'bg-brand', title: 'text-brand' },
+  danger: { border: 'border-danger/30', bg: 'bg-surface-raised', dot: 'bg-danger', title: 'text-danger' },
+  warn: { border: 'border-warn/30', bg: 'bg-surface-raised', dot: 'bg-warn', title: 'text-warn' },
+  ok: { border: 'border-ok/30', bg: 'bg-surface-raised', dot: 'bg-ok', title: 'text-ok' },
 }
 
 export function StatusBannerShell({

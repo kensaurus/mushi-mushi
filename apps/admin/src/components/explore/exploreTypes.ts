@@ -18,6 +18,8 @@ export interface ExploreNodeMeta {
   layer: ExploreLayer
   content_preview: string | null
   last_modified: string | null
+  language_notes?: string[] | null
+  tags?: string[] | null
 }
 
 /** Node as returned by GET /v1/admin/projects/:id/codebase/explore */

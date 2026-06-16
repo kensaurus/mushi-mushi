@@ -8,6 +8,22 @@ import { useSyncExternalStore } from 'react'
 export const ACTIVE_ORG_STORAGE_KEY = 'mushi:active_org_id'
 export const ACTIVE_ORG_QUERY_PARAM = 'org'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export function isValidOrgId(value: string | null | undefined): value is string {
+  return typeof value === 'string' && UUID_RE.test(value)
+}
+
+export function clearActiveOrg(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new CustomEvent(ACTIVE_ORG_EVENT, { detail: { orgId: null } }))
+}
+
 const ACTIVE_ORG_EVENT = 'mushi:active-org-change'
 const SERVER_SNAPSHOT = '__server__'
 
@@ -21,7 +37,17 @@ function readStorage(): string | null {
 }
 
 export function getActiveOrgIdSnapshot(): string | null {
-  return readStorage()
+  const raw = readStorage()
+  if (!raw) return null
+  if (!isValidOrgId(raw)) {
+    try {
+      window.localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+    return null
+  }
+  return raw
 }
 
 export function setActiveOrgIdSnapshot(orgId: string): void {

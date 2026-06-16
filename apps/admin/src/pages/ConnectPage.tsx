@@ -11,15 +11,20 @@
  *   5. Update center (per-package freshness, "Create Upgrade PR" CTA)
  */
 
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import {
+  ACTIVE_PROJECT_QUERY_PARAM,
+  setActiveProjectIdSnapshot,
+} from '../lib/activeProject'
 import { usePageData } from '../lib/usePageData'
 import { PageHeader, Section, Card, Btn, Tooltip, CopyButton } from '../components/ui'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { McpInstallButtons } from '../components/McpInstallButtons'
 import { SdkVersionBadge } from '../components/SdkVersionBadge'
 import { useSdkUpgrade, type BumpEntry } from '../lib/useSdkUpgrade'
-import { useDispatchPreflight } from '../lib/useDispatchPreflight'
+import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
 import { usePublishPageContext } from '../lib/pageContext'
 import {
   IconGit,
@@ -69,9 +74,21 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
 }) {
   if (status === 'idle') return null
 
+  const spinner = (
+    <span
+      className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-current/30 border-t-current motion-safe:animate-spin"
+      aria-hidden
+    />
+  )
+
   if (status === 'queueing' || status === 'queued') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-surface-overlay px-2.5 py-0.5 text-xs text-fg-muted border border-edge-subtle">
+      <span
+        role="status"
+        aria-live="polite"
+        className="inline-flex items-center gap-1.5 rounded-full bg-surface-overlay px-2.5 py-0.5 text-xs text-fg-muted border border-edge-subtle"
+      >
+        {spinner}
         Queuing…
       </span>
     )
@@ -79,7 +96,12 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
 
   if (status === 'running') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-surface-overlay px-2.5 py-0.5 text-xs text-fg-muted border border-edge-subtle">
+      <span
+        role="status"
+        aria-live="polite"
+        className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand border border-brand/25"
+      >
+        {spinner}
         Opening PR…
       </span>
     )
@@ -91,6 +113,8 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
         href={prUrl}
         target="_blank"
         rel="noopener noreferrer"
+        role="status"
+        aria-live="polite"
         className="inline-flex items-center gap-1.5 rounded-full bg-ok/10 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok hover:bg-ok/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden />
@@ -102,17 +126,27 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
 
   if (status === 'completed_no_pr') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-ok/10 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok">
-        <IconCheck className="h-3.5 w-3.5" aria-hidden />
-        All up to date
-      </span>
+      <Tooltip content={error ?? 'All @mushi-mushi/* packages are already at the latest version.'} side="top">
+        <span
+          role="status"
+          aria-live="polite"
+          className="inline-flex items-center gap-1 rounded-full bg-ok/10 border border-ok/25 px-2.5 py-0.5 text-xs font-medium text-ok"
+        >
+          <IconCheck className="h-3.5 w-3.5" aria-hidden />
+          All up to date
+        </span>
+      </Tooltip>
     )
   }
 
   if (status === 'failed') {
     return (
       <Tooltip content={error ?? 'Unknown error'} side="top">
-        <span className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2.5 py-0.5 text-xs font-medium text-danger-foreground">
+        <span
+          role="status"
+          aria-live="assertive"
+          className="inline-flex items-center gap-1 rounded-full bg-danger/10 border border-danger/25 px-2.5 py-0.5 text-xs font-medium text-danger-foreground"
+        >
           Failed
         </span>
       </Tooltip>
@@ -154,14 +188,13 @@ function BumpPlanTable({ bumps }: { bumps: BumpEntry[] }) {
 // ---------------------------------------------------------------------------
 // Update center section
 // ---------------------------------------------------------------------------
-function UpdateCenter({ project }: { project: ProjectRow }) {
+function UpdateCenter({ project, preflight }: { project: ProjectRow; preflight: PreflightState }) {
   const { state, createUpgradePr, reset } = useSdkUpgrade(project.id)
-  const preflight = useDispatchPreflight(project.id)
 
   const isInFlight = ['queueing', 'queued', 'running'].includes(state.status)
   const isDone = ['completed', 'completed_no_pr', 'failed'].includes(state.status)
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
-  const hasRepoRow = Boolean(project.primary_repo?.repo_url)
+  const hasRepoRow = Boolean(project.primary_repo?.repo_url) || Boolean(preflight.repoUrl)
   const hasGithubReady = githubCheck?.ready ?? hasRepoRow
   const githubHint = githubCheck && !githubCheck.ready ? githubCheck.hint : null
 
@@ -261,6 +294,14 @@ function UpdateCenter({ project }: { project: ProjectRow }) {
         <BumpPlanTable bumps={state.plan} />
       )}
 
+      {state.status === 'completed_no_pr' && state.error && (
+        <p className="text-xs text-fg-muted">{state.error}</p>
+      )}
+
+      {state.status === 'failed' && state.error && (
+        <p className="text-xs text-[var(--color-error-foreground)]">{state.error}</p>
+      )}
+
       {state.status === 'completed' && state.prUrl && (
         <p className="text-xs text-fg-muted">
           After merging the PR, run your package manager to refresh the lockfile.
@@ -268,6 +309,61 @@ function UpdateCenter({ project }: { project: ProjectRow }) {
         </p>
       )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// GitHub connection card — preflight-backed for realtime repo metadata
+// ---------------------------------------------------------------------------
+function GithubConnectionCard({
+  preflight,
+  fallbackRepoUrl,
+}: {
+  preflight: PreflightState
+  fallbackRepoUrl: string | null
+}) {
+  const githubCheck = preflight.checks.find((c) => c.key === 'github')
+  const repoUrl = preflight.repoUrl ?? fallbackRepoUrl
+  const hasGithub = Boolean(repoUrl) && (githubCheck?.ready ?? Boolean(repoUrl))
+  const loading = preflight.loading && !repoUrl
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center gap-3 p-4">
+        <IconGit className="h-5 w-5 text-fg-muted shrink-0" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-fg">GitHub repository</p>
+          {loading ? (
+            <p className="text-xs text-fg-muted" aria-busy="true">Checking connection…</p>
+          ) : hasGithub && repoUrl ? (
+            <p className="text-xs text-fg-muted truncate font-mono">{repoUrl}</p>
+          ) : (
+            <p className="text-xs text-fg-muted">
+              {githubCheck?.hint ??
+                'Required for upgrade PRs and autofix. Managed in Integrations.'}
+            </p>
+          )}
+        </div>
+        {loading ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted shrink-0" aria-busy="true">
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-current/30 border-t-current motion-safe:animate-spin" aria-hidden />
+            Loading
+          </span>
+        ) : hasGithub ? (
+          <span className="inline-flex items-center gap-1 text-xs text-ok shrink-0">
+            <IconCheck className="h-3.5 w-3.5" aria-hidden />
+            Connected
+          </span>
+        ) : (
+          <Link to={githubCheck?.fixHref ?? '/integrations/config'}>
+            <Btn size="sm" variant="ghost" className="gap-1.5 shrink-0">
+              <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
+              Connect
+            </Btn>
+          </Link>
+        )}
+      </div>
+    </Card>
   )
 }
 
@@ -286,15 +382,25 @@ export function ConnectPage() {
     route: '/connect',
     title: 'Connect & Update',
   })
+  const [searchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
   const projectsFeed = usePageData<ProjectsPayload>('/v1/admin/projects')
+  const preflight = useDispatchPreflight(activeProjectId)
+
+  // Deep links like /connect?project=<uuid> should hydrate storage before
+  // child hooks (SdkInstallCard, useSdkUpgrade) read the active project.
+  useEffect(() => {
+    const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
+    if (fromUrl) setActiveProjectIdSnapshot(fromUrl)
+  }, [searchParams])
 
   const project = activeProjectId
     ? projectsFeed.data?.projects.find((p) => p.id === activeProjectId) ?? null
     : null
+  const projectPending =
+    Boolean(activeProjectId) && projectsFeed.loading && project == null
 
-  const githubRepoUrl = project?.primary_repo?.repo_url ?? null
-  const hasGithub = Boolean(githubRepoUrl)
+  const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
 
   const CLI_INSTALL = 'npm install -g @mushi-mushi/cli@latest'
   const CLI_INIT = 'mushi init'
@@ -324,34 +430,10 @@ export function ConnectPage() {
         <SectionDescription>
           Connect your repository to enable one-click upgrade PRs and autofix.
         </SectionDescription>
-        <Card>
-          <div className="flex flex-wrap items-center gap-3 p-4">
-            <IconGit className="h-5 w-5 text-fg-muted shrink-0" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-fg">GitHub repository</p>
-              {hasGithub ? (
-                <p className="text-xs text-fg-muted truncate font-mono">{githubRepoUrl}</p>
-              ) : (
-                <p className="text-xs text-fg-muted">
-                  Required for upgrade PRs and autofix. Managed in Integrations.
-                </p>
-              )}
-            </div>
-            {hasGithub ? (
-              <span className="inline-flex items-center gap-1 text-xs text-ok shrink-0">
-                <IconCheck className="h-3.5 w-3.5" aria-hidden />
-                Connected
-              </span>
-            ) : (
-              <Link to="/integrations/config">
-                <Btn size="sm" variant="ghost" className="gap-1.5 shrink-0">
-                  <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
-                  Connect
-                </Btn>
-              </Link>
-            )}
-          </div>
-        </Card>
+        <GithubConnectionCard
+          preflight={preflight}
+          fallbackRepoUrl={fallbackGithubRepoUrl}
+        />
       </Section>
 
       {/* ---------------------------------------------------------------- */}
@@ -366,6 +448,12 @@ export function ConnectPage() {
             projectId={project.id}
             compact
           />
+        ) : projectPending ? (
+          <Card>
+            <p className="p-4 text-sm text-fg-muted" aria-busy="true">
+              Loading project…
+            </p>
+          </Card>
         ) : (
           <Card>
             <p className="p-4 text-sm text-fg-muted">Select a project to see install snippets.</p>
@@ -395,6 +483,8 @@ export function ConnectPage() {
             </div>
             {project ? (
               <McpInstallButtons projectId={project.id} projectName={project.name} />
+            ) : projectPending ? (
+              <p className="text-sm text-fg-muted" aria-busy="true">Loading project…</p>
             ) : (
               <p className="text-sm text-fg-muted">Select a project above.</p>
             )}
@@ -460,7 +550,9 @@ export function ConnectPage() {
         <Card>
           <div className="p-4">
             {project ? (
-              <UpdateCenter project={project} />
+              <UpdateCenter project={project} preflight={preflight} />
+            ) : projectPending ? (
+              <p className="text-sm text-fg-muted" aria-busy="true">Loading project…</p>
             ) : (
               <p className="text-sm text-fg-muted">Select a project above.</p>
             )}

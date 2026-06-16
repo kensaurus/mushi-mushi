@@ -368,9 +368,13 @@ export function IntegrationsPage() {
           sparkline={sparklineByKind['slack'] ?? []}
         />
         {activeProjectId && (
-          <div className="mt-4 rounded-xl border border-border bg-surface px-5 py-4">
-            <h4 className="text-sm font-semibold text-fg mb-1">Notification events</h4>
-            <p className="text-xs text-fg-secondary mb-4">Choose which events trigger a Slack (or Discord) message for this project.</p>
+          <div className="mt-4 border-t border-edge-subtle pt-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
+              Notification events
+            </h4>
+            <p className="text-2xs text-fg-muted mb-3 leading-snug">
+              Choose which events trigger a Slack (or Discord) message for this project.
+            </p>
             <NotificationPrefsMatrix projectId={activeProjectId} />
           </div>
         )}

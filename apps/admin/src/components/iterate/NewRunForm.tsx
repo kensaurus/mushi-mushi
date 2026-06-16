@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Card, Btn, Input } from '../ui'
-import { IconSparkle } from '../icons'
+import { IconIterate } from '../icons'
 import { MODEL_OPTIONS, PERSONA_OPTIONS } from './types'
 
 interface Props {
@@ -151,7 +151,7 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
         onClick={() => void submit()}
         loading={loading}
         disabled={!projectId}
-        leadingIcon={<IconSparkle className="h-3.5 w-3.5" aria-hidden="true" />}
+        leadingIcon={<IconIterate className="h-3.5 w-3.5" aria-hidden="true" />}
         className="w-full sm:w-auto"
       >
         Queue run

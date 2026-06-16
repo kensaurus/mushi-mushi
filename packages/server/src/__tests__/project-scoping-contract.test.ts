@@ -18,7 +18,19 @@ function readApiFile(relative: string): string {
 
 describe('admin project scoping contract', () => {
   const settingsResearch = readApiFile('routes/settings-research.ts');
-  const enterpriseIntegrations = readApiFile('routes/enterprise-integrations.ts');
+  // The former enterprise-integrations.ts god-file was split (Jun 2026) into
+  // cohesive sibling modules; read them all so the scoping guard still covers
+  // every handler that used to live in the monolith.
+  const enterpriseIntegrations = [
+    'routes/sso-audit.ts',
+    'routes/fine-tuning.ts',
+    'routes/integrations.ts',
+    'routes/plugins-marketplace.ts',
+    'routes/intelligence-synthetic.ts',
+    'routes/health.ts',
+  ]
+    .map(readApiFile)
+    .join('\n');
   const askMushi = readApiFile('routes/ask-mushi.ts');
   const scopedSources = [settingsResearch, enterpriseIntegrations].join('\n');
 

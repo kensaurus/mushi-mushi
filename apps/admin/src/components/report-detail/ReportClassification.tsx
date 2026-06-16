@@ -15,7 +15,7 @@ import {
   severityLabel,
   confidenceBadgeClass,
 } from '../../lib/tokens'
-import { IconCamera, IconSparkle } from '../icons'
+import { IconCamera, IconIntelligence } from '../icons'
 import { ContainedBlock } from './ReportSurface'
 import type { ReportDetail } from './types'
 
@@ -84,7 +84,7 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
       />
 
       {report.summary && (
-        <Callout tone="info" label="LLM summary" icon={<IconSparkle className="text-info" />}>
+        <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
           <LongFormText value={report.summary} />
         </Callout>
       )}

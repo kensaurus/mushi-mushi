@@ -8,11 +8,12 @@
       "cache": true
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
     "@mushi-mushi/admin#dev": {
-      "dependsOn": ["@mushi-mushi/web#build"],
+      "dependsOn": ["^build", "@mushi-mushi/web#build"],
       "cache": false,
       "persistent": true
     },

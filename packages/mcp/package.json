@@ -6,24 +6,24 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./catalog": {
-      "import": "./dist/catalog.js",
-      "types": "./dist/catalog.d.ts"
+      "types": "./dist/catalog.d.ts",
+      "import": "./dist/catalog.js"
     },
     "./server": {
-      "import": "./dist/server.js",
-      "types": "./dist/server.d.ts"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     },
     "./branding": {
-      "import": "./dist/branding.js",
-      "types": "./dist/branding.d.ts"
+      "types": "./dist/branding.d.ts",
+      "import": "./dist/branding.js"
     },
     "./feature-groups": {
-      "import": "./dist/feature-groups.js",
-      "types": "./dist/feature-groups.d.ts"
+      "types": "./dist/feature-groups.d.ts",
+      "import": "./dist/feature-groups.js"
     }
   },
   "main": "./dist/index.js",

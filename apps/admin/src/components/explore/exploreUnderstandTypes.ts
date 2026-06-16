@@ -40,10 +40,14 @@ export interface DomainView {
   flows: DomainFlow[]
 }
 
+export type DomainExtractionSource = 'llm' | 'fallback'
+
 export interface CodebaseImpactResult {
   changed_paths: string[]
   affected_file_paths: string[]
   affected_node_ids: string[]
+  source?: 'paths' | 'last_push' | 'compare' | 'fix'
+  meta?: Record<string, string | null> | null
 }
 
 export interface CodebaseUnderstandError {

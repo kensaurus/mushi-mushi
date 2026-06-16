@@ -25,7 +25,7 @@ import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
 import {
   IconUser,
-  IconSparkle,
+  IconIntelligence,
   IconGlobe,
   IconGauge,
   IconTerminal,
@@ -65,9 +65,10 @@ import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 import { DispatchPreflightBanner } from '../components/reports/DispatchPreflightBanner'
-import { useDispatchPreflight } from '../lib/useDispatchPreflight'
+import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
 import { canMergeFix, pickPrimaryFixAttempt } from '../lib/mergeFix'
 import { MergeFixPreflight } from '../components/fixes/MergeFixPreflight'
+import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import type { SdkStatus } from '../components/SdkVersionBadge'
@@ -473,6 +474,17 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         preflight={preflight}
       />
 
+      {report.tester_submission && (
+        <Section title="Mushi Bounties" className="mb-3">
+          <TesterSubmissionCard
+            submission={report.tester_submission}
+            onReviewed={() => {
+              onReload()
+            }}
+          />
+        </Section>
+      )}
+
       <FixProgressStream reportId={report.id} dispatchState={dispatchState} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -506,7 +518,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           )}
         </Section>
 
-        <Section title="LLM classification" icon={<IconSparkle />}>
+        <Section title="LLM classification" icon={<IconIntelligence />}>
           {report.stage1_classification ? (
             <ClassificationFields report={report} />
           ) : report.processing_error ? (
@@ -534,7 +546,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
         {(report.sdk_package || report.sdk_version || report.app_version) && (
           <Section title="Device & build" icon={<IconHealth />}>
-            <DeviceAndBuildPanel report={report} />
+            <DeviceAndBuildPanel report={report} preflight={preflight} />
           </Section>
         )}
 
@@ -613,9 +625,14 @@ const PLATFORM_BADGE: Record<string, string> = {
  * the resolved platform tag in a compact definition grid. Mirrors the
  * density of EnvironmentFields so the two panels feel like one surface.
  */
-function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
+function DeviceAndBuildPanel({
+  report,
+  preflight,
+}: {
+  report: ReportDetail
+  preflight: PreflightState
+}) {
   const snapshots = useProjectSnapshots()
-  const preflight = useDispatchPreflight(report.project_id)
   const snapshot = report.project_id ? snapshots.byId.get(report.project_id) : undefined
   const githubReady = preflight.checks.find((c) => c.key === 'github')?.ready ?? false
   const platform = (report.environment?.platform ?? '').toLowerCase()

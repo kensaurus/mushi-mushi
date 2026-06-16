@@ -58,11 +58,20 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
   const handleReview = async (action: ReviewAction) => {
     setReviewing(action)
     try {
-      await apiFetch(`/v1/admin/tester-submissions/${submission.id}/${action}`, {
+      const res = await apiFetch(`/v1/admin/tester-submissions/${submission.id}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: note || undefined }),
       })
+      if (!res.ok) {
+        const msg = res.error?.message ?? 'Review action failed'
+        if (res.error?.code === 'forbidden') {
+          toast.error('You do not have permission to review this submission.')
+        } else {
+          toast.error(msg)
+        }
+        return
+      }
       toast.success(`Submission ${REVIEW_SUCCESS_LABEL[action]}`)
       onReviewed()
     } catch (err) {

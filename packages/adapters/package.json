@@ -9,64 +9,64 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./datadog": {
+      "types": "./dist/datadog.d.ts",
       "import": "./dist/datadog.js",
-      "require": "./dist/datadog.cjs",
-      "types": "./dist/datadog.d.ts"
+      "require": "./dist/datadog.cjs"
     },
     "./honeycomb": {
+      "types": "./dist/honeycomb.d.ts",
       "import": "./dist/honeycomb.js",
-      "require": "./dist/honeycomb.cjs",
-      "types": "./dist/honeycomb.d.ts"
+      "require": "./dist/honeycomb.cjs"
     },
     "./new-relic": {
+      "types": "./dist/new-relic.d.ts",
       "import": "./dist/new-relic.js",
-      "require": "./dist/new-relic.cjs",
-      "types": "./dist/new-relic.d.ts"
+      "require": "./dist/new-relic.cjs"
     },
     "./grafana-loki": {
+      "types": "./dist/grafana-loki.d.ts",
       "import": "./dist/grafana-loki.js",
-      "require": "./dist/grafana-loki.cjs",
-      "types": "./dist/grafana-loki.d.ts"
+      "require": "./dist/grafana-loki.cjs"
     },
     "./sentry": {
+      "types": "./dist/sentry.d.ts",
       "import": "./dist/sentry.js",
-      "require": "./dist/sentry.cjs",
-      "types": "./dist/sentry.d.ts"
+      "require": "./dist/sentry.cjs"
     },
     "./bugsnag": {
+      "types": "./dist/bugsnag.d.ts",
       "import": "./dist/bugsnag.js",
-      "require": "./dist/bugsnag.cjs",
-      "types": "./dist/bugsnag.d.ts"
+      "require": "./dist/bugsnag.cjs"
     },
     "./rollbar": {
+      "types": "./dist/rollbar.d.ts",
       "import": "./dist/rollbar.js",
-      "require": "./dist/rollbar.cjs",
-      "types": "./dist/rollbar.d.ts"
+      "require": "./dist/rollbar.cjs"
     },
     "./crashlytics": {
+      "types": "./dist/crashlytics.d.ts",
       "import": "./dist/crashlytics.js",
-      "require": "./dist/crashlytics.cjs",
-      "types": "./dist/crashlytics.d.ts"
+      "require": "./dist/crashlytics.cjs"
     },
     "./firebase-analytics": {
+      "types": "./dist/firebase-analytics.d.ts",
       "import": "./dist/firebase-analytics.js",
-      "require": "./dist/firebase-analytics.cjs",
-      "types": "./dist/firebase-analytics.d.ts"
+      "require": "./dist/firebase-analytics.cjs"
     },
     "./cloudwatch": {
+      "types": "./dist/cloudwatch.d.ts",
       "import": "./dist/cloudwatch.js",
-      "require": "./dist/cloudwatch.cjs",
-      "types": "./dist/cloudwatch.d.ts"
+      "require": "./dist/cloudwatch.cjs"
     },
     "./opsgenie": {
+      "types": "./dist/opsgenie.d.ts",
       "import": "./dist/opsgenie.js",
-      "require": "./dist/opsgenie.cjs",
-      "types": "./dist/opsgenie.d.ts"
+      "require": "./dist/opsgenie.cjs"
     }
   },
   "files": [

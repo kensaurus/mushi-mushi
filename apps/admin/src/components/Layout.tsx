@@ -14,7 +14,7 @@ import {
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
   IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
-  IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconSparkle, IconGit,
+  IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconEye, IconGit,
   // unique glyphs for the closed-loop + workspace sections
   IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
   IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
@@ -30,7 +30,7 @@ import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
-import { useAdminMode, type AdminMode } from '../lib/mode'
+import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip } from './ui'
 import { RouteProgress } from './RouteProgress'
@@ -42,7 +42,6 @@ import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
-import { FeedbackModal } from './FeedbackModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
@@ -50,9 +49,11 @@ import { SidebarUserCard } from './SidebarUserCard'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { VersionBadge } from './VersionBadge'
-import { AskMushiSidebar } from './AskMushiSidebar'
+import { AskMushiLauncherButton } from './AskMushiLauncherButton'
 import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
+import { AskMushiSidebar } from './AskMushiSidebar'
+import { useAskMushiPanel } from '../lib/useAskMushiPanel'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { shouldSkipLayoutHero } from '../lib/pageHeroOwnership'
@@ -62,6 +63,9 @@ import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
+import { PortalToggle } from './PortalSwitcher'
+import { ModeToggle } from './ModeToggle'
+import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 
 interface NavItem {
   label: string
@@ -137,7 +141,7 @@ const NAV: NavSection[] = [
       // pin Get started at the top of the rail. Once setup is complete the
       // checklist itself collapses to a "Setup complete" hero, and Dashboard
       // / Inbox become the obvious next stops.
-      { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
+      { label: 'Get started', path: '/onboarding', icon: IconBolt,        beginner: true, quickstartLabel: 'Setup' },
       { label: 'Connect & Update', path: '/connect', icon: IconBolt, beginner: true, quickstartLabel: 'Connect' },
       { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true, quickstartLabel: 'Home' },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
@@ -146,7 +150,7 @@ const NAV: NavSection[] = [
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
       { label: 'My feedback',    path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
-      { label: 'Feature board',  path: '/feature-board', icon: IconSparkle,   beginner: false },
+      { label: 'Feature board',  path: '/feature-board', icon: IconInbox,     beginner: false },
     ],
   },
   {
@@ -156,7 +160,7 @@ const NAV: NavSection[] = [
     hint: 'Inbound user-felt bugs land here, get classified, deduped, and prioritised.',
     items: [
       { label: 'Reports',     path: '/reports',     icon: IconReports, beginner: true, quickstartLabel: 'Bugs to fix' },
-      { label: 'Content QA',  path: '/content',     icon: IconSparkle },
+      { label: 'Content QA',  path: '/content',     icon: IconQaCoverage },
       {
         label: 'User stories',
         path: '/inventory',
@@ -227,9 +231,7 @@ const NAV: NavSection[] = [
       { label: 'Members',    path: '/organization/members', icon: IconMembers, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
       { label: 'Rewards',    path: '/rewards',    icon: IconRewards },
-      { label: '🪲 Bounties', path: '/rewards?tab=publishing', icon: IconRewards, requiresFeature: 'marketplace_publish' },
       { label: 'LLM Cost',   path: '/cost',       icon: IconGauge },
-      { label: 'Tester portal', path: '/tester',  icon: IconMarketplace },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
       { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
@@ -674,12 +676,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
   const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
   const palette = useCommandPalette()
+  const askPanel = useAskMushiPanel()
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
-  const [aiOpen, setAiOpen] = useState(false)
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
-  const [feedbackModalType, setFeedbackModalType] = useState<'bug' | 'feature'>('bug')
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
   const projectSnapshots = useProjectSnapshots()
@@ -693,6 +693,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const fallbackHero = shouldSkipLayoutHero(pathname)
     ? null
     : PAGE_HERO_FALLBACKS[pathname]
+  const pageShellWidth = pageLayoutWidthForPath(pathname)
   const [focusMode, setFocusMode] = useFocusMode()
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
@@ -702,6 +703,13 @@ export function Layout({ children }: { children: ReactNode }) {
   // get a matching tab title and a red favicon dot when criticals > 0.
   useDocumentTitle()
   useFaviconBadge()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-portal', 'admin')
+    return () => {
+      document.documentElement.removeAttribute('data-portal')
+    }
+  }, [])
 
   // Global Cmd/Ctrl+K opens the command palette. `allowInInputs: true`
   // because the shortcut's whole point is to be reachable while the user
@@ -744,7 +752,7 @@ export function Layout({ children }: { children: ReactNode }) {
         description: 'Toggle Ask Mushi (scoped to current page)',
         handler: (e) => {
           e.preventDefault()
-          setAiOpen((v) => !v)
+          askPanel.toggle()
         },
         meta: true,
       },
@@ -753,7 +761,7 @@ export function Layout({ children }: { children: ReactNode }) {
         description: 'Toggle Ask Mushi (scoped to current page)',
         handler: (e) => {
           e.preventDefault()
-          setAiOpen((v) => !v)
+          askPanel.toggle()
         },
         ctrl: true,
       },
@@ -957,19 +965,22 @@ export function Layout({ children }: { children: ReactNode }) {
     <>
       {/* Brand — collapses to a single "M" stamp in compact mode so the
           rail still has a recognisable identity at the top. */}
-      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60`}>
+      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60 overflow-visible`}>
         {compact ? (
-          <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
-            <span className="text-brand">m</span>
-            <span className="text-fg-secondary">m</span>
-          </h1>
+          <div className="space-y-1.5">
+            <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
+              <span className="text-brand">m</span>
+              <span className="text-fg-secondary">m</span>
+            </h1>
+            <PortalToggle compact />
+          </div>
         ) : (
           <>
             <h1 className="text-sm font-bold tracking-tight leading-none">
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
             </h1>
-            <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
+            <PortalToggle />
             <ModeToggle mode={mode} onSelect={setMode} />
             {onHiddenRoute && (
               <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn space-y-1.5">
@@ -1269,7 +1280,7 @@ export function Layout({ children }: { children: ReactNode }) {
             title={focusMode ? 'Exit focus mode' : 'Focus mode'}
             aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
           >
-            <IconSparkle className="nav-link-icon" />
+            <IconEye className="nav-link-icon" />
           </button>
         )}
         {!compact && <SidebarUserCard user={user} signOut={signOut} />}
@@ -1446,28 +1457,13 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span aria-hidden className="font-mono text-xs leading-none">?</span>
                 </button>
               </Tooltip>
-              <Tooltip content="Ask Mushi (Cmd/Ctrl+J)" side="bottom">
-                <button
-                  type="button"
-                  onClick={() => setAiOpen(true)}
-                  aria-label="Open Ask Mushi"
-                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  <span aria-hidden className="font-mono text-xs leading-none">✨</span>
-                </button>
-              </Tooltip>
-              <Tooltip content="Report a bug or request a feature — opens inline" side="bottom">
-                <button
-                  type="button"
-                  onClick={() => { setFeedbackModalType('bug'); setFeedbackModalOpen(true) }}
-                  aria-label="Report a bug or request a feature"
-                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-                >
-                  <IconChat className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
+              <AskMushiLauncherButton
+                panelOpen={askPanel.isOpen}
+                onClick={() => askPanel.open()}
+              />
             </div>
             <VersionBadge whatsNew={whatsNew} />
+            <span className="h-5 w-px shrink-0 bg-edge-subtle" aria-hidden />
             <OrgSwitcher />
             <ProjectSwitcher />
           </div>
@@ -1475,7 +1471,10 @@ export function Layout({ children }: { children: ReactNode }) {
 
         <PageHelpProvider>
           <main id="main-content" className={`flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-surface ${appChromeMainClass}`}>
-            <div className="w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base">
+            <div
+              className={`${PAGE_SHELL_CLASS[pageShellWidth]} motion-safe:transition-[max-width,padding] motion-safe:duration-base`}
+              data-page-width={pageShellWidth}
+            >
               {!focusMode && <QuickstartMegaCta />}
               {!focusMode && (
                 <>
@@ -1517,66 +1516,12 @@ export function Layout({ children }: { children: ReactNode }) {
         entries={whatsNew.entries}
       />
       <AskMushiSidebar
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
+        open={askPanel.isOpen}
+        onClose={() => askPanel.close()}
         route={pathname}
+        seedMessage={askPanel.seed}
+        seedThreadId={askPanel.threadId}
       />
-      {feedbackModalOpen && (
-        <FeedbackModal
-          initialType={feedbackModalType}
-          onClose={() => setFeedbackModalOpen(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-const MODE_OPTIONS: Array<{ id: AdminMode; label: string; hint: string }> = [
-  {
-    id: 'quickstart',
-    label: 'Quick',
-    hint: 'Quickstart: 3 pages + one big "Resolve next bug" button. The fastest path from a real bug to a draft PR.',
-  },
-  {
-    id: 'beginner',
-    label: 'Beginner',
-    hint: 'Beginner: 9 essential pages with guided next-best-action and plain-language copy.',
-  },
-  {
-    id: 'advanced',
-    label: 'Advanced',
-    hint: 'Advanced: full 23-page console with dense layouts and jargon-rich copy.',
-  },
-]
-
-function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: AdminMode) => void }) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Admin mode"
-      data-tour-id="mode-toggle"
-      className="mt-2 inline-flex max-w-full min-w-0 items-stretch gap-0.5 rounded-md border border-edge bg-surface-root/50 p-0.5"
-    >
-      {MODE_OPTIONS.map((opt) => {
-        const active = opt.id === mode
-        return (
-          <Tooltip key={opt.id} content={opt.hint}>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onSelect(opt.id)}
-              className={`shrink-0 rounded px-1.5 py-1 text-3xs font-medium motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-                active
-                  ? 'bg-brand/25 text-brand shadow-sm ring-1 ring-brand/20 font-semibold'
-                  : 'text-fg-muted hover:bg-surface-overlay hover:text-fg-secondary'
-              }`}
-            >
-              {opt.label}
-            </button>
-          </Tooltip>
-        )
-      })}
     </div>
   )
 }

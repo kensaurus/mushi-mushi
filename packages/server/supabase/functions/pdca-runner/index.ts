@@ -19,6 +19,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { log } from '../_shared/logger.ts'
 import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts'
 
@@ -163,7 +164,10 @@ async function runQaStoryImprover(
 
       // Never persist/enable an improved script that contains a credential.
       if (hasSecret(result.improved_script)) {
-        console.warn(`[pdca-runner] improved script for story ${story.id} contained a secret — skipped`)
+        log.warn('improved script contained a secret — skipped', {
+          scope: 'pdca-runner',
+          storyId: story.id,
+        })
         continue
       }
 
@@ -256,7 +260,7 @@ Deno.serve(
       })
     }
 
-    console.info('[pdca-runner] run.started', { runId })
+    log.info('run.started', { scope: 'pdca-runner', runId })
 
     // Load persona
     const { data: personaData } = await db
@@ -391,7 +395,11 @@ Deno.serve(
         lastScore = critiqueResult.overall_score
 
       } catch (err) {
-        console.error(`[pdca-runner] iteration ${i + 1} error:`, err)
+        log.error('iteration error', {
+          scope: 'pdca-runner',
+          iteration: i + 1,
+          err: err instanceof Error ? err.message : String(err),
+        })
         finalStatus = 'failed'
         exitReason = 'error'
         break
@@ -406,7 +414,7 @@ Deno.serve(
       finished_at: new Date().toISOString(),
     }).eq('id', runId)
 
-    console.info('[pdca-runner] run.finished', { runId, finalScore, exitReason, status: finalStatus })
+    log.info('run.finished', { scope: 'pdca-runner', runId, finalScore, exitReason, status: finalStatus })
 
     // Slack notification for completed PDCA runs — non-fatal, no SLACK_BOT_TOKEN = silent.
     try {

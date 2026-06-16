@@ -119,7 +119,7 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
         inserted++;
       } catch (err) {
         // best-effort per chunk; continue
-        console.warn('chunk upload failed', String(err));
+        log.warn('chunk upload failed', { err: String(err) });
       }
     }
     return c.json({ ok: true, chunks: inserted });

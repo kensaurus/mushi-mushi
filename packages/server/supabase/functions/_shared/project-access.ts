@@ -70,6 +70,35 @@ export async function accessibleProjectIds(
 }
 
 /**
+ * Subset of {@link accessibleProjectIds} limited to one organization.
+ * Returns `[]` when the caller is not a member of `organizationId` (fail
+ * closed — same contract as Supabase org-scoped dashboards).
+ */
+export async function accessibleProjectIdsInOrganization(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  organizationId: string,
+): Promise<string[]> {
+  const { data: membership } = await db
+    .from('organization_members')
+    .select('organization_id')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (!membership) return []
+
+  const all = await accessibleProjectIds(db, userId)
+  if (all.length === 0) return []
+
+  const { data: orgProjects } = await db
+    .from('projects')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .in('id', all)
+  return (orgProjects ?? []).map((p) => p.id)
+}
+
+/**
  * Historical alias kept for backwards compatibility with older route
  * code that still says `ownedProjectIds`. New code should use
  * `accessibleProjectIds` directly — the "owned" naming pre-dated Teams

@@ -22,8 +22,45 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { jwtAuth, apiKeyAuth, adminOrApiKey, getOrgIdFromContext } from '../../_shared/auth.ts'
-import { ownedProjectIds, callerProjectIds, resolveOwnedProject } from '../shared.ts'
+import { jwtAuth, apiKeyAuth, adminOrApiKey } from '../../_shared/auth.ts'
+import {
+  assertTargetProjectAccess,
+  callerProjectIds,
+  intersectOrgAndProjectScope,
+  jsonNotFound,
+  parseUuidParam,
+  resolveOwnedProject,
+} from '../shared.ts'
+
+async function assertLessonRowAccess(
+  c: Parameters<typeof assertTargetProjectAccess>[0],
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  lessonId: string,
+) {
+  const { data: lesson } = await db.from('lessons').select('project_id').eq('id', lessonId).maybeSingle()
+  if (!lesson?.project_id) return { ok: false as const, response: jsonNotFound(c, 'Lesson not found') }
+  const access = await assertTargetProjectAccess(c, db, userId, lesson.project_id as string)
+  if (!access.ok) return { ok: false as const, response: access.response }
+  return { ok: true as const, projectId: lesson.project_id as string }
+}
+
+async function assertClusterRowAccess(
+  c: Parameters<typeof assertTargetProjectAccess>[0],
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  clusterId: string,
+) {
+  const { data: cluster } = await db
+    .from('mistake_clusters')
+    .select('project_id')
+    .eq('id', clusterId)
+    .maybeSingle()
+  if (!cluster?.project_id) return { ok: false as const, response: jsonNotFound(c, 'Cluster not found') }
+  const access = await assertTargetProjectAccess(c, db, userId, cluster.project_id as string)
+  if (!access.ok) return { ok: false as const, response: access.response }
+  return { ok: true as const, projectId: cluster.project_id as string }
+}
 
 export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
@@ -166,20 +203,28 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   app.get('/v1/admin/lessons', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const db = getServiceClient()
     const authMethod = c.get('authMethod') as string | undefined
-    const callerProjectId = c.get('projectId') as string | undefined
-    const projectId =
-      authMethod === 'apiKey'
-        ? callerProjectId
-        : (c.req.query('projectId') ?? c.req.header('x-mushi-project-id') ?? null)
-    const orgId = await getOrgIdFromContext(c)
+    const userId = c.get('userId') as string | undefined
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 500)
     const offset = parseInt(c.req.query('offset') ?? '0')
     const severity = c.req.query('severity')
     const retired = c.req.query('retired') === 'true'
 
+    let projectIds: string[] = []
+    if (authMethod === 'apiKey') {
+      const bound = c.get('projectId') as string | undefined
+      projectIds = bound ? [bound] : []
+    } else if (userId) {
+      projectIds = await intersectOrgAndProjectScope(c, db, userId)
+    }
+
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: [], meta: { total: 0, limit, offset } })
+    }
+
     let query = db
       .from('lessons')
       .select('id, rule_text, anti_pattern, summary_paragraph, severity, frequency, last_reinforced_at, promoted_at, retired_at, cluster_id, mistake_clusters(name, status, judge_coherence_score, cluster_size)', { count: 'exact' })
+      .in('project_id', projectIds)
       .order('frequency', { ascending: false })
       .order('last_reinforced_at', { ascending: false })
       .range(offset, offset + limit - 1)
@@ -188,21 +233,6 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
       query = query.not('retired_at', 'is', null)
     } else {
       query = query.is('retired_at', null)
-    }
-
-    if (projectId) {
-      query = query.eq('project_id', projectId)
-    } else if (orgId) {
-      // Get all project IDs for this org
-      const { data: projects } = await db
-        .from('projects')
-        .select('id')
-        .eq('organization_id', orgId)
-      const projectIds = (projects ?? []).map((p) => p.id as string)
-      if (projectIds.length === 0) {
-        return c.json({ ok: true, data: [], meta: { total: 0, limit, offset } })
-      }
-      query = query.in('project_id', projectIds)
     }
 
     if (severity) query = query.eq('severity', severity)
@@ -216,6 +246,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Lesson detail ────────────────────────────────────────────────────────
   app.get('/v1/admin/lessons/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertLessonRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const { data, error } = await db
       .from('lessons')
       .select('*, mistake_clusters(id, name, summary, suggested_rule, cluster_size, status, judge_coherence_score, first_seen_at, last_seen_at)')
@@ -235,6 +271,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
 
   app.patch('/v1/admin/lessons/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertLessonRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const body = patchLessonSchema.safeParse(await c.req.json())
     if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
 
@@ -259,6 +301,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Source reports for a lesson's cluster ────────────────────────────────
   app.get('/v1/admin/lessons/:id/reports', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertLessonRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const { data: lesson } = await db
       .from('lessons')
       .select('cluster_id, sample_report_ids')
@@ -282,7 +330,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── List clusters ────────────────────────────────────────────────────────
   app.get('/v1/admin/clusters', jwtAuth, async (c) => {
     const db = getServiceClient()
-    const projectId = c.req.query('projectId') ?? c.req.header('x-mushi-project-id') ?? null
+    const userId = c.get('userId') as string
+    const projectIds = await intersectOrgAndProjectScope(c, db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: [], meta: { total: 0, limit: 50, offset: 0 } })
+    }
+
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50'), 200)
     const offset = parseInt(c.req.query('offset') ?? '0')
     const status = c.req.query('status') // 'candidate' | 'promoted' | 'retired'
@@ -290,10 +343,10 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
     let query = db
       .from('mistake_clusters')
       .select('id, project_id, cluster_size, severity_distribution, first_seen_at, last_seen_at, status, name, summary, suggested_rule, judge_coherence_score', { count: 'exact' })
+      .in('project_id', projectIds)
       .order('cluster_size', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (projectId) query = query.eq('project_id', projectId)
     if (status) query = query.eq('status', status)
 
     const { data, count, error } = await query
@@ -304,6 +357,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Cluster detail ────────────────────────────────────────────────────────
   app.get('/v1/admin/clusters/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertClusterRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const [clusterRes, membersRes] = await Promise.all([
       db.from('mistake_clusters').select('*').eq('id', c.req.param('id')!).single(),
       db.from('report_cluster_membership')
@@ -320,6 +379,12 @@ export function registerLessonsRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Manually promote cluster to lesson ───────────────────────────────────
   app.post('/v1/admin/clusters/:id/promote', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertClusterRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const { data: cluster } = await db
       .from('mistake_clusters')
       .select('*')

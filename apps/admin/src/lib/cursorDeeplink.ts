@@ -1,10 +1,12 @@
 /**
- * Cursor (and VS Code) one-click MCP install deeplinks.
+ * Cursor and VS Code one-click MCP install deeplinks.
  *
- * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64(config)>
+ * Cursor: cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64(config)>
+ * VS Code: vscode:mcp/install?name=<name>&config=<url-encoded JSON config>
  *
- * The `config` parameter is the base64-encoded JSON of the single server
- * config object (the value inside mcpServers.name, not the whole object).
+ * The `config` payload is the single server config object (not the whole mcp.json).
+ * Cursor base64-encodes it; VS Code URL-encodes JSON.stringify(config) with `name`
+ * as a separate query param — see https://github.com/merill/vscode-mcp
  *
  * Icon note: Cursor often shows the **host favicon** for HTTP MCP URLs
  * (e.g. supabase.co). Prefer stdio for the Mushi stamp icon, or set `icon`
@@ -90,9 +92,18 @@ export function projectServerName(projectId: string, projectName: string): strin
   return `mushi-${nameSlug}-${idSuffix}`
 }
 
-function encodeInstallDeeplink(scheme: 'cursor' | 'vscode', name: string, config: McpStdioConfig | McpHttpConfig): string {
+function encodeCursorInstallDeeplink(name: string, config: McpStdioConfig | McpHttpConfig): string {
   const encoded = btoa(JSON.stringify(config))
-  return `${scheme}://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(encoded)}`
+  return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(encoded)}`
+}
+
+function toVsCodeInstallConfig(config: McpStdioConfig | McpHttpConfig): McpHttpConfig | (McpStdioConfig & { type: 'stdio' }) {
+  if ('type' in config && config.type === 'http') return config
+  return { type: 'stdio', ...config }
+}
+
+function encodeVsCodeInstallDeeplink(name: string, config: McpStdioConfig | McpHttpConfig): string {
+  return `vscode:mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(JSON.stringify(toVsCodeInstallConfig(config)))}`
 }
 
 /** One-click Cursor MCP install URL (stdio transport — recommended). */
@@ -103,7 +114,7 @@ export function buildCursorDeeplink(
   apiEndpoint: string,
 ): string {
   const name = projectServerName(projectId, projectName)
-  return encodeInstallDeeplink('cursor', name, buildStdioConfig(projectId, apiKey, apiEndpoint))
+  return encodeCursorInstallDeeplink(name, buildStdioConfig(projectId, apiKey, apiEndpoint))
 }
 
 /** One-click Cursor MCP install URL (hosted HTTP transport). */
@@ -114,7 +125,7 @@ export function buildCursorHttpDeeplink(
   mcpHttpUrl: string,
 ): string {
   const name = projectServerName(projectId, projectName)
-  return encodeInstallDeeplink('cursor', name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
+  return encodeCursorInstallDeeplink(name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
 }
 
 /** VS Code deeplink — stdio transport. */
@@ -125,7 +136,7 @@ export function buildVsCodeDeeplink(
   apiEndpoint: string,
 ): string {
   const name = projectServerName(projectId, projectName)
-  return encodeInstallDeeplink('vscode', name, buildStdioConfig(projectId, apiKey, apiEndpoint))
+  return encodeVsCodeInstallDeeplink(name, buildStdioConfig(projectId, apiKey, apiEndpoint))
 }
 
 /** VS Code deeplink — hosted HTTP transport. */
@@ -136,5 +147,5 @@ export function buildVsCodeHttpDeeplink(
   mcpHttpUrl: string,
 ): string {
   const name = projectServerName(projectId, projectName)
-  return encodeInstallDeeplink('vscode', name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
+  return encodeVsCodeInstallDeeplink(name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
 }

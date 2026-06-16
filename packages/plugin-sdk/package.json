@@ -6,19 +6,19 @@
   "type": "module",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./express": {
+      "types": "./dist/express.d.ts",
       "import": "./dist/express.js",
-      "require": "./dist/express.cjs",
-      "types": "./dist/express.d.ts"
+      "require": "./dist/express.cjs"
     },
     "./hono": {
+      "types": "./dist/hono.d.ts",
       "import": "./dist/hono.js",
-      "require": "./dist/hono.cjs",
-      "types": "./dist/hono.d.ts"
+      "require": "./dist/hono.cjs"
     }
   },
   "bin": {

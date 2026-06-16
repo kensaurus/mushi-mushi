@@ -5,11 +5,13 @@ import { App } from './App'
 import { initSentry } from './lib/sentry'
 import { hydrateDensity } from './lib/useDensity'
 import { hydrateTheme } from './lib/useTheme'
+import { sanitizeTenantUrlParams } from './lib/tenantUrlSanitize'
 import './index.css'
 
 initSentry()
 hydrateDensity()
 hydrateTheme()
+sanitizeTenantUrlParams()
 
 // Defer web-vitals observation until after first paint so it has zero cost
 // on the critical render path. The dynamic import is intentional — the

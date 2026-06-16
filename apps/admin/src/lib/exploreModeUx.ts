@@ -11,6 +11,7 @@ export interface ExploreUxFlags {
   isBeginner: boolean
   isAdvanced: boolean
   hideTabs: boolean
+  hideIndexTab: boolean
   plainBanner: boolean
   hideOverviewChrome: boolean
   hideExploreSnapshot: boolean
@@ -23,6 +24,7 @@ export function useExploreUx(): ExploreUxFlags {
     isBeginner,
     isAdvanced,
     hideTabs: isQuickstart,
+    hideIndexTab: isQuickstart || isBeginner,
     plainBanner: !isAdvanced,
     hideOverviewChrome: !isAdvanced,
     hideExploreSnapshot: isQuickstart,

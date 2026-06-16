@@ -17,9 +17,40 @@ import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { jwtAuth, getOrgIdFromContext, apiKeyAuth } from '../../_shared/auth.ts'
+import { jwtAuth, apiKeyAuth } from '../../_shared/auth.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
-import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import {
+  assertTargetProjectAccess,
+  callerProjectIds,
+  intersectOrgAndProjectScope,
+  jsonForbidden,
+  jsonNotFound,
+  parseUuidParam,
+  resolveOwnedProject,
+} from '../shared.ts'
+import { log } from '../../_shared/logger.ts'
+
+async function assertReleaseRowAccess(
+  c: Parameters<typeof assertTargetProjectAccess>[0],
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  releaseId: string,
+): Promise<
+  | { ok: true; projectId: string }
+  | { ok: false; response: Response }
+> {
+  const { data: release } = await db
+    .from('releases')
+    .select('project_id')
+    .eq('id', releaseId)
+    .maybeSingle()
+  if (!release?.project_id) {
+    return { ok: false, response: jsonNotFound(c, 'Release not found') }
+  }
+  const access = await assertTargetProjectAccess(c, db, userId, release.project_id as string)
+  if (!access.ok) return { ok: false, response: access.response }
+  return { ok: true, projectId: release.project_id as string }
+}
 
 export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/releases/stats — posture banner + RELEASES SNAPSHOT.
@@ -56,7 +87,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty })
     }
@@ -181,7 +212,12 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── List releases ────────────────────────────────────────────────────────
   app.get('/v1/admin/releases', jwtAuth, async (c) => {
     const db = getServiceClient()
-    const projectId = c.req.query('projectId') ?? c.req.header('x-mushi-project-id') ?? null
+    const userId = c.get('userId') as string
+    const projectIds = await intersectOrgAndProjectScope(c, db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: [], meta: { total: 0, limit: 20, offset: 0 } })
+    }
+
     const status = c.req.query('status') // 'draft' | 'published'
     const limit = Math.min(parseInt(c.req.query('limit') ?? '20'), 100)
     const offset = parseInt(c.req.query('offset') ?? '0')
@@ -189,10 +225,10 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     let query = db
       .from('releases')
       .select('id, project_id, version, title, status, published_at, credited_reporter_ids, fixed_report_ids, fulfilled_ticket_ids, created_at, updated_at', { count: 'exact' })
+      .in('project_id', projectIds)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (projectId) query = query.eq('project_id', projectId)
     if (status) query = query.eq('status', status)
 
     const { data, count, error } = await query
@@ -213,6 +249,11 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     const body = draftSchema.safeParse(await c.req.json())
     if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
 
+    const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const access = await assertTargetProjectAccess(c, db, userId, body.data.project_id)
+    if (!access.ok) return access.response
+
     // Call the release-builder edge function
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -229,7 +270,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
         body: JSON.stringify(body.data),
       })
     } catch (err) {
-      console.error('[releases/draft] fetch release-builder failed:', err)
+      log.error('fetch release-builder failed', { scope: 'releases/draft', err: String(err) })
       return c.json({ ok: false, error: 'Could not reach release-builder function' }, 500)
     }
 
@@ -240,7 +281,10 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     try {
       data = JSON.parse(rawText)
     } catch {
-      console.error('[releases/draft] release-builder returned non-JSON:', rawText.slice(0, 200))
+      log.error('release-builder returned non-JSON', {
+        scope: 'releases/draft',
+        preview: rawText.slice(0, 200),
+      })
       return c.json({ ok: false, error: `release-builder error: ${rawText.slice(0, 100)}` }, 500)
     }
     if (!res.ok) return c.json({ ok: false, error: (data.error as string) ?? 'release-builder failed' }, 500)
@@ -250,6 +294,12 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Release detail ────────────────────────────────────────────────────────
   app.get('/v1/admin/releases/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const [releaseRes, creditsRes] = await Promise.all([
       db.from('releases').select('*').eq('id', c.req.param('id')!).single(),
       db.from('release_credits')
@@ -271,6 +321,12 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
 
   app.patch('/v1/admin/releases/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const body = patchReleaseSchema.safeParse(await c.req.json())
     if (!body.success) return c.json({ ok: false, error: body.error.flatten() }, 400)
 
@@ -289,6 +345,12 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Delete draft release ─────────────────────────────────────────────────
   app.delete('/v1/admin/releases/:id', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
+
     const { error } = await db
       .from('releases')
       .delete()
@@ -302,6 +364,11 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
   // ─── Publish release + notify credited users ──────────────────────────────
   app.post('/v1/admin/releases/:id/publish', jwtAuth, async (c) => {
     const db = getServiceClient()
+    const userId = c.get('userId') as string
+    const idParsed = parseUuidParam(c, 'id')
+    if (!idParsed.ok) return idParsed.error
+    const rowAccess = await assertReleaseRowAccess(c, db, userId, idParsed.value)
+    if (!rowAccess.ok) return rowAccess.response
 
     // Mark as published
     const { data: release, error } = await db

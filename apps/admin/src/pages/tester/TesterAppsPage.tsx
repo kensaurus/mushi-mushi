@@ -5,12 +5,14 @@
  * Filter rail: search + All / Joined / Eligible chips.
  */
 import { useState, useMemo } from 'react'
-import { TesterLayout } from '../../components/tester/TesterLayout'
+import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
+import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Btn, Badge } from '../../components/ui'
+import { Btn, Badge, SegmentedControl } from '../../components/ui'
 import { TableSkeleton } from '../../components/skeletons/TableSkeleton'
+import { TesterPageIntro } from '../../components/tester/tester-ui'
 
 interface BountyTier {
   action: string
@@ -131,7 +133,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
     : null
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden hover:border-accent/30 transition-colors">
+    <div className="rounded-xl border border-edge-subtle bg-surface-raised overflow-hidden hover:border-accent/30 transition-colors">
       {/* Header row */}
       <div className="flex items-start gap-4 p-4">
         <div className="h-14 w-14 shrink-0 rounded-xl bg-surface-root flex items-center justify-center text-2xl overflow-hidden">
@@ -155,11 +157,19 @@ function AppCard({ app, onJoin, onLeave, acting }: {
           </div>
         </div>
         {/* CTA */}
-        <div className="shrink-0 flex gap-2 items-start">
+        <div className="shrink-0 flex flex-col gap-2 items-end">
           {app.joined ? (
-            <Btn variant="ghost" size="sm" loading={acting === app.slug} onClick={() => onLeave(app.slug)}>
-              Leave
-            </Btn>
+            <>
+              <Link
+                to={`/tester/submissions?appId=${encodeURIComponent(app.id)}&new=1`}
+                className="inline-flex items-center justify-center rounded-sm border border-brand/40 bg-brand-subtle px-2.5 py-1 text-2xs font-semibold text-brand motion-safe:transition-colors hover:bg-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+              >
+                Report bug
+              </Link>
+              <Btn variant="ghost" size="sm" loading={acting === app.slug} onClick={() => onLeave(app.slug)}>
+                Leave
+              </Btn>
+            </>
           ) : (
             <Btn
               variant="primary" size="sm"
@@ -182,7 +192,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
       )}
 
       {/* Data strip */}
-      <div className="border-t border-white/5 px-4 py-3 grid grid-cols-1 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs">
+      <div className="border-t border-edge-subtle px-4 py-3 grid grid-cols-1 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs">
         <div>
           <p className="text-fg-faint mb-0.5">Bounty</p>
           <p className="text-fg font-medium">
@@ -231,11 +241,11 @@ function AppCard({ app, onJoin, onLeave, acting }: {
 
       {/* Bounty schedule (expandable) */}
       {app.bountySchedule.length > 0 && (
-        <div className="border-t border-white/5">
+        <div className="border-t border-edge-subtle">
           <button
             type="button"
             onClick={() => setShowBounties(v => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-fg-muted hover:text-fg hover:bg-white/5 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
           >
             <span>Bounty schedule — {app.bountySchedule.length} active tiers</span>
             <span>{showBounties ? '▲' : '▼'}</span>
@@ -264,7 +274,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
       )}
 
       {/* Footer links */}
-      <div className="border-t border-white/5 px-4 py-2.5 flex flex-wrap gap-3">
+      <div className="border-t border-edge-subtle px-4 py-2.5 flex flex-wrap gap-3">
         {app.webUrl && (
           <a href={app.webUrl} target="_blank" rel="noreferrer" className="text-xs text-fg-muted hover:text-fg transition-colors">
             Open web ↗
@@ -296,7 +306,7 @@ type FilterChip = 'all' | 'joined' | 'eligible'
 
 export function TesterAppsPage() {
   const toast = useToast()
-  const { data: raw, loading, error, reload } = usePageData<AppsResponse | TesterApp[]>('/v1/tester/apps')
+  const { data: raw, loading, error, reload } = usePageData<AppsResponse | TesterApp[]>('/v1/tester/apps', TESTER_API_OPTS)
   const [acting, setActing] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [chip, setChip] = useState<FilterChip>('all')
@@ -327,7 +337,7 @@ export function TesterAppsPage() {
   async function handleJoin(slug: string) {
     setActing(slug)
     try {
-      const res = await apiFetch(`/v1/tester/apps/${slug}/join`, { method: 'POST' })
+      const res = await apiFetch(`/v1/tester/apps/${slug}/join`, { method: 'POST', scope: 'none' })
       if (res.ok) {
         toast.success('Joined! Start testing and report bugs to earn points.')
         reload()
@@ -342,7 +352,7 @@ export function TesterAppsPage() {
   async function handleLeave(slug: string) {
     setActing(slug)
     try {
-      const res = await apiFetch(`/v1/tester/apps/${slug}/leave`, { method: 'POST' })
+      const res = await apiFetch(`/v1/tester/apps/${slug}/leave`, { method: 'POST', scope: 'none' })
       if (res.ok) {
         toast.success('Left the test program.')
         reload()
@@ -355,43 +365,35 @@ export function TesterAppsPage() {
   }
 
   return (
-    <TesterLayout title="Apps">
-      <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold">Apps to test</h1>
-          <p className="text-sm text-fg-muted mt-1">
-            Join a program, find real bugs, and earn mushi-points redeemable for Pro credit or gift cards.
-          </p>
-        </div>
+    <div className="space-y-5">
+        <TesterPageIntro
+          title="Apps to test"
+          description="Join a program, find real bugs, and earn mushi-points redeemable for Pro credit or gift cards."
+        />
 
         {/* Filter rail */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1 max-w-xs">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint text-sm select-none">🔍</span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative max-w-xs flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 select-none text-sm text-fg-faint" aria-hidden>🔍</span>
             <input
               type="search"
               placeholder="Search apps…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full rounded-md border border-edge-subtle bg-surface-raised py-2 pl-8 pr-3 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
             />
           </div>
-          <div className="flex gap-1.5">
-            {(['all', 'joined', 'eligible'] as FilterChip[]).map(c => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setChip(c)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors capitalize ${
-                  chip === c
-                    ? 'bg-accent text-fg'
-                    : 'border border-white/10 bg-white/5 text-fg-muted hover:text-fg hover:border-white/20'
-                }`}
-              >
-                {c === 'all' ? `All apps (${allApps.length})` : c === 'joined' ? `Joined (${allApps.filter(a => a.joined).length})` : `Eligible (${allApps.filter(a => a.meetsReputationGate && !a.joined).length})`}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={chip}
+            onChange={setChip}
+            ariaLabel="Filter apps"
+            size="sm"
+            options={[
+              { id: 'all', label: 'All', count: allApps.length },
+              { id: 'joined', label: 'Joined', count: allApps.filter(a => a.joined).length },
+              { id: 'eligible', label: 'Eligible', count: allApps.filter(a => a.meetsReputationGate && !a.joined).length },
+            ]}
+          />
         </div>
 
         {loading && <TableSkeleton rows={3} />}
@@ -405,7 +407,7 @@ export function TesterAppsPage() {
         )}
 
         {!loading && filtered.length === 0 && !error && (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
+          <div className="rounded-xl border border-edge-subtle bg-surface-raised p-12 text-center">
             <p className="text-3xl mb-3">{search ? '🔍' : '📭'}</p>
             <p className="text-lg font-medium">{search ? 'No apps match your search' : chip === 'joined' ? 'No joined apps yet' : 'No apps yet'}</p>
             <p className="text-sm text-fg-muted mt-1">
@@ -425,9 +427,9 @@ export function TesterAppsPage() {
               </button>
             )}
             <div className="mt-4">
-              <a href="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary transition-colors">
+              <Link to="/tester/learn" className="text-xs text-fg-faint hover:text-fg-secondary motion-safe:transition-colors">
                 New to Bounties? Read the guide →
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -445,7 +447,6 @@ export function TesterAppsPage() {
             ))}
           </div>
         )}
-      </div>
-    </TesterLayout>
+    </div>
   )
 }

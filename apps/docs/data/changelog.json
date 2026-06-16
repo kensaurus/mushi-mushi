@@ -1,5 +1,26 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Security",
+        "description": "`getWidgetStyles` now validates the `accent` / `accentText`"
+      },
+      {
+        "title": "Reliability",
+        "description": "the community load (global leaderboard + tester reputation)"
+      },
+      {
+        "title": "Maintainability",
+        "description": "the widget's rendering and stateless helpers were"
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.14",
     "headline": null,
     "pending": false,

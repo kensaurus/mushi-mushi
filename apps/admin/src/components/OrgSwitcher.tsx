@@ -8,9 +8,15 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import {
   ACTIVE_ORG_QUERY_PARAM,
+  clearActiveOrg,
   getActiveOrgIdSnapshot,
+  isValidOrgId,
   setActiveOrgIdSnapshot,
 } from '../lib/activeOrg'
+import {
+  ACTIVE_PROJECT_QUERY_PARAM,
+  ACTIVE_PROJECT_STORAGE_KEY,
+} from '../lib/activeProject'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 
@@ -41,7 +47,9 @@ function orgPillLabel(org: OrganizationSummary): string {
 }
 
 export function OrgSwitcher() {
-  const orgsQuery = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org')
+  const orgsQuery = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
+    scope: 'none',
+  })
   const { data, loading } = orgsQuery
   const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
@@ -64,7 +72,13 @@ export function OrgSwitcher() {
     if (loading || !data?.organizations?.length) return
     const fromUrl = searchParams.get(ACTIVE_ORG_QUERY_PARAM)
     const fromStorage = getActiveOrgIdSnapshot()
-    const candidate = fromUrl ?? fromStorage
+    if (fromUrl && !isValidOrgId(fromUrl)) {
+      const next = new URLSearchParams(searchParams)
+      next.delete(ACTIVE_ORG_QUERY_PARAM)
+      setSearchParams(next, { replace: true })
+      clearActiveOrg()
+    }
+    const candidate = (fromUrl && isValidOrgId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = data.organizations.find((o) => o.id === candidate)
     if (known) {
       if (fromStorage !== known.id) setActiveOrgIdSnapshot(known.id)
@@ -162,13 +176,26 @@ export function OrgSwitcher() {
     )
   }
 
-  const activeId = searchParams.get(ACTIVE_ORG_QUERY_PARAM) ?? getActiveOrgIdSnapshot() ?? orgs[0].id
+  const fromUrlOrg = searchParams.get(ACTIVE_ORG_QUERY_PARAM)
+  const activeId =
+    (fromUrlOrg && isValidOrgId(fromUrlOrg) ? fromUrlOrg : null) ??
+    getActiveOrgIdSnapshot() ??
+    orgs[0].id
   const active = orgs.find((o) => o.id === activeId) ?? orgs[0]
 
   function pick(id: string) {
     setActiveOrgIdSnapshot(id)
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_ORG_QUERY_PARAM, id)
+    // Dropping the pinned project when the team changes mirrors Supabase's
+    // org switcher: the project switcher re-resolves against the new team's
+    // project set instead of keeping a project from the previous org selected.
+    next.delete(ACTIVE_PROJECT_QUERY_PARAM)
+    try {
+      window.localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY)
+    } catch {
+      // storage-disabled — URL param clear is enough
+    }
     setSearchParams(next, { replace: true })
     setOpen(false)
   }

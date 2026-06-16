@@ -163,6 +163,7 @@ Deno.serve(
     if (unauthorized) return unauthorized;
 
     const log = rootLog.child('fix-worker');
+    const requestId = req.headers.get('x-request-id')?.trim();
     let body: FixRequestBody;
     try {
       const raw: unknown = await req.json();
@@ -181,6 +182,8 @@ Deno.serve(
         status: 400,
       });
     }
+
+    log.info('job.start', { dispatchId: body.dispatchId, requestId });
 
     const db = getServiceClient();
 

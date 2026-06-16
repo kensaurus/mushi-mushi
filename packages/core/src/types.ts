@@ -244,7 +244,7 @@ export interface MushiBannerConfig {
   label?: string | false;
   /** Override the call-to-action text in the banner. Defaults to '🐛 Report a bug'. */
   bugCta?: string;
-  /** Show a "✨ Request a feature" button alongside the bug button. Defaults to true. */
+  /** Show a "Request a feature" button alongside the bug button. Defaults to true. */
   featureCta?: boolean;
   /** Override the feature-request button label. */
   featureCtaLabel?: string;

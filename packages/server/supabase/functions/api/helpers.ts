@@ -1,6 +1,7 @@
 import type { Context } from 'npm:hono@4';
 
 import { getServiceClient } from '../_shared/db.ts';
+import { propagateRequestId } from '../_shared/internal-headers.ts';
 import { log } from '../_shared/logger.ts';
 import { checkIngestQuota } from '../_shared/quota.ts';
 import { getStorageAdapter } from '../_shared/storage.ts';
@@ -802,17 +803,20 @@ async function checkCircuitBreaker(db: ReturnType<typeof getServiceClient>): Pro
   }
 }
 
-export function triggerClassification(reportId: string, projectId: string) {
+export function triggerClassification(reportId: string, projectId: string, requestId?: string) {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     const classifyPromise = fetch(`${supabaseUrl}/functions/v1/fast-filter`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceKey}`,
-      },
+      headers: propagateRequestId(
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceKey}`,
+        },
+        requestId,
+      ),
       body: JSON.stringify({ reportId, projectId }),
     })
       .then(async (res) => {
@@ -873,7 +877,7 @@ async function handleQueueFailure(
   }
 }
 
-export async function invokeFixWorker(dispatchId: string): Promise<void> {
+export async function invokeFixWorker(dispatchId: string, requestId?: string): Promise<void> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceRoleKey) return;
@@ -884,10 +888,13 @@ export async function invokeFixWorker(dispatchId: string): Promise<void> {
   // fix_dispatch_jobs row that the SSE endpoint subscribes to.
   await fetch(`${supabaseUrl}/functions/v1/fix-worker`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: propagateRequestId(
+      {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json',
+      },
+      requestId,
+    ),
     body: JSON.stringify({ dispatchId }),
     // Don't block the dispatch response on the worker booting.
     signal: AbortSignal.timeout(2_000),

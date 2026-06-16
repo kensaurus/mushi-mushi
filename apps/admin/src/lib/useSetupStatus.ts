@@ -147,6 +147,7 @@ export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusR
   // the narrower `SetupStepId` union). Runtime shape is unchanged.
   const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup', {
     schema: SetupResponseSchema as unknown as ZodType<SetupResponse, ZodTypeDef, SetupResponse>,
+    scope: 'enumeration',
   })
 
   return useMemo(() => {

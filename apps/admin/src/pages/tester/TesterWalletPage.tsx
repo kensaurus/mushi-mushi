@@ -7,8 +7,10 @@
  * - Lifetime stats sub-section
  */
 import { useState } from 'react'
-import { TesterLayout } from '../../components/tester/TesterLayout'
+import { Link } from 'react-router-dom'
+import { TesterPageIntro, TesterPrimaryCta, TesterStatGrid } from '../../components/tester/tester-ui'
 import { usePageData } from '../../lib/usePageData'
+import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Btn, Badge, Card } from '../../components/ui'
@@ -81,7 +83,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
   const overThreshold = ytd >= threshold
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+    <div className="rounded-xl border border-edge-subtle bg-surface-raised p-5">
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>
           <p className="text-sm font-semibold">Gift card milestone</p>
@@ -93,16 +95,16 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
           </p>
         </div>
         {overThreshold && !kycCleared && (
-          <a
-            href="/tester/settings#kyc"
-            className="shrink-0 rounded-lg bg-warn/20 border border-warn/30 px-3 py-1.5 text-xs font-medium text-warn hover:bg-warn/30 transition-colors"
+          <Link
+            to="/tester/settings#kyc"
+            className="shrink-0 rounded-lg border border-warn/30 bg-warn/20 px-3 py-1.5 text-xs font-medium text-[var(--color-warning-foreground)] motion-safe:transition-colors hover:bg-warn/30"
           >
             Complete KYC →
-          </a>
+          </Link>
         )}
       </div>
       {/* Segmented bar */}
-      <div className="relative h-3 rounded-full bg-white/10 overflow-visible">
+      <div className="relative h-3 rounded-full bg-surface-overlay overflow-visible">
         {/* Filled portion */}
         <div
           className={`absolute inset-y-0 left-0 rounded-full transition-all ${
@@ -112,7 +114,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
         />
         {/* KYC gate marker */}
         <div
-          className="absolute inset-y-0 w-0.5 bg-white/40"
+          className="absolute inset-y-0 w-0.5 bg-edge"
           style={{ left: `${thresholdPct}%` }}
           title={`KYC required at $${threshold}`}
         />
@@ -132,7 +134,7 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
     ? 'Mushi Pro credit'
     : `Gift card — $${r.faceValueUsd?.toFixed(0) ?? '?'}`
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-t border-white/5 first:border-t-0">
+    <div className="flex items-center gap-3 px-4 py-3 border-t border-edge-subtle first:border-t-0">
       <span className="text-xl shrink-0">{icon}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{label}</p>
@@ -149,9 +151,11 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
 
 export function TesterWalletPage() {
   const toast = useToast()
-  const { data: raw, loading, error, reload } = usePageData<WalletResponse | WalletData>('/v1/tester/wallet')
+  const { data: raw, loading, error, reload } = usePageData<WalletResponse | WalletData>(
+    '/v1/tester/wallet',
+    TESTER_API_OPTS,
+  )
   const [redeeming, setRedeeming] = useState<string | null>(null)
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
   // Normalise nested .data wrapper
   const wallet: WalletData | null = raw
@@ -172,7 +176,11 @@ export function TesterWalletPage() {
     try {
       const res = await apiFetch('/v1/tester/wallet/redeem', {
         method: 'POST',
-        body: JSON.stringify({ catalogItemId: item.id }),
+        scope: 'none',
+        body: JSON.stringify({
+          catalogItemId: item.id,
+          clientEventId: crypto.randomUUID(),
+        }),
       })
       if ((res as { ok?: boolean }).ok) {
         toast.success(`Redemption submitted! ${item.category === 'pro' ? 'Credit applied to your subscription.' : 'Gift card will arrive via email.'}`)
@@ -185,6 +193,8 @@ export function TesterWalletPage() {
           window.location.href = '/tester/settings#kyc'
         } else if (code === 'region_not_supported') {
           toast.error('Gift cards are not available in your region.')
+        } else if (code === 'budget_exceeded') {
+          toast.error('This app has reached its monthly payout budget. Try again next month or choose Pro credit.')
         } else {
           toast.error(msg)
         }
@@ -195,14 +205,11 @@ export function TesterWalletPage() {
   }
 
   return (
-    <TesterLayout title="Wallet">
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-bold">Wallet</h1>
-          <p className="text-sm text-fg-muted mt-1">
-            Redeem mushi-points for Mushi Pro credit (1.3× bonus) or gift cards via Tremendous.
-          </p>
-        </div>
+    <div className="space-y-6">
+        <TesterPageIntro
+          title="Wallet"
+          description="Redeem mushi-points for Mushi Pro credit (1.3× bonus) or gift cards via Tremendous."
+        />
 
         {loading && <TableSkeleton rows={6} />}
 
@@ -217,20 +224,14 @@ export function TesterWalletPage() {
         {!loading && wallet && (
           <>
             {/* Balance strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { label: 'Balance',       value: wallet.balance.toLocaleString() + ' pts',                             sub: 'available to redeem' },
-                { label: 'Total earned',  value: wallet.totalEarned.toLocaleString() + ' pts',                        sub: 'all time' },
-                { label: 'Total redeemed',value: Math.max(0, wallet.totalRedeemed).toLocaleString() + ' pts',         sub: 'all time' },
-                { label: 'YTD gift cards',value: '$' + wallet.ytdGiftCardUsd.toFixed(2),                              sub: `of $${wallet.kycCapUsd} annual cap` },
-              ].map(({ label, value, sub }) => (
-                <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-                  <p className="text-xs text-fg-faint uppercase tracking-wide">{label}</p>
-                  <p className="text-lg font-bold mt-1">{value}</p>
-                  <p className="text-xs text-fg-faint mt-0.5">{sub}</p>
-                </div>
-              ))}
-            </div>
+            <TesterStatGrid
+              items={[
+                { label: 'Balance', value: `${wallet.balance.toLocaleString()} pts`, hint: 'redeemable now' },
+                { label: 'Total earned', value: `${wallet.totalEarned.toLocaleString()} pts`, hint: 'all time' },
+                { label: 'Total redeemed', value: `${Math.max(0, wallet.totalRedeemed).toLocaleString()} pts`, hint: 'all time' },
+                { label: 'YTD gift cards', value: `$${wallet.ytdGiftCardUsd.toFixed(2)}`, hint: `of $${wallet.kycCapUsd} cap` },
+              ]}
+            />
 
             {/* Always-on milestone bar */}
             <MilestoneBar
@@ -245,7 +246,7 @@ export function TesterWalletPage() {
               <div>
                 <h2 className="text-sm font-semibold mb-2">In-flight redemptions</h2>
                 <Card>
-                  <div className="divide-y divide-white/5">
+                  <div className="divide-y divide-edge-subtle">
                     {wallet.pendingRedemptions.map(r => <PendingRedemptionCard key={r.id} r={r} />)}
                   </div>
                 </Card>
@@ -259,15 +260,11 @@ export function TesterWalletPage() {
                 {wallet.catalog.map(item => (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-4 rounded-xl border p-4 transition-all ${
+                    className={`flex items-center gap-4 rounded-xl border p-4 motion-safe:transition-[border-color,background-color] ${
                       item.isAvailable
-                        ? hoveredItem === item.id
-                          ? 'border-accent/40 bg-accent/5'
-                          : 'border-white/10 bg-white/5'
-                        : 'border-white/5 bg-white/2 opacity-60'
+                        ? 'border-edge-subtle bg-surface-raised hover:border-brand/30'
+                        : 'border-edge-subtle bg-surface-overlay opacity-60'
                     }`}
-                    onMouseEnter={() => setHoveredItem(item.id)}
-                    onMouseLeave={() => setHoveredItem(null)}
                   >
                     <span className="text-2xl shrink-0">{item.icon}</span>
                     <div className="flex-1 min-w-0">
@@ -278,9 +275,8 @@ export function TesterWalletPage() {
                         )}
                       </div>
                       <p className="text-xs text-fg-muted mt-0.5">{item.description}</p>
-                      {/* Conversion preview — shown on hover */}
-                      {hoveredItem === item.id && item.conversionPreview && (
-                        <p className="text-xs text-accent/80 mt-1 italic">{item.conversionPreview}</p>
+                      {item.conversionPreview && (
+                        <p className="mt-1 text-xs text-fg-muted">{item.conversionPreview}</p>
                       )}
                       {item.unavailableReason && (
                         <p className="text-xs text-danger mt-0.5">{item.unavailableReason}</p>
@@ -313,7 +309,7 @@ export function TesterWalletPage() {
               <div>
                 <h2 className="text-sm font-semibold mb-3">Recent activity</h2>
                 <Card>
-                  <div className="divide-y divide-white/5">
+                  <div className="divide-y divide-edge-subtle">
                     {wallet.recentLedger.map(entry => (
                       <div key={entry.id} className="flex items-center justify-between px-4 py-3">
                         <div>
@@ -335,20 +331,19 @@ export function TesterWalletPage() {
             )}
 
             {wallet.recentLedger.length === 0 && wallet.balance === 0 && (
-              <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
+              <div className="rounded-xl border border-edge-subtle bg-surface-raised p-8 text-center">
                 <p className="text-2xl mb-2">🪙</p>
                 <p className="text-sm font-medium">No points yet</p>
                 <p className="text-xs text-fg-muted mt-1">
                   Join an app and submit a bug to earn your first points.
                 </p>
-                <a href="/tester/apps" className="mt-3 inline-block text-xs text-accent hover:underline">
-                  Browse apps →
-                </a>
+                <div className="mt-3">
+                  <TesterPrimaryCta to="/tester/apps">Browse apps →</TesterPrimaryCta>
+                </div>
               </div>
             )}
           </>
         )}
-      </div>
-    </TesterLayout>
+    </div>
   )
 }

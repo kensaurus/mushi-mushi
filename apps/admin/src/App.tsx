@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-do
 import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
+import { TesterLayout } from './components/tester/TesterLayout'
 import { LoginPage } from './pages/LoginPage'
 import { PublicHomePage } from './pages/PublicHomePage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -68,6 +69,9 @@ const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default:
 const QaCoveragePage = lazy(() => import('./pages/QaCoveragePage').then(m => ({ default: m.QaCoveragePage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const RewardsPage = lazy(() => import('./pages/RewardsPage').then(m => ({ default: m.RewardsPage })))
+const TesterSubmissionsReviewPage = lazy(() =>
+  import('./pages/TesterSubmissionsReviewPage').then(m => ({ default: m.TesterSubmissionsReviewPage })),
+)
 const LessonsPage = lazy(() => import('./pages/LessonsPage').then(m => ({ default: m.LessonsPage })))
 const ReleasesPage = lazy(() => import('./pages/ReleasesPage').then(m => ({ default: m.ReleasesPage })))
 const IteratePage = lazy(() => import('./pages/IteratePage').then(m => ({ default: m.IteratePage })))
@@ -293,83 +297,25 @@ export function App() {
             Router v6 picks the more-specific match over `/*`. The admin
             integration config is available at /integrations/config. */}
         <Route path="/integrations" element={<IntegrationsRouteGate />} />
-        {/* Mushi Bounties — Tester Portal (Wave 3-4).
-            Mounted OUTSIDE the dev-console ProtectedRoute + Layout so testers get their own
-            TesterLayout chrome instead of the full admin sidebar. */}
-        {/* Mushi Bounties — Tester Portal (Wave 3-4).
-            Pages include TesterLayout; routes don't need the dev-console Layout. */}
+        {/* Mushi Bounties — tester portal shell mirrors admin Layout; purple portal theme. */}
         <Route
           path="/tester"
           element={
             <TesterRoute>
-              <Suspense fallback={<Loading text="Loading tester portal..." />}>
-                <TesterHomePage />
-              </Suspense>
-            </TesterRoute>
-          }
-        />
-        <Route
-          path="/tester/apps"
-          element={
-            <TesterRoute>
-              <Suspense fallback={<Loading text="Loading..." />}>
-                <TesterAppsPage />
-              </Suspense>
-            </TesterRoute>
-          }
-        />
-        <Route
-          path="/tester/submissions"
-          element={
-            <TesterRoute>
-              <Suspense fallback={<Loading text="Loading..." />}>
-                <TesterSubmissionsPage />
-              </Suspense>
-            </TesterRoute>
-          }
-        />
-        <Route
-          path="/tester/wallet"
-          element={
-            <TesterRoute>
-              <Suspense fallback={<Loading text="Loading..." />}>
-                <TesterWalletPage />
-              </Suspense>
-            </TesterRoute>
-          }
-        />
-        <Route
-          path="/tester/settings"
-          element={
-            <TesterRoute>
-              <Suspense fallback={<Loading text="Loading..." />}>
-                <TesterSettingsPage />
-              </Suspense>
-            </TesterRoute>
-          }
-        />
-        {/* Tester portal — uses TesterLayout, no dev console chrome or Layout.
-            Inner Routes must use RELATIVE paths (no leading /) so React Router v6
-            matches against the remaining path after /tester/, not the full URL. */}
-        <Route
-          path="/tester/*"
-          element={
-            <ProtectedRoute>
               <ErrorBoundary source="tester-portal">
-              <Suspense fallback={<Loading text="Loading..." />}>
-              <SentryRoutes>
-                <Route index element={<TesterHomePage />} />
-                <Route path="apps" element={<TesterAppsPage />} />
-                <Route path="wallet" element={<TesterWalletPage />} />
-                <Route path="learn" element={<TesterLearnPage />} />
-                <Route path="settings" element={<TesterSettingsPage />} />
-                <Route path="*" element={<Navigate to="/tester" replace />} />
-              </SentryRoutes>
-              </Suspense>
+                <TesterLayout />
               </ErrorBoundary>
-            </ProtectedRoute>
+            </TesterRoute>
           }
-        />
+        >
+          <Route index element={<TesterHomePage />} />
+          <Route path="apps" element={<TesterAppsPage />} />
+          <Route path="wallet" element={<TesterWalletPage />} />
+          <Route path="learn" element={<TesterLearnPage />} />
+          <Route path="settings" element={<TesterSettingsPage />} />
+          <Route path="submissions" element={<TesterSubmissionsPage />} />
+          <Route path="*" element={<Navigate to="/tester" replace />} />
+        </Route>
         <Route
           path="/*"
           element={
@@ -417,6 +363,7 @@ export function App() {
                   <Route path="/projects/:pid/qa-coverage/:storyId" element={<QaCoverageRedirect />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/rewards" element={<RewardsPage />} />
+                  <Route path="/rewards/tester-review" element={<TesterSubmissionsReviewPage />} />
                   <Route path="/lessons" element={<LessonsPage />} />
                   <Route path="/releases" element={<ReleasesPage />} />
                   <Route path="/iterate" element={<IteratePage />} />
