@@ -2,9 +2,6 @@
 "@mushi-mushi/core": minor
 "@mushi-mushi/web": minor
 "@mushi-mushi/react-native": minor
-"@mushi-mushi/flutter": patch
-"@mushi-mushi/android": patch
-"@mushi-mushi/ios": patch
 ---
 
 **Mushi SDK Uplift — Draggable FAB, Themed Popup, Keyboard-Safe Form, Cross-App Community**
