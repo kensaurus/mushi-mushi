@@ -2,7 +2,29 @@
   "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
-      "id": "2026-05-10-data-pipeline-loop-closure",
+      "id": "2026-06-17-sidebar-micro-chrome",
+      "date": "2026-06-17",
+      "title": "Sidebar micro chrome — sliding pill toggles with calmer motion",
+      "summary": "Portal, mode, density, and theme controls now share one segmented-control primitive with a Framer Motion sliding pill, reduced-motion support, and a leaner Ask Mushi launcher.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Unified MicroSegmentedTrack — portal, admin mode, density, theme, and table-density toggles share one sliding-pill control with consistent hover, focus, and press feedback."
+        },
+        {
+          "tone": "feature",
+          "text": "Sidebar footer consolidation — density, theme, and focus controls live in SidebarFooterControls; brand row uses SidebarBrandToggles under the wordmark."
+        },
+        {
+          "tone": "fix",
+          "text": "Edge access logs with HTTP 5xx no longer duplicate into Sentry — request.done errors pass sentry: false so route exceptions remain the single error signal."
+        },
+        {
+          "tone": "fix",
+          "text": "Tester portal sidebar now uses the same micro chrome as admin (theme-only footer, portal row without mode toggle)."
+        }
+      ]
+    },
       "date": "2026-05-10",
       "title": "Closing the data pipeline loop — failure categories, fix RAG, drift watch, multi-repo",
       "summary": "Every fix attempt now categorises why it failed, the fix-worker learns from past merged fixes, inventory drift auto-proposes updates, structured reporter feedback feeds the prompt-tune loop, and a single bug can fan out fixes across multiple linked repos.",

@@ -609,12 +609,12 @@ export function OnboardingPage() {
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden
-              className="ask-mushi-launcher ask-mushi-launcher--glow relative mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-brand/25 bg-brand/10 text-brand"
+              className="relative mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center text-brand"
             >
-              <IconChat className="h-4 w-4 relative z-[1]" />
+              <IconChat className="h-3.5 w-3.5" />
               <span
                 aria-hidden
-                className="ask-mushi-launcher__ring pointer-events-none absolute inset-0 rounded-md"
+                className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-brand"
               />
             </span>
             <div className="min-w-0">
@@ -626,7 +626,7 @@ export function OnboardingPage() {
                 <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
                   Cmd/Ctrl+J
                 </kbd>
-                . Look for the glowing chat icon in the header after you open the dashboard.
+                . Look for the chat icon in the header toolbar after you open the dashboard.
               </p>
             </div>
           </div>

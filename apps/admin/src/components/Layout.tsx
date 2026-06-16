@@ -43,8 +43,8 @@ import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
-import { DensitySidebarToggle } from './DensitySidebarToggle'
-import { ThemeSidebarToggle } from './ThemeSidebarToggle'
+import { SidebarBrandToggles } from './SidebarBrandToggles'
+import { SidebarFooterControls } from './SidebarFooterControls'
 import { SidebarUserCard } from './SidebarUserCard'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
@@ -63,8 +63,6 @@ import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
-import { PortalToggle } from './PortalSwitcher'
-import { ModeToggle } from './ModeToggle'
 import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 
 interface NavItem {
@@ -972,7 +970,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <span className="text-brand">m</span>
               <span className="text-fg-secondary">m</span>
             </h1>
-            <PortalToggle compact />
+            <SidebarBrandToggles compact mode={mode} onSelectMode={setMode} />
           </div>
         ) : (
           <>
@@ -980,8 +978,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
             </h1>
-            <PortalToggle />
-            <ModeToggle mode={mode} onSelect={setMode} />
+            <SidebarBrandToggles mode={mode} onSelectMode={setMode} />
             {onHiddenRoute && (
               <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn space-y-1.5">
                 <p className="leading-snug">{hiddenRouteCopy}</p>
@@ -1250,23 +1247,11 @@ export function Layout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      {/* User footer.
-          Expanded rail (compact === false): density toggle on top, then
-          a single combined Theme + Focus row (3 icon buttons in one
-          bordered strip — see ThemeSidebarToggle.tsx for the rationale
-          behind dropping the standalone Auto/system option), then the
-          user identity card with provider info + the rose sign-out
-          icon (which opens a confirm dialog so the 3am-on-call
-          accidental sign-out is caught).
-          Collapsed rail (compact === true): density + theme controls
-          don't fit a 48px rail, so we hide them. Focus mode + sign-out
-          stay as icon-only buttons (always-needed escape hatches). */}
+      {/* User footer — density, theme, focus in one micro row; identity card below. */}
       <div className={`${compact ? 'px-1 py-2 space-y-2' : 'px-3 py-2.5 space-y-2'} border-t border-edge/60`}>
-        {/* Privacy posture badge — always visible, collapses to a dot when compact */}
         <PrivacyPostureBadge compact={compact} />
-        {!compact && <DensitySidebarToggle />}
         {!compact && (
-          <ThemeSidebarToggle
+          <SidebarFooterControls
             focusMode={focusMode}
             onToggleFocus={() => setFocusMode((value) => !value)}
           />

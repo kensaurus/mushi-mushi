@@ -12,9 +12,9 @@ import { useTesterStatus, reputationTier } from '../../lib/useTesterStatus'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../../lib/appChrome'
 import { PAGE_SHELL_CLASS } from '../../lib/pageLayout'
 import { useDocumentTitle } from '../../lib/useDocumentTitle'
-import { PortalToggle } from '../PortalSwitcher'
+import { SidebarBrandToggles } from '../SidebarBrandToggles'
+import { SidebarFooterControls } from '../SidebarFooterControls'
 import { SidebarUserCard } from '../SidebarUserCard'
-import { ThemeSidebarToggle } from '../ThemeSidebarToggle'
 import { RouteProgress } from '../RouteProgress'
 import { TesterWelcomeEnroll } from './TesterWelcomeEnroll'
 import {
@@ -148,7 +148,7 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
               <span className="text-brand">m</span>
               <span className="text-fg-secondary">m</span>
             </h1>
-            <PortalToggle compact />
+            <SidebarBrandToggles compact showMode={false} mode="advanced" onSelectMode={() => {}} />
           </div>
         ) : (
           <>
@@ -156,7 +156,7 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
             </h1>
-            <PortalToggle />
+            <SidebarBrandToggles showMode={false} mode="advanced" onSelectMode={() => {}} />
           </>
         )}
       </div>
@@ -164,7 +164,14 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
       {renderSidebarNav(compact)}
 
       <div className={`${compact ? 'space-y-2 px-1 py-2' : 'space-y-2 px-3 py-2.5'} border-t border-edge/60`}>
-        {!compact && <ThemeSidebarToggle focusMode={false} onToggleFocus={() => {}} showFocus={false} />}
+        {!compact && (
+          <SidebarFooterControls
+            focusMode={false}
+            onToggleFocus={() => {}}
+            showDensity={false}
+            showFocus={false}
+          />
+        )}
         {!compact && user && <SidebarUserCard user={user} signOut={signOut} />}
         {compact && (
           <button

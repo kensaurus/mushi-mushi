@@ -127,4 +127,16 @@ describe('edge logger', () => {
     logger.info('visible')
     expect(logSpy).toHaveBeenCalledOnce()
   })
+
+  it('skips Sentry when sentry: false is passed', async () => {
+    const { reportMessage } = await import('../../supabase/functions/_shared/sentry.ts')
+    const { createLogger } = await loadLogger()
+    const logger = createLogger({ scope: 'mushi:test', format: 'json' })
+    logger.error('expected 5xx', { status: 503, sentry: false })
+
+    expect(errorSpy).toHaveBeenCalledOnce()
+    const entry = JSON.parse(String(errorSpy.mock.calls[0][0]))
+    expect(entry.sentry).toBeUndefined()
+    expect(reportMessage).not.toHaveBeenCalled()
+  })
 })

@@ -7,7 +7,7 @@
  * - Wires TesterSubmissionCard accept / informative / duplicate / spam actions
  *
  * DEPENDENCIES:
- * - apiFetch, getActiveProjectIdSnapshot, TesterSubmissionCard
+ * - apiFetch, useActiveProjectId, TesterSubmissionCard
  *
  * USAGE:
  * - Route: /rewards/tester-review (protected admin layout)
@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { getActiveProjectIdSnapshot } from '../lib/activeProject'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { PageHeader, EmptyState, ErrorAlert, Badge, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -38,7 +38,7 @@ interface QueueItem {
 type StatusFilter = 'pending' | 'all' | 'accepted'
 
 export function TesterSubmissionsReviewPage() {
-  const projectId = getActiveProjectIdSnapshot()
+  const projectId = useActiveProjectId()
   const toast = useToast()
   const [status, setStatus] = useState<StatusFilter>('pending')
   const [items, setItems] = useState<QueueItem[]>([])

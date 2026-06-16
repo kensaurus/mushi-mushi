@@ -271,7 +271,7 @@ export function SidebarUserCard({ user, signOut }: SidebarUserCardProps) {
 
   return (
     <>
-      <div className="rounded-sm border border-edge-subtle/60 bg-surface-raised/40 px-1.5 py-1.5 hover:border-edge/60 motion-safe:transition-colors space-y-1.5">
+      <div className="space-y-1 pt-0.5">
         <div className="group flex items-center gap-2">
           <Avatar user={user} className="h-6 w-6 shrink-0" />
           <div className="min-w-0 flex-1">

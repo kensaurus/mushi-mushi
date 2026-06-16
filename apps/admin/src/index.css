@@ -1618,67 +1618,187 @@ select, input, textarea {
   animation: mushi-pulse-glow 2.4s var(--ease-out-expo) infinite;
 }
 
-/* Ask Mushi header launcher — brand glow until first open */
-@keyframes ask-mushi-launcher-glow {
-  0%, 100% {
-    opacity: 0.35;
-    transform: scale(1);
-    box-shadow:
-      0 0 0 0 color-mix(in oklch, var(--color-brand) 0%, transparent),
-      0 0 10px -2px color-mix(in oklch, var(--color-brand) 35%, transparent);
-  }
-  50% {
-    opacity: 0.85;
-    transform: scale(1.12);
-    box-shadow:
-      0 0 0 3px color-mix(in oklch, var(--color-brand) 22%, transparent),
-      0 0 18px -2px color-mix(in oklch, var(--color-brand) 55%, transparent);
+/* Ask Mushi header launcher — replaced by inline pulse dot (see AskMushiLauncherButton.tsx) */
+
+/* ---------------------------------------------------------------------------
+   Sidebar micro toggles — segmented control (portal, mode, density, theme)
+   Single source of truth for hover / selected / press / focus on sidebar
+   icon+label strips.    Consumers: MicroSegmentedTrack, SidebarBrandToggles,
+   SidebarFooterControls, ResponsiveTable TableDensityToggle.
+--------------------------------------------------------------------------- */
+
+.sidebar-micro-track {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklch, var(--color-edge) 55%, transparent);
+  background: color-mix(in oklch, var(--color-surface-overlay) 65%, var(--color-surface-raised));
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--color-fg) 4%, transparent);
+}
+
+.sidebar-micro-seg {
+  position: relative;
+  display: flex;
+  height: 1.375rem;
+  min-width: 0;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  padding-inline: 0.125rem;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 160ms var(--ease-out-expo),
+    background-color 160ms var(--ease-out-expo),
+    border-color 160ms var(--ease-out-expo),
+    box-shadow 160ms var(--ease-out-expo),
+    transform 100ms var(--ease-out-expo);
+}
+
+.sidebar-micro-seg__label {
+  transition: color 160ms var(--ease-out-expo), font-weight 160ms var(--ease-out-expo);
+}
+
+.sidebar-micro-seg:hover:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) {
+  color: var(--color-fg-secondary);
+  background: color-mix(in oklch, var(--color-surface-hover) 55%, transparent);
+  border-color: color-mix(in oklch, var(--color-edge) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-micro-seg:active {
+    transform: scale(0.96);
   }
 }
 
-.ask-mushi-launcher--glow {
+.sidebar-micro-seg--active,
+.sidebar-micro-seg[aria-checked='true'],
+.sidebar-micro-seg[aria-pressed='true'] {
+  color: var(--color-brand-foreground);
+  font-weight: 600;
+  background: color-mix(in oklch, var(--color-brand) 14%, var(--color-surface-raised));
+  border-color: color-mix(in oklch, var(--color-brand) 32%, transparent);
   box-shadow:
-    inset 0 0 0 1px color-mix(in oklch, var(--color-brand) 45%, transparent),
-    0 0 14px -3px color-mix(in oklch, var(--color-brand) 50%, transparent);
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-brand) 10%, transparent);
 }
 
-.ask-mushi-launcher__ring {
-  inset: -2px;
-  border-radius: inherit;
-  border: 1px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+.sidebar-micro-seg--active .sidebar-micro-seg__label,
+.sidebar-micro-seg[aria-checked='true'] .sidebar-micro-seg__label {
+  font-weight: 600;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .ask-mushi-launcher--glow .ask-mushi-launcher__ring {
-    animation: ask-mushi-launcher-glow 2.2s var(--ease-out-expo) infinite;
-  }
+.sidebar-micro-seg--active:hover,
+.sidebar-micro-seg[aria-checked='true']:hover,
+.sidebar-micro-seg[aria-pressed='true']:hover {
+  background: color-mix(in oklch, var(--color-brand) 20%, var(--color-surface-raised));
+  border-color: color-mix(in oklch, var(--color-brand) 42%, transparent);
+}
+
+.sidebar-micro-seg--active svg,
+.sidebar-micro-seg[aria-checked='true'] svg,
+.sidebar-micro-seg[aria-pressed='true'] svg {
+  opacity: 1;
+  color: var(--color-brand-foreground);
+}
+
+.sidebar-micro-seg:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) svg {
+  opacity: 0.72;
+}
+
+.sidebar-micro-seg:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+.sidebar-micro-seg--active:focus-visible,
+.sidebar-micro-seg[aria-checked='true']:focus-visible,
+.sidebar-micro-seg[aria-pressed='true']:focus-visible {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+/* Sliding pill — Framer layoutId indicator (MicroSegmentedTrack) */
+.sidebar-micro-track--sliding {
+  position: relative;
+}
+
+.sidebar-micro-track--inline {
+  width: auto;
+  display: inline-flex;
+}
+
+.sidebar-micro-seg-cell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0%;
+  align-items: stretch;
+}
+
+.sidebar-micro-track--inline .sidebar-micro-seg-cell {
+  flex: 0 1 auto;
+}
+
+.sidebar-micro-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid color-mix(in oklch, var(--color-brand) 32%, transparent);
+  background: color-mix(in oklch, var(--color-brand) 14%, var(--color-surface-raised));
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-brand) 10%, transparent);
+  pointer-events: none;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true'],
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true'] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active:hover,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true']:hover,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true']:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active:focus-visible,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true']:focus-visible,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true']:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ask-mushi-launcher--glow {
-    outline: 2px solid color-mix(in oklch, var(--color-brand) 65%, transparent);
-    outline-offset: 2px;
+  .sidebar-micro-seg {
+    transition: none;
   }
-  .ask-mushi-launcher__ring {
-    display: none;
+
+  .sidebar-micro-seg:active {
+    transform: none;
+  }
+
+  .sidebar-micro-indicator {
+    transition: none !important;
   }
 }
 
-@keyframes portal-toggle-caret-blink {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
-}
-
-.portal-toggle__caret {
-  animation: portal-toggle-caret-blink 900ms step-end infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .portal-toggle__caret {
-    animation: none;
-    opacity: 0.6;
-  }
-}
 
 /* ---------------------------------------------------------------------------
    STAMP GLOW UTILITIES (used by PDCA receipts)
