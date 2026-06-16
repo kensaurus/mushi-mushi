@@ -33,7 +33,7 @@ import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { resolveLlmKey } from '../../_shared/byok.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import { resolveNextStepTo } from '../../_shared/activation-status.ts';
 import {
   canManageProjectSdkConfig,
@@ -83,7 +83,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       unpaidProjects: 0,
     };
 
-    const projectIdsForUser = await ownedProjectIds(db, userId);
+    const projectIdsForUser = await callerProjectIds(c, db, userId);
     if (projectIdsForUser.length === 0) {
       const plans = await listPlans();
       const hobby = plans.find((pl) => pl.id === 'hobby');
@@ -269,7 +269,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIdsForUser = await ownedProjectIds(db, userId);
+    const projectIdsForUser = await callerProjectIds(c, db, userId);
     const { data: projects } =
       projectIdsForUser.length > 0
         ? await db
@@ -606,7 +606,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       mergedFixCount: 0,
     };
 
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -764,7 +764,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
 
     // Setup wizard lists every accessible project so org members can see
     // and resume an existing onboarding (Teams v1).
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     const { data: projects } = accessibleIds.length
       ? await db
           .from('projects')
@@ -1136,7 +1136,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     // org). `accessibleProjectIds` is the canonical helper already used by
     // /v1/admin/billing/* and the entitlements layer; the projects list is
     // the only owner-only filter that hadn't been migrated.
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: true, data: { projects: [] } });
 
     // Pull the projects + the user's role in each project's org so the FE can
@@ -1655,7 +1655,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   app.get('/v1/admin/projects/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     const activeProjectHint =
       c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null;
 
@@ -3120,7 +3120,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty })
     }
@@ -3469,7 +3469,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
     const projectRes = await db
@@ -3578,7 +3578,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { items: [], total: 0, page: 1, pageSize: 50 } });
     }
@@ -3611,7 +3611,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   app.get('/v1/admin/queue/summary', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { byStatus: {}, byStage: {}, stages: [] } });
     }
@@ -3638,7 +3638,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   app.get('/v1/admin/queue/throughput', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { days: [] } });
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - 13);
@@ -3673,7 +3673,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const { data: item } = await db
       .from('processing_queue')
@@ -3713,7 +3713,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { flushed: 0, scanned: 0 } });
     }
@@ -3755,7 +3755,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { reports: 0, queue: 0, reconciled: 0 } });
     }
@@ -3873,7 +3873,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -4031,7 +4031,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   app.get('/v1/admin/graph/nodes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { nodes: [] } });
 
     const nodeType = c.req.query('type');
@@ -4087,7 +4087,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   app.get('/v1/admin/graph/edges', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const edgeType = c.req.query('type');
     let query = db
@@ -4118,7 +4118,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       );
 
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (!projectIds.length) return c.json({ ok: true, data: { nodes: [], edges: [] } });
 
     const { data: seedNode } = await db
@@ -4174,7 +4174,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const nodeId = c.req.param('nodeId')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const { data: node, error } = await db
       .from('graph_nodes')
       .select('id, project_id, node_type, label, metadata, last_traversed_at, created_at')
@@ -4192,7 +4192,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const nodeId = c.req.param('nodeId')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const { data: node } = await db
       .from('graph_nodes')
       .select('id')
@@ -4213,7 +4213,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     // Teams v1: any accessible project anchors the ontology read.
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: true, data: { tags: [] } });
     const project = { id: accessibleIds[0] };
 
@@ -4226,7 +4226,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
     const body = await c.req.json();
     const db = getServiceClient();
     // Teams v1: any accessible project anchors the ontology write.
-    const accessibleIds = await ownedProjectIds(db, userId);
+    const accessibleIds = await callerProjectIds(c, db, userId);
     const project = accessibleIds.length ? { id: accessibleIds[0] } : null;
     if (!project)
       return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404);
@@ -4286,7 +4286,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       console.warn('[nl-query] rate limit RPC failed:', msg);
     }
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (!projectIds.length)
       return c.json({ ok: true, data: { results: [], summary: 'No projects found.' } });
 
@@ -4379,7 +4379,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
       console.warn('[raw-query] rate limit RPC failed:', msg);
     }
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (!projectIds.length) {
       return c.json({ ok: true, data: { sql: rawSql, results: [], rowCount: 0 } });
     }

@@ -1,16 +1,23 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Card } from '../ui'
+import { apiFetch } from '../../lib/supabase'
+import { useExploreUx } from '../../lib/exploreModeUx'
+import { Btn, Card } from '../ui'
+import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import { LAYER_COLORS, LAYER_LABELS } from './exploreLayers'
+import type { CodebaseUnderstandError } from './exploreUnderstandTypes'
 import type { ExploreLayer, ExploreNode } from './exploreTypes'
 
 interface Props {
   node: ExploreNode | null
+  projectId?: string
   onClear: () => void
   /** Called when user clicks "View in graph" — parent should switch to graph view */
   onViewInGraph?: () => void
   /** Called when user clicks "Find similar" — parent should switch to Search tab with this query */
   onFindSimilar?: (query: string) => void
+  /** Seed the Ask tab with a question about this file */
+  onAskAboutFile?: (filePath: string, symbolName: string | null) => void
 }
 
 type Complexity = { label: string; pct: number; color: string }
@@ -81,7 +88,39 @@ function CodePreview({ content, startLine }: { content: string; startLine: numbe
   )
 }
 
-export function ExploreSymbolPanel({ node, onClear, onViewInGraph, onFindSimilar }: Props) {
+export function ExploreSymbolPanel({
+  node,
+  projectId,
+  onClear,
+  onViewInGraph,
+  onFindSimilar,
+  onAskAboutFile,
+}: Props) {
+  const ux = useExploreUx()
+  const [summary, setSummary] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState<CodebaseUnderstandError | null>(null)
+
+  const loadSummary = useCallback(async () => {
+    if (!node || !projectId) return
+    const { file_path, symbol_name } = node.metadata
+    setSummaryLoading(true)
+    setSummaryError(null)
+    const qs = new URLSearchParams({ file_path })
+    if (symbol_name) qs.set('symbol_name', symbol_name)
+    const res = await apiFetch<{ summary: string; cached?: boolean }>(
+      `/v1/admin/projects/${projectId}/codebase/summary?${qs}`,
+    )
+    setSummaryLoading(false)
+    if (!res.ok) {
+      if (res.error?.code === 'NO_LLM_KEY' || res.error?.code === 'INDEX_DISABLED') {
+        setSummaryError(res.error)
+      }
+      return
+    }
+    setSummary(res.data?.summary ?? null)
+  }, [node, projectId])
+
   if (!node) {
     return (
       <Card className="p-3 self-start">
@@ -223,8 +262,47 @@ export function ExploreSymbolPanel({ node, onClear, onViewInGraph, onFindSimilar
         </div>
       )}
 
+      {/* Plain-English summary */}
+      {projectId && (
+        <div className="px-3 py-2.5 border-b border-edge-subtle/60 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-3xs uppercase tracking-wider text-fg-faint">Plain English</span>
+            {!summary && !summaryLoading && (
+              <Btn size="sm" variant="ghost" onClick={() => void loadSummary()} className="h-7 text-2xs px-2">
+                Explain this file
+              </Btn>
+            )}
+          </div>
+          {summaryError && (
+            <ExploreUnderstandEmpty error={summaryError} onRetry={() => void loadSummary()} />
+          )}
+          {summaryLoading && (
+            <p className="text-xs text-fg-muted animate-pulse">Generating summary…</p>
+          )}
+          {summary && !summaryLoading && (
+            <p className={`text-xs text-fg-secondary leading-relaxed ${ux.isAdvanced ? '' : 'line-clamp-6'}`}>
+              {summary}
+            </p>
+          )}
+          {!summary && !summaryLoading && !summaryError && (
+            <p className="text-2xs text-fg-muted">
+              Lazy summary from the indexed chunk — uses your BYOK key once, then caches until the file changes.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Action links */}
       <div className="px-3 py-2 flex flex-wrap items-center gap-2">
+        {onAskAboutFile && (
+          <button
+            type="button"
+            onClick={() => onAskAboutFile(file_path, symbol_name)}
+            className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand/80 border border-brand/30 hover:border-brand/50 rounded-sm px-2 py-1 transition-colors"
+          >
+            Ask about this file
+          </button>
+        )}
         {onViewInGraph && (
           <button
             type="button"

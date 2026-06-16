@@ -1,12 +1,15 @@
 import type {
   MushiApiClient,
   MushiApiResponse,
+  MushiCrossAppReport,
+  MushiLeaderboardEntry,
   MushiReport,
   MushiReportStatus,
   MushiReporterComment,
   MushiReporterReport,
   MushiRuntimeSdkConfig,
   MushiSdkVersionInfo,
+  MushiTesterReputation,
   MushiTierResult,
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
@@ -29,7 +32,7 @@ export const DEFAULT_API_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/fu
 export const MUSHI_INTERNAL_HEADER = 'X-Mushi-Internal';
 export const MUSHI_INTERNAL_INIT_MARKER = '__mushiInternal';
 
-export type MushiInternalRequestKind = 'sdk-config' | 'report-submit' | 'report-status' | 'reporter-poll' | 'diagnose' | 'discovery';
+export type MushiInternalRequestKind = 'sdk-config' | 'report-submit' | 'report-status' | 'reporter-poll' | 'diagnose' | 'discovery' | 'community';
 
 const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_MAX_RETRIES = 2;
@@ -51,6 +54,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     body?: unknown,
     retries = maxRetries,
     internalKind?: MushiInternalRequestKind,
+    extraHeaders?: Record<string, string>,
   ): Promise<MushiApiResponse<T>> {
     const url = `${baseUrl}${path}`;
     const controller = new AbortController();
@@ -64,6 +68,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           'X-Mushi-Api-Key': apiKey,
           'X-Mushi-Project': projectId,
           ...(internalKind ? { [MUSHI_INTERNAL_HEADER]: internalKind } : {}),
+          ...extraHeaders,
         },
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
@@ -81,7 +86,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           const targetBase = target.replace(/\/v1\/.*$/, '').replace(/\/$/, '');
           if (targetBase !== baseUrl) {
             baseUrl = targetBase;
-            return request<T>(method, path, body, retries - 1, internalKind);
+            return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);
           }
         }
       }
@@ -90,7 +95,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         const errorBody = await response.json().catch(() => ({}));
         if (response.status >= 500 && retries > 0) {
           await sleep(getBackoffDelay(maxRetries - retries));
-          return request<T>(method, path, body, retries - 1, internalKind);
+          return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);
         }
         return {
           ok: false,
@@ -352,6 +357,76 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         undefined,
         1,
         'reporter-poll',
+      );
+    },
+
+    // ─── Cross-app community (in-widget tester identity) ──────────
+
+    async sendMagicLink(email: string) {
+      return request<{ ok: boolean }>(
+        'POST',
+        '/v1/tester/magic-link',
+        { email },
+        1,
+        'community',
+      );
+    },
+
+    async linkReporterToken(reporterTokenHash: string, jwt: string) {
+      return request<{ ok: boolean; linked: number }>(
+        'POST',
+        '/v1/tester/link-reporter',
+        { reporter_token_hash: reporterTokenHash },
+        1,
+        'community',
+        { Authorization: `Bearer ${jwt}` },
+      );
+    },
+
+    async getCrossAppReports(jwt: string, opts?: { limit?: number; offset?: number }) {
+      const qs = new URLSearchParams();
+      if (opts?.limit)  qs.set('limit',  String(opts.limit));
+      if (opts?.offset) qs.set('offset', String(opts.offset));
+      const suffix = qs.size ? `?${qs.toString()}` : '';
+      return request<{ reports: MushiCrossAppReport[] }>(
+        'GET',
+        `/v1/tester/cross-app-reports${suffix}`,
+        undefined,
+        1,
+        'community',
+        { Authorization: `Bearer ${jwt}` },
+      );
+    },
+
+    async getMyReputation(jwt: string) {
+      return request<{ reputation: MushiTesterReputation | null }>(
+        'GET',
+        '/v1/tester/reputation',
+        undefined,
+        1,
+        'community',
+        { Authorization: `Bearer ${jwt}` },
+      );
+    },
+
+    async getPublicLeaderboard(limit = 20) {
+      return request<{ leaderboard: MushiLeaderboardEntry[] }>(
+        'GET',
+        `/v1/public/tester-leaderboard?limit=${limit}`,
+        undefined,
+        1,
+        'reporter-poll',
+      );
+    },
+
+    async getTesterStatus(jwt: string) {
+      return request<{ is_tester: boolean; tester: { id: string; public_handle: string | null; display_name: string | null } | null }>(
+        'GET',
+        '/v1/me/tester-status',
+        undefined,
+        1,
+        'community',
+        { Authorization: `Bearer ${jwt}` },
       );
     },
   };

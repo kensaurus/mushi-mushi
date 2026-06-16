@@ -5,7 +5,7 @@ title: Architecture
 # Architecture
 
 The whole system is intentionally boring at the seams: a Hono gateway in
-front of Supabase, six small specialised functions behind it, and three
+front of Supabase, **47** specialised edge functions behind it, and three
 data substrates (relational + vector + graph) that mirror each other for
 their respective query shapes. Everything an SDK does is one POST to the
 gateway; everything a contributor adds is either a route or a function.
@@ -22,7 +22,10 @@ device to a merged PR.
 | `@mushi-mushi/react-native` | `fast-filter` *(spam triage)* | `pgvector` embeddings | Slack |
 | Native iOS / Android / Flutter | `classify-report` *(2-stage LLM)* | Apache AGE graph | GitHub *(scoped App)* |
 | `@mushi-mushi/capacitor` | `judge-batch` *(nightly cron)* | `blast_radius_cache` MV | Langfuse *(traces)* |
-| `@mushi-mushi/mcp` *(agent surface)* | `fix-worker` *(sandbox PR + LLM agent)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
+| `@mushi-mushi/mcp` *(stdio + Streamable HTTP)* | `fix-worker` *(sandbox PR + LLM agent)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
+| `@mushi-mushi/cli` *(init / connect / upgrade)* | `sdk-upgrade-worker` *(semver bump PR)* | `sdk_upgrade_jobs` | GitHub *(upgrade PRs)* |
+| Admin **Connect & Update** (`/connect`) | `sdk-versions-cron` *(daily npm sync)* | `sdk_versions` | npm registry |
+|  | `skill-sync` *(skills.sh ingest)* | `agent_skills` + pipeline runs | cursor-kenji / skills.sh |
 |  | `intelligence-report` *(weekly digest)* | `contract_snapshots` *(drift baseline)* | Firecrawl *(research + crawl)* |
 |  | `drift-walker` *(live crawl diff)* | `pdca_runs` + `fix_attempts` | Browserbase *(QA story execution)* |
 |  | `contract-graph-builder` *(snapshot builder)* | `qa_stories` + `qa_story_runs` |  |
@@ -77,6 +80,42 @@ device to a merged PR.
   optional cross-customer benchmarking (k-anonymity enforced via materialized view).
   Runs with `verify_jwt = false`; authenticated via service-role header internally.
 - **`soc2-evidence`** snapshots control state for SOC 2 Type 1 readiness.
+- **`sdk-upgrade-worker`** reads a linked GitHub repo's `package.json`(s), computes a
+  semver-only bump plan (`computeBumpPlan`), opens a draft PR via shared
+  `createPrFromFiles`, and writes status to `sdk_upgrade_jobs`. Triggered from
+  **Connect & Update → Create Upgrade PR** or `POST /v1/admin/projects/:pid/sdk-upgrade`.
+- **`sdk-versions-cron`** upserts latest stable `@mushi-mushi/*` versions from npm
+  (daily pg_cron + post-publish sync) into `sdk_versions` so freshness chips stay
+  accurate between releases.
+- **`skill-sync`** ingests allowlisted `SKILL.md` files (default:
+  `kensaurus/cursor-kenji`), embeds descriptions, and powers **Skill Pipelines**
+  (`/skills`) — attach a skill chain to a report and stream step status over Realtime.
+
+## MCP surface (2026)
+
+The same tool catalog ships on two transports:
+
+| Transport | Entry | Notes |
+|---|---|---|
+| **stdio** | `npx @mushi-mushi/mcp` | Local editor subprocess; env from `.env.local` or `mcp.json` |
+| **Streamable HTTP** | `/functions/v1/mcp` | Remote orchestrators; `?features=triage,fixes,inventory,setup,docs` for lean default |
+
+Catalog source of truth: `packages/mcp/src/catalog.ts`, mirrored in
+`apps/admin/src/lib/mcpCatalog.ts`, guarded by `pnpm check:catalog-sync`.
+Destructive tools carry MCP annotations; scope enforcement is `mcp:read` vs `mcp:write`.
+
+## Connect & Update (console)
+
+`/connect` consolidates onboarding paths that previously lived across Settings,
+Onboarding, and MCP:
+
+1. **GitHub** — prerequisite for upgrade PRs and autofix.
+2. **SDK install** — live snippet + trigger-mode preview (`SdkInstallCard`).
+3. **MCP** — **Add to Cursor** deeplink + hosted/stdio snippets (`McpInstallButtons`).
+4. **CLI** — `npm i -g @mushi-mushi/cli@latest`.
+5. **Update center** — per-package freshness + **Create Upgrade PR** (`SdkUpgradeCTA`).
+
+CLI mirror: `mushi connect --wire-ide --wait` writes the same artifacts locally.
 
 ## Knowledge graph
 

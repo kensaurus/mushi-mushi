@@ -7,6 +7,7 @@ import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
+import { registerCodebaseUnderstandRoutes } from './routes/codebase-understand.ts';
 import {
   registerPreRegionDiscoveryRoutes,
   registerPostRegionDiscoveryRoutes,
@@ -40,6 +41,7 @@ import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 import { registerTesterMarketplaceRoutes } from './routes/tester-marketplace.ts';
+import { registerCommunityRoutes } from './routes/community.ts';
 import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerDbAdvisorsRoutes } from './routes/db-advisors.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
@@ -49,6 +51,7 @@ import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
+import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 
 ensureSentry('api');
 
@@ -93,6 +96,9 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
     'http://127.0.0.1:6466',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    // Common alternate Vite ports when 6464 is occupied.
+    'http://localhost:5180',
+    'http://127.0.0.1:5180',
     // Dev-only: paired dogfood app (glot.it) runs on Next.js :3000 and
     // occasionally hits admin debug endpoints when the `local` target is
     // selected. The same origin is re-validated by JWT + RLS server-side,
@@ -449,6 +455,8 @@ registerFixDispatchRoutes(app);
 
 registerCodebaseRoutes(app);
 
+registerCodebaseUnderstandRoutes(app);
+
 registerReportsDashboardRoutes(app);
 
 registerSettingsResearchRoutes(app);
@@ -489,6 +497,7 @@ registerAnomaliesRoutes(app);
 registerCostsRoutes(app);
 registerEvolutionRoutes(app);
 registerTesterMarketplaceRoutes(app);
+registerCommunityRoutes(app);
 registerPublishedAppsRoutes(app);
 registerDbAdvisorsRoutes(app);
 registerContentQualityRoutes(app);
@@ -497,6 +506,7 @@ registerBackendRoutes(app);
 registerFullstackAuditRoutes(app);
 registerCodeHealthRoutes(app);
 registerSkillsRoutes(app);
+registerSdkUpgradeRoutes(app);
 
 registerA2ATaskRoutes(app);
 

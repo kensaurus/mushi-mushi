@@ -31,8 +31,30 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = config.theme.dark ? .black : .systemBackground
+        // Respect theme.inherit: detect system dark mode
+        let resolvedDark: Bool
+        if config.theme.inherit {
+            resolvedDark = traitCollection.userInterfaceStyle == .dark
+        } else {
+            resolvedDark = config.theme.dark
+        }
+        view.backgroundColor = resolvedDark ? UIColor(white: 0.1, alpha: 1) : .systemBackground
         title = "Report a bug"
+
+        // Keyboard avoidance: register for keyboard show/hide so the
+        // text view scrolls into view on both portrait and landscape.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyboardWillShow(_:)),
+            name: UIResponder.keyboardWillShowNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(keyboardWillHide(_:)),
+            name: UIResponder.keyboardWillHideNotification,
+            object: nil
+        )
 
         let stack = UIStackView()
         stack.axis = .vertical
@@ -67,6 +89,8 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
         submitButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         submitButton.backgroundColor = UIColor(hex: config.theme.accentColor) ?? .systemBlue
         submitButton.setTitleColor(.white, for: .normal)
+        // WCAG AA: disabled state uses a visible dim tone, not 40% opacity white
+        submitButton.setTitleColor(UIColor.label.withAlphaComponent(0.4), for: .disabled)
         submitButton.layer.cornerRadius = 10
         submitButton.contentEdgeInsets = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
         submitButton.addTarget(self, action: #selector(submit), for: .touchUpInside)
@@ -89,6 +113,29 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
 
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func keyboardWillShow(_ note: Notification) {
+        guard let kbFrame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+              let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
+        else { return }
+        let overlap = view.bounds.maxY - kbFrame.minY
+        guard overlap > 0 else { return }
+        UIView.animate(withDuration: duration) {
+            self.view.transform = CGAffineTransform(translationX: 0, y: -overlap)
+        }
+    }
+
+    @objc private func keyboardWillHide(_ note: Notification) {
+        guard let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
+        else { return }
+        UIView.animate(withDuration: duration) {
+            self.view.transform = .identity
+        }
     }
 
     func textViewDidChange(_ textView: UITextView) {

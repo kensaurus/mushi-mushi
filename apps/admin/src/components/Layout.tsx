@@ -18,7 +18,7 @@ import {
   // unique glyphs for the closed-loop + workspace sections
   IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
   IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
-  IconInbox, IconGauge, IconUser, IconExplore, IconChat, IconSkills,
+  IconInbox, IconGauge, IconUser, IconExplore, IconChat, IconSkills, IconBolt,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
@@ -138,6 +138,7 @@ const NAV: NavSection[] = [
       // checklist itself collapses to a "Setup complete" hero, and Dashboard
       // / Inbox become the obvious next stops.
       { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
+      { label: 'Connect & Update', path: '/connect', icon: IconBolt, beginner: true, quickstartLabel: 'Connect' },
       { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true, quickstartLabel: 'Home' },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
       // "what should I do next?" across the whole PDCA surface. Pinned above
@@ -864,6 +865,7 @@ export function Layout({ children }: { children: ReactNode }) {
     const activationDone = setupStatus.selectors.done
     const allowedPaths = new Set([
       '/onboarding',
+      '/connect',
       '/inbox',
       '/feedback',
       '/reports',

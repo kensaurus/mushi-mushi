@@ -22,11 +22,16 @@ const serverPath = join(distDir, 'index.js')
 // This ensures the smoke gate tracks the catalog automatically.
 // Use pathToFileURL for Windows ESM compatibility (file:// required on win32).
 import { pathToFileURL } from 'node:url'
-const { TOOL_CATALOG, TDD_TOOL_CATALOG, RESOURCE_CATALOG, PROMPT_CATALOG } = await import(
+const { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, RESOURCE_CATALOG, PROMPT_CATALOG } = await import(
   pathToFileURL(join(distDir, 'catalog.js')).href
 )
 
-const allToolCatalog = [...(TOOL_CATALOG ?? []), ...(TDD_TOOL_CATALOG ?? [])]
+const allToolCatalog = [
+  ...(TOOL_CATALOG ?? []),
+  ...(TDD_TOOL_CATALOG ?? []),
+  ...(CODEBASE_TOOL_CATALOG ?? []),
+]
+// Stdio exposes tools only; resources stay on resources/list (hosted HTTP also registers resource names as tools).
 const expectedToolNames = allToolCatalog.map((t) => t.name)
 const expectedResourceNames = (RESOURCE_CATALOG ?? []).map((r) => r.name)
 const expectedPromptNames = (PROMPT_CATALOG ?? []).map((p) => p.name)
@@ -93,8 +98,9 @@ try {
     process.exit(1)
   }
 
+  const expectedToolCount = expectedToolNames.length
   console.log(
-    `OK — ${tools.length} tools / ${resources.length} resources / ${prompts.length} prompts (all match catalog)`,
+    `OK — ${tools.length} tools (expected ${expectedToolCount}) / ${resources.length} resources / ${prompts.length} prompts (all match catalog)`,
   )
 } finally {
   await client.close()

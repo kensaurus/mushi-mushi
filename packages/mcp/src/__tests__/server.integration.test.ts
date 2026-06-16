@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
-import { TOOL_CATALOG, TDD_TOOL_CATALOG, RESOURCE_CATALOG } from '../catalog.js'
+import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, RESOURCE_CATALOG } from '../catalog.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const API_KEY = 'mushi_test_key_0123456789'
@@ -109,7 +109,7 @@ describe('MCP protocol handshake', () => {
     const { tools } = await client.listTools()
     const names = tools.map(t => t.name).sort()
     // Derive expected names from the catalog so this list auto-updates.
-    const expected = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG].map(t => t.name).sort()
+    const expected = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG].map(t => t.name).sort()
     expect(names).toEqual(expected)
     for (const t of tools) {
       expect(t.description, `${t.name} description`).toBeTruthy()
@@ -145,6 +145,9 @@ describe('MCP protocol handshake', () => {
       // Fix-merge + reopen write tools (refresh_ci is read-only)
       'merge_fix',
       'reopen_report',
+      // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
+      // get_file_summary / get_codebase_tour are read-only.
+      'ask_codebase',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()
@@ -205,7 +208,7 @@ describe('tool → REST contract', () => {
     expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/reports?status=classified&severity=critical&limit=5`)
     expect(call.headers['authorization']).toBe(`Bearer ${API_KEY}`)
     expect(call.headers['x-mushi-api-key']).toBe(API_KEY)
-    expect(call.headers['x-mushi-project']).toBe(PROJECT_ID)
+    expect(call.headers['x-mushi-project-id']).toBe(PROJECT_ID)
 
     expect(res.isError).toBeFalsy()
     const content = res.content as Array<{ type: string; text: string }>
@@ -350,7 +353,7 @@ describe('tool → REST contract', () => {
     expect(call.url).toBe(`${API_ENDPOINT}/v1/sync/ingest-setup`)
     expect(call.headers['authorization']).toBe(`Bearer ${API_KEY}`)
     expect(call.headers['x-mushi-api-key']).toBe(API_KEY)
-    expect(call.headers['x-mushi-project']).toBe(PROJECT_ID)
+    expect(call.headers['x-mushi-project-id']).toBe(PROJECT_ID)
 
     expect(res.isError).toBeFalsy()
     const content = res.content as Array<{ type: string; text: string }>

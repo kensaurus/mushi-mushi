@@ -173,6 +173,7 @@ export function SetupCopilotPage() {
                   latestVersion={projectRow.sdk_version.latest_version}
                   stackLabel={env.stackLabel}
                   compact
+                  projectId={projectId}
                 />
               </div>
             )}

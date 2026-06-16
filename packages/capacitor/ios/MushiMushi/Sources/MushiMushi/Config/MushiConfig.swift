@@ -21,6 +21,7 @@ public struct MushiConfig {
     public var triggerInset: TriggerInset
     public var proactive: ProactiveConfig
     public var pii: PIIScrubberConfig
+    public var draggable: DraggableConfig?
 
     public struct ProactiveConfig {
         /// Detect ≥3 rapid taps on the same view. Default true.
@@ -55,9 +56,28 @@ public struct MushiConfig {
     public struct Theme {
         public var accentColor: String
         public var dark: Bool
-        public init(accentColor: String = "#6366f1", dark: Bool = false) {
+        /// When true, the SDK reads UITraitCollection.userInterfaceStyle
+        /// from the host app and ignores the `dark` field.
+        public var inherit: Bool
+        public init(accentColor: String = "#6366f1", dark: Bool = false, inherit: Bool = false) {
             self.accentColor = accentColor
             self.dark = dark
+            self.inherit = inherit
+        }
+    }
+
+    /// Draggable FAB configuration.
+    public struct DraggableConfig {
+        /// Allow the FAB to be dragged to a new position.
+        public var enabled: Bool
+        /// Snap FAB to the nearest vertical edge after dragging.
+        public var snapToEdge: Bool
+        /// Persist FAB position across sessions via UserDefaults.
+        public var persist: Bool
+        public init(enabled: Bool = true, snapToEdge: Bool = true, persist: Bool = true) {
+            self.enabled = enabled
+            self.snapToEdge = snapToEdge
+            self.persist = persist
         }
     }
 
@@ -89,7 +109,8 @@ public struct MushiConfig {
         theme: Theme = Theme(),
         triggerInset: TriggerInset = TriggerInset(),
         proactive: ProactiveConfig = ProactiveConfig(),
-        pii: PIIScrubberConfig = PIIScrubberConfig()
+        pii: PIIScrubberConfig = PIIScrubberConfig(),
+        draggable: DraggableConfig? = nil
     ) {
         self.projectId = projectId
         self.apiKey = apiKey
@@ -105,5 +126,6 @@ public struct MushiConfig {
         self.triggerInset = triggerInset
         self.proactive = proactive
         self.pii = pii
+        self.draggable = draggable
     }
 }

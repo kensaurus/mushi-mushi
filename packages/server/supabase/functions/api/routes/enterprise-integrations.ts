@@ -13,7 +13,7 @@ import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, sendTestDelivery } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -451,7 +451,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     const plan = entitlement?.plan;
     const auditLogEntitlement = entitlement?.hasFeature('audit_log') ?? false;
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const now = Date.now();
     const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
     const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -584,7 +584,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/audit', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const action = c.req.query('action');
     const resourceType = c.req.query('resource_type');
@@ -635,7 +635,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/fine-tuning', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
     const { data } = await db
       .from('fine_tuning_jobs')
@@ -1521,7 +1521,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     const userId = c.get('userId') as string;
     const reportId = c.req.param('reportId')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const { data: report } = await db
       .from('reports')
       .select('id, project_id, summary, description, category, severity, component, metadata')
@@ -2163,7 +2163,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/synthetic', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const { data } = await db
       .from('synthetic_reports')
       .select(
@@ -2216,7 +2216,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -2512,7 +2512,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       const userId = c.get('userId') as string;
       const id = c.req.param('id')!;
       const db = getServiceClient();
-      const projectIds = await ownedProjectIds(db, userId);
+      const projectIds = await callerProjectIds(c, db, userId);
       if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
       const { data: job } = await db
         .from('intelligence_generation_jobs')
@@ -2565,7 +2565,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     const userId = c.get('userId') as string;
     const id = c.req.param('id')!;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No reports' } }, 404);
 
@@ -2712,7 +2712,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/integrations/health', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { channels: [], staleSince: null, summary: 'healthy' } });
     }
@@ -2821,7 +2821,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
       topPriorityTo: null as string | null,
     };
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: empty });
     }
@@ -2978,7 +2978,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
   app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const windowParam = c.req.query('window') ?? '24h';
     const windowMs: Record<string, number> = {
@@ -3230,7 +3230,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Vari
     // NULL project_id) are still surfaced because they don't belong to any
     // specific tenant.
     const db = getServiceClient();
-    const ownedIds = await ownedProjectIds(db, userId);
+    const ownedIds = await callerProjectIds(c, db, userId);
 
     // Validate the optional caller-supplied `project_id` filter as a UUID
     // before threading it into the query — both to reject obvious garbage

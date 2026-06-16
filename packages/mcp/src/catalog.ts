@@ -204,11 +204,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'setup_check',
     title: 'Dispatch preflight check',
     description:
+      '[Deprecated — use diagnose_setup with mode=dispatch or diagnose_connection.] ' +
       'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
       '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
-      'Also returns the target repo URL when GitHub is connected. ' +
-      'Use this before calling dispatch_fix to understand why a dispatch might fail. ' +
-      'For SDK ingest health (API key → heartbeat → first report), call ingest_setup_check instead.',
+      'Also returns the target repo URL when GitHub is connected.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Is this project ready to auto-fix bugs? What is blocking dispatch?',
@@ -217,24 +216,43 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'ingest_setup_check',
     title: 'Ingest setup check',
     description:
+      '[Deprecated — use diagnose_setup with mode=ingest or diagnose_connection.] ' +
       'Run the 4 **required ingest** checks for the project tied to this API key: ' +
-      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report. ' +
-      'Returns per-step pass/fail plus last_sdk_seen_at and endpoint host diagnostics. ' +
-      'Use after wiring env vars or pasting the SDK snippet to confirm the banner will work.',
+      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Is the SDK installed and ingesting reports? Why is my banner still missing?',
   },
   {
+    name: 'diagnose_setup',
+    title: 'Unified setup diagnose',
+    description:
+      'Single entry point for setup health. mode=full (default) runs ingest + dispatch checks and returns the best next action; ' +
+      'mode=ingest runs SDK ingest checks only; mode=dispatch runs fix-dispatch preflight only. ' +
+      'Prefer this over setup_check, ingest_setup_check, or diagnose_connection alone.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Why is Mushi setup broken — one call, clear next step.',
+  },
+  {
     name: 'diagnose_connection',
     title: 'Connection diagnose (CLI + MCP + SDK)',
     description:
-      'Validate the MCP server credentials (endpoint, API key, projectId), ping /health, ' +
-      'run ingest-setup and dispatch preflight, and return the single best next action when ' +
-      'anything fails. Use when the user asks "why aren\'t my reports showing up?".',
+      'Validate MCP credentials, ping /health, run ingest-setup and dispatch preflight, return the single best next action. ' +
+      'For mode-specific checks prefer diagnose_setup. Use when the user asks "why aren\'t my reports showing up?".',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Why is my Mushi setup broken — what exact step should I fix next?',
+  },
+  {
+    name: 'search_mushi_docs',
+    title: 'Search Mushi documentation',
+    description:
+      'Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword. ' +
+      'Returns ranked page titles, URLs, and excerpts — use before guessing API shapes or RPC names.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'How do I configure MCP scopes / dispatch a fix / wire QA stories?',
   },
   // --- Write / agentic ----------------------------------------------------
   {
@@ -361,13 +379,28 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_projects',
     title: 'List accessible projects',
     description:
-      'List the Mushi projects accessible to this API key. For project-scoped keys (the typical case), ' +
-      'returns a single-item list with the bound project\'s id, name, slug, plan tier, and ingest status. ' +
-      'For org-level tokens, returns all projects in the org. ' +
-      'Use this when MUSHI_PROJECT_ID is not configured — call list_projects first, then pass the id to other tools.',
+      'List the Mushi projects accessible to this API key. ' +
+      'For project-scoped keys (the typical case), returns a single-item list with the bound project\'s id, name, created_at. ' +
+      'Use this when MUSHI_PROJECT_ID is not configured — call list_projects first, then pass the id to other tools. ' +
+      'Multi-project note: each Mushi project uses its own API key. To connect multiple projects, run ' +
+      '"Add to Cursor" in the Mushi console for each project — each deeplink creates a uniquely-named MCP server ' +
+      'entry (mushi-{slug}-{id}). You can then call list_projects on each named server to confirm which project it serves.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which projects can I access with this API key?',
+  },
+  {
+    name: 'get_account_overview',
+    title: 'Account overview — all projects',
+    description:
+      'Return a summary of every Mushi project accessible to this API key, including report counts, ' +
+      'SDK heartbeat status, and the last ingest timestamp for each. ' +
+      'For project-scoped keys this is a one-item list; for future org-level keys it lists every project. ' +
+      'Also includes a hint explaining how to connect additional projects to your IDE. ' +
+      'Call this at the start of a multi-repo or multi-app triage session to orient yourself.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Show me all my Mushi projects and their health at a glance.',
   },
   {
     name: 'get_project_context',
@@ -776,8 +809,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_activation_status',
     title: 'Activation cockpit status',
     description:
-      'Unified setup posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action. ' +
-      'Use this first when the user says setup is broken or they cannot connect.',
+      '[Deprecated — use activation_status resource or tool on hosted MCP.] ' +
+      'Unified setup posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What is blocking this project from going live?',
@@ -786,9 +819,8 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_reporter_thread',
     title: 'Reporter feedback thread',
     description:
-      'Fetch the unified timeline for a report — the reporter/admin comment thread ' +
-      '(including verify/reopen signals) plus fix, QA, and status lanes. ' +
-      'Use when triaging whether an end user still sees a bug as unfixed.',
+      '[Deprecated — use get_report_timeline instead.] ' +
+      'Fetch the unified timeline for a report — reporter comments plus fix, QA, and status lanes.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What did the reporter say after we marked this fixed?',
@@ -829,5 +861,41 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase:
       'Are there any tables without RLS? Show me recent backend errors for this project.',
+  },
+]
+
+// ── Codebase Understand tools ────────────────────────────────────────────────
+
+export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
+  {
+    name: 'ask_codebase',
+    title: 'Ask about the indexed codebase',
+    description:
+      'Ask a plain-English question about the connected repo. Grounds on pgvector retrieval over ' +
+      'project_codebase_files and returns an answer with file:line citations. Requires codebase ' +
+      'indexing enabled and an Anthropic or OpenAI BYOK key.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'How does authentication work in this repo?',
+  },
+  {
+    name: 'get_file_summary',
+    title: 'Plain-English file summary',
+    description:
+      'Lazy-generate (or return cached) plain-English summary for an indexed file or symbol. ' +
+      'Cache invalidates when content_hash changes after re-index.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Explain what lib/auth.ts does in plain English.',
+  },
+  {
+    name: 'get_codebase_tour',
+    title: 'Guided codebase tour',
+    description:
+      'Return a dependency-ordered guided tour (~6–10 stops) for onboarding — each stop lists ' +
+      'node ids, file paths, layer, and rationale. Cached per index fingerprint.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Give me an onboarding walkthrough of this codebase.',
   },
 ]

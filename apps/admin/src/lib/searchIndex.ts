@@ -40,6 +40,22 @@ export const STATIC_ROUTES: StaticRoute[] = [
     keywords: ['setup', 'install', 'quickstart', 'first run', 'widget', 'snippet', 'project'],
   },
   {
+    id: 'nav:connect',
+    label: 'Connect & Update',
+    path: '/connect',
+    description: 'Connect GitHub, install SDK + MCP, and create upgrade PRs.',
+    group: 'Start',
+    keywords: ['connect', 'install', 'sdk', 'upgrade', 'update', 'mcp', 'cursor', 'npm', 'package'],
+  },
+  {
+    id: 'nav:explore',
+    label: 'Explore codebase',
+    path: '/explore',
+    description: 'Map, chat with, and tour your indexed repository.',
+    group: 'Plan',
+    keywords: ['codebase', 'atlas', 'understand', 'architecture', 'graph', 'ask', 'tour', 'domains'],
+  },
+  {
     id: 'nav:reports',
     label: 'Reports',
     path: '/reports',

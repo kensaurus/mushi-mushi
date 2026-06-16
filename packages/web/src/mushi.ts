@@ -13,6 +13,7 @@ import {
   type MushiReporterReport,
   type MushiReporterComment,
   type MushiHallOfFameEntry,
+  type MushiTesterReputation,
   DEFAULT_API_ENDPOINT,
   MUSHI_INTERNAL_INIT_MARKER,
   createApiClient,
@@ -171,6 +172,51 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // out of order; we only install the capture whose token is still current.
   let replayGeneration = 0;
   let widget!: MushiWidget;
+
+  // ── Community / tester session ─────────────────────────────────────────
+  // The JWT is stored per-origin in localStorage so magic-link re-auth is
+  // required when the tester uses the SDK on a different domain (cross-origin
+  // isolation). The identity is unified server-side via `tester_id`.
+  const TESTER_JWT_KEY = `mushi:tester-jwt:${bootstrapConfig.projectId}`;
+  function readTesterJwt(): string | null {
+    try { return typeof localStorage !== 'undefined' ? localStorage.getItem(TESTER_JWT_KEY) : null; }
+    catch { return null; }
+  }
+  function saveTesterJwt(jwt: string): void {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(TESTER_JWT_KEY, jwt); }
+    catch { /* storage unavailable */ }
+  }
+  // Exposed via widget.setTesterSession so other flows can persist the JWT
+  void saveTesterJwt; // referenced by loadTesterSession + future magic-link callback
+  function clearTesterJwt(): void {
+    try { if (typeof localStorage !== 'undefined') localStorage.removeItem(TESTER_JWT_KEY); }
+    catch { /* storage unavailable */ }
+  }
+
+  async function loadTesterSession(jwt: string): Promise<void> {
+    const statusResult = await apiClient.getTesterStatus(jwt);
+    if (!statusResult.ok || !statusResult.data) {
+      clearTesterJwt();
+      return;
+    }
+    const status = statusResult.data as {
+      is_tester: boolean;
+      public_handle?: string;
+      display_name?: string;
+      email?: string;
+    };
+    if (!status.is_tester) { clearTesterJwt(); return; }
+    widget.setTesterSession(jwt, {
+      id: jwt.substring(0, 16),
+      public_handle: status.public_handle ?? null,
+      display_name: status.display_name ?? null,
+    });
+    const repResult = await apiClient.getMyReputation(jwt);
+    if (repResult.ok && repResult.data) {
+      const repData = repResult.data as { reputation?: MushiTesterReputation };
+      if (repData.reputation) widget.setTesterReputation(repData.reputation);
+    }
+  }
 
   function syncCaptureModules() {
     if (activeConfig.capture?.console !== false) {
@@ -540,6 +586,47 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         widget.setLeaderboard(entries, false);
       });
     },
+
+    // ── Community callbacks ──────────────────────────────────────────────
+    async onMushiSignIn(email: string): Promise<{ ok: boolean; error?: string }> {
+      const res = await apiClient.sendMagicLink(email);
+      if (!res.ok) throw new Error((res.error as { message?: string })?.message ?? 'Could not send sign-in link');
+      return { ok: true };
+    },
+
+    async onGlobalLeaderboardOpen() {
+      widget.setGlobalLeaderboard(null, true);
+      const jwt = readTesterJwt();
+      const res = await apiClient.getPublicLeaderboard(50);
+      const rawEntries = res.ok
+        ? (res.data as { leaderboard?: Array<{ tester_id: string; rank: number; public_handle: string | null; display_name: string | null; points_30d: number; total_points?: number; badge_slug?: string }> })?.leaderboard ?? []
+        : [];
+      const entries = rawEntries.map((e) => ({
+        tester_id: e.tester_id,
+        rank: e.rank,
+        public_handle: e.public_handle,
+        display_name: e.display_name,
+        points_30d: e.points_30d,
+        total_points: e.total_points ?? 0,
+        badge: e.badge_slug,
+      }));
+      widget.setGlobalLeaderboard(entries, false);
+      if (jwt) {
+        const repRes = await apiClient.getMyReputation(jwt);
+        if (repRes.ok && repRes.data) {
+          const repData = repRes.data as { reputation?: MushiTesterReputation };
+          if (repData.reputation) widget.setTesterReputation(repData.reputation);
+        }
+      }
+    },
+
+    async onCrossAppReportsOpen() {
+      const jwt = readTesterJwt();
+      if (!jwt) { widget.setCrossAppReports([], false); return; }
+      const res = await apiClient.getCrossAppReports(jwt);
+      const reports = res.ok ? (res.data as { reports?: Parameters<typeof widget.setCrossAppReports>[0] })?.reports ?? [] : [];
+      widget.setCrossAppReports(reports, false);
+    },
   }, MUSHI_SDK_VERSION);
   syncCaptureModules();
 
@@ -549,6 +636,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     } else {
       widget.mount();
     }
+  }
+
+  // Restore tester session if we have a cached JWT
+  const cachedJwt = readTesterJwt();
+  if (cachedJwt) {
+    void loadTesterSession(cachedJwt).catch(() => clearTesterJwt());
   }
 
   // --- Proactive triggers + fatigue prevention ---

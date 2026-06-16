@@ -16,8 +16,9 @@ export async function buildSetupResponse(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
   adminHost: string | null,
+  accessibleIdsOverride?: string[],
 ) {
-  const accessibleIds = await ownedProjectIds(db, userId);
+  const accessibleIds = accessibleIdsOverride ?? (await ownedProjectIds(db, userId));
   const { data: projects } = accessibleIds.length
     ? await db
         .from('projects')

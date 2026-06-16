@@ -335,6 +335,27 @@ export function CommandPalette() {
               keywords={['status', 'monitoring', 'sentry', 'health']}
               onSelect={() => handleSelect('action:health:open', () => navigate('/health'))}
             />
+            <PaletteActionItem
+              id="action:connect:install"
+              label="Install SDK & MCP"
+              hint="Connect & Update hub"
+              keywords={['install', 'sdk', 'connect', 'setup', 'mcp', 'cursor']}
+              onSelect={() => handleSelect('action:connect:install', () => navigate('/connect'))}
+            />
+            <PaletteActionItem
+              id="action:connect:upgrade"
+              label="Update SDK (upgrade PR)"
+              hint="Bump @mushi-mushi packages via GitHub PR"
+              keywords={['upgrade', 'update', 'sdk', 'npm', 'pr', 'version']}
+              onSelect={() => handleSelect('action:connect:upgrade', () => navigate('/connect'))}
+            />
+            <PaletteActionItem
+              id="action:explore:understand"
+              label="Understand my codebase"
+              hint="Ask questions with file citations"
+              keywords={['codebase', 'explore', 'understand', 'atlas', 'architecture', 'ask']}
+              onSelect={() => handleSelect('action:explore:understand', () => navigate('/explore?tab=ask'))}
+            />
             {(['quickstart', 'beginner', 'advanced'] as AdminMode[])
               .filter((m) => m !== mode)
               .map((m) => (

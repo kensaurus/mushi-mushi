@@ -35,6 +35,7 @@ import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
 import { PlatformHealthTile } from '../components/dashboard/PlatformHealthTile'
+import { SdkUpgradeBanner } from '../components/dashboard/SdkUpgradeBanner'
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
@@ -220,6 +221,10 @@ export function DashboardPage() {
           onRefresh={setup.reload}
           adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
         />
+      )}
+
+      {setup.activeProject && (
+        <SdkUpgradeBanner projectId={setup.activeProject.project_id} />
       )}
 
       {setupIncomplete && !showFullDashboard && (

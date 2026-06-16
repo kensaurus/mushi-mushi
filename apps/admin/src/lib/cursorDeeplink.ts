@@ -1,0 +1,140 @@
+/**
+ * Cursor (and VS Code) one-click MCP install deeplinks.
+ *
+ * Format: cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64(config)>
+ *
+ * The `config` parameter is the base64-encoded JSON of the single server
+ * config object (the value inside mcpServers.name, not the whole object).
+ *
+ * Icon note: Cursor often shows the **host favicon** for HTTP MCP URLs
+ * (e.g. supabase.co). Prefer stdio for the Mushi stamp icon, or set `icon`
+ * explicitly (supported in recent Cursor builds).
+ */
+
+import {
+  DEFAULT_FEATURE_GROUPS,
+  appendFeaturesToUrl,
+  featuresQueryString,
+} from '@mushi-mushi/mcp/feature-groups'
+import { MUSHI_ICON_PNG_URL } from '@mushi-mushi/mcp/branding'
+
+interface McpStdioConfig {
+  command: string
+  args: string[]
+  env: Record<string, string>
+  icon?: string
+}
+
+interface McpHttpConfig {
+  type: 'http'
+  url: string
+  headers: Record<string, string>
+  icon?: string
+}
+
+/** Build the npm-exec server config for stdio transport (recommended for Cursor — correct icon). */
+export function buildStdioConfig(
+  projectId: string,
+  apiKey: string,
+  apiEndpoint: string,
+  options?: { features?: readonly string[] },
+): McpStdioConfig {
+  const features = options?.features ?? DEFAULT_FEATURE_GROUPS
+  return {
+    command: 'npx',
+    args: ['-y', '@mushi-mushi/mcp@latest'],
+    env: {
+      MUSHI_API_ENDPOINT: apiEndpoint,
+      MUSHI_API_KEY: apiKey,
+      MUSHI_PROJECT_ID: projectId,
+      MUSHI_FEATURES: featuresQueryString(features as typeof DEFAULT_FEATURE_GROUPS),
+    },
+    icon: MUSHI_ICON_PNG_URL,
+  }
+}
+
+/** Hosted Streamable HTTP MCP config (CI / no subprocess). Appends lean ?features= by default. */
+export function buildHttpConfig(
+  projectId: string,
+  apiKey: string,
+  mcpHttpUrl: string,
+  options?: { features?: readonly string[]; featuresAll?: boolean },
+): McpHttpConfig {
+  const url = options?.featuresAll
+    ? mcpHttpUrl
+    : appendFeaturesToUrl(mcpHttpUrl, (options?.features ?? DEFAULT_FEATURE_GROUPS) as typeof DEFAULT_FEATURE_GROUPS)
+  return {
+    type: 'http',
+    url,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'X-Mushi-Api-Key': apiKey,
+      'X-Mushi-Project-Id': projectId,
+    },
+    icon: MUSHI_ICON_PNG_URL,
+  }
+}
+
+/**
+ * Build a stable, unique, human-readable MCP server slug for a project.
+ *
+ * Format: `mushi-{name-slug}-{id-prefix}`
+ */
+export function projectServerName(projectId: string, projectName: string): string {
+  const nameSlug = projectName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 22)
+  const idSuffix = projectId.replace(/-/g, '').slice(0, 6)
+  return `mushi-${nameSlug}-${idSuffix}`
+}
+
+function encodeInstallDeeplink(scheme: 'cursor' | 'vscode', name: string, config: McpStdioConfig | McpHttpConfig): string {
+  const encoded = btoa(JSON.stringify(config))
+  return `${scheme}://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(encoded)}`
+}
+
+/** One-click Cursor MCP install URL (stdio transport — recommended). */
+export function buildCursorDeeplink(
+  projectId: string,
+  projectName: string,
+  apiKey: string,
+  apiEndpoint: string,
+): string {
+  const name = projectServerName(projectId, projectName)
+  return encodeInstallDeeplink('cursor', name, buildStdioConfig(projectId, apiKey, apiEndpoint))
+}
+
+/** One-click Cursor MCP install URL (hosted HTTP transport). */
+export function buildCursorHttpDeeplink(
+  projectId: string,
+  projectName: string,
+  apiKey: string,
+  mcpHttpUrl: string,
+): string {
+  const name = projectServerName(projectId, projectName)
+  return encodeInstallDeeplink('cursor', name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
+}
+
+/** VS Code deeplink — stdio transport. */
+export function buildVsCodeDeeplink(
+  projectId: string,
+  projectName: string,
+  apiKey: string,
+  apiEndpoint: string,
+): string {
+  const name = projectServerName(projectId, projectName)
+  return encodeInstallDeeplink('vscode', name, buildStdioConfig(projectId, apiKey, apiEndpoint))
+}
+
+/** VS Code deeplink — hosted HTTP transport. */
+export function buildVsCodeHttpDeeplink(
+  projectId: string,
+  projectName: string,
+  apiKey: string,
+  mcpHttpUrl: string,
+): string {
+  const name = projectServerName(projectId, projectName)
+  return encodeInstallDeeplink('vscode', name, buildHttpConfig(projectId, apiKey, mcpHttpUrl))
+}

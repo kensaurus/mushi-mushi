@@ -69,6 +69,10 @@
  */
 
 import { withSentry } from '../_shared/sentry.ts'
+import { buildManifestTools } from './manifest-tools.ts'
+import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from './branding.ts'
+import { parseFeaturesParam, toolMatchesFeatures, type FeatureFilter } from './feature-groups.ts'
+import { searchMushiDocs } from './docs-index.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -82,10 +86,7 @@ declare const Deno: {
 // upgraded yet (e.g. Claude Desktop on a stale build).
 const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26', '2024-11-05'] as const
 
-const SERVER_INFO = {
-  name: 'mushi-mushi',
-  version: '2.0.0',
-}
+const SERVER_INFO = SERVER_INFO_EXTENDED
 
 interface JsonRpcRequest {
   jsonrpc: '2.0'
@@ -143,7 +144,7 @@ interface ToolDef {
   handler: ToolHandler
 }
 
-const TOOLS: Record<string, ToolDef> = {
+const BASE_TOOLS: Record<string, ToolDef> = {
   get_recent_reports: {
     scope: 'mcp:read',
     description:
@@ -674,6 +675,166 @@ const TOOLS: Record<string, ToolDef> = {
     },
   },
 
+  diagnose_setup: {
+    scope: 'mcp:read',
+    description:
+      'Single entry point for setup health. mode=full (default) runs ingest + dispatch checks; ' +
+      'mode=ingest runs SDK ingest checks only; mode=dispatch runs fix-dispatch preflight only. ' +
+      'Prefer this over setup_check, ingest_setup_check, or diagnose_connection alone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', enum: ['full', 'ingest', 'dispatch'], description: 'Which checks to run (default full).' },
+        project_id: { type: 'string', description: 'Project UUID for dispatch checks.' },
+        projectId: { type: 'string', description: 'Alias for project_id.' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string' },
+        ready: { type: 'boolean' },
+        summary: { type: 'string' },
+        nextAction: { type: 'string' },
+        ingest: { type: 'object', additionalProperties: true },
+        dispatch: { type: ['object', 'null'], additionalProperties: true },
+      },
+      required: ['mode', 'ready', 'summary'],
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const mode = (args.mode as string | undefined) ?? 'full'
+      const resolvedId = (args.project_id as string | undefined) ??
+        (args.projectId as string | undefined) ??
+        ctx.projectIdHint
+
+      if (mode === 'ingest') {
+        const data = await apiCall<{
+          ready: boolean
+          required_complete: number
+          required_total: number
+          project_id: string
+          project_name: string
+          steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
+          diagnostic?: Record<string, unknown>
+        }>('/v1/sync/ingest-setup', { headers: ctx.authHeaders })
+        const failed = data.steps.filter((s) => s.required && !s.complete)
+        return {
+          mode: 'ingest',
+          ready: data.ready,
+          summary: data.ready
+            ? `Ingest setup complete for ${data.project_name}.`
+            : `Ingest incomplete — ${failed.map((s) => s.label).join(', ')}.`,
+          nextAction: failed[0]?.hint,
+          ingest: data,
+        }
+      }
+
+      if (mode === 'dispatch') {
+        if (!resolvedId) {
+          throw new McpError(ERR_INVALID_PARAMS, 'project_id is required for dispatch mode')
+        }
+        const data = await apiCall<{
+          ready: boolean
+          checks: Array<{ key: string; ready: boolean; label: string; hint: string }>
+          repoUrl: string | null
+        }>(`/v1/admin/projects/${encodeURIComponent(resolvedId)}/preflight`, { headers: ctx.authHeaders })
+        const failed = data.checks.filter((c) => !c.ready)
+        return {
+          mode: 'dispatch',
+          ready: data.ready,
+          summary: data.ready
+            ? `Project ${resolvedId} is ready to dispatch auto-fixes.`
+            : `Dispatch blocked — ${failed.map((c) => c.label).join(', ')}.`,
+          nextAction: failed[0]?.hint,
+          dispatch: data,
+        }
+      }
+
+      const ingest = await apiCall<{
+        ready: boolean
+        steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>
+      }>('/v1/sync/ingest-setup', { headers: ctx.authHeaders })
+      let dispatchReady = true
+      let dispatchBlock: string | undefined
+      let dispatchPayload: unknown = null
+      if (resolvedId) {
+        try {
+          const preflight = await apiCall<{
+            ready: boolean
+            checks: Array<{ label: string; ready: boolean; hint: string }>
+          }>(`/v1/admin/projects/${encodeURIComponent(resolvedId)}/preflight`, { headers: ctx.authHeaders })
+          dispatchReady = preflight.ready
+          dispatchPayload = preflight
+          if (!preflight.ready) {
+            dispatchBlock = preflight.checks.filter((c) => !c.ready)[0]?.hint
+          }
+        } catch {
+          dispatchReady = false
+          dispatchBlock = 'Could not run dispatch preflight — verify project_id and API key scope.'
+        }
+      }
+      const ingestFailed = ingest.steps.filter((s) => s.required && !s.complete)
+      const ready = ingest.ready && dispatchReady
+      const nextAction = !ingest.ready
+        ? (ingestFailed[0]?.hint ?? 'Complete SDK ingest setup.')
+        : !dispatchReady
+        ? (dispatchBlock ?? 'Complete dispatch preflight in Settings → Integrations.')
+        : 'All setup checks pass.'
+      return {
+        mode: 'full',
+        ready,
+        summary: ready ? 'Ingest and dispatch setup look healthy.' : 'Setup incomplete — see nextAction.',
+        nextAction,
+        ingest,
+        dispatch: resolvedId ? dispatchPayload : null,
+      }
+    },
+  },
+
+  search_mushi_docs: {
+    scope: 'mcp:read',
+    description:
+      'Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword. ' +
+      'Returns ranked page titles, URLs, and excerpts.',
+    inputSchema: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: { type: 'string', description: 'Keywords to search.' },
+        limit: { type: 'number', description: 'Max results (default 8, max 20).' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        results: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              path: { type: 'string' },
+              excerpt: { type: 'string' },
+              score: { type: 'number' },
+            },
+            required: ['title', 'path', 'excerpt', 'score'],
+          },
+        },
+      },
+      required: ['query', 'results'],
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    handler: async (args) => {
+      const query = String(args.query ?? '')
+      const limit = Math.min(Number(args.limit ?? 8), 20)
+      const hits = searchMushiDocs(query, limit)
+      const results = hits.map(({ title, path, excerpt, score }) => ({ title, path, excerpt, score }))
+      return { query, results }
+    },
+  },
+
   // ── Sentry-like triage + project context tools ─────────────────────────────
 
   list_projects: {
@@ -861,7 +1022,9 @@ const TOOLS: Record<string, ToolDef> = {
   },
 }
 
-// ----------------------------------------------------------------------------
+/** Full catalog — base hand-authored tools + manifest-generated parity tools. */
+let TOOLS: Record<string, ToolDef> = BASE_TOOLS
+
 // JSON-RPC dispatcher
 // ----------------------------------------------------------------------------
 
@@ -881,7 +1044,17 @@ function requireString(v: unknown, name: string): asserts v is string {
 interface CallContext {
   authHeaders: Record<string, string>
   scope: 'mcp:read' | 'mcp:write' | null
+  /** When `?read_only=1`, write tools are hidden and blocked even for mcp:write keys. */
+  readOnlyMode: boolean
+  /** When `?features=` is set, only tools in those groups are listed/callable. */
+  features: FeatureFilter
   projectIdHint?: string
+}
+
+function effectiveScope(ctx: CallContext): 'mcp:read' | 'mcp:write' | null {
+  if (!ctx.scope) return null
+  if (ctx.readOnlyMode && ctx.scope === 'mcp:write') return 'mcp:read'
+  return ctx.scope
 }
 
 async function dispatchRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonRpcSuccess | JsonRpcError | null> {
@@ -974,9 +1147,11 @@ function handleInitialize(params: Record<string, unknown>): unknown {
  * blind. Includes `outputSchema` when defined (MCP 2025-06-18).
  */
 function handleToolsList(ctx: CallContext): unknown {
+  const scope = effectiveScope(ctx)
   return {
     tools: Object.entries(TOOLS)
-      .filter(([, def]) => isToolGrantedToScope(def.scope, ctx.scope))
+      .filter(([, def]) => isToolGrantedToScope(def.scope, scope))
+      .filter(([name]) => toolMatchesFeatures(name, ctx.features))
       .map(([name, def]) => ({
         name,
         description: def.description,
@@ -1004,13 +1179,20 @@ async function handleToolsCall(
   if (typeof name !== 'string') throw new McpError(ERR_INVALID_PARAMS, 'tools/call requires a string `name`')
   const def = TOOLS[name]
   if (!def) throw new McpError(ERR_METHOD_NOT_FOUND, `tool not found: ${name}`)
+  if (!toolMatchesFeatures(name, ctx.features)) {
+    throw new McpError(
+      ERR_METHOD_NOT_FOUND,
+      `tool "${name}" is not enabled for this connection — add its feature group to ?features= or use features=all`,
+    )
+  }
   // Scope gate. Anonymous clients (somehow past auth — shouldn't be
   // possible but defence in depth) get nothing. mcp:write implies read.
-  if (!ctx.scope) throw new McpError(ERR_INVALID_REQUEST, 'caller has no scope')
-  if (!isToolGrantedToScope(def.scope, ctx.scope)) {
+  const callerScope = effectiveScope(ctx)
+  if (!callerScope) throw new McpError(ERR_INVALID_REQUEST, 'caller has no scope')
+  if (!isToolGrantedToScope(def.scope, callerScope)) {
     throw new McpError(
       ERR_INVALID_REQUEST,
-      `tool "${name}" requires ${def.scope} scope; caller holds ${ctx.scope}`,
+      `tool "${name}" requires ${def.scope} scope; caller holds ${callerScope}${ctx.readOnlyMode ? ' (read_only mode)' : ''}`,
     )
   }
   const args = (params.arguments as Record<string, unknown> | undefined) ?? {}
@@ -1060,7 +1242,7 @@ async function handleResourcesRead(params: Record<string, unknown>, ctx: CallCon
       ? (ctx.projectIdHint ? `/v1/admin/inventory/${encodeURIComponent(ctx.projectIdHint)}` : null)
       : null
   if (uri === 'inventory://current' && !ctx.projectIdHint) {
-    throw new McpError(ERR_INVALID_PARAMS, 'inventory://current requires a project context; set X-Mushi-Project header or pass projectId')
+    throw new McpError(ERR_INVALID_PARAMS, 'inventory://current requires a project context; set X-Mushi-Project-Id header or pass projectId')
   }
   if (!path) throw new McpError(ERR_INVALID_PARAMS, `unknown resource uri: ${uri}`)
   const data = await apiCall(path, { headers: ctx.authHeaders })
@@ -1161,6 +1343,16 @@ async function apiCall<T = unknown>(
   return body as T
 }
 
+TOOLS = {
+  ...BASE_TOOLS,
+  ...buildManifestTools({
+    apiCall,
+    requireString,
+    McpError,
+    ERR_INVALID_PARAMS,
+  }),
+}
+
 // ----------------------------------------------------------------------------
 // Auth — dual mode (API key OR JWT). Validates the key against
 // `project_api_keys` via service-role; for JWT we rely on the downstream
@@ -1169,6 +1361,9 @@ async function apiCall<T = unknown>(
 // ----------------------------------------------------------------------------
 
 async function resolveAuth(req: Request): Promise<CallContext> {
+  const url = new URL(req.url)
+  const readOnlyMode = url.searchParams.get('read_only') === '1'
+  const features = parseFeaturesParam(url.searchParams.get('features'))
   const apiKey = req.headers.get('X-Mushi-Api-Key')
   if (apiKey) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -1209,13 +1404,14 @@ async function resolveAuth(req: Request): Promise<CallContext> {
       : null
     if (!scope) throw new McpError(ERR_INVALID_REQUEST, 'API key has no MCP scope')
     return {
-      // Forward the API key so the downstream /v1/admin/* calls re-validate
-      // it via adminOrApiKey({ scope }) and inherit RLS.
       authHeaders: {
         'X-Mushi-Api-Key': apiKey,
         'Authorization': `Bearer ${apiKey}`,
+        'X-Mushi-Project-Id': row.project_id,
       },
       scope,
+      readOnlyMode,
+      features,
       projectIdHint: row.project_id,
     }
   }
@@ -1231,6 +1427,8 @@ async function resolveAuth(req: Request): Promise<CallContext> {
     return {
       authHeaders: { Authorization: auth },
       scope: 'mcp:write',
+      readOnlyMode,
+      features,
     }
   }
 
@@ -1249,7 +1447,7 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': ALLOWED_METHODS,
   'Access-Control-Allow-Headers':
-    'Content-Type, Authorization, X-Mushi-Api-Key, X-Mushi-Project, MCP-Session-Id, MCP-Protocol-Version',
+    'Content-Type, Authorization, X-Mushi-Api-Key, X-Mushi-Project-Id, MCP-Session-Id, MCP-Protocol-Version',
   'Access-Control-Max-Age': '600',
 }
 
@@ -1262,6 +1460,18 @@ async function handler(req: Request): Promise<Response> {
   // MCP server descriptor so curl-style probes can confirm the endpoint
   // is alive without negotiating SSE. Not in the spec but very useful.
   if (req.method === 'GET') {
+    const url = new URL(req.url)
+    const iconParam = url.searchParams.get('icon')
+    if (iconParam === '1' || iconParam === 'svg') {
+      return new Response(MUSHI_ICON_SVG_INLINE, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml',
+          'Cache-Control': 'public, max-age=86400',
+          ...CORS_HEADERS,
+        },
+      })
+    }
     const accept = req.headers.get('Accept') ?? ''
     if (!accept.includes('text/event-stream')) {
       return new Response(
@@ -1435,13 +1645,17 @@ async function handler(req: Request): Promise<Response> {
     // Notification — no response.
     return new Response(null, { status: 202, headers: CORS_HEADERS })
   }
-  return jsonRpcResponse(response)
+  const extraHeaders: Record<string, string> = {}
+  if (rpc.method === 'tools/list') {
+    extraHeaders['Cache-Control'] = 'private, max-age=300'
+  }
+  return jsonRpcResponse(response, extraHeaders)
 }
 
-function jsonRpcResponse(body: unknown): Response {
+function jsonRpcResponse(body: unknown, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders, ...CORS_HEADERS },
   })
 }
 

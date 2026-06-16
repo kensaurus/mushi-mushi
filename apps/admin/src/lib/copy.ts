@@ -1059,6 +1059,9 @@ export const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
+        ask: 'Ask',
+        tour: 'Tour',
+        domains: 'Domains',
         graph: 'Graph',
         layers: 'Layers',
         search: 'Search',
@@ -1066,13 +1069,88 @@ export const COPY: CopyRegistry = {
       },
       help: {
         title: 'About the codebase explorer',
-        whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search with plain English.',
+        whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search and chat with plain English.',
         useCases: [
-          'Red banner = index error; brand = indexing off or in progress',
+          'Ask tab: "How does auth work?" with file:line citations',
+          'Tour tab: onboarding walkthrough that highlights the graph',
           'Graph tab: canvas coloured by UI / Backend / Test layer',
           'Search tab: semantic lookup once embeddings are populated',
         ],
-        howToUse: 'Overview for posture. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.',
+        howToUse: 'Overview for posture. Ask/Tour/Domains to understand the repo. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.',
+      },
+    },
+    '/connect': {
+      title: 'Connect & Update',
+      description: 'One hub to connect GitHub, install the SDK + MCP, and open upgrade PRs.',
+      help: {
+        title: 'About Connect & Update',
+        whatIsIt: 'The install and upgrade cockpit — connect your repo, copy SDK/MCP install commands, and create a PR that bumps @mushi-mushi packages.',
+        useCases: [
+          'First-time setup: connect GitHub → install SDK → add MCP to Cursor',
+          'Upgrade path: "Create Upgrade PR" bumps @mushi-mushi/* to latest npm',
+          'Verify indexing: enable codebase index so Explore can map your repo',
+        ],
+        howToUse: 'Connect GitHub first. Copy the SDK install snippet into your app, then use MCP deeplinks for Cursor. When versions drift, click Create Upgrade PR and merge after CI passes.',
+      },
+    },
+    '/code-health': {
+      title: 'Code health',
+      description: 'Bundle-size trends and god-file LOC findings from host-repo CI.',
+      help: {
+        title: 'About code health',
+        whatIsIt: 'CI-ingested bundle budgets and oversized-file warnings for the connected app.',
+        useCases: ['Spot bundle regressions after a release', 'Find files that need splitting before they become unmaintainable'],
+        howToUse: 'Wire mushi ingest in your repo CI; open this page to see the latest metrics and gate findings.',
+      },
+    },
+    '/content': {
+      title: 'Content QA',
+      description: 'Review AI-generated or imported content before it ships to learners.',
+      help: {
+        title: 'About content QA',
+        whatIsIt: 'A review queue for generated copy, thumbnails, and lesson content awaiting approval.',
+        useCases: ['Approve safe content before publish', 'Reject off-brand or incorrect generated text'],
+        howToUse: 'Filter by status, open a row, approve or reject with a note.',
+      },
+    },
+    '/feature-board': {
+      title: 'Feature board',
+      description: 'Community feature requests ranked by votes and impact.',
+      help: {
+        title: 'About the feature board',
+        whatIsIt: 'End-user feature ideas linked to your project, with vote counts and status.',
+        useCases: ['See what users ask for most', 'Promote a request into your roadmap'],
+        howToUse: 'Sort by votes or recency; link items to reports or inventory stories when you start work.',
+      },
+    },
+    '/fullstack-audit': {
+      title: 'Full-stack audit',
+      description: 'One-click health scorecard — schema, API contracts, RLS, and backend logs.',
+      help: {
+        title: 'About full-stack audit',
+        whatIsIt: 'Runs gate checks and backend probes to surface contract drift, missing RLS, and error spikes.',
+        useCases: ['Pre-release sanity check', 'Onboard a new repo with a baseline scorecard'],
+        howToUse: 'Configure Supabase PAT + project ref in Settings, then run audit and triage findings by severity.',
+      },
+    },
+    '/skills': {
+      title: 'Skill pipelines',
+      description: 'Browse agent skills, sync sources, and track pipeline runs.',
+      help: {
+        title: 'About skill pipelines',
+        whatIsIt: 'Catalog of cursor-kenji skills plus live runs when you attach a skill to a report.',
+        useCases: ['Find the right skill for a bug class', 'Watch a cloud pipeline step complete'],
+        howToUse: 'Catalog tab to browse; Pipelines tab for active runs; Sources tab to sync GitHub repos.',
+      },
+    },
+    '/tester': {
+      title: 'Tester hub',
+      description: 'External tester onboarding and reward flows.',
+      help: {
+        title: 'About the tester hub',
+        whatIsIt: 'Manage community testers who submit bugs through the widget.',
+        useCases: ['Invite testers', 'Track rewards and leaderboard standing'],
+        howToUse: 'Share invite links from Rewards; monitor submissions on Reports.',
       },
     },
     '/users': {
@@ -1570,7 +1648,11 @@ export const COPY: CopyRegistry = {
     },
     '/explore': {
       title: 'Codebase atlas',
-      description: 'Banner + EXPLORE SNAPSHOT — Overview | Graph | Layers | Search | Index. Indexed file graph + semantic search.',
+      description: 'Banner + EXPLORE SNAPSHOT — Overview | Ask | Tour | Domains | Graph | Layers | Search | Index.',
+    },
+    '/connect': {
+      title: 'Connect & Update',
+      description: 'GitHub connect, SDK install, MCP deeplinks, and one-click upgrade PRs.',
     },
     '/users': {
       title: 'Users',

@@ -41,7 +41,7 @@ import {
 import {
   resolveProjectGithubToken,
 } from '../../_shared/github.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -97,7 +97,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       db
         .from('nl_query_history')
         .select('id', { count: 'exact', head: true })
-        .in('project_id', await ownedProjectIds(db, userId))
+        .in('project_id', await callerProjectIds(c, db, userId))
         .eq('is_saved', true)
         .neq('user_id', userId),
       db
@@ -257,7 +257,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const db = getServiceClient();
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 25), 1), 100);
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { team: [] } });
     }
@@ -351,7 +351,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   app.get('/v1/admin/groups', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const { data } = await db
       .from('report_groups')
@@ -368,7 +368,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const { targetGroupId } = await c.req.json();
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const { data: sourceGroup } = await db
       .from('report_groups')
@@ -417,7 +417,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   app.get('/v1/admin/verifications', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { verifications: [] } });
 
     const { data } = await db
@@ -465,7 +465,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -593,7 +593,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // (legacy / per-project shares) AND direct owner_id all see the same
     // pipeline. The previous project_members-only filter showed "0 fixes"
     // to invited org members.
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } });
 
     // Optional `q` substring search — the admin command palette needs fast
@@ -628,7 +628,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const body = await c.req.json();
     const db = getServiceClient();
 
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const { data: report } = await db
       .from('reports')
@@ -772,7 +772,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     const { data } = await db
       .from('fix_attempts')
       .select(
@@ -1007,7 +1007,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const fixId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
     if (projectIds.length === 0)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404);
 
@@ -1242,7 +1242,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo: null as string | null,
     }
 
-    const projectIds = await ownedProjectIds(db, userId)
+    const projectIds = await callerProjectIds(c, db, userId)
     if (projectIds.length === 0) return c.json({ ok: true, data: empty })
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -1632,7 +1632,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await callerProjectIds(c, db, userId);
 
     const allowed: Record<string, boolean> = {
       status: true,

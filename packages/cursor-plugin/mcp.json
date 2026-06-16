@@ -4,10 +4,12 @@
       "type": "http",
       "url": "https://your-project.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "${MUSHI_API_KEY}"
+        "Authorization": "Bearer ${MUSHI_API_KEY}",
+        "X-Mushi-Api-Key": "${MUSHI_API_KEY}",
+        "X-Mushi-Project-Id": "${MUSHI_PROJECT_ID}"
       },
-      "notes": "Hosted Streamable HTTP MCP — recommended for Cursor plugin usage. Replace the URL with your Supabase project's edge function URL. Set MUSHI_API_KEY in your shell environment or Cursor settings.",
-      "_envSetup": "Export MUSHI_API_KEY=<your-mcp-read-key> in your shell profile, or add it to Cursor → Settings → Environment Variables."
+      "notes": "Hosted Streamable HTTP MCP — recommended for Cursor plugin usage. Replace the URL with your Supabase project's edge function URL. Set MUSHI_API_KEY and MUSHI_PROJECT_ID in your shell environment or Cursor settings. Append ?read_only=1 to the URL to hide write tools.",
+      "_envSetup": "Export MUSHI_API_KEY=<your-mcp-read-key> and MUSHI_PROJECT_ID=<uuid> in your shell profile, or add them to Cursor → Settings → Environment Variables."
     },
     "mushi-stdio": {
       "type": "stdio",
@@ -15,7 +17,8 @@
       "args": ["-y", "@mushi-mushi/mcp"],
       "env": {
         "MUSHI_API_KEY": "${MUSHI_API_KEY}",
-        "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}"
+        "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}",
+        "MUSHI_API_ENDPOINT": "${MUSHI_API_ENDPOINT}"
       },
       "notes": "stdio fallback — runs npx @mushi-mushi/mcp locally. Use this if the hosted HTTP endpoint is not configured."
     }
