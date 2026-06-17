@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { apiFetch } from '../lib/supabase';
 import { usePageData } from '../lib/usePageData';
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
-  PageHeader,
-  PageHelp,
   Card,
   Badge,
   Btn,
@@ -149,20 +148,17 @@ export function SsoPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title="SSO Configuration"
         description="Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default."
-      />
-
-      <PageHelp
-        title="About SSO"
-        whatIsIt="Single Sign-On lets your team log in via your corporate identity provider (Okta, Azure AD, Google Workspace, etc.) instead of email + password."
-        useCases={[
+        helpTitle="About SSO"
+        helpWhatIsIt="Single Sign-On lets your team log in via your corporate identity provider (Okta, Azure AD, Google Workspace, etc.) instead of email + password."
+        helpUseCases={[
           'Centrally enforce MFA, password policy, and offboarding',
           'Automatically provision new admins when they join your IdP group',
           'Pass an enterprise security review (SAML 2.0)',
         ]}
-        howToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
+        helpHowToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
 
       {!ssoUnlocked && !entitlements.loading && (

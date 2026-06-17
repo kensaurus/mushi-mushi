@@ -379,12 +379,11 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_projects',
     title: 'List accessible projects',
     description:
-      'List the Mushi projects accessible to this API key. ' +
-      'For project-scoped keys (the typical case), returns a single-item list with the bound project\'s id, name, created_at. ' +
-      'Use this when MUSHI_PROJECT_ID is not configured — call list_projects first, then pass the id to other tools. ' +
-      'Multi-project note: each Mushi project uses its own API key. To connect multiple projects, run ' +
-      '"Add to Cursor" in the Mushi console for each project — each deeplink creates a uniquely-named MCP server ' +
-      'entry (mushi-{slug}-{id}). You can then call list_projects on each named server to confirm which project it serves.',
+      'List all Mushi projects accessible to this API key. ' +
+      'For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. ' +
+      'Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. ' +
+      'If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. ' +
+      'Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which projects can I access with this API key?',
@@ -393,10 +392,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_account_overview',
     title: 'Account overview — all projects',
     description:
-      'Return a summary of every Mushi project accessible to this API key, including report counts, ' +
-      'SDK heartbeat status, and the last ingest timestamp for each. ' +
-      'For project-scoped keys this is a one-item list; for future org-level keys it lists every project. ' +
-      'Also includes a hint explaining how to connect additional projects to your IDE. ' +
+      'Return an enriched summary of every Mushi project accessible to this API key: id, name, ' +
+      'recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. ' +
+      'For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. ' +
+      'Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. ' +
       'Call this at the start of a multi-repo or multi-app triage session to orient yourself.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },

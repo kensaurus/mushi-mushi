@@ -12,6 +12,13 @@ Adds a floating 🐛 button (or your own button via `MushiTrigger`) to your Reac
 
 See the [main README](https://www.npmjs.com/package/mushi-mushi) for the full before/after and pros/cons.
 
+## Install
+
+```bash
+npm install @mushi-mushi/react
+# or: npx mushi-mushi
+```
+
 ## Quick start
 
 ```tsx

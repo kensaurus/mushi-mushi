@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mushi-mushi/brand": "workspace:*",
     "next": "^15.5.15",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -21,6 +22,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "eslint": "^10.3.0",
+    "eslint-plugin-mushi-mushi": "workspace:*",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.8.3"
   }

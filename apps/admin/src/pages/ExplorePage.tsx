@@ -12,7 +12,7 @@ import '@xyflow/react/dist/style.css'
 
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
-import { useExploreUx, resolveQuickExploreTab } from '../lib/exploreModeUx'
+import { useExploreUx, resolveBeginnerExploreTab, resolveQuickExploreTab } from '../lib/exploreModeUx'
 import {
   resolveExploreTab,
   primaryTabOf,
@@ -30,8 +30,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useTheme } from '../lib/useTheme'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   SegmentedControl,
   ErrorAlert,
   Section,
@@ -45,7 +44,7 @@ import { PageScopeHint,SnapshotSectionHint,PageHeader,
   type DetailRowItem, } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
-import { PageHero } from '../components/PageHero'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
 import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
@@ -255,10 +254,18 @@ export function ExplorePage() {
   )
 
   useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
-    const quickTab = resolveQuickExploreTab(stats)
-    if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+    if (statsLoading) return
+    if (tabParam != null) return
+    if (ux.isQuickstart) {
+      const quickTab = resolveQuickExploreTab(stats)
+      if (activeTab !== quickTab) setActiveTab(quickTab)
+      return
+    }
+    if (ux.isBeginner) {
+      const beginnerTab = resolveBeginnerExploreTab(stats)
+      if (activeTab !== beginnerTab) setActiveTab(beginnerTab)
+    }
+  }, [ux.isQuickstart, ux.isBeginner, statsLoading, stats, activeTab, tabParam, setActiveTab])
 
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []
@@ -564,7 +571,7 @@ export function ExplorePage() {
   if (!projectId) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Explore'} />
+        <PageHeaderBar title={copy?.title ?? 'Explore'} />
         <ExploreStatusBanner stats={stats} onTab={setActiveTab} />
         <EmptySectionMessage
           text="No project selected"
@@ -581,7 +588,10 @@ export function ExplorePage() {
   if (accessDenied) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Explore'} projectScope={stats.projectName ?? undefined} />
+        <PageHeaderBar
+          title={copy?.title ?? 'Explore'}
+          projectScope={stats.projectName ?? undefined}
+        />
         <ExploreUnderstandEmpty
           error={{
             code: 'FORBIDDEN',
@@ -764,28 +774,26 @@ export function ExplorePage() {
 
   return (
     <div className="space-y-3 sm:space-y-4 min-w-0" data-testid="mushi-page-explore">
-      <PageHelp
-        title={copy?.help?.title ?? 'Codebase Atlas'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Explore'}
+        projectScope={stats.projectName ?? undefined}
+        description={copy?.description ?? 'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'}
+        helpTitle={copy?.help?.title ?? 'Codebase Atlas'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Visual map of indexed source files grouped by architectural layer.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'See which layer a bug report file lives in',
             'Trace import dependencies between files',
             'Search "where is login?" and jump to the right symbol',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Overview for posture. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Explore'}
-        projectScope={stats.projectName ?? undefined}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -798,7 +806,7 @@ export function ExplorePage() {
                     : bannerSeverity === 'warn'
                       ? 'bg-warn-muted/50 text-warning-foreground'
                       : bannerSeverity === 'brand'
-                        ? 'bg-brand/15 text-brand'
+                        ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                         : 'bg-surface-overlay text-fg-muted'
               }
             >
@@ -823,8 +831,7 @@ export function ExplorePage() {
             </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas."} />
+      </PageHeaderBar>
 
       <ExploreStatusBanner
         stats={stats}
@@ -918,39 +925,6 @@ export function ExplorePage() {
         <>
           {!ux.hideOverviewChrome && (
           <>
-          <PageHero
-            scope="explore"
-            title="Codebase Atlas"
-            kicker="Plan"
-            decide={{
-              label: stats.topPriorityLabel ?? 'Indexed codebase map',
-              metric:
-                stats.indexedFiles > 0
-                  ? `${stats.layers?.ui ?? 0} UI · ${stats.layers?.backend ?? 0} backend`
-                  : undefined,
-              summary:
-                stats.topPriority === 'not_enabled'
-                  ? 'Brand banner — turn on indexing before the graph can populate.'
-                  : stats.topPriority === 'error'
-                    ? 'Red banner — last indexer run failed; check Index tab for the error.'
-                    : stats.topPriority === 'ready'
-                      ? 'Green banner — open Graph to trace imports or Search for plain-English lookup.'
-                      : 'Amber banner — indexing may still be running or the repo is empty.',
-              severity:
-                stats.topPriority === 'error'
-                  ? 'crit'
-                  : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-                    ? 'warn'
-                    : stats.topPriority === 'ready'
-                      ? 'ok'
-                      : 'info',
-            }}
-            verify={{
-              label: 'Embeddings',
-              detail: `${stats.withEmbeddings}/${stats.indexedFiles} files embedded for search`,
-            }}
-          />
-
           {stats.topPriorityTo && stats.topPriority !== 'ready' ? (
             <Card
               className={`p-4 ${

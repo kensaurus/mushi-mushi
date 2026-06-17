@@ -22,8 +22,10 @@ export function setDebugEnabled(enabled: boolean): void {
   else localStorage.removeItem(STORAGE_KEY)
 }
 
+import { readVizToken } from './vizTokens'
+
 const PREFIX = '%c[mushi:debug]'
-const STYLE = 'color: #7c3aed; font-weight: bold;'
+const STYLE = `color: ${readVizToken('accent')}; font-weight: bold;`
 const RESET_STYLE = 'color: inherit;'
 
 // `category` and `message` are passed as `%s` data arguments (never
@@ -33,7 +35,7 @@ const FORMAT = `${PREFIX} %c%s%c %s`
 
 export function debugLog(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  const catStyle = 'color: #a78bfa; font-weight: 600;'
+  const catStyle = `color: ${readVizToken('accent-foreground')}; font-weight: 600;`
   if (data) {
     console.log(FORMAT, STYLE, catStyle, category, RESET_STYLE, message, data)
   } else {
@@ -43,10 +45,10 @@ export function debugLog(category: string, message: string, data?: Record<string
 
 export function debugWarn(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.warn(FORMAT, STYLE, 'color: #f59e0b; font-weight: 600;', category, RESET_STYLE, message, data ?? '')
+  console.warn(FORMAT, STYLE, `color: ${readVizToken('viz-score-warn')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
 }
 
 export function debugError(category: string, message: string, data?: Record<string, unknown>): void {
   if (!isDebugEnabled()) return
-  console.error(FORMAT, STYLE, 'color: #ef4444; font-weight: 600;', category, RESET_STYLE, message, data ?? '')
+  console.error(FORMAT, STYLE, `color: ${readVizToken('viz-flow-danger')}; font-weight: 600;`, category, RESET_STYLE, message, data ?? '')
 }

@@ -173,7 +173,7 @@ export function OperatorTraceLog({ lines, variant = 'full' }: OperatorTraceLogPr
         </div>
       )}
       <div
-        className={`overflow-y-auto rounded-md border border-edge-subtle/80 bg-[#0a0c10]/90 px-2.5 py-2 font-mono text-3xs leading-relaxed ${maxH}`}
+        className={`overflow-y-auto rounded-md border border-edge-subtle/80 bg-viz-terminal-bg/90 px-2.5 py-2 font-mono text-3xs leading-relaxed ${maxH}`}
         role="log"
         aria-label="Operator debug trace"
         aria-live="polite"

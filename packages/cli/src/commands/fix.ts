@@ -288,12 +288,16 @@ program
     'Verify host-app wiring: Mushi env vars, Cursor MCP config, Capacitor hybrid SDK notes.',
   )
   .option(
+    '--mcp',
+    'Check Cursor MCP config: verify mushi-* server entry, credentials, and probe account-overview connectivity.',
+  )
+  .option(
     '--fix',
     'Apply safe local fixes when checks fail: write missing .env.local lines and wire Cursor MCP config.',
   )
-  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean; hostApp?: boolean; fix?: boolean }) => {
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean; hostApp?: boolean; mcp?: boolean; fix?: boolean }) => {
     const config = loadConfig()
-    const doctorOpts = { cwd: opts.cwd, server: opts.server, ingest: opts.ingest, qaStories: opts.qaStories, hostApp: opts.hostApp }
+    const doctorOpts = { cwd: opts.cwd, server: opts.server, ingest: opts.ingest, qaStories: opts.qaStories, hostApp: opts.hostApp, mcp: opts.mcp }
     let result = await runDoctor(config, doctorOpts)
 
     if (!result.ready && opts.fix && config.apiKey && config.projectId && config.endpoint) {
@@ -307,9 +311,8 @@ program
       }, config)
       for (const msg of connectResult.messages) console.log(msg)
       // Re-run the checks so the printed result + exit code reflect the
-      // post-fix state. Without this the command reports the stale pre-fix
-      // failures and exits 1 even when every fix succeeded.
-      result = await runDoctor(config, doctorOpts)
+      // post-fix state.
+      result = await runDoctor(config, { ...doctorOpts, mcp: opts.mcp })
     }
 
     const { checks } = result

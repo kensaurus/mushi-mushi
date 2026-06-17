@@ -249,6 +249,52 @@ export function Section({ title, children, className = '', action, icon, freshne
   )
 }
 
+/** Neutral chrome surface for informational help strips (de-amber rule). */
+const HELP_BANNER_TONE: Record<'neutral' | 'warn' | 'danger' | 'info', string> = {
+  neutral: 'border-chrome-border bg-chrome text-fg-secondary',
+  warn: 'border-warn/30 bg-warn-muted/20 text-fg',
+  danger: 'border-danger/30 bg-danger-muted/20 text-fg',
+  info: 'border-info/30 bg-info-muted/20 text-fg',
+}
+
+export interface HelpBannerProps {
+  children: ReactNode
+  className?: string
+  /** Default `neutral` — use semantic tones only for real status, not page help. */
+  tone?: keyof typeof HELP_BANNER_TONE
+  title?: string
+  icon?: ReactNode
+  role?: 'status' | 'note' | 'alert'
+  'data-testid'?: string
+}
+
+/** Compact inline help / guidance strip — prefer over raw `bg-warn/10` for info copy. */
+export function HelpBanner({
+  children,
+  className = '',
+  tone = 'neutral',
+  title,
+  icon,
+  role,
+  'data-testid': testId,
+}: HelpBannerProps) {
+  return (
+    <div
+      role={role}
+      data-testid={testId}
+      className={`flex items-start gap-2.5 rounded-md border px-3 py-2.5 ${HELP_BANNER_TONE[tone]} ${className}`}
+    >
+      {icon ? <span className="mt-0.5 shrink-0" aria-hidden>{icon}</span> : null}
+      <div className="min-w-0 flex-1">
+        {title ? <p className="text-xs font-medium text-fg">{title}</p> : null}
+        <div className={title ? 'mt-1 text-xs text-fg-muted leading-relaxed' : 'text-xs leading-relaxed'}>
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Suppresses internal TAB_META / "Banner + …" dev copy under snapshot sections. */
 export function SnapshotSectionHint({
   text,
@@ -259,9 +305,9 @@ export function SnapshotSectionHint({
 }) {
   if (isDevFacingHint(text) || !text) return null
   return (
-    <ContainedBlock tone="muted" className={className}>
+    <HelpBanner tone="neutral" className={className}>
       <p className="text-2xs leading-relaxed text-fg-muted">{text}</p>
-    </ContainedBlock>
+    </HelpBanner>
   )
 }
 

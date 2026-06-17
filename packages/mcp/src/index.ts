@@ -12,6 +12,21 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createRequire } from 'node:module'
 import { createLogger } from '@mushi-mushi/core'
+
+// MCP stdio transport owns stdout for JSON-RPC 2.0 exclusively.
+// Any non-JSON-RPC bytes on stdout — including structured log lines from
+// createLogger — cause the client (Cursor, Claude Desktop, etc.) to emit
+// validation errors and drop the transport connection.
+// Redirect console.log and console.warn to stderr before any logger is
+// instantiated so all log output goes to the safe side of the pipe.
+/* eslint-disable no-console */
+const _writeStderr = (...args: unknown[]) =>
+  process.stderr.write(
+    args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') + '\n',
+  )
+console.log = _writeStderr
+console.warn = _writeStderr
+/* eslint-enable no-console */
 import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer } from './server.js'
@@ -19,7 +34,7 @@ import { createMushiServer } from './server.js'
 const require = createRequire(import.meta.url)
 const VERSION = (require('../package.json') as { version: string }).version
 
-const log = createLogger({ scope: 'mushi:mcp', level: 'info' })
+const log = createLogger({ scope: 'mushi:mcp', level: 'info', destination: 'stderr' })
 
 const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? ''
 const API_KEY = process.env.MUSHI_API_KEY ?? ''
@@ -58,25 +73,21 @@ async function main() {
         'e.g. https://xyz.supabase.co/functions/v1/api',
     )
   }
+  const mode = PROJECT_ID ? 'single-project' : 'account'
   if (!PROJECT_ID) {
-    console.error(
-      '[mushi-mcp] MUSHI_PROJECT_ID is not set.\n' +
-        '\n' +
-        'Tools that scope to a project (get_recent_reports, get_report_detail,\n' +
-        'search_reports, etc.) will require you to pass projectId explicitly on\n' +
-        'every call. To set it once and never pass it again:\n' +
-        '\n' +
-        '  1. Open the Mushi admin console → Projects\n' +
-        '     https://kensaur.us/mushi-mushi/projects\n' +
-        '  2. Click your project — copy the UUID below the project name.\n' +
-        '  3. Add it to your MCP env config:\n' +
-        '       MUSHI_PROJECT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n' +
-        '\n' +
-        'Or visit Admin → MCP for a pre-filled config snippet with your actual UUID.',
+    // Account mode: no fixed project — the key resolves projects dynamically.
+    // This is intentional when a key can access multiple projects.
+    // Tools that need a projectId will resolve it via list_projects or require
+    // it to be passed explicitly on each call.
+    log.info(
+      '[mushi-mcp] Running in account mode (no MUSHI_PROJECT_ID set). ' +
+        'Project-scoped tools accept an explicit projectId argument. ' +
+        'Run `get_account_overview` to see accessible projects.',
     )
   }
   log.info('Starting Mushi MCP server', {
     version: VERSION,
+    mode,
     endpoint: API_ENDPOINT || '(unset)',
     hasProjectId: !!PROJECT_ID,
     scopes: SCOPES.join(','),

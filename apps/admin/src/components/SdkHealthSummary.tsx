@@ -56,8 +56,11 @@ import type { SetupStep } from '../lib/useSetupStatus'
 import {
   formatEnvVarPair,
   mushiEnvVarsForProjectSlug,
+  isExpoReporterProject,
+  expoReporterGithubRepo,
   type ProjectMushiEnvVars,
 } from '../lib/projectMushiEnv'
+import { sdkPlatformHintFromUserAgent } from '../lib/sdkClientPlatform'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -292,6 +295,15 @@ const CARD_BLOCK_TONE: Record<
   'no-key': 'muted',
 }
 
+function keyHeartbeatTitle(k: SdkHealthApiKey, d: KeyDiagnostic): string {
+  const parts: string[] = [d.description]
+  if (k.last_seen_at) parts.push(`Last seen ${absTime(k.last_seen_at)}`)
+  const platform = sdkPlatformHintFromUserAgent(k.last_seen_user_agent)
+  if (platform) parts.push(platform)
+  if (k.last_seen_user_agent) parts.push(k.last_seen_user_agent)
+  return parts.join(' · ')
+}
+
 function SdkKeyCompactTableRow({
   apiKey: k,
   adminHost,
@@ -361,11 +373,7 @@ function SdkKeyCompactTableRow({
       </td>
       <td className="border-l border-edge-subtle/45 px-3 py-2.5 align-middle text-right">
         <span
-          title={
-            k.last_seen_at
-              ? `${d.description} · Last seen ${absTime(k.last_seen_at)}`
-              : d.description
-          }
+          title={k.last_seen_at ? keyHeartbeatTitle(k, d) : d.description}
         >
           <SignalChip
             tone={KEY_STATUS_CHIP[d.status]}
@@ -402,11 +410,7 @@ function SdkKeyTableRow({
       </td>
       <td className="px-2 py-2 align-middle whitespace-nowrap">
         <span
-          title={
-            k.last_seen_at
-              ? `${d.description} · Last seen ${absTime(k.last_seen_at)}`
-              : d.description
-          }
+          title={k.last_seen_at ? keyHeartbeatTitle(k, d) : d.description}
         >
           <SignalChip tone={KEY_STATUS_CHIP[d.status]}>{d.label}</SignalChip>
         </span>
@@ -458,10 +462,29 @@ function SdkKeyTableRow({
 
 function buildPlaybook(
   env: ProjectMushiEnvVars,
+  projectSlug?: string | null,
 ): Record<CardStatus, { title: string; checks: string[]; cta: string | null }> {
   const envPair = formatEnvVarPair(env)
   const envWhere = env.envFileHint ?? 'your CI/build env'
   const endpointVar = env.endpointVar ?? 'your Mushi API endpoint env var'
+  const isExpo = env.projectIdVar.startsWith('EXPO_PUBLIC_')
+  const ghRepo = expoReporterGithubRepo(projectSlug) ?? 'your-repo'
+  const neverChecks =
+    isExpo
+      ? [
+          `Local dev: add ${envPair} to ${envWhere}. Without both, mushiConfig is null and the feedback band never renders.`,
+          env.ciVars
+            ? `CI / store builds: set GitHub repo ${env.ciVars.projectId.ghKind} ${env.ciVars.projectId.name}, ${env.ciVars.apiKey.ghKind} ${env.ciVars.apiKey.name}${env.ciVars.endpoint ? `, and ${env.ciVars.endpoint.name}` : ''} on ${ghRepo}. See Connect → Setup Copilot or run scripts/setup-yen-yen-reporter-secrets.mjs.`
+            : `CI / store builds: mirror ${envPair} into your release workflow env — Expo cannot read secrets at runtime.`,
+          'Rebuild required: EXPO_PUBLIC_* is compile-time. OTA updates cannot fix a store build that shipped without keys — trigger release-mobile for Android + iOS.',
+          'Reporter vs ingest: EXPO_PUBLIC_MUSHI_API_KEY powers the in-app band. MUSHI_INGEST_KEY is Code Health metrics only — it does not enable the band.',
+          'Send test report below proves ingest only — it does not mark SDK installed; you still need a heartbeat from a real TestFlight / Play build.',
+        ]
+      : [
+          `${env.projectIdVar} or ${env.apiKeyVar} are missing in ${envWhere} (${env.stackLabel}) — without them, isEnabled() returns false and the SDK never heartbeats.`,
+          'initMushi() is never called from your app entry — usually deferred from providers or app shell after first paint.',
+          'Send test report below proves ingest only — it does not mark SDK installed; you still need a heartbeat from a real app build.',
+        ]
   return {
     healthy: {
       title: 'Everything green',
@@ -482,12 +505,8 @@ function buildPlaybook(
       cta: 'Send test report',
     },
     never: {
-      title: 'Most likely causes',
-      checks: [
-        `${env.projectIdVar} or ${env.apiKeyVar} are missing in ${envWhere} (${env.stackLabel}) — without them, isEnabled() returns false and the SDK never heartbeats.`,
-        'initMushi() is never called from your app entry — usually deferred from providers or app shell after first paint.',
-        'Send test report below proves ingest only — it does not mark SDK installed; you still need a heartbeat from a real app build.',
-      ],
+      title: isExpo ? 'Expo build-time env missing — fix checklist' : 'Most likely causes',
+      checks: neverChecks,
       cta: 'Send test report',
     },
     stale: {
@@ -551,7 +570,7 @@ export function SdkHealthSummary({
   }, [status])
 
   const tone = STATUS_TONE[status]
-  const playbook = buildPlaybook(envVars)[status]
+  const playbook = buildPlaybook(envVars, projectSlug)[status]
   const activeKeys = apiKeys.filter((k) => k.is_active)
   const freshest = activeKeys
     .filter((k) => k.last_seen_at)
@@ -717,10 +736,10 @@ export function SdkHealthSummary({
           <span aria-hidden="true" className="ml-1.5">{open ? '▴' : '▾'}</span>
         </Btn>
         <Link
-          to="/onboarding"
+          to={isExpoReporterProject(projectSlug) ? '/setup-copilot' : '/onboarding'}
           className="text-2xs text-fg-muted hover:text-fg underline-offset-2 hover:underline ml-auto"
         >
-          Setup guide →
+          {isExpoReporterProject(projectSlug) ? 'Setup Copilot →' : 'Setup guide →'}
         </Link>
       </div>
 

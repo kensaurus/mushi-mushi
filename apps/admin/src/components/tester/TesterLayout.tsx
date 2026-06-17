@@ -28,6 +28,13 @@ import {
   IconSettings,
   IconSignOut,
 } from '../icons'
+import type { AdminMode } from '../../lib/mode'
+
+// mushi-mushi-allowlist: tester shell hides mode switcher — prop required by shared component
+function noopSelectMode(_mode: AdminMode) {}
+
+// mushi-mushi-allowlist: focus mode hidden in compact tester sidebar
+function noopToggleFocus() {}
 
 /** Routes readable before a tester profile exists. */
 const PRE_ENROLL_PATHS = new Set(['/tester/learn'])
@@ -148,7 +155,7 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
               <span className="text-brand">m</span>
               <span className="text-fg-secondary">m</span>
             </h1>
-            <SidebarBrandToggles compact showMode={false} mode="advanced" onSelectMode={() => {}} />
+            <SidebarBrandToggles compact showMode={false} mode="advanced" onSelectMode={noopSelectMode} />
           </div>
         ) : (
           <>
@@ -156,7 +163,7 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
               <span className="text-brand">mushi</span>
               <span className="text-fg-secondary">mushi</span>
             </h1>
-            <SidebarBrandToggles showMode={false} mode="advanced" onSelectMode={() => {}} />
+            <SidebarBrandToggles showMode={false} mode="advanced" onSelectMode={noopSelectMode} />
           </>
         )}
       </div>
@@ -167,7 +174,7 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
         {!compact && (
           <SidebarFooterControls
             focusMode={false}
-            onToggleFocus={() => {}}
+            onToggleFocus={noopToggleFocus}
             showDensity={false}
             showFocus={false}
           />

@@ -6,6 +6,24 @@ Angular SDK for Mushi Mushi bug reporting. **API-only** — captures errors and 
 >
 > **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
 
+## Install
+
+```bash
+npm install @mushi-mushi/angular @mushi-mushi/web
+# or: npx mushi-mushi
+```
+
+## Environment variables
+
+The wizard writes `VITE_MUSHI_*` for Angular CLI / Vite-based apps:
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_MUSHI_PROJECT_ID` | Project slug (`proj_…`) or UUID from Admin → Projects |
+| `VITE_MUSHI_API_KEY` | Ingest key (`mushi_…`) |
+
+See [Project ID & API keys](https://docs.mushimushi.dev/concepts/credentials) for format details.
+
 ## Usage
 
 ```ts
@@ -13,35 +31,48 @@ import { provideMushi } from '@mushi-mushi/angular'
 
 bootstrapApplication(AppComponent, {
   providers: [
-    provideMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
-  ]
+    provideMushi({
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+    }),
+  ],
 })
 ```
 
-### With Widget UI
+### With widget UI
 
 ```ts
 import { provideMushi } from '@mushi-mushi/angular'
 import { Mushi } from '@mushi-mushi/web'
 
 bootstrapApplication(AppComponent, {
-  providers: [provideMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })]
+  providers: [
+    provideMushi({
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+    }),
+  ],
 })
-Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
+
+Mushi.init({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})
 ```
 
-The module provides a global `ErrorHandler` that captures uncaught errors and an injectable `MushiService` for programmatic control.
+`provideMushi()` registers a global `ErrorHandler` and an injectable `MushiService` for programmatic reports.
 
-## Peer Dependencies
+## API
+
+| Export | Purpose |
+| --- | --- |
+| `provideMushi(config)` | Standalone provider — init + global error handler |
+| `MushiService` | Injectable service for `submitReport()` |
+
+## Peer dependencies
 
 - `@angular/core` >= 17
 
 ## License
 
 MIT
-
-
-<!-- mushi-readme-stats-footer -->
----
-
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

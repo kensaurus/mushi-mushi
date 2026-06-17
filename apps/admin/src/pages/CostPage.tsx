@@ -31,8 +31,9 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
+import { SnapshotSectionHint,
   Card,
   Section,
   StatCard,
@@ -214,26 +215,26 @@ export function CostPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4" data-testid="mushi-page-cost">
-        <PageHelp
-          title={copy?.help?.title ?? 'About AI cost tracking'}
-          whatIsIt={
+        <PageHeaderBar
+          title={copy?.title ?? 'LLM Cost'}
+          description={copy?.description ?? 'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
+          helpTitle={copy?.help?.title ?? 'About AI cost tracking'}
+          helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'Every LLM call is logged in llm_invocations with token counts and cost_usd. Legacy llm_cost_usd rows are merged into totals.'
           }
-          useCases={
+          helpUseCases={
             copy?.help?.useCases ?? [
               'Audit which edge function is spending the most',
               'Compare costs across models',
               'Spot a runaway cron from the daily trend',
             ]
           }
-          howToUse={
+          helpHowToUse={
             copy?.help?.howToUse ??
             'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
           }
         />
-        <PageHeader title={copy?.title ?? 'LLM Cost'} />
-      <PageScopeHint text={copy?.description ?? "Track and audit every LLM call across classify, fix, judge, and inventory agents."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -252,26 +253,27 @@ export function CostPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-cost">
-      <PageHelp
-        title={copy?.help?.title ?? 'About AI cost tracking'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'LLM Cost'}
+        projectScope={stats.projectName ?? undefined}
+        description={copy?.description ?? 'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
+        helpTitle={copy?.help?.title ?? 'About AI cost tracking'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Every LLM call is logged in llm_invocations with token counts and cost_usd. Legacy llm_cost_usd rows are merged into totals.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'Audit which edge function is spending the most',
             'Compare costs across models',
             'Spot a runaway cron from the daily trend',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
         }
-      />
-
-      <PageHeader title={copy?.title ?? 'LLM Cost'} projectScope={stats.projectName ?? undefined}>
+      >
         {!ux.hideOverviewChrome && (
           <>
             {stats.totalCalls > 0 ? (
@@ -281,8 +283,7 @@ export function CostPage() {
             )}
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Track and audit every LLM call across classify, fix, judge, and inventory agents."} />
+      </PageHeaderBar>
 
       <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
 
@@ -427,6 +428,7 @@ export function CostPage() {
                   hint="Operations appear here once edge functions run."
                 />
               ) : (
+                <ResponsiveTable ariaLabel="Cost by operation">
                 <table className="w-full text-sm">
                   <tbody>
                     {Object.entries(byOp)
@@ -443,6 +445,7 @@ export function CostPage() {
                       ))}
                   </tbody>
                 </table>
+                </ResponsiveTable>
               )}
             </Card>
 
@@ -458,6 +461,7 @@ export function CostPage() {
                   hint="Models appear here once edge functions run."
                 />
               ) : (
+                <ResponsiveTable ariaLabel="Cost by model">
                 <table className="w-full text-sm">
                   <tbody>
                     {Object.entries(byModel)
@@ -474,6 +478,7 @@ export function CostPage() {
                       ))}
                   </tbody>
                 </table>
+                </ResponsiveTable>
               )}
             </Card>
           </div>

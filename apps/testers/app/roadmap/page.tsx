@@ -2,6 +2,7 @@
  * Public roadmap — anonymous voting, no auth required.
  */
 import type { Metadata } from 'next'
+import { TestersPageShell } from '../components/TestersPageShell'
 import { VoteButton } from './vote-button'
 
 export const metadata: Metadata = {
@@ -45,25 +46,21 @@ export default async function RoadmapPage({
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <nav className="border-b border-white/10 px-4 py-3">
-        <a href="/mushi-mushi/" className="text-violet-400 font-semibold">mushimushi</a>
-        <span className="mx-2 text-gray-500">/</span>
-        <span>Roadmap</span>
-      </nav>
-      <main className="mx-auto max-w-3xl px-4 py-10 space-y-6">
+    <TestersPageShell>
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
         <header>
+          <p className="testers-kicker mb-2">Public roadmap</p>
           <h1 className="text-2xl font-bold">{project?.name ?? slug} roadmap</h1>
-          <p className="text-sm text-gray-400 mt-1">Vote without signing in — one tap per item.</p>
+          <p className="testers-muted mt-1 text-sm">Vote without signing in — one tap per item.</p>
         </header>
         <ul className="space-y-3">
           {tickets.map((t) => (
-            <li key={t.id} className="rounded-lg border border-white/10 bg-white/5 p-4">
+            <li key={t.id} className="testers-panel p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="font-medium">{t.subject}</h2>
-                  {t.body && <p className="text-sm text-gray-400 mt-1 line-clamp-2">{t.body}</p>}
-                  <p className="text-xs text-gray-500 mt-2">
+                  {t.body && <p className="testers-muted mt-1 line-clamp-2 text-sm">{t.body}</p>}
+                  <p className="testers-faint mt-2 text-xs">
                     {t.shipped_at ? 'Shipped' : t.status}
                   </p>
                 </div>
@@ -77,13 +74,13 @@ export default async function RoadmapPage({
             </li>
           ))}
           {tickets.length === 0 && (
-            <p className="text-gray-500 text-sm">No public feature requests yet.</p>
+            <p className="testers-muted text-sm">No public feature requests yet.</p>
           )}
         </ul>
-        <p className="text-xs text-gray-600">
+        <p className="testers-faint text-xs">
           Votes are anonymous — tap to vote, tap again to remove. One vote per item per browser.
         </p>
-      </main>
-    </div>
+      </div>
+    </TestersPageShell>
   )
 }

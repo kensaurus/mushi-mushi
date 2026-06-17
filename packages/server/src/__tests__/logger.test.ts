@@ -16,6 +16,12 @@ describe('edge logger', () => {
 
   beforeEach(() => {
     vi.resetModules()
+    // Clear accumulated call history on the module-level reportMessage mock so
+    // each test is isolated. vi.restoreAllMocks() in afterEach restores spies
+    // but does NOT reset a vi.fn()'s call log, so without this an earlier test
+    // that legitimately forwards to Sentry (e.g. "routes errors to console.error")
+    // leaks a stale call into the "skips Sentry" assertion below.
+    vi.clearAllMocks()
     vi.stubEnv('MUSHI_LOG_FORMAT', 'json')
     vi.stubEnv('MUSHI_LOG_LEVEL', 'debug')
     vi.stubEnv('SUPABASE_URL', 'https://prod.example.supabase.co')

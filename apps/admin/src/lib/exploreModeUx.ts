@@ -31,6 +31,18 @@ export function useExploreUx(): ExploreUxFlags {
   }
 }
 
+/** Beginner mode: Summary or Ask — not the implicit Graph default. */
+export function resolveBeginnerExploreTab(stats: ExploreStats): ExploreTabId {
+  if (
+    stats.topPriority === 'ready' &&
+    stats.withEmbeddings > 0 &&
+    stats.indexedFiles > 0
+  ) {
+    return 'ask'
+  }
+  return 'overview'
+}
+
 /** Quick mode: land on the tab that matches index posture. */
 export function resolveQuickExploreTab(stats: ExploreStats): ExploreTabId {
   if (

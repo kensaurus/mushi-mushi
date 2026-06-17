@@ -8,7 +8,7 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Input, Btn, Tooltip } from '../components/ui'
+import { Input, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import {
@@ -441,13 +441,13 @@ export function LoginPage() {
             )}
 
             {!cloud && health === 'error' && !error && (
-              <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
+              <HelpBanner tone="warn">
                 <p className="text-xs text-warn">
                   Cannot connect to <code className="text-2xs bg-surface-raised px-1 rounded">{supabaseHost}</code>.
                   Verify your <code className="text-2xs bg-surface-raised px-1 rounded">VITE_SUPABASE_URL</code> and
                   make sure the Supabase project is running.
                 </p>
-              </div>
+              </HelpBanner>
             )}
 
             <Btn type="submit" disabled={loading} className="w-full justify-center">

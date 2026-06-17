@@ -14,6 +14,9 @@
 import { createContext, useContext } from 'react'
 import type { PdcaStageId } from '../../lib/pdca'
 
+// mushi-mushi-allowlist: noop default when rendered outside PdcaFlowProvider
+function noopOpenStage(_stage: PdcaStageId | null) {}
+
 export type PdcaFlowVariant = 'live' | 'onboarding'
 
 export interface PdcaFlowContextValue {
@@ -44,7 +47,7 @@ export function usePdcaFlow(): PdcaFlowContextValue {
       focusStage: null,
       runningStage: null,
       openStage: null,
-      onOpenStage: () => {},
+      onOpenStage: noopOpenStage,
     }
   }
   return ctx

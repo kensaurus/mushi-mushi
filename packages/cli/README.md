@@ -306,6 +306,16 @@ mushi slack test
 - The `--api-key` flag leaks into `ps -ef` — prefer the interactive prompt on shared machines.
 - Full stack traces on error: `DEBUG=mushi mushi init`.
 
+## Programmatic imports
+
+The CLI is also importable for tooling (used by `create-mushi-mushi`):
+
+| Subpath | Exports |
+| --- | --- |
+| `@mushi-mushi/cli/init` | `runInit`, `InitOptions` |
+| `@mushi-mushi/cli/detect` | Framework / package-manager detection |
+| `@mushi-mushi/cli/version` | `MUSHI_CLI_VERSION` |
+
 ## License
 
 MIT

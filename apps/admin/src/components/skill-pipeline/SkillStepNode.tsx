@@ -10,11 +10,11 @@ import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import type { PipelineStepNodeData } from './pipelineFlow.data'
-import { STEP_STATUS_HEX, STEP_STATUS_LABEL } from './pipelineFlow.data'
+import { STEP_STATUS_LABEL, resolveStepStatusColor } from './pipelineFlow.data'
 
 function SkillStepNodeInner({ data }: NodeProps) {
   const node = data as PipelineStepNodeData
-  const statusColor = STEP_STATUS_HEX[node.status] ?? '#94a3b8'
+  const statusColor = resolveStepStatusColor(node.status)
   const statusLabel = STEP_STATUS_LABEL[node.status] ?? node.status
 
   return (

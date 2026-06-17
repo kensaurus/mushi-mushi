@@ -14,7 +14,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageScopeHint,SnapshotSectionHint,Btn, Card, Input, PageHelp, PageHeader, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
@@ -390,15 +391,24 @@ export function OnboardingPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Setup'}
         projectScope={stats.projectName ?? undefined}
+        withPageHero={!ux.hideOverviewChrome}
+        description={copy?.description ?? 'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'}
+        helpTitle={copy?.help?.title ?? 'About this wizard'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
+        helpUseCases={copy?.help?.useCases ?? [
+          'Create the project that will receive bug reports from your app',
+          'Generate and copy the API key that authenticates SDK requests',
+          'Confirm the ingest pipeline is reachable before shipping any code',
+        ]}
+        helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
       >
         <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn-muted/50 text-warning-foreground' : 'bg-info-muted/50 text-info-foreground'}>
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet."} />
+      </PageHeaderBar>
 
       {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
       <OnboardingModeIntroCard />
@@ -577,17 +587,6 @@ export function OnboardingPage() {
           hasMerged={hasMerged}
         />
       )}
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About this wizard'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
-        useCases={copy?.help?.useCases ?? [
-          'Create the project that will receive bug reports from your app',
-          'Generate and copy the API key that authenticates SDK requests',
-          'Confirm the ingest pipeline is reachable before shipping any code',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings.'}
-      />
 
       {/* Explainer diagram: shows first-run users the four stages of the
           loop they're about to enter, with outcome copy instead of empty
@@ -872,7 +871,7 @@ export function OnboardingPage() {
         <>
       {project && !setup.isStepIncomplete('api_key_generated') ? (
         <div className="space-y-3">
-          <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} showConnectionStatus />
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={apiKey?.key} showConnectionStatus />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>
@@ -925,11 +924,11 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
         </div>
         <code className="text-sm font-mono text-ok wrap-anywhere select-all">{apiKey.key}</code>
       </div>
-      <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
+      <HelpBanner tone="warn" className="rounded-sm">
         <p className="text-2xs text-warn">
           Save this key securely. It will not be shown again after you leave this page.
         </p>
-      </div>
+      </HelpBanner>
     </div>
   )
 }

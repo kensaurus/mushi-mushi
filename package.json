@@ -71,6 +71,11 @@
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
     "docs-stats": "node scripts/docs-stats.mjs --print-markdown",
     "check:docs-stats": "node scripts/docs-stats.mjs --check",
+    "gen:sdk-version-matrix": "node scripts/gen-sdk-version-matrix.mjs",
+    "check:sdk-version-matrix": "node scripts/gen-sdk-version-matrix.mjs --check",
+    "check:internal-doc-links": "node scripts/check-internal-doc-links.mjs",
+    "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
+    "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"

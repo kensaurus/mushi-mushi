@@ -6,16 +6,12 @@
     "versions": [],
     "highlights": [
       {
-        "title": "Security",
-        "description": "`getWidgetStyles` now validates the `accent` / `accentText`"
+        "title": "Account mode",
+        "description": "an org-scoped API key (no `MUSHI_PROJECT_ID` required) now"
       },
       {
-        "title": "Reliability",
-        "description": "the community load (global leaderboard + tester reputation)"
-      },
-      {
-        "title": "Maintainability",
-        "description": "the widget's rendering and stateless helpers were"
+        "title": "stdio fix",
+        "description": "all logger and `console.*` output is routed to stderr so stdout"
       }
     ],
     "packages": []

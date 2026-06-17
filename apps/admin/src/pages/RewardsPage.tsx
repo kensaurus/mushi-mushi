@@ -16,9 +16,8 @@ import { useToast } from '../lib/toast'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useActiveOrgSignal } from '../lib/activeOrg'
 import { usePublishPageContext } from '../lib/pageContext'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
-  PageHeader,
-  PageHelp,
   Card,
   Section,
   Badge,
@@ -2133,25 +2132,22 @@ export function RewardsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title="Rewards"
         description="Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks."
-      >
-        {rewardsEnabled
-          ? <Badge className="bg-ok-muted text-ok">Active</Badge>
-          : <Badge className="bg-surface-overlay text-fg-muted">Hobby — read-only</Badge>}
-      </PageHeader>
-
-      <PageHelp
-        title="About Rewards"
-        whatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
-        useCases={[
+        helpTitle="About Rewards"
+        helpWhatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
+        helpUseCases={[
           'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
           'Reward power users with monetary payments (via Stripe Connect) at the Champion tier',
           'Use quests to guide new users through key flows while earning bonus points',
         ]}
-        howToUse="Configure activity rules to set points per SDK event, then define the tier ladder. Share the SDK snippet with your app and call identify() to link users. Monitor contributors in the leaderboard; use the Simulator tab to preview changes before going live."
-      />
+        helpHowToUse="Configure activity rules to set points per SDK event, then define the tier ladder. Share the SDK snippet with your app and call identify() to link users. Monitor contributors in the leaderboard; use the Simulator tab to preview changes before going live."
+      >
+        {rewardsEnabled
+          ? <Badge className="bg-ok-muted text-ok">Active</Badge>
+          : <Badge className="bg-surface-overlay text-fg-muted">Hobby — read-only</Badge>}
+      </PageHeaderBar>
 
       {!rewardsEnabled && (
         <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">

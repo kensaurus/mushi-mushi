@@ -1392,7 +1392,7 @@ const BILLING: ConfigDoc[] = [
     label: 'Support subject',
     summary: 'One-line summary of your support request — appears as the email subject line.',
     howItWorks:
-      'Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice #1234"`) so triage doesn\'t bounce it back asking for clarification.',
+      'Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so triage doesn\'t bounce it back asking for clarification.',
     default: { value: 'empty' },
     backend: {
       table: 'support_requests',

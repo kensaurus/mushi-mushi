@@ -39,6 +39,7 @@ import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Drawer } from '../components/Drawer'
 import { Modal } from '../components/Modal'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -633,7 +634,7 @@ function StoryDrawer({
                     {/* Run summary row — click to expand */}
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-black/5 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-overlay transition-colors"
                       onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
                       aria-expanded={isExpanded}
                     >
@@ -1059,11 +1060,7 @@ export function QaCoveragePage() {
 
       {/* Story grid */}
       {loading && (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-36 rounded-md bg-surface-raised animate-pulse" />
-          ))}
-        </div>
+        <PanelSkeleton rows={4} label="Loading QA stories" inCard={false} />
       )}
 
       {!loading && !error && coverage.length === 0 && (

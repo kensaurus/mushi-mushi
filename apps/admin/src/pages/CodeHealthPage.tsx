@@ -16,9 +16,8 @@
 
 import { useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
-  PageHeader,
-  PageHelpBanner,
   Badge,
   Section,
   ErrorAlert,
@@ -355,7 +354,10 @@ export function CodeHealthPage() {
   if (!projectId) {
     return (
       <div className="flex flex-1 flex-col">
-        <PageHeader title="Code Health" />
+        <PageHeaderBar
+          title="Code Health"
+          description="Switch to a project using the selector at the top to view code-health data."
+        />
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             title="No project selected"
@@ -368,26 +370,21 @@ export function CodeHealthPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <PageHeader title="Code Health" />
-
-      <PageHelpBanner
-        title="What is Code Health?"
-        whatIsIt="Bundle sizes and god-file findings pushed from your host repo's CI pipeline. Each push records a gate run you can track over time."
-        howToUse="Mint an SDK ingest key under Projects, add MUSHI_API_URL + MUSHI_INGEST_KEY to your CI secrets, and include scan-god-files.mjs in bundle-budget.yml. Pair with Full-Stack Audit for backend/schema checks."
-        flowPath="/code-health"
-      />
+      <PageHeaderBar
+        title="Code Health"
+        description="Tracks bundle KB trends and files over the 2,000-LOC budget across CI pushes."
+        helpTitle="What is Code Health?"
+        helpWhatIsIt="Bundle sizes and god-file findings pushed from your host repo's CI pipeline. Each push records a gate run you can track over time."
+        helpHowToUse="Mint an SDK ingest key under Projects, add MUSHI_API_URL + MUSHI_INGEST_KEY to your CI secrets, and include scan-god-files.mjs in bundle-budget.yml. Pair with Full-Stack Audit for backend/schema checks."
+        helpFlowPath="/code-health"
+      >
+        <Btn size="sm" variant="ghost" onClick={handleReload}>
+          Refresh
+        </Btn>
+      </PageHeaderBar>
 
       <div className="flex flex-col gap-6 px-4 pb-8 pt-4">
         {error && <ErrorAlert message={error} />}
-
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-fg-faint">
-            Tracks bundle KB trends and files over the 2,000-LOC budget across CI pushes.
-          </p>
-          <Btn size="sm" variant="ghost" onClick={handleReload}>
-            Refresh
-          </Btn>
-        </div>
 
         {loading && !codeHealth && (
           <div className="flex items-center justify-center py-12">

@@ -14,8 +14,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useDriftUx, resolveQuickDriftTab } from '../lib/driftModeUx'
 import { useToast } from '../lib/toast'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint,
   Card,
   Section,
   Badge,
@@ -276,21 +276,19 @@ export function DriftPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-drift">
-      <PageHelp
-        title={copy?.help?.title ?? 'Contract drift detection'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Drift'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'}
+        contextChip={<PdcaContextHint stage="check" />}
+        helpTitle={copy?.help?.title ?? 'Contract drift detection'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Find API endpoints present in inventory but missing in OpenAPI spec',
           'Detect DB columns expected by the FE but removed from the schema',
           'Promote high-severity findings to candidate lessons',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Drift'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
-        contextChip={<PdcaContextHint stage="check" />}
+        helpHowToUse={copy?.help?.howToUse ?? 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -303,7 +301,7 @@ export function DriftPage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -326,8 +324,7 @@ export function DriftPage() {
         </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker."} />
+      </PageHeaderBar>
 
       <DriftStatusBanner
         stats={stats}

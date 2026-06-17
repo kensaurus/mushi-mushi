@@ -123,6 +123,9 @@ importers:
       eslint:
         specifier: ^10.3.0
         version: 10.3.0(jiti@2.6.1)
+      eslint-plugin-mushi-mushi:
+        specifier: workspace:*
+        version: link:../../packages/eslint-plugin-mushi-mushi
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -196,6 +199,9 @@ importers:
 
   apps/testers:
     dependencies:
+      '@mushi-mushi/brand':
+        specifier: workspace:*
+        version: link:../../packages/brand
       next:
         specifier: '>=15.5.18'
         version: 16.2.6(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -224,6 +230,9 @@ importers:
       eslint:
         specifier: ^10.3.0
         version: 10.3.0(jiti@2.6.1)
+      eslint-plugin-mushi-mushi:
+        specifier: workspace:*
+        version: link:../../packages/eslint-plugin-mushi-mushi
       tailwindcss:
         specifier: ^4.1.7
         version: 4.2.4

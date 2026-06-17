@@ -240,6 +240,102 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
     })
   })
 
+  // ── MCP account overview (API key + JWT) ─────────────────────────────────────
+  // Returns all projects accessible to the caller with enriched MCP stats.
+  // API-key callers see exactly their bound project; JWT admins see all.
+  // Used by the `get_account_overview` MCP tool.
+  parent.get('/v1/admin/mcp/account-overview', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const db = getServiceClient()
+    const authMethod = c.get('authMethod') as string | undefined
+    const apiKeyProjectId = c.get('projectId') as string | undefined
+    const userId = c.get('userId') as string | undefined
+
+    // Resolve the set of project IDs in scope for this caller.
+    let accessibleIds: string[]
+    if (authMethod === 'apiKey' && apiKeyProjectId) {
+      accessibleIds = [apiKeyProjectId]
+    } else if (userId) {
+      accessibleIds = await enumerateAccessibleProjectIds(c, db, userId)
+    } else {
+      return c.json({
+        ok: true,
+        data: { projects: [], total: 0, toolCount: TOOL_COUNT, resourceCount: RESOURCE_COUNT, promptCount: PROMPT_COUNT },
+      })
+    }
+
+    if (accessibleIds.length === 0) {
+      return c.json({
+        ok: true,
+        data: { projects: [], total: 0, toolCount: TOOL_COUNT, resourceCount: RESOURCE_COUNT, promptCount: PROMPT_COUNT },
+      })
+    }
+
+    // Fetch project metadata.
+    const { data: projectRows, error: projectsErr } = await db
+      .from('projects')
+      .select('id, name, created_at')
+      .in('id', accessibleIds)
+      .order('name', { ascending: true })
+    if (projectsErr) return dbError(c, projectsErr)
+
+    // Fetch recent report counts (last 30 days) — best-effort; silently skip on error.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: reportRows } = await db
+      .from('reports')
+      .select('project_id')
+      .in('project_id', accessibleIds)
+      .gte('created_at', thirtyDaysAgo)
+    const recentCountByProject: Record<string, number> = {}
+    for (const r of reportRows ?? []) {
+      const pid = r.project_id as string
+      recentCountByProject[pid] = (recentCountByProject[pid] ?? 0) + 1
+    }
+
+    // Fetch MCP key stats per project.
+    const { data: keyRows } = await db
+      .from('project_api_keys')
+      .select('project_id, scopes, last_seen_at')
+      .in('project_id', accessibleIds)
+      .eq('is_active', true)
+    const mcpStatsByProject: Record<string, { connectedKeyCount: number; lastSeenAt: string | null }> = {}
+    for (const k of keyRows ?? []) {
+      const pid = k.project_id as string
+      const scopes = (k.scopes as string[] | null) ?? []
+      if (!hasMcpRead(scopes)) continue
+      if (!mcpStatsByProject[pid]) mcpStatsByProject[pid] = { connectedKeyCount: 0, lastSeenAt: null }
+      const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null
+      if (seenAt) {
+        mcpStatsByProject[pid].connectedKeyCount++
+        const cur = mcpStatsByProject[pid].lastSeenAt
+        if (!cur || seenAt > cur) mcpStatsByProject[pid].lastSeenAt = seenAt
+      }
+    }
+
+    const projects = (projectRows ?? []).map((p) => {
+      const pid = p.id as string
+      const stats = mcpStatsByProject[pid] ?? { connectedKeyCount: 0, lastSeenAt: null }
+      return {
+        id: pid,
+        name: (p.name as string | null) ?? null,
+        created_at: p.created_at as string,
+        recentReportCount: recentCountByProject[pid] ?? 0,
+        mcpConnectedKeyCount: stats.connectedKeyCount,
+        lastSeenAt: stats.lastSeenAt,
+      }
+    })
+
+    return c.json({
+      ok: true,
+      data: {
+        projects,
+        total: projects.length,
+        toolCount: TOOL_COUNT,
+        resourceCount: RESOURCE_COUNT,
+        promptCount: PROMPT_COUNT,
+      },
+    })
+  })
+
   // ── MCP pipeline logs (API key + JWT) ─────────────────────────────────────
   // Returns recent pipeline events for a project, aggregated from fix_events,
   // processing_queue, and qa_story_runs. Read-only; project-scoped; scrubbed.
@@ -472,6 +568,66 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       })
     },
   )
+
+  // ── Mint org-scoped (account-level) MCP key (JWT only) ───────────────────────
+  // Creates an is_org_scoped=true key with no bound project — the key resolves
+  // all projects owned by the authenticated user. Equivalent to a Supabase PAT.
+  // Returns the raw key for one-time display (not stored; lost if user navigates away).
+  parent.post('/v1/admin/mcp/mint-org-key', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    // Validate request body
+    const body = await c.req.json().catch(() => ({})) as { scopes?: string[]; label?: string }
+    const allowedScopes = ['mcp:read', 'mcp:write'] as const
+    const rawScopes: string[] = body.scopes ?? ['mcp:read']
+    const invalidScopes = rawScopes.filter((s) => !(allowedScopes as readonly string[]).includes(s))
+    if (invalidScopes.length > 0) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_SCOPES', message: `Invalid scope(s): ${invalidScopes.join(', ')}. Allowed: ${allowedScopes.join(', ')}` } },
+        400,
+      )
+    }
+    const scopes = rawScopes as typeof allowedScopes[number][]
+
+    // Verify the user owns at least one project (sanity guard — no orphan org keys)
+    const { data: projects } = await db
+      .from('projects')
+      .select('id')
+      .eq('owner_id', userId)
+      .limit(1)
+    if (!projects || projects.length === 0) {
+      return c.json(
+        { ok: false, error: { code: 'NO_PROJECTS', message: 'Create a project before minting an account key.' } },
+        400,
+      )
+    }
+
+    const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
+    const prefix = rawKey.slice(0, 12)
+    const keyHash = Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))),
+    )
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+
+    const label = (body.label ?? 'account-mcp-key').slice(0, 64)
+
+    const { error: insertErr } = await db.from('project_api_keys').insert({
+      key_hash: keyHash,
+      key_prefix: prefix,
+      label,
+      scopes,
+      is_active: true,
+      is_org_scoped: true,
+      owner_user_id: userId,
+      // project_id intentionally omitted (NULL) for org-scoped keys
+    })
+
+    if (insertErr) return dbError(c, insertErr)
+
+    return c.json({ ok: true, data: { key: rawKey, prefix, scopes, label, is_org_scoped: true } }, 201)
+  })
 
   /** Live probe of hosted MCP — mints a short-lived read key server-side (no browser secret handling). */
   parent.get('/v1/admin/mcp/test-connection', jwtAuth, async (c) => {

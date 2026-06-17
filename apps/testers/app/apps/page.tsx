@@ -6,6 +6,7 @@
  */
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, Suspense } from 'react'
+import { TestersPageShell } from '../components/TestersPageShell'
 
 interface PublicApp {
   id: string
@@ -56,6 +57,12 @@ async function fetchApps(params: {
 
 const PLATFORMS = ['web', 'ios', 'android', 'desktop']
 
+function filterChipClass(active: boolean): string {
+  return active
+    ? 'rounded-full border border-[color-mix(in_oklch,var(--mushi-vermillion)_45%,var(--mushi-rule))] bg-[var(--mushi-vermillion-wash)] px-3 py-1 text-sm text-[var(--mushi-vermillion)] motion-safe:transition-colors cursor-pointer'
+    : 'rounded-full border border-[var(--mushi-rule)] px-3 py-1 text-sm testers-muted hover:border-[color-mix(in_oklch,var(--mushi-ink)_35%,var(--mushi-rule))] motion-safe:transition-colors cursor-pointer'
+}
+
 function AppsPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -86,29 +93,11 @@ function AppsPageInner() {
   }, [searchParams, router])
 
   return (
-    <div className="min-h-screen">
-      {/* Nav */}
-      <nav className="sticky top-0 z-40 border-b border-white/10 bg-gray-950/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <a href="/mushi-mushi/testers/" className="text-lg font-bold">
-            <span className="text-violet-400">mushi</span>mushi
-            <span className="ml-2 rounded-sm bg-violet-500/20 px-1.5 py-0.5 text-xs font-medium text-violet-400">
-              🪲 Bounties
-            </span>
-          </a>
-          <a
-            href={`${adminUrl}/login?as=tester`}
-            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium hover:bg-violet-500 transition-colors"
-          >
-            Sign in as tester
-          </a>
-        </div>
-      </nav>
-
+    <TestersPageShell>
       <div className="mx-auto max-w-5xl px-4 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Browse apps</h1>
-          <p className="text-gray-400">
+          <h1 className="mb-2 text-3xl font-bold">Browse apps</h1>
+          <p className="testers-muted">
             {loading
               ? 'Loading…'
               : apps.length > 0
@@ -117,17 +106,12 @@ function AppsPageInner() {
           </p>
         </div>
 
-        {/* Filter rail */}
-        <div className="flex flex-wrap gap-3 mb-8">
+        <div className="mb-8 flex flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Platform:</span>
+            <span className="testers-faint text-sm">Platform:</span>
             <button
               onClick={() => setFilter('platform', undefined)}
-              className={`rounded-full border px-3 py-1 text-sm transition-colors cursor-pointer ${
-                !platform
-                  ? 'border-violet-500 bg-violet-500/20 text-violet-300'
-                  : 'border-white/10 text-gray-400 hover:border-white/30'
-              }`}
+              className={filterChipClass(!platform)}
             >
               All
             </button>
@@ -135,19 +119,15 @@ function AppsPageInner() {
               <button
                 key={p}
                 onClick={() => setFilter('platform', p)}
-                className={`rounded-full border px-3 py-1 text-sm capitalize transition-colors cursor-pointer ${
-                  platform === p
-                    ? 'border-violet-500 bg-violet-500/20 text-violet-300'
-                    : 'border-white/10 text-gray-400 hover:border-white/30'
-                }`}
+                className={`${filterChipClass(platform === p)} capitalize`}
               >
                 {p}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-2 ml-4">
-            <span className="text-sm text-gray-500">Min bounty:</span>
+          <div className="ml-4 flex items-center gap-2">
+            <span className="testers-faint text-sm">Min bounty:</span>
             {[
               { label: 'Any', value: undefined },
               { label: '100 pts', value: '100' },
@@ -157,11 +137,7 @@ function AppsPageInner() {
               <button
                 key={label}
                 onClick={() => setFilter('min_points', value)}
-                className={`rounded-full border px-3 py-1 text-sm transition-colors cursor-pointer ${
-                  minPoints === value
-                    ? 'border-violet-500 bg-violet-500/20 text-violet-300'
-                    : 'border-white/10 text-gray-400 hover:border-white/30'
-                }`}
+                className={filterChipClass(minPoints === value)}
               >
                 {label}
               </button>
@@ -169,18 +145,19 @@ function AppsPageInner() {
           </div>
         </div>
 
-        {/* App grid */}
         {loading ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center text-gray-500">
-            Loading apps…
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="testers-skeleton h-24 border border-[var(--mushi-rule)]" />
+            ))}
           </div>
         ) : apps.length === 0 ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
-            <p className="text-3xl mb-3">📭</p>
+          <div className="testers-panel p-12 text-center">
+            <p className="mb-3 text-3xl">📭</p>
             <p className="text-lg font-medium">
               {platform || minPoints ? 'No apps match these filters' : 'No apps yet'}
             </p>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="testers-muted mt-1 text-sm">
               {platform || minPoints
                 ? 'Try removing a filter.'
                 : 'The first apps are coming soon. Check back shortly.'}
@@ -188,44 +165,42 @@ function AppsPageInner() {
             {(platform || minPoints) && (
               <button
                 onClick={() => router.replace('/apps/')}
-                className="mt-4 inline-block text-sm text-violet-400 hover:underline cursor-pointer"
+                className="testers-brand-mark mt-4 inline-block cursor-pointer text-sm underline underline-offset-2 hover:opacity-90"
               >
                 Clear filters →
               </button>
             )}
-            <p className="text-sm text-gray-400 mt-3">
+            <p className="testers-muted mt-3 text-sm">
               Are you a developer?{' '}
-              <a href={adminUrl} className="text-violet-400 hover:underline">
+              <a href={adminUrl} className="testers-brand-mark underline underline-offset-2 hover:opacity-90">
                 Publish your app →
               </a>
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {apps.map(app => (
               <a
                 key={app.id}
                 href={`/mushi-mushi/testers/apps/${app.slug}/`}
-                className="flex gap-4 rounded-xl border border-white/10 bg-white/5 p-5 hover:border-violet-500/50 hover:bg-white/10 transition-all group"
+                className="testers-panel testers-panel-hover group flex gap-4 p-5"
               >
-                <div className="h-14 w-14 shrink-0 rounded-xl bg-gray-800 flex items-center justify-center text-2xl">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--mushi-paper-wash)] text-2xl">
                   📱
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold group-hover:text-violet-300 transition-colors">
+                  <p className="font-semibold group-hover:text-[var(--mushi-vermillion)] motion-safe:transition-colors">
                     {app.name}
                   </p>
                   {app.tagline && (
-                    <p className="text-sm text-gray-400 mt-0.5 line-clamp-1">{app.tagline}</p>
+                    <p className="testers-muted mt-0.5 line-clamp-1 text-sm">{app.tagline}</p>
                   )}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     {app.platforms.map(p => (
-                      <span key={p} className="rounded-full bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
-                        {p}
-                      </span>
+                      <span key={p} className="testers-chip">{p}</span>
                     ))}
                     {app.maxBountyPoints > 0 && (
-                      <span className="rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-xs text-violet-300">
+                      <span className="testers-badge">
                         up to {app.maxBountyPoints.toLocaleString()} pts
                       </span>
                     )}
@@ -236,23 +211,19 @@ function AppsPageInner() {
           </div>
         )}
       </div>
-
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-8 text-center text-sm text-gray-500">
-        <p>
-          <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
-          <a href="/mushi-mushi/testers/" className="hover:text-gray-300">Home</a> ·{' '}
-          <a href="/mushi-mushi/testers/how-it-works/" className="hover:text-gray-300">How it works</a> ·{' '}
-          <a href="/mushi-mushi/testers/leaderboard/" className="hover:text-gray-300">Leaderboard</a>
-        </p>
-      </footer>
-    </div>
+    </TestersPageShell>
   )
 }
 
 export default function AppsPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-gray-950 text-white">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="testers-shell flex min-h-screen items-center justify-center">
+          <p className="testers-muted">Loading…</p>
+        </div>
+      }
+    >
       <AppsPageInner />
     </Suspense>
   )

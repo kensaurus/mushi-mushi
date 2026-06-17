@@ -20,6 +20,7 @@ import { PDCA_ORDER, PDCA_STAGES, PDCA_STAGE_OUTCOMES } from '../../lib/pdca'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { PdcaStage, PdcaStageTone } from '../dashboard/types'
 import { STAGE_HEX } from '../flow-primitives/flowTokens'
+import { readVizToken } from '../../lib/vizTokens'
 
 export type PdcaFlowVariant = 'live' | 'onboarding'
 
@@ -191,7 +192,7 @@ export function buildEdges(
     ['check', 'act',   'out',      'in'     ],
     ['act',   'plan',  'loop-out', 'loop-in'],
   ]
-  const DANGER_HEX = '#ef4444'
+  const DANGER_HEX = readVizToken('viz-flow-danger')
   const toneById = new Map(stages.map((s) => [s.id, s.tone]))
   return pairs.map(([source, target, sourceHandle, targetHandle]) => {
     // Paint the segment red when the *target* stage is urgent.

@@ -53,6 +53,12 @@ export interface DoctorOptions {
    */
   hostApp?: boolean
   /**
+   * When true, verify Cursor MCP config: checks .cursor/mcp.json for a mushi-*
+   * server entry with valid credentials and probes the account-overview endpoint
+   * to confirm the key can reach at least one project.
+   */
+  mcp?: boolean
+  /**
    * Override the fetch implementation (for testing). Defaults to globalThis.fetch.
    */
   fetch?: typeof globalThis.fetch
@@ -439,6 +445,136 @@ export async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
   return checks
 }
 
+// ── Check 8: MCP config health ───────────────────────────────────────────────
+
+export async function checkMcpConfig(
+  config: DoctorCliConfig,
+  cwd: string,
+  doFetch: typeof globalThis.fetch = globalThis.fetch,
+): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = []
+  const { readFile, access } = await import('node:fs/promises')
+  const { join, resolve } = await import('node:path')
+  const { homedir } = await import('node:os')
+  const root = resolve(cwd)
+
+  // 1. Find the mcp.json — check project-local first, then global ~/.cursor
+  const candidates = [
+    join(root, '.cursor', 'mcp.json'),
+    join(homedir(), '.cursor', 'mcp.json'),
+  ]
+  let mcpPath: string | null = null
+  let mcpRaw: string | null = null
+  for (const candidate of candidates) {
+    try {
+      await access(candidate)
+      mcpRaw = await readFile(candidate, 'utf8')
+      mcpPath = candidate
+      break
+    } catch { /* try next */ }
+  }
+
+  if (!mcpPath || !mcpRaw) {
+    checks.push({
+      name: '[mcp] mcp.json present',
+      ok: false,
+      detail: 'No .cursor/mcp.json found in cwd or ~/.cursor/. Run `mushi setup` to create it.',
+    })
+    return checks
+  }
+  checks.push({
+    name: '[mcp] mcp.json present',
+    ok: true,
+    detail: `Found at ${mcpPath}`,
+  })
+
+  // 2. Parse and look for a mushi-* server entry
+  let mcpConfig: { mcpServers?: Record<string, unknown> } = {}
+  try {
+    mcpConfig = JSON.parse(mcpRaw) as { mcpServers?: Record<string, unknown> }
+  } catch {
+    checks.push({ name: '[mcp] mcp.json valid JSON', ok: false, detail: 'mcp.json is not valid JSON — regenerate with `mushi setup`.' })
+    return checks
+  }
+
+  const servers = mcpConfig.mcpServers ?? {}
+  const mushiEntries = Object.entries(servers).filter(([k]) => k === 'mushi' || k.startsWith('mushi-'))
+  if (mushiEntries.length === 0) {
+    checks.push({
+      name: '[mcp] mushi server entry',
+      ok: false,
+      detail: 'No mushi or mushi-* server found in mcpServers. Run `mushi setup` to add one.',
+    })
+    return checks
+  }
+  checks.push({
+    name: '[mcp] mushi server entry',
+    ok: true,
+    detail: `Found: ${mushiEntries.map(([k]) => k).join(', ')}`,
+  })
+
+  // 3. Check each mushi entry for valid credentials
+  let anyKeyValid = false
+  let anyEndpointSet = false
+  for (const [, srv] of mushiEntries) {
+    const s = srv as { command?: string; args?: string[]; env?: Record<string, string> }
+    const env = s.env ?? {}
+    const key = env['MUSHI_API_KEY'] ?? ''
+    const endpoint = env['MUSHI_API_ENDPOINT'] ?? ''
+    if (key.startsWith('mushi_')) anyKeyValid = true
+    if (endpoint.includes('supabase.co') || endpoint.includes('localhost')) anyEndpointSet = true
+  }
+  checks.push({
+    name: '[mcp] MUSHI_API_KEY set',
+    ok: anyKeyValid,
+    detail: anyKeyValid
+      ? 'At least one mushi server has a valid mushi_* API key'
+      : 'No mushi_* API key found in any mushi server env. Re-run `mushi setup` to regenerate.',
+  })
+  checks.push({
+    name: '[mcp] MUSHI_API_ENDPOINT set',
+    ok: anyEndpointSet,
+    detail: anyEndpointSet
+      ? 'MUSHI_API_ENDPOINT is present and looks valid'
+      : 'MUSHI_API_ENDPOINT missing or not a Supabase URL. Re-run `mushi setup`.',
+  })
+
+  // 4. Probe the API with the configured key to verify connectivity
+  if (anyKeyValid && anyEndpointSet && config.apiKey && config.endpoint) {
+    try {
+      const { endpoint, apiKey } = sanitizeCliCredentials(config)
+      const res = await doFetch(`${endpoint}/v1/admin/mcp/account-overview`, {
+        headers: apiKeyHeaders(apiKey, config.projectId),
+        signal: AbortSignal.timeout(6000),
+      })
+      if (res.ok) {
+        const body = await res.json() as { ok?: boolean; data?: { total?: number } }
+        const projectCount = body?.data?.total ?? 0
+        checks.push({
+          name: '[mcp] account-overview reachable',
+          ok: true,
+          detail: `Key is valid; ${projectCount} accessible project${projectCount === 1 ? '' : 's'}`,
+        })
+      } else {
+        checks.push({
+          name: '[mcp] account-overview reachable',
+          ok: false,
+          detail: `GET /v1/admin/mcp/account-overview → HTTP ${res.status}. Verify the API key is active.`,
+        })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      checks.push({
+        name: '[mcp] account-overview reachable',
+        ok: false,
+        detail: `Probe failed: ${msg}. Check MUSHI_API_ENDPOINT and network connectivity.`,
+      })
+    }
+  }
+
+  return checks
+}
+
 // ── Fix hints — printed after each failed check so doctor always says HOW to fix ──
 
 const FIX_HINTS: Record<string, string> = {
@@ -448,12 +584,14 @@ const FIX_HINTS: Record<string, string> = {
   'Endpoint reachable': 'Check your network and that MUSHI_API_ENDPOINT points at `…/functions/v1/api`.',
   '[ingest]': 'Open the console Onboarding wizard → Install SDK → submit a test report, or run `mushi connect --wait`.',
   '[server]': 'Open Settings → Integrations: connect GitHub, index codebase, add Anthropic BYOK key, enable autofix.',
+  '[mcp]': 'Run `mushi setup` to regenerate .cursor/mcp.json with a fresh API key and endpoint.',
 }
 
 function fixHintForCheck(name: string): string | undefined {
   if (FIX_HINTS[name]) return FIX_HINTS[name]
   if (name.startsWith('[ingest]')) return FIX_HINTS['[ingest]']
   if (name.startsWith('[server]') || name.startsWith('[preflight]')) return FIX_HINTS['[server]']
+  if (name.startsWith('[mcp]')) return FIX_HINTS['[mcp]']
   return undefined
 }
 
@@ -502,6 +640,12 @@ export async function runDoctor(
   if (options.hostApp) {
     const hostChecks = await checkHostAppWiring(options.cwd ?? process.cwd())
     checks.push(...hostChecks)
+  }
+
+  // 8. MCP config health (opt-in)
+  if (options.mcp) {
+    const mcpChecks = await checkMcpConfig(config, options.cwd ?? process.cwd(), doFetch)
+    checks.push(...mcpChecks)
   }
 
   return { checks, ready: checks.every((c) => c.ok) }

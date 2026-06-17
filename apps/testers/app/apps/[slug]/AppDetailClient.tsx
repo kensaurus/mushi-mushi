@@ -1,6 +1,7 @@
 'use client'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { TestersPageShell } from '../../components/TestersPageShell'
 
 interface BountyTier {
   action: string
@@ -52,11 +53,11 @@ async function fetchApp(slug: string): Promise<AppDetail | null> {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  bug_critical: 'text-red-400 bg-red-500/10 border-red-500/30',
-  bug_high: 'text-orange-400 bg-orange-500/10 border-orange-500/30',
-  bug_medium: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
-  bug_low: 'text-gray-400 bg-gray-500/10 border-gray-500/30',
-  enhancement: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+  bug_critical: 'text-[var(--mushi-vermillion)] bg-[var(--mushi-vermillion-wash)] border-[color-mix(in_oklch,var(--mushi-vermillion)_35%,var(--mushi-rule))]',
+  bug_high: 'text-[var(--mushi-vermillion-ink)] bg-[var(--mushi-vermillion-wash)] border-[var(--mushi-rule)]',
+  bug_medium: 'text-[var(--mushi-ink)] bg-[var(--mushi-paper-wash)] border-[var(--mushi-rule)]',
+  bug_low: 'text-[var(--mushi-ink-muted)] bg-[var(--mushi-paper-wash)] border-[var(--mushi-rule)]',
+  enhancement: 'text-[var(--mushi-jade)] bg-[var(--mushi-jade-wash)] border-[color-mix(in_oklch,var(--mushi-jade)_35%,var(--mushi-rule))]',
 }
 
 function actionLabel(action: string): string {
@@ -74,7 +75,6 @@ export default function AppDetailClient() {
   const params = useParams<{ slug: string }>()
   const slug = params.slug
 
-  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/console'
   const joinUrl = `/mushi-mushi/testers/join/?app=${slug}`
 
   const [app, setApp] = useState<AppDetail | null | 'loading'>('loading')
@@ -86,22 +86,28 @@ export default function AppDetailClient() {
 
   if (app === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Loading…
-      </div>
+      <TestersPageShell>
+        <div className="mx-auto max-w-3xl space-y-4 px-4 py-10">
+          <div className="testers-skeleton h-4 w-24" />
+          <div className="testers-skeleton h-32 border border-[var(--mushi-rule)]" />
+          <div className="testers-skeleton h-48 border border-[var(--mushi-rule)]" />
+        </div>
+      </TestersPageShell>
     )
   }
 
   if (!app) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
-        <p className="text-4xl mb-4">🔍</p>
-        <h1 className="text-2xl font-bold mb-2">App not found</h1>
-        <p className="text-gray-400 mb-6">This app may have been removed from the marketplace.</p>
-        <a href="/mushi-mushi/testers/apps/" className="text-violet-400 hover:underline">
-          ← Browse all apps
-        </a>
-      </div>
+      <TestersPageShell>
+        <div className="flex min-h-[calc(100vh-10rem)] flex-col items-center justify-center px-4 text-center">
+          <p className="mb-4 text-4xl">🔍</p>
+          <h1 className="mb-2 text-2xl font-bold">App not found</h1>
+          <p className="testers-muted mb-6">This app may have been removed from the marketplace.</p>
+          <a href="/mushi-mushi/testers/apps/" className="testers-brand-mark underline underline-offset-2 hover:opacity-90">
+            ← Browse all apps
+          </a>
+        </div>
+      </TestersPageShell>
     )
   }
 
@@ -109,44 +115,25 @@ export default function AppDetailClient() {
   const activeBounties = app.bounties.filter(b => b.enabled)
 
   return (
-    <div className="min-h-screen">
-      <nav className="sticky top-0 z-40 border-b border-white/10 bg-gray-950/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <a href="/mushi-mushi/testers/" className="text-lg font-bold">
-            <span className="text-violet-400">mushi</span>mushi
-            <span className="ml-2 rounded-sm bg-violet-500/20 px-1.5 py-0.5 text-xs font-medium text-violet-400">
-              🪲 Bounties
-            </span>
-          </a>
-          <a
-            href={`${adminUrl}/login?as=tester`}
-            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium hover:bg-violet-500 transition-colors"
-          >
-            Sign in as tester
-          </a>
-        </div>
-      </nav>
-
-      <div className="mx-auto max-w-3xl px-4 py-10 space-y-8">
-        <a href="/mushi-mushi/testers/apps/" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
+    <TestersPageShell>
+      <div className="mx-auto max-w-3xl space-y-8 px-4 py-10">
+        <a href="/mushi-mushi/testers/apps/" className="testers-faint text-sm hover:text-[var(--mushi-ink-muted)] motion-safe:transition-colors">
           ← All apps
         </a>
 
-        <div className="flex gap-5 items-start">
-          <div className="h-16 w-16 shrink-0 rounded-2xl bg-gray-800 flex items-center justify-center text-3xl">
+        <div className="flex items-start gap-5">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--mushi-paper-wash)] text-3xl">
             📱
           </div>
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">{app.name}</h1>
-            {app.tagline && <p className="text-gray-400 mt-1">{app.tagline}</p>}
-            <div className="flex flex-wrap gap-2 mt-2">
+            {app.tagline && <p className="testers-muted mt-1">{app.tagline}</p>}
+            <div className="mt-2 flex flex-wrap gap-2">
               {app.platforms.map(p => (
-                <span key={p} className="rounded-full bg-gray-800 px-2.5 py-0.5 text-xs text-gray-400 capitalize">
-                  {p}
-                </span>
+                <span key={p} className="testers-chip capitalize">{p}</span>
               ))}
               {maxPoints > 0 && (
-                <span className="rounded-full bg-violet-500/10 border border-violet-500/30 px-2.5 py-0.5 text-xs text-violet-300">
+                <span className="testers-badge">
                   up to {maxPoints.toLocaleString()} pts
                 </span>
               )}
@@ -154,86 +141,76 @@ export default function AppDetailClient() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="testers-panel flex flex-col items-start justify-between gap-4 border-[color-mix(in_oklch,var(--mushi-vermillion)_30%,var(--mushi-rule))] p-6 sm:flex-row sm:items-center">
           <div>
             <p className="font-semibold">Ready to test {app.name}?</p>
-            <p className="text-sm text-gray-400 mt-0.5">Sign up free — find bugs, earn points, redeem rewards.</p>
+            <p className="testers-muted mt-0.5 text-sm">Sign up free — find bugs, earn points, redeem rewards.</p>
           </div>
-          <a href={joinUrl} className="shrink-0 rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold hover:bg-violet-500 transition-colors">
+          <a href={joinUrl} className="testers-cta shrink-0 px-6 py-2.5 text-sm">
             Join to test →
           </a>
         </div>
 
         {app.description && (
           <div>
-            <h2 className="text-lg font-semibold mb-3">About this app</h2>
-            <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">{app.description}</p>
+            <h2 className="mb-3 text-lg font-semibold">About this app</h2>
+            <p className="whitespace-pre-wrap leading-relaxed text-[var(--mushi-ink)]">{app.description}</p>
           </div>
         )}
 
         {activeBounties.length > 0 ? (
           <div>
-            <h2 className="text-lg font-semibold mb-3">Bounty schedule</h2>
-            <div className="rounded-xl border border-white/10 overflow-hidden">
-              <div className="grid grid-cols-[1fr_auto] gap-4 px-4 py-2 bg-white/5 text-xs text-gray-500 font-medium uppercase tracking-wide">
+            <h2 className="mb-3 text-lg font-semibold">Bounty schedule</h2>
+            <div className="testers-panel overflow-hidden">
+              <div className="grid grid-cols-[1fr_auto] gap-4 bg-[var(--mushi-paper-wash)] px-4 py-2 text-xs font-medium uppercase tracking-wide testers-faint">
                 <span>Action</span>
                 <span className="text-right">Points</span>
               </div>
               {activeBounties.map((b, i) => (
-                <div key={b.action + i} className="grid grid-cols-[1fr_auto] gap-4 px-4 py-3 border-t border-white/5 items-center">
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ACTION_COLORS[b.action] ?? 'text-gray-400 bg-gray-500/10 border-gray-500/30'}`}>
+                <div key={b.action + i} className="grid grid-cols-[1fr_auto] items-center gap-4 border-t border-[var(--mushi-rule)] px-4 py-3">
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ACTION_COLORS[b.action] ?? 'border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] text-[var(--mushi-ink-muted)]'}`}>
                     {actionLabel(b.action)}
                   </span>
-                  <span className="text-sm font-semibold text-violet-400 text-right">
+                  <span className="testers-brand-mark text-right text-sm font-semibold">
                     {b.points_per_event.toLocaleString()} pts
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="testers-faint mt-2 text-xs">
               Points are awarded by the developer after reviewing your submission.
               1,000 pts = $10 gift card or $13 Mushi Pro credit (1.3× premium).
             </p>
           </div>
         ) : (
           <div>
-            <h2 className="text-lg font-semibold mb-3">Bounty schedule</h2>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-              <p className="text-sm text-gray-400">This developer awards points at their discretion for each accepted report.</p>
+            <h2 className="mb-3 text-lg font-semibold">Bounty schedule</h2>
+            <div className="testers-panel p-6 text-center">
+              <p className="testers-muted text-sm">This developer awards points at their discretion for each accepted report.</p>
             </div>
           </div>
         )}
 
-        <div className="rounded-xl border border-white/10 bg-white/5 p-6 space-y-3">
+        <div className="testers-panel space-y-3 p-6">
           <h2 className="font-semibold">How to submit a report</h2>
-          <ol className="space-y-2 text-sm text-gray-300 list-decimal list-inside">
+          <ol className="list-inside list-decimal space-y-2 text-sm text-[var(--mushi-ink)]">
             <li>Sign up or sign in as a tester.</li>
             <li>Join this app from your tester dashboard.</li>
             <li>Use the app as a real user and reproduce the bug.</li>
             <li>Submit a report with steps to reproduce, expected vs actual behavior, and screenshots.</li>
             <li>The developer reviews and awards points if the report is accepted.</li>
           </ol>
-          <a href="/mushi-mushi/testers/how-it-works/" className="inline-block text-sm text-violet-400 hover:underline mt-2">
+          <a href="/mushi-mushi/testers/how-it-works/" className="testers-brand-mark mt-2 inline-block text-sm underline underline-offset-2 hover:opacity-90">
             Full guide: How Mushi Bounties works →
           </a>
         </div>
 
         <div className="pt-4">
-          <a href={joinUrl} className="w-full block text-center rounded-xl bg-violet-600 px-8 py-3 text-base font-semibold hover:bg-violet-500 transition-colors">
+          <a href={joinUrl} className="testers-cta block w-full px-8 py-3 text-center text-base">
             Start testing {app.name} →
           </a>
         </div>
       </div>
-
-      <footer className="border-t border-white/10 py-8 text-center text-sm text-gray-500">
-        <p>
-          <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
-          <a href="/mushi-mushi/testers/apps/" className="hover:text-gray-300">Browse apps</a> ·{' '}
-          <a href="/mushi-mushi/testers/how-it-works/" className="hover:text-gray-300">How it works</a> ·{' '}
-          <a href="/mushi-mushi/testers/leaderboard/" className="hover:text-gray-300">Leaderboard</a> ·{' '}
-          Gift cards powered by Tremendous · $599/yr cap before KYC
-        </p>
-      </footer>
-    </div>
+    </TestersPageShell>
   )
 }

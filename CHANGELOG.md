@@ -10,9 +10,8 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
-- **Security** — `getWidgetStyles` now validates the `accent` / `accentText`
-- **Reliability** — the community load (global leaderboard + tester reputation)
-- **Maintainability** — the widget's rendering and stateless helpers were
+- **Account mode** — an org-scoped API key (no `MUSHI_PROJECT_ID` required) now
+- **stdio fix** — all logger and `console.*` output is routed to stderr so stdout
 
 ## v1.14.x
 
