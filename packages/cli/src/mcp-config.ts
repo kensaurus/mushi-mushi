@@ -6,7 +6,6 @@
  * `project use` command uses `mushi` for backwards compatibility.
  */
 
-import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -38,15 +37,22 @@ export interface WriteMcpResult {
  */
 export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteMcpResult> {
   const { configPath, serverName, serverBlock, dryRun = false } = opts
-  const created = !existsSync(configPath)
 
+  // Read the existing config directly and treat a missing file as "created".
+  // Deriving `created` from the read result (rather than a separate existsSync
+  // pre-check) avoids a check-then-use file-system race (js/file-system-race).
   let merged: Record<string, unknown> = { mcpServers: {} }
-  if (!created) {
+  let created = false
+  try {
+    const existing = await readFile(configPath, 'utf8')
     try {
-      merged = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>
+      merged = JSON.parse(existing) as Record<string, unknown>
     } catch {
       merged = { mcpServers: {} }
     }
+  } catch {
+    created = true
+    merged = { mcpServers: {} }
   }
 
   const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
@@ -100,7 +106,7 @@ export function buildMcpServerName(opts: {
     const slug = opts.projectName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/, '')
+      .replace(/^-|-$/g, '')
       .slice(0, 24)
     return `mushi-${slug}`
   }
