@@ -49,7 +49,7 @@ const ENV_FILES = ['.env.local', '.env'] as const
 // every project created so far is a UUID. The proj_ prefix may be adopted in a
 // future API revision. Never break existing UUID users.
 const PROJECT_ID_PATTERN = /^(?:proj_[A-Za-z0-9_-]{10,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
-const API_KEY_PATTERN = /^mushi_[A-Za-z0-9_-]{10,}$/
+const API_KEY_PATTERN = /^(mushi_|mush_pk_)[A-Za-z0-9_-]{10,}$/
 
 export async function runInit(options: InitOptions = {}): Promise<void> {
   const cwd = options.cwd ?? process.cwd()
@@ -377,8 +377,8 @@ function persistCliConfig(apiKey: string, projectId: string, endpoint: string): 
   saveConfig({ ...existing, apiKey, projectId, endpoint })
 }
 
-function printNextSteps(framework: Framework, apiKey: string, projectId: string, enableRewards = false): void {
-  p.note(framework.snippet(apiKey, projectId), 'Add this to your app:')
+function printNextSteps(framework: Framework, _apiKey: string, _projectId: string, enableRewards = false): void {
+  p.note(framework.snippet(), 'Add this to your app:')
 
   if (enableRewards) {
     const badgeSnippet = framework.id === 'react'

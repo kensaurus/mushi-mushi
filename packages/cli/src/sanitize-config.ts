@@ -8,7 +8,7 @@ import { assertEndpoint, normalizeEndpoint } from './endpoint.js'
 
 const PROJECT_ID_RE =
   /^(?:proj_[A-Za-z0-9_-]{10,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
-const API_KEY_RE = /^mushi_[A-Za-z0-9_-]{10,}$/
+const API_KEY_RE = /^(mushi_|mush_pk_)[A-Za-z0-9_-]{10,}$/
 
 export function sanitizeApiKey(raw: string): string {
   const key = raw.replace(/[\r\n\0]/g, '')

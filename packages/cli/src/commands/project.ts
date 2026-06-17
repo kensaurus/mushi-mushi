@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
+import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
 
 export function registerProjectCommands(program: Command): void {
 // ─── project ──────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ Typical first-time flow:
   # CLI writes .env.local and .cursor/mcp.json
   # mushi whoami to confirm`)
   .action(async (opts: { name?: string; browser?: boolean; endpoint?: string }) => {
-    const { writeFile, mkdir } = await import('node:fs/promises')
+    const { writeFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
 
@@ -70,7 +71,7 @@ Typical first-time flow:
       process.exit(2)
     }
 
-    // Save to ~/.mushirc
+    // Save to config (~/.config/mushi/config.json, migrated from ~/.mushirc)
     const config = loadConfig()
     config.apiKey = apiKey
     config.endpoint = endpoint
@@ -92,39 +93,12 @@ Typical first-time flow:
     await writeFile(envPath, envLines.join('\n'), 'utf8')
     console.log(`\n  ✓ ${envExisting ? 'Updated' : 'Created'} .env.local`)
 
-    // Write .cursor/mcp.json
-    const mcpDir = nodePath.join(cwd, '.cursor')
-    await mkdir(mcpDir, { recursive: true })
-    const mcpPath = nodePath.join(mcpDir, 'mcp.json')
-    const mcpJson = {
-      mcpServers: {
-        mushi: {
-          command: 'npx',
-          args: ['-y', '@mushi-mushi/mcp@latest'],
-          env: {
-            MUSHI_API_ENDPOINT: endpoint,
-            MUSHI_PROJECT_ID: projectId,
-            MUSHI_API_KEY: apiKey,
-          },
-        },
-      },
-    }
-    const mcpExisting = existsSync(mcpPath)
-    if (mcpExisting) {
-      // Merge rather than overwrite — preserve other mcpServers entries
-      try {
-        const { readFile } = await import('node:fs/promises')
-        const raw = JSON.parse(await readFile(mcpPath, 'utf8')) as Record<string, unknown>
-        const existing = raw as { mcpServers?: Record<string, unknown> }
-        existing.mcpServers = { ...(existing.mcpServers ?? {}), mushi: mcpJson.mcpServers.mushi }
-        await writeFile(mcpPath, JSON.stringify(existing, null, 2) + '\n', 'utf8')
-      } catch {
-        await writeFile(mcpPath, JSON.stringify(mcpJson, null, 2) + '\n', 'utf8')
-      }
-    } else {
-      await writeFile(mcpPath, JSON.stringify(mcpJson, null, 2) + '\n', 'utf8')
-    }
-    console.log(`  ✓ ${mcpExisting ? 'Updated' : 'Created'} .cursor/mcp.json`)
+    // Write .cursor/mcp.json (use legacy server name 'mushi' for project use back-compat)
+    const mcpPath = nodePath.join(cwd, '.cursor', 'mcp.json')
+    const serverName = buildMcpServerName({ legacy: true })
+    const serverBlock = buildMcpServerBlock({ endpoint, projectId, apiKey })
+    const { created: mcpCreated } = await writeMcpServerEntry({ configPath: mcpPath, serverName, serverBlock })
+    console.log(`  ✓ ${mcpCreated ? 'Created' : 'Updated'} .cursor/mcp.json`)
 
     console.log('')
     console.log('  Done! Restart Cursor and ask: "list mushi tools"')

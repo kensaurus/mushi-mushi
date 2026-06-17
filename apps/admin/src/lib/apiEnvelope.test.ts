@@ -49,6 +49,24 @@ describe('coerceApiResult', () => {
     expect(res.error).toEqual({ code: 'ERROR', message: 'boom' })
   })
 
+  it('preserves data on ok:false soft errors (e.g. sync-ci-secrets forbidden)', () => {
+    const res = coerceApiResult<{ minted: { prefix: string }; fallback: string[] }>({
+      ok: false,
+      error: { code: 'GH_SECRETS_FORBIDDEN', message: 'write denied' },
+      data: { minted: { prefix: 'mushi_ab' }, fallback: ['gh secret set ...'] },
+    })
+    expect(res.ok).toBe(false)
+    expect(res.error?.code).toBe('GH_SECRETS_FORBIDDEN')
+    expect(res.data?.minted.prefix).toBe('mushi_ab')
+    expect(res.data?.fallback).toEqual(['gh secret set ...'])
+  })
+
+  it('keeps data absent on ok:false errors that carry none', () => {
+    const res = coerceApiResult({ ok: false, error: { code: 'NOT_FOUND', message: 'nope' } })
+    expect(res.ok).toBe(false)
+    expect(res.data).toBeUndefined()
+  })
+
   it('falls back to a generic message for ok:false without error detail', () => {
     const res = coerceApiResult({ ok: false })
     expect(res.ok).toBe(false)

@@ -106,10 +106,28 @@ function extractHeadline(body) {
  */
 function extractHighlights(body) {
   const out = []
-  const re = /^[\t ]*-\s+\*\*([^*]+)\*\*:?\s*(.+)$/gm
-  let m
-  while ((m = re.exec(body)) !== null) {
-    out.push({ title: m[1].trim(), description: m[2].trim() })
+  const lines = body.split(/\r?\n/)
+  const bulletRe = /^([\t ]*)-\s+\*\*([^*]+)\*\*:?\s*(.*)$/
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(bulletRe)
+    if (!m) continue
+    const indent = m[1].length
+    const title = m[2].trim()
+    const parts = m[3].trim() ? [m[3].trim()] : []
+    // Changesets wrap long bullet descriptions across several more-indented
+    // lines. Capture those continuations so the public changelog never renders
+    // a sentence truncated at the first physical line. Stop at a blank line, a
+    // new list item, or any line indented no deeper than the bullet itself.
+    let j = i + 1
+    for (; j < lines.length; j++) {
+      const next = lines[j]
+      if (!next.trim()) break
+      const nextIndent = next.length - next.trimStart().length
+      if (/^[\t ]*[-*]\s/.test(next) || nextIndent <= indent) break
+      parts.push(next.trim())
+    }
+    i = j - 1
+    out.push({ title, description: parts.join(' ').trim() })
   }
   return out
 }

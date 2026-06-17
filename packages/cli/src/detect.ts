@@ -28,7 +28,7 @@ export interface Framework {
   label: string
   packageName: string
   needsWebPackage: boolean
-  snippet: (apiKey: string, projectId: string) => string
+  snippet: () => string
 }
 
 export interface PackageJson {
@@ -67,15 +67,15 @@ export const FRAMEWORKS: Record<FrameworkId, Framework> = {
     label: 'Next.js',
     packageName: '@mushi-mushi/react',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// app/providers.tsx (or pages/_app.tsx for /pages router)
+    snippet: () => `// app/providers.tsx (or pages/_app.tsx for /pages router)
 'use client'
 import { MushiProvider } from '@mushi-mushi/react'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MushiProvider config={{
-      projectId: '${projectId}',
-      apiKey: '${apiKey}',
+      projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+      apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
     }}>
       {children}
     </MushiProvider>
@@ -87,13 +87,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     label: 'React',
     packageName: '@mushi-mushi/react',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// src/main.tsx
+    snippet: () => `// src/main.tsx
 import { MushiProvider } from '@mushi-mushi/react'
 
 createRoot(document.getElementById('root')!).render(
   <MushiProvider config={{
-    projectId: '${projectId}',
-    apiKey: '${apiKey}',
+    projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.VITE_MUSHI_API_KEY,
   }}>
     <App />
   </MushiProvider>
@@ -103,57 +103,58 @@ createRoot(document.getElementById('root')!).render(
     id: 'vue',
     label: 'Vue 3',
     packageName: '@mushi-mushi/vue',
-    needsWebPackage: true,
-    snippet: (apiKey, projectId) => `// src/main.ts
+    needsWebPackage: false,
+    snippet: () => `// src/main.ts
 import { MushiPlugin } from '@mushi-mushi/vue'
-import { Mushi } from '@mushi-mushi/web'
 
-app.use(MushiPlugin, { projectId: '${projectId}', apiKey: '${apiKey}' })
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
+app.use(MushiPlugin, {
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})`,
   },
   nuxt: {
     id: 'nuxt',
     label: 'Nuxt',
     packageName: '@mushi-mushi/vue',
-    needsWebPackage: true,
-    snippet: (apiKey, projectId) => `// plugins/mushi.client.ts
+    needsWebPackage: false,
+    snippet: () => `// plugins/mushi.client.ts
 import { MushiPlugin } from '@mushi-mushi/vue'
-import { Mushi } from '@mushi-mushi/web'
 
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.vueApp.use(MushiPlugin, {
-    projectId: '${projectId}',
-    apiKey: '${apiKey}',
+    projectId: import.meta.env.NUXT_PUBLIC_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.NUXT_PUBLIC_MUSHI_API_KEY,
   })
-  Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })
 })`,
   },
   svelte: {
     id: 'svelte',
     label: 'Svelte',
     packageName: '@mushi-mushi/svelte',
-    needsWebPackage: true,
-    snippet: (apiKey, projectId) => `// src/main.ts (or +layout.svelte for SvelteKit)
+    needsWebPackage: false,
+    snippet: () => `// src/main.ts
 import { initMushi } from '@mushi-mushi/svelte'
-import { Mushi } from '@mushi-mushi/web'
 
-initMushi({ projectId: '${projectId}', apiKey: '${apiKey}' })
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
+initMushi({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})`,
   },
   sveltekit: {
     id: 'sveltekit',
     label: 'SvelteKit',
     packageName: '@mushi-mushi/svelte',
-    needsWebPackage: true,
-    snippet: (apiKey, projectId) => `// src/routes/+layout.svelte
+    needsWebPackage: false,
+    snippet: () => `// src/routes/+layout.svelte
 <script>
   import { onMount } from 'svelte'
-  import { initMushi } from '@mushi-mushi/svelte'
 
   onMount(async () => {
-    const { Mushi } = await import('@mushi-mushi/web')
-    initMushi({ projectId: '${projectId}', apiKey: '${apiKey}' })
-    Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })
+    const { initMushi } = await import('@mushi-mushi/svelte')
+    initMushi({
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+    })
   })
 </script>`,
   },
@@ -161,29 +162,33 @@ Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
     id: 'angular',
     label: 'Angular',
     packageName: '@mushi-mushi/angular',
-    needsWebPackage: true,
-    snippet: (apiKey, projectId) => `// src/main.ts
+    needsWebPackage: false,
+    snippet: () => `// src/main.ts
 import { provideMushi } from '@mushi-mushi/angular'
-import { Mushi } from '@mushi-mushi/web'
 
 bootstrapApplication(AppComponent, {
   providers: [
-    provideMushi({ projectId: '${projectId}', apiKey: '${apiKey}' }),
+    provideMushi({
+      projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+      apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+    }),
   ],
-})
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
+})`,
   },
   expo: {
     id: 'expo',
     label: 'Expo',
     packageName: '@mushi-mushi/react-native',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// App.tsx
+    snippet: () => `// App.tsx
 import { MushiProvider } from '@mushi-mushi/react-native'
 
 export default function App() {
   return (
-    <MushiProvider projectId="${projectId}" apiKey="${apiKey}">
+    <MushiProvider
+      projectId={process.env.EXPO_PUBLIC_MUSHI_PROJECT_ID!}
+      apiKey={process.env.EXPO_PUBLIC_MUSHI_API_KEY!}
+    >
       <YourApp />
     </MushiProvider>
   )
@@ -194,12 +199,15 @@ export default function App() {
     label: 'React Native',
     packageName: '@mushi-mushi/react-native',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// App.tsx
+    snippet: () => `// App.tsx
 import { MushiProvider } from '@mushi-mushi/react-native'
 
 export default function App() {
   return (
-    <MushiProvider projectId="${projectId}" apiKey="${apiKey}">
+    <MushiProvider
+      projectId={process.env.MUSHI_PROJECT_ID!}
+      apiKey={process.env.MUSHI_API_KEY!}
+    >
       <YourApp />
     </MushiProvider>
   )
@@ -216,24 +224,27 @@ export default function App() {
      * `TypeError: Mushi.init is not a function`. The accompanying admin
      * console snippet (apps/admin/src/lib/sdkSnippets.ts) emits the same
      * `Mushi.configure(...)` shape; both are pinned by tests. */
-    snippet: (apiKey, projectId) => `// src/main.ts — after install, run \`npx cap sync\`
+    snippet: () => `// src/main.ts — after install, run \`npx cap sync\`
 import { Mushi } from '@mushi-mushi/capacitor'
 
-await Mushi.configure({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
+await Mushi.configure({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})`,
   },
   express: {
     id: 'express',
     label: 'Express',
     packageName: '@mushi-mushi/node',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// src/instrument.ts — load with: node --import ./dist/instrument.js
+    snippet: () => `// src/instrument.ts — load with: node --import ./dist/instrument.js
 import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
 import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
 import type { Express } from 'express'
 
 export const mushi = new MushiNodeClient({
-  projectId: '${projectId}',
-  apiKey: '${apiKey}',
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  apiKey: process.env.MUSHI_API_KEY!,
   environment: process.env.NODE_ENV ?? 'production',
 })
 attachUnhandledHook({ client: mushi })
@@ -247,14 +258,14 @@ export function attachMushi(app: Express) {
     label: 'Fastify',
     packageName: '@mushi-mushi/node',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// src/instrument.ts — load with: node --import ./dist/instrument.js
+    snippet: () => `// src/instrument.ts — load with: node --import ./dist/instrument.js
 import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
 import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
 import Fastify from 'fastify'
 
 export const mushi = new MushiNodeClient({
-  projectId: '${projectId}',
-  apiKey: '${apiKey}',
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  apiKey: process.env.MUSHI_API_KEY!,
   environment: process.env.NODE_ENV ?? 'production',
 })
 attachUnhandledHook({ client: mushi })
@@ -267,14 +278,14 @@ mushiFastifyPlugin(app, { client: mushi })`,
     label: 'Hono',
     packageName: '@mushi-mushi/node',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// src/instrument.ts — load with: node --import ./dist/instrument.js
+    snippet: () => `// src/instrument.ts — load with: node --import ./dist/instrument.js
 import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
 import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 import { Hono } from 'hono'
 
 export const mushi = new MushiNodeClient({
-  projectId: '${projectId}',
-  apiKey: '${apiKey}',
+  projectId: process.env.MUSHI_PROJECT_ID!,
+  apiKey: process.env.MUSHI_API_KEY!,
   environment: process.env.NODE_ENV ?? 'production',
 })
 attachUnhandledHook({ client: mushi })
@@ -291,10 +302,13 @@ app.onError(
     label: 'Vanilla JS / unknown',
     packageName: '@mushi-mushi/web',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// Anywhere in your client bundle
+    snippet: () => `// Anywhere in your client bundle
 import { Mushi } from '@mushi-mushi/web'
 
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
+Mushi.init({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})`,
   },
 }
 
@@ -370,6 +384,20 @@ export function envVarsToWrite(apiKey: string, projectId: string, framework: Fra
     return [
       `MUSHI_PROJECT_ID=${projectId}`,
       `MUSHI_API_KEY=${apiKey}`,
+    ].join('\n')
+  }
+  // React Native bare workflow: bare MUSHI_* names, read via dotenv/babel plugin
+  if (framework.id === 'react-native') {
+    return [
+      `MUSHI_PROJECT_ID=${projectId}`,
+      `MUSHI_API_KEY=${apiKey}`,
+    ].join('\n')
+  }
+  // Expo managed workflow: EXPO_PUBLIC_ prefix is required for JS access
+  if (framework.id === 'expo') {
+    return [
+      `EXPO_PUBLIC_MUSHI_PROJECT_ID=${projectId}`,
+      `EXPO_PUBLIC_MUSHI_API_KEY=${apiKey}`,
     ].join('\n')
   }
   const prefix = framework.id === 'next' ? 'NEXT_PUBLIC_' : framework.id === 'nuxt' ? 'NUXT_PUBLIC_' : 'VITE_'

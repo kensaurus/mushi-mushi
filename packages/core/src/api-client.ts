@@ -420,7 +420,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     },
 
     async getTesterStatus(jwt: string) {
-      return request<{ is_tester: boolean; tester: { id: string; public_handle: string | null; display_name: string | null } | null }>(
+      return request<{ is_tester: boolean; tester_id: string | null; public_handle: string | null; display_name: string | null }>(
         'GET',
         '/v1/me/tester-status',
         undefined,

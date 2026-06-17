@@ -16,11 +16,11 @@ const MushiContext = createContext<MushiContextValue>({
 });
 
 export interface MushiProviderProps {
-  config: MushiConfig;
+  config?: MushiConfig;
   children: ReactNode;
 }
 
-export function MushiProvider({ config, children }: MushiProviderProps) {
+export function MushiProvider({ config = {} as MushiConfig, children }: MushiProviderProps) {
   const [isReady, setIsReady] = useState(false);
   const sdkRef = useRef<MushiSDKInstance | null>(null);
 

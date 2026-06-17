@@ -13,18 +13,22 @@ import { Btn, Tooltip } from './ui'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { buildCursorDeeplink, buildVsCodeDeeplink, projectServerName } from '../lib/cursorDeeplink'
-import { RESOLVED_API_URL } from '../lib/env'
+import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 
-const MUSHI_CLOUD_API = RESOLVED_API_URL
+const MUSHI_CLOUD_API = RESOLVED_EXTERNAL_API_URL
 
 async function mintMcpKey(
   scopes: string[],
   projectId: string,
 ): Promise<string | null> {
-  const res = await apiFetch<{ key: string }>('/v1/admin/mcp/mint-key', {
-    method: 'POST',
-    body: JSON.stringify({ project_id: projectId, scopes }),
-  })
+  const res = await apiFetch<{ key: string; prefix: string }>(
+    `/v1/admin/projects/${projectId}/keys`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ scopes }),
+      idempotencyKey: crypto.randomUUID(),
+    },
+  )
   if (!res.ok || !res.data?.key) return null
   return res.data.key
 }

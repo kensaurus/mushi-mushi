@@ -147,7 +147,22 @@ type ExpoSensorsModule = {
   }
 }
 
-export function MushiProvider({ children, ...config }: MushiRNConfig & { children: ReactNode }) {
+export function MushiProvider({ children, config: configProp, ...barePropConfig }: MushiRNConfig & { children: ReactNode; config?: Partial<MushiRNConfig> }) {
+  // Merge: bare props override config prop. Env vars fill in any missing creds.
+  // This lets <MushiProvider> be used three ways:
+  //   1. Bare props:        <MushiProvider projectId="…" apiKey="…">
+  //   2. Config object:     <MushiProvider config={{ projectId: '…', apiKey: '…' }}>
+  //   3. Zero-config:       <MushiProvider>   (reads MUSHI_PROJECT_ID / MUSHI_API_KEY)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const proc = (globalThis as any).process
+  const envProjectId = (proc?.env?.MUSHI_PROJECT_ID || proc?.env?.EXPO_PUBLIC_MUSHI_PROJECT_ID) as string | undefined
+  const envApiKey = (proc?.env?.MUSHI_API_KEY || proc?.env?.EXPO_PUBLIC_MUSHI_API_KEY) as string | undefined
+  const config: MushiRNConfig = {
+    ...(envProjectId ? { projectId: envProjectId } : {}),
+    ...(envApiKey ? { apiKey: envApiKey } : {}),
+    ...configProp,
+    ...barePropConfig,
+  } as MushiRNConfig
   const consoleRef = useRef<ReturnType<typeof setupConsoleCapture> | null>(null)
   const networkRef = useRef<ReturnType<typeof setupNetworkCapture> | null>(null)
   const queueRef = useRef<AsyncStorageQueue | null>(null)

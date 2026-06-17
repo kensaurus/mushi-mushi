@@ -120,10 +120,18 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
     }
 
     @objc private func keyboardWillShow(_ note: Notification) {
-        guard let kbFrame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+        guard let kbFrameEnd = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
               let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
         else { return }
-        let overlap = view.bounds.maxY - kbFrame.minY
+        // `keyboardFrameEndUserInfoKey` is reported in screen coordinates, but
+        // `view.bounds` is the view's own local space. Subtracting them directly
+        // miscomputes the overlap for `.pageSheet` / `.formSheet` presentations,
+        // rotation, split-view, and any non-zero view origin. Convert the
+        // keyboard frame into the view's coordinate space first.
+        let screenSpace = (note.object as? UIScreen ?? view.window?.windowScene?.screen)?.coordinateSpace
+        let kbFrameInView = screenSpace.map { view.convert(kbFrameEnd, from: $0) }
+            ?? view.convert(kbFrameEnd, from: nil)
+        let overlap = view.bounds.maxY - kbFrameInView.minY
         guard overlap > 0 else { return }
         UIView.animate(withDuration: duration) {
             self.view.transform = CGAffineTransform(translationX: 0, y: -overlap)

@@ -22,7 +22,7 @@ export const triggerInsetPresets: Record<
 export interface MushiCapacitorPluginConfig {
   /** Project UUID from the Mushi admin console. */
   projectId: string;
-  /** Public ingest API key (`mush_pk_...`). */
+  /** Mushi API key (`mushi_...`). Mint one in the admin console under Projects → API Keys. */
   apiKey: string;
   /**
    * Supabase Edge Function URL for the ingest endpoint.
