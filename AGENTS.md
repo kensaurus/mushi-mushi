@@ -521,6 +521,17 @@ Graph builder concepts attributed to **Understand-Anything (MIT)** — see `pack
 
 ---
 
+## Production deployment
+
+Maintainers shipping Mushi Cloud or npm SDK releases should follow
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (repo runbook) and the public summary at
+[`apps/docs/content/operating/deployment.mdx`](apps/docs/content/operating/deployment.mdx).
+Key points: Changesets version PR → merge → **manual `release.yml` dispatch** when
+GitHub suppresses the bot merge trigger; Edge Functions / admin / docs deploy on
+path-filtered pushes; **DB migrations are manual** (`supabase db push`).
+
+---
+
 ## ExecPlans
 
 Detailed, phase-by-phase implementation plans live in

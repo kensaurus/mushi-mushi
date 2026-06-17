@@ -58,9 +58,9 @@ packages/
   react-native/  React Native SDK (MIT)
   cli/           CLI tool (MIT)
   mcp/           MCP server for coding agents (MIT)
-  server/        Supabase Edge Functions (BSL)
-  agents/        Agentic fix pipeline (BSL)
-  verify/        Fix verification (BSL)
+  server/        Supabase Edge Functions (AGPLv3)
+  agents/        Agentic fix pipeline (AGPLv3)
+  verify/        Fix verification (AGPLv3)
 apps/
   admin/         Admin dashboard (React + Tailwind)
   docs/          Documentation site (Nextra — apps/docs)
@@ -115,13 +115,30 @@ Select the affected packages, the semver bump type, and write a summary. The cha
 
 ## Release flow
 
-Releases are fully automated. Maintainers don't run `npm publish` by hand.
+Releases are fully automated once the version PR is merged. Maintainers don't run
+`npm publish` by hand for routine bumps. See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**
+for the full production runbook (edge functions, admin SPA, docs site, migrations).
 
 1. PRs land on `master` with one or more changeset files in `.changeset/`.
-2. `release.yml` runs on every push to `master`. It opens (or updates) a `chore: version packages` PR that bumps every affected `package.json`, rolls up the changelogs, and deletes the consumed changesets.
-3. Merging that "Version Packages" PR re-fires `release.yml`. The publish step authenticates to npm via **OpenID Connect (OIDC) Trusted Publishers** — no long-lived `NPM_TOKEN` is exchanged — and every tarball ships with a **Sigstore provenance attestation** uploaded to the public transparency log.
+   Orphaned changesets (only ignored packages) fail `pnpm check:changeset-orphans`.
+2. `release.yml` runs on every push to `master`. It opens (or updates) a
+   **`chore: version packages`** PR on `changeset-release/master` that bumps
+   affected `package.json` files, rolls up changelogs, and deletes consumed
+   changesets.
+3. **Wait for CI on the version PR.** If checks don't appear (bot-branch
+   suppression), push an empty commit to `changeset-release/master`. If
+   `check:sdk-version-matrix` fails, run `pnpm gen:sdk-version-matrix` on that
+   branch and commit `apps/docs/content/sdks/index.mdx`.
+4. Merge the version PR. The publish step uses **OIDC Trusted Publishers** +
+   Sigstore provenance (with `NPM_TOKEN` only for brand-new package bootstrap).
+5. **Manually dispatch Release** unless a run starts within ~2 minutes:
+   **Actions → Release → Run workflow → `master`**. Squash-merges attributed to
+   `github-actions[bot]` usually suppress the auto `push` trigger — manual
+   dispatch is the normal path, not a fallback of last resort.
 
-If GitHub's anti-loop protection suppresses the auto re-fire (the squash merge can be attributed to `github-actions[bot]`), trigger the workflow manually: **Actions → release → Run workflow → master**.
+```bash
+gh workflow run release.yml --ref master
+```
 
 ### Adding a brand-new publishable package
 
@@ -168,7 +185,7 @@ chore: bump dependencies
 ## License
 
 - SDK packages are MIT — your contributions will be MIT-licensed
-- Server/agents/verify are BSL 1.1 — contributions to those packages fall under BSL
+- Server/agents/verify are AGPLv3 — contributions to those packages fall under AGPLv3
 
 ## Questions?
 

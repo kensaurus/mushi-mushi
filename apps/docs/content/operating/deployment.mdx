@@ -1,0 +1,114 @@
+---
+title: Production deployment
+---
+
+import { Callout } from 'nextra/components'
+
+# Production deployment
+
+Guide for **maintainers** shipping Mushi Cloud (`kensaur.us/mushi-mushi/*`) and
+`@mushi-mushi/*` npm packages. End users and self-hosters should start with
+[Self-hosting](/self-hosting) instead.
+
+<Callout type="info">
+  The full runbook with workflow file paths, secret names, and incident notes lives in
+  [`docs/DEPLOYMENT.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/DEPLOYMENT.md)
+  on GitHub. This page is the operator summary.
+</Callout>
+
+## What ships automatically
+
+| Surface | Trigger | Destination |
+| --- | --- | --- |
+| **npm SDKs** | Changesets version PR merged → Release workflow | [npmjs.com/@mushi-mushi](https://www.npmjs.com/org/mushi-mushi) |
+| **Edge Functions** | Push to `master` under `packages/server/supabase/functions/` | Supabase (Mushi Cloud project) |
+| **Admin console** | Push to `master` under `apps/admin/` | `https://kensaur.us/mushi-mushi/admin/` |
+| **Docs site** | Push to `master` under `apps/docs/` | `https://kensaur.us/mushi-mushi/docs/` |
+
+**Database migrations are manual.** Run `supabase db push` from `packages/server/`
+before deploying Edge Functions that depend on new tables or RPCs.
+
+---
+
+## npm release (Changesets)
+
+1. Land PRs on `master` with a **changeset** (`pnpm changeset`) for every
+   published package you touched (`core`, `web`, `react`, `cli`, `mcp`, etc.).
+2. `release.yml` opens a **`chore: version packages`** PR — wait for CI to pass.
+3. Merge that version PR.
+4. **Dispatch Release manually** if no publish run starts within ~2 minutes:
+
+   ```bash
+   gh workflow run release.yml --ref master
+   ```
+
+   Squash-merges attributed to `github-actions[bot]` usually suppress the auto
+   `push` trigger. Manual dispatch is normal, not an emergency workaround.
+
+### Version PR CI traps
+
+**No checks on the version PR?** Push an empty commit to `changeset-release/master`
+to trigger CI.
+
+**`check:sdk-version-matrix` failed?** Regenerate the docs table and push to the
+version PR branch:
+
+```bash
+pnpm gen:sdk-version-matrix
+git add apps/docs/content/sdks/index.mdx
+git commit -m "docs(sdks): regenerate SDK version matrix"
+git push origin HEAD:changeset-release/master
+```
+
+**Orphaned changeset?** Every `.changeset/*.md` must bump at least one publishable
+package. Changesets that only target ignored packages (`server`, `agents`, `verify`)
+fail `pnpm check:changeset-orphans`.
+
+---
+
+## Backend & console deploy
+
+**Edge Functions** — auto on function changes, or on demand:
+
+```bash
+gh workflow run deploy-edge-functions.yml --ref master
+# single function:
+gh workflow run deploy-edge-functions.yml --ref master -f function_name=api
+```
+
+**Admin SPA:**
+
+```bash
+gh workflow run deploy-admin.yml --ref master
+```
+
+**Docs:**
+
+```bash
+gh workflow run deploy-docs.yml --ref master
+```
+
+Apply migrations **first** when your change adds schema:
+
+```bash
+cd packages/server
+npx supabase db push
+```
+
+---
+
+## Pre-merge checklist
+
+- [ ] Valid changeset(s) on every SDK-affecting feature PR
+- [ ] Version PR CI green (including SDK version matrix)
+- [ ] Migrations applied before edge deploy
+- [ ] Manual `release.yml` dispatch after version PR merge
+- [ ] npm + GitHub Releases show expected versions
+
+---
+
+## Related
+
+- [Contributing — Release flow](https://github.com/kensaurus/mushi-mushi/blob/master/CONTRIBUTING.md#release-flow)
+- [Self-hosting — Edge Functions](/self-hosting/edge-functions)
+- [Changelog](/changelog)
