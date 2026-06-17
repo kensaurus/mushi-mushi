@@ -6,7 +6,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey, apiKeyAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, resolveOwnedProject, ownedProjectIds, callerProjectIds } from '../shared.ts';
+import { dbError, resolveOwnedProject, ownedProjectIds, callerProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -524,9 +524,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       // API key auth — project is bound to the key; reject mismatch
       if (contextPid !== pid) return c.json({ error: 'API key does not belong to this project' }, 403);
     } else {
-      // JWT auth — verify the user owns the project
-      const ids = await callerProjectIds(c, db, userId);
-      if (!ids.includes(pid)) return c.json({ error: 'Project not found or access denied' }, 403);
+      // JWT auth — verify the user can access this *specific* project with a
+      // header-independent ownership/membership check. callerProjectIds()
+      // honours X-Mushi-Project-Id, so it would wrongly 403 a legitimate owner
+      // whenever the admin SPA has a *different* project pinned as active.
+      const access = await userCanAccessProject(db, userId, pid);
+      if (!access.allowed) return c.json({ error: 'Project not found or access denied' }, 403);
     }
 
     try {

@@ -1,5 +1,13 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
     "majorMinor": "1.15",
     "headline": null,
     "pending": false,
@@ -487,27 +495,27 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -535,27 +543,27 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -700,11 +708,11 @@
     "highlights": [
       {
         "title": "Account mode",
-        "description": "an org-scoped API key (no `MUSHI_PROJECT_ID` required) now"
+        "description": "an org-scoped API key (no `MUSHI_PROJECT_ID` required) now lets the server resolve project IDs per tool call and exposes an enriched `get_account_overview` (accessible projects with report counts + MCP key stats). `list_projects` reflects account-mode capabilities. Project-scoped keys keep their single-project restriction."
       },
       {
         "title": "stdio fix",
-        "description": "all logger and `console.*` output is routed to stderr so stdout"
+        "description": "all logger and `console.*` output is routed to stderr so stdout carries only JSON-RPC. This stops the Cursor/Claude stdio transport from being corrupted by non-protocol bytes (the cause of intermittent red-badge \"transport error\" connections)."
       },
       {
         "title": "Web",
@@ -951,11 +959,11 @@
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -1017,11 +1025,11 @@
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -1050,15 +1058,15 @@
     "highlights": [
       {
         "title": "Fix `fix.status` event name",
-        "description": "the `fix poll` loop was emitting `poll.status`"
+        "description": "the `fix poll` loop was emitting `poll.status` instead of the documented `fix.status`. Fixes `--json` consumers and automations that subscribe to fix lifecycle events."
       },
       {
         "title": "Fix ESM-safe `unlinkSync`",
-        "description": "`migrateLegacyConfig` was using a"
+        "description": "`migrateLegacyConfig` was using a `require('fs').unlinkSync` inside an ESM module. Switched to a named import."
       },
       {
         "title": "Fix scope fallback on typo",
-        "description": "if `MUSHI_SCOPES` is set but contains only"
+        "description": "if `MUSHI_SCOPES` is set but contains only unrecognised values (e.g. a typo like `mcp:writes`), the MCP server now falls back to `ALL_SCOPES` instead of registering zero tools and silently deregistering the entire tool surface. Only an explicitly empty `MUSHI_SCOPES=\"\"` opts in to zero tools."
       }
     ],
     "packages": [
@@ -1091,7 +1099,7 @@
       },
       {
         "title": "Trackable error codes",
-        "description": "every user-visible failure now flows through a structured `MushiCliError` carrying a stable `[E_*]` code (`E_AUTH_MISSING`, `E_NETWORK`, `E_RATE_LIMITED`, `E_INTERRUPTED`, etc.) and an actionable fix hint. Output format is grep-friendly:"
+        "description": "every user-visible failure now flows through a structured `MushiCliError` carrying a stable `[E_*]` code (`E_AUTH_MISSING`, `E_NETWORK`, `E_RATE_LIMITED`, `E_INTERRUPTED`, etc.) and an actionable fix hint. Output format is grep-friendly: ``` error [E_AUTH_MISSING]: No API key found → fix: run `mushi init` or set MUSHI_API_KEY in your environment $ echo $? 2 ``` `--json` mode renders the same payload as a JSON object so CI orchestrators can branch on `error.code` without parsing English."
       },
       {
         "title": "Rewards subsystem",
@@ -1175,51 +1183,51 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Fix `fix.status` event name",
-        "description": "the `fix poll` loop was emitting `poll.status`"
+        "description": "the `fix poll` loop was emitting `poll.status` instead of the documented `fix.status`. Fixes `--json` consumers and automations that subscribe to fix lifecycle events."
       },
       {
         "title": "Fix ESM-safe `unlinkSync`",
-        "description": "`migrateLegacyConfig` was using a"
+        "description": "`migrateLegacyConfig` was using a `require('fs').unlinkSync` inside an ESM module. Switched to a named import."
       },
       {
         "title": "Fix scope fallback on typo",
-        "description": "if `MUSHI_SCOPES` is set but contains only"
+        "description": "if `MUSHI_SCOPES` is set but contains only unrecognised values (e.g. a typo like `mcp:writes`), the MCP server now falls back to `ALL_SCOPES` instead of registering zero tools and silently deregistering the entire tool surface. Only an explicitly empty `MUSHI_SCOPES=\"\"` opts in to zero tools."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       }
     ],
     "packages": [
@@ -1284,19 +1292,19 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Graph",
@@ -1397,39 +1405,39 @@
     "highlights": [
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
         "title": "Launcher README",
-        "description": "adds a Socket.dev badge and a new \"Supply-chain &"
+        "description": "adds a Socket.dev badge and a new \"Supply-chain & verification\" section that explains, up front, what each external scanner reports about `mushi-mushi` (npm provenance, Socket.dev alerts, Bundlephobia `EntryPointError`, Snyk Advisor crawler lag) and why none of them are actionable bugs."
       },
       {
         "title": "CLI",
-        "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened"
+        "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened the `text({ validate })` callback parameter to `string | undefined`; the `requireSecret()` helper was updated to handle the new signature explicitly. No user-visible change; the v1 spinner-API breaking change isn't used here."
       },
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
         "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from"
+        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
       {
         "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -1488,23 +1496,23 @@
     "highlights": [
       {
         "title": "Launcher README",
-        "description": "adds a Socket.dev badge and a new \"Supply-chain &"
+        "description": "adds a Socket.dev badge and a new \"Supply-chain & verification\" section that explains, up front, what each external scanner reports about `mushi-mushi` (npm provenance, Socket.dev alerts, Bundlephobia `EntryPointError`, Snyk Advisor crawler lag) and why none of them are actionable bugs."
       },
       {
         "title": "CLI",
-        "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened"
+        "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened the `text({ validate })` callback parameter to `string | undefined`; the `requireSecret()` helper was updated to handle the new signature explicitly. No user-visible change; the v1 spinner-API breaking change isn't used here."
       },
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
         "title": "Community files in-tarball.",
@@ -1520,15 +1528,15 @@
       },
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
         "title": "Community files in-tarball.",
@@ -1601,15 +1609,15 @@
     "highlights": [
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
         "title": "`@mushi-mushi/cli` `0.3.0`",
@@ -1637,15 +1645,15 @@
       },
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       }
     ],
     "packages": [
@@ -1717,15 +1725,15 @@
     "highlights": [
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
         "title": "Community files in-tarball.",
@@ -1838,15 +1846,15 @@
     "highlights": [
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
       },
       {
         "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
       },
       {
         "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
+        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
         "title": "Community files in-tarball.",

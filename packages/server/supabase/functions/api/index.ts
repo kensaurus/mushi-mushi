@@ -54,6 +54,7 @@ import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
+import { registerBootstrapRoutes } from './routes/bootstrap.ts';
 
 ensureSentry('api');
 
@@ -532,6 +533,7 @@ registerFullstackAuditRoutes(app);
 registerCodeHealthRoutes(app);
 registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);
+registerBootstrapRoutes(app);
 
 registerA2ATaskRoutes(app);
 

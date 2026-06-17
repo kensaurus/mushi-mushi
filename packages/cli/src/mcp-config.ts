@@ -1,0 +1,108 @@
+/**
+ * Shared helper for writing / merging MCP server entries into IDE config files.
+ *
+ * Unified server naming: `mushi-<slug>` where slug is derived from project name
+ * (or falls back to first 8 chars of projectId). The special single-project
+ * `project use` command uses `mushi` for backwards compatibility.
+ */
+
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+export interface McpServerEntry {
+  command: string
+  args: string[]
+  env: Record<string, string>
+}
+
+export interface WriteMcpOptions {
+  /** Absolute path to the IDE config file, e.g. `/repo/.cursor/mcp.json` */
+  configPath: string
+  /** Key to use inside `mcpServers`, e.g. `mushi-myproject` */
+  serverName: string
+  /** The server block to upsert */
+  serverBlock: McpServerEntry
+  /** If true, only log what would be written without touching the fs */
+  dryRun?: boolean
+}
+
+export interface WriteMcpResult {
+  created: boolean
+  path: string
+}
+
+/**
+ * Reads the existing mcp-json file (if present), merges the new server entry,
+ * and writes the result back. Preserves all other `mcpServers` entries.
+ */
+export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteMcpResult> {
+  const { configPath, serverName, serverBlock, dryRun = false } = opts
+  const created = !existsSync(configPath)
+
+  let merged: Record<string, unknown> = { mcpServers: {} }
+  if (!created) {
+    try {
+      merged = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      merged = { mcpServers: {} }
+    }
+  }
+
+  const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
+  servers[serverName] = serverBlock
+  merged.mcpServers = servers
+
+  const output = JSON.stringify(merged, null, 2) + '\n'
+  if (!dryRun) {
+    await mkdir(join(configPath, '..'), { recursive: true })
+    await writeFile(configPath, output, 'utf8')
+  }
+
+  return { created, path: configPath }
+}
+
+/**
+ * Build a canonical `mcpServers` block for the Mushi MCP server.
+ */
+export function buildMcpServerBlock(opts: {
+  endpoint: string
+  projectId: string
+  apiKey: string
+}): McpServerEntry {
+  return {
+    command: 'npx',
+    args: ['-y', '@mushi-mushi/mcp@latest'],
+    env: {
+      MUSHI_API_ENDPOINT: opts.endpoint,
+      MUSHI_PROJECT_ID: opts.projectId,
+      MUSHI_API_KEY: opts.apiKey,
+    },
+  }
+}
+
+/**
+ * Derive the canonical server name for an entry in `mcpServers`.
+ *
+ * When `projectName` is given, slugify it (lowercase, hyphens, max 24 chars).
+ * Otherwise fall back to `mushi-<first-8-of-projectId>`.
+ *
+ * For the `project use` single-project path, pass `legacy: true` to get the
+ * bare `mushi` key for backwards compatibility with existing Cursor configs.
+ */
+export function buildMcpServerName(opts: {
+  projectId?: string
+  projectName?: string
+  legacy?: boolean
+}): string {
+  if (opts.legacy) return 'mushi'
+  if (opts.projectName) {
+    const slug = opts.projectName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/, '')
+      .slice(0, 24)
+    return `mushi-${slug}`
+  }
+  return `mushi-${(opts.projectId ?? 'unknown').slice(0, 8)}`
+}

@@ -36,7 +36,14 @@ export function sdkPlatformHintFromUserAgent(userAgent: string | null | undefine
 export function sdkOriginKind(origin: string | null | undefined): SdkPlatformKind {
   if (!origin?.trim()) return 'unknown'
   const o = origin.toLowerCase()
-  if (o.startsWith('capacitor://')) return 'ios-native'    // Capacitor WebView on both iOS + Android
+  // `capacitor://` is the Capacitor WebView scheme on BOTH iOS and Android, so
+  // the OS is indeterminate from the Origin alone — return 'unknown' rather
+  // than mislabelling Android heartbeats as iOS. This must come BEFORE the
+  // loopback check because `capacitor://localhost` contains "localhost" and
+  // would otherwise be misread as 'web'. `isNativeOrigin()` still recognises
+  // the scheme as native, and the user-agent heuristic
+  // (`sdkPlatformHintFromUserAgent`) can refine the OS where present.
+  if (o.startsWith('capacitor://')) return 'unknown'
   if (o.startsWith('android-app://')) return 'android-native'
   if (o.includes('localhost') || o.includes('127.0.0.1') || o.includes('10.0.2.2')) return 'web'
   if (/^https?:\/\//.test(o)) return 'web'
@@ -50,6 +57,10 @@ export function isNativeOrigin(
   origin: string | null | undefined,
   userAgent: string | null | undefined,
 ): boolean {
+  const o = (origin ?? '').trim().toLowerCase()
+  // Capacitor's `capacitor://` scheme is native on both iOS and Android even
+  // though `sdkOriginKind` deliberately can't pin the OS from it.
+  if (o.startsWith('capacitor://')) return true
   const kind = sdkOriginKind(origin)
   if (kind === 'ios-native' || kind === 'android-native') return true
   // Fallback to UA when origin is null (Capacitor sets Origin on iOS 16+ but not on older)
