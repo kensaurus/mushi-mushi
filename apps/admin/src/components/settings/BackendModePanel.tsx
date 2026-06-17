@@ -219,7 +219,7 @@ function ModeCard({ active, onClick, title, badge, description }: ModeCardProps)
           {badge}
         </span>
         {active && (
-          <span className="ml-auto inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand text-white text-2xs">
+          <span className="ml-auto inline-flex h-4 w-4 items-center justify-center rounded-full bg-brand text-brand-fg text-2xs">
             ✓
           </span>
         )}

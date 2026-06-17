@@ -15,6 +15,7 @@ import {
   Btn,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SignalChip, ConfidenceMeter } from '../components/report-detail/ReportSurface'
 
@@ -216,7 +217,7 @@ export function ContentQualityPage() {
               Click any row to view the full asset context and trigger regeneration.
             </p>
 
-            <div className="rounded-lg border border-edge overflow-hidden">
+            <ResponsiveTable ariaLabel="Content quality issues">
               <table className="w-full text-xs">
                 <thead className="bg-surface-overlay border-b border-edge">
                   <tr>
@@ -316,7 +317,7 @@ export function ContentQualityPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </ResponsiveTable>
           </>
         )}
 

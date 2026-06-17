@@ -20,8 +20,9 @@ import {
 } from '../lib/statTooltips/query'
 import { queryLinks } from '../lib/statCardLinks'
 import { SetupNudge } from '../components/SetupNudge'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
+import { SnapshotSectionHint,
   Card,
   Btn,
   RelativeTime,
@@ -51,8 +52,6 @@ import {
 } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { PageHero } from '../components/PageHero'
-import { useNextBestAction } from '../lib/useNextBestAction'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 
 type QueryMode = 'nl' | 'raw'
@@ -591,7 +590,8 @@ function ResultsTable({ rows }: { rows: unknown[] }) {
   const numericCols = new Set(table.columns.filter((c) => isNumericCol(c, sampleRow[c])))
 
   return (
-    <div className="overflow-x-auto -mx-3 mt-1">
+    <>
+    <ResponsiveTable ariaLabel="Query results">
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr className="bg-surface-raised border-b border-edge">
@@ -629,12 +629,13 @@ function ResultsTable({ rows }: { rows: unknown[] }) {
           ))}
         </tbody>
       </table>
+    </ResponsiveTable>
       {table.data.length > 50 && (
         <InlineProof className="mt-1.5 mx-3">
           Showing first 50 of {table.data.length} rows.
         </InlineProof>
       )}
-    </div>
+    </>
   )
 }
 
@@ -741,7 +742,7 @@ const QUERY_TABS: Array<{ id: QueryTabId; label: string; description: string }> 
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Run health, PageHero decide/act/verify, and query posture for the active project.',
+    description: 'Run health, snapshot KPIs, and query posture for the active project.',
   },
   {
     id: 'ask',
@@ -923,24 +924,6 @@ export function QueryPage() {
 
   const saved = useMemo(() => history.filter((h) => h.is_saved), [history])
   const recent = useMemo(() => history.filter((h) => !h.is_saved), [history])
-  const lastRunHoursAgo = stats.lastRunAt
-    ? Math.floor((Date.now() - new Date(stats.lastRunAt).getTime()) / 3_600_000)
-    : history[0]?.created_at
-      ? Math.floor((Date.now() - new Date(history[0].created_at).getTime()) / 3_600_000)
-      : null
-  const queryAction = useNextBestAction({
-    scope: 'query',
-    savedQueries: saved.length,
-    lastRunHoursAgo,
-  })
-  const querySeverity: 'crit' | 'warn' | 'ok' | 'neutral' | 'info' =
-    stats.errors24h > 0
-      ? 'crit'
-      : stats.runs24h === 0 && stats.savedCount === 0
-        ? 'neutral'
-        : stats.savedCount === 0
-          ? 'info'
-          : 'ok'
 
   usePublishPageContext({
     route: '/query',
@@ -980,8 +963,17 @@ export function QueryPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Ask Your Data'} />
-      <PageScopeHint text={copy?.description ?? "Natural-language or raw SQL analytics against approved tables."} />
+        <PageHeaderBar
+          title={copy?.title ?? 'Ask Your Data'}
+          description={copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
+          helpTitle={copy?.help?.title ?? 'About Ask Your Data'}
+          helpWhatIsIt={
+            copy?.help?.whatIsIt ??
+            'Natural-language or raw SQL interface to approved bug tables — every run is sandboxed and logged.'
+          }
+          helpUseCases={copy?.help?.useCases ?? []}
+          helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
+        />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -1000,15 +992,22 @@ export function QueryPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Ask Your Data'}
         projectScope={stats.projectName ?? undefined}
+        description={copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
+        helpTitle={copy?.help?.title ?? 'About Ask Your Data'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'Natural-language or raw SQL interface to approved bug tables — every run is sandboxed and logged.'
+        }
+        helpUseCases={copy?.help?.useCases ?? []}
+        helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
       >
         <Badge className={stats.errors24h > 0 ? 'bg-danger-subtle text-danger' : stats.runs24h > 0 ? 'bg-ok-muted text-ok' : 'bg-info-muted/50 text-info-foreground'}>
           {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
         </Badge>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Natural-language or raw SQL analytics against approved tables."} />
+      </PageHeaderBar>
 
       {(stats.schemaDegraded || stats.errors24h > 0) && (
         <QueryStatusBanner
@@ -1028,63 +1027,6 @@ export function QueryPage() {
         ariaLabel="Query sections"
         size="sm"
       />
-
-      {activeTab === 'overview' && (
-        <PageHero
-          scope="query"
-          title="Ask Your Data"
-          kicker="Natural-language analytics"
-          decide={{
-            label:
-              stats.runs24h === 0 && stats.savedCount === 0
-                ? 'No queries yet'
-                : stats.savedCount === 0
-                  ? 'No saved queries'
-                  : 'Saved queries ready',
-            metric: `${stats.savedCount} saved · ${stats.recentCount} recent · ${stats.teamSavedCount} from team`,
-            summary:
-              stats.runs24h === 0 && stats.savedCount === 0
-                ? 'Ask your first question — the LLM writes the SQL, you see the rows. No setup required.'
-                : stats.savedCount === 0
-                  ? 'Save a useful query so it becomes a one-click tile for your team.'
-                  : 'Rerun any saved query from History or edit the SQL before running.',
-            severity: querySeverity,
-            anchor: 'query:decide',
-            evidence: {
-              kind: 'metric-breakdown',
-              items: [
-                { label: 'Saved', value: stats.savedCount, tone: stats.savedCount > 0 ? 'ok' : 'neutral' },
-                { label: 'Recent', value: stats.recentCount, tone: stats.recentCount > 0 ? 'info' : 'neutral' },
-                { label: 'Team', value: stats.teamSavedCount, tone: stats.teamSavedCount > 0 ? 'info' : 'neutral' },
-                { label: 'Errors 24h', value: stats.errors24h, tone: stats.errors24h > 0 ? 'crit' : 'ok' },
-              ],
-            },
-          }}
-          act={queryAction}
-          actAnchor="query:act"
-          actEvidence={queryAction ? { kind: 'rule-trace', why: queryAction.reason ?? queryAction.title } : undefined}
-          verify={{
-            label: 'Latest activity',
-            detail:
-              lastRunHoursAgo == null
-                ? 'No queries run yet'
-                : lastRunHoursAgo < 1
-                  ? 'Last run less than an hour ago'
-                  : `Last run ${lastRunHoursAgo}h ago`,
-            to: '/query?tab=history',
-            secondaryTo: '/query?tab=ask',
-            secondaryLabel: 'New query',
-            anchor: 'query:verify',
-            evidence: stats.lastRunAt ? {
-              kind: 'last-event',
-              at: stats.lastRunAt,
-              by: 'user',
-              payloadSummary: stats.lastRunPrompt?.slice(0, 60) ?? 'Query run',
-              status: stats.lastRunError ? 'error' : 'ok',
-            } : undefined,
-          }}
-        />
-      )}
 
       <Section title="Query snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <SnapshotSectionHint text={activeTabMeta.description} />
@@ -1123,18 +1065,6 @@ export function QueryPage() {
           />
         </div>
       </Section>
-
-      {activeTab === 'overview' && (
-        <PageHelp
-        title={copy?.help?.title ?? 'About Ask Your Data'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'Natural-language or raw SQL interface to approved bug tables — every run is sandboxed and logged.'
-        }
-        useCases={copy?.help?.useCases ?? []}
-        howToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
-      />
-      )}
 
       {activeTab === 'schema' && (
         <Card className="p-3">

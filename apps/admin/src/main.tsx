@@ -6,6 +6,7 @@ import { initSentry } from './lib/sentry'
 import { hydrateDensity } from './lib/useDensity'
 import { hydrateTheme } from './lib/useTheme'
 import { sanitizeTenantUrlParams } from './lib/tenantUrlSanitize'
+import { MotionProvider } from './components/providers/MotionProvider'
 import './index.css'
 
 initSentry()
@@ -28,8 +29,10 @@ window.addEventListener('load', () => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <App />
-    </BrowserRouter>
+    <MotionProvider>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <App />
+      </BrowserRouter>
+    </MotionProvider>
   </StrictMode>,
 )

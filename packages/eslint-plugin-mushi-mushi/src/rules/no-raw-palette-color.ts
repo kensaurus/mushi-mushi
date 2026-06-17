@@ -112,7 +112,8 @@ const rule: Rule.RuleModule = {
     const isGuarded =
       filename.includes('apps/admin/src') ||
       filename.includes('packages/marketing-ui/src') ||
-      filename.includes('apps/docs/components')
+      filename.includes('apps/docs/components') ||
+      filename.includes('apps/testers')
     if (!isGuarded) return {}
 
     function check(node: Node) {

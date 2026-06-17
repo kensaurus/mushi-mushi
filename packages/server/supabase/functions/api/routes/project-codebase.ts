@@ -1,7 +1,7 @@
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { jwtAuth } from '../../_shared/auth.ts';
+import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { dbError, callerProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import { buildImportEdges, detectExploreLayer, getProjectCodebaseScope } from '../../_shared/codebase-understand.ts';
@@ -620,10 +620,26 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     })
   })
 
-  app.post('/v1/admin/projects/:id/codebase/search', jwtAuth, async (c) => {
+  app.post('/v1/admin/projects/:id/codebase/search', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const projectId = c.req.param('id')!
     const userId = c.get('userId') as string
+    const authMethod = c.get('authMethod')
+    const keyProjectId = c.get('projectId')
+    const isOrgScopedKey = c.get('isOrgScopedKey') ?? false
     const db = getServiceClient()
+
+    if (authMethod === 'apiKey' && !isOrgScopedKey && keyProjectId !== projectId) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'PROJECT_SCOPE_MISMATCH',
+            message: 'This project-scoped MCP key cannot search another project. Set MUSHI_PROJECT_ID to the key project or mint an org-scoped key.',
+          },
+        },
+        403,
+      )
+    }
 
     const access = await userCanAccessProject(db, userId, projectId)
     if (!access.allowed) {

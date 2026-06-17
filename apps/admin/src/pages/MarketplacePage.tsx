@@ -19,8 +19,7 @@ import { useMarketplaceUx, resolveQuickMarketplaceTab } from '../lib/marketplace
 import { marketplaceLinks } from '../lib/statCardLinks'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   Btn,
   Badge,
   Card,
@@ -48,6 +47,7 @@ import { InstallForm } from '../components/marketplace/InstallForm'
 import { InstalledList } from '../components/marketplace/InstalledList'
 import { PluginCard } from '../components/marketplace/PluginCard'
 import { MarketplaceStatusBanner } from '../components/marketplace/MarketplaceStatusBanner'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
   EMPTY_MARKETPLACE_STATS,
   type DispatchEntry,
@@ -440,8 +440,26 @@ export function MarketplacePage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Marketplace'} />
-      <PageScopeHint text={copy?.description ?? "Install signed webhook plugins that react when reports classify or fixes land."} />
+        <PageHeaderBar
+          title={copy?.title ?? 'Marketplace'}
+          description={copy?.description ?? 'Install signed webhook plugins that react when reports classify or fixes land.'}
+          helpTitle={copy?.help?.title ?? 'About the marketplace'}
+          helpWhatIsIt={
+            copy?.help?.whatIsIt ??
+            'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
+          }
+          helpUseCases={
+            copy?.help?.useCases ?? [
+              'Page on-call via PagerDuty when a critical bug is reported',
+              'Mirror reports to Linear and keep issue status in sync',
+              'Fan out any event to a Zapier catch-hook for no-code workflows',
+            ]
+          }
+          helpHowToUse={
+            copy?.help?.howToUse ??
+            'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
+          }
+        />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -480,28 +498,26 @@ export function MarketplacePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-marketplace">
-      <PageHelp
-        title={copy?.help?.title ?? 'About the marketplace'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Marketplace'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Install signed webhook plugins that react when reports classify or fixes land.'}
+        helpTitle={copy?.help?.title ?? 'About the marketplace'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'Page on-call via PagerDuty when a critical bug is reported',
             'Mirror reports to Linear and keep issue status in sync',
             'Fan out any event to a Zapier catch-hook for no-code workflows',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Marketplace'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -514,7 +530,7 @@ export function MarketplacePage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -526,8 +542,7 @@ export function MarketplacePage() {
         </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Install signed webhook plugins that react when reports classify or fixes land."} />
+      </PageHeaderBar>
 
       <MarketplaceStatusBanner
         stats={stats}
@@ -608,7 +623,7 @@ export function MarketplacePage() {
               ? 'border-danger/30 bg-danger/5'
               : stats.topPriority === 'plugins_paused'
                 ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
+                : 'border-edge-subtle bg-chrome'
           }`}
         >
           <SignalChip

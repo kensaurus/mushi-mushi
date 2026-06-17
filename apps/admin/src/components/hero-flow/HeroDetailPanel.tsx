@@ -424,7 +424,7 @@ export function HeroDetailPanel({
           <Section heading="Why now" tone="lead">
             <p className="text-fg">{whyNow}</p>
             {evidence?.kind === 'rule-trace' && evidence.threshold && (
-              <pre className="mt-1.5 overflow-x-auto rounded-md border border-edge-subtle/60 bg-[#0a0c10]/80 px-2 py-1.5 font-mono text-3xs text-brand leading-relaxed">
+              <pre className="mt-1.5 overflow-x-auto rounded-md border border-edge-subtle/60 bg-viz-terminal-bg/80 px-2 py-1.5 font-mono text-3xs text-brand leading-relaxed">
                 {evidence.threshold}
               </pre>
             )}

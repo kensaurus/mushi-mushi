@@ -13,6 +13,9 @@
  *          options, mirror them here so the configurator stays honest.
  */
 
+import type { ProjectMushiEnvVars } from './projectMushiEnv'
+import { mushiEnvVarsForProjectSlug } from './projectMushiEnv'
+
 /** Mirror of `MushiWidgetConfig.position` from packages/core. */
 export type WidgetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
@@ -136,6 +139,45 @@ export function isServerFramework(fw: Framework): fw is ServerFramework {
 
 export const API_KEY_PLACEHOLDER = 'mushi_xxx'
 
+function isExpoBuildTimeEnv(env: ProjectMushiEnvVars): boolean {
+  return env.projectIdVar.startsWith('EXPO_PUBLIC_')
+}
+
+function mobileEnvBlock(env: ProjectMushiEnvVars, projectId: string, apiKey: string): string {
+  const endpointLine = env.endpointVar
+    ? `# ${env.endpointVar}=https://your-mushi-api/functions/v1/api\n`
+    : ''
+  return `# Paste into ${env.envFileHint ?? 'apps/mobile/.env.local'} (gitignored).
+# EXPO_PUBLIC_* is compile-time — OTA cannot inject it; rebuild store apps after changing.
+${env.projectIdVar}=${projectId}
+${env.apiKeyVar}=${apiKey}
+${endpointLine}`
+}
+
+function mobileProviderProps(
+  env: ProjectMushiEnvVars,
+  projectId: string,
+  key: string,
+  configProp: string,
+): { header: string; props: string } {
+  if (isExpoBuildTimeEnv(env)) {
+    return {
+      header: `${mobileEnvBlock(env, projectId, key)}
+import { MushiProvider } from '@mushi-mushi/react-native'
+
+const PROJECT_ID = process.env.${env.projectIdVar} ?? ''
+const API_KEY = process.env.${env.apiKeyVar} ?? ''`,
+      props: `      projectId={PROJECT_ID}
+      apiKey={API_KEY}${configProp}`,
+    }
+  }
+  return {
+    header: `import { MushiProvider } from '@mushi-mushi/react-native'`,
+    props: `      projectId="${projectId}"
+      apiKey="${key}"${configProp}`,
+  }
+}
+
 export function frameworkLabel(fw: Framework): string {
   if (fw === 'vanilla') return 'Vanilla JS'
   if (fw === 'react-native') return 'React Native'
@@ -236,8 +278,10 @@ export function renderSnippet(
   projectId: string,
   apiKey?: string | null,
   cfg: SdkPreviewConfig = DEFAULT_SDK_CONFIG,
+  projectSlug?: string | null,
 ): string {
   const key = apiKey || API_KEY_PLACEHOLDER
+  const env = mushiEnvVarsForProjectSlug(projectSlug)
 
   if (fw === 'react') {
     const innerIndent = '      '
@@ -394,6 +438,8 @@ Mushi.init(${mushiInitBody})`
     }
     const configProp = blocks.length > 0 ? `\n      config={{\n${blocks.join('\n')}\n      }}` : ''
 
+    const { header, props } = mobileProviderProps(env, projectId, key, configProp)
+
     const expoNote =
       fw === 'expo'
         ? `// Expo: works on bare workflow OR managed with a dev client.
@@ -405,13 +451,12 @@ Mushi.init(${mushiInitBody})`
 
 `
 
-    return `${expoNote}import { MushiProvider } from '@mushi-mushi/react-native'
+    return `${expoNote}${header}
 
 export default function App() {
   return (
     <MushiProvider
-      projectId="${projectId}"
-      apiKey="${key}"${configProp}
+${props}
     >
       <YourApp />
     </MushiProvider>

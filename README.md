@@ -59,7 +59,7 @@ The console, CLI, MCP server, and SDK install path were unified around one **Con
 
 - **Connect & Update hub** (`/connect`) — one page wires GitHub, SDK install snippet, MCP deeplinks (**Add to Cursor** / **Add to VS Code**), CLI install copy, and per-package freshness chips. Beginner sidebar pins it as **Connect** under Start here.
 - **One-click SDK upgrade PR** — **Create Upgrade PR** reads your linked repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm stable (never `workspace:` / `file:` / git specifiers), opens a draft GitHub PR, and marks it ready. Backed by `sdk-upgrade-worker` + daily `sdk-versions-cron` (npm registry sync into `sdk_versions`). CLI equivalent: `mushi upgrade`.
-- **MCP lean catalog (72 tools)** — default installs expose `triage,fixes,inventory,setup,docs` via `MUSHI_FEATURES` (stdio) or `?features=` (hosted HTTP). Unified `diagnose_setup` + `search_mushi_docs` replace the old setup trilogy. Full catalog: `features=all`. Catalog sync guarded by `pnpm check:catalog-sync`.
+- **MCP lean catalog (79 tools)** — default installs expose `triage,fixes,inventory,setup,docs` via `MUSHI_FEATURES` (stdio) or `?features=` (hosted HTTP). Unified `diagnose_setup` + `search_mushi_docs` replace the old setup trilogy. Full catalog: `features=all`. Catalog sync guarded by `pnpm check:catalog-sync`.
 - **Skill Pipelines** (`/skills`) — attach a [cursor-kenji](https://github.com/kensaurus/cursor-kenji) / skills.sh skill to a report; run handoff or Cursor Cloud mode with live step updates. CLI: `mushi pipeline start|watch|checkin`.
 - **Console v2 density** — `PageHeaderBar` replaces stacked header + help chrome; neutral zinc frames (amber reserved for CTAs); 12px type floor on labels. See [`apps/admin/README.md`](./apps/admin/README.md#design-system-v2-2026-06--compact-console-grade-uiux).
 
@@ -67,7 +67,7 @@ Quick path for a new repo:
 
 ```bash
 npx mushi-mushi                    # wizard: SDK + env vars + optional test report
-mushi connect --wait --wire-ide    # ~/.mushirc + .env.local + .cursor/mcp.json + heartbeat
+mushi connect --wait               # ~/.mushirc + .env.local + .cursor/mcp.json + heartbeat (IDE wired by default; use --no-ide to skip)
 # or open Admin → Connect & Update → Add to Cursor → Create Upgrade PR when GitHub is linked
 ```
 
@@ -210,42 +210,42 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 <tr>
 <td align="center" width="16%">
 
-**~279K**
+**~292K**
 <br/>
 <sub>TypeScript Lines</sub>
 
 </td>
 <td align="center" width="16%">
 
-**1,194**
+**1,299**
 <br/>
 <sub>Source Files</sub>
 
 </td>
 <td align="center" width="16%">
 
-**42**
+**43**
 <br/>
 <sub>Workspace Packages</sub>
 
 </td>
 <td align="center" width="16%">
 
-**35**
+**36**
 <br/>
 <sub>NPM Packages</sub>
 
 </td>
 <td align="center" width="16%">
 
-**47**
+**49**
 <br/>
 <sub>Edge Functions</sub>
 
 </td>
 <td align="center" width="16%">
 
-**256**
+**267**
 <br/>
 <sub>SQL Migrations</sub>
 

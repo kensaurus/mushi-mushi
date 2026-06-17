@@ -97,6 +97,9 @@ jobs:
 
       - run: pnpm lint
 
+      - name: Check design tokens
+        run: pnpm check:design-tokens
+
       - run: pnpm test
 
       # Wave D D2: enforce that the public changelog is in sync with the
@@ -131,6 +134,20 @@ jobs:
         # apps/admin/src/lib/configDocs.ts and must not drift. Run
         # `pnpm gen:config-docs` and commit the result if this fails.
         run: pnpm check:config-docs
+
+      - name: Check README stats are in sync
+        # Regression guard: root README at-a-glance badges (migrations, edge
+        # functions, npm packages, etc.) must match scripts/lib/docs-stats.mjs.
+        run: pnpm check:docs-stats
+
+      - name: Check SDK version matrix
+        run: pnpm check:sdk-version-matrix
+
+      - name: Check internal doc links
+        run: pnpm check:internal-doc-links
+
+      - name: Check web bundle docs
+        run: pnpm check:bundle-docs
 
       - name: Check Migration Hub catalog sync
         # Regression guard for Migration Hub Phase 2: the docs catalog

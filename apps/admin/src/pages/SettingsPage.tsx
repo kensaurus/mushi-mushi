@@ -77,6 +77,7 @@ export function SettingsPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const projectSlug = setup.activeProject?.project_slug ?? null
 
   const param = searchParams.get('tab')
   const active: SettingsTabId = isTabId(param) ? param : 'general'
@@ -298,7 +299,13 @@ export function SettingsPage() {
         {active === 'byok' && <ByokPanel />}
         {active === 'firecrawl' && <FirecrawlPanel />}
         {active === 'browserbase' && <BrowserbasePanel />}
-        {active === 'health' && <HealthPanel projectId={activeProjectId} projectName={projectName ?? stats.projectName} />}
+        {active === 'health' && (
+          <HealthPanel
+            projectId={activeProjectId}
+            projectName={projectName ?? stats.projectName}
+            projectSlug={projectSlug}
+          />
+        )}
         {active === 'dev' && <DevToolsPanel />}
       </div>
     </div>

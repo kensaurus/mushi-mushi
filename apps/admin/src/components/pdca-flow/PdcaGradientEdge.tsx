@@ -14,6 +14,7 @@ import { EdgeLabelRenderer, getBezierPath } from '@xyflow/react'
 import type { EdgeProps } from '@xyflow/react'
 import type { PdcaEdgeData } from './pdcaFlow.data'
 import { TravelingDotsEdge } from '../flow-primitives/TravelingDotsEdge'
+import { readVizToken } from '../../lib/vizTokens'
 
 const DASH_LENGTH = 8
 const GAP_LENGTH = 4
@@ -73,10 +74,13 @@ function PdcaGradientEdgeInner({
   const isFlowing = Boolean(edgeData.flowing)
   const isFailing = Boolean(edgeData.failing)
 
+  const flowInfo = readVizToken('viz-flow-info')
+  const flowBrand = readVizToken('viz-flow-brand')
+  const flowDanger = readVizToken('viz-flow-danger')
+
   // Failure dominates flow styling: swap the gradient for the danger hue
   // + shorten the dash so the eye catches the stall before reading copy.
-  const DANGER = '#ef4444'
-  const strokeValue = isFailing ? DANGER : `url(#${gradientId})`
+  const strokeValue = isFailing ? flowDanger : `url(#${gradientId})`
   const failingDash = '6 3'
 
   const [isHovered, setIsHovered] = useState(false)
@@ -94,8 +98,8 @@ function PdcaGradientEdgeInner({
           x2={targetX}
           y2={targetY}
         >
-          <stop offset="0%" stopColor={edgeData.sourceColor ?? '#60a5fa'} />
-          <stop offset="100%" stopColor={edgeData.targetColor ?? '#f5b544'} />
+          <stop offset="0%" stopColor={edgeData.sourceColor ?? flowInfo} />
+          <stop offset="100%" stopColor={edgeData.targetColor ?? flowBrand} />
         </linearGradient>
       </defs>
 
@@ -165,7 +169,7 @@ function PdcaGradientEdgeInner({
       {isFlowing && (
         <TravelingDotsEdge
           path={edgePath}
-          color={edgeData.targetColor ?? '#f5b544'}
+          color={edgeData.targetColor ?? flowBrand}
           dots={3}
         />
       )}
@@ -180,11 +184,11 @@ function PdcaGradientEdgeInner({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY - 12}px)`,
               pointerEvents: 'none',
-              borderColor: edgeData.sourceColor ?? '#60a5fa',
+              borderColor: edgeData.sourceColor ?? flowInfo,
             }}
             className="rounded-full border bg-surface-overlay/95 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wider shadow-sm"
           >
-            <span style={{ color: edgeData.sourceColor ?? '#60a5fa' }}>{edgeData.edgeLabel}</span>
+            <span style={{ color: edgeData.sourceColor ?? flowInfo }}>{edgeData.edgeLabel}</span>
           </div>
         </EdgeLabelRenderer>
       )}

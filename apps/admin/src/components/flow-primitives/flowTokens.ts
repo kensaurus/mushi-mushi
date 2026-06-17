@@ -2,33 +2,44 @@
  * FILE: apps/admin/src/components/flow-primitives/flowTokens.ts
  * PURPOSE: Central source of truth for per-stage colours used inside React
  *          Flow canvases (PDCA loop + FixAttemptFlow). SVG `stop-color`
- *          attributes and inline `style.stroke` need concrete hex/hsl values
- *          — CSS custom properties don't always resolve inside SVG `defs`
- *          across browsers. We keep the hex table here so a theme tweak only
- *          touches one file and every flow-related node/edge stays in lock-
- *          step with the design tokens in `index.css`.
+ *          attributes and inline `style.stroke` need concrete values —
+ *          CSS custom properties don't always resolve inside SVG `defs`
+ *          across browsers. Values are read from @theme viz-* tokens via
+ *          `readVizToken()` so theme tweaks stay in index.css.
  */
 
 import type { PdcaStageId } from '../../lib/pdca'
+import { readVizToken } from '../../lib/vizTokens'
+
+const STAGE_TOKEN: Record<PdcaStageId, string> = {
+  plan: 'viz-flow-info',
+  do: 'viz-flow-brand',
+  check: 'viz-score-warn',
+  act: 'viz-score-ok',
+}
+
+function softMix(token: string): string {
+  return `color-mix(in oklch, ${readVizToken(token)} 28%, transparent)`
+}
 
 export const STAGE_HEX: Record<PdcaStageId, string> = {
-  plan: '#60a5fa',   // info / blue
-  do: '#f5b544',     // brand / amber
-  check: '#fbbf24',  // warn / gold
-  act: '#34d399',    // ok / emerald
+  plan: readVizToken('viz-flow-info'),
+  do: readVizToken('viz-flow-brand'),
+  check: readVizToken('viz-score-warn'),
+  act: readVizToken('viz-score-ok'),
 }
 
 export const STAGE_SOFT_HEX: Record<PdcaStageId, string> = {
-  plan: 'rgba(96, 165, 250, 0.28)',
-  do: 'rgba(245, 181, 68, 0.28)',
-  check: 'rgba(251, 191, 36, 0.28)',
-  act: 'rgba(52, 211, 153, 0.28)',
+  plan: softMix(STAGE_TOKEN.plan),
+  do: softMix(STAGE_TOKEN.do),
+  check: softMix(STAGE_TOKEN.check),
+  act: softMix(STAGE_TOKEN.act),
 }
 
 export const TONE_HEX = {
-  ok: '#34d399',
-  warn: '#fbbf24',
-  urgent: '#ef4444',
+  ok: readVizToken('viz-score-ok'),
+  warn: readVizToken('viz-score-warn'),
+  urgent: readVizToken('viz-flow-danger'),
 } as const
 
 export type FlowStageTone = keyof typeof TONE_HEX

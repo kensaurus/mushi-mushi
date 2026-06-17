@@ -14,8 +14,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useExperimentsUx, resolveQuickExperimentsTab } from '../lib/experimentsModeUx'
 import { useToast } from '../lib/toast'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint,
   Card,
   Section,
   Badge,
@@ -265,20 +265,18 @@ export function ExperimentsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-experiments">
-      <PageHelp
-        title={copy?.help?.title ?? 'A/B experiments'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Experiments'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'}
+        helpTitle={copy?.help?.title ?? 'A/B experiments'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Test button copy, colour, or layout variants',
           'Measure impact of a new feature on report rate',
           'Use bandit mode for fast exploration with small samples',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Experiments'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -289,7 +287,7 @@ export function ExperimentsPage() {
               : bannerSeverity === 'warn'
                 ? 'bg-warn-muted/50 text-warning-foreground'
                 : bannerSeverity === 'brand'
-                  ? 'bg-brand/15 text-brand'
+                  ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                   : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -310,8 +308,7 @@ export function ExperimentsPage() {
         <Btn size="sm" variant="primary" onClick={() => setActiveTab('new')}>+ New</Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants."} />
+      </PageHeaderBar>
 
       <ExperimentsStatusBanner
         stats={stats}

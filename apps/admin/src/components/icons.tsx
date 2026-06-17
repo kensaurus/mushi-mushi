@@ -803,3 +803,13 @@ export function IconSkills(p: IconProps) {
   </>)
 }
 
+// Clockwise arrow arc — "Refresh / Re-sync".
+export function IconRefresh(p: IconProps) {
+  return wrap(p, <>
+    <path d="M1.5 8A6.5 6.5 0 0 1 14 5.5" fill="none" strokeLinecap="round" />
+    <path d="M14.5 8A6.5 6.5 0 0 1 2 10.5" fill="none" strokeLinecap="round" />
+    <polyline points="12 3.5 14 5.5 12 7.5" />
+    <polyline points="4 8.5 2 10.5 4 12.5" />
+  </>)
+}
+

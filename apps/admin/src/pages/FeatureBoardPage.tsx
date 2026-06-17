@@ -17,6 +17,7 @@ import { apiFetch } from '../lib/supabase'
 import { ContainedBlock, InlineProof } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
+import { useAdminMode } from '../lib/mode'
 import {
   Badge,
   Btn,
@@ -325,6 +326,7 @@ function FeatureRow({
 
 export function FeatureBoardPage() {
   const toast = useToast()
+  const { isAdvanced } = useAdminMode()
   const projectId = useActiveProjectId()
   const [sort, setSort] = useState<SortKey>('votes')
   const [search, setSearch] = useState('')
@@ -449,6 +451,7 @@ export function FeatureBoardPage() {
     <div className="space-y-4">
       <PageHeaderBar
         title="Feature board"
+        withPageHero={isAdvanced}
         description="Vote on feature requests and track what ships."
         helpTitle="About the feature board"
         helpWhatIsIt="Community feature requests from the Feedback form, ranked by votes. Operators can mark items shipped and notify requesters."
@@ -469,6 +472,7 @@ export function FeatureBoardPage() {
         </Link>
       </PageHeaderBar>
 
+      {isAdvanced ? (
       <PageHero
         scope="community"
         title="Feature board"
@@ -505,6 +509,7 @@ export function FeatureBoardPage() {
           secondaryLabel: 'Releases',
         }}
       />
+      ) : null}
 
       <Section
         title="FEATURE BOARD SNAPSHOT"

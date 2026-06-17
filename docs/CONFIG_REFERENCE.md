@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_94 configuration knobs across 18 sections · last regenerated 2026-06-16._
+_94 configuration knobs across 18 sections · last regenerated 2026-06-17._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1312,7 +1312,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — One-line summary of your support request — appears as the email subject line.
 
-**How it works** — Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice #1234"`) so triage doesn't bounce it back asking for clarification.
+**How it works** — Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so triage doesn't bounce it back asking for clarification.
 
 **Default** — `empty`
 

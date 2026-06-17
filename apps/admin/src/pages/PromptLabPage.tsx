@@ -12,11 +12,10 @@
 
 import { useMemo, useState } from 'react'
 import {
-  PageHeader,
-  PageHelp,
   ErrorAlert,
   Card,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiRow, KpiTile, formatPct } from '../components/charts'
 import { useToast } from '../lib/toast'
@@ -238,18 +237,24 @@ export function PromptLabPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Prompt Lab">
+      <PageHeaderBar
+        title="Prompt Lab"
+        description="Test prompt versions live before promoting them to production. Diff outputs side-by-side."
+        helpTitle="About Prompt Lab"
+        helpWhatIsIt="The control plane for the LLM prompts that drive fast-filter (Stage 1) and classify-report (Stage 2). Clone a baseline, edit it, run it as a candidate at 10% traffic, and promote when the judge score beats the active version."
+        helpUseCases={[
+          'A/B test a sharper Stage 2 prompt before flipping it on for everyone',
+          'Iterate on category rules without redeploying — prompts hot-reload from the DB',
+          'Audit who changed what, when, and what the judge thought of it',
+          'Validate prompt changes against synthetic reports before they reach real users',
+        ]}
+        helpHowToUse="Pick a baseline → Clone → Edit → set Traffic % to a small number (e.g. 10) → wait for the judge to score it → Promote if it beats the active prompt. Global defaults are read-only; clone first."
+      >
         <div className="flex flex-wrap items-center gap-1.5">
           <SignalChip tone="neutral">{data.prompts.length} prompts</SignalChip>
           <SignalChip tone="brand">{totalEvals.toLocaleString()} evals</SignalChip>
         </div>
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          Test prompt versions live before promoting them to production. Diff outputs side-by-side.
-        </p>
-      </ContainedBlock>
+      </PageHeaderBar>
 
       <PromptLabStatusBanner stats={promptLabStats} />
 
@@ -289,18 +294,6 @@ export function PromptLabPage() {
           </ActionPillRow>
         </Card>
       )}
-
-      <PageHelp
-        title="About Prompt Lab"
-        whatIsIt="The control plane for the LLM prompts that drive fast-filter (Stage 1) and classify-report (Stage 2). Clone a baseline, edit it, run it as a candidate at 10% traffic, and promote when the judge score beats the active version."
-        useCases={[
-          'A/B test a sharper Stage 2 prompt before flipping it on for everyone',
-          'Iterate on category rules without redeploying — prompts hot-reload from the DB',
-          'Audit who changed what, when, and what the judge thought of it',
-          'Validate prompt changes against synthetic reports before they reach real users',
-        ]}
-        howToUse="Pick a baseline → Clone → Edit → set Traffic % to a small number (e.g. 10) → wait for the judge to score it → Promote if it beats the active prompt. Global defaults are read-only; clone first."
-      />
 
       {/* Workflow strip.
           Pre-2026-05-07 the page jumped straight from the help block into a

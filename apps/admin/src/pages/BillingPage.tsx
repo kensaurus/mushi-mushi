@@ -44,8 +44,9 @@ import { useRealtimeReload } from '../lib/realtime'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
 import { EMPTY_BILLING_STATS, type BillingStats, type BillingTabId } from '../components/billing/types'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
+import { SnapshotSectionHint,
   Card,
   Btn,
   Badge,
@@ -381,36 +382,33 @@ export function BillingPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-billing">
-      <PageHelp
-        title={copy?.help?.title ?? 'About Billing'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Billing'}
+        projectScope={stats.projectName ?? activeProject?.project_name}
+        description={copy?.description ?? 'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'}
+        helpTitle={copy?.help?.title ?? 'About Billing'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Per-project subscription + usage view. The free tier gives every project a monthly quota of report ingests; subscriptions unlock unlimited reports + usage-based pricing on Stripe Meter Events.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'Upgrade to Cloud Starter when you hit the free quota and reports are being rejected with HTTP 402',
             'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
             'Cross-check usage between Mushi (reports/fixes/tokens) and Stripe (line items)',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Overview shows your project card with usage + invoices. Plans compares tiers. Support opens a ticket. Upgrade starts Stripe Checkout; Manage opens the customer portal.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Billing'}
-        projectScope={stats.projectName ?? activeProject?.project_name}
       >
         {!ux.hideOverviewChrome && (
         <SignalChip tone="neutral" className="font-mono">
           Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} / mo
         </SignalChip>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms."} />
+      </PageHeaderBar>
 
       <BillingStatusBanner
         stats={stats}
@@ -1352,6 +1350,7 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
       <SignalChip tone="neutral" className="mb-1.5 uppercase tracking-wider">
         Recent invoices
       </SignalChip>
+      <ResponsiveTable ariaLabel="Recent invoices">
       <table className="w-full text-2xs">
         <thead className="text-fg-faint">
           <tr>
@@ -1403,6 +1402,7 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
           ))}
         </tbody>
       </table>
+      </ResponsiveTable>
     </section>
   )
 }
@@ -1676,7 +1676,7 @@ function TicketHistory({
                   <div className="flex items-center gap-1.5">
                     <p className="text-fg truncate font-medium">{t.subject}</p>
                     {hasReply && (
-                      <Badge className="bg-brand/15 text-brand border border-brand/30 shrink-0 text-3xs">
+                      <Badge className="border border-edge-subtle bg-surface-raised text-fg-secondary shrink-0 text-3xs">
                         Reply
                       </Badge>
                     )}

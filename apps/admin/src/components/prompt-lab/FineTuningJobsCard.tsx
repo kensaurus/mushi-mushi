@@ -4,6 +4,7 @@ import { Card, Badge, Btn, RelativeTime, EmptyState } from '../ui'
 import { useToast } from '../../lib/toast'
 import { formatPct } from '../charts'
 import { ConfirmDialog, PromptDialog } from '../ConfirmDialog'
+import { Modal } from '../Modal'
 import {
   IconExport,
   IconShieldCheck,
@@ -338,64 +339,70 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
         </div>
       )}
 
-      {askingStage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-surface rounded-md border border-edge-subtle shadow-xl w-full max-w-sm space-y-3 p-4">
-            <h3 className="text-sm font-semibold text-fg">New fine-tuning job</h3>
-            <div className="space-y-1">
-              <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Vendor / base model</label>
-              <select
-                className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1.5 text-xs"
-                value={selectedVendor}
-                onChange={(e) => setSelectedVendor(e.currentTarget.value)}
-              >
-                {VENDOR_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <p className="text-2xs text-fg-faint leading-relaxed">
-                {VENDOR_OPTIONS.find((o) => o.value === selectedVendor)?.description ?? ''}
-              </p>
-            </div>
-            <p className="text-2xs text-fg-secondary leading-snug">
-              Pick which stage to promote once it passes validation. Most operators use <span className="font-mono">stage2</span> (the deeper classifier).
+      <Modal
+        open={askingStage}
+        onClose={() => setAskingStage(false)}
+        title="New fine-tuning job"
+        size="sm"
+        dismissible={!creating}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Btn size="sm" variant="cancel" onClick={() => setAskingStage(false)} disabled={creating}>Cancel</Btn>
+            <Btn
+              size="sm"
+              loading={creating}
+              data-primary
+              onClick={() => {
+                const stage = stageInputRef.current?.value?.trim() ?? ''
+                if (stage !== 'stage1' && stage !== 'stage2') {
+                  setStageError('Type stage1 or stage2 exactly.')
+                  return
+                }
+                setStageError(null)
+                void commitCreateJob(stage)
+              }}
+            >
+              Create job
+            </Btn>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Vendor / base model</label>
+            <select
+              className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1.5 text-xs"
+              value={selectedVendor}
+              onChange={(e) => setSelectedVendor(e.currentTarget.value)}
+            >
+              {VENDOR_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-2xs text-fg-faint leading-relaxed">
+              {VENDOR_OPTIONS.find((o) => o.value === selectedVendor)?.description ?? ''}
             </p>
-            <div className="space-y-1">
-              <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Promote to stage</label>
-              <input
-                ref={stageInputRef}
-                type="text"
-                defaultValue="stage2"
-                className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1 text-xs font-mono"
-                placeholder="stage1 or stage2"
-                onChange={() => setStageError(null)}
-              />
-              {stageError
-                ? <p className="text-2xs text-danger">{stageError}</p>
-                : <p className="text-2xs text-fg-faint">Type stage1 or stage2 exactly.</p>
-              }
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Btn size="sm" variant="cancel" onClick={() => setAskingStage(false)} disabled={creating}>Cancel</Btn>
-              <Btn
-                size="sm"
-                loading={creating}
-                onClick={() => {
-                  const stage = stageInputRef.current?.value?.trim() ?? ''
-                  if (stage !== 'stage1' && stage !== 'stage2') {
-                    setStageError('Type stage1 or stage2 exactly.')
-                    return
-                  }
-                  setStageError(null)
-                  void commitCreateJob(stage)
-                }}
-              >
-                Create job
-              </Btn>
-            </div>
+          </div>
+          <p className="text-2xs text-fg-secondary leading-snug">
+            Pick which stage to promote once it passes validation. Most operators use <span className="font-mono">stage2</span> (the deeper classifier).
+          </p>
+          <div className="space-y-1">
+            <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Promote to stage</label>
+            <input
+              ref={stageInputRef}
+              type="text"
+              defaultValue="stage2"
+              className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1 text-xs font-mono"
+              placeholder="stage1 or stage2"
+              onChange={() => setStageError(null)}
+            />
+            {stageError
+              ? <p className="text-2xs text-danger">{stageError}</p>
+              : <p className="text-2xs text-fg-faint">Type stage1 or stage2 exactly.</p>
+            }
           </div>
         </div>
-      )}
+      </Modal>
 
       {promoteTarget && (
         <ConfirmDialog

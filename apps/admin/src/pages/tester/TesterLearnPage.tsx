@@ -10,7 +10,7 @@ import {
   TesterHowItWorksFlow,
   TesterPointsEconomyStrip,
 } from '../../components/tester/TesterVisuals'
-import { TesterPageIntro, TESTER_PANEL, TesterPrimaryCta } from '../../components/tester/tester-ui'
+import { TesterPageIntro, TESTER_PANEL, TesterPrimaryCta, TesterHelpBanner } from '../../components/tester/tester-ui'
 import { Btn } from '../../components/ui'
 import { useToast } from '../../lib/toast'
 import { useState } from 'react'
@@ -144,7 +144,7 @@ function LearnEnrollStrip() {
         toast.success('Profile activated — head to Apps to join your first program.')
         reload()
       } else {
-        toast.error('Activation failed. Try again in a moment.')
+        toast.error('We could not activate your profile — check your connection and try again, or sign out and back in.')
       }
     } finally {
       setBusy(false)
@@ -183,6 +183,11 @@ export function TesterLearnPage() {
         title="How Bounties works"
         description="Short guides you can skim in minutes — expand any topic for detail."
       />
+
+      <TesterHelpBanner title="Before you submit">
+        Accepted reports need numbered repro steps, device or browser info, and expected vs actual behavior.
+        Duplicates and spam lower your reputation multiplier — see the Good report section below.
+      </TesterHelpBanner>
 
       {showEnroll && <LearnEnrollStrip />}
 

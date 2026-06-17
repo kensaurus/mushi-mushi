@@ -86,6 +86,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   const apiLog = createLogger({
     scope: 'mushi:mcp:api',
     level: (process.env.MUSHI_LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error' | undefined) ?? 'info',
+    destination: 'stderr',
   })
 
   // Short-circuit for empty scope list: return a bare server with no tools
@@ -153,6 +154,55 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
     apiLog.info('api.done', { path, requestId, status: res.status, durationMs })
     return body as T
+  }
+
+  /**
+   * Resolve the effective project ID for a tool call.
+   *
+   * Resolution order:
+   *   1. Caller-supplied explicitId (e.g. from tool argument `projectId`)
+   *   2. Server-config projectId (MUSHI_PROJECT_ID env var — single-project mode)
+   *   3. Account mode: call list_projects and auto-select the single result.
+   *      If the key can reach >1 project, throw with a clear hint listing IDs.
+   *
+   * This lets agents using an org-scoped (multi-project) key work transparently
+   * when they have a single project — and fail with a helpful message when they
+   * need to specify which of several projects to target.
+   */
+  async function resolveProjectId(explicitId?: string | null): Promise<string> {
+    if (explicitId) return explicitId
+    if (projectId) return projectId
+    // Account mode: probe the API to find accessible projects.
+    try {
+      const data = await apiCall<{ projects: Array<{ id: string; name?: string | null }>; total: number }>(
+        '/v1/admin/mcp/account-overview',
+      )
+      if (data.total === 1 && data.projects[0]) {
+        return data.projects[0].id
+      }
+      if (data.total === 0) {
+        throw new MushiApiError(
+          400,
+          'NO_ACCESSIBLE_PROJECTS',
+          'This API key has no accessible projects. Mint an API key on a project in the admin console.',
+        )
+      }
+      // Multiple projects — caller must specify.
+      const projectList = data.projects.map((p) => `${p.name ?? 'unnamed'} (${p.id})`).join(', ')
+      throw new MushiApiError(
+        400,
+        'PROJECT_ID_REQUIRED',
+        `Multiple projects are accessible with this key: ${projectList}. ` +
+          'Pass projectId explicitly to target a specific project, or set MUSHI_PROJECT_ID in your MCP env config.',
+      )
+    } catch (err) {
+      if (err instanceof MushiApiError) throw err
+      throw new MushiApiError(
+        400,
+        'MISSING_PROJECT_ID',
+        'projectId is required. Set MUSHI_PROJECT_ID in .cursor/mcp.json or pass it explicitly.',
+      )
+    }
   }
 
   /** Format any value as an MCP text block containing pretty-printed JSON. */
@@ -250,8 +300,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       if (args.category) params.set('category', args.category)
       if (args.severity) params.set('severity', args.severity)
       params.set('limit', String(Math.min(args.limit ?? 20, 100)))
-      const pid = args.project_id ?? projectId
-      const extraHeaders: Record<string, string> = pid && pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {}
+      const pid = await resolveProjectId(args.project_id)
+      const extraHeaders: Record<string, string> = pid !== projectId ? { 'X-Mushi-Project-Id': pid } : {}
       const data = await apiCall<{ reports: unknown[]; total: number }>(`/v1/admin/reports?${params}`, {
         headers: extraHeaders,
       })
@@ -795,6 +845,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         dispatchReady: z.boolean(),
         endpoint: z.string().nullable(),
         projectId: z.string().nullable(),
+        accessibleProjectCount: z.number().nullable(),
         issues: z.array(z.unknown()),
         nextAction: z.string(),
         summary: z.string(),
@@ -810,13 +861,9 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
           fix: 'Run `mushi connect` to write MUSHI_API_KEY into .cursor/mcp.json, then restart the MCP server.',
         })
       }
-      if (!projectId) {
-        issues.push({
-          check: 'mcp_project_id',
-          detail: 'No projectId configured on the MCP server',
-          fix: 'Add MUSHI_PROJECT_ID to .cursor/mcp.json (copy UUID from console → Projects).',
-        })
-      }
+      // Note: missing MUSHI_PROJECT_ID is NOT an error — account mode (no fixed
+      // project) is a valid configuration. We verify access via account-overview
+      // below and only surface an issue when the key can't reach any project.
       if (!apiEndpoint) {
         issues.push({
           check: 'mcp_endpoint',
@@ -850,6 +897,29 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
       let ingestReady = false
       let dispatchReady = false
+      let accessibleProjectCount: number | null = null
+
+      // In account mode (no fixed projectId), verify the key can reach at least
+      // one project via the account-overview endpoint.
+      if (!projectId && healthOk) {
+        try {
+          const overview = await apiCall<{
+            projects: Array<{ id: string }>
+            total: number
+          }>('/v1/admin/mcp/account-overview')
+          accessibleProjectCount = overview.total
+          if (overview.total === 0) {
+            issues.push({
+              check: 'no_accessible_projects',
+              detail: 'API key has no accessible projects',
+              fix: 'Mint an API key on a project (console → Projects → API Keys) or add MUSHI_PROJECT_ID to restrict to a single project.',
+            })
+          }
+        } catch {
+          // Best-effort; don't add an issue — the health check above already covered connectivity.
+        }
+      }
+
       try {
         const ingest = await apiCall<{
           ready: boolean
@@ -905,6 +975,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         dispatchReady,
         endpoint: apiEndpoint ?? null,
         projectId: projectId ?? null,
+        accessibleProjectCount,
         issues,
         nextAction,
         summary: ready
@@ -981,16 +1052,30 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: {},
       outputSchema: {
         projects: z.array(z.unknown()),
+        total: z.number(),
         active_project_id: z.string().nullable(),
+        toolCount: z.number().optional(),
+        resourceCount: z.number().optional(),
+        promptCount: z.number().optional(),
         multi_project_hint: z.string(),
       },
     },
     async () => {
-      const data = await apiCall<{ projects: unknown[]; total?: number }>('/v1/admin/mcp/projects')
+      const data = await apiCall<{
+        projects: unknown[]
+        total: number
+        toolCount?: number
+        resourceCount?: number
+        promptCount?: number
+      }>('/v1/admin/mcp/account-overview')
       const projects = Array.isArray(data?.projects) ? data.projects : []
       return jsonResult({
         projects,
+        total: data?.total ?? projects.length,
         active_project_id: projectId ?? null,
+        toolCount: data?.toolCount,
+        resourceCount: data?.resourceCount,
+        promptCount: data?.promptCount,
         multi_project_hint:
           projects.length <= 1
             ? 'You are currently connected to one project. To connect additional Mushi projects, ' +

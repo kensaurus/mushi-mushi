@@ -6,8 +6,8 @@ import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint,
   Card,
   Btn,
   ErrorAlert,
@@ -31,8 +31,6 @@ import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
-import { useNextBestAction } from '../lib/useNextBestAction'
-import { PageHero } from '../components/PageHero'
 import { ComplianceStatusBanner, isComplianceStatusBannerCritical } from '../components/compliance/ComplianceStatusBanner'
 import {
   EMPTY_COMPLIANCE_STATS,
@@ -536,25 +534,29 @@ export function CompliancePage() {
     [stats.controlsFail, stats.controlsTotal, stats.legalHoldCount, stats.openDsars],
   )
 
-  const complianceAction = useNextBestAction({
-    scope: 'compliance',
-    openControls: openDsars.length,
-    nextReviewInDays: null,
-  })
-  const complianceSeverity: 'ok' | 'warn' | 'crit' =
-    failEvidenceCount > 0 || overdueDsars.length > 0
-      ? 'crit'
-      : warnEvidenceCount > 0 || openDsars.length > 0
-        ? 'warn'
-        : 'ok'
-
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
+        <PageHeaderBar
           title={copy?.title ?? 'Compliance'}
+          description={copy?.description ?? 'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
+          helpTitle={copy?.help?.title ?? 'About Compliance'}
+          helpWhatIsIt={
+            copy?.help?.whatIsIt ??
+            'SOC 2 Type 1 readiness — control evidence, retention windows, and Data Subject Access Request (DSAR) audit trail.'
+          }
+          helpUseCases={
+            copy?.help?.useCases ?? [
+              'Demonstrate per-control evidence to your auditor at a single glance',
+              'Tune per-project data retention windows and place projects on legal hold',
+              'Track and fulfil GDPR/CCPA data subject requests within 30 days',
+            ]
+          }
+          helpHowToUse={
+            copy?.help?.howToUse ??
+            'Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot.'
+          }
         />
-      <PageScopeHint text={copy?.description ?? "Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -573,9 +575,26 @@ export function CompliancePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Compliance'}
         projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
+        helpTitle={copy?.help?.title ?? 'About Compliance'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'SOC 2 Type 1 readiness — control evidence, retention windows, and Data Subject Access Request (DSAR) audit trail.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Demonstrate per-control evidence to your auditor at a single glance',
+            'Tune per-project data retention windows and place projects on legal hold',
+            'Track and fulfil GDPR/CCPA data subject requests within 30 days',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot.'
+        }
       >
         {stats.soc2Entitlement ? (
           <Badge className="bg-ok-muted text-ok">SOC 2 enabled</Badge>
@@ -589,8 +608,7 @@ export function CompliancePage() {
           Export PDF
         </Btn>
         <TableDensityToggle />
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project."} />
+      </PageHeaderBar>
 
       {isComplianceStatusBannerCritical(stats) && (
         <ComplianceStatusBanner
@@ -609,76 +627,6 @@ export function CompliancePage() {
         ariaLabel="Compliance sections"
         size="sm"
       />
-
-      {activeTab === 'overview' && (
-      <PageHero
-        scope="compliance"
-        title="Compliance"
-        kicker="SOC 2 · GDPR · residency"
-        decide={{
-          label:
-            failEvidenceCount > 0
-              ? `${failEvidenceCount} control${failEvidenceCount === 1 ? '' : 's'} failing evidence`
-              : overdueDsars.length > 0
-                ? `${overdueDsars.length} DSAR${overdueDsars.length === 1 ? '' : 's'} approaching 30-day SLA`
-                : warnEvidenceCount > 0
-                  ? `${warnEvidenceCount} WARN${warnEvidenceCount === 1 ? '' : 's'} to triage`
-                  : openDsars.length > 0
-                    ? `${openDsars.length} open DSAR${openDsars.length === 1 ? '' : 's'}`
-                    : 'Compliant',
-          metric:
-            failEvidenceCount > 0
-              ? `${failEvidenceCount} fail`
-              : overdueDsars.length > 0
-                ? `${overdueDsars.length} overdue`
-                : warnEvidenceCount > 0
-                  ? `${warnEvidenceCount} warn`
-                  : openDsars.length > 0
-                    ? `${openDsars.length} open`
-                    : `${latestEvidenceByControl.length} green`,
-          summary:
-            failEvidenceCount > 0
-              ? 'One or more controls missed their evidence check — remediate before the next audit.'
-              : overdueDsars.length > 0
-                ? 'Open DSARs are within 9 days of the 30-day GDPR fulfilment deadline.'
-                : warnEvidenceCount > 0
-                  ? 'Evidence rows flagged with warnings — investigate before they escalate.'
-                  : openDsars.length > 0
-                    ? 'DSARs must resolve within 30 days under GDPR / CCPA.'
-                    : 'Controls, DSARs, and retention windows are all green.',
-          severity: complianceSeverity,
-          anchor: 'compliance:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Controls green', value: latestEvidenceByControl.length - failEvidenceCount - warnEvidenceCount, tone: 'ok' },
-              { label: 'Controls warn', value: warnEvidenceCount, tone: warnEvidenceCount > 0 ? 'warn' : 'neutral' },
-              { label: 'Controls fail', value: failEvidenceCount, tone: failEvidenceCount > 0 ? 'crit' : 'ok' },
-              { label: 'Open DSARs', value: openDsars.length, tone: overdueDsars.length > 0 ? 'crit' : openDsars.length > 0 ? 'warn' : 'ok' },
-            ],
-          },
-          missingConfigIds: failEvidenceCount > 0 || overdueDsars.length > 0 ? ['compliance.legal_hold'] : [],
-        }}
-        act={complianceAction}
-        actAnchor="compliance:act"
-        actEvidence={complianceAction ? { kind: 'rule-trace', why: complianceAction.reason ?? complianceAction.title } : undefined}
-        verify={{
-          label: 'Latest evidence snapshot',
-          detail: latestEvidenceTs ? new Date(latestEvidenceTs).toLocaleString() : 'no snapshot yet',
-          to: '/audit?scope=compliance',
-          secondaryTo: '/compliance?status=fail',
-          secondaryLabel: failEvidenceCount > 0 ? 'Open failing controls' : undefined,
-          anchor: 'compliance:verify',
-          evidence: latestEvidenceTs ? {
-            kind: 'last-event',
-            at: latestEvidenceTs,
-            by: 'evidence-sweep cron',
-            payloadSummary: `${latestEvidenceByControl.length} controls · ${failEvidenceCount} fail · ${warnEvidenceCount} warn`,
-            status: failEvidenceCount > 0 ? 'error' : warnEvidenceCount > 0 ? 'warn' : 'ok',
-          } : undefined,
-        }}
-      />
-      )}
 
       <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
         <SnapshotSectionHint text={activeTabMeta.description} />
@@ -720,25 +668,6 @@ export function CompliancePage() {
 
       {activeTab === 'overview' && (
       <>
-      <PageHelp
-        title={copy?.help?.title ?? 'About Compliance'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'SOC 2 Type 1 readiness — control evidence, retention windows, and Data Subject Access Request (DSAR) audit trail.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Demonstrate per-control evidence to your auditor at a single glance',
-            'Tune per-project data retention windows and place projects on legal hold',
-            'Track and fulfil GDPR/CCPA data subject requests within 30 days',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot.'
-        }
-      />
-
       {/* URL-driven status filter. Deep links from the Next-Best-Action
           (e.g. /compliance?status=open) drop the user straight onto the
           relevant view. */}
@@ -757,15 +686,6 @@ export function CompliancePage() {
       </div>
       </>
       )}
-
-      {activeTab !== 'overview' ? (
-        <PageHelp
-          title={copy?.help?.title ?? 'About Compliance'}
-          whatIsIt={activeTabMeta.description}
-          useCases={copy?.help?.useCases ?? []}
-          howToUse={copy?.help?.howToUse ?? 'Use Refresh evidence for on-demand SOC 2 snapshots.'}
-        />
-      ) : null}
 
       {loading ? <PanelSkeleton rows={5} label="Loading compliance data" /> : error ? (
         <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'compliance data'}: ${error}`} onRetry={merged.retry} />
@@ -1085,7 +1005,7 @@ export function CompliancePage() {
                   <Input
                     label="Subject email"
                     helpId="compliance.dsar.subject_email"
-                    placeholder="user@example.com"
+                    placeholder="subject@your-domain.com"
                     value={dsarForm.subjectEmail}
                     onChange={(e) => setDsarForm((f) => ({ ...f, subjectEmail: e.target.value }))}
                   />
@@ -1311,7 +1231,7 @@ function RetentionInput({ label, value, onChange, helpId }: { label: string; val
   }, [value])
 
   return (
-    <label className="flex flex-col gap-1 text-3xs">
+    <label className="flex flex-col gap-1 text-2xs">
       <span className="opacity-60 uppercase tracking-wider inline-flex items-center gap-1">
         <span>{label} (days)</span>
         {helpId && <ConfigHelp helpId={helpId} />}

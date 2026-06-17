@@ -213,7 +213,7 @@ interface PillProps {
 }
 
 const PILL_BASE =
-  'inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-bold tracking-wider uppercase border bg-brand/10 text-brand border-brand/30 hover:bg-brand/20 motion-safe:transition-colors'
+  'inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold tracking-wider uppercase border-0 bg-transparent text-brand/80 hover:text-brand motion-safe:transition-colors'
 
 export function UpgradePill({ flag, alwaysShow, className = '', as = 'auto' }: PillProps) {
   const ent = useEntitlements()

@@ -4,20 +4,20 @@ Mushi events flow out as **HMAC-signed JSON webhooks** with [Standard Webhooks](
 
 ## Available plugins
 
-| Plugin              | Triggers                                                           | Use case                                       |
+| Plugin              | Triggers                                                           | Doc |
 | ------------------- | ------------------------------------------------------------------ | ---------------------------------------------- |
-| **PagerDuty**       | `report.created` (P0/P1)                                           | Page on-call for blocker user-felt regressions |
-| **Linear**          | `report.classified`                                                | File issues with labels + assignees            |
-| **Jira Cloud**      | `report.classified` + status sync                                  | Bidirectional Jira ↔ Mushi sync (OAuth 3LO)    |
-| **Slack app**       | `report.created` / `fix.pr_opened` + `/mushi` slash command        | Inline triage from your team channel           |
-| **Discord**         | Configurable per-event embeds                                      | Community / startup teams who live in Discord  |
-| **Microsoft Teams** | Adaptive cards on classified reports                               | Enterprise on-call handoff                     |
-| **GitHub Issues**   | `report.classified` → labelled issue with Mushi backlink           | Repos that already triage in GitHub Issues     |
-| **Sentry**          | Mirror critical reports + resolve on fix                           | Companion to your existing Sentry surface      |
-| **Bugsnag**         | Mirror reports into Bugsnag projects + close on fix merge          | Bugsnag-native shops                           |
-| **Rollbar**         | Mirror reports + resolve Rollbar items on fix                      | Rollbar-native shops                           |
-| **Crashlytics**     | Push Mushi reports into Firebase Crashlytics issues + close on fix | Mobile-first teams                             |
-| **Zapier**          | All events                                                         | Fan-out to 6,000+ Zapier integrations          |
+| **PagerDuty**       | `report.created` (P0/P1)                                           | [PagerDuty](/plugins/pagerduty) |
+| **Linear**          | `report.classified`                                                | [Linear](/plugins/linear) |
+| **Jira Cloud**      | `report.classified` + status sync                                  | [Jira Cloud](/plugins/jira) |
+| **Slack app**       | `report.created` / `fix.pr_opened` + `/mushi` slash command        | [Slack](/plugins/slack) |
+| **Discord**         | Configurable per-event embeds                                      | [Discord](/plugins/discord) |
+| **Microsoft Teams** | Adaptive cards on classified reports                               | [Teams](/plugins/msteams) |
+| **GitHub Issues**   | `report.classified` → labelled issue with Mushi backlink           | [GitHub Issues](/plugins/github-issues) |
+| **Sentry**          | Mirror critical reports + resolve on fix                           | [Sentry](/plugins/sentry) |
+| **Bugsnag**         | Mirror reports into Bugsnag projects + close on fix merge          | [Bugsnag](/plugins/bugsnag) |
+| **Rollbar**         | Mirror reports + resolve Rollbar items on fix                      | [Rollbar](/plugins/rollbar) |
+| **Crashlytics**     | Push Mushi reports into Firebase Crashlytics issues + close on fix | [Crashlytics](/plugins/crashlytics) |
+| **Zapier**          | All events                                                         | [Zapier](/plugins/zapier) |
 
 Browse and install from the admin console: **Marketplace**. Each plugin enforces strict scope — it only sees the events you subscribe it to.
 

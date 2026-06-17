@@ -32,8 +32,7 @@ import {
   publishedTooltip,
 } from '../lib/statTooltips/releases'
 import { releasesLinks } from '../lib/statCardLinks'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   Card,
   Section,
   Badge,
@@ -61,6 +60,8 @@ import {
 import { IconReleases, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
@@ -384,6 +385,7 @@ function ReleasesList({
   return (
     <>
       <Card className="overflow-hidden">
+        <ResponsiveTable ariaLabel="Release notes">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-edge-subtle bg-surface-raised/50 text-xs text-fg-muted">
@@ -439,6 +441,7 @@ function ReleasesList({
             ))}
           </tbody>
         </table>
+        </ResponsiveTable>
       </Card>
 
       {selected && (
@@ -578,20 +581,18 @@ export function ReleasesPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-releases">
-      <PageHelp
-        title={copy?.help?.title ?? 'About Releases'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Releases'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.'}
+        helpTitle={copy?.help?.title ?? 'About Releases'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Auto-generate changelogs linked to the users who reported each fix',
           'Notify credited reporters in the feedback stamp when you publish',
           'Close the feedback loop: users see what their reports fixed',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Summary for posture. Drafts to review pending changelogs. Published for shipped releases. New draft to generate from fixed bugs.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Releases'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Drafts to review pending changelogs. Published for shipped releases. New draft to generate from fixed bugs.'}
       >
         <Badge
           className={
@@ -600,7 +601,7 @@ export function ReleasesPage() {
               : bannerSeverity === 'warn'
                 ? 'bg-warn-muted/50 text-warning-foreground'
                 : bannerSeverity === 'brand'
-                  ? 'bg-brand/15 text-brand'
+                  ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                   : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -619,8 +620,7 @@ export function ReleasesPage() {
         <Btn size="sm" variant="primary" onClick={() => setActiveTab('draft')}>
           + Draft
         </Btn>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI."} />
+      </PageHeaderBar>
 
       <ReleasesStatusBanner
         stats={stats}
@@ -659,7 +659,7 @@ export function ReleasesPage() {
           className={`space-y-3 p-4 ${
             stats.topPriority === 'drafts_pending'
               ? 'border-warn/30 bg-warn/5'
-              : 'border-brand/30 bg-brand/5'
+              : 'border-edge-subtle bg-chrome'
           }`}
         >
           <SignalChip tone={stats.topPriority === 'drafts_pending' ? 'warn' : 'brand'}>

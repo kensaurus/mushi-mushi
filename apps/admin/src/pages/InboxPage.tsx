@@ -6,11 +6,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { SnapshotSectionHint,ErrorAlert,
+import { SnapshotSectionHint, ErrorAlert,
   Btn,
   FreshnessPill,
-  PageHelp,
-  PageHeader,
   AgeChip,
   Section,
   StatCard,
@@ -22,7 +20,7 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { PageHero } from '../components/PageHero'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { PageAction } from '../components/PageActionBar'
@@ -258,28 +256,31 @@ export function InboxPage() {
 
   return (
     <div data-inbox-root className="space-y-4">
-      <PageHelp
-        title={copy?.help?.title ?? 'About the inbox'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Action inbox'}
+        projectScope={stats.projectName ?? undefined}
+        description={
+          copy?.description ??
+          (stats.openActions > 0
+            ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — work top to bottom on Actions tab`
+            : 'No open actions — cleared stages stay one click away on Stages tab')
+        }
+        helpTitle={copy?.help?.title ?? 'About the inbox'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'Start every morning on Overview — read the banner, then switch to Actions',
             'Use Stages tab to filter by Plan / Do / Check / Act / Ops',
             'Activity tab shows the events that triggered open cards',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Red banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Action inbox'}
-        projectScope={stats.projectName ?? undefined}
       >
         <Badge
           className={
@@ -307,16 +308,7 @@ export function InboxPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
           Refresh
         </Btn>
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            (stats.openActions > 0
-              ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — work top to bottom on Actions tab`
-              : 'No open actions — cleared stages stay one click away on Stages tab')}
-        </p>
-      </ContainedBlock>
+      </PageHeaderBar>
 
       {isInboxStatusBannerCritical(stats) && (
         <InboxStatusBanner
@@ -340,30 +332,6 @@ export function InboxPage() {
 
       {activeTab === 'overview' && (
         <>
-          {!ux.hideOverviewChrome && (
-          <PageHero
-            scope="inbox"
-            title="Action inbox"
-            kicker="Start here"
-            decide={{
-              label:
-                stats.openActions > 0
-                  ? (stats.topPriorityTitle ?? 'Open actions waiting')
-                  : 'All clear',
-              metric: stats.openActions > 0 ? `${stats.openActions} open` : `${stats.clearStages}/${stats.totalSurfaces} clear`,
-              summary:
-                stats.openActions > 0
-                  ? 'Work the Actions tab top-to-bottom — each card links to the page where you can resolve it.'
-                  : 'New reports and integration drift surface here automatically — green banner means nothing is blocking.',
-              severity: bannerSeverity === 'ok' ? 'ok' : bannerSeverity === 'danger' ? 'crit' : 'info',
-            }}
-            verify={{
-              label: 'Live counts',
-              detail: 'Cards derive from the same dashboard aggregate as the sidebar badge.',
-            }}
-          />
-          )}
-
           {stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
             <Card className="border-danger/30 bg-danger/5 p-4">
               <div className="mb-2 flex flex-wrap items-center gap-1.5">

@@ -11,19 +11,13 @@ import { getBezierPath } from '@xyflow/react'
 import type { EdgeProps } from '@xyflow/react'
 
 import { TravelingDotsEdge } from '../flow-primitives/TravelingDotsEdge'
-import { useTheme } from '../../lib/useTheme'
+import { useVizColors } from '../../lib/vizTokens'
 import type { HeroEdgeData } from './heroFlow.data'
 
 const STROKE = 2.5
 const STROKE_ACTIVE = 3.25
 const DASH_LENGTH = 6
 const GAP_LENGTH = 6
-
-/** Arrow halo — fixed hex so SVG never falls back to black when CSS vars fail. */
-const ARROW_HALO = {
-  dark: '#2a2a36',
-  light: '#e4e7ec',
-} as const
 
 function HeroGradientEdgeInner({
   id,
@@ -35,7 +29,7 @@ function HeroGradientEdgeInner({
   targetPosition,
   data,
 }: EdgeProps) {
-  const { resolved } = useTheme()
+  const viz = useVizColors()
   const edgeData = (data ?? {}) as HeroEdgeData
   const [edgePath] = getBezierPath({
     sourceX,
@@ -51,16 +45,16 @@ function HeroGradientEdgeInner({
   const arrowId = `ha-${safeId}`
   const animName = `hm-${safeId}`
 
-  const src = edgeData.sourceColor ?? '#60a5fa'
-  const tgt = edgeData.targetColor ?? '#f5b544'
+  const src = edgeData.sourceColor ?? viz.flowInfo
+  const tgt = edgeData.targetColor ?? viz.flowBrand
   const fail = Boolean(edgeData.failing)
   const flowing = Boolean(edgeData.flowing)
   const active = flowing || fail
   const strokeW = active ? STROKE_ACTIVE : STROKE
-  const danger = '#ef4444'
+  const danger = viz.flowDanger
   const strokeValue = fail ? danger : active ? `url(#${gradientId})` : tgt
   const arrowColor = fail ? danger : tgt
-  const arrowHalo = ARROW_HALO[resolved]
+  const arrowHalo = viz.arrowHalo
   const dashArray = `${DASH_LENGTH} ${GAP_LENGTH}`
 
   return (

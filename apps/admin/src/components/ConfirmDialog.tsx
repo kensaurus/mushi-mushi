@@ -5,17 +5,13 @@
  *          The browser-native dialogs are jarring on a dark themed app,
  *          can't carry destructive-action affordances, and break Playwright
  *          smoke tests. This file ships two declarative components that
- *          drop into the same shell other modals on the app use
- *          (PromptEditorModal, FirstRunTour) so they're visually
- *          consistent and keyboard-accessible.
- *
- *          Both render to a fixed overlay, focus the primary input/button
- *          on mount, close on Escape, and forward Enter to the primary
- *          action. They are uncontrolled — keep state in the parent.
+ *          drop into the shared Modal primitive for consistent focus-trap,
+ *          scroll-lock, and Esc-close behaviour.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { Btn, Card } from './ui'
+import { useRef, useState } from 'react'
+import { Btn } from './ui'
+import { Modal } from './Modal'
 
 type ConfirmTone = 'default' | 'danger'
 
@@ -37,23 +33,13 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   tone = 'default',
   loading = false,
-  onConfirm,
   onCancel,
+  onConfirm,
 }: ConfirmDialogProps) {
-  // Btn doesn't forwardRef yet, so we focus the primary action via a
-  // wrapper span query after mount. Same accessibility outcome.
   const wrapperRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    wrapperRef.current?.querySelector<HTMLButtonElement>('[data-primary]')?.focus()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !loading) onCancel()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [loading, onCancel])
 
   return (
-    <DialogShell title={title} onCancel={loading ? () => {} : onCancel}>
+    <DialogShell title={title} onCancel={onCancel} dismissible={!loading}>
       {body && <p className="text-2xs text-fg-secondary leading-snug">{body}</p>}
       <div ref={wrapperRef} className="flex justify-end gap-1.5 pt-1">
         <Btn variant="cancel" onClick={onCancel} disabled={loading}>
@@ -108,16 +94,6 @@ export function PromptDialog({
   const [validationError, setValidationError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  useEffect(() => {
-    inputRef.current?.focus()
-    inputRef.current?.select()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !loading) onCancel()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [loading, onCancel])
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (loading) return
@@ -132,7 +108,7 @@ export function PromptDialog({
   }
 
   return (
-    <DialogShell title={title} onCancel={loading ? () => {} : onCancel}>
+    <DialogShell title={title} onCancel={onCancel} dismissible={!loading}>
       <form onSubmit={handleSubmit} className="space-y-2">
         {body && <p className="text-2xs text-fg-secondary leading-snug">{body}</p>}
         <label className="block text-2xs font-medium text-fg-muted">
@@ -159,7 +135,7 @@ export function PromptDialog({
           <Btn type="button" variant="cancel" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Btn>
-          <Btn type="submit" loading={loading}>
+          <Btn type="submit" data-primary loading={loading}>
             {confirmLabel}
           </Btn>
         </div>
@@ -172,35 +148,13 @@ interface DialogShellProps {
   title: string
   children: React.ReactNode
   onCancel: () => void
+  dismissible?: boolean
 }
 
-function DialogShell({ title, children, onCancel }: DialogShellProps) {
+function DialogShell({ title, children, onCancel, dismissible = true }: DialogShellProps) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
-      onClick={onCancel}
-    >
-      <Card
-        elevated
-        className="w-full max-w-md p-4 space-y-2 motion-safe:animate-mushi-modal-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-fg">{title}</h3>
-          <button
-            type="button"
-            className="text-danger hover:bg-danger-muted/50 text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 rounded-sm w-6 h-6 flex items-center justify-center"
-            onClick={onCancel}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-        {children}
-      </Card>
-    </div>
+    <Modal open onClose={onCancel} title={title} size="sm" dismissible={dismissible}>
+      {children}
+    </Modal>
   )
 }

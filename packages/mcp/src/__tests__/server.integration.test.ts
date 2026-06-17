@@ -505,3 +505,114 @@ describe('resources', () => {
     expect(JSON.parse(textOf(result.contents)).total).toBe(12)
   })
 })
+
+// ─── Account mode (no projectId) ────────────────────────────────────────────
+
+async function connectAccountClient(stubFetch: typeof fetch) {
+  // Deliberately NO projectId — simulates org-scoped key with MUSHI_PROJECT_ID unset.
+  const server = createMushiServer({
+    version: '0.0.0-test',
+    apiEndpoint: API_ENDPOINT,
+    apiKey: API_KEY,
+    fetch: stubFetch,
+  })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const client = new Client(
+    { name: 'mushi-mcp-test-account-client', version: '0.0.0' },
+    { capabilities: {} },
+  )
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+  return { client, server }
+}
+
+describe('account mode (no MUSHI_PROJECT_ID)', () => {
+  let fetchStub: ReturnType<typeof createStubFetch>
+  let client: Client
+
+  beforeEach(async () => {
+    fetchStub = createStubFetch()
+    ;({ client } = await connectAccountClient(fetchStub.stub))
+  })
+
+  afterEach(async () => { await client.close() })
+
+  it('diagnose_connection does NOT raise mcp_project_id issue when projectId is missing', async () => {
+    // Health check
+    fetchStub.enqueue({ status: 'ok' }, 200)
+    // account-overview (called in account mode)
+    fetchStub.enqueue({ ok: true, data: { projects: [{ id: PROJECT_ID, name: 'Test Project' }], total: 1 } })
+    // ingest-setup
+    fetchStub.enqueue({ ok: true, data: { ready: true, steps: [] } })
+
+    const result = await client.callTool({ name: 'diagnose_connection', arguments: {} })
+    const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text) as {
+      issues: Array<{ check: string }>
+      accessibleProjectCount: number
+    }
+    const checks = parsed.issues.map((i) => i.check)
+    expect(checks).not.toContain('mcp_project_id')
+    expect(parsed.accessibleProjectCount).toBe(1)
+  })
+
+  it('get_account_overview sends request to /v1/admin/mcp/account-overview', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: {
+        projects: [{ id: PROJECT_ID, name: 'Test Project', recentReportCount: 5, mcpConnectedKeyCount: 1, lastSeenAt: null }],
+        total: 1,
+        toolCount: 72,
+        resourceCount: 8,
+        promptCount: 4,
+      },
+    })
+    const result = await client.callTool({ name: 'get_account_overview', arguments: {} })
+    expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/mcp/account-overview`)
+    expect(result.isError).toBeFalsy()
+  })
+
+  it('list_projects sends request to /v1/admin/mcp/projects without X-Mushi-Project-Id header', async () => {
+    fetchStub.enqueue({ ok: true, data: { projects: [], total: 0 } })
+    await client.callTool({ name: 'list_projects', arguments: {} })
+    const call = fetchStub.calls[0]
+    expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/mcp/projects`)
+    // No project ID header in account mode
+    expect(call.headers['x-mushi-project-id']).toBeUndefined()
+  })
+
+  it('resolveProjectId auto-selects single project and passes it in X-Mushi-Project-Id header', async () => {
+    // resolveProjectId calls account-overview first, then get_recent_reports uses resolved ID
+    fetchStub.enqueue({
+      ok: true,
+      data: { projects: [{ id: PROJECT_ID, name: 'Test' }], total: 1 },
+    }) // account-overview call from resolveProjectId
+    fetchStub.enqueue({ ok: true, data: { reports: [], total: 0 } }) // get_recent_reports
+
+    const result = await client.callTool({ name: 'get_recent_reports', arguments: {} })
+    expect(result.isError).toBeFalsy()
+    // First fetch: account-overview; second fetch: reports
+    expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/mcp/account-overview`)
+    expect(fetchStub.calls[1].url).toContain('/v1/admin/reports')
+    // Auto-resolved project ID is forwarded as a header (stub lowercases headers)
+    expect(fetchStub.calls[1].headers['x-mushi-project-id']).toBe(PROJECT_ID)
+  })
+
+  it('resolveProjectId throws PROJECT_ID_REQUIRED when multiple projects are accessible', async () => {
+    // Return 2 projects — caller must specify
+    fetchStub.enqueue({
+      ok: true,
+      data: {
+        projects: [
+          { id: PROJECT_ID, name: 'App 1' },
+          { id: '22222222-2222-2222-2222-222222222222', name: 'App 2' },
+        ],
+        total: 2,
+      },
+    })
+    const result = await client.callTool({ name: 'get_recent_reports', arguments: {} })
+    expect(result.isError).toBe(true)
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text
+    expect(text).toContain('PROJECT_ID_REQUIRED')
+    expect(text).toContain('App 1')
+    expect(text).toContain('App 2')
+  })
+})

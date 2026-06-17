@@ -102,10 +102,10 @@ export function VoteButton({ apiUrl, slug, requestId, initialVoteCount }: VoteBu
       disabled={pending}
       aria-pressed={voted}
       aria-label={voted ? 'Remove your vote' : 'Vote for this feature'}
-      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
+      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium motion-safe:transition-colors disabled:opacity-60 ${
         voted
-          ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/40 hover:bg-violet-500/30'
-          : 'bg-violet-600 text-white hover:bg-violet-500'
+          ? 'border border-[color-mix(in_oklch,var(--mushi-vermillion)_45%,var(--mushi-rule))] bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion)] hover:opacity-90'
+          : 'testers-cta'
       }`}
       data-vote-id={requestId}
     >

@@ -28,6 +28,7 @@
 
 import { useEffect } from 'react'
 import { usePageContext } from './pageContext'
+import { readVizToken } from './vizTokens'
 
 const FAVICON_SIZE = 32
 /** Size of the badge pip in canvas pixels. */
@@ -44,8 +45,8 @@ const DOT_RADIUS = 6
  * If the favicon is ever recoloured back to a neutral surface, swap these
  * back to a warning red — there's nothing in the API that needs to change.
  */
-const DOT_COLOR = '#F8F4ED' // paper cream — same token as packages/web/src/styles.ts
-const DOT_RING_COLOR = '#0E0D0B' // sumi ink — gives the pip a crisp edge on vermillion
+const DOT_COLOR = readVizToken('viz-lang-javascript')
+const DOT_RING_COLOR = readVizToken('viz-terminal-bg')
 const BASE_SRC = '/favicon.svg'
 
 let baseImage: HTMLImageElement | null = null

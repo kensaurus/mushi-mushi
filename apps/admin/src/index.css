@@ -104,6 +104,31 @@
   --color-info-subtle: var(--color-info-muted);
   --color-ok-subtle: var(--color-ok-muted);
 
+  /* ── Data viz (xyflow edges, sparklines, lang chips) ─────────────── */
+  --color-viz-edge-dark: oklch(0.22 0.01 285);
+  --color-viz-edge-light: oklch(0.91 0.01 285);
+  --color-viz-flow-info: oklch(0.68 0.15 250);
+  --color-viz-flow-brand: oklch(0.78 0.14 80);
+  --color-viz-flow-danger: oklch(0.63 0.22 25);
+  --color-viz-score-ok: oklch(0.72 0.19 155);
+  --color-viz-score-warn: oklch(0.75 0.15 80);
+  --color-viz-score-danger: oklch(0.63 0.22 25);
+  --color-viz-lang-default: oklch(0.55 0.01 285);
+  --color-viz-terminal-bg: oklch(0.12 0.01 285);
+  --color-viz-step-pending: oklch(0.65 0.02 285);
+  --color-viz-step-running: oklch(0.68 0.15 250);
+  --color-viz-step-passed: oklch(0.72 0.17 160);
+  --color-viz-step-failed: oklch(0.63 0.22 25);
+  --color-viz-step-skipped: oklch(0.55 0.01 285);
+  --color-viz-neutral: oklch(0.65 0.02 285);
+  --color-viz-lang-typescript: oklch(0.52 0.15 250);
+  --color-viz-lang-javascript: oklch(0.86 0.16 95);
+  --color-viz-lang-python: oklch(0.48 0.12 250);
+  --color-viz-lang-go: oklch(0.62 0.12 220);
+  --color-viz-lang-rust: oklch(0.72 0.06 55);
+  --color-viz-lang-react: oklch(0.72 0.12 220);
+  --color-viz-sentry: oklch(0.55 0.12 300);
+
   /* Lime-green accent — used exclusively for the beta announcement banner
      so it reads as "active / live" rather than the teal-ish canonical ok.
      Hue 128° is more yellow-shifted than ok's 155°, giving a vivid lime
@@ -1617,6 +1642,188 @@ select, input, textarea {
 .mushi-pulse {
   animation: mushi-pulse-glow 2.4s var(--ease-out-expo) infinite;
 }
+
+/* Ask Mushi header launcher — replaced by inline pulse dot (see AskMushiLauncherButton.tsx) */
+
+/* ---------------------------------------------------------------------------
+   Sidebar micro toggles — segmented control (portal, mode, density, theme)
+   Single source of truth for hover / selected / press / focus on sidebar
+   icon+label strips.    Consumers: MicroSegmentedTrack, SidebarBrandToggles,
+   SidebarFooterControls, ResponsiveTable TableDensityToggle.
+--------------------------------------------------------------------------- */
+
+.sidebar-micro-track {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklch, var(--color-edge) 55%, transparent);
+  background: color-mix(in oklch, var(--color-surface-overlay) 65%, var(--color-surface-raised));
+  box-shadow: inset 0 1px 2px color-mix(in oklch, var(--color-fg) 4%, transparent);
+}
+
+.sidebar-micro-seg {
+  position: relative;
+  display: flex;
+  height: 1.375rem;
+  min-width: 0;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  padding-inline: 0.125rem;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 160ms var(--ease-out-expo),
+    background-color 160ms var(--ease-out-expo),
+    border-color 160ms var(--ease-out-expo),
+    box-shadow 160ms var(--ease-out-expo),
+    transform 100ms var(--ease-out-expo);
+}
+
+.sidebar-micro-seg__label {
+  transition: color 160ms var(--ease-out-expo), font-weight 160ms var(--ease-out-expo);
+}
+
+.sidebar-micro-seg:hover:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) {
+  color: var(--color-fg-secondary);
+  background: color-mix(in oklch, var(--color-surface-hover) 55%, transparent);
+  border-color: color-mix(in oklch, var(--color-edge) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-micro-seg:active {
+    transform: scale(0.96);
+  }
+}
+
+.sidebar-micro-seg--active,
+.sidebar-micro-seg[aria-checked='true'],
+.sidebar-micro-seg[aria-pressed='true'] {
+  color: var(--color-brand-foreground);
+  font-weight: 600;
+  background: color-mix(in oklch, var(--color-brand) 14%, var(--color-surface-raised));
+  border-color: color-mix(in oklch, var(--color-brand) 32%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-brand) 10%, transparent);
+}
+
+.sidebar-micro-seg--active .sidebar-micro-seg__label,
+.sidebar-micro-seg[aria-checked='true'] .sidebar-micro-seg__label {
+  font-weight: 600;
+}
+
+.sidebar-micro-seg--active:hover,
+.sidebar-micro-seg[aria-checked='true']:hover,
+.sidebar-micro-seg[aria-pressed='true']:hover {
+  background: color-mix(in oklch, var(--color-brand) 20%, var(--color-surface-raised));
+  border-color: color-mix(in oklch, var(--color-brand) 42%, transparent);
+}
+
+.sidebar-micro-seg--active svg,
+.sidebar-micro-seg[aria-checked='true'] svg,
+.sidebar-micro-seg[aria-pressed='true'] svg {
+  opacity: 1;
+  color: var(--color-brand-foreground);
+}
+
+.sidebar-micro-seg:not(.sidebar-micro-seg--active):not([aria-checked='true']):not([aria-pressed='true']) svg {
+  opacity: 0.72;
+}
+
+.sidebar-micro-seg:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+.sidebar-micro-seg--active:focus-visible,
+.sidebar-micro-seg[aria-checked='true']:focus-visible,
+.sidebar-micro-seg[aria-pressed='true']:focus-visible {
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+/* Sliding pill — Framer layoutId indicator (MicroSegmentedTrack) */
+.sidebar-micro-track--sliding {
+  position: relative;
+}
+
+.sidebar-micro-track--inline {
+  width: auto;
+  display: inline-flex;
+}
+
+.sidebar-micro-seg-cell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0%;
+  align-items: stretch;
+}
+
+.sidebar-micro-track--inline .sidebar-micro-seg-cell {
+  flex: 0 1 auto;
+}
+
+.sidebar-micro-indicator {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  border: 1px solid color-mix(in oklch, var(--color-brand) 32%, transparent);
+  background: color-mix(in oklch, var(--color-brand) 14%, var(--color-surface-raised));
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklch, white 12%, transparent),
+    0 1px 2px color-mix(in oklch, var(--color-brand) 10%, transparent);
+  pointer-events: none;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true'],
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true'] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active:hover,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true']:hover,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true']:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.sidebar-micro-track--sliding .sidebar-micro-seg--active:focus-visible,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-checked='true']:focus-visible,
+.sidebar-micro-track--sliding .sidebar-micro-seg[aria-pressed='true']:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-micro-seg {
+    transition: none;
+  }
+
+  .sidebar-micro-seg:active {
+    transform: none;
+  }
+
+  .sidebar-micro-indicator {
+    transition: none !important;
+  }
+}
+
 
 /* Ask Mushi header launcher — brand glow until first open */
 @keyframes ask-mushi-launcher-glow {

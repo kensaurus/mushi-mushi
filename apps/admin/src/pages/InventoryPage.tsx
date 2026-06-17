@@ -6,6 +6,7 @@ import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
+import { useAdminMode } from '../lib/mode'
 import {
   SegmentedControl,
   Btn,
@@ -138,6 +139,7 @@ function buildTreeRows(parsed: Record<string, unknown> | undefined): TreeRow[] {
 
 export function InventoryPage() {
   const toast = useToast()
+  const { isAdvanced } = useAdminMode()
   const projectId = useActiveProjectId()
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
@@ -364,6 +366,7 @@ export function InventoryPage() {
       <PageHeaderBar
         title={copy?.title ?? 'User stories · Inventory'}
         projectScope={null}
+        withPageHero={isAdvanced}
         description={copy?.description ?? 'Positive graph: stories, pages, elements, actions — status derived from gates, crawler, and reconciler.'}
         helpTitle={INVENTORY_HELP.title}
         helpWhatIsIt={INVENTORY_HELP.whatIsIt}
@@ -387,6 +390,7 @@ export function InventoryPage() {
         />
       </PageHeaderBar>
 
+      {isAdvanced ? (
       <PageHero
         scope="inventory"
         title="Truth layer snapshot"
@@ -431,6 +435,7 @@ export function InventoryPage() {
           } : undefined,
         }}
       />
+      ) : null}
       <ActionPillRow className="mb-2" data-dav-anchor="inventory:act">
         <ActionPill tone="neutral" onClick={() => void runGates()}>
           Run gates

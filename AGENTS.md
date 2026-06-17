@@ -412,6 +412,87 @@ The `sdk_versions` catalog is kept fresh via two paths:
 
 ---
 
+## Native CI Secrets Diagnostic & Auto-Write (Jun 2026)
+
+For Capacitor, Expo, and React Native apps, the Mushi SDK environment variables
+(`NEXT_PUBLIC_MUSHI_PROJECT_ID`, `NEXT_PUBLIC_MUSHI_API_KEY`,
+`NEXT_PUBLIC_MUSHI_API_ENDPOINT`) must be **baked into the native bundle at
+compile time** — Next.js inlines `NEXT_PUBLIC_*` vars at build time and they
+cannot be injected at runtime. A missing secret silently disables `initMushi()`
+and the lime feedback banner never appears in the downloaded store app.
+
+### Detection
+
+`GET /v1/admin/projects/:id/sdk-diagnostics` returns a fused verdict combining:
+- **Authoritative**: repo Actions secrets/variables are listed via the stored GitHub
+  token and compared against the required names from `projectMushiEnv` (per-project
+  var map). Missing name → definitive `ci-secret-missing` verdict.
+- **Telemetry fallback** (no GitHub token): scans `project_api_keys.last_seen_origin`
+  / `last_seen_user_agent`; flags `native-never-seen` when web/server heartbeats
+  exist but no `capacitor://` / `okhttp` / `CFNetwork` origin appears.
+
+Response shape: `{ status, platformHint, endpointMatches, bannerEnabled, launcherMode,
+requiredVars, presentVars, missingVars, lastSeenAt, recommendedFix, repoUrl, hasGithubToken }`.
+
+### Auto-write
+
+`POST /v1/admin/projects/:id/sync-ci-secrets` — the one-click operation:
+
+1. Resolves repo from `project_repos` (primary row).
+2. Resolves token via `resolveProjectGithubToken`.
+3. Mints a project-scoped `report:write` key labelled `ci-auto:<repo>`; deactivates
+   prior `ci-auto:*` keys (idempotent-by-name — avoids key sprawl).
+4. Writes each required var via sealed-box encryption (libsodium `crypto_box_seal` +
+   GitHub `PUT .../actions/secrets/{name}`) or plain `PUT .../actions/variables/{name}`.
+5. Logs audit event; returns `{ ok, written, skipped, failed }`.
+
+### GitHub App vs PAT permission boundary (critical for agent implementers)
+
+The **Mushi GitHub App** currently requests only `Contents: write` and
+`Pull requests: write`. It does **not** have `Actions secrets: write`. This means:
+
+- Auto-write works **only** when a **fine-grained PAT** with
+  `Actions secrets: Read and write` is stored in the project's GitHub connection
+  settings (`project_settings.github_installation_token_ref`).
+- When the GitHub App installation token is used and lacks the secrets scope,
+  GitHub returns HTTP 403. The backend detects this and returns:
+  `{ ok: false, error: { code: "GH_SECRETS_FORBIDDEN" }, fallback: { commands, envBlock } }`.
+- The console `SdkNativeConnectivityCard` surfaces this as an inline warning with
+  explanatory text and auto-expands the guided fallback (copy-paste `gh secret set`
+  commands + CI `env:` block).
+
+**To enable full auto-write via the GitHub App** (instead of a PAT):
+1. Add `Secrets: Read and write` to the App's requested permissions on GitHub.
+2. This forces a re-consent for all installations (users must approve the new scope).
+3. Until then, the guided PAT path is the supported route for CI secret auto-write.
+
+### Guided fallback
+
+When auto-write is forbidden or no GitHub token is stored, the backend always
+returns `fallback.commands` (one `gh secret set` / `gh variable set` command per
+required var, prefixed with `.env.local`-sourced value substitution) and
+`fallback.envBlock` (the `env:` YAML snippet to add to the CI workflow). The
+console presents these as copyable code blocks so developers are never dead-ended.
+
+### Frontend surfaces
+
+| Surface | Location | What it adds |
+|---------|----------|-------------|
+| `SdkNativeConnectivityCard` | `apps/admin/src/components/SdkNativeConnectivityCard.tsx` | Fetches `/sdk-diagnostics`, renders status badge, one-click sync CTA, forbidden explanation, guided fallback commands |
+| `ConnectPage` section "Native app CI secrets" | `apps/admin/src/pages/ConnectPage.tsx` | Wires the card into the Connect hub beside SDK install |
+| `sdkCiSecrets.ts` | `apps/admin/src/lib/sdkCiSecrets.ts` | Pure helpers: required var names per project slug, `buildGuidedFallbackCommands`, `sdkCiStatusMeta` |
+| `useCiSecretSync` | `apps/admin/src/lib/useCiSecretSync.ts` | React hook for the POST → sync flow (synchronous, no SSE needed) |
+| `sdkClientPlatform.ts` | `apps/admin/src/lib/sdkClientPlatform.ts` | `sdkOriginKind` + `isNativeOrigin` classify `capacitor://`, `okhttp`, `CFNetwork` signals |
+
+### Build-time guard (glot.it reference implementation)
+
+`scripts/check-mushi-env.mjs` (non-fatal by default, strict with `MUSHI_ENV_STRICT=1`) is
+invoked from `prebuild:native` and emits a prominent warning block when
+`NEXT_PUBLIC_MUSHI_PROJECT_ID` or `NEXT_PUBLIC_MUSHI_API_KEY` are empty during a
+native build. Copy this pattern into any Capacitor/RN project using the Mushi SDK.
+
+---
+
 ## Codebase Atlas (`/explore`)
 
 Server-hosted **Codebase Understand** surface in the admin console — parity with [Understand-Anything](https://github.com/Egonex-AI/Understand-Anything) commands.

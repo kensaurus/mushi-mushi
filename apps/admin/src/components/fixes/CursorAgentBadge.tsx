@@ -19,8 +19,8 @@ export function CursorAgentBadge({ agentId }: Props) {
       rel="noopener noreferrer"
       title={`Cursor Cloud Agent run ${agentId} — click to open in Cursor Web`}
       className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-mono
-                 bg-[#1a1a2e] text-[#a78bfa] border border-[#7c3aed]/40
-                 hover:border-[#7c3aed]/80 hover:text-[#c4b5fd] transition-colors"
+                 bg-surface-root text-accent-foreground border border-accent/40
+                 hover:border-accent/80 hover:text-accent-hover transition-colors"
     >
       {/* Cursor logo glyph (simple diamond) */}
       <svg

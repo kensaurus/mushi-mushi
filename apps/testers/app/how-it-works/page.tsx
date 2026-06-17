@@ -3,6 +3,7 @@
  * Six sections covering the full loop, bounty math, KYC, anti-fraud, and OFAC.
  */
 import type { Metadata } from 'next'
+import { TestersPageShell } from '../components/TestersPageShell'
 
 export const metadata: Metadata = {
   title: 'How Mushi Bounties Works',
@@ -69,67 +70,42 @@ const SECTIONS = [
 ]
 
 export default function HowItWorksPage() {
-  const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? '/mushi-mushi/console'
-
   return (
-    <div className="min-h-screen">
-      {/* Nav */}
-      <nav className="sticky top-0 z-40 border-b border-white/10 bg-gray-950/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <a href="/mushi-mushi/testers/" className="text-lg font-bold">
-            <span className="text-violet-400">mushi</span>mushi
-            <span className="ml-2 rounded-sm bg-violet-500/20 px-1.5 py-0.5 text-xs font-medium text-violet-400">
-              🪲 Bounties
-            </span>
-          </a>
-          <a
-            href={`${adminUrl}/login?as=tester`}
-            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium hover:bg-violet-500 transition-colors"
-          >
-            Sign in as tester
-          </a>
-        </div>
-      </nav>
-
+    <TestersPageShell>
       <div className="mx-auto max-w-3xl px-4 py-12">
-        {/* Header */}
         <div className="mb-12 text-center">
-          <p className="text-violet-400 text-sm font-medium tracking-wide uppercase mb-3">
-            Mushi Bounties
-          </p>
-          <h1 className="text-4xl font-bold mb-4">How it works</h1>
-          <p className="text-lg text-gray-400">
+          <p className="testers-kicker mb-3">Mushi Bounties</p>
+          <h1 className="mb-4 text-4xl font-bold">How it works</h1>
+          <p className="testers-muted text-lg">
             A complete guide to earning and redeeming mushi-points through the Bounties marketplace.
           </p>
         </div>
 
-        {/* Quick summary strip */}
-        <div className="grid grid-cols-3 gap-4 mb-12 rounded-xl border border-white/10 bg-white/5 p-6">
+        <div className="testers-panel mb-12 grid grid-cols-3 gap-4 p-6">
           <div className="text-center">
-            <p className="text-2xl font-bold text-violet-400">1,000</p>
-            <p className="text-xs text-gray-400 mt-1">pts per $10 gift card</p>
+            <p className="testers-brand-mark text-2xl font-bold">1,000</p>
+            <p className="testers-muted mt-1 text-xs">pts per $10 gift card</p>
           </div>
-          <div className="text-center border-x border-white/10">
-            <p className="text-2xl font-bold text-violet-400">1.3×</p>
-            <p className="text-xs text-gray-400 mt-1">premium for Mushi Pro credit</p>
+          <div className="border-x border-[var(--mushi-rule)] text-center">
+            <p className="testers-brand-mark text-2xl font-bold">1.3×</p>
+            <p className="testers-muted mt-1 text-xs">premium for Mushi Pro credit</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-violet-400">$599</p>
-            <p className="text-xs text-gray-400 mt-1">annual gift card cap before KYC</p>
+            <p className="testers-brand-mark text-2xl font-bold">$599</p>
+            <p className="testers-muted mt-1 text-xs">annual gift card cap before KYC</p>
           </div>
         </div>
 
-        {/* Sections */}
         <div className="space-y-10">
           {SECTIONS.map((section) => (
             <div key={section.title}>
-              <div className="flex items-center gap-3 mb-3">
+              <div className="mb-3 flex items-center gap-3">
                 <span className="text-2xl">{section.icon}</span>
                 <h2 className="text-xl font-semibold">{section.title}</h2>
               </div>
               <div className="space-y-3 pl-9">
                 {section.body.map((para, i) => (
-                  <p key={i} className="text-gray-300 leading-relaxed">
+                  <p key={i} className="leading-relaxed text-[var(--mushi-ink)]">
                     {para}
                   </p>
                 ))}
@@ -138,38 +114,27 @@ export default function HowItWorksPage() {
           ))}
         </div>
 
-        {/* CTA */}
-        <div className="mt-12 rounded-xl border border-violet-500/30 bg-violet-500/5 p-8 text-center">
-          <h2 className="text-xl font-bold mb-2">Ready to start?</h2>
-          <p className="text-gray-400 mb-6">
+        <div className="testers-panel mt-12 border-[color-mix(in_oklch,var(--mushi-vermillion)_30%,var(--mushi-rule))] p-8 text-center">
+          <h2 className="mb-2 text-xl font-bold">Ready to start?</h2>
+          <p className="testers-muted mb-6">
             Create a free tester account and start earning points today.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <a
               href="/mushi-mushi/testers/join/"
-              className="rounded-xl bg-violet-600 px-8 py-3 text-base font-semibold hover:bg-violet-500 transition-colors"
+              className="testers-cta px-8 py-3 text-base"
             >
               Create tester account →
             </a>
             <a
               href="/mushi-mushi/testers/apps/"
-              className="rounded-xl border border-white/20 px-8 py-3 text-base font-semibold hover:border-white/40 transition-colors"
+              className="testers-cta-secondary px-8 py-3 text-base"
             >
               Browse apps first
             </a>
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-8 text-center text-sm text-gray-500">
-        <p>
-          <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
-          <a href="/mushi-mushi/testers/apps/" className="hover:text-gray-300">Browse apps</a> ·{' '}
-          <a href="/mushi-mushi/testers/leaderboard/" className="hover:text-gray-300">Leaderboard</a> ·{' '}
-          Gift cards powered by Tremendous · $599/yr cap before KYC
-        </p>
-      </footer>
-    </div>
+    </TestersPageShell>
   )
 }

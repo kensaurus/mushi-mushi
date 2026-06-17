@@ -27,16 +27,13 @@ const GLYPH: Record<string, string> = {
   enterprise: '★',
 }
 
-// Distinct visual identity for complimentary / staff accounts. We deliberately
-// pick a tone that doesn't compete with the `pro: bg-ok-muted` so a glance
-// makes "Admin" read as "different account class" rather than
-// "another pricing tier". Border emphasis matches the brand palette so the
-// pill still feels first-class, not like a degraded warning.
-const COMPLIMENTARY_TONE = 'bg-brand-subtle text-brand border-brand/40'
+// Complimentary — ghost text row in sidebar; bordered pill in header only.
+const COMPLIMENTARY_TONE = 'text-fg-muted hover:text-brand border-0 bg-transparent'
+const COMPLIMENTARY_TONE_HEADER = 'bg-brand-subtle text-brand border-brand/40'
 
 function densityClasses(sidebar: boolean) {
   if (sidebar) {
-    return 'w-full min-w-0 justify-center text-2xs px-2 py-1 gap-1 rounded-sm shrink-0'
+    return 'w-full min-w-0 justify-center text-3xs px-0 py-0 gap-1 border-0 bg-transparent font-normal shrink-0'
   }
   return 'text-2xs px-2 py-1 gap-1.5 rounded-sm'
 }
@@ -88,16 +85,24 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
         title={tooltip}
         aria-label={`Admin account with ${plan.displayName} entitlements. ${usageHint ?? ''} Open billing.`}
         data-tour-id="plan-badge"
-        className={`inline-flex items-center border font-medium motion-safe:transition-colors hover:brightness-110 min-w-0 ${COMPLIMENTARY_TONE} ${densityClasses(sidebar)}`}
+        className={`inline-flex items-center font-medium motion-safe:transition-colors min-w-0 ${
+          sidebar ? COMPLIMENTARY_TONE : `${COMPLIMENTARY_TONE_HEADER} border hover:brightness-110`
+        } ${densityClasses(sidebar)}`}
       >
-        <span aria-hidden="true" className="leading-none shrink-0">◆</span>
+        <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-3xs">◆</span>
         <span className={sidebar ? 'truncate' : ''}>Admin</span>
-        <span
-          className={`rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-secondary shrink-0 ${sidebar ? 'text-2xs px-1 py-px' : 'px-1 py-0.5 text-2xs'}`}
-          aria-hidden="true"
-        >
-          {plan.displayName}
-        </span>
+        {sidebar ? (
+          <span className="text-fg-faint font-mono uppercase tracking-wider text-3xs shrink-0">
+            {plan.displayName}
+          </span>
+        ) : (
+          <span
+            className="rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-secondary shrink-0 px-1 py-0.5 text-2xs"
+            aria-hidden="true"
+          >
+            {plan.displayName}
+          </span>
+        )}
       </Link>
     )
   }

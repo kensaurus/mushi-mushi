@@ -6,14 +6,12 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
-import { PageScopeHint,SnapshotSectionHint,Badge,
+import { SnapshotSectionHint,Badge,
   Btn,
   Card,
   EmptyState,
   ErrorAlert,
   Input,
-  PageHeader,
-  PageHelp,
   RelativeTime,
   Section,
   SegmentedControl,
@@ -23,6 +21,7 @@ import { PageScopeHint,SnapshotSectionHint,Badge,
 import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -648,8 +647,18 @@ export function OrganizationSettingsPage() {
   if (!activeOrgId) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Team members'} />
-      <PageScopeHint text={copy?.description ?? "Invite colleagues, assign roles, and manage workspace access."} />
+        <PageHeaderBar
+          title={copy?.title ?? 'Team members'}
+          description={copy?.description ?? 'Invite colleagues, assign roles, and manage workspace access.'}
+          helpTitle={copy?.help?.title ?? 'About team management'}
+          helpWhatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
+          helpUseCases={copy?.help?.useCases ?? [
+            'Invite a colleague with their email address — they get a sign-up link',
+            'Give a designer read-only access so they can see bugs without changing anything',
+            'Remove a former teammate\'s access in one click',
+          ]}
+          helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
+        />
         <EmptyState
           title="No team selected"
           description="Pick a team from the header org switcher, or create a project first — every project belongs to a team."
@@ -667,15 +676,23 @@ export function OrganizationSettingsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Team members'}
         projectScope={data?.organization?.name ?? stats.organizationName ?? undefined}
+        description={copy?.description ?? 'Invite colleagues, assign roles, and manage workspace access.'}
+        helpTitle={copy?.help?.title ?? 'About team management'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
+        helpUseCases={copy?.help?.useCases ?? [
+          'Invite a colleague with their email address — they get a sign-up link',
+          'Give a designer read-only access so they can see bugs without changing anything',
+          'Remove a former teammate\'s access in one click',
+        ]}
+        helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
         <Badge className={teamsEnabled ? 'bg-ok-muted text-ok' : 'bg-warn-muted/50 text-warning-foreground'}>
           {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Invite colleagues, assign roles, and manage workspace access."} />
+      </PageHeaderBar>
 
       <MembersStatusBanner
         stats={stats}
@@ -810,16 +827,6 @@ export function OrganizationSettingsPage() {
         )}
       </Card>
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About team management'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
-        useCases={copy?.help?.useCases ?? [
-          'Invite a colleague with their email address — they get a sign-up link',
-          'Give a designer read-only access so they can see bugs without changing anything',
-          'Remove a former teammate\'s access in one click',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
-      />
         </>
       )}
 

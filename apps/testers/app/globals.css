@@ -1,1 +1,107 @@
+/**
+ * FILE: apps/testers/app/globals.css
+ * PURPOSE: Tailwind entry + Mushi editorial brand tokens for the public Bounties marketplace.
+ */
 @import "tailwindcss";
+@import "@mushi-mushi/brand/editorial.css";
+
+@layer components {
+  .testers-shell {
+    min-height: 100vh;
+    background-color: var(--mushi-paper);
+    color: var(--mushi-ink);
+  }
+
+  .testers-nav {
+    border-bottom: 1px solid var(--mushi-rule);
+    background: color-mix(in oklch, var(--mushi-paper) 88%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  .testers-panel {
+    border: 1px solid var(--mushi-rule);
+    background: var(--mushi-paper-wash);
+    border-radius: 0.75rem;
+  }
+
+  .testers-panel-hover {
+    transition: border-color 150ms ease, background-color 150ms ease;
+  }
+
+  .testers-panel-hover:hover {
+    border-color: color-mix(in oklch, var(--mushi-vermillion) 45%, var(--mushi-rule));
+    background: color-mix(in oklch, var(--mushi-paper-wash) 80%, var(--mushi-vermillion-wash));
+  }
+
+  .testers-cta {
+    background: var(--mushi-vermillion);
+    color: var(--mushi-vermillion-ink);
+    border-radius: 0.75rem;
+    font-weight: 600;
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+
+  .testers-cta:hover {
+    opacity: 0.92;
+  }
+
+  .testers-cta-secondary {
+    border: 1px solid var(--mushi-rule);
+    border-radius: 0.75rem;
+    font-weight: 600;
+    transition: border-color 150ms ease, background-color 150ms ease;
+  }
+
+  .testers-cta-secondary:hover {
+    border-color: color-mix(in oklch, var(--mushi-ink) 35%, var(--mushi-rule));
+    background: var(--mushi-paper-wash);
+  }
+
+  .testers-kicker {
+    color: var(--mushi-vermillion);
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .testers-muted {
+    color: var(--mushi-ink-muted);
+  }
+
+  .testers-faint {
+    color: var(--mushi-ink-faint);
+  }
+
+  .testers-brand-mark {
+    color: var(--mushi-vermillion);
+  }
+
+  .testers-badge {
+    background: var(--mushi-vermillion-wash);
+    color: var(--mushi-vermillion);
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .testers-chip {
+    background: var(--mushi-paper-wash);
+    color: var(--mushi-ink-muted);
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+
+  .testers-skeleton {
+    animation: testers-pulse 1.5s ease-in-out infinite;
+    background: var(--mushi-paper-wash);
+    border-radius: 0.75rem;
+  }
+}
+
+@keyframes testers-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
