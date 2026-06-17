@@ -5,6 +5,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { mergeFixAttempt, type MergeMethod } from '../../lib/mergeFix'
+import { Btn } from '../ui'
 import { FixCiFeedback } from './FixCiFeedback'
 
 interface Props {
@@ -205,14 +206,16 @@ export function MergeFixPreflight({
             >
               Cancel
             </button>
-            <button
+            <Btn
               type="button"
+              size="sm"
+              variant="success"
               onClick={() => void handleMerge('squash')}
               disabled={merging}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm bg-ok text-white hover:opacity-90 disabled:opacity-50"
+              loading={merging}
             >
               {merging ? 'Merging…' : 'Squash merge →'}
-            </button>
+            </Btn>
           </div>
         </div>
       )}

@@ -6,25 +6,51 @@ Vue 3 plugin for Mushi Mushi bug reporting. **API-only** — captures errors and
 >
 > **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
 
+## Install
+
+```bash
+npm install @mushi-mushi/vue @mushi-mushi/web
+# or: npx mushi-mushi
+```
+
+## Environment variables
+
+| Stack | Project ID | API key |
+| --- | --- | --- |
+| Vite / Vue CLI | `VITE_MUSHI_PROJECT_ID` | `VITE_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` | `NUXT_PUBLIC_MUSHI_API_KEY` |
+
+See [Project ID & API keys](https://docs.mushimushi.dev/concepts/credentials).
+
 ## Usage
 
 ```ts
+import { createApp } from 'vue'
 import { MushiPlugin } from '@mushi-mushi/vue'
 
+const app = createApp(App)
+
 app.use(MushiPlugin, {
-  projectId: 'proj_xxx',
-  apiKey: 'mushi_xxx',
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
 })
 ```
 
-### With Widget UI
+### With widget UI
 
 ```ts
 import { MushiPlugin } from '@mushi-mushi/vue'
 import { Mushi } from '@mushi-mushi/web'
 
-app.use(MushiPlugin, { projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
-Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
+app.use(MushiPlugin, {
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})
+
+Mushi.init({
+  projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+  apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+})
 ```
 
 ### Composables
@@ -36,16 +62,19 @@ const mushi = useMushi()
 mushi.submitReport({ title: 'broken layout', description: '...' })
 ```
 
-## Peer Dependencies
+## API
+
+| Export | Purpose |
+| --- | --- |
+| `MushiPlugin` | Vue plugin — init at app root |
+| `useMushi()` | SDK instance + report helpers |
+| `useMushiReport()` | Convenience submit hook |
+| `useMushiWidget()` | Widget open/close helpers |
+
+## Peer dependencies
 
 - `vue` >= 3.3
 
 ## License
 
 MIT
-
-
-<!-- mushi-readme-stats-footer -->
----
-
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

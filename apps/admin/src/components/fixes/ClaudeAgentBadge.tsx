@@ -23,8 +23,8 @@ export function ClaudeAgentBadge({ workflowRunUrl, isRunning = false }: Props) {
       rel="noopener noreferrer"
       title={`Claude Code Agent — ${label}`}
       className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-2xs font-mono
-                 bg-[#1a1a1a] text-[#d97706] border border-[#d97706]/40
-                 hover:border-[#d97706]/80 hover:text-[#fbbf24] transition-colors"
+                 bg-surface-root text-warn border border-warn/40
+                 hover:border-warn/80 hover:text-brand transition-colors"
     >
       {isRunning ? (
         /* Pulsing dot while the agent is live */
@@ -32,8 +32,8 @@ export function ClaudeAgentBadge({ workflowRunUrl, isRunning = false }: Props) {
           className="relative flex h-2 w-2 shrink-0"
           aria-label="Agent running"
         >
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#d97706] opacity-60" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#d97706]" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warn opacity-60" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-warn" />
         </span>
       ) : (
         /* Claude logo mark — simplified diamond shape */

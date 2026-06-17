@@ -481,6 +481,7 @@ export function HealthPage() {
       <PageHeaderBar
         title={copy?.title ?? 'System Health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
+        withPageHero={!ux.hideOverviewChrome}
         description={copy?.description ?? 'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.'}
         helpTitle={copy?.help?.title ?? 'About System Health'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}

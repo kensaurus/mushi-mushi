@@ -29,7 +29,7 @@
  *          dominating it.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ConnectionStatus } from './ConnectionStatus'
 import { RevealedKeyCard } from './RevealedKeyCard'
 import { Card, Btn } from './ui'
@@ -53,11 +53,16 @@ import {
   type WidgetTheme,
   type WidgetTrigger,
 } from '../lib/sdkSnippets'
+import { resolveDefaultSdkFramework } from '../lib/sdkInstallDefaults'
 
 interface Props {
   /** The project's external `project_id` (the value the SDK sends back to the
    *  ingest endpoint) — not the internal UUID. */
   projectId: string
+  /** Project slug — drives Expo env-var snippets and default framework tab. */
+  projectSlug?: string | null
+  /** Optional linked-repo package.json text for frameworkDetect auto-tab. */
+  linkedPackageJson?: string | null
   /** Plaintext API key, only available the moment after a mint. */
   apiKey?: string | null
   /** Active key prefixes (e.g. `mushi_a1b2c3d4`) when the full secret is not in memory. */
@@ -156,8 +161,21 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
   }
 }
 
-export function SdkInstallCard({ projectId, apiKey, keyPrefixes, compact, showConnectionStatus = false }: Props) {
-  const [framework, setFramework] = useState<Framework>('react')
+export function SdkInstallCard({
+  projectId,
+  projectSlug,
+  linkedPackageJson,
+  apiKey,
+  keyPrefixes,
+  compact,
+  showConnectionStatus = false,
+}: Props) {
+  const detectedFramework = useMemo(
+    () => resolveDefaultSdkFramework(projectSlug, linkedPackageJson),
+    [projectSlug, linkedPackageJson],
+  )
+  const [framework, setFramework] = useState<Framework>(() => detectedFramework)
+  const autoFrameworkApplied = useRef(false)
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
@@ -175,9 +193,20 @@ export function SdkInstallCard({ projectId, apiKey, keyPrefixes, compact, showCo
   const activePrefixes = keyPrefixes ?? fetchedPrefixes
   const snippetKey = apiKey ?? (activePrefixes[0] ? `${activePrefixes[0]}…` : null)
 
-  const code = useMemo(() => renderSnippet(framework, projectId, snippetKey, config), [framework, projectId, snippetKey, config])
+  const code = useMemo(
+    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug),
+    [framework, projectId, snippetKey, config, projectSlug],
+  )
   const install = installCommand(framework)
   const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
+
+  useEffect(() => {
+    if (autoFrameworkApplied.current) return
+    if (detectedFramework !== 'react') {
+      setFramework(detectedFramework)
+      autoFrameworkApplied.current = true
+    }
+  }, [detectedFramework])
 
   useEffect(() => {
     if (apiKey || (keyPrefixes && keyPrefixes.length > 0)) return
@@ -324,7 +353,8 @@ export function SdkInstallCard({ projectId, apiKey, keyPrefixes, compact, showCo
       {rotatedKey && (
         <RevealedKeyCard
           projectId={projectId}
-          projectName="project"
+          projectName={projectSlug ?? 'project'}
+          projectSlug={projectSlug}
           apiKey={rotatedKey}
           scopes={['ingest']}
           onDismiss={() => setRotatedKey(null)}
@@ -420,6 +450,7 @@ export function SdkInstallCard({ projectId, apiKey, keyPrefixes, compact, showCo
                 role="tab"
                 aria-selected={framework === fw}
                 onClick={() => {
+                  autoFrameworkApplied.current = true
                   setFramework(fw)
                   setSnippetCopied(false)
                   setInstallCopied(false)
@@ -547,6 +578,7 @@ const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
  * "the actual widget doesn't look like the preview".
  */
 function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
+  // mushi-mushi-allowlist: mirrors packages/web widget tokens — hex must match shipped SDK preview
   const isDark =
     config.theme === 'dark' ||
     (config.theme === 'auto' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
@@ -594,6 +626,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
       aria-label="Live preview of the bug-capture widget in your app"
     >
       {/* Faux browser chrome — kept minimal so the eye lands on the widget */}
+      {/* mushi-mushi-allowlist: macOS traffic-light mock chrome in SDK widget preview */}
       <div
         className="flex items-center gap-1 px-2 py-1 border-b"
         style={{
@@ -620,7 +653,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
       </div>
 
       {config.trigger === 'banner' ? (
-        /* Banner strip preview */
+        /* Banner strip preview — mushi-mushi-allowlist: yen-yen widget banner variant colours in live preview */
         <div
           style={{
             position: 'absolute',

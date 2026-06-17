@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { META_CHIP_TONE } from '../../lib/tokens';
@@ -7,6 +7,7 @@ import { statDestinationLabel } from '../../lib/statCardLinks';
 import { InfoHint, MetricHelpTrigger } from './fields';
 import { Card } from './layout';
 import { Tooltip } from './misc';
+import { Modal } from '../Modal';
 
 
 /* ── RelativeTime (humanised time + ISO tooltip) ────────────────────────── */
@@ -337,18 +338,6 @@ interface ImageZoomProps {
 export function ImageZoom({ src, alt, thumbClassName = '' }: ImageZoomProps) {
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-  }, [open])
-
   return (
     <>
       <button
@@ -362,33 +351,32 @@ export function ImageZoom({ src, alt, thumbClassName = '' }: ImageZoomProps) {
           Click to enlarge
         </span>
       </button>
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label={alt}
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        ariaLabel={alt}
+        hideCloseButton
+        size="full"
+        className="max-w-[95vw] border-0 bg-transparent shadow-none"
+        bodyClassName="p-0 flex items-center justify-center"
+      >
+        <button
+          type="button"
           onClick={() => setOpen(false)}
+          aria-label="Close"
+          className="absolute top-3 right-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-sm text-fg-secondary hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
         >
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setOpen(false) }}
-            aria-label="Close"
-            className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-sm text-fg-secondary hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-              <line x1="4" y1="4" x2="12" y2="12" strokeLinecap="round" />
-              <line x1="12" y1="4" x2="4" y2="12" strokeLinecap="round" />
-            </svg>
-          </button>
-          <img
-            src={src}
-            alt={alt}
-            onClick={(e) => e.stopPropagation()}
-            className="max-h-[90vh] max-w-[95vw] object-contain rounded-sm shadow-raised"
-          />
-        </div>
-      )}
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <line x1="4" y1="4" x2="12" y2="12" strokeLinecap="round" />
+            <line x1="12" y1="4" x2="4" y2="12" strokeLinecap="round" />
+          </svg>
+        </button>
+        <img
+          src={src}
+          alt={alt}
+          className="max-h-[90vh] max-w-[95vw] object-contain rounded-sm shadow-raised"
+        />
+      </Modal>
     </>
   )
 }

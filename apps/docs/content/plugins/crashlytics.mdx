@@ -1,0 +1,24 @@
+---
+title: Crashlytics
+---
+
+# Crashlytics plugin
+
+Pushes Mushi mobile reports into Firebase Crashlytics issues and closes them when fixes merge.
+
+## Setup
+
+1. In Mushi: **Marketplace → Crashlytics → Install**.
+2. Upload Firebase service account JSON with Crashlytics write scope.
+3. Map Android/iOS app IDs to Mushi projects if you run multiple apps.
+
+## Package
+
+[`@mushi-mushi/plugin-crashlytics`](https://www.npmjs.com/package/@mushi-mushi/plugin-crashlytics)
+
+## Events
+
+| Event | Action |
+| --- | --- |
+| `report.classified` (mobile) | Create Crashlytics issue with device metadata |
+| `fix.applied` | Close issue |

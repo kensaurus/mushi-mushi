@@ -93,6 +93,9 @@ export interface PageHeaderBarProps {
   /** Force-override help panel open state. Leave undefined for the standard
    *  logic: Advanced users start collapsed, Beginners open until dismissed. */
   helpDefaultOpen?: boolean
+  /** When true, suppresses the subtitle line — use when the page renders its
+   *  own PageHero DAV strip below to avoid double-chrome stacking. */
+  withPageHero?: boolean
 }
 
 /**
@@ -112,6 +115,7 @@ export function PageHeaderBar({
   helpHowToUse,
   helpFlowPath,
   helpDefaultOpen,
+  withPageHero = false,
 }: PageHeaderBarProps) {
   const { pathname } = useLocation()
 
@@ -151,7 +155,7 @@ export function PageHeaderBar({
         )}
       </div>
 
-      {description && !isDevFacingHint(description) && (
+      {description && !withPageHero && !isDevFacingHint(description) && (
         <p className="mt-0.5 max-w-none text-xs leading-relaxed text-fg-muted text-pretty">
           {description}
         </p>

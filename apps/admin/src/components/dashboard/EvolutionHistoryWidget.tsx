@@ -53,7 +53,12 @@ function Spark({ weeks }: { weeks: WeekBucket[] }) {
         const barH = Math.max(2, Math.round((score / maxScore) * h))
         const x = i * (w + gap)
         const y = h - barH
-        const tone = score >= 7 ? '#22c55e' : score >= 5 ? '#f59e0b' : '#ef4444'
+        const tone =
+          score >= 7
+            ? 'var(--color-viz-score-ok)'
+            : score >= 5
+              ? 'var(--color-viz-score-warn)'
+              : 'var(--color-viz-score-danger)'
         return (
           <rect
             key={i}

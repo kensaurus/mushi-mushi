@@ -7,7 +7,7 @@
  * - Wires TesterSubmissionCard accept / informative / duplicate / spam actions
  *
  * DEPENDENCIES:
- * - apiFetch, getActiveProjectIdSnapshot, TesterSubmissionCard
+ * - apiFetch, useActiveProjectId, TesterSubmissionCard
  *
  * USAGE:
  * - Route: /rewards/tester-review (protected admin layout)
@@ -16,9 +16,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { getActiveProjectIdSnapshot } from '../lib/activeProject'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
-import { PageHeader, EmptyState, ErrorAlert, Badge, SegmentedControl } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { EmptyState, ErrorAlert, Badge, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
 
@@ -38,7 +39,7 @@ interface QueueItem {
 type StatusFilter = 'pending' | 'all' | 'accepted'
 
 export function TesterSubmissionsReviewPage() {
-  const projectId = getActiveProjectIdSnapshot()
+  const projectId = useActiveProjectId()
   const toast = useToast()
   const [status, setStatus] = useState<StatusFilter>('pending')
   const [items, setItems] = useState<QueueItem[]>([])
@@ -90,14 +91,25 @@ export function TesterSubmissionsReviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Tester submissions" description="Review bug reports from Mushi Bounties testers and award points.">
+      <PageHeaderBar
+        title="Tester submissions"
+        description="Review bug reports from Mushi Bounties testers and award points."
+        helpTitle="About tester submissions"
+        helpWhatIsIt="Org-scoped reviewer queue for bug reports submitted via Mushi Bounties — accept, mark informative, duplicate, or spam, and award points."
+        helpUseCases={[
+          'Review pending tester bug reports before points are awarded',
+          'Filter by pending, accepted, or all submissions',
+          'Link back to Rewards marketplace publishing settings',
+        ]}
+        helpHowToUse="Filter the queue, expand a submission, and use accept or reject actions. Points are awarded on accept per your Rewards tier rules."
+      >
         <Link
           to="/rewards?tab=publishing"
           className="text-xs font-medium text-brand hover:underline shrink-0"
         >
           ← Marketplace settings
         </Link>
-      </PageHeader>
+      </PageHeaderBar>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl

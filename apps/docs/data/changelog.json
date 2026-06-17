@@ -1,5 +1,22 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Account mode",
+        "description": "an org-scoped API key (no `MUSHI_PROJECT_ID` required) now"
+      },
+      {
+        "title": "stdio fix",
+        "description": "all logger and `console.*` output is routed to stderr so stdout"
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.14",
     "headline": null,
     "pending": false,

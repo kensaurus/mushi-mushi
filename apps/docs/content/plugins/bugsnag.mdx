@@ -1,0 +1,24 @@
+---
+title: Bugsnag
+---
+
+# Bugsnag plugin
+
+Mirrors Mushi reports into Bugsnag projects and closes Bugsnag errors when the fix PR merges.
+
+## Setup
+
+1. In Mushi: **Marketplace → Bugsnag → Install**.
+2. Provide project API key and release stage mapping.
+3. Set severity filter for which reports sync outbound.
+
+## Package
+
+[`@mushi-mushi/plugin-bugsnag`](https://www.npmjs.com/package/@mushi-mushi/plugin-bugsnag)
+
+## Events
+
+| Event | Action |
+| --- | --- |
+| `report.classified` | Open Bugsnag error with Mushi backlink |
+| `fix.applied` | Resolve Bugsnag error |

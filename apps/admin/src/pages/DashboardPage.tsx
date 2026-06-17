@@ -185,6 +185,15 @@ export function DashboardPage() {
         </Link>
       </PageHeaderBar>
 
+      {!showFirstReportHero && data.pdcaStages && data.pdcaStages.length > 0 && (
+        <HeroIntro
+          stages={data.pdcaStages}
+          focusStage={data.focusStage}
+          projectName={projectName}
+          lastReportAt={lastReportAt}
+        />
+      )}
+
       <LivePdcaPipeline
         projectId={setup.activeProject?.project_id}
         pdcaStages={data.pdcaStages}
@@ -202,15 +211,6 @@ export function DashboardPage() {
             setup.reload()
             reload()
           }}
-        />
-      )}
-
-      {!showFirstReportHero && data.pdcaStages && data.pdcaStages.length > 0 && (
-        <HeroIntro
-          stages={data.pdcaStages}
-          focusStage={data.focusStage}
-          projectName={projectName}
-          lastReportAt={lastReportAt}
         />
       )}
 

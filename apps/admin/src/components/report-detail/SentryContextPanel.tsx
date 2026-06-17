@@ -60,7 +60,7 @@ const SOURCE_DOT: Record<UnifiedCrumb['source'], string> = {
   // Sentry's own purple so the operator can read provenance at a
   // glance without reading the source label.
   mushi: 'bg-brand',
-  sentry: 'bg-[#7553ff]',
+  sentry: 'bg-viz-sentry',
 }
 
 const SOURCE_LABEL: Record<UnifiedCrumb['source'], string> = {

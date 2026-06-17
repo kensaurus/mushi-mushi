@@ -33,6 +33,13 @@ export interface LoggerOptions {
   level?: LogLevel
   meta?: Record<string, unknown>
   format?: LogFormat
+  /**
+   * Where to write log output.
+   * - `'stdout'` (default): normal servers, browsers.
+   * - `'stderr'`: use for stdio MCP servers where stdout is the JSON-RPC
+   *   protocol pipe; any non-JSON-RPC bytes there corrupt the connection.
+   */
+  destination?: 'stdout' | 'stderr'
 }
 
 export interface Logger {
@@ -142,17 +149,26 @@ function formatJson(entry: LogEntry): string {
 }
 
 /* eslint-disable no-console */
-function emit(level: LogLevel, formatted: string): void {
-  switch (level) {
-    case 'error':
-    case 'fatal':
+function makeEmitter(destination: 'stdout' | 'stderr') {
+  if (destination === 'stderr') {
+    // Write everything to stderr — required for stdio MCP servers.
+    return (level: LogLevel, formatted: string): void => {
+      void level
       console.error(formatted)
-      break
-    case 'warn':
-      console.warn(formatted)
-      break
-    default:
-      console.log(formatted)
+    }
+  }
+  return (level: LogLevel, formatted: string): void => {
+    switch (level) {
+      case 'error':
+      case 'fatal':
+        console.error(formatted)
+        break
+      case 'warn':
+        console.warn(formatted)
+        break
+      default:
+        console.log(formatted)
+    }
   }
 }
 /* eslint-enable no-console */
@@ -162,6 +178,7 @@ function buildLogger(
   minLevel: LogLevel,
   baseMeta: Record<string, unknown>,
   formatter: (entry: LogEntry) => string,
+  emit: (level: LogLevel, formatted: string) => void,
 ): Logger {
   let currentLevel = minLevel
 
@@ -193,6 +210,7 @@ function buildLogger(
         currentLevel,
         { ...baseMeta, ...childMeta },
         formatter,
+        emit,
       )
     },
 
@@ -218,12 +236,14 @@ export function createLogger(options: LoggerOptions): Logger {
     level = 'info',
     meta = {},
     format = 'auto',
+    destination = 'stdout',
   } = options
 
   const resolvedFormat = format === 'auto' ? detectFormat() : format
   const formatter = resolvedFormat === 'json' ? formatJson : formatPretty
+  const emit = makeEmitter(destination)
 
-  return buildLogger(scope, level, meta, formatter)
+  return buildLogger(scope, level, meta, formatter, emit)
 }
 
 /**

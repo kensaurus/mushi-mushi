@@ -254,7 +254,7 @@ export function PageHelp({
           )}
         </div>
         <footer className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-edge-subtle/60 pt-3">
-          <label className="inline-flex cursor-pointer items-center gap-2 text-3xs text-fg-muted">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-2xs text-fg-muted">
             <input
               type="checkbox"
               className="rounded border-edge-subtle text-brand focus:ring-brand/40"

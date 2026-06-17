@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/AskMushiLauncherButton.tsx
- * PURPOSE: Prominent glowing header affordance for Ask Mushi (Cmd/Ctrl+J).
+ * PURPOSE: Ask Mushi launcher — matches sibling toolbar icon buttons (h-6).
  */
 
 import { useSyncExternalStore } from 'react'
@@ -14,7 +14,6 @@ import {
 
 interface AskMushiLauncherButtonProps {
   onClick: () => void
-  /** When the sidebar is open, suppress the first-run glow. */
   panelOpen?: boolean
 }
 
@@ -24,12 +23,13 @@ function readIntroSeen(): boolean {
 
 export function AskMushiLauncherButton({ onClick, panelOpen = false }: AskMushiLauncherButtonProps) {
   const introSeen = useSyncExternalStore(subscribeAskMushiIntro, readIntroSeen, readIntroSeen)
-  const showGlow = !introSeen && !panelOpen
+  const showPulse = !introSeen && !panelOpen
 
   return (
     <Tooltip
-      content={showGlow ? 'Ask Mushi — your AI guide (Cmd/Ctrl+J)' : 'Ask Mushi (Cmd/Ctrl+J)'}
-      side="bottom"
+      content={showPulse ? 'Ask Mushi — your AI guide (Cmd/Ctrl+J)' : 'Ask Mushi (Cmd/Ctrl+J)'}
+      side="auto"
+      nowrap={false}
     >
       <button
         type="button"
@@ -40,21 +40,17 @@ export function AskMushiLauncherButton({ onClick, panelOpen = false }: AskMushiL
         }}
         aria-label="Open Ask Mushi"
         className={[
-          'ask-mushi-launcher relative inline-flex items-center justify-center',
-          'h-9 w-9 rounded-md',
-          'text-brand bg-brand/10 border border-brand/25',
-          'hover:bg-brand/15 hover:text-brand',
-          'motion-safe:transition-[background-color,color,box-shadow,border-color]',
-          'motion-safe:duration-[var(--duration-fast,150ms)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
-          showGlow ? 'ask-mushi-launcher--glow' : '',
+          'relative inline-flex items-center justify-center h-6 w-6 rounded-sm',
+          showPulse ? 'text-brand' : 'text-fg-muted hover:text-fg hover:bg-surface-overlay',
+          'motion-safe:transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50',
         ].join(' ')}
       >
-        <IconChat className="h-4 w-4 relative z-[1]" aria-hidden />
-        {showGlow ? (
+        <IconChat className="h-3.5 w-3.5" aria-hidden />
+        {showPulse ? (
           <span
             aria-hidden
-            className="ask-mushi-launcher__ring pointer-events-none absolute inset-0 rounded-md"
+            className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse"
           />
         ) : null}
       </button>

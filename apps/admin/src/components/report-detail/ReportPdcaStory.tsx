@@ -14,7 +14,7 @@
  *            ●━━━━ Plan        Classified 2 min ago by Haiku → Sonnet
  *            ┃              "submit-button-broken" • severity: high
  *            ●━━━━ Do          Dispatched to claude-code · branch fix/123
- *            ┃              PR #482 opened
+ *            ┃              PR 482 opened
  *            ◐━━━━ Check       Judge agreed (94%) · CI running
  *            ┃              [thumbnail of screenshot diff if present]
  *            ○      Act         Awaiting merge
@@ -102,7 +102,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           isDone
             ? 'bg-ok text-ok-fg mushi-glow-ok'
             : node.state === 'failed'
-              ? 'bg-danger text-white mushi-glow-danger'
+              ? 'bg-danger text-danger-fg mushi-glow-danger'
               : node.state === 'pending'
                 ? `ring-2 ${v.ring} ${v.dot} mushi-pulse`
                 : `ring-2 ring-dashed ${v.ring} bg-transparent`

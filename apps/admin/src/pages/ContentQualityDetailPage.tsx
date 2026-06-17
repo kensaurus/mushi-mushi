@@ -11,6 +11,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
   Btn,
   ErrorAlert,
@@ -66,15 +67,6 @@ const REASON_LABELS: Record<string, { label: string; description: string }> = {
   user_flag:           { label: 'User flagged', description: 'One or more learners flagged this content as incorrect or unhelpful.' },
   low_star_rating:     { label: 'Low star rating', description: 'Users gave this content a low average star rating.' },
   high_downvote_ratio: { label: 'High downvote ratio', description: 'More users downvoted than upvoted this content.' },
-}
-
-const TYPE_ICON: Record<string, string> = {
-  mnemonic:           '🧠',
-  grammar_lesson:     '📖',
-  listening_exercise: '🎧',
-  lesson_story:       '📝',
-  podcast:            '🎙️',
-  word_thumbnail:     '🖼️',
 }
 
 const LANG_NAMES: Record<string, string> = {
@@ -274,7 +266,6 @@ export function ContentQualityDetailPage() {
     && issue.regen_status !== 'queued'
 
   const title = humanTitle(issue)
-  const icon = TYPE_ICON[issue.content_type] ?? '📄'
   const regenRunDuration = issue.regen_requested_at && issue.regen_completed_at
     ? Math.round((new Date(issue.regen_completed_at).getTime() - new Date(issue.regen_requested_at).getTime()) / 1000)
     : null
@@ -288,18 +279,19 @@ export function ContentQualityDetailPage() {
           <span aria-hidden="true">←</span> Content Quality
         </Link>
 
-        <div className="flex items-start justify-between gap-4 mt-2">
-          <div className="flex items-start gap-3 min-w-0">
-            <span className="text-2xl leading-none mt-0.5 shrink-0" aria-hidden="true">{icon}</span>
-            <div className="min-w-0">
-              <h1 className="text-base font-semibold capitalize leading-snug">{title}</h1>
-              {reasonInfo && (
-                <p className="text-xs text-fg-muted mt-0.5">{reasonInfo.description}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Actions */}
+        <PageHeaderBar
+          title={title}
+          description={reasonInfo?.description}
+          helpTitle="About content quality issues"
+          helpWhatIsIt="Rich detail for a flagged learning asset — quality signals, Langfuse trace, user feedback, and regenerate or resolve actions."
+          helpUseCases={[
+            'Review why an asset was flagged (low judge score, user flags, downvotes)',
+            'Trigger regeneration when the source project can improve the asset',
+            'Resolve or dismiss after manual review',
+          ]}
+          helpHowToUse="Inspect signals and feedback, open the Langfuse trace if needed, then Regenerate, Resolve, or Dismiss."
+          showCopyLink={false}
+        >
           <div className="flex items-center gap-2 shrink-0">
             {canRegen && (
               <Btn
@@ -325,7 +317,7 @@ export function ContentQualityDetailPage() {
               </Btn>
             )}
           </div>
-        </div>
+        </PageHeaderBar>
 
         {/* Status strip */}
         <div className="flex items-center gap-2 flex-wrap mt-3">

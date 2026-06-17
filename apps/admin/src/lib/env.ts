@@ -168,6 +168,9 @@ export const RESOLVED_SUPABASE_ANON_KEY =
   (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() ||
   CLOUD_SUPABASE_ANON_KEY
 export const RESOLVED_API_URL = stripTrailingSlash(resolveApiUrl())
+export const RESOLVED_EXTERNAL_API_URL = stripTrailingSlash(
+  RESOLVED_API_URL.startsWith('/') ? CLOUD_API_URL : RESOLVED_API_URL,
+)
 
 function resolveApiUrl(): string {
   const explicit = (import.meta.env.VITE_API_URL ?? '').trim()

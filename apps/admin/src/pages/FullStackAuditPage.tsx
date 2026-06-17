@@ -15,9 +15,9 @@
 
 import { useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
-  PageHeader,
-  PageHelp,
   Card,
   Badge,
   Btn,
@@ -186,7 +186,7 @@ function GateRunsTable({ runs }: { runs: AuditGateRun[] }) {
     )
   }
   return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle">
+    <ResponsiveTable ariaLabel="Recent gate runs">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-edge-subtle bg-surface-overlay/30">
@@ -215,7 +215,7 @@ function GateRunsTable({ runs }: { runs: AuditGateRun[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ResponsiveTable>
   )
 }
 
@@ -250,21 +250,18 @@ export function FullStackAuditPage() {
 
   return (
     <div className="space-y-5 pb-16">
-      <PageHelp
+      <PageHeaderBar
         title="Full-Stack Audit"
-        whatIsIt="A one-click health scorecard that fans out to your linked Supabase backend, runs Gates 3–8, and returns PM-readable findings."
-        useCases={[
+        description="One-click health scorecard for your project: backend schema, API contracts, gate results, and security gaps."
+        helpTitle="Full-Stack Audit"
+        helpWhatIsIt="A one-click health scorecard that fans out to your linked Supabase backend, runs Gates 3–8, and returns PM-readable findings."
+        helpUseCases={[
           'Spot broken API contracts before users hit them',
           'Identify backend endpoints never called by the frontend (orphan features)',
           'Detect schema changes that break active API dependencies',
           'See RLS gaps and DB advisor warnings in one view',
         ]}
-        howToUse="Set supabase_project_ref in Project Settings and add your Supabase PAT under Settings → API Keys (slug: supabase). Then click Run audit."
-      />
-
-      <PageHeader
-        title="Full-Stack Audit"
-        description="One-click health scorecard for your project: backend schema, API contracts, gate results, and security gaps."
+        helpHowToUse="Set supabase_project_ref in Project Settings and add your Supabase PAT under Settings → API Keys (slug: supabase). Then click Run audit."
       >
         <Btn
           variant="primary"
@@ -275,7 +272,7 @@ export function FullStackAuditPage() {
         >
           {loading ? 'Running audit…' : 'Run audit'}
         </Btn>
-      </PageHeader>
+      </PageHeaderBar>
 
       {!projectId && (
         <Card>

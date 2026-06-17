@@ -14,9 +14,8 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
 import { SetupNudge } from '../components/SetupNudge'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
-  Card,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint, Card,
   Section,
   Btn,
   Badge,
@@ -388,20 +387,18 @@ export function IntelligencePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-intelligence">
-      <PageHelp
-        title={copy?.help?.title ?? 'About Bug Intelligence'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Bug Intelligence'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.'}
+        helpTitle={copy?.help?.title ?? 'About Bug Intelligence'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Share a one-page status with stakeholders every Monday',
           'Spot regressions early — week-over-week category and severity drift',
           'Compare fix velocity against anonymised industry benchmarks (opt-in)',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Reports generate automatically every Monday by cron. Click Generate to run for the current project — Pipeline shows live status.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Bug Intelligence'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? 'Reports generate automatically every Monday by cron. Click Generate to run for the current project — Pipeline shows live status.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -414,7 +411,7 @@ export function IntelligencePage() {
                     : bannerSeverity === 'warn'
                       ? 'bg-warn-muted/50 text-warning-foreground'
                       : bannerSeverity === 'brand'
-                        ? 'bg-brand/15 text-brand'
+                        ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                         : 'bg-surface-overlay text-fg-muted'
               }
             >
@@ -456,8 +453,7 @@ export function IntelligencePage() {
             </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings."} />
+      </PageHeaderBar>
 
       <IntelligenceStatusBanner
         stats={stats}

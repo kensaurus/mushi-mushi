@@ -6,8 +6,7 @@
 
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   Section,
   Card,
   Badge,
@@ -50,6 +49,7 @@ import {
   type McpScope,
 } from '../lib/mcpCatalog'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
   activeKeysDetail,
   activeKeysTooltip,
@@ -65,7 +65,7 @@ import {
   toolsTooltip,
 } from '../lib/statTooltips/mcp'
 import { mcpLinks } from '../lib/statCardLinks'
-import { RESOLVED_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
+import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
 import {
   buildCursorDeeplink,
   buildVsCodeDeeplink,
@@ -73,6 +73,7 @@ import {
   buildStdioConfig,
   projectServerName,
 } from '../lib/cursorDeeplink'
+import { McpAccountKeyCard } from '../components/McpAccountKeyCard'
 
 const TABS: Array<{ id: McpTabId; label: string; description: string }> = [
   {
@@ -103,7 +104,7 @@ const CATALOG_TABS: Array<{ id: CatalogTabId; label: string }> = [
   { id: 'prompts', label: 'Prompts' },
 ]
 
-const MUSHI_CLOUD_API = RESOLVED_API_URL
+const MUSHI_MCP_API = RESOLVED_EXTERNAL_API_URL
 
 interface UseCase {
   title: string
@@ -224,7 +225,7 @@ function buildCursorJson(projectId: string, projectName: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        [serverName]: buildStdioConfig(projectId, 'paste-your-mushi-api-key-here', MUSHI_CLOUD_API),
+        [serverName]: buildStdioConfig(projectId, 'paste-your-mushi-api-key-here', MUSHI_MCP_API),
       },
     },
     null,
@@ -248,13 +249,147 @@ function buildHttpCursorJson(projectId: string, projectName: string): string {
 function buildEnvBlock(projectId: string): string {
   return [
     '# Mushi MCP — paste into .env.local (gitignored).',
-    `MUSHI_API_ENDPOINT=${MUSHI_CLOUD_API}`,
+    `MUSHI_API_ENDPOINT=${MUSHI_MCP_API}`,
     'MUSHI_API_KEY=paste-your-mushi-api-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
     '# Optional: lean tool set (default in admin snippets). Omit or set to "all" for full catalog.',
     'MUSHI_FEATURES=triage,fixes,inventory,setup,docs',
     '',
   ].join('\n')
+}
+
+interface McpJsonCheck {
+  ok: boolean
+  title: string
+  details: string[]
+}
+
+function validateMcpJsonSyntax(raw: string): McpJsonCheck {
+  if (!raw.trim()) {
+    return {
+      ok: false,
+      title: 'Paste an mcp.json block to check it.',
+      details: ['Tip: click "Load generated snippet" below to start from the active project config.'],
+    }
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    return {
+      ok: false,
+      title: 'Invalid JSON syntax.',
+      details: [err instanceof Error ? err.message : 'The config is not valid JSON.'],
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, title: 'Root must be an object.', details: ['Expected { "mcpServers": { ... } }.'] }
+  }
+
+  const root = parsed as { mcpServers?: unknown }
+  if (!root.mcpServers || typeof root.mcpServers !== 'object' || Array.isArray(root.mcpServers)) {
+    return {
+      ok: false,
+      title: 'Missing mcpServers object.',
+      details: ['Cursor expects { "mcpServers": { "mushi-...": { ... } } }.'],
+    }
+  }
+
+  const entries = Object.entries(root.mcpServers as Record<string, unknown>)
+  const mushiEntries = entries.filter(([name, value]) => {
+    if (!value || typeof value !== 'object') return false
+    const server = value as { command?: unknown; args?: unknown; url?: unknown; env?: unknown }
+    const args = Array.isArray(server.args) ? server.args.join(' ') : ''
+    const env = server.env && typeof server.env === 'object' ? server.env as Record<string, unknown> : {}
+    return name.includes('mushi') ||
+      String(server.command ?? '').includes('mushi') ||
+      args.includes('mushi') ||
+      Boolean(env.MUSHI_API_KEY || env.MUSHI_API_ENDPOINT)
+  })
+
+  if (mushiEntries.length === 0) {
+    return {
+      ok: false,
+      title: 'No Mushi server entry found.',
+      details: ['Add a server named like "mushi-my-app" or paste the generated snippet.'],
+    }
+  }
+
+  const details: string[] = []
+  let ok = true
+
+  for (const [name, value] of mushiEntries) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      ok = false
+      details.push(`${name}: server config must be an object.`)
+      continue
+    }
+
+    const server = value as {
+      type?: unknown
+      command?: unknown
+      args?: unknown
+      env?: unknown
+      url?: unknown
+      headers?: unknown
+    }
+    const isHttp = server.type === 'http' || typeof server.url === 'string'
+
+    if (isHttp) {
+      if (typeof server.url !== 'string' || !server.url.startsWith('http')) {
+        ok = false
+        details.push(`${name}: hosted HTTP config needs a valid url.`)
+      }
+      const headers = server.headers && typeof server.headers === 'object'
+        ? server.headers as Record<string, unknown>
+        : {}
+      if (!headers.Authorization && !headers['X-Mushi-Api-Key']) {
+        ok = false
+        details.push(`${name}: hosted HTTP config needs Authorization or X-Mushi-Api-Key headers.`)
+      }
+      continue
+    }
+
+    if (typeof server.command !== 'string') {
+      ok = false
+      details.push(`${name}: stdio config needs a command, usually "npx" or "node".`)
+    }
+    if (!Array.isArray(server.args) || server.args.some((arg) => typeof arg !== 'string')) {
+      ok = false
+      details.push(`${name}: stdio config needs args as a string array.`)
+    }
+
+    const env = server.env && typeof server.env === 'object'
+      ? server.env as Record<string, unknown>
+      : null
+    if (!env) {
+      ok = false
+      details.push(`${name}: stdio config needs an env object with MUSHI_* values.`)
+      continue
+    }
+    if (typeof env.MUSHI_API_ENDPOINT !== 'string' || !env.MUSHI_API_ENDPOINT.includes('/functions/v1/api')) {
+      ok = false
+      details.push(`${name}: MUSHI_API_ENDPOINT should end with /functions/v1/api.`)
+    }
+    if (typeof env.MUSHI_API_KEY !== 'string' || !env.MUSHI_API_KEY.startsWith('mushi_')) {
+      ok = false
+      details.push(`${name}: MUSHI_API_KEY should start with mushi_.`)
+    }
+    if (!env.MUSHI_PROJECT_ID) {
+      details.push(`${name}: no MUSHI_PROJECT_ID means account mode; use an org-scoped key or pass project_id in tool calls.`)
+    }
+    if (Array.isArray(server.args) && server.args.includes('@mushi-mushi/mcp@latest')) {
+      details.push(`${name}: uses npm @latest. If Cursor still shows a transport error before the next publish, use Hosted HTTP or restart Cursor after upgrading.`)
+    }
+  }
+
+  return {
+    ok,
+    title: ok ? 'Syntax looks valid.' : 'Config needs changes.',
+    details: details.length > 0 ? details : ['Restart Cursor MCP after saving the file, then run diagnose_connection.'],
+  }
 }
 
 interface QuickstartStepProps {
@@ -348,6 +483,7 @@ export function McpPage() {
   const [mintingProjectId, setMintingProjectId] = useState<string | null>(null)
   const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
   const [sdkSnippetLang, setSdkSnippetLang] = useState<'npm' | 'yarn' | 'pnpm'>('npm')
+  const [mcpJsonDraft, setMcpJsonDraft] = useState('')
   const detectTaRef = useRef<HTMLTextAreaElement>(null)
 
   const projectsPath = activeProjectId ? '/v1/admin/projects' : null
@@ -480,8 +616,8 @@ export function McpPage() {
       const projectLabel = targetProjectName ?? displayName
       const deeplink =
         ide === 'cursor'
-          ? buildCursorDeeplink(pid, projectLabel, key, MUSHI_CLOUD_API)
-          : buildVsCodeDeeplink(pid, projectLabel, key, MUSHI_CLOUD_API)
+          ? buildCursorDeeplink(pid, projectLabel, key, MUSHI_MCP_API)
+          : buildVsCodeDeeplink(pid, projectLabel, key, MUSHI_MCP_API)
       window.open(deeplink, '_self')
       toast.success(
         `${ide === 'cursor' ? 'Cursor' : 'VS Code'} install launched`,
@@ -501,6 +637,10 @@ export function McpPage() {
       : snippetMode === 'http'
         ? buildHttpCursorJson(projectId, displayName)
         : buildEnvBlock(projectId)
+  const syntaxCheck = useMemo(
+    () => validateMcpJsonSyntax(mcpJsonDraft || (snippetMode === 'env' ? '' : snippet)),
+    [mcpJsonDraft, snippet, snippetMode],
+  )
 
   async function testMcpConnection() {
     if (!activeProjectId) return
@@ -573,32 +713,30 @@ export function McpPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4" data-testid="mushi-page-mcp">
-        <PageHelp
-          title={copy?.help?.title ?? 'About MCP'}
-          whatIsIt={
+        <PageHeaderBar
+          title={copy?.title ?? 'MCP'}
+          description={
+            copy?.description ??
+            'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue.'
+          }
+          helpTitle={copy?.help?.title ?? 'About MCP'}
+          helpWhatIsIt={
             copy?.help?.whatIsIt ??
             'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
           }
-          useCases={
+          helpUseCases={
             copy?.help?.useCases ?? [
               'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
               'Have the agent draft a fix for a specific report in one command',
               'Query your bug data in plain English from inside your editor',
             ]
           }
-          howToUse={
+          helpHowToUse={
             copy?.help?.howToUse ??
             '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
           }
         />
-        <PageHeader title={copy?.title ?? 'MCP'} />
 
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-xs leading-relaxed text-fg-muted">
-            {copy?.description ??
-              "Connect Cursor, Claude Desktop, or any MCP-aware agent to this project's live triage queue."}
-          </p>
-        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -639,26 +777,27 @@ export function McpPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-mcp">
-      <PageHelp
-        title={copy?.help?.title ?? 'About MCP'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'MCP'}
+        projectScope={displayName}
+        description={copy?.description ?? 'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools.'}
+        helpTitle={copy?.help?.title ?? 'About MCP'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
             'Have the agent draft a fix for a specific report in one command',
             'Query your bug data in plain English from inside your editor',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
         }
-      />
-
-      <PageHeader title={copy?.title ?? 'MCP'} projectScope={displayName}>
+      >
         {!ux.hideOverviewChrome && (
           <>
             <Badge
@@ -668,7 +807,7 @@ export function McpPage() {
                   : bannerSeverity === 'warn'
                     ? 'bg-warn-muted/50 text-warning-foreground'
                     : bannerSeverity === 'brand'
-                      ? 'bg-brand/15 text-brand'
+                      ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                       : 'bg-surface-overlay text-fg-muted'
               }
             >
@@ -700,8 +839,7 @@ export function McpPage() {
         >
           Mint mcp:write key
         </Btn>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools."} />
+      </PageHeaderBar>
 
       <McpStatusBanner
         stats={stats}
@@ -768,7 +906,7 @@ export function McpPage() {
           className={`space-y-3 p-4 ${
             stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
               ? 'border-warn/30 bg-warn/5'
-              : 'border-brand/30 bg-brand/5'
+              : 'border-edge-subtle bg-chrome'
           }`}
         >
           <SignalChip tone={stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected' ? 'warn' : 'brand'}>
@@ -842,8 +980,8 @@ export function McpPage() {
               <div className="grid gap-2 sm:grid-cols-3 text-xs">
                 <div>
                   <p className="text-fg-faint text-3xs uppercase tracking-wide">Expected endpoint</p>
-                  <p className="font-mono text-fg-secondary truncate" title={stats.expectedEndpointHost ?? MUSHI_CLOUD_API}>
-                    {stats.expectedEndpointHost ?? new URL(MUSHI_CLOUD_API).host}
+                  <p className="font-mono text-fg-secondary truncate" title={stats.expectedEndpointHost ?? MUSHI_MCP_API}>
+                    {stats.expectedEndpointHost ?? new URL(MUSHI_MCP_API).host}
                   </p>
                 </div>
                 <div>
@@ -1237,6 +1375,41 @@ export function McpPage() {
                   {snippet}
                 </pre>
               </div>
+
+              <div className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 space-y-2" data-testid="mcp-json-helper">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <h3 className="text-sm font-semibold text-fg">mcp.json syntax helper</h3>
+                    <p className="text-xs text-fg-muted">
+                      Paste the block Cursor is using. We check JSON shape, stdio/HTTP fields, and Mushi env names.
+                    </p>
+                  </div>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setMcpJsonDraft(snippetMode === 'env' ? buildCursorJson(projectId, displayName) : snippet)}
+                    data-testid="mcp-json-helper-load"
+                  >
+                    Load generated snippet
+                  </Btn>
+                </div>
+                <textarea
+                  className="w-full min-h-32 rounded-sm border border-edge-subtle bg-surface px-3 py-2 font-mono text-2xs text-fg-secondary outline-none focus:border-brand"
+                  value={mcpJsonDraft}
+                  onChange={(event) => setMcpJsonDraft(event.target.value)}
+                  placeholder="Paste your ~/.cursor/mcp.json block here..."
+                  spellCheck={false}
+                  data-testid="mcp-json-helper-input"
+                />
+                <ContainedBlock tone={syntaxCheck.ok ? 'ok' : 'warn'}>
+                  <p className="text-xs font-semibold text-fg">{syntaxCheck.title}</p>
+                  <ul className="mt-1 list-disc pl-4 space-y-0.5 text-2xs text-fg-muted">
+                    {syntaxCheck.details.map((detail) => (
+                      <li key={detail}>{detail}</li>
+                    ))}
+                  </ul>
+                </ContainedBlock>
+              </div>
             </Card>
 
             {/* Multi-project connections */}
@@ -1314,6 +1487,26 @@ export function McpPage() {
                 </ContainedBlock>
               </Card>
             )}
+
+            {/* Account-level key — one key for all projects (org-scoped) */}
+            <Card className="p-5 space-y-4" data-testid="mcp-account-key">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-fg">Account key (all projects, one server)</h3>
+                  <Badge className="bg-info-muted text-info border border-info/30 text-2xs">org-scoped</Badge>
+                </div>
+                <ContainedBlock tone="muted" className="mt-2">
+                  <p className="text-xs text-fg-muted leading-relaxed">
+                    Alternative to per-project keys — one org-scoped key with no{' '}
+                    <span className="font-mono text-fg-secondary">MUSHI_PROJECT_ID</span> covers all your projects.
+                    The agent calls <span className="font-mono text-fg-secondary">get_account_overview</span> to
+                    discover accessible projects and auto-selects when you only have one.
+                    Use this when you want a single MCP server entry across your entire account.
+                  </p>
+                </ContainedBlock>
+              </div>
+              <McpAccountKeyCard compact />
+            </Card>
 
             {/* SDK install for end users */}
             {activeProjectId && (

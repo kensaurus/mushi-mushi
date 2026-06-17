@@ -24,6 +24,7 @@ import { registerBillingRoutes } from './billing.ts';
 import { registerOnboardingSetupRoutes } from './onboarding-setup.ts';
 import { registerProjectsCrudRoutes } from './projects-crud.ts';
 import { registerProjectKeysRoutes } from './project-keys.ts';
+import { registerProjectCiSecretsRoutes } from './project-ci-secrets.ts';
 import { registerProjectIntegrationsRoutes } from './project-integrations.ts';
 import { registerProjectCodebaseRoutes } from './project-codebase.ts';
 import { registerQueueRoutes } from './queue.ts';
@@ -34,6 +35,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   registerOnboardingSetupRoutes(app);
   registerProjectsCrudRoutes(app);
   registerProjectKeysRoutes(app);
+  registerProjectCiSecretsRoutes(app);
   registerProjectIntegrationsRoutes(app);
   registerProjectCodebaseRoutes(app);
   registerQueueRoutes(app);

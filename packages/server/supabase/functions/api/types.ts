@@ -21,4 +21,5 @@ export interface Variables {
   projectName?: string
   apiKeyId?: string
   apiKeyPrefix?: string
+  isOrgScopedKey?: boolean
 }

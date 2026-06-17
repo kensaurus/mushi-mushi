@@ -1,11 +1,10 @@
 /**
  * Root layout for the Mushi Bounties tester marketplace.
- * Provides <html> and <body> tags required by Next.js App Router.
+ * Dark editorial theme via --mushi-* brand tokens (Bounties is always dark).
  */
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-// Tailwind CSS is loaded via PostCSS at the app level — no explicit import needed
-// when using @tailwindcss/postcss with Turbopack.
+import './globals.css'
 
 export const metadata: Metadata = {
   title: {
@@ -18,8 +17,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-950 text-white antialiased">{children}</body>
+    <html lang="en" data-mushi-theme="dark">
+      <body className="antialiased">{children}</body>
     </html>
   )
 }

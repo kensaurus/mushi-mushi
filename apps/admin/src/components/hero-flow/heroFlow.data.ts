@@ -15,6 +15,7 @@
  */
 import type { Edge, Node } from '@xyflow/react'
 
+import { readVizToken } from '../../lib/vizTokens'
 import type { PageAction } from '../PageActionBar'
 import type { DavEvidence } from '../../lib/davManifest'
 import type { OperatorTraceLine } from './operatorTrace'
@@ -26,19 +27,19 @@ export type HeroSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
  *  TS so a theme tweak only touches one file. Aligned with the dashboard
  *  flow's `flowTokens.ts` so the two flows feel like one system. */
 export const HERO_SEVERITY_HEX: Record<HeroSeverity, string> = {
-  ok: '#34d399',
-  info: '#60a5fa',
-  warn: '#fbbf24',
-  crit: '#ef4444',
-  neutral: '#94a3b8',
+  ok: readVizToken('viz-score-ok'),
+  info: readVizToken('viz-flow-info'),
+  warn: readVizToken('viz-score-warn'),
+  crit: readVizToken('viz-flow-danger'),
+  neutral: readVizToken('viz-neutral'),
 }
 
 export const HERO_ACTION_TONE_HEX: Record<PageAction['tone'], string> = {
-  plan: '#60a5fa',
-  do: '#f5b544',
-  check: '#fbbf24',
-  act: '#34d399',
-  idle: '#94a3b8',
+  plan: readVizToken('viz-flow-info'),
+  do: readVizToken('viz-flow-brand'),
+  check: readVizToken('viz-score-warn'),
+  act: readVizToken('viz-score-ok'),
+  idle: readVizToken('viz-neutral'),
 }
 
 export interface HeroDecideData {

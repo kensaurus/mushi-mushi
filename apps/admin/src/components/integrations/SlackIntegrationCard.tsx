@@ -102,7 +102,8 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-[#4A154B] flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-accent-muted flex items-center justify-center flex-shrink-0">
+            {/* mushi-mushi-allowlist: Slack trademark SVG requires exact brand hex fills */}
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="#E01E5A"/>
               <path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="#36C5F0"/>
@@ -138,7 +139,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             </button>
           ) : (
             <button
-              className="inline-flex items-center gap-2 rounded-lg bg-[#4A154B] text-white px-4 py-2 text-sm font-medium hover:bg-[#3d1140] transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent text-fg px-4 py-2 text-sm font-medium hover:bg-accent-hover transition-colors"
               onClick={handleAddToSlack}
               disabled={!projectId}
             >

@@ -7,12 +7,14 @@ program
   .command('setup')
   .description('Wire Mushi into your IDE with one command')
   .option('--ide <ide>', 'Target IDE: cursor | claude | continue | zed', 'cursor')
-  .option('--project-slug <slug>', 'Override the project slug in the server name (default: project ID prefix)')
+  .option('--project-slug <slug>', 'Override the project slug in the server name (default: fetched from API or ID prefix)')
+  .option('--all-projects', 'Write a separate mushi-<name> server entry for every accessible project')
   .option('--with-rules', 'Also write the .cursorrules / .claude/rules/mushi.md lesson-library hook')
   .option('--dry-run', 'Print what would be written without making changes')
   .addHelpText('after', `
 Examples:
   mushi setup                         # wire Cursor (default)
+  mushi setup --all-projects          # one server entry per accessible project
   mushi setup --ide claude            # wire Claude Code
   mushi setup --ide cursor --with-rules  # also write .cursorrules
 
@@ -23,13 +25,61 @@ Supported IDEs:
   zed       — writes ~/.config/zed/settings.json mcpServers block
 
 The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
-  .action(async (opts: { ide: string; projectSlug?: string; withRules?: boolean; dryRun?: boolean }) => {
+  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
     const os = await import('node:os')
 
     const config = requireConfig({ needsProject: true })
+
+    // Mask the API key when echoing config to the terminal (dry-run preview) so
+    // the secret never lands in shell history or CI logs. The file written in a
+    // real run still contains the live key — see the .gitignore reminder below.
+    const redactKeyForDisplay = (text: string): string => {
+      const key = config.apiKey
+      if (!key) return text
+      const masked = key.length > 12 ? `${key.slice(0, 10)}…${key.slice(-2)}` : '••••'
+      return text.split(key).join(masked)
+    }
+
+    // Resolve a human-readable project slug: prefer --project-slug, then fetch
+    // the project name from the API and slugify it, falling back to the ID prefix.
+    let slug: string
+    if (opts.projectSlug) {
+      slug = opts.projectSlug
+    } else {
+      // Try to fetch the project name for a nicer server key.
+      try {
+        const res = await fetch(
+          `${config.endpoint?.replace(/\/$/, '')}/v1/admin/mcp/projects`,
+          {
+            headers: {
+              'X-Mushi-Api-Key': config.apiKey ?? '',
+              'X-Mushi-Project': config.projectId ?? '',
+            },
+            signal: AbortSignal.timeout(5000),
+          },
+        )
+        if (res.ok) {
+          const body = await res.json() as { ok: boolean; data?: { projects: Array<{ id: string; name?: string | null }> } }
+          const project = body?.data?.projects?.find((p) => p.id === config.projectId)
+          if (project?.name) {
+            slug = project.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-|-$/g, '')
+              .slice(0, 24)
+          } else {
+            slug = config.projectId?.slice(0, 8) ?? 'mushi'
+          }
+        } else {
+          slug = config.projectId?.slice(0, 8) ?? 'mushi'
+        }
+      } catch {
+        slug = config.projectId?.slice(0, 8) ?? 'mushi'
+      }
+    }
 
     const IDE_CONFIG: Record<string, { dir: string; file: string; format: 'mcp-json' | 'zed' }> = {
       cursor:   { dir: '.cursor',                       file: 'mcp.json', format: 'mcp-json' },
@@ -45,7 +95,26 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
     }
 
     const cwd = process.cwd()
-    const slug = opts.projectSlug ?? (config.projectId?.slice(0, 8) ?? 'mushi')
+
+    // ── --all-projects: fetch every accessible project and build one server entry each ──
+    type ProjectEntry = { id: string; name?: string | null }
+    let allProjectsList: ProjectEntry[] | null = null
+    if (opts.allProjects && config.endpoint && config.apiKey) {
+      try {
+        const res = await fetch(
+          `${config.endpoint.replace(/\/$/, '')}/v1/admin/mcp/projects`,
+          {
+            headers: { 'X-Mushi-Api-Key': config.apiKey, 'X-Mushi-Project': config.projectId ?? '' },
+            signal: AbortSignal.timeout(8000),
+          },
+        )
+        if (res.ok) {
+          const body = await res.json() as { ok: boolean; data?: { projects: ProjectEntry[] } }
+          allProjectsList = body?.data?.projects ?? []
+        }
+      } catch { /* fall through to single-project mode */ }
+    }
+
     const serverName = `mushi-${slug}`
 
     const mcpServerBlock = {
@@ -72,17 +141,42 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
         } catch { /* start fresh */ }
       }
       const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
-      servers[serverName] = mcpServerBlock
+
+      if (allProjectsList && allProjectsList.length > 0) {
+        // --all-projects: upsert one entry per project
+        for (const p of allProjectsList) {
+          const pSlug = p.name
+            ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)
+            : p.id.slice(0, 8)
+          const pServerName = `mushi-${pSlug}`
+          servers[pServerName] = {
+            command: 'npx',
+            args: ['-y', '@mushi-mushi/mcp@latest'],
+            env: {
+              MUSHI_API_ENDPOINT: config.endpoint,
+              MUSHI_PROJECT_ID: p.id,
+              MUSHI_API_KEY: config.apiKey,
+            },
+          }
+        }
+        if (opts.dryRun) {
+          console.log(`[dry-run] Would add ${allProjectsList.length} mushi-* entries to ${configPath}`)
+        } else {
+          console.log(`✓ Added ${allProjectsList.length} mushi-* server entries (${allProjectsList.map((p) => p.name ?? p.id.slice(0, 8)).join(', ')})`)
+        }
+      } else {
+        servers[serverName] = mcpServerBlock
+      }
       merged.mcpServers = servers
 
       const output = JSON.stringify(merged, null, 2) + '\n'
       if (opts.dryRun) {
         console.log(`[dry-run] Would write ${configPath}:`)
-        console.log(output)
+        console.log(redactKeyForDisplay(output))
       } else {
         await mkdir(configDir, { recursive: true })
         await writeFile(configPath, output, 'utf8')
-        console.log(`✓ Written ${configPath}`)
+        if (!allProjectsList) console.log(`✓ Written ${configPath}`)
       }
     } else if (ideEntry.format === 'zed') {
       let settings: Record<string, unknown> = {}
@@ -112,7 +206,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
       const output = JSON.stringify(settings, null, 2) + '\n'
       if (opts.dryRun) {
         console.log(`[dry-run] Would write ${configPath}:`)
-        console.log(output)
+        console.log(redactKeyForDisplay(output))
       } else {
         await mkdir(configDir, { recursive: true })
         await writeFile(configPath, output, 'utf8')

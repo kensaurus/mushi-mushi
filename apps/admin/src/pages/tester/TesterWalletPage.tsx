@@ -8,7 +8,7 @@
  */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { TesterPageIntro, TesterPrimaryCta, TesterStatGrid } from '../../components/tester/tester-ui'
+import { TesterPageIntro, TesterPrimaryCta, TesterStatGrid, TesterHelpBanner } from '../../components/tester/tester-ui'
 import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
@@ -196,7 +196,7 @@ export function TesterWalletPage() {
         } else if (code === 'budget_exceeded') {
           toast.error('This app has reached its monthly payout budget. Try again next month or choose Pro credit.')
         } else {
-          toast.error(msg)
+          toast.error(`${msg} Check your balance and try Pro credit if gift cards are blocked in your region.`)
         }
       }
     } finally {
@@ -210,6 +210,11 @@ export function TesterWalletPage() {
           title="Wallet"
           description="Redeem mushi-points for Mushi Pro credit (1.3× bonus) or gift cards via Tremendous."
         />
+
+        <TesterHelpBanner title="Redemption tips">
+          Pro credit skips the $599/yr gift-card KYC gate and pays a 1.3× bonus.
+          Gift cards may take a few minutes — check your email spam folder if nothing arrives.
+        </TesterHelpBanner>
 
         {loading && <TableSkeleton rows={6} />}
 

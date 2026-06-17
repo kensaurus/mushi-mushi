@@ -13,8 +13,7 @@ import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
-import { SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   SegmentedControl,
   ErrorAlert,
   Section,
@@ -28,8 +27,7 @@ import { SetupNudge } from '../components/SetupNudge'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { PageHero } from '../components/PageHero'
-import { useNextBestAction } from '../lib/useNextBestAction'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
@@ -426,30 +424,6 @@ export function GraphPage() {
     filteredNodes.length > 0 &&
     filteredNodes.length < STORYBOARD_THRESHOLD
 
-  // Hero + NBA derivations. Kept here (above the early returns) so the
-  // hook order stays stable across loading/error/success renders. Also
-  // shared with the hero Act tile so they can never disagree on "are we fragile?".
-  const componentIds = useMemo(
-    () => new Set(rawNodes.filter((n) => n.node_type === 'component').map((n) => n.id)),
-    [rawNodes],
-  )
-  const fragileComponents = useMemo(() => {
-    const incoming = new Map<string, number>()
-    for (const e of rawEdges) {
-      if (e.edge_type !== 'affects') continue
-      if (!componentIds.has(e.target_node_id)) continue
-      incoming.set(e.target_node_id, (incoming.get(e.target_node_id) ?? 0) + 1)
-    }
-    let n = 0
-    for (const count of incoming.values()) if (count >= 3) n += 1
-    return n
-  }, [componentIds, rawEdges])
-  const graphAction = useNextBestAction({
-    scope: 'graph',
-    fragileComponents: fragileComponents || stats.fragileComponents,
-    untestedComponents: 0,
-  })
-
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
     !stats.hasAnyProject
       ? 'neutral'
@@ -638,28 +612,31 @@ export function GraphPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-graph">
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Knowledge Graph'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Knowledge Graph'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          (stats.nodeCount > 0
+            ? `${stats.nodeCount} nodes · Explore tab for blast radius`
+            : 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map.')
+        }
+        helpTitle={copy?.help?.title ?? 'About the Knowledge Graph'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'See blast radius: click any node to highlight everything it can affect',
             'Find regressions: pick the Regressions quick view on Explore tab',
             'Spot fragile components: red banner means ≥3 incoming affects edges',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Overview for posture. Explore for canvas/table/surface. Backend tab shows AGE sync and ontology debug info.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Knowledge Graph'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
       >
         <Badge
           className={
@@ -670,7 +647,7 @@ export function GraphPage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'bg-chrome text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -696,16 +673,7 @@ export function GraphPage() {
         >
           Refresh
         </Btn>
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          {copy?.description ??
-            (stats.nodeCount > 0
-              ? `${stats.nodeCount} nodes · Explore tab for blast radius`
-              : 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map.')}
-        </p>
-      </ContainedBlock>
+      </PageHeaderBar>
 
       <GraphStatusBanner
         stats={stats}
@@ -767,43 +735,6 @@ export function GraphPage() {
 
       {activeTab === 'overview' && (
         <>
-          {!ux.hideOverviewChrome && (
-          <PageHero
-            scope="graph"
-            title="Knowledge Graph"
-            kicker="Plan"
-            decide={{
-              label: stats.topPriorityLabel ?? 'Blast radius map',
-              metric:
-                stats.nodeCount > 0
-                  ? `${stats.fragileComponents} fragile · ${stats.regressionEdges} regressions`
-                  : undefined,
-              summary:
-                stats.topPriority === 'waiting_ingest'
-                  ? 'Brand banner — graph seeds when reports ingest and the classifier links components.'
-                  : stats.topPriority === 'fragile'
-                    ? 'Red banner — fragile components have ≥3 incoming affects edges.'
-                    : stats.topPriority === 'regressions'
-                      ? 'Amber banner — regression edges mean bugs came back after a fix.'
-                      : 'Green banner — explore the map and click nodes for blast radius.',
-              severity:
-                stats.topPriority === 'fragile'
-                  ? 'crit'
-                  : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
-                    ? 'warn'
-                    : stats.topPriority === 'clear'
-                      ? 'ok'
-                      : 'info',
-            }}
-            act={graphAction}
-            actEvidence={graphAction ? { kind: 'rule-trace', why: graphAction.reason ?? graphAction.title } : undefined}
-            verify={{
-              label: 'Graph backend',
-              detail: `${stats.graphBackend}${stats.unsyncedNodes > 0 ? ` · ${stats.unsyncedNodes} unsynced nodes` : ''}`,
-            }}
-          />
-          )}
-
           {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
             <Card
               className={`space-y-3 p-4 ${

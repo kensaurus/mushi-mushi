@@ -10,7 +10,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, PageHelp, Section, ErrorAlert } from '../components/ui'
+import { Section, ErrorAlert } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
@@ -37,8 +38,6 @@ import {
   type RoutingProviderDef,
 } from '../components/integrations/types'
 import { usePageCopy } from '../lib/copy'
-import { PageHero } from '../components/PageHero'
-import { useNextBestAction } from '../lib/useNextBestAction'
 
 export function IntegrationsPage() {
   const toast = useToast()
@@ -110,22 +109,6 @@ export function IntegrationsPage() {
     }
     return map
   }, [history])
-
-  // Derive integration health for the hero tile.
-  const disconnectedCount = PLATFORM_DEFS.filter(
-    (d) => !platform?.[d.kind] || latestByKind[d.kind]?.status === 'down',
-  ).length
-  const expiringCount = 0  // Token expiry not surfaced in the current data model
-  const integrationsAction = useNextBestAction({ scope: 'integrations', disconnectedCount, expiringCount })
-  const integrationsSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
-    disconnectedCount === PLATFORM_DEFS.length ? 'neutral'
-    : disconnectedCount > 0 ? 'warn'
-    : 'ok'
-  const latestPlatformProbe = history[0] ?? null
-  const missingPlatformConfigIds = [
-    ...(platform?.github ? [] : ['integrations.github.repo_url', 'integrations.github.installation_token']),
-    ...(platform?.sentry ? [] : ['integrations.sentry.auth_token']),
-  ].slice(0, 3)
 
   const startEdit = (kind: Kind) => {
     setEditing(kind)
@@ -271,9 +254,34 @@ export function IntegrationsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Integrations'}
-        description={copy?.description ?? 'Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust.'}
+        description={
+          copy?.description ??
+          'Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust.'
+        }
+        helpTitle={copy?.help?.title ?? 'About Integrations'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
+            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
+            'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ?? [
+            'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
+            'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
+            'Step 3 — Sandbox: set Sandbox to e2b, modal, or cloudflare in Settings → Autofix. local-noop generates code but skips the PR in production.',
+            'Step 4 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
+            'Step 5 — Sentry: paste your DSN and auth token. Mushi links Sentry issues to reports and surfaces them on the fix PR.',
+            'Step 6 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
+          ].join('\n')
+        }
       />
 
       {!setup.hasAnyProject && (
@@ -285,79 +293,6 @@ export function IntegrationsPage() {
           blockedIcon={<HeroPlugIntegration accent="text-fg-faint" />}
         />
       )}
-
-      <PageHero
-        scope="integrations"
-        title={copy?.title ?? 'Integrations'}
-        kicker="Platform wiring"
-        decide={{
-          label: disconnectedCount === 0 ? 'All integrations connected' : `${disconnectedCount} integration${disconnectedCount === 1 ? '' : 's'} disconnected or failing`,
-          metric: `${PLATFORM_DEFS.length - disconnectedCount}/${PLATFORM_DEFS.length} connected`,
-          summary: disconnectedCount === 0
-            ? 'All platform integrations are connected and passing health probes.'
-            : `${disconnectedCount} integration${disconnectedCount === 1 ? '' : 's'} need credentials or failed the last probe — the pipeline degrades without them.`,
-          severity: integrationsSeverity,
-          anchor: 'integrations:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: PLATFORM_DEFS.map(d => ({
-              label: d.label,
-              value: latestByKind[d.kind]?.status ?? (platform?.[d.kind] ? 'configured' : 'missing'),
-              tone: latestByKind[d.kind]?.status === 'ok' ? 'ok'
-                : latestByKind[d.kind]?.status === 'down' ? 'crit'
-                : latestByKind[d.kind]?.status === 'degraded' ? 'warn'
-                : platform?.[d.kind] ? 'neutral'
-                : 'neutral',
-            })),
-          },
-          missingConfigIds: missingPlatformConfigIds,
-        }}
-        act={integrationsAction}
-        actAnchor="integrations:act"
-        actEvidence={integrationsAction ? {
-          kind: 'rule-trace',
-          why: integrationsAction.reason ?? integrationsAction.title,
-          threshold: disconnectedCount > 0 ? `${disconnectedCount} integration${disconnectedCount === 1 ? '' : 's'} disconnected` : undefined,
-        } : undefined}
-        actMissingConfigIds={missingPlatformConfigIds}
-        verify={{
-          label: latestPlatformProbe ? `Last probe · ${latestPlatformProbe.kind}` : 'No probes yet',
-          detail: latestPlatformProbe
-            ? `${latestPlatformProbe.status} · ${new Date(latestPlatformProbe.checked_at).toLocaleString()}`
-            : 'Trigger a test on any platform card below',
-          to: '/health?fn=integration-probe',
-          secondaryTo: '/audit?source=integrations',
-          secondaryLabel: 'Audit log',
-          anchor: 'integrations:verify',
-          evidence: latestPlatformProbe ? {
-            kind: 'last-event',
-            at: latestPlatformProbe.checked_at,
-            by: latestPlatformProbe.kind,
-            payloadSummary: `probe ${latestPlatformProbe.status}`,
-            status: latestPlatformProbe.status === 'ok' ? 'ok'
-              : latestPlatformProbe.status === 'down' ? 'error'
-              : 'warn',
-          } : undefined,
-        }}
-      />
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About Integrations'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'}
-        useCases={copy?.help?.useCases ?? [
-          'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
-          'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
-          'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
-        ]}
-        howToUse={copy?.help?.howToUse ?? [
-          'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
-          'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
-          'Step 3 — Sandbox: set Sandbox to e2b, modal, or cloudflare in Settings → Autofix. local-noop generates code but skips the PR in production.',
-          'Step 4 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
-          'Step 5 — Sentry: paste your DSN and auth token. Mushi links Sentry issues to reports and surfaces them on the fix PR.',
-          'Step 6 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
-        ].join('\n')}
-      />
 
       <Section title="Slack notifications">
         <SlackIntegrationCard

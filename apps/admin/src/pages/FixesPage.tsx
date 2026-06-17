@@ -14,7 +14,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
+import { SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -724,21 +724,18 @@ export function FixesPage() {
       {activeTab === 'overview' && (
         <>
           {codebaseStats && (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) && (
-            <div
+            <HelpBanner
+              tone="warn"
               role="status"
-              className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn-muted/30 px-3 py-2 text-2xs text-warn"
               data-testid="fixes-codebase-unindexed-banner"
+              icon={<span aria-hidden="true">⚠</span>}
             >
-              <span aria-hidden="true" className="mt-[1px]">⚠</span>
-              <div className="flex-1">
-                <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
-                {codebaseStats.codebase_index_enabled
-                  ? 'your codebase index is empty, so the LLM has nothing to read.'
-                  : 'codebase indexing is off, so the LLM has nothing to read.'}
-                {' '}
-                <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
-              </div>
-            </div>
+              <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
+              {codebaseStats.codebase_index_enabled
+                ? 'your codebase index is empty, so the LLM has nothing to read.'
+                : 'codebase indexing is off, so the LLM has nothing to read.'}{' '}
+              <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
+            </HelpBanner>
           )}
 
           {summary && (ux.isAdvanced || ux.hideFixesSnapshot) && (

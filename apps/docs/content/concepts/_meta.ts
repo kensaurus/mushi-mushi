@@ -1,5 +1,6 @@
 export default {
   index: 'Overview',
+  credentials: 'Project ID & API keys',
   architecture: 'Architecture',
   'trigger-modes': 'Trigger modes',
   classification: 'Classification pipeline',

@@ -51,6 +51,8 @@ interface ModalProps {
   /** Suppress the X close button (rare — use for wizards with explicit Cancel). */
   hideCloseButton?: boolean
   className?: string
+  /** Extra classes on the scrollable body wrapper. */
+  bodyClassName?: string
 }
 
 export function Modal({
@@ -65,6 +67,7 @@ export function Modal({
   dismissible = true,
   hideCloseButton,
   className = '',
+  bodyClassName = '',
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
@@ -134,6 +137,7 @@ export function Modal({
   }
 
   return (
+    // mushi-mushi-allowlist: canonical Modal primitive — shared overlay implementation
     <div
       role="dialog"
       aria-modal="true"
@@ -173,7 +177,7 @@ export function Modal({
             )}
           </header>
         )}
-        <div className="px-4 pb-3 pt-1 overflow-y-auto flex-1 min-h-0">{children}</div>
+        <div className={['px-4 pb-3 pt-1 overflow-y-auto flex-1 min-h-0', bodyClassName].filter(Boolean).join(' ')}>{children}</div>
         {footer && (
           <footer className="px-4 py-3 border-t border-edge/50 flex-shrink-0 flex flex-wrap justify-end gap-1.5 bg-surface-raised/40">
             {footer}

@@ -17,10 +17,16 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Badge } from './ui'
 import { useToast } from '../lib/toast'
-import { RESOLVED_API_URL } from '../lib/env'
-import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
+import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
+import { mushiEnvVarsForProjectSlug, isExpoReporterProject, expoReporterGithubRepo, type ProjectMushiEnvVars } from '../lib/projectMushiEnv'
 
-type Mode = 'raw' | 'env' | 'cursor' | 'admin'
+type Mode = 'raw' | 'env' | 'cursor' | 'admin' | 'expo' | 'github'
+
+function defaultModeForSlug(slug: string | null | undefined): Mode {
+  if (isExpoReporterProject(slug)) return 'expo'
+  if (mushiEnvVarsForProjectSlug(slug).apiKeyVar.startsWith('VITE_MUSHI_SELF_')) return 'admin'
+  return 'env'
+}
 
 interface Props {
   projectId: string
@@ -48,7 +54,7 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
           env: {
             // The same endpoint this console talks to — keeps the MCP server
             // and the admin on one host (self-hosted instances included).
-            MUSHI_API_ENDPOINT: RESOLVED_API_URL,
+            MUSHI_API_ENDPOINT: RESOLVED_EXTERNAL_API_URL,
             MUSHI_API_KEY: apiKey,
             MUSHI_PROJECT_ID: projectId,
           },
@@ -63,7 +69,7 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
 function buildEnvLocal(projectId: string, apiKey: string): string {
   return [
     '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
-    `MUSHI_API_ENDPOINT=${RESOLVED_API_URL}`,
+    `MUSHI_API_ENDPOINT=${RESOLVED_EXTERNAL_API_URL}`,
     `MUSHI_API_KEY=${apiKey}`,
     `MUSHI_PROJECT_ID=${projectId}`,
     '',
@@ -79,7 +85,56 @@ function buildAdminDogfoodEnv(projectId: string, apiKey: string, slug: string | 
     `${env.apiKeyVar}=${apiKey}`,
   ]
   if (env.endpointVar) {
-    lines.push(`# ${env.endpointVar}=${RESOLVED_API_URL}  # optional override`)
+    lines.push(`${env.endpointVar}=${RESOLVED_EXTERNAL_API_URL}`)
+  }
+  lines.push('')
+  return lines.join('\n')
+}
+
+function buildExpoEnvLocal(projectId: string, apiKey: string, env: ProjectMushiEnvVars): string {
+  const file = env.envFileHint ?? 'apps/mobile/.env.local'
+  const lines = [
+    `# Mushi reporter SDK — paste into ${file} (gitignored).`,
+    `# EXPO_PUBLIC_* is baked at bundle time; OTA cannot inject it.`,
+    `${env.projectIdVar}=${projectId}`,
+    `${env.apiKeyVar}=${apiKey}`,
+  ]
+  if (env.endpointVar) {
+    lines.push(`${env.endpointVar}=${RESOLVED_EXTERNAL_API_URL}`)
+  }
+  lines.push('')
+  return lines.join('\n')
+}
+
+function buildGithubCiEnv(projectId: string, apiKey: string, env: ProjectMushiEnvVars, projectSlug?: string | null): string {
+  const ci = env.ciVars
+  const repo = expoReporterGithubRepo(projectSlug) ?? 'your-org/your-repo'
+  if (!ci) {
+    return buildEnvLocal(projectId, apiKey)
+  }
+  const lines = [
+    '# GitHub Actions — reporter SDK for store builds (Android + iOS).',
+    '# Run from mushi-mushi: node scripts/setup-yen-yen-reporter-secrets.mjs',
+    '# Use stdin/body-file when running gh — never paste secrets into shell history.',
+    '#',
+    '# Reporter (in-app feedback band):',
+  ]
+  lines.push(`gh variable set ${ci.projectId.name} --body-file project-id.txt --repo ${repo}`)
+  lines.push(`gh secret set ${ci.apiKey.name} < api-key.txt --repo ${repo}`)
+  if (ci.endpoint) {
+    lines.push(`gh variable set ${ci.endpoint.name} --body-file endpoint.txt --repo ${repo}`)
+  }
+  lines.push(
+    '',
+    '# Code Health CI only (NOT the reporter band):',
+    'gh secret set MUSHI_INGEST_KEY < ingest-key.txt --repo ' + repo,
+    '',
+    '# Values for this reveal (store in the files above — do not commit):',
+    `${ci.projectId.name}=${projectId}`,
+    `${ci.apiKey.name}=${apiKey}`,
+  )
+  if (ci.endpoint) {
+    lines.push(`${ci.endpoint.name}=${RESOLVED_EXTERNAL_API_URL}`)
   }
   lines.push('')
   return lines.join('\n')
@@ -100,13 +155,18 @@ export function RevealedKeyCard({
   onDismiss,
   testIdPrefix,
 }: Props) {
-  const [mode, setMode] = useState<Mode>('env')
+  const env = mushiEnvVarsForProjectSlug(projectSlug)
+  const [mode, setMode] = useState<Mode>(() => defaultModeForSlug(projectSlug))
   const toast = useToast()
 
   const envSnippet = buildEnvLocal(projectId, apiKey)
   const cursorSnippet = buildCursorJson(projectId, projectName, apiKey)
   const adminSnippet = buildAdminDogfoodEnv(projectId, apiKey, projectSlug)
-  const showAdminTab = mushiEnvVarsForProjectSlug(projectSlug).apiKeyVar.startsWith('VITE_MUSHI_SELF_')
+  const expoSnippet = buildExpoEnvLocal(projectId, apiKey, env)
+  const githubSnippet = buildGithubCiEnv(projectId, apiKey, env, projectSlug)
+  const showAdminTab = env.apiKeyVar.startsWith('VITE_MUSHI_SELF_')
+  const showExpoTab = isExpoReporterProject(projectSlug)
+  const showGithubTab = Boolean(env.ciVars)
   const payload =
     mode === 'raw'
       ? apiKey
@@ -114,7 +174,11 @@ export function RevealedKeyCard({
         ? envSnippet
         : mode === 'admin'
           ? adminSnippet
-          : cursorSnippet
+          : mode === 'expo'
+            ? expoSnippet
+            : mode === 'github'
+              ? githubSnippet
+              : cursorSnippet
 
   async function copy() {
     try {
@@ -126,7 +190,11 @@ export function RevealedKeyCard({
             ? '.env.local block copied — paste into your repo\'s .env.local.'
             : mode === 'admin'
               ? 'Admin dogfood env copied — paste into apps/admin/.env.local and restart Vite.'
-              : '.cursor/mcp.json block copied — paste into your IDE\'s MCP config.',
+              : mode === 'expo'
+                ? 'Expo .env.local block copied — paste into apps/mobile/.env.local.'
+                : mode === 'github'
+                  ? 'GitHub Actions checklist copied — run gh variable/secret set, then rebuild store apps.'
+                  : '.cursor/mcp.json block copied — paste into your IDE\'s MCP config.',
       )
     } catch {
       toast.error('Clipboard blocked — select the text and copy manually.')
@@ -134,7 +202,25 @@ export function RevealedKeyCard({
   }
 
   const tabs: Array<{ id: Mode; label: string; hint: string }> = [
-    { id: 'env', label: '.env.local', hint: 'For the MCP binary, CI, or any tool that reads env vars.' },
+    ...(showExpoTab
+      ? [
+          {
+            id: 'expo' as const,
+            label: 'Expo (.env.local)',
+            hint: 'Reporter SDK vars for apps/mobile — compile-time EXPO_PUBLIC_* pattern.',
+          },
+        ]
+      : []),
+    ...(showGithubTab
+      ? [
+          {
+            id: 'github' as const,
+            label: 'GitHub Actions',
+            hint: 'Repo vars/secrets for release-mobile store builds (reporter vs ingest keys).',
+          },
+        ]
+      : []),
+    { id: 'env', label: '.env.local (MCP)', hint: 'For the MCP binary, CI, or any tool that reads MUSHI_* env vars.' },
     ...(showAdminTab
       ? [
           {

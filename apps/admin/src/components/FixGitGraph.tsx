@@ -305,9 +305,6 @@ export function FixGitGraph({
               onKeyDown={(ev) => onNodeKey(ev, i, e)}
               onMouseEnter={() => select(i)}
               onFocus={() => select(i)}
-              onBlur={() => {
-                // only clear if focus moved outside graph (leave hover-selected)
-              }}
             >
               <title>{tooltipFor(e, agentModel)}</title>
               {/* invisible hit-target so tiny circles are easy to click */}

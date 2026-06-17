@@ -9,8 +9,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import {
-  PageHeader,
-  PageHelp,
   Btn,
   FilterSelect,
   EmptyState,
@@ -18,15 +16,13 @@ import {
   RecommendedAction,
   Card,
 } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
 import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
-import { PageHero } from '../components/PageHero'
-import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
-import { useNextBestAction } from '../lib/useNextBestAction'
 import {
   STATUS_OPTIONS,
   type QueueItem,
@@ -190,43 +186,23 @@ export function DLQPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  // Hero data derivations. We keep them at the top of render so the
-  // DLQ hero reflects exactly what the KPI row sees — there is one
-  // source of truth for each metric, which matters because operators
-  // use the hero to decide whether to open the page in the first place.
   const deadLetter = summary?.byStatus?.dead_letter ?? 0
   const failedCount = summary?.byStatus?.failed ?? 0
-  const pendingCount = summary?.byStatus?.pending ?? 0
-  const runningCount = summary?.byStatus?.running ?? 0
-  const completedCount = summary?.byStatus?.completed ?? 0
-  const dlqSeverity: 'crit' | 'warn' | 'ok' =
-    deadLetter > 0 ? 'crit' : failedCount > 0 ? 'warn' : 'ok'
-  const dlqAction = useNextBestAction({
-    scope: 'dlq',
-    poisonedCount: deadLetter,
-    pendingCount,
-    oldestPendingMinutes: null,
-  })
-  const latestThroughput = throughput.at(-1)
-
-  const dlqDebugLines: OperatorTraceLine[] = [
-    {
-      level: deadLetter > 0 ? 'error' : failedCount > 0 ? 'warn' : 'info',
-      source: 'queue',
-      message: `dead=${deadLetter} failed=${failedCount} pending=${pendingCount} running=${runningCount}`,
-    },
-    ...(latestThroughput
-      ? [{
-          level: 'debug' as const,
-          source: 'throughput',
-          message: `${latestThroughput.day}: ${latestThroughput.completed} ok / ${latestThroughput.failed} fail`,
-        }]
-      : []),
-  ]
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Processing Queue">
+      <PageHeaderBar
+        title="Processing Queue"
+        description="Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here."
+        helpTitle="About the Processing Queue"
+        helpWhatIsIt="Every report passes through fast-filter, classify, and (optionally) judge + fix stages. This page is the operator view of that pipeline — backlog by status, throughput trend, and any item stuck in dead letter."
+        helpUseCases={[
+          'Spot a stuck stage at a glance via the Backlog by status row',
+          'Recover from transient outages (LLM rate limits, network blips) with bulk retry',
+          'Audit pipeline health over the last 14 days via the throughput chart',
+        ]}
+        helpHowToUse="Switch status to find what's failing. Use the stage filter to scope. Retry individual items, or use Retry page after fixing the root cause."
+      >
         <FilterSelect
           label="Status"
           value={filter}
@@ -268,73 +244,7 @@ export function DLQPage() {
         >
           Recover stranded
         </Btn>
-      </PageHeader>
-
-      <ContainedBlock tone="muted" className="mb-1">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here.
-        </p>
-      </ContainedBlock>
-
-      <PageHero
-        scope="dlq"
-        title="Processing Queue"
-        kicker="Pipeline pulse"
-        decide={{
-          label:
-            dlqSeverity === 'crit'
-              ? 'Dead-letter lane non-empty'
-              : dlqSeverity === 'warn'
-                ? 'Failures need retry'
-                : 'Queue is healthy',
-          metric:
-            deadLetter > 0
-              ? `${deadLetter} dead-letter`
-              : failedCount > 0
-                ? `${failedCount} failed`
-                : `${runningCount} running · ${pendingCount} pending`,
-          summary:
-            dlqSeverity === 'crit'
-              ? 'Dead-letter rows never retry automatically — inspect the payload and republish.'
-              : dlqSeverity === 'warn'
-                ? 'Transient failures will retry; confirm nothing is stuck on the same message.'
-                : 'No stuck work, no dead letters. Backlog is draining normally.',
-          severity: dlqSeverity,
-          anchor: 'dlq:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Dead-letter', value: deadLetter, tone: deadLetter > 0 ? 'crit' : 'ok' },
-              { label: 'Failed', value: failedCount, tone: failedCount > 0 ? 'warn' : 'ok' },
-              { label: 'Pending', value: pendingCount, tone: 'neutral' },
-              { label: 'Running', value: runningCount, tone: runningCount > 0 ? 'info' : 'neutral' },
-            ],
-          },
-          debugLines: dlqDebugLines,
-        }}
-        act={dlqAction}
-        actAnchor="dlq:act"
-        actEvidence={dlqAction ? { kind: 'rule-trace', why: dlqAction.reason ?? dlqAction.title, threshold: deadLetter > 0 ? `${deadLetter} dead-letter` : failedCount > 0 ? `${failedCount} failed` : undefined } : undefined}
-        verify={{
-          label: 'Latest throughput snapshot',
-          detail:
-            latestThroughput
-              ? `${latestThroughput.day} · ${latestThroughput.completed} completed · ${latestThroughput.failed} failed`
-              : `${completedCount} lifetime completions`,
-          to: '/health?fn=queue-worker',
-          secondaryTo: '/audit?source=queue',
-          secondaryLabel: 'Audit log',
-          anchor: 'dlq:verify',
-          evidence: latestThroughput ? {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Date', value: latestThroughput.day, tone: 'neutral' },
-              { label: 'Completed', value: latestThroughput.completed, tone: 'ok' },
-              { label: 'Failed', value: latestThroughput.failed, tone: latestThroughput.failed > 0 ? 'warn' : 'ok' },
-            ],
-          } : undefined,
-        }}
-      />
+      </PageHeaderBar>
 
       {(deadLetter > 0 || failedCount > 0) && (
         <Card
@@ -368,17 +278,6 @@ export function DLQPage() {
           </ActionPillRow>
         </Card>
       )}
-
-      <PageHelp
-        title="About the Processing Queue"
-        whatIsIt="Every report passes through fast-filter, classify, and (optionally) judge + fix stages. This page is the operator view of that pipeline — backlog by status, throughput trend, and any item stuck in dead letter."
-        useCases={[
-          'Spot a stuck stage at a glance via the Backlog by status row',
-          'Recover from transient outages (LLM rate limits, network blips) with bulk retry',
-          'Audit pipeline health over the last 14 days via the throughput chart',
-        ]}
-        howToUse="Switch status to find what's failing. Use the stage filter to scope. Retry individual items, or use Retry page after fixing the root cause."
-      />
 
       {summary && (
         <div className="space-y-1.5">

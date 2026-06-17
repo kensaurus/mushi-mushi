@@ -19,8 +19,12 @@ import {
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, Section, Card, Btn, Tooltip, CopyButton } from '../components/ui'
+import { Section, Card, Btn, Tooltip, CopyButton, HelpBanner } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { ResponsiveTable } from '../components/ResponsiveTable'
+import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
+import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
 import { McpInstallButtons } from '../components/McpInstallButtons'
 import { SdkVersionBadge } from '../components/SdkVersionBadge'
 import { useSdkUpgrade, type BumpEntry } from '../lib/useSdkUpgrade'
@@ -39,10 +43,7 @@ import {
 } from '../components/icons'
 import { CodeInline } from '../components/CodePanel'
 import type { SdkStatus } from '../components/SdkVersionBadge'
-
-// ---------------------------------------------------------------------------
-// Types — mirrors GET /v1/admin/projects row shape (billing-projects-queue-graph)
-// ---------------------------------------------------------------------------
+import { isExpoReporterProject } from '../lib/projectMushiEnv'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -58,6 +59,17 @@ interface ProjectRow {
   sdk_latest_version?: string | null
   sdk_status?: SdkStatus | null
   primary_repo?: ProjectRepoLite | null
+  api_keys?: Array<{
+    is_active: boolean
+    last_seen_at?: string | null
+  }>
+}
+
+function isExpoReporterNeverConnected(project: ProjectRow): boolean {
+  if (!isExpoReporterProject(project.slug)) return false
+  const active = (project.api_keys ?? []).filter((k) => k.is_active)
+  if (active.length === 0) return false
+  return active.every((k) => !k.last_seen_at)
 }
 
 interface ProjectsPayload {
@@ -99,7 +111,7 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
       <span
         role="status"
         aria-live="polite"
-        className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand border border-brand/25"
+        className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent border border-accent/25"
       >
         {spinner}
         Opening PR…
@@ -162,7 +174,7 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
 function BumpPlanTable({ bumps }: { bumps: BumpEntry[] }) {
   if (bumps.length === 0) return null
   return (
-    <div className="mt-2 overflow-x-auto rounded-md border border-edge-subtle">
+    <ResponsiveTable ariaLabel="SDK upgrade bump plan">
       <table className="w-full text-xs">
         <thead className="bg-surface-hover/50">
           <tr>
@@ -181,7 +193,7 @@ function BumpPlanTable({ bumps }: { bumps: BumpEntry[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ResponsiveTable>
   )
 }
 
@@ -218,31 +230,29 @@ function UpdateCenter({ project, preflight }: { project: ProjectRow; preflight: 
       </div>
 
       {!hasGithubReady && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-warn/25 bg-warn-muted/20 px-3 py-2.5">
-          <IconAlertTriangle className="h-4 w-4 text-[var(--color-warning-foreground)] mt-0.5 shrink-0" aria-hidden />
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-medium text-fg">GitHub not ready for upgrade PRs</p>
-            <p className="text-xs text-fg-muted">
-              {githubHint ?? (
-                <>
-                  Connect a GitHub repo in{' '}
-                  <Link to="/integrations/config" className="underline focus-visible:ring-2 focus-visible:ring-focus">
-                    Integrations
-                  </Link>{' '}
-                  to enable one-click upgrade PRs.
-                </>
-              )}
-            </p>
-            {githubCheck?.fixHref && (
-              <Link
-                to={githubCheck.fixHref}
-                className="inline-flex text-xs font-medium text-brand underline focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                Fix GitHub connection
-              </Link>
-            )}
-          </div>
-        </div>
+        <HelpBanner
+          tone="warn"
+          title="GitHub not ready for upgrade PRs"
+          icon={<IconAlertTriangle className="h-4 w-4 text-warning-foreground" />}
+        >
+          {githubHint ?? (
+            <>
+              Connect a GitHub repo in{' '}
+              <Link to="/integrations/config" className="underline focus-visible:ring-2 focus-visible:ring-focus">
+                Integrations
+              </Link>{' '}
+              to enable one-click upgrade PRs.
+            </>
+          )}
+          {githubCheck?.fixHref && (
+            <Link
+              to={githubCheck.fixHref}
+              className="mt-1 inline-flex text-xs font-medium text-brand underline focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              Fix GitHub connection
+            </Link>
+          )}
+        </HelpBanner>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -378,6 +388,7 @@ function SectionDescription({ children }: { children: React.ReactNode }) {
 // Main page
 // ---------------------------------------------------------------------------
 export function ConnectPage() {
+  const copy = usePageCopy('/connect')
   usePublishPageContext({
     route: '/connect',
     title: 'Connect & Update',
@@ -407,11 +418,32 @@ export function ConnectPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Connect & Update"
-        description="Install the SDK, connect your IDE agent, set up the CLI, and keep everything up to date — all in one place."
+      <PageHeaderBar
+        title={copy?.title ?? 'Connect & Update'}
+        description={
+          copy?.description ??
+          'Install the SDK, connect your IDE agent, set up the CLI, and keep everything up to date — all in one place.'
+        }
+        helpTitle={copy?.help?.title ?? 'About Connect & Update'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'The install and upgrade cockpit — connect your repo, copy SDK/MCP install commands, and create a PR that bumps @mushi-mushi packages.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'First-time setup: connect GitHub → install SDK → add MCP to Cursor',
+            'Upgrade path: "Create Upgrade PR" bumps @mushi-mushi/* to latest npm',
+            'Verify indexing: enable codebase index so Explore can map your repo',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'Connect GitHub first. Copy the SDK install snippet into your app, then use MCP deeplinks for Cursor. When versions drift, click Create Upgrade PR and merge after CI passes.'
+        }
       />
 
+      <div className="xl:grid xl:grid-cols-2 xl:items-start xl:gap-6">
+      <div className="space-y-6">
       {/* ---------------------------------------------------------------- */}
       {/* 1. GitHub connect                                                 */}
       {/* ---------------------------------------------------------------- */}
@@ -443,9 +475,30 @@ export function ConnectPage() {
         <SectionDescription>
           Add the Mushi SDK to your app so users can report bugs in one tap.
         </SectionDescription>
+        {project && isExpoReporterNeverConnected(project) ? (
+          <HelpBanner
+            tone="warn"
+            title="No SDK heartbeat from store builds yet"
+            icon={<IconAlertTriangle className="h-5 w-5 text-warn" />}
+            className="mb-3"
+          >
+            <p className="text-xs leading-relaxed">
+              Keys exist but no app has authenticated. For yen-yen, set{' '}
+              <code className="font-mono text-2xs">EXPO_PUBLIC_MUSHI_*</code> in{' '}
+              <code className="font-mono text-2xs">apps/mobile/.env.local</code> and as GitHub
+              repo vars/secrets, then trigger <strong>release-mobile</strong> — OTA cannot inject
+              compile-time env. <code className="font-mono text-2xs">MUSHI_INGEST_KEY</code> is
+              Code Health only, not the in-app band.
+            </p>
+            <Link to={`/setup-copilot?project=${project.id}`} className="mt-2 inline-block text-xs text-accent underline">
+              Open Setup Copilot → CI &amp; store builds
+            </Link>
+          </HelpBanner>
+        ) : null}
         {project ? (
           <SdkInstallCard
             projectId={project.id}
+            projectSlug={project.slug}
             compact
           />
         ) : projectPending ? (
@@ -461,6 +514,34 @@ export function ConnectPage() {
         )}
       </Section>
 
+      {/* ---------------------------------------------------------------- */}
+      {/* 2b. Native CI secrets diagnostic                                   */}
+      {/* ---------------------------------------------------------------- */}
+      <Section title="Native app CI secrets">
+        <SectionDescription>
+          For Capacitor, Expo, and React Native builds, Mushi env vars must be baked in at
+          compile time — they cannot be injected at runtime. This panel detects missing CI secrets
+          and can write them to GitHub Actions automatically.
+        </SectionDescription>
+        {project ? (
+          <SdkNativeConnectivityCard
+            projectId={project.id}
+            projectSlug={project.slug}
+          />
+        ) : projectPending ? (
+          <Card>
+            <p className="p-4 text-sm text-fg-muted" aria-busy="true">Loading project…</p>
+          </Card>
+        ) : (
+          <Card>
+            <p className="p-4 text-sm text-fg-muted">Select a project above.</p>
+          </Card>
+        )}
+      </Section>
+
+      </div>
+
+      <div className="space-y-6 xl:sticky xl:top-4">
       {/* ---------------------------------------------------------------- */}
       {/* 3. Install MCP                                                    */}
       {/* ---------------------------------------------------------------- */}
@@ -559,6 +640,8 @@ export function ConnectPage() {
           </div>
         </Card>
       </Section>
+      </div>
+      </div>
     </div>
   )
 }

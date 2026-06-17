@@ -19,9 +19,8 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
-  Badge,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint, Badge,
   Btn,
   EmptyState,
   ErrorAlert,
@@ -643,20 +642,18 @@ export function LessonsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-lessons">
-      <PageHelp
-        title={copy?.help?.title ?? 'About Lessons'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Lessons'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'}
+        helpTitle={copy?.help?.title ?? 'About Lessons'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Inject relevant lessons into PR review context via the lessons.query MCP tool',
           'Test what rules a diff would trigger using the Query Sim tab',
           'Export active lessons to .mushi/lessons.json for offline CI use',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Lessons'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -669,7 +666,7 @@ export function LessonsPage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -689,8 +686,7 @@ export function LessonsPage() {
         </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection."} />
+      </PageHeaderBar>
 
       <LessonsStatusBanner
         stats={stats}
