@@ -453,12 +453,14 @@ export async function checkMcpConfig(
   doFetch: typeof globalThis.fetch = globalThis.fetch,
 ): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = []
-  const { readFile, access } = await import('node:fs/promises')
+  const { readFile } = await import('node:fs/promises')
   const { join, resolve } = await import('node:path')
   const { homedir } = await import('node:os')
   const root = resolve(cwd)
 
-  // 1. Find the mcp.json — check project-local first, then global ~/.cursor
+  // 1. Find the mcp.json — check project-local first, then global ~/.cursor.
+  // Read directly and let a missing file throw (caught below) rather than an
+  // access()+readFile() pre-check, which is a TOCTOU race and an extra syscall.
   const candidates = [
     join(root, '.cursor', 'mcp.json'),
     join(homedir(), '.cursor', 'mcp.json'),
@@ -467,7 +469,6 @@ export async function checkMcpConfig(
   let mcpRaw: string | null = null
   for (const candidate of candidates) {
     try {
-      await access(candidate)
       mcpRaw = await readFile(candidate, 'utf8')
       mcpPath = candidate
       break

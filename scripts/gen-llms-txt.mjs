@@ -5,7 +5,7 @@
  *   pnpm gen:llms-txt
  */
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -16,11 +16,18 @@ const OUT = path.join(ROOT, "apps/docs/public/llms.txt")
 const BASE = "https://docs.mushimushi.dev"
 
 function walkMdx(dir, baseRoute = "", acc = []) {
-  if (!existsSync(dir)) return acc
-  for (const name of readdirSync(dir)) {
+  // Read the directory with Dirent entries so we never stat()-then-read() the
+  // same path (a TOCTOU race); a missing dir simply yields no entries.
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return acc
+  }
+  for (const entry of entries) {
+    const name = entry.name
     const full = path.join(dir, name)
-    const st = statSync(full)
-    if (st.isDirectory()) {
+    if (entry.isDirectory()) {
       walkMdx(full, `${baseRoute}/${name}`, acc)
     } else if (name.endsWith(".mdx")) {
       const slug = name === "index.mdx" ? baseRoute || "/" : `${baseRoute}/${name.replace(/\.mdx$/, "")}`
