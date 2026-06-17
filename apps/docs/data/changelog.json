@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.15",
     "headline": null,
     "pending": false,
@@ -628,11 +620,31 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/angular",
+        "version": "1.0.0"
+      },
+      {
+        "name": "@mushi-mushi/capacitor",
+        "version": "1.0.0"
+      },
+      {
         "name": "@mushi-mushi/core",
         "version": "1.0.0"
       },
       {
+        "name": "@mushi-mushi/node",
+        "version": "1.0.0"
+      },
+      {
         "name": "@mushi-mushi/react",
+        "version": "1.0.0"
+      },
+      {
+        "name": "@mushi-mushi/svelte",
+        "version": "1.0.0"
+      },
+      {
+        "name": "@mushi-mushi/vue",
         "version": "1.0.0"
       },
       {
