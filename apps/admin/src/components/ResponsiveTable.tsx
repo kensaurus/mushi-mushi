@@ -25,6 +25,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTableDensity } from '../lib/useTableDensity'
 import type { TableDensity } from '../lib/useTableDensity'
+import { MicroSegmentCell, MicroSegmentedTrack } from './sidebar/MicroSegmentedTrack'
+import { MICRO_SEG, MICRO_SEG_LABEL, microSegActive } from './sidebar/SidebarMicroChrome'
 
 interface ResponsiveTableProps {
   children: ReactNode
@@ -123,31 +125,30 @@ const DENSITY_LABELS: Record<TableDensity, string> = {
 
 export function TableDensityToggle({ className = '' }: TableDensityToggleProps) {
   const [density, setDensity] = useTableDensity()
+  const options = Object.keys(DENSITY_LABELS) as TableDensity[]
   return (
-    <div
+    <MicroSegmentedTrack
+      trackId="table-density"
+      inline
       role="group"
       aria-label="Table density"
-      className={`inline-flex items-center rounded-sm border border-edge-subtle bg-surface-raised/40 p-0.5 text-2xs ${className}`.trim()}
+      className={className.trim() || undefined}
     >
-      {(Object.keys(DENSITY_LABELS) as TableDensity[]).map((d) => {
+      {options.map((d) => {
         const active = density === d
         return (
-          <button
-            key={d}
-            type="button"
-            onClick={() => setDensity(d)}
-            aria-pressed={active}
-            className={[
-              'px-2 py-0.5 rounded-xs transition-colors',
-              active
-                ? 'bg-brand/15 text-fg'
-                : 'text-fg-muted hover:text-fg-secondary',
-            ].join(' ')}
-          >
-            {DENSITY_LABELS[d]}
-          </button>
+          <MicroSegmentCell key={d} active={active}>
+            <button
+              type="button"
+              onClick={() => setDensity(d)}
+              aria-pressed={active}
+              className={`${MICRO_SEG} ${microSegActive(active)} px-2`}
+            >
+              <span className={MICRO_SEG_LABEL}>{DENSITY_LABELS[d]}</span>
+            </button>
+          </MicroSegmentCell>
         )
       })}
-    </div>
+    </MicroSegmentedTrack>
   )
 }

@@ -15,8 +15,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
 import { useRealtimeReload } from '../lib/realtime'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   Section,
   Card,
   Btn,
@@ -56,6 +55,7 @@ import {
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
@@ -887,8 +887,28 @@ export function ProjectsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-projects">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Projects'}
+        description={
+          copy?.description ??
+          'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'
+        }
+        helpTitle={copy?.help?.title ?? 'About projects'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Create a project for your main app (takes 30 seconds)',
+            "Add a separate project for staging so test bugs don't mix with real ones",
+            'Generate an API key, send a test report, and confirm SDK heartbeat before production',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'Use Your projects to switch context, mint keys, and read per-project health. The banner and KPI strip tell you which projects ingest and which keys have connected.'
+        }
       >
         <Badge
           className={
@@ -897,7 +917,7 @@ export function ProjectsPage() {
               : bannerSeverity === 'warn'
                 ? 'bg-warn-muted text-warning-foreground'
                 : bannerSeverity === 'brand'
-                  ? 'bg-brand-subtle text-brand'
+                  ? 'bg-chrome text-fg-secondary'
                   : bannerSeverity === 'info'
                     ? 'bg-info-muted text-info-foreground'
                     : 'bg-surface-overlay text-fg-muted'
@@ -909,8 +929,7 @@ export function ProjectsPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
           Refresh
         </Btn>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest."} />
+      </PageHeaderBar>
 
       <ProjectsStatusBanner
         stats={stats}
@@ -1017,24 +1036,6 @@ export function ProjectsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <PageHelp
-            title={copy?.help?.title ?? 'About projects'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Create a project for your main app (takes 30 seconds)',
-                "Add a separate project for staging so test bugs don't mix with real ones",
-                'Generate an API key, send a test report, and confirm SDK heartbeat before production',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Use Your projects to switch context, mint keys, and read per-project health. The banner and KPI strip tell you which projects ingest and which keys have connected.'
-            }
-          />
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -1121,12 +1122,6 @@ export function ProjectsPage() {
             </p>
           </ContainedBlock>
           {createForm}
-          <PageHelp
-            title={copy?.help?.title ?? 'About projects'}
-            whatIsIt={copy?.help?.whatIsIt ?? ''}
-            useCases={copy?.help?.useCases ?? []}
-            howToUse={copy?.help?.howToUse ?? ''}
-          />
         </Section>
       ) : activeTab === 'list' ? (
         <Section title="Your projects">
@@ -1564,7 +1559,7 @@ export function ProjectsPage() {
                         (or reloads), `revealed` becomes undefined and the
                         card cleanly falls back to the placeholder — which
                         is what we want, since we don't persist plaintext. */}
-                    <SdkInstallCard projectId={project.id} apiKey={revealed?.key} compact />
+                    <SdkInstallCard projectId={project.id} projectSlug={project.slug} apiKey={revealed?.key} compact />
                   </div>
                 </details>
               </Card>

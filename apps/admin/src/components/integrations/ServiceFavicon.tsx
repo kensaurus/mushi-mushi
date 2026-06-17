@@ -16,7 +16,7 @@ interface ServiceFaviconProps {
   label: string
   /** SVG fallback icon rendered when favicon fails or network is unavailable */
   FallbackIcon: ComponentType<{ size?: number; className?: string }>
-  /** Tailwind text-color class applied to the fallback icon, e.g. "text-[#7B5EA7]" */
+  /** Tailwind text-color class applied to the fallback icon, e.g. "text-accent" */
   colorClass?: string
   /** Size of the inner icon in pixels. The chip wrapper is iconSize + 8. Default 14. */
   iconSize?: number
@@ -56,8 +56,8 @@ export function ServiceFavicon({
   return (
     <span
       aria-hidden="true"
-      className="shrink-0 inline-flex items-center justify-center rounded-md overflow-hidden"
-      style={{ width: chipSize, height: chipSize, background: '#fff' }}
+      className="shrink-0 inline-flex items-center justify-center rounded-md overflow-hidden bg-surface-raised"
+      style={{ width: chipSize, height: chipSize }}
     >
       <img
         src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}

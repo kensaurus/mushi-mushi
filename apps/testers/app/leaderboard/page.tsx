@@ -3,6 +3,7 @@
  * Revalidates every 15 minutes (aligned with the pg_cron MV refresh).
  */
 import type { Metadata } from 'next'
+import { TestersPageShell } from '../components/TestersPageShell'
 
 export const metadata: Metadata = {
   title: 'Tester Leaderboard',
@@ -47,42 +48,27 @@ export default async function LeaderboardPage() {
   const leaders = await getLeaderboard()
 
   return (
-    <div className="min-h-screen">
-      <nav className="sticky top-0 z-40 border-b border-white/10 bg-gray-950/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <a href="/mushi-mushi/testers/" className="text-lg font-bold">
-            <span className="text-violet-400">mushi</span>mushi
-            <span className="ml-2 text-sm font-normal text-gray-400">🪲 Bounties</span>
-          </a>
-          <a
-            href="/mushi-mushi/console/login?as=tester"
-            className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium hover:bg-violet-500 transition-colors"
-          >
-            Sign in as tester
-          </a>
-        </div>
-      </nav>
-
-      <div className="mx-auto max-w-3xl px-4 py-12 space-y-6">
+    <TestersPageShell>
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-12">
         <div>
           <h1 className="text-2xl font-bold">Tester Leaderboard</h1>
-          <p className="text-gray-400 mt-1 text-sm">Top testers in the last 30 days. Updated every 15 minutes.</p>
+          <p className="testers-muted mt-1 text-sm">Top testers in the last 30 days. Updated every 15 minutes.</p>
         </div>
 
         {leaders.length === 0 ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-12 text-center">
-            <p className="text-3xl mb-3">🏆</p>
+          <div className="testers-panel p-12 text-center">
+            <p className="mb-3 text-3xl">🏆</p>
             <p className="font-medium">No testers yet — be the first!</p>
             <a
               href="/mushi-mushi/testers/apps/"
-              className="mt-4 inline-block text-sm text-violet-400 hover:underline"
+              className="testers-brand-mark mt-4 inline-block text-sm underline underline-offset-2 hover:opacity-90"
             >
               Browse apps →
             </a>
           </div>
         ) : (
-          <div className="rounded-xl border border-white/10 overflow-hidden">
-            <div className="grid grid-cols-[2rem_1fr_auto_auto] gap-4 px-4 py-2 bg-white/5 text-xs text-gray-500 font-medium uppercase tracking-wide">
+          <div className="testers-panel overflow-hidden">
+            <div className="grid grid-cols-[2rem_1fr_auto_auto] gap-4 bg-[var(--mushi-paper-wash)] px-4 py-2 text-xs font-medium uppercase tracking-wide testers-faint">
               <span>#</span>
               <span>Tester</span>
               <span className="text-right">Bugs</span>
@@ -91,14 +77,14 @@ export default async function LeaderboardPage() {
             {leaders.map((e, i) => (
               <div
                 key={e.handle + i}
-                className="grid grid-cols-[2rem_1fr_auto_auto] gap-4 px-4 py-3 bg-white/5 border-t border-white/5 items-center"
+                className="grid grid-cols-[2rem_1fr_auto_auto] items-center gap-4 border-t border-[var(--mushi-rule)] px-4 py-3"
               >
-                <span className="text-sm font-mono text-center">
+                <span className="text-center font-mono text-sm">
                   {MEDAL[i] ?? e.rank}
                 </span>
-                <span className="font-medium truncate">{e.handle}</span>
-                <span className="text-sm text-gray-400 text-right">{e.acceptedCount}</span>
-                <span className="text-sm font-semibold text-violet-400 text-right">
+                <span className="truncate font-medium">{e.handle}</span>
+                <span className="testers-muted text-right text-sm">{e.acceptedCount}</span>
+                <span className="testers-brand-mark text-right text-sm font-semibold">
                   {e.totalPoints.toLocaleString()}
                 </span>
               </div>
@@ -106,19 +92,10 @@ export default async function LeaderboardPage() {
           </div>
         )}
 
-        <a href="/mushi-mushi/testers/" className="text-sm text-gray-500 hover:text-gray-300">
+        <a href="/mushi-mushi/testers/" className="testers-faint text-sm hover:text-[var(--mushi-ink-muted)]">
           ← Back to marketplace
         </a>
       </div>
-
-      <footer className="border-t border-white/10 py-8 text-center text-sm text-gray-500">
-        <p>
-          <span className="text-violet-400">mushi</span>mushi Bounties ·{' '}
-          <a href="/mushi-mushi/testers/apps/" className="hover:text-gray-300">Browse apps</a> ·{' '}
-          <a href="/mushi-mushi/testers/how-it-works/" className="hover:text-gray-300">How it works</a> ·{' '}
-          Gift cards powered by Tremendous · $599/yr cap before KYC
-        </p>
-      </footer>
-    </div>
+    </TestersPageShell>
   )
 }

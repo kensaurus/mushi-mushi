@@ -76,7 +76,7 @@ export function FixDetailPanel({
             href={`https://cursor.com/agents/${fix.cursor_agent_id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[#a78bfa] hover:text-[#c4b5fd] underline"
+            className="text-accent-foreground hover:text-accent-hover underline"
           >
             Cursor agent ↗
           </a>

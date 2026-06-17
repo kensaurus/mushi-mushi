@@ -48,7 +48,45 @@ const TOKEN_CSS = resolve(ADMIN_SRC, 'index.css')
 const TYPE_FLOOR_EXTRA_DIRS = [
   resolve(ROOT, 'packages/marketing-ui/src'),
   resolve(ROOT, 'apps/docs/components'),
+  resolve(ROOT, 'apps/testers'),
 ]
+
+// Raw Tailwind palette deny-list for surfaces that use --mushi-* brand tokens
+// (marketing-ui, docs, public testers marketplace) — not the admin @theme layer.
+const PALETTE_COLOR_NAMES = [
+  'slate', 'gray', 'zinc', 'neutral', 'stone',
+  'red', 'orange', 'amber', 'yellow',
+  'lime', 'green', 'emerald', 'teal', 'cyan',
+  'sky', 'blue', 'indigo', 'violet', 'purple',
+  'fuchsia', 'pink', 'rose',
+]
+const PALETTE_PREFIXES = ['bg', 'text', 'border', 'ring', 'fill', 'stroke', 'from', 'to', 'via', 'divide', 'shadow', 'outline', 'decoration', 'placeholder', 'caret', 'accent']
+const PALETTE_SHADE_RE = /^(50|[1-9]00|950)$/
+
+function extractRawPaletteHits(src, file) {
+  const hits = []
+  const prefixAlt = PALETTE_PREFIXES.join('|')
+  const colorAlt = PALETTE_COLOR_NAMES.join('|')
+  // Match bg-gray-950, text-violet-400, hover:bg-white/5 (white/black without shade)
+  const withShade = new RegExp(
+    `(?<=[\\s"'\`{}\\[\\]=>:;(])((?:hover:|focus:|focus-visible:|active:|dark:|sm:|md:|lg:|xl:|2xl:|motion-safe:|group-hover:)*)(?:${prefixAlt})-(?:${colorAlt})-(\\d+|950)(?:\\/\\d+)?(?=[\\s"'\`{}\\[\\]=>:;)])`,
+    'g',
+  )
+  const whiteBlack = new RegExp(
+    `(?<=[\\s"'\`{}\\[\\]=>:;(])((?:hover:|focus:|focus-visible:|active:|dark:|sm:|md:|lg:|xl:|2xl:|motion-safe:|group-hover:)*)(?:${prefixAlt})-(?:white|black)(?:\\/\\d+)?(?=[\\s"'\`{}\\[\\]=>:;)])`,
+    'g',
+  )
+  for (const re of [withShade, whiteBlack]) {
+    for (const match of src.matchAll(re)) {
+      const index = match.index ?? 0
+      const lineStart = src.lastIndexOf('\n', index) + 1
+      const linePrefix = src.slice(lineStart, index)
+      if (/mushi-mushi-allowlist:/i.test(linePrefix)) continue
+      hits.push({ token: match[0].trim(), file, index })
+    }
+  }
+  return hits
+}
 
 // Sub-directories and file name patterns exempt from the type-floor scan.
 // These are data-visualization components (canvas node labels, inline SVG
@@ -85,6 +123,7 @@ const SEMANTIC_NAMESPACES = [
   'border',
   'background',
   'chrome',
+  'viz',
 ]
 
 // Tailwind class prefixes that *can* take a semantic color token. We only
@@ -295,7 +334,97 @@ if (subFloorHits.length > 0) {
   )
 }
 
-if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0) process.exit(1)
+// ── Raw palette check (apps/testers marketplace only) ────────────────────
+const TESTERS_SRC = resolve(ROOT, 'apps/testers')
+const paletteHits = []
+try {
+  for (const file of walkForTypeFloor(TESTERS_SRC)) {
+    if (!/\.tsx?$/.test(file)) continue
+    const src = readFileSync(file, 'utf8')
+    for (const hit of extractRawPaletteHits(src, file)) {
+      paletteHits.push({ ...hit, line: extractLineNumber(src, hit.index) })
+    }
+  }
+} catch {
+  // testers app may not exist in some checkouts
+}
+
+if (paletteHits.length > 0) {
+  console.error(`\n[palette] Raw Tailwind palette classes in brand/marketing surfaces:\n`)
+  for (const hit of paletteHits) {
+    const rel = relative(ROOT, hit.file).replace(/\\/g, '/')
+    console.error(`  ${rel}:${hit.line}  ${hit.token}`)
+  }
+  console.error(
+    `\nFix: use --mushi-* CSS variables (bg-[var(--mushi-paper)], text-[var(--mushi-ink-muted)], etc.)\n` +
+    `or admin @theme tokens on console pages. Allowlist with // mushi-mushi-allowlist: <reason>\n`,
+  )
+}
+
+// ── Page hero duplication guard ───────────────────────────────────────────
+// Pages that render both PageHeaderBar and PageHero must pass withPageHero
+// on PageHeaderBar so the subtitle does not stack under the DAV hero strip.
+const heroDupHits = []
+const PAGES_DIR = resolve(ADMIN_SRC, 'pages')
+try {
+  for (const file of walk(PAGES_DIR)) {
+    if (!/\.tsx?$/.test(file)) continue
+    const src = readFileSync(file, 'utf8')
+    if (!src.includes('PageHero') || !src.includes('PageHeaderBar')) continue
+    if (src.includes('withPageHero')) continue
+    heroDupHits.push(file)
+  }
+} catch {
+  /* pages dir missing */
+}
+
+if (heroDupHits.length > 0) {
+  console.error(`\n[hero-dup] PageHeaderBar + PageHero without withPageHero:\n`)
+  for (const file of heroDupHits) {
+    console.error(`  ${relative(ROOT, file).replace(/\\/g, '/')}`)
+  }
+  console.error(
+    `\nFix: pass withPageHero on PageHeaderBar when the page renders PageHero, ` +
+    `or gate PageHero to advanced-only mode.\n`,
+  )
+}
+
+// ── Raw hex guard (admin src only) ───────────────────────────────────────
+// SVG/canvas surfaces should read @theme viz-* tokens via readVizToken().
+// Allowlist with // mushi-mushi-allowlist: <reason> on the preceding line.
+const HEX_RE = /#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\b/g
+const hexHits = []
+
+for (const file of files) {
+  if (!/\.tsx?$/.test(file)) continue
+  if (file === TOKEN_CSS) continue
+  const src = readFileSync(file, 'utf8')
+  for (const match of src.matchAll(HEX_RE)) {
+    const index = match.index ?? 0
+    const lineStart = src.lastIndexOf('\n', index) + 1
+    const lineNum = extractLineNumber(src, index)
+    const lines = src.split('\n')
+    const contextStart = Math.max(0, lineNum - 25)
+    const contextBlock = lines.slice(contextStart, lineNum).join('\n')
+    const linePrefix = src.slice(lineStart, index)
+    if (/mushi-mushi-allowlist:/i.test(linePrefix) || /mushi-mushi-allowlist:/i.test(contextBlock)) continue
+    hexHits.push({ file, line: lineNum, token: match[0] })
+  }
+}
+
+if (hexHits.length > 0) {
+  console.error(`\n[hex] Raw hex colours in admin source — use @theme viz-* + readVizToken():\n`)
+  for (const hit of hexHits) {
+    const rel = relative(ROOT, hit.file).replace(/\\/g, '/')
+    console.error(`  ${rel}:${hit.line}  ${hit.token}`)
+  }
+  console.error(
+    `\nFix: add a viz-* token in index.css and read it via apps/admin/src/lib/vizTokens.ts,\n` +
+    `or allowlist with // mushi-mushi-allowlist: <reason> when exact brand hex is required.\n`,
+  )
+}
+
+if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0 || paletteHits.length > 0 || heroDupHits.length > 0 || hexHits.length > 0) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
-console.log(`[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). Type floor: ${subFloorHits.length === 0 ? 'clean' : subFloorHits.length + ' violations'} across ${totalTypeFloorFiles} files (admin + marketing-ui + docs/components).`)
+console.log(`[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). Type floor: clean across ${totalTypeFloorFiles} files. Palette guard: clean on apps/testers. Hex guard: clean.`)

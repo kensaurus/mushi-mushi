@@ -77,6 +77,37 @@ export function buildHttpConfig(
   }
 }
 
+/** Build the org-scoped (account-level) stdio config — no MUSHI_PROJECT_ID set. */
+export function buildOrgStdioConfig(
+  apiKey: string,
+  apiEndpoint: string,
+  options?: { features?: readonly string[] },
+): McpStdioConfig {
+  const features = options?.features ?? DEFAULT_FEATURE_GROUPS
+  return {
+    command: 'npx',
+    args: ['-y', '@mushi-mushi/mcp@latest'],
+    env: {
+      MUSHI_API_ENDPOINT: apiEndpoint,
+      MUSHI_API_KEY: apiKey,
+      MUSHI_FEATURES: featuresQueryString(features as typeof DEFAULT_FEATURE_GROUPS),
+    },
+    icon: MUSHI_ICON_PNG_URL,
+  }
+}
+
+/** One-click Cursor deeplink for an org-scoped key (all projects, no fixed MUSHI_PROJECT_ID). */
+export function buildCursorOrgDeeplink(accountLabel: string, apiKey: string, apiEndpoint: string): string {
+  const slug = accountLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)
+  return encodeCursorInstallDeeplink(`mushi-${slug}`, buildOrgStdioConfig(apiKey, apiEndpoint))
+}
+
+/** VS Code deeplink for an org-scoped key. */
+export function buildVsCodeOrgDeeplink(accountLabel: string, apiKey: string, apiEndpoint: string): string {
+  const slug = accountLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)
+  return encodeVsCodeInstallDeeplink(`mushi-${slug}`, buildOrgStdioConfig(apiKey, apiEndpoint))
+}
+
 /**
  * Build a stable, unique, human-readable MCP server slug for a project.
  *

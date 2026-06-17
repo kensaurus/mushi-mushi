@@ -56,7 +56,7 @@ packages/
   verify/        Fix verification (BSL)
 apps/
   admin/         Admin dashboard (React + Tailwind)
-  docs/          Documentation site (planned)
+  docs/          Documentation site (Nextra — apps/docs)
 tooling/
   eslint-config/ Shared ESLint flat config
   tsconfig/      Shared TypeScript configs
@@ -73,6 +73,28 @@ tooling/
    pnpm changeset
    ```
 6. Open a pull request
+
+### Documentation (docs-as-code)
+
+If your PR changes **user-visible SDK or CLI behavior**, update docs in the **same PR**:
+
+| Surface | When to update |
+| --- | --- |
+| `packages/*/README.md` | npm-facing install/API/config changes for that package |
+| `apps/docs/content/**/*.mdx` | Long-form guides, quickstarts, admin console docs |
+| Root `README.md` | Marketing stats only when counts change — run `pnpm check:docs-stats` |
+
+Guardrails (run locally before pushing):
+
+```bash
+pnpm check:docs-stats          # root README stat badges
+pnpm check:sdk-version-matrix  # apps/docs/content/sdks/index.mdx versions
+pnpm check:internal-doc-links  # dead /foo links in MDX
+pnpm check:bundle-docs         # @mushi-mushi/web size-limit vs README
+pnpm gen:llms-txt              # regenerate apps/docs/public/llms.txt after nav changes
+```
+
+README changes on npm packages only appear on [npmjs.com](https://www.npmjs.com) after the next **Changesets publish**.
 
 ## Changesets
 

@@ -8,14 +8,19 @@ export interface ProjectContext {
 }
 
 /**
- * Shape of a `project_api_keys` row joined with `projects!inner(name)`.
+ * Shape of a `project_api_keys` row joined with `projects(name)` (left-join).
  * Declared locally so we don't have to thread the generated Supabase types
  * into every Edge Function just for this one query.
+ *
+ * project_id is nullable since the mcp_org_scoped_keys migration (20260617200000).
+ * Org-scoped keys (is_org_scoped = true) have project_id = NULL and grant access
+ * to all projects owned by owner_user_id.
  */
 interface ApiKeyRow {
   id?: string
   key_prefix?: string | null
-  project_id: string
+  project_id: string | null
+  is_org_scoped?: boolean
   is_active: boolean
   scopes: string[] | null
   owner_user_id: string | null
@@ -275,9 +280,11 @@ function recordOrgMemberActivity(opts: {
 async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null> {
   const db = getServiceClient()
   const keyHash = await hashApiKey(apiKey)
+  // Use a left-join (`projects(name)` not `projects!inner(name)`) so org-scoped
+  // keys (project_id = NULL) are not excluded by the inner-join filter.
   const { data, error } = await db
     .from('project_api_keys')
-    .select('id, key_prefix, project_id, is_active, scopes, owner_user_id, projects!inner(name)')
+    .select('id, key_prefix, project_id, is_org_scoped, is_active, scopes, owner_user_id, projects(name)')
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
@@ -323,16 +330,21 @@ async function authenticateApiKey(
     )
   }
 
+  const isOrgScoped = keyRow.is_org_scoped ?? false
+
   c.set('userId', ownerId)
-  c.set('projectId', keyRow.project_id)
-  c.set('projectName', keyRow.projects?.name ?? 'Unknown')
+  // For org-scoped keys project_id is null; routes that need a specific project
+  // should read X-Mushi-Project-Id header and verify ownership via enumerateAccessibleProjectIds.
+  c.set('projectId', keyRow.project_id ?? null)
+  c.set('projectName', keyRow.projects?.name ?? (isOrgScoped ? 'Account' : 'Unknown'))
   c.set('apiKeyScopes', scopes)
   c.set('authMethod', 'apiKey')
+  c.set('isOrgScopedKey', isOrgScoped)
   if (keyRow.id) c.set('apiKeyId', keyRow.id)
   if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
   applyLogContext(c, {
     authMethod: 'apiKey',
-    projectId: keyRow.project_id,
+    projectId: keyRow.project_id ?? undefined,
     userId: ownerId,
     apiKeyId: keyRow.id,
     apiKeyPrefix: keyRow.key_prefix ?? undefined,
@@ -361,17 +373,26 @@ export async function apiKeyAuth(c: Context, next: Next) {
 
   const { data, error } = await db
     .from('project_api_keys')
-    .select('id, key_prefix, project_id, is_active, scopes, projects!inner(name)')
+    .select('id, key_prefix, project_id, is_org_scoped, is_active, scopes, projects(name)')
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
 
   const keyRow = data as Pick<
     ApiKeyRow,
-    'id' | 'key_prefix' | 'project_id' | 'is_active' | 'scopes' | 'projects'
+    'id' | 'key_prefix' | 'project_id' | 'is_org_scoped' | 'is_active' | 'scopes' | 'projects'
   > | null
   if (error || !keyRow) {
     return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
+  }
+
+  // Org-scoped keys are for MCP/admin use only; they cannot ingest SDK events
+  // without an explicit project scope. This keeps the SDK ingest path predictable.
+  if (keyRow.is_org_scoped) {
+    return c.json(
+      { error: { code: 'ORG_KEY_NOT_ALLOWED', message: 'Org-scoped keys cannot be used for SDK ingest. Use a project-scoped key.' } },
+      403,
+    )
   }
 
   // Skip the heartbeat stamp for the ingest-setup diagnostic route: its
@@ -389,14 +410,14 @@ export async function apiKeyAuth(c: Context, next: Next) {
     })
   }
 
-  c.set('projectId', keyRow.project_id)
+  c.set('projectId', keyRow.project_id ?? undefined)
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')
   c.set('apiKeyScopes', keyRow.scopes ?? [])
   if (keyRow.id) c.set('apiKeyId', keyRow.id)
   if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
   applyLogContext(c, {
     authMethod: 'apiKey',
-    projectId: keyRow.project_id,
+    projectId: keyRow.project_id ?? undefined,
     apiKeyId: keyRow.id,
     apiKeyPrefix: keyRow.key_prefix ?? undefined,
   })

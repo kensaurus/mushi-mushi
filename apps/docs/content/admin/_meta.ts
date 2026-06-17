@@ -47,6 +47,8 @@ export default {
   'fine-tuning': 'Fine-tuning',
   realtime: 'Real-time collaboration',
   'sdk-health': 'SDK health',
+  explore: 'Codebase Atlas',
+  queue: 'Processing queue',
 
   // Administration
   teams: 'Organization & members',

@@ -4,7 +4,25 @@ title: SDK reference
 
 # SDK reference
 
-All SDKs are at `0.8.x`. The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/admin`) are BSL — free for self-hosting, commercial license required for hosted-as-a-service redistribution.
+Published npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
+
+{/* sdk-version-matrix:start */}
+| Package | Version |
+| --- | --- |
+| @mushi-mushi/core, @mushi-mushi/web | 1.14.x |
+| @mushi-mushi/react | 1.10.x |
+| @mushi-mushi/react-native | 0.16.x |
+| @mushi-mushi/cli | 0.17.x |
+| @mushi-mushi/mcp | 0.15.x |
+| @mushi-mushi/capacitor | 0.8.x |
+| @mushi-mushi/node | 0.6.x |
+| @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 0.9.x |
+| mushi-mushi (launcher) | 0.7.x |
+{/* sdk-version-matrix:end */}
+
+See [Project ID & API keys](/concepts/credentials) for credential formats (`proj_*` slug vs UUID, `mushi_*` vs `mush_pk_*` keys).
+
+The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/admin`) are BSL — free for self-hosting, commercial license required for hosted-as-a-service redistribution.
 
 ## Web & frameworks
 
@@ -17,6 +35,12 @@ All SDKs are at `0.8.x`. The JS packages are MIT-licensed; the server packages (
 | [`@mushi-mushi/svelte`](/sdks/svelte) | npm | Svelte stores + context |
 | [`@mushi-mushi/angular`](/sdks/angular) | npm | Angular DI service + directive |
 | [`@mushi-mushi/adapters`](/sdks/adapters) | npm | Framework adapters (Next.js, SvelteKit, Nuxt, etc.) |
+
+## Server
+
+| Package | Registry | Description |
+| --- | --- | --- |
+| [`@mushi-mushi/node`](/sdks/node) | npm | Forward unhandled exceptions + HTTP error handlers |
 
 ## Mobile & native
 
@@ -33,6 +57,7 @@ All SDKs are at `0.8.x`. The JS packages are MIT-licensed; the server packages (
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
+| [`mushi-mushi`](/sdks/launcher) | npm | Meta-launcher — `npx mushi-mushi` wizard |
 | [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server — triage reports from Cursor, Claude, Codex |
 | [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | CI-aware MCP surface — attach to GitHub Actions |
 | [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lints for missing report calls and incorrect config |
@@ -45,6 +70,16 @@ All SDKs are at `0.8.x`. The JS packages are MIT-licensed; the server packages (
 | [`@mushi-mushi/plugin-sdk`](/sdks/plugin-sdk) | npm | Build your own Marketplace plugin |
 | [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) | npm | Zod schemas for `inventory_nodes` and user stories |
 | [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) | npm | Auth-gated story runner for the QA coverage suite |
+
+## Recipes & presets
+
+| Page | Description |
+| --- | --- |
+| [SDK presets](/sdks/presets) | `production-calm`, `beta-loud`, `manual-only`, `internal-debug` |
+| [Next.js App Router + CSP](/sdks/nextjs-app-router-csp) | Content-Security-Policy allowlist for the widget |
+| [Next.js static export](/sdks/nextjs-static-export) | Static export + client-only init |
+| [Capacitor bottom dock](/sdks/capacitor-bottom-dock) | Anchor widget above tab bars |
+| [Sentry Replay coexistence](/sdks/sentry-replay-coexistence) | Run Mushi replay alongside Sentry |
 
 ## Installation
 

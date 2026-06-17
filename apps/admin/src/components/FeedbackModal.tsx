@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Card } from './ui'
+import { Modal } from './Modal'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from './ProjectSwitcher'
 
@@ -178,17 +179,18 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
   const bodyNearLimit = bodyLen > MAX_BODY * 0.85
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={config.label}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      size="md"
+      ariaLabel={config.label}
+      hideCloseButton
+      className="max-w-lg overflow-hidden"
+      bodyClassName="p-0"
     >
       <Card
         elevated
-        className="w-full max-w-lg p-0 overflow-hidden motion-safe:animate-mushi-modal-in"
-        onClick={(e) => e.stopPropagation()}
+        className="w-full p-0 overflow-hidden border-0 shadow-none bg-transparent"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-edge-subtle">
@@ -330,6 +332,6 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
           </form>
         )}
       </Card>
-    </div>
+    </Modal>
   )
 }

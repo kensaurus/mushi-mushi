@@ -17,9 +17,10 @@ import { BackendModePanel } from './BackendModePanel'
 interface HealthPanelProps {
   projectId: string
   projectName?: string | null
+  projectSlug?: string | null
 }
 
-export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
+export function HealthPanel({ projectId, projectName, projectSlug }: HealthPanelProps) {
   const project = { id: projectId, name: projectName ?? projectId }
 
   return (
@@ -49,7 +50,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
             pre-filled with this project&apos;s id.
           </p>
         </ContainedBlock>
-        <SdkInstallCard projectId={project.id} />
+        <SdkInstallCard projectId={project.id} projectSlug={projectSlug} />
       </Section>
     </SettingsPanelLayout>
   )

@@ -37,7 +37,7 @@ mushi connect --wait   # optional: block until SDK heartbeat lands
 **CLI:**
 
 ```bash
-mushi connect --write-env --wire-ide --wait
+mushi connect --wait
 # writes ~/.mushirc + .env.local + .cursor/mcp.json
 ```
 

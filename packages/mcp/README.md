@@ -146,7 +146,7 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
-Full catalog is **72 tools** (64 core + 8 project-context tools). New installs default to a lean set via:
+Full catalog is **79 tools**. New installs default to a lean set via:
 
 - **Stdio:** `MUSHI_FEATURES=triage,fixes,inventory,setup,docs`
 - **HTTP:** `?features=triage,fixes,inventory,setup,docs` on the MCP URL
@@ -156,6 +156,17 @@ Append `legacy` to keep deprecated aliases (`setup_check`, `ingest_setup_check`,
 New unified tools: `diagnose_setup` (replaces setup trilogy), `search_mushi_docs` (keyword doc search).
 
 Append `?read_only=1` to the URL to hide write tools (Supabase-parity mode).
+
+## Programmatic imports
+
+For custom MCP hosts or tests:
+
+| Subpath | Exports |
+| --- | --- |
+| `@mushi-mushi/mcp/catalog` | `TOOL_CATALOG`, scopes, tool specs |
+| `@mushi-mushi/mcp/server` | `createMushiServer()` |
+| `@mushi-mushi/mcp/branding` | Icons and server metadata |
+| `@mushi-mushi/mcp/feature-groups` | `MUSHI_FEATURES` filtering |
 
 ## Cursor config hygiene
 

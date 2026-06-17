@@ -4,7 +4,8 @@
 
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { PageHeader, Section, Card, Btn } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { Section, Card, Btn } from '../components/ui'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
@@ -13,7 +14,7 @@ import { CodeInline } from '../components/CodePanel'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageData } from '../lib/usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
+import { mushiEnvVarsForProjectSlug, isExpoReporterProject } from '../lib/projectMushiEnv'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 
 interface ProjectRow {
@@ -69,14 +70,22 @@ export function SetupCopilotPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <PageHeader
+      <PageHeaderBar
         title="Setup Copilot"
         description="Wire the SDK, confirm heartbeat traffic, then verify dispatch readiness — without guessing which checklist applies."
+        helpTitle="About Setup Copilot"
+        helpWhatIsIt="Guided ingest and dispatch verification with copy-paste CLI blocks for the active project."
+        helpUseCases={[
+          'Connect credentials and wait for SDK heartbeat',
+          'Copy the canonical SDK install snippet from Onboarding',
+          'Verify ingest and dispatch readiness in one place',
+        ]}
+        helpHowToUse="Select a project, paste connect credentials, open the SDK wizard, then run Verify Setup for both ingest and dispatch tracks."
       >
         <Link to="/projects">
           <Btn variant="ghost" size="sm">← Projects</Btn>
         </Link>
-      </PageHeader>
+      </PageHeaderBar>
 
       {!projectId && (
         <Card className="p-5">
@@ -143,6 +152,63 @@ export function SetupCopilotPage() {
               <Link to={`/onboarding?tab=sdk&project=${projectId}`}>
                 <Btn variant="primary" size="sm">Open SDK install wizard →</Btn>
               </Link>
+            </Card>
+          </Section>
+
+          <Section title="2b · CI &amp; store builds">
+            <p className="text-xs text-fg-muted mb-3">
+              Reporter SDK keys for TestFlight / Play builds vs Code Health ingest — different secrets.
+            </p>
+            <Card className="p-5 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <ContainedBlock tone="ok">
+                  <p className="text-xs font-semibold text-fg mb-2">Reporter (in-app feedback band)</p>
+                  <ul className="text-2xs text-fg-muted space-y-1.5 list-disc pl-4">
+                    <li>
+                      Local: <code className="font-mono">{env.envFileHint ?? '.env.local'}</code>
+                    </li>
+                    <li>
+                      Vars: <code className="font-mono">{env.projectIdVar}</code>,{' '}
+                      <code className="font-mono">{env.apiKeyVar}</code>
+                      {env.endpointVar ? (
+                        <>, <code className="font-mono">{env.endpointVar}</code></>
+                      ) : null}
+                    </li>
+                    {env.ciVars ? (
+                      <li>
+                        GitHub:{' '}
+                        <code className="font-mono">{env.ciVars.projectId.name}</code> (var),{' '}
+                        <code className="font-mono">{env.ciVars.apiKey.name}</code> (secret)
+                      </li>
+                    ) : null}
+                    <li>Rebuild store apps after changing — EXPO_PUBLIC_* is compile-time.</li>
+                  </ul>
+                </ContainedBlock>
+                <ContainedBlock tone="muted">
+                  <p className="text-xs font-semibold text-fg mb-2">Ingest (Code Health CI only)</p>
+                  <ul className="text-2xs text-fg-muted space-y-1.5 list-disc pl-4">
+                    <li>
+                      GitHub secret: <code className="font-mono">MUSHI_INGEST_KEY</code>
+                    </li>
+                    <li>
+                      API URL: <code className="font-mono">MUSHI_API_URL</code>
+                    </li>
+                    <li>Does not enable the in-app band — metrics POST /v1/ingest/metrics only.</li>
+                    <li>
+                      Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
+                    </li>
+                  </ul>
+                </ContainedBlock>
+              </div>
+              {(env.ciVars && isExpoReporterProject(projectRow.slug)) ? (
+                <ContainedBlock tone="warn">
+                  <p className="text-2xs text-fg-muted">
+                    Automate reporter GitHub vars:{' '}
+                    <code className="font-mono">node scripts/setup-yen-yen-reporter-secrets.mjs</code>
+                    {' '}from the mushi-mushi repo (reads yen-yen <code className="font-mono">apps/mobile/.env.local</code>).
+                  </p>
+                </ContainedBlock>
+              ) : null}
             </Card>
           </Section>
 

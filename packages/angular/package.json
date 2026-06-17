@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/angular",
   "version": "0.9.0",
   "license": "MIT",
-  "description": "Angular SDK for Mushi Mushi — NgModule, injectable service, global ErrorHandler",
+  "description": "Angular SDK for Mushi Mushi — standalone provideMushi(), injectable service, global ErrorHandler",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

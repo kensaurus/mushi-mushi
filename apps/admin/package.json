@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/admin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Mushi Mushi admin console — report triage, analytics dashboard, project settings",
   "license": "SEE LICENSE IN LICENSE",
@@ -44,6 +44,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.3.0",
+    "eslint-plugin-mushi-mushi": "workspace:*",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",

@@ -15,8 +15,7 @@ import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
 import { notificationsLinks } from '../lib/statCardLinks'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   Section,
   Card,
   Badge,
@@ -39,6 +38,7 @@ import {
   InlineProof,
 } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
@@ -210,8 +210,26 @@ export function NotificationsPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader title={copy?.title ?? 'Notifications'} />
-      <PageScopeHint text={copy?.description ?? "Outbound messages the reporter SDK widget polls after classify, fix, or reward events."} />
+        <PageHeaderBar
+          title={copy?.title ?? 'Notifications'}
+          description={copy?.description ?? 'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'}
+          helpTitle={copy?.help?.title ?? 'About reporter notifications'}
+          helpWhatIsIt={
+            copy?.help?.whatIsIt ??
+            'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
+          }
+          helpUseCases={
+            copy?.help?.useCases ?? [
+              'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
+              'Audit which reporter tokens received messages for a given report',
+              'Spot stale unread rows that suggest client polling stopped working',
+            ]
+          }
+          helpHowToUse={
+            copy?.help?.howToUse ??
+            'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
+          }
+        />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -252,28 +270,26 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-notifications">
-      <PageHelp
-        title={copy?.help?.title ?? 'About reporter notifications'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Notifications'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Outbound messages the reporter SDK widget polls after classify, fix, or reward events.'}
+        helpTitle={copy?.help?.title ?? 'About reporter notifications'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
             'Audit which reporter tokens received messages for a given report',
             'Spot stale unread rows that suggest client polling stopped working',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Notifications'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -284,7 +300,7 @@ export function NotificationsPage() {
                   : bannerSeverity === 'warn'
                     ? 'bg-warn-muted/50 text-warning-foreground'
                     : bannerSeverity === 'brand'
-                      ? 'bg-brand/15 text-brand'
+                      ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                       : 'bg-surface-overlay text-fg-muted'
               }
             >
@@ -326,8 +342,7 @@ export function NotificationsPage() {
             )}
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Outbound messages the reporter SDK widget polls after classify, fix, or reward events."} />
+      </PageHeaderBar>
 
       <NotificationsStatusBanner
         stats={stats}
@@ -408,7 +423,7 @@ export function NotificationsPage() {
           className={`space-y-3 p-4 ${
             stats.topPriority === 'disabled' || stats.topPriority === 'unread_backlog'
               ? 'border-warn/30 bg-warn/5'
-              : 'border-brand/30 bg-brand/5'
+              : 'border-edge-subtle bg-chrome'
           }`}
         >
           <SignalChip tone={stats.topPriority === 'unread_backlog' ? 'warn' : stats.topPriority === 'disabled' ? 'warn' : 'brand'}>

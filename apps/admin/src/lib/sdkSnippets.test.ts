@@ -186,12 +186,20 @@ describe('renderSnippet — mobile / hybrid frameworks', () => {
     expect(out).not.toContain('enableShakeToReport')
   })
 
-  it('expo emits the same provider but mentions expo-sensors / npx expo install', () => {
+  it('expo (yen-yen) uses EXPO_PUBLIC_* build-time env pattern', () => {
+    const out = renderSnippet('expo', PROJECT, KEY, DEFAULT_SDK_CONFIG, 'yen-yen')
+    expect(out).toContain('EXPO_PUBLIC_MUSHI_PROJECT_ID')
+    expect(out).toContain('EXPO_PUBLIC_MUSHI_API_KEY')
+    expect(out).toContain('process.env.EXPO_PUBLIC_MUSHI_PROJECT_ID')
+    expect(out).toContain('projectId={PROJECT_ID}')
+    expect(out).toContain('expo-sensors')
+    expect(installCommand('expo')).toContain('npx expo install')
+  })
+
+  it('expo without yen-yen slug still renders provider', () => {
     const out = renderSnippet('expo', PROJECT, KEY)
     expect(out).toContain('@mushi-mushi/react-native')
     expect(out).toMatch(/<MushiProvider[\s\S]*projectId="proj_abc"/)
-    expect(out).toContain('expo-sensors')
-    expect(installCommand('expo')).toContain('npx expo install')
   })
 
   it('capacitor calls Mushi.configure (NEVER Mushi.init) and reminds users to cap sync', () => {

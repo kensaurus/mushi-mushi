@@ -31,3 +31,11 @@ cb2768f0fc5b62c34809228937620c61f19a793d:packages/ios/Tests/MushiMushiTests/PIIS
 # tree to `TEST-FIXTURE-NOT-A-REAL-SECRET`; this fingerprint pins the historical
 # commit fff6f497 so PR-range scans stop flagging the already-audited finding.
 fff6f49793017a556d40670418a0a66809df05ce:packages/mcp/src/__tests__/tdd-tools.test.ts:generic-api-key:22
+
+# REAL key that was briefly committed in a local MCP test script and has been
+# REVOKED/ROTATED out-of-band (it can no longer authenticate). The working tree
+# now reads MUSHI_API_KEY from the environment — no literal secret remains. This
+# fingerprint pins the historical commit fe9eab07 so PR-range scans stop flagging
+# the already-remediated finding. (Unlike the fixtures above, this WAS a live key
+# — the remediation here is rotation, not "it was always fake".)
+fe9eab0773f9f2d4e9ab1da178592d728b5e1680:packages/mcp/scripts/test-all-tools-yenyen.py:generic-api-key:23

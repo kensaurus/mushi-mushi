@@ -34,15 +34,16 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
 import {
   buildPipelineNodes,
   buildPipelineEdges,
-  STEP_STATUS_HEX,
   STEP_STATUS_LABEL,
+  resolveStepStatusColor,
 } from '../components/skill-pipeline/pipelineFlow.data'
 import type { PipelineStep, SkillInfo } from '../components/skill-pipeline/pipelineFlow.data'
 import { getSkillCategoryMeta } from '../components/skill-pipeline/skillCategoryMeta'
@@ -183,10 +184,18 @@ export function SkillPipelinesPage() {
     <div className="flex flex-col h-full gap-0">
       {/* Page header */}
       <div className="px-6 pt-5 pb-0 flex flex-col gap-1">
-        <h1 className="text-lg font-bold text-fg">Skill Pipelines</h1>
-        <p className="text-sm text-fg-muted">
-          Attach cursor-kenji skills to reports, run them as pipelines, and track each step live.
-        </p>
+        <PageHeaderBar
+          title="Skill Pipelines"
+          description="Attach cursor-kenji skills to reports, run them as pipelines, and track each step live."
+          helpTitle="About Skill Pipelines"
+          helpWhatIsIt="Browse the cursor-kenji skill catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
+          helpUseCases={[
+            'Run audit-uiux-design-system or other skills against a report',
+            'Track pipeline step runs in real time via React Flow',
+            'Sync skill sources from GitHub repos like kensaurus/cursor-kenji',
+          ]}
+          helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
+        />
 
         {/* Tabs */}
         <div className="flex gap-0 border-b border-border mt-3 -mx-6 px-6" role="tablist" aria-label="Skill pipelines sections">
@@ -513,7 +522,7 @@ function CatalogTab({
               </option>
             </select>
             {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady && (
-              <p className="text-2xs text-warn bg-warn/10 border border-warn/30 rounded-lg px-2 py-1.5">
+              <HelpBanner tone="neutral" className="rounded-lg">
                 Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
                 <Link to="/integrations/config#cursor_cloud" className="text-brand hover:underline">
                   Open Integrations → Cursor Cloud
@@ -526,7 +535,7 @@ function CatalogTab({
                     </Link>
                   </>
                 )}
-              </p>
+              </HelpBanner>
             )}
             <button
               onClick={() => startPipeline(selected.slug)}
@@ -1091,7 +1100,7 @@ function SkillCategoryHeader({
 }
 
 function StatusDot({ status, size = 'md' }: { status: string; size?: 'sm' | 'md' }) {
-  const color = STEP_STATUS_HEX[status] ?? '#94a3b8'
+  const color = resolveStepStatusColor(status)
   const cls = size === 'sm' ? 'w-2 h-2' : 'w-2.5 h-2.5'
   return (
     <span

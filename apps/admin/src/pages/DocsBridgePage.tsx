@@ -34,6 +34,7 @@ import { RESOLVED_API_URL } from '../lib/env'
 import { getActiveProjectIdSnapshot } from '../lib/activeProject'
 import { getActiveOrgIdSnapshot } from '../lib/activeOrg'
 import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 
 type BridgeStatus = 'pending' | 'sent' | 'invalid_origin' | 'missing_opener' | 'no_session' | 'no_nonce'
 
@@ -183,7 +184,20 @@ export function DocsBridgePage() {
   }, [loading, session])
 
   return (
-    <main className="grid min-h-screen place-items-center bg-surface p-6">
+    <div className="min-h-screen bg-surface p-6 space-y-4">
+      <PageHeaderBar
+        title="Docs bridge"
+        description="Connects your Mushi admin session to docs.mushimushi.dev for migration checklist sync."
+        helpTitle="About the docs bridge"
+        helpWhatIsIt="Cross-origin auth bridge opened by the docs Migration Hub — posts your Supabase access token to the docs origin after login."
+        helpUseCases={[
+          'Sync migration checklist progress from docs to admin',
+          'Authenticate docs.mushimushi.dev without re-entering credentials',
+        ]}
+        helpHowToUse="Opened automatically from docs — sign in if prompted, then this window closes once the token is delivered."
+        showCopyLink={false}
+      />
+    <main className="grid place-items-center">
       <div className="max-w-md rounded-xl border border-edge bg-surface p-6 text-center shadow-sm space-y-3">
         {status === 'pending' && (
           <>
@@ -234,6 +248,7 @@ export function DocsBridgePage() {
         )}
       </div>
     </main>
+    </div>
   )
 }
 

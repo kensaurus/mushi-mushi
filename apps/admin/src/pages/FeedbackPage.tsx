@@ -45,14 +45,12 @@ import {
   totalTicketsTooltip,
 } from '../lib/statTooltips/feedback'
 import { feedbackLinks } from '../lib/statCardLinks'
-import { PageHero } from '../components/PageHero'
-import { PageScopeHint,SnapshotSectionHint,Badge,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint, Badge,
   Btn,
   Card,
   ErrorAlert,
   FreshnessPill,
-  PageHeader,
-  PageHelp,
   RelativeTime,
   Section,
   SegmentedControl,
@@ -235,16 +233,34 @@ export function FeedbackPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'My feedback'}
         projectScope={stats.projectName ?? undefined}
+        description={copy?.description ?? 'Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app.'}
+        helpTitle={copy?.help?.title ?? 'About My feedback'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'A personal inbox for bugs and feature requests you file to the Mushi team. When we ship your idea, the release version appears on the row.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Check Active tab for tickets still in triage',
+            'Look for pulsing “New reply” badges when the team responds',
+            'Shipped tab shows release version chips for credited ideas',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'This is not the same as Reports — those are end-user bugs from your app. Billing questions go to Billing support.'
+        }
+        helpFlowPath="/feedback"
       >
         <Badge
           className={
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'brand'
-                ? 'bg-brand/15 text-brand'
+                ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : 'bg-info-muted/50 text-info-foreground'
@@ -265,8 +281,7 @@ export function FeedbackPage() {
         <Btn size="sm" variant="ghost" onClick={() => openFeedback('feature')}>
           Request feature
         </Btn>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app."} />
+      </PageHeaderBar>
 
       <FeedbackStatusBanner
         stats={stats}
@@ -325,37 +340,6 @@ export function FeedbackPage() {
 
       {activeTab === 'overview' && (
         <>
-          <PageHero
-            scope="feedback"
-            title="My feedback"
-            kicker="Start here"
-            decide={{
-              label: stats.topPriorityLabel ?? 'Your submissions',
-              metric:
-                stats.totalTickets > 0
-                  ? `${stats.activeTickets} active · ${stats.shippedTickets} shipped`
-                  : undefined,
-              summary:
-                stats.topPriority === 'first_submit'
-                  ? 'Use Report a bug for console issues; Request feature for product ideas. End-user bugs from your app live under Reports.'
-                  : stats.topPriority === 'reply'
-                    ? 'Brand banner means the team replied — open the ticket to read the thread.'
-                    : 'Green banner means nothing is waiting on you. Shipped rows show the release version.',
-              severity:
-                stats.topPriority === 'reply'
-                  ? 'info'
-                  : stats.topPriority === 'active'
-                    ? 'warn'
-                    : stats.topPriority === 'first_submit'
-                      ? 'info'
-                      : 'ok',
-            }}
-            verify={{
-              label: 'Closed loop',
-              detail: 'When we ship your idea, the release version appears on the Shipped tab.',
-            }}
-          />
-
           {stats.topTicketId && stats.topPriority !== 'first_submit' ? (
             <Card className={`space-y-3 p-4 ${stats.topPriority === 'reply' ? 'border-brand/30 bg-brand/5' : 'border-warn/30 bg-warn/5'}`}>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -380,26 +364,6 @@ export function FeedbackPage() {
               </ActionPillRow>
             </Card>
           ) : null}
-
-          <PageHelp
-            title={copy?.help?.title ?? 'About My feedback'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'A personal inbox for bugs and feature requests you file to the Mushi team. When we ship your idea, the release version appears on the row.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Check Active tab for tickets still in triage',
-                'Look for pulsing “New reply” badges when the team responds',
-                'Shipped tab shows release version chips for credited ideas',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'This is not the same as Reports — those are end-user bugs from your app. Billing questions go to Billing support.'
-            }
-            flowPath="/feedback"
-          />
 
           <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
             <p className="text-2xs leading-relaxed text-fg-muted">

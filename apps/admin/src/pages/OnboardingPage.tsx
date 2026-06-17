@@ -14,7 +14,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageScopeHint,SnapshotSectionHint,Btn, Card, Input, PageHelp, PageHeader, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge } from '../components/ui'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
@@ -390,15 +391,24 @@ export function OnboardingPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Setup'}
         projectScope={stats.projectName ?? undefined}
+        withPageHero={!ux.hideOverviewChrome}
+        description={copy?.description ?? 'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'}
+        helpTitle={copy?.help?.title ?? 'About this wizard'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
+        helpUseCases={copy?.help?.useCases ?? [
+          'Create the project that will receive bug reports from your app',
+          'Generate and copy the API key that authenticates SDK requests',
+          'Confirm the ingest pipeline is reachable before shipping any code',
+        ]}
+        helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
       >
         <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn-muted/50 text-warning-foreground' : 'bg-info-muted/50 text-info-foreground'}>
           {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
         </Badge>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet."} />
+      </PageHeaderBar>
 
       {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
       <OnboardingModeIntroCard />
@@ -578,17 +588,6 @@ export function OnboardingPage() {
         />
       )}
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About this wizard'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
-        useCases={copy?.help?.useCases ?? [
-          'Create the project that will receive bug reports from your app',
-          'Generate and copy the API key that authenticates SDK requests',
-          'Confirm the ingest pipeline is reachable before shipping any code',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings.'}
-      />
-
       {/* Explainer diagram: shows first-run users the four stages of the
           loop they're about to enter, with outcome copy instead of empty
           zero-counts. Wrapped in a section so the FirstRunTour's "plan"
@@ -609,12 +608,12 @@ export function OnboardingPage() {
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden
-              className="ask-mushi-launcher ask-mushi-launcher--glow relative mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-brand/25 bg-brand/10 text-brand"
+              className="relative mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center text-brand"
             >
-              <IconChat className="h-4 w-4 relative z-[1]" />
+              <IconChat className="h-3.5 w-3.5" />
               <span
                 aria-hidden
-                className="ask-mushi-launcher__ring pointer-events-none absolute inset-0 rounded-md"
+                className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-brand"
               />
             </span>
             <div className="min-w-0">
@@ -626,7 +625,7 @@ export function OnboardingPage() {
                 <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
                   Cmd/Ctrl+J
                 </kbd>
-                . Look for the glowing chat icon in the header after you open the dashboard.
+                . Look for the chat icon in the header toolbar after you open the dashboard.
               </p>
             </div>
           </div>
@@ -872,7 +871,7 @@ export function OnboardingPage() {
         <>
       {project && !setup.isStepIncomplete('api_key_generated') ? (
         <div className="space-y-3">
-          <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} showConnectionStatus />
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={apiKey?.key} showConnectionStatus />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>
@@ -925,11 +924,11 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
         </div>
         <code className="text-sm font-mono text-ok wrap-anywhere select-all">{apiKey.key}</code>
       </div>
-      <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
+      <HelpBanner tone="warn" className="rounded-sm">
         <p className="text-2xs text-warn">
           Save this key securely. It will not be shown again after you leave this page.
         </p>
-      </div>
+      </HelpBanner>
     </div>
   )
 }

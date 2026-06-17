@@ -23,14 +23,26 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: 'MCP setup',
     path: docPath('/guides/mcp-setup'),
-    keywords: ['mcp', 'cursor', 'api key', 'stdio', 'http'],
-    excerpt: 'Wire Mushi MCP into Cursor, Claude, or any MCP client.',
+    keywords: ['mcp', 'cursor', 'api key', 'stdio', 'http', 'multi-project', 'account mode', 'install', 'setup', 'deeplink'],
+    excerpt: 'Wire Mushi MCP into Cursor, Claude, or any MCP client. Supports per-project and account-level keys.',
   },
   {
     title: 'API key scopes',
     path: docPath('/guides/api-keys'),
-    keywords: ['api key', 'mcp:read', 'mcp:write', 'scopes', 'security'],
-    excerpt: 'Separate SDK ingest keys from MCP read/write keys.',
+    keywords: ['api key', 'mcp:read', 'mcp:write', 'scopes', 'security', 'account key', 'org-scoped', 'multi-project'],
+    excerpt: 'Separate SDK ingest keys from MCP read/write keys. Mint an org-scoped account key for multi-project access.',
+  },
+  {
+    title: 'Account key (org-scoped)',
+    path: docPath('/guides/mcp-setup'),
+    keywords: ['account key', 'org-scoped', 'multi-project', 'MUSHI_PROJECT_ID', 'all projects', 'mint-org-key', 'get_account_overview'],
+    excerpt: 'Mint one org-scoped key that covers all your projects — no MUSHI_PROJECT_ID needed. The agent calls get_account_overview to discover projects.',
+  },
+  {
+    title: 'Cursor MCP troubleshooting',
+    path: docPath('/guides/mcp-setup'),
+    keywords: ['cursor', 'mcp.json', 'red badge', 'transport error', 'stdout', 'stderr', 'json-rpc', 'INVALID_TOKEN', 'syntax helper', 'diagnose_connection'],
+    excerpt: 'Cursor stdio MCP requires stdout to contain only JSON-RPC. Use the console syntax helper, restart Cursor MCP, then run diagnose_connection.',
   },
   {
     title: 'Judge loop',

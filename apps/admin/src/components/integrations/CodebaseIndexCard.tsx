@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
+import { langVizColor } from '../../lib/vizTokens'
 
 // JSX text nodes do NOT decode \u escapes — `Hello \u2014 world` renders
 // the literal six chars `\u2014`. Keep these as JS constants and interpolate
@@ -445,37 +446,30 @@ export function CodebaseIndexCard({ projectId }: Props) {
 function LanguageSparkline({ distribution }: { distribution: Record<string, number> }) {
   const total = Object.values(distribution).reduce((a, b) => a + b, 0)
   if (total === 0) return null
-  const COLORS: Record<string, string> = {
-    typescript: '#3178c6',
-    javascript: '#f7df1e',
-    python: '#3572a5',
-    go: '#00add8',
-    rust: '#dea584',
-    tsx: '#61dafb',
-    jsx: '#61dafb',
-  }
   return (
     <div className="flex items-center gap-1 flex-wrap mt-0.5">
       {Object.entries(distribution)
         .slice(0, 8)
-        .map(([lang, count]) => (
+        .map(([lang, count]) => {
+          const langColor = langVizColor(lang)
+          return (
           <span
             key={lang}
             className="inline-flex items-center gap-1 rounded-full px-1.5 py-px text-2xs"
             style={{
-              backgroundColor: (COLORS[lang] ?? '#6b7280') + '22',
-              color: COLORS[lang] ?? '#6b7280',
-              border: `1px solid ${COLORS[lang] ?? '#6b7280'}44`,
+              backgroundColor: `color-mix(in oklch, ${langColor} 13%, transparent)`,
+              color: langColor,
+              border: `1px solid color-mix(in oklch, ${langColor} 27%, transparent)`,
             }}
             title={`${count} files`}
           >
             <span
               className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: COLORS[lang] ?? '#6b7280' }}
+              style={{ backgroundColor: langColor }}
             />
             {lang} {Math.round((count / total) * 100)}%
           </span>
-        ))}
+        )})}
     </div>
   )
 }

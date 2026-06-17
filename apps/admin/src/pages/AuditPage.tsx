@@ -32,8 +32,7 @@ import {
 } from '../lib/statTooltips/audit'
 import { auditLinks } from '../lib/statCardLinks'
 import { useToast } from '../lib/toast'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { SnapshotSectionHint,
   Card,
   Badge,
   Btn,
@@ -59,8 +58,7 @@ import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFilter
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
-import { PageHero } from '../components/PageHero'
-import { useNextBestAction } from '../lib/useNextBestAction'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 
 interface AuditEntry {
   id: string
@@ -134,7 +132,7 @@ const AUDIT_TABS: Array<{ id: AuditTabId; label: string; description: string }> 
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Posture summary, PageHero decide/act/verify, and the live event log.',
+    description: 'Posture summary, KPI snapshot strip, and the live event log.',
   },
   {
     id: 'log',
@@ -399,11 +397,6 @@ export function AuditPage() {
   const expandedIds = useMemo(() => new Set(expanded ? [expanded] : []), [expanded])
 
   const failCount = stats.failCount24h
-  const warnCount = stats.warnCount24h
-  const auditAction = useNextBestAction({ scope: 'audit', failCount, warnCount })
-  const auditSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
-    failCount > 0 ? 'crit' : warnCount > 0 ? 'warn' : stats.totalEvents === 0 ? 'neutral' : 'ok'
-  const lastLog = logs[0]
 
   const criticalCount =
     (stats.auditLogEntitlement ? 0 : 1) + stats.failCount24h + (stats.totalEvents === 0 && stats.auditLogEntitlement ? 0 : 0)
@@ -638,10 +631,26 @@ export function AuditPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
+        <PageHeaderBar
           title={copy?.title ?? 'Audit log'}
+          description={copy?.description ?? 'Append-only history of every mutation — filter by actor, action, or resource.'}
+          helpTitle={copy?.help?.title ?? 'About the Audit Log'}
+          helpWhatIsIt={
+            copy?.help?.whatIsIt ??
+            'An append-only history of consequential actions: who did what, to which resource, and when.'
+          }
+          helpUseCases={
+            copy?.help?.useCases ?? [
+              'Investigate who changed a setting or rotated an API key',
+              'Satisfy SOC 2 / ISO 27001 audit evidence requirements',
+              'Detect suspicious activity from API keys or service accounts',
+            ]
+          }
+          helpHowToUse={
+            copy?.help?.howToUse ??
+            'Stack filters on the Log tab; expand any row for metadata JSON. Export CSV for compliance bundles.'
+          }
         />
-      <PageScopeHint text={copy?.description ?? "Append-only history of every mutation — filter by actor, action, or resource."} />
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -660,9 +669,26 @@ export function AuditPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
+      <PageHeaderBar
         title={copy?.title ?? 'Audit log'}
         projectScope={stats.projectName ?? undefined}
+        description={copy?.description ?? 'Append-only history of every mutation — filter by actor, action, or resource.'}
+        helpTitle={copy?.help?.title ?? 'About the Audit Log'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'An append-only history of consequential actions: who did what, to which resource, and when.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Investigate who changed a setting or rotated an API key',
+            'Satisfy SOC 2 / ISO 27001 audit evidence requirements',
+            'Detect suspicious activity from API keys or service accounts',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'Stack filters on the Log tab; expand any row for metadata JSON. Export CSV for compliance bundles.'
+        }
       >
         {stats.auditLogEntitlement ? (
           <Badge className="bg-ok-muted text-ok">Audit enabled</Badge>
@@ -672,8 +698,7 @@ export function AuditPage() {
         <Btn variant="ghost" size="sm" onClick={exportCsv} data-dav-anchor="audit:act">
           Export CSV ({logs.length})
         </Btn>
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Append-only history of every mutation — filter by actor, action, or resource."} />
+      </PageHeaderBar>
 
       {isAuditStatusBannerCritical(stats) && (
         <AuditStatusBanner
@@ -691,84 +716,6 @@ export function AuditPage() {
         ariaLabel="Audit sections"
         size="sm"
       />
-
-      {activeTab === 'overview' && (
-        <PageHero
-          scope="audit"
-          title="Audit Log"
-          kicker="Append-only evidence"
-          decide={{
-            label:
-              failCount > 0
-                ? 'FAIL events present'
-                : warnCount > 0
-                  ? 'WARN events present'
-                  : stats.totalEvents === 0
-                    ? 'No audit activity'
-                    : 'Audit trail clean',
-            metric: `${stats.events24h} / 24h`,
-            summary:
-              failCount > 0
-                ? `${failCount} FAIL event${failCount === 1 ? '' : 's'} in 24h — block next SOC 2 cycle without remediation.`
-                : warnCount > 0
-                  ? `${warnCount} WARN event${warnCount === 1 ? '' : 's'} — technical debt on evidence, not blocking.`
-                  : stats.totalEvents === 0
-                    ? 'Audit stream empty — mutations will appear as your team uses the console.'
-                    : 'Every mutation in scope is accounted for. Export evidence for your next review.',
-            severity: auditSeverity,
-            anchor: 'audit:decide',
-            evidence: {
-              kind: 'metric-breakdown',
-              items: [
-                { label: '24h events', value: stats.events24h, tone: 'neutral' },
-                { label: 'FAIL (24h)', value: failCount, tone: failCount > 0 ? 'crit' : 'ok' },
-                { label: 'WARN (24h)', value: warnCount, tone: warnCount > 0 ? 'warn' : 'ok' },
-              ],
-            },
-          }}
-          act={auditAction}
-          actAnchor="audit:act"
-          actEvidence={
-            auditAction
-              ? {
-                  kind: 'rule-trace',
-                  why: auditAction.reason ?? auditAction.title,
-                  threshold: failCount > 0 ? `${failCount} FAIL event${failCount === 1 ? '' : 's'}` : undefined,
-                }
-              : undefined
-          }
-          verify={{
-            label: lastLog ? `Last event · ${lastLog.action}` : stats.latestAction ? `Latest · ${stats.latestAction}` : 'Awaiting activity',
-            detail: lastLog
-              ? `${lastLog.actor_email ?? lastLog.actor_id ?? 'system'} · ${new Date(lastLog.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
-              : stats.latestActorEmail ?? '—',
-            to: '/audit?tab=log',
-            secondaryTo: '/compliance',
-            secondaryLabel: 'Open compliance',
-            anchor: 'audit:verify',
-            evidence: lastLog
-              ? {
-                  kind: 'last-event',
-                  at: lastLog.created_at,
-                  by: lastLog.actor_email ?? lastLog.actor_id ?? 'system',
-                  payloadSummary: lastLog.action,
-                  status:
-                    lastLog.action === 'fix.failed' || lastLog.action === 'integration.disconnected'
-                      ? 'error'
-                      : 'ok',
-                }
-              : stats.latestEventAt
-                ? {
-                    kind: 'last-event',
-                    at: stats.latestEventAt,
-                    by: stats.latestActorEmail ?? 'system',
-                    payloadSummary: stats.latestAction ?? 'event',
-                    status: 'ok',
-                  }
-                : undefined,
-          }}
-        />
-      )}
 
       <Section
         title="Audit snapshot"
@@ -813,25 +760,6 @@ export function AuditPage() {
 
       {activeTab === 'overview' && (
         <>
-          <PageHelp
-            title={copy?.help?.title ?? 'About the Audit Log'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'An append-only history of consequential actions: who did what, to which resource, and when.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Investigate who changed a setting or rotated an API key',
-                'Satisfy SOC 2 / ISO 27001 audit evidence requirements',
-                'Detect suspicious activity from API keys or service accounts',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Stack filters on the Log tab; expand any row for metadata JSON. Export CSV for compliance bundles.'
-            }
-          />
-
           {filterPanel}
           {logTable}
         </>
@@ -839,12 +767,6 @@ export function AuditPage() {
 
       {activeTab === 'log' && (
         <>
-          <PageHelp
-            title={copy?.help?.title ?? 'About the Audit Log'}
-            whatIsIt={activeTabMeta.description}
-            useCases={copy?.help?.useCases ?? []}
-            howToUse={copy?.help?.howToUse ?? 'Expand rows with metadata to debug payloads.'}
-          />
           {filterPanel}
           {logTable}
         </>

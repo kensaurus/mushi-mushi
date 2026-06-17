@@ -14,8 +14,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useAnomaliesUx, resolveQuickAnomaliesTab } from '../lib/anomaliesModeUx'
 import { useToast } from '../lib/toast'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint,
   Card,
   Section,
   Badge,
@@ -261,21 +261,19 @@ export function AnomaliesPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-anomalies">
-      <PageHelp
-        title={copy?.help?.title ?? 'Anomaly detection'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Anomalies'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.'}
+        contextChip={<PdcaContextHint stage="check" />}
+        helpTitle={copy?.help?.title ?? 'Anomaly detection'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Detect crash-rate spikes after a release',
           'Flag latency regressions against rolling baseline',
           'Auto-open a bug report when a regression is confirmed',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Anomalies'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
-        contextChip={<PdcaContextHint stage="check" />}
+        helpHowToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -288,7 +286,7 @@ export function AnomaliesPage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -309,8 +307,7 @@ export function AnomaliesPage() {
         </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis."} />
+      </PageHeaderBar>
 
       <AnomaliesStatusBanner
         stats={stats}

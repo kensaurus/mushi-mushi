@@ -685,6 +685,7 @@ export function JudgePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Judge'}
         projectScope={stats.projectName ?? projectName ?? undefined}
+        withPageHero={!ux.hideOverviewChrome}
         description={copy?.description ?? 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'}
         helpTitle={copy?.help?.title ?? 'About the Judge'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}

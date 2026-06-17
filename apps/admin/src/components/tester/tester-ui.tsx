@@ -288,3 +288,19 @@ export function TesterPrimaryCta({ to, children }: { to: string; children: React
     </Link>
   )
 }
+
+/** Compact contextual help — mirrors PageHeaderBar help without admin chrome. */
+export function TesterHelpBanner({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <div className="rounded-md border border-chrome-border bg-chrome px-4 py-3 text-xs leading-relaxed text-fg-secondary">
+      <p className="mb-1 font-semibold text-fg">{title}</p>
+      {children}
+    </div>
+  )
+}

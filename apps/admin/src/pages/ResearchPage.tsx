@@ -14,9 +14,8 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
 import { SetupNudge } from '../components/SetupNudge'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
-  Card,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint, Card,
   Section,
   Btn,
   Badge,
@@ -302,20 +301,18 @@ export function ResearchPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-research">
-      <PageHelp
-        title={copy?.help?.title ?? 'About web research'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'BYOK Firecrawl-powered web search you run while triaging a report.'}
-        useCases={copy?.help?.useCases ?? [
+      <PageHeaderBar
+        title={copy?.title ?? 'Research'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'}
+        helpTitle={copy?.help?.title ?? 'About web research'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'BYOK Firecrawl-powered web search you run while triaging a report.'}
+        helpUseCases={copy?.help?.useCases ?? [
           'Cross-reference an error signature against current upstream docs',
           'Find a Stack Overflow thread to attach as triage evidence',
           'Check if a third-party library shipped a fix in the last 24 hours',
         ]}
-        howToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Research'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpHowToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -328,7 +325,7 @@ export function ResearchPage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -366,8 +363,7 @@ export function ResearchPage() {
         )}
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions."} />
+      </PageHeaderBar>
 
       <ResearchStatusBanner
         stats={stats}

@@ -11,6 +11,9 @@ describe('mushiEnvVarsForProjectSlug', () => {
   it('uses Expo public vars for yen-yen', () => {
     const env = mushiEnvVarsForProjectSlug('yen-yen')
     expect(env.apiKeyVar).toBe('EXPO_PUBLIC_MUSHI_API_KEY')
+    expect(env.envFileHint).toBe('apps/mobile/.env.local')
+    expect(env.ciVars?.projectId.name).toBe('EXPO_PUBLIC_MUSHI_PROJECT_ID')
+    expect(env.ciVars?.apiKey.ghKind).toBe('secret')
   })
 
   it('uses Vite vars for solo-boss-cloud', () => {

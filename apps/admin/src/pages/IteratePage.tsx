@@ -15,9 +15,8 @@ import { usePageCopy } from '../lib/copy'
 import { useIterateUx, resolveQuickIterateTab } from '../lib/iterateModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
-import { PageScopeHint,SnapshotSectionHint,PageHeader,
-  PageHelp,
-  Card,
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import { SnapshotSectionHint, Card,
   Section,
   Btn,
   Badge,
@@ -284,29 +283,27 @@ export function IteratePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-iterate">
-      <PageHelp
-        title={copy?.help?.title ?? 'About PDCA iteration'}
-        whatIsIt={
+      <PageHeaderBar
+        title={copy?.title ?? 'Iterate'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={copy?.description ?? 'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops.'}
+        contextChip={<PdcaContextHint stage="act" />}
+        helpTitle={copy?.help?.title ?? 'About PDCA iteration'}
+        helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona until target score or max iterations.'
         }
-        useCases={
+        helpUseCases={
           copy?.help?.useCases ?? [
             "Improve a dashboard page's visual hierarchy automatically",
             'Run a WCAG accessibility critique cycle on a live URL',
             'Use a conversion persona to suggest CTA and copy improvements',
           ]
         }
-        howToUse={
+        helpHowToUse={
           copy?.help?.howToUse ??
           'Queue a run on New Run. Click Trigger on queued rows (Runs tab). Open a run for score timeline and critique export.'
         }
-      />
-
-      <PageHeader
-        title={copy?.title ?? 'Iterate'}
-        projectScope={stats.projectName ?? projectName ?? undefined}
-        contextChip={<PdcaContextHint stage="act" />}
       >
         {!ux.hideOverviewChrome && (
           <>
@@ -319,7 +316,7 @@ export function IteratePage() {
                 : bannerSeverity === 'warn'
                   ? 'bg-warn-muted/50 text-warning-foreground'
                   : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
+                    ? 'border border-edge-subtle bg-surface-raised text-fg-secondary'
                     : 'bg-surface-overlay text-fg-muted'
           }
         >
@@ -340,8 +337,7 @@ export function IteratePage() {
         </Btn>
           </>
         )}
-      </PageHeader>
-      <PageScopeHint text={copy?.description ?? "Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops."} />
+      </PageHeaderBar>
 
       <IterateStatusBanner
         stats={stats}
