@@ -20,10 +20,18 @@ export function coerceApiResult<T>(raw: unknown): ApiResult<T> {
 
   if (obj.ok === false) {
     const err = obj.error
+    // Some routes intentionally return `{ ok: false, error, data }` at HTTP 200
+    // (e.g. sync-ci-secrets' soft "forbidden"/"no-repo" that still carries a
+    // freshly-minted key + guided fallback). The ApiResult contract already
+    // declares `data` as optional alongside `ok`, and every consumer gates on
+    // `ok` before reading `data`, so carrying it through is additive and lets
+    // those callers recover the payload instead of silently dropping it.
+    const dataField = obj.data !== undefined ? { data: obj.data as T } : {}
     if (err && typeof err === 'object') {
       const e = err as Record<string, unknown>
       return {
         ok: false,
+        ...dataField,
         error: {
           code: String(e.code ?? 'ERROR'),
           message: String(e.message ?? e.code ?? 'Request failed'),
@@ -31,9 +39,9 @@ export function coerceApiResult<T>(raw: unknown): ApiResult<T> {
       }
     }
     if (typeof err === 'string') {
-      return { ok: false, error: { code: 'ERROR', message: err } }
+      return { ok: false, ...dataField, error: { code: 'ERROR', message: err } }
     }
-    return { ok: false, error: { code: 'ERROR', message: 'Request failed' } }
+    return { ok: false, ...dataField, error: { code: 'ERROR', message: 'Request failed' } }
   }
 
   if (obj.ok === true) {
