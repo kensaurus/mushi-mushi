@@ -13,7 +13,7 @@ import { Btn, Tooltip } from './ui'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { buildCursorOrgDeeplink, buildVsCodeOrgDeeplink } from '../lib/cursorDeeplink'
-import { RESOLVED_API_URL } from '../lib/env'
+import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 
 interface Props {
   /** A short label for the MCP server name — appears as `mushi-{label}` in Cursor's server list. */
@@ -45,8 +45,8 @@ export function McpAccountKeyCard({ accountLabel = 'account', compact = false }:
       }
       const deeplink =
         ide === 'cursor'
-          ? buildCursorOrgDeeplink(accountLabel, res.data.key, RESOLVED_API_URL)
-          : buildVsCodeOrgDeeplink(accountLabel, res.data.key, RESOLVED_API_URL)
+          ? buildCursorOrgDeeplink(accountLabel, res.data.key, RESOLVED_EXTERNAL_API_URL)
+          : buildVsCodeOrgDeeplink(accountLabel, res.data.key, RESOLVED_EXTERNAL_API_URL)
       window.open(deeplink, '_self')
       toast.success(
         `${ide === 'cursor' ? 'Cursor' : 'VS Code'} install launched`,

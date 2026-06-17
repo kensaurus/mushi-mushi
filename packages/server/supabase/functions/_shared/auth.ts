@@ -122,6 +122,14 @@ export function requireServiceRoleAuth(req: Request): Response | null {
 }
 
 /**
+ * Every Mushi-issued API key is minted as `mushi_<hex>` (see
+ * `api/routes/project-keys.ts` and `mcp-admin.ts`). A Supabase user JWT is a
+ * base64url `eyJ…` string and never carries this prefix, so the prefix is a
+ * safe, allocation-free discriminator for "is this bearer token an API key?".
+ */
+const MUSHI_API_KEY_PREFIX = 'mushi_'
+
+/**
  * SHA-256 of a raw API key, lowercase hex — matches how keys are persisted
  * in `project_api_keys.key_hash`. Extracted so `apiKeyAuth` and
  * `adminOrApiKey` stay byte-compatible with the hash at rest.
@@ -519,14 +527,17 @@ export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
       return
     }
 
-    if (bearer) {
-      const keyRow = await lookupActiveApiKey(bearer)
-      if (keyRow) {
-        const authErr = await authenticateApiKey(c, bearer, requiredScope)
-        if (authErr) return authErr
-        await next()
-        return
-      }
+    if (bearer && bearer.startsWith(MUSHI_API_KEY_PREFIX)) {
+      // Only Mushi-issued keys carry the `mushi_` prefix; a Supabase user JWT
+      // never does. Gating on the prefix avoids the wasted `lookupActiveApiKey`
+      // DB round-trip on every JWT-authenticated console request and removes
+      // the prior double lookup (here + a second one inside authenticateApiKey).
+      // An invalid/revoked `mushi_` key now fails closed as 401 INVALID_API_KEY
+      // rather than being silently retried as a JWT.
+      const authErr = await authenticateApiKey(c, bearer, requiredScope)
+      if (authErr) return authErr
+      await next()
+      return
     }
 
     // Fall through to JWT — keeps existing console flows unchanged.

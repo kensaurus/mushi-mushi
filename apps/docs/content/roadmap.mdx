@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 Mushi is built in the open. The whitepaper documents the full architectural target — code catches up release by release.
 
 <Callout type="info">
-  **Currently shipping:** v0.8.0 (Wave C complete). See the [Changelog](/changelog) for what landed.
+  **Currently shipping:** v1.15.x (Wave D complete). See the [Changelog](/changelog) for what landed.
 </Callout>
 
 ## Live boards
@@ -24,31 +24,29 @@ Mushi is built in the open. The whitepaper documents the full architectural targ
 | --- | --- | --- |
 | **A** | Vision air-gap, MCP correctness, RAG, sandbox | ✅ Shipped |
 | **B** | WASM SLM classifier, real-time collab, AG-UI, fine-tuning pipeline | ✅ Shipped |
-| **C** | Mobile parity (RN + iOS + Android + Flutter + Capacitor), A2A protocol, SOC 2 readiness, data residency pinning, BYOK, BYO storage | ✅ Shipped (v0.8.0) |
-| **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories | 🔄 In-flight |
-| **E** | v1.0.0 GA, whitepaper V6.0, self-hosting one-click | ⏭ Next |
+| **C** | Mobile parity (RN + iOS + Android + Flutter + Capacitor), A2A protocol, SOC 2 readiness, data residency pinning, BYOK, BYO storage | ✅ Shipped |
+| **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories, SDK install & upgrade one-click, Skill-driven triage, Codebase Atlas | ✅ Shipped (v1.15.x) |
+| **E** | v1.0.0 cross-platform stable API, Launch Week, frictionless onboarding, self-hosting one-click | 🔄 In-flight |
 
-## Wave D details (in-flight)
+## Wave E details (in-flight)
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| Plugin marketplace GA | 🔄 In-flight | 12 first-party plugins shipping, SDK + builder docs live |
-| PDCA console improvements | ✅ Done | Drift scanner, iterate loop, QA coverage stories, PDCA runner |
-| Docs site rewrite | ✅ Done | Scenario-first admin docs, SDK reference, migration guides |
-| Mushi Cloud GA | 🔄 In-flight | Metered billing via Stripe, multi-region, plan management |
-| Multi-repo coordinated fixes | 🔄 In-flight | `fix-worker` cross-repo diffing |
-| `@mushi-mushi/mcp-ci` GA | ✅ Done | CI-aware MCP tool surface |
-| `@mushi-mushi/inventory-auth-runner` | ✅ Done | Auth-gated story runner |
+| `@mushi-mushi/*` 1.0.0 stable API locks | 🔄 In-flight | Coordinated 1.0 across all 0.x packages (capacitor, node, vue, svelte, angular) |
+| Frictionless onboarding | 🔄 In-flight | GitHub/Google OAuth signup, auto-provisioned project+key, `mushi login` device flow |
+| Self-hosting one-click | 🔄 In-flight | Railway / Render deploy button, `MUSHI_INIT_*` headless bootstrap |
+| Launch Week | ⏭ Next | Public Show HN + Product Hunt + Reddit coordinated launch |
 
-## Wave E (v1.0.0 GA) — planned
+## Wave D highlights (v1.15.x, shipped)
 
-- Self-hosting one-click deploy (Railway / Render button)
-- `mushi doctor` CLI command for self-hosters
-- Whitepaper V6.0 with full A2A protocol spec
-- SLA + enterprise support tier
-- `@mushi-mushi/*` 1.0.0 stable API locks (semver)
+- **One-click SDK install & upgrade** — `npx mushi-mushi` + `npm create mushi-mushi` wizard, SDK upgrade PRs from the Connect hub
+- **Skill-driven triage** — `skill-sync`, `classify-report` Stage 2, pipeline runs, cursor-kenji integration
+- **Codebase Atlas (`/explore`)** — semantic codebase search, ask, tour, and knowledge surface
+- **sdk-versions-cron** — daily npm sync keeps SDK freshness chips accurate
+- **Backend drift scanner** — daily schema snapshot diff, `gate_findings` of type `schema_drift`
+- **MCP 72-tool surface** — `@mushi-mushi/mcp@0.16`, `mcp:read` + `mcp:write` scopes, 10 feature groups
 
-## Completed highlights (v0.8.0)
+## Completed highlights (Wave C, v0.8.0)
 
 - **Native SDKs** — iOS (Swift, CocoaPods + SPM), Android (Kotlin, Maven Central), Flutter (pub.dev), Capacitor
 - **A2A discovery** — `a2a-push-notify` edge function; agents can subscribe to Mushi events as A2A peers

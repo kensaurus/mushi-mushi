@@ -1,0 +1,55 @@
+---
+title: "Mushi goes AGPLv3 — the honest open source story"
+date: 2026-06-17
+---
+
+import { Callout } from 'nextra/components'
+
+# Mushi goes AGPLv3 — the honest open source story
+
+*Jun 17, 2026 · Kenji Sakuramoto*
+
+---
+
+We started Mushi with a BSL 1.1 server license — the "source-available" model popularized by HashiCorp and Redis. The idea was reasonable: let anyone self-host, block unmodified SaaS competitors, and convert to Apache in 2029.
+
+The problem: our README said "open source." Our migration guides said "MIT-licensed." The badges said `BSL 1.1`. Three things, all contradicting each other.
+
+Worse, every time a developer read the license and realized BSL isn't OSI-approved, the credibility hit was worse than just being honest from the start.
+
+## What we actually want
+
+Supabase is AGPLv3. Langfuse is MIT (SDKs) + proprietary (cloud features). Both built massive developer communities. The common thread: they were honest. Supabase didn't say "open source" and then ship a license that confused everyone. Langfuse didn't over-promise.
+
+We want what they have: trust from developers who can read the license and know exactly what they're getting.
+
+## The decision
+
+The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`) is now **AGPLv3**.
+
+- True OSI-approved open source.
+- Self-hosting is and always will be free.
+- The AGPLv3 network use provision (Section 13) means if you run a modified server as a SaaS, you publish your changes. This isn't punitive — it's the copyleft that keeps the ecosystem honest.
+- The SDK packages (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) remain **MIT** — embed them in anything, open or closed.
+
+<Callout type="info">
+**Self-hosters:** nothing changes operationally. You were already allowed to do everything you're doing. The new license just makes that legally unambiguous and removes the 2029 date anxiety.
+</Callout>
+
+## What this changes
+
+**For individual developers and teams self-hosting:** nothing. Fork it, modify it, run it for your own org.
+
+**For companies that want to offer Mushi as a hosted service to third parties:** AGPLv3 applies. Either publish your server modifications or talk to us about a commercial license.
+
+**For the cloud product at mushimushi.dev:** still running the same code. Now provably the same code.
+
+## The honest "open source" claim
+
+We can now say "the server is open source" and mean it. The SDKs were always MIT. The distinction is: SDK = embed anywhere; server = copyleft when you SaaS it.
+
+That's Mushi's licensing model going forward. No change dates, no "convert to Apache in X years," no ambiguity.
+
+---
+
+*Questions? Open an issue or find us on Discord.*

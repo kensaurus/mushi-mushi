@@ -56,22 +56,102 @@ program
 // ─── login ───────────────────────────────────────────────────────────────────
 program
   .command('login')
-  .description('Save API credentials to ~/.mushirc (mode 0o600)')
-  .requiredOption('--api-key <key>', 'Mushi API key (mushi_...)')
-  .option('--endpoint <url>', 'Supabase edge function URL')
-  .option('--project-id <id>', 'Project UUID (from the Projects page)')
+  .description('Authenticate the CLI — opens browser to get your API key, or pass --api-key to skip')
+  .option('--api-key <key>', 'Mushi API key (mushi_...) — skip the browser flow')
+  .option('--endpoint <url>', 'Supabase edge function URL (defaults to Mushi Cloud)')
+  .option('--project-id <id>', 'Project UUID — skip the whoami project-list prompt')
+  .option('--no-browser', 'Skip opening the browser (print sign-in URL instead)')
   .addHelpText('after', `
 Examples:
-  mushi login --api-key mushi_xxx --endpoint https://xyz.supabase.co/functions/v1/api
-  mushi login --api-key mushi_xxx --project-id 542b34e0-019e-41fe-b900-7b637717bb86`)
-  .action((opts: { apiKey: string; endpoint?: string; projectId?: string }) => {
+  mushi login                         # browser-guided: open console → paste key
+  mushi login --api-key mushi_xxx     # non-interactive: save key directly
+  mushi login --api-key mushi_xxx --project-id <uuid>`)
+  .action(async (opts: { apiKey?: string; endpoint?: string; projectId?: string; browser?: boolean }) => {
+    const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('../endpoint.js')
+    const { apiCall } = await import('../cli-shared.js')
+    const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
+    const consoleUrl = 'https://kensaur.us/mushi-mushi/projects'
+
+    let apiKey = opts.apiKey
+    let projectId = opts.projectId
+
+    if (!apiKey) {
+      // Browser-guided flow: open the console, then prompt for the key
+      const signInUrl = 'https://kensaur.us/mushi-mushi/sign-in'
+      console.log('')
+      console.log('  Mushi login — browser-guided')
+      console.log('  ─────────────────────────────')
+      if (opts.browser !== false) {
+        console.log('  Opening the Mushi console in your browser…')
+        try {
+          const { exec } = await import('node:child_process')
+          const openCmd = process.platform === 'win32'
+            ? `start "" "${signInUrl}"`
+            : process.platform === 'darwin'
+              ? `open "${signInUrl}"`
+              : `xdg-open "${signInUrl}"`
+          exec(openCmd)
+        } catch { /* best-effort */ }
+      } else {
+        console.log(`  Sign in at: ${signInUrl}`)
+      }
+      console.log('')
+      console.log('  After signing in, go to Projects → API Keys → New key')
+      console.log('  then paste the key below.')
+      console.log('')
+
+      const { createInterface } = await import('node:readline')
+      const rl = createInterface({ input: process.stdin, output: process.stdout })
+      const ask = (q: string): Promise<string> =>
+        new Promise(resolve => rl.question(q, (a) => resolve(a.trim())))
+
+      apiKey = await ask('  API key (mushi_...): ')
+      if (!projectId) {
+        projectId = await ask(`  Project ID (uuid, or leave blank to list projects): `)
+        if (!projectId) projectId = undefined
+      }
+      rl.close()
+
+      if (!apiKey) {
+        process.stderr.write('\nerror: API key is required.\n')
+        process.exit(2)
+      }
+    }
+
+    // Save credentials
     const config = loadConfig()
-    config.apiKey = opts.apiKey
-    if (opts.endpoint) config.endpoint = assertEndpoint(opts.endpoint)
-    if (opts.projectId) config.projectId = opts.projectId
+    config.apiKey = apiKey
+    config.endpoint = endpoint
+    if (projectId) config.projectId = projectId
     saveConfig(config)
-    console.log('✓ Credentials saved to ~/.mushirc (mode 0o600)')
-    console.log("  Run 'mushi whoami' to verify the connection.")
+
+    console.log('')
+    console.log('  ✓ Credentials saved to ~/.config/mushi/config.json')
+
+    // Verify + list projects if project ID not set
+    const verifyResult = await apiCall<{ project_name: string; project_id: string; stats: Record<string, unknown> }>(
+      '/v1/sync/whoami',
+      { apiKey, endpoint, projectId },
+    )
+    if (!verifyResult.ok) {
+      console.warn(`  ⚠  Key saved, but verification failed: ${verifyResult.error?.message ?? 'unknown error'}`)
+      console.warn(`     Check your key at: ${consoleUrl}`)
+      return
+    }
+
+    const d = verifyResult.data
+    if (!projectId && d.project_id) {
+      // Whoami returned a project — save it
+      config.projectId = d.project_id
+      saveConfig(config)
+      console.log(`  ✓ Project: ${d.project_name} (${d.project_id})`)
+    } else if (d.project_name) {
+      console.log(`  ✓ Project: ${d.project_name} (${d.project_id})`)
+    }
+
+    console.log(`  ✓ Endpoint: ${endpoint}`)
+    console.log('')
+    console.log("  Run 'mushi whoami' to verify · 'mushi init' to set up the SDK")
   })
 
 // ─── whoami ──────────────────────────────────────────────────────────────────
@@ -162,7 +242,7 @@ program
 // ─── config ──────────────────────────────────────────────────────────────────
 program
   .command('config')
-  .description('View or update CLI config (stored in ~/.mushirc)')
+  .description('View or update CLI config (stored in ~/.config/mushi/config.json)')
   .argument('[key]', 'Config key to set: apiKey | endpoint | projectId')
   .argument('[value]', 'New value')
   .addHelpText('after', `

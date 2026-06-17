@@ -201,12 +201,29 @@ describe('FRAMEWORKS', () => {
     }
   })
 
-  it('snippet always references the chosen package and the supplied keys', () => {
+  it('snippet always references the correct env var names and the package', () => {
+    const VITE_FRAMEWORKS = new Set(['react', 'vue', 'svelte', 'sveltekit', 'angular', 'capacitor', 'vanilla'])
     for (const fw of Object.values(FRAMEWORKS)) {
-      const snip = fw.snippet('mushi_test_key', 'proj_test_id')
-      expect(snip).toContain('mushi_test_key')
-      expect(snip).toContain('proj_test_id')
+      const snip = fw.snippet()
+      // Every snippet must reference the package it belongs to
       expect(snip).toContain(fw.packageName)
+      // Each framework must reference its env vars — not literal key values
+      if (fw.id === 'next') {
+        expect(snip).toContain('NEXT_PUBLIC_MUSHI_PROJECT_ID')
+        expect(snip).toContain('NEXT_PUBLIC_MUSHI_API_KEY')
+      } else if (fw.id === 'nuxt') {
+        expect(snip).toContain('NUXT_PUBLIC_MUSHI_PROJECT_ID')
+        expect(snip).toContain('NUXT_PUBLIC_MUSHI_API_KEY')
+      } else if (fw.id === 'expo') {
+        expect(snip).toContain('EXPO_PUBLIC_MUSHI_PROJECT_ID')
+        expect(snip).toContain('EXPO_PUBLIC_MUSHI_API_KEY')
+      } else if (fw.id === 'react-native' || fw.id === 'express' || fw.id === 'fastify' || fw.id === 'hono') {
+        expect(snip).toContain('MUSHI_PROJECT_ID')
+        expect(snip).toContain('MUSHI_API_KEY')
+      } else if (VITE_FRAMEWORKS.has(fw.id)) {
+        expect(snip).toContain('VITE_MUSHI_PROJECT_ID')
+        expect(snip).toContain('VITE_MUSHI_API_KEY')
+      }
     }
   })
 })

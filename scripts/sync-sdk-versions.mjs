@@ -19,9 +19,6 @@
  *   1 — missing env / HTTP error
  */
 
-import { createRequire } from 'node:module'
-const require = createRequire(import.meta.url)
-
 const PUBLISHED_RAW = process.env.PUBLISHED ?? ''
 const PROJECT_REF = process.env.SUPABASE_PROJECT_REF ?? ''
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''

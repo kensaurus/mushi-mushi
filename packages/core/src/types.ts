@@ -1440,7 +1440,7 @@ export interface MushiApiClient {
   getPublicLeaderboard(limit?: number): Promise<MushiApiResponse<{ leaderboard: MushiLeaderboardEntry[] }>>;
 
   /** Whether the caller has a mushi_testers row. */
-  getTesterStatus(jwt: string): Promise<MushiApiResponse<{ is_tester: boolean; tester: { id: string; public_handle: string | null; display_name: string | null } | null }>>;
+  getTesterStatus(jwt: string): Promise<MushiApiResponse<{ is_tester: boolean; tester_id: string | null; public_handle: string | null; display_name: string | null }>>;
 }
 
 /**

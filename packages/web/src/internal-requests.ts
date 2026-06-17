@@ -60,7 +60,12 @@ export function matchesUrl(url: string, matcher: MushiUrlMatcher): boolean {
 
 export function normalizeUrlPrefix(url?: string): string | null {
   if (!url) return null;
-  return normalizeComparableUrl(url).replace(/\/+$/, '');
+  // Strip trailing slashes with a linear scan instead of /\/+$/ — the anchored
+  // one-or-more regex is a polynomial-ReDoS vector on library-supplied URLs.
+  const normalized = normalizeComparableUrl(url);
+  let end = normalized.length;
+  while (end > 0 && normalized.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return normalized.slice(0, end);
 }
 
 export function isLocalhostEndpoint(url?: string): boolean {

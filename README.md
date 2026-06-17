@@ -2,7 +2,11 @@
 
 # Mushi Mushi
 
-**The bug your monitoring can't see, in your queue with a draft fix.**
+**Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
+
+```
+npx mushi-mushi
+```
 
 Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android.
 
@@ -11,15 +15,15 @@ Mushi is the **synthesis layer**: the one signal none of your existing tools cap
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
-[![Server](https://img.shields.io/badge/server-BSL%201.1-orange.svg)](./packages/server/LICENSE)
+[![Server](https://img.shields.io/badge/server-AGPLv3-brightgreen.svg)](./packages/server/LICENSE)
 
 [Quick start](#try-it) · [Connect & Update hub](https://kensaur.us/mushi-mushi/admin/connect) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
 
-<a href="https://kensaur.us/mushi-mushi/admin/" title="Open the live admin demo — animated guided tour">
+<a href="https://kensaur.us/mushi-mushi/admin/" title="Live demo — one click, no sign-up required">
   <img src="./docs/screenshots/tour-pdca-loop.gif" alt="Animated guided tour through the logged-in admin console, walking the full Plan → Do → Check → Act loop." width="100%" />
 </a>
 
-<sub>↑ a logged-in 4-stop walk through the Plan → Do → Check → Act loop</sub>
+<sub>↑ live demo — one click, no sign-up required &nbsp;·&nbsp; a 4-stop walk through the Plan → Do → Check → Act loop</sub>
 
 <br><br>
 
@@ -811,9 +815,9 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | [`@mushi-mushi/plugin-rollbar`](./packages/plugin-rollbar)               | Mirror Mushi reports into Rollbar; resolve Rollbar items on fix merge                                                                                                                                                                                                                      |
 | [`@mushi-mushi/plugin-crashlytics`](./packages/plugin-crashlytics)       | Push Mushi reports into Firebase Crashlytics issues; close on fix                                                                                                                                                                                                                          |
 | [`@mushi-mushi/plugin-cursor-cloud`](./packages/plugin-cursor-cloud)     | Dispatch fix jobs to Cursor Cloud agents; opens draft PRs from classified reports                                                                                                                                                                                                            |
-| `@mushi-mushi/server` (BSL 1.1)                                          | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer                                                                                                                                                                                                 |
-| `@mushi-mushi/agents` (BSL 1.1)                                          | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction                                                                                                                                                                                                |
-| `@mushi-mushi/verify` (BSL 1.1)                                          | Playwright fix verification — screenshot visual diff + step interpreter                                                                                                                                                                                                                    |
+| `@mushi-mushi/server` (AGPLv3)                                          | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer                                                                                                                                                                                                 |
+| `@mushi-mushi/agents` (AGPLv3)                                          | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction                                                                                                                                                                                                |
+| `@mushi-mushi/verify` (AGPLv3)                                          | Playwright fix verification — screenshot visual diff + step interpreter                                                                                                                                                                                                                    |
 
 </details>
 
@@ -839,14 +843,12 @@ pnpm check:docs-stats  # fail if README counts drift from source
 
 ## License & branding
 
-This repository is dual-licensed because the **code** is open source but
-the **brand** is not. The split is what lets us welcome forks while
-making it hard for bad actors to ship a malicious copy under our name.
+This repository is dual-licensed. The **SDK packages** are MIT — use them in any product, open or closed. The **server** (the part you self-host or we run for you) is AGPLv3 — true OSI-approved open source with a copyleft requirement: if you run a modified server as a service you must publish your changes under the same license.
 
 | Surface                                                                                                                                                                                                                                                                                                          | License                              | Permitted                                              | Notes                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | SDK packages — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, `plugin-*` (13 plugins), `adapters` (11 sources), `inventory-schema`, `inventory-auth-runner`, `eslint-plugin-mushi-mushi`, `brand`, `marketing-ui` | [MIT](./LICENSE)                     | Use, fork, sell, embed in proprietary products.        | Trademarks separate — see below.                                                                                                               |
-| Server packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`                                                                                                                                                                                                                            | [BSL 1.1](./packages/server/LICENSE) | Self-host for your own org. Modify. Resell embedded.   | Cannot offer as a hosted bug-reporting service to third parties until **2029-04-15**, when it converts to Apache 2.0 automatically.            |
+| Server packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`                                                                                                                                                                                                                            | [AGPLv3](./packages/server/LICENSE) | Use, modify, self-host, fork — source must stay open (Section 13 applies to SaaS deployments). | OSI-approved open source. SaaS redistribution requires publishing your modifications under AGPLv3. |
 | Trademarks — "Mushi Mushi", "Mushi", 虫, the bug logo, the visual identity                                                                                                                                                                                                                                       | [Trademark policy](./TRADEMARK.md)   | Refer to the project, build add-ons, link to the repo. | **Forks must rename.** Hosting a service under the Mushi name requires written permission. Use on malware / phishing kits is enforced against. |
 | Third-party attributions                                                                                                                                                                                                                                                                                         | [NOTICE](./NOTICE)                   | —                                                      | One-stop list of upstream projects we depend on and their licenses.                                                                            |
 
