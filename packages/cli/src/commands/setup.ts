@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { requireConfig } from '../cli-shared.js';
+import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
 
 export function registerSetupCommands(program: Command): void {
 // ─── setup ────────────────────────────────────────────────────────────────────
@@ -24,7 +25,7 @@ Supported IDEs:
   continue  — writes .continue/mcp.json
   zed       — writes ~/.config/zed/settings.json mcpServers block
 
-The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
+The command reads credentials from ~/.config/mushi/config.json (run \`mushi login\` first).`)
   .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
@@ -133,30 +134,17 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
     const configPath = nodePath.join(configDir, ideEntry.file)
 
     if (ideEntry.format === 'mcp-json') {
-      let merged: Record<string, unknown> = { mcpServers: {} }
-      if (existsSync(configPath)) {
-        try {
-          const raw = await readFile(configPath, 'utf8')
-          merged = JSON.parse(raw) as Record<string, unknown>
-        } catch { /* start fresh */ }
-      }
-      const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
-
       if (allProjectsList && allProjectsList.length > 0) {
-        // --all-projects: upsert one entry per project
+        // --all-projects: upsert one entry per project using the shared helper
         for (const p of allProjectsList) {
-          const pSlug = p.name
-            ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)
-            : p.id.slice(0, 8)
-          const pServerName = `mushi-${pSlug}`
-          servers[pServerName] = {
-            command: 'npx',
-            args: ['-y', '@mushi-mushi/mcp@latest'],
-            env: {
-              MUSHI_API_ENDPOINT: config.endpoint,
-              MUSHI_PROJECT_ID: p.id,
-              MUSHI_API_KEY: config.apiKey,
-            },
+          const pServerName = buildMcpServerName({ projectId: p.id, projectName: p.name ?? undefined })
+          const pBlock = buildMcpServerBlock({
+            endpoint: config.endpoint,
+            projectId: p.id,
+            apiKey: config.apiKey,
+          })
+          if (!opts.dryRun) {
+            await writeMcpServerEntry({ configPath, serverName: pServerName, serverBlock: pBlock })
           }
         }
         if (opts.dryRun) {
@@ -165,18 +153,14 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
           console.log(`✓ Added ${allProjectsList.length} mushi-* server entries (${allProjectsList.map((p) => p.name ?? p.id.slice(0, 8)).join(', ')})`)
         }
       } else {
-        servers[serverName] = mcpServerBlock
-      }
-      merged.mcpServers = servers
-
-      const output = JSON.stringify(merged, null, 2) + '\n'
-      if (opts.dryRun) {
-        console.log(`[dry-run] Would write ${configPath}:`)
-        console.log(redactKeyForDisplay(output))
-      } else {
-        await mkdir(configDir, { recursive: true })
-        await writeFile(configPath, output, 'utf8')
-        if (!allProjectsList) console.log(`✓ Written ${configPath}`)
+        if (opts.dryRun) {
+          const preview = JSON.stringify({ mcpServers: { [serverName]: mcpServerBlock } }, null, 2) + '\n'
+          console.log(`[dry-run] Would write ${configPath}:`)
+          console.log(redactKeyForDisplay(preview))
+        } else {
+          await writeMcpServerEntry({ configPath, serverName, serverBlock: mcpServerBlock })
+          console.log(`✓ Written ${configPath}`)
+        }
       }
     } else if (ideEntry.format === 'zed') {
       let settings: Record<string, unknown> = {}
@@ -187,9 +171,6 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
         } catch { /* start fresh */ }
       }
       const servers = (settings.context_servers as Record<string, unknown>) ?? {}
-      // Zed context-server spec: `command.env` passes env vars to the spawned process.
-      // `settings: {}` is kept for Zed UI (it maps to settings the extension can expose)
-      // but env vars are the actual credential delivery mechanism for MCP servers.
       servers[serverName] = {
         command: {
           path: 'npx',

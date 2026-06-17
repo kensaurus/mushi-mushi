@@ -1,0 +1,48 @@
+---
+title: Pricing
+---
+
+import { Callout } from 'nextra/components'
+
+# Pricing
+
+Bug reports are bursty. Seats are not the right unit. Mushi bills per ingested report — every report is a triaged, classified, auto-fixable unit of customer friction.
+
+## Plans
+
+| Plan | Cost | What you get |
+|---|---|---|
+| **Free** | $0 / 1,000 reports / month | All SDKs, hosted admin, community Discord, AI triage, 30-day report history |
+| **Cloud** | $0.0025 per ingested report after the free 1,000 | No seat tax, plugin marketplace, 90-day history, email support, Sentry/Slack/Linear/Jira integrations |
+| **Enterprise** | Talk to us | SOC 2 evidence pack, SAML SSO, BYOK / BYO storage / data residency, optional self-host SLA, priority support |
+
+<Callout type="info">
+  No credit card required for Free. Cloud billing activates the moment you add a card — not before.
+</Callout>
+
+## What counts as a report
+
+One `shake-to-report` user submission, or one inbound alert from an adapter (Sentry, Datadog, Bugsnag, etc.). Classification, deduplication, fix attempts, and lesson-library writes are **not** counted separately — they're included in the per-report price.
+
+## Why metered
+
+- Side projects and small teams stay free indefinitely.
+- Growth-stage teams pay in proportion to user activity, not headcount.
+- No surprise "you used 1,001 reports on day 1 of a big launch" bill — the first 1,000 each month are always free.
+
+## BYOK means you control the LLM bill
+
+Mushi never marks up LLM tokens. You bring your own Anthropic / OpenAI keys (Settings → API Keys), pay those vendors directly at their list rates, and rotate keys any time. Most teams run the full loop for under $20/month in LLM costs.
+
+## Self-hosting
+
+Every feature on Cloud is in the open-source repo (AGPLv3 server). Self-hosting is free and always will be — [see the guide](/self-hosting).
+
+## Sign up
+
+```bash
+npx mushi-mushi
+# wizard: detect framework → install SDK → write env vars → connect MCP
+```
+
+Or [open the console →](https://mushimushi.dev/signup)

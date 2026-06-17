@@ -6,8 +6,9 @@
  * canonical license the workspace has chosen for its folder:
  *
  *   - `packages/server`, `packages/agents`, `packages/verify` →
- *     BSL 1.1 (converts to Apache 2.0 on 2029-04-15). These packages
- *     implement the core orchestration that the BSL author clause covers.
+ *     AGPLv3 (GNU Affero General Public License v3.0). These server-side
+ *     packages are true OSI-approved open source; the Section 13 "network
+ *     use" copyleft applies to modified hosted deployments.
  *
  *   - Everything else under `packages/*` → MIT. SDKs, adapters, plugins,
  *     and CLI tooling are MIT so integrators can vendor/fork freely.
@@ -28,10 +29,10 @@ import { dirname, join, relative } from 'node:path'
 
 const ROOT = process.cwd()
 
-// Folders whose packages publish under BSL. Keep this list in sync with
+// Folders whose packages publish under AGPLv3. Keep this list in sync with
 // `README.md` and per-package LICENSE files — the lint will tell us if
-// someone drops a new package into these folders without the BSL header.
-const BSL_FOLDERS = new Set([
+// someone drops a new package into these folders without the AGPLv3 header.
+const AGPL_FOLDERS = new Set([
   'packages/server',
   'packages/agents',
   'packages/verify',
@@ -40,7 +41,7 @@ const BSL_FOLDERS = new Set([
 /** Expected LICENSE file header marker per license kind. */
 const LICENSE_MARKERS = {
   MIT: /^MIT License$/m,
-  BSL: /^Business Source License 1\.1$/m,
+  AGPL: /^GNU AFFERO GENERAL PUBLIC LICENSE$/m,
 }
 
 const violations = []
@@ -67,19 +68,19 @@ for (const pkgPath of walk(join(ROOT, 'packages'))) {
   }
 
   const folder = pkgFolder(pkgPath)
-  const expectedLicense = BSL_FOLDERS.has(folder) ? 'BSL' : 'MIT'
+  const expectedLicense = AGPL_FOLDERS.has(folder) ? 'AGPL' : 'MIT'
   const declared = (pkg.license ?? '').toString()
 
-  // Special-case: BSL packages may declare via `"license": "BUSL-1.1"` or
-  // `"SEE LICENSE IN LICENSE"`. Accept both.
-  const declaresBsl = /^(busl-?1\.1|bsl-?1\.1|see\s+license\s+in\s+license)$/i.test(declared)
+  // Special-case: AGPL packages may declare via `"license": "AGPL-3.0-only"`,
+  // `"AGPL-3.0"`, `"AGPL-3.0-or-later"`, or `"SEE LICENSE IN LICENSE"`. Accept all.
+  const declaresAgpl = /^(agpl-?3\.0(-only|-or-later)?|see\s+license\s+in\s+license)$/i.test(declared)
   const declaresMit = /^mit$/i.test(declared)
 
-  if (expectedLicense === 'BSL' && !declaresBsl) {
+  if (expectedLicense === 'AGPL' && !declaresAgpl) {
     violations.push({
       pkg: folder,
       rule: 'license',
-      detail: `Expected BSL 1.1 (declare as "BUSL-1.1" or "SEE LICENSE IN LICENSE"), got "${declared}"`,
+      detail: `Expected AGPLv3 (declare as "AGPL-3.0-only" or "SEE LICENSE IN LICENSE"), got "${declared}"`,
     })
   }
   if (expectedLicense === 'MIT' && !declaresMit && pkg.private !== true) {

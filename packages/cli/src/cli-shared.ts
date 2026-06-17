@@ -32,6 +32,7 @@ import { loadConfig } from './config.js'
 import type { CliConfig } from './config.js'
 import { MUSHI_CLI_VERSION } from './version.js'
 import { getAbortSignal } from './signals.js'
+import { CLOUD_API_ENDPOINT } from './endpoint.js'
 
 // ─── API client ─────────────────────────────────────────────────────────────
 
@@ -174,24 +175,21 @@ export function die(result: ApiError, exitCode = 1): never {
 /**
  * Load config and assert that api key + endpoint are present.
  * Exits with code 2 (config error) if either is missing.
+ * Falls back to the Mushi Cloud endpoint when no endpoint is configured.
  */
 export function requireConfig(opts: { needsProject?: boolean } = {}): Required<Pick<CliConfig, 'apiKey' | 'endpoint'>> & CliConfig {
   const config = loadConfig()
   if (!config.apiKey) {
     process.stderr.write(
       'error: API key not configured.\n' +
-      '  Run:  mushi login --api-key <key> --endpoint <url>\n' +
+      '  Run:  mushi login --api-key <key>\n' +
       '  Or:   export MUSHI_API_KEY=<key>\n',
     )
     process.exit(2)
   }
+  // Default to the Mushi Cloud endpoint — self-hosters override via env or config.
   if (!config.endpoint) {
-    process.stderr.write(
-      'error: API endpoint not configured.\n' +
-      '  Run:  mushi login --endpoint https://<ref>.supabase.co/functions/v1/api\n' +
-      '  Or:   export MUSHI_API_ENDPOINT=<url>\n',
-    )
-    process.exit(2)
+    config.endpoint = process.env.MUSHI_API_ENDPOINT?.trim() || CLOUD_API_ENDPOINT
   }
   if (opts.needsProject && !config.projectId) {
     process.stderr.write(

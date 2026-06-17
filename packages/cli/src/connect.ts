@@ -3,13 +3,14 @@
  * and poll until the SDK heartbeat lands on the configured backend.
  */
 
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { CliConfig } from './config.js'
 import { CONFIG_PATH, saveConfig } from './config.js'
 import { assertEndpoint } from './endpoint.js'
 import { detectFramework, envVarsToWrite, readPackageJson } from './detect.js'
 import { waitForIngestReady } from './heartbeat-wait.js'
+import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from './mcp-config.js'
 
 export interface ConnectOptions {
   apiKey: string
@@ -117,25 +118,13 @@ export async function runConnect(
   if (opts.wireIde !== false) {
     const mcpDir = join(cwd, '.cursor')
     mcpPath = join(mcpDir, 'mcp.json')
-    const serverName = `mushi-${opts.projectId.slice(0, 8)}`
-    const mcpServerBlock = {
-      command: 'npx',
-      args: ['-y', '@mushi-mushi/mcp@latest'],
-      env: {
-        MUSHI_API_ENDPOINT: endpoint,
-        MUSHI_PROJECT_ID: opts.projectId,
-        MUSHI_API_KEY: opts.apiKey,
-      },
-    }
-    let merged: Record<string, unknown> = { mcpServers: {} }
-    try {
-      merged = JSON.parse(await readFile(mcpPath, 'utf8')) as Record<string, unknown>
-    } catch { /* fresh or unreadable — start with empty config */ }
-    const servers = (merged.mcpServers as Record<string, unknown>) ?? {}
-    servers[serverName] = mcpServerBlock
-    merged.mcpServers = servers
-    await mkdir(mcpDir, { recursive: true })
-    await writeFile(mcpPath, JSON.stringify(merged, null, 2) + '\n', 'utf8')
+    const serverName = buildMcpServerName({ projectId: opts.projectId })
+    const serverBlock = buildMcpServerBlock({
+      endpoint,
+      projectId: opts.projectId,
+      apiKey: opts.apiKey,
+    })
+    await writeMcpServerEntry({ configPath: mcpPath, serverName, serverBlock })
     await ensureMcpJsonGitignored(cwd, messages)
     messages.push(`✓ Wired ${mcpPath} — restart Cursor and run "list mushi tools"`)
   }

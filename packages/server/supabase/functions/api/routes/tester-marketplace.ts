@@ -361,6 +361,7 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
       return c.json({ ok: true, data: {
         isTester: false,
         is_tester: false,
+        tester_id: null,
         handle: null,
         public_handle: null,
         display_name: null,
@@ -387,6 +388,9 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
     return c.json({ ok: true, data: {
       isTester: true,
       is_tester: true,
+      // The caller's own tester id — a stable identity the SDK keys its tester
+      // session on (so it never has to derive one from the bearer JWT).
+      tester_id: tester.id,
       handle: testerRow?.public_handle ?? testerRow?.display_name ?? null,
       public_handle: testerRow?.public_handle ?? null,
       display_name: testerRow?.display_name ?? null,

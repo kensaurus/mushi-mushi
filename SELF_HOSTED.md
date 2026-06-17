@@ -317,3 +317,42 @@ target) and DNS configuration details, see
 > `region_routing` replicates read-only; write routing relies on client-side
 > GeoDNS stickiness. Cross-region write conflicts are the operator's
 > responsibility.
+
+---
+
+## Headless bootstrap (`MUSHI_INIT_*`)
+
+Mirror of [Langfuse's `LANGFUSE_INIT_*`](https://langfuse.com/docs/self-hosting) pattern.
+When these environment variables are set, the Mushi API bootstraps an initial
+organisation, project, and reporter API key on the first authenticated request
+— useful for IaC, Docker Compose, CI seeds, and one-click deploys.
+
+Set the following Supabase secrets (all optional; omit any you don't need):
+
+```bash
+# Org
+npx supabase secrets set MUSHI_INIT_ORG_NAME="My Team"
+npx supabase secrets set MUSHI_INIT_ORG_ID="00000000-0000-0000-0000-000000000001"   # optional, makes idempotent
+
+# Project
+npx supabase secrets set MUSHI_INIT_PROJECT_NAME="Production"
+npx supabase secrets set MUSHI_INIT_PROJECT_ID="00000000-0000-0000-0000-000000000002"  # optional, makes idempotent
+
+# First reporter key (mushi_... format); written as a pre-hashed key
+npx supabase secrets set MUSHI_INIT_REPORTER_KEY="mushi_mystaticreporterkey123"
+```
+
+Then call the bootstrap endpoint (once, after `supabase db push`):
+
+```bash
+curl -X POST https://YOUR_REF.supabase.co/functions/v1/api/v1/admin/bootstrap \
+  -H "Authorization: Bearer $(npx supabase projects api-keys --project-ref YOUR_REF | grep service_role | awk '{print $NF}')" \
+  -H "Content-Type: application/json" \
+  --data '{}'
+```
+
+The endpoint is idempotent — it skips creation when the org/project/key already exists.
+The response lists what was created and what was skipped.
+
+> **Security note**: the bootstrap endpoint requires a service-role JWT. Never
+> expose it to the public internet without auth.

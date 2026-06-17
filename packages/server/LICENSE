@@ -1,30 +1,35 @@
-Business Source License 1.1
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
 
-Licensor:           Kenji Sakuramoto
-Licensed Work:      Mushi Mushi Server (packages/server, packages/agents, packages/verify)
-                    Copyright (c) 2026 Kenji Sakuramoto
+Copyright (c) 2026 Kenji Sakuramoto
 
-Additional Use Grant:
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-  You may use the Licensed Work for any purpose, including production use,
-  provided that you do not use the Licensed Work to offer a commercial
-  bug reporting, bug intelligence, or user feedback service to third parties
-  as a managed service, hosted service, or software-as-a-service.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
 
-  For clarity, the following uses ARE permitted:
-  - Self-hosting the Licensed Work for your own organization's internal use
-  - Modifying the Licensed Work for your own organization's internal use
-  - Using the Licensed Work in development, testing, and staging environments
-  - Integrating the Licensed Work into your product for your own bug tracking
-    (not resold as a service)
+The "network use" provision of AGPLv3 (Section 13) means that if you run a
+modified version of this software as a service (SaaS), you must make the
+complete source of the modified version available to the users of that service
+under this license.
 
-  The following uses are NOT permitted without a separate commercial license:
-  - Offering the Licensed Work (or a substantially similar service) as a
-    hosted or managed service to third parties
-  - Embedding the Licensed Work into a product where bug reporting or user
-    feedback intelligence is a primary feature sold to customers
+The full AGPLv3 license text is available at:
+https://www.gnu.org/licenses/agpl-3.0.html
 
-Change Date:        April 15, 2029
-Change License:     Apache License, Version 2.0
+SPDX-License-Identifier: AGPL-3.0-only
 
-For the full BSL 1.1 license text, see: https://mariadb.com/bsl11/
+---
+
+Applies to: packages/server  packages/agents  packages/verify
+
+The SDK packages (packages/core, packages/web, packages/react, packages/vue,
+packages/svelte, packages/angular, packages/react-native, packages/capacitor,
+packages/node, packages/cli, packages/mcp, packages/plugin-*, packages/adapters,
+packages/marketing-ui, packages/brand, packages/inventory-schema) remain MIT.
+
+See the root LICENSE file for the MIT text covering the SDK packages.

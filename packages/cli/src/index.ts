@@ -18,7 +18,7 @@
  * Auth precedence (highest wins):
  *   1. Explicit flags (--api-key, --endpoint, --project-id)
  *   2. Environment variables (MUSHI_API_KEY, MUSHI_API_ENDPOINT, MUSHI_PROJECT_ID)
- *   3. ~/.mushirc config file (written by `mushi login`)
+ *   3. ~/.config/mushi/config.json config file (written by `mushi login`)
  *
  * EXIT CODES
  * ----------

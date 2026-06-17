@@ -25,6 +25,8 @@ interface AuthContextValue {
   clearPasswordRecovery: () => void
   signIn: (email: string, password: string) => Promise<{ error?: string }>
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>
+  signInWithGitHub: () => Promise<{ error?: string }>
+  signInWithGoogle: () => Promise<{ error?: string }>
   /** Sign in as a Mushi Bounties tester via magic-link. Sets signup_intent='tester'
    *  so the DB trigger auto-provisions a mushi_testers row on first login. */
   signInAsTester: (email: string) => Promise<{ error?: string }>
@@ -51,6 +53,8 @@ const AuthContext = createContext<AuthContextValue>({
   clearPasswordRecovery: () => {},
   signIn: async () => ({}),
   signInWithMagicLink: async () => ({}),
+  signInWithGitHub: async () => ({}),
+  signInWithGoogle: async () => ({}),
   signInAsTester: async () => ({}),
   signInWithPasskey: async () => ({}),
   signUp: async () => ({}),
@@ -123,6 +127,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
+  const signInWithGitHub = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: { redirectTo: getRedirectUrl() },
+    })
+    return { error: error?.message }
+  }
+
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: getRedirectUrl() },
+    })
+    return { error: error?.message }
+  }
+
   const signInAsTester = async (email: string) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -174,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       session, user: session?.user ?? null, loading,
       isPasswordRecovery, clearPasswordRecovery,
-      signIn, signInWithMagicLink, signInAsTester, signInWithPasskey, signUp, signOut, resetPassword, updatePassword,
+      signIn, signInWithMagicLink, signInWithGitHub, signInWithGoogle, signInAsTester, signInWithPasskey, signUp, signOut, resetPassword, updatePassword,
     }}>
       {children}
     </AuthContext.Provider>

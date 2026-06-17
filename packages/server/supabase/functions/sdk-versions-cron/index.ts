@@ -20,10 +20,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { log as rootLog } from '../_shared/logger.ts'
-import {
-  fetchAllLatestVersions,
-  UPGRADEABLE_PACKAGES,
-} from '../_shared/sdk-upgrade-plan.ts'
+import { fetchAllLatestVersions } from '../_shared/sdk-upgrade-plan.ts'
 
 const log = rootLog.child('sdk-versions-cron')
 

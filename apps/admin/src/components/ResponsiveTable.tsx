@@ -22,7 +22,7 @@
  *          replace-the-outer-wrapper-only.
  */
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useTableDensity } from '../lib/useTableDensity'
 import type { TableDensity } from '../lib/useTableDensity'
 import { MicroSegmentCell, MicroSegmentedTrack } from './sidebar/MicroSegmentedTrack'
@@ -126,9 +126,14 @@ const DENSITY_LABELS: Record<TableDensity, string> = {
 export function TableDensityToggle({ className = '' }: TableDensityToggleProps) {
   const [density, setDensity] = useTableDensity()
   const options = Object.keys(DENSITY_LABELS) as TableDensity[]
+  // Per-instance, stable id — a constant trackId would make the Framer
+  // `LayoutGroup` id and the shared `micro-ind-${trackId}` layoutId collide
+  // when more than one TableDensityToggle is mounted on the same page, causing
+  // the sliding pill to animate between unrelated toggles.
+  const trackId = `table-density-${useId()}`
   return (
     <MicroSegmentedTrack
-      trackId="table-density"
+      trackId={trackId}
       inline
       role="group"
       aria-label="Table density"

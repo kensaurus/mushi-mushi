@@ -19,8 +19,9 @@ prop is "we host it for you, you get a metered bill."
 ## Sign-up flow
 
 1. `mushimushi.dev/signup` — Supabase Auth (email + password).
-2. Email confirmation → project + first reporter token auto-provisioned.
-3. `mushimushi.dev/dashboard` shows usage and a single button:
+2. Email confirmation → sign in → `/onboarding` wizard.
+3. Create your first project, mint an API key, run `npx mushi-mushi` to install the SDK.
+4. `mushimushi.dev/dashboard` shows usage and a single button:
    **Add a card via Stripe**.
 4. Stripe Checkout → on success, the metered subscription becomes
    `active`. Usage flows out via Stripe Meter Events from the hourly

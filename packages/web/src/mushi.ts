@@ -31,6 +31,7 @@ import {
   type BreadcrumbBuffer,
   normaliseThrown,
   newUuid,
+  resolveEnvConfig,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -77,19 +78,24 @@ export class Mushi {
       return instance;
     }
 
-    if (!config.projectId) {
-      throw new Error('[mushi] projectId is required');
+    // Merge env-var defaults under any explicit config so developers can
+    // use zero-config mode: <MushiProvider> with no props reads from
+    // NEXT_PUBLIC_MUSHI_* / VITE_MUSHI_* / MUSHI_* automatically.
+    const resolved: MushiConfig = { ...resolveEnvConfig(), ...config };
+
+    if (!resolved.projectId) {
+      throw new Error('[mushi] projectId is required — set NEXT_PUBLIC_MUSHI_PROJECT_ID / VITE_MUSHI_PROJECT_ID / MUSHI_PROJECT_ID or pass it explicitly');
     }
 
-    if (!config.apiKey) {
-      throw new Error('[mushi] apiKey is required');
+    if (!resolved.apiKey) {
+      throw new Error('[mushi] apiKey is required — set NEXT_PUBLIC_MUSHI_API_KEY / VITE_MUSHI_API_KEY / MUSHI_API_KEY or pass it explicitly');
     }
 
-    if (config.enabled === false) {
+    if (resolved.enabled === false) {
       return createNoopInstance();
     }
 
-    instance = createInstance(config);
+    instance = createInstance(resolved);
     return instance;
   }
 
@@ -201,13 +207,16 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
     const status = statusResult.data as {
       is_tester: boolean;
-      public_handle?: string;
-      display_name?: string;
-      email?: string;
+      tester_id?: string | null;
+      public_handle?: string | null;
+      display_name?: string | null;
     };
-    if (!status.is_tester) { clearTesterJwt(); return; }
+    // Fail closed: require a verified tester identity from the server. Never
+    // derive the id from the JWT — that leaked token bytes into UI/state and
+    // was unstable across token refresh.
+    if (!status.is_tester || !status.tester_id) { clearTesterJwt(); return; }
     widget.setTesterSession(jwt, {
-      id: jwt.substring(0, 16),
+      id: status.tester_id,
       public_handle: status.public_handle ?? null,
       display_name: status.display_name ?? null,
     });
