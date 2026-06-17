@@ -1,20 +1,18 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
-    "highlights": [
-      {
-        "title": "Account mode",
-        "description": "an org-scoped API key (no `MUSHI_PROJECT_ID` required) now"
-      },
-      {
-        "title": "stdio fix",
-        "description": "all logger and `console.*` output is routed to stderr so stdout"
-      }
+    "majorMinor": "1.15",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.15.0"
     ],
-    "packages": []
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.15.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.14",
@@ -636,6 +634,21 @@
     ]
   },
   {
+    "majorMinor": "0.18",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.18.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.18.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.17",
     "headline": null,
     "pending": false,
@@ -686,6 +699,14 @@
     ],
     "highlights": [
       {
+        "title": "Account mode",
+        "description": "an org-scoped API key (no `MUSHI_PROJECT_ID` required) now"
+      },
+      {
+        "title": "stdio fix",
+        "description": "all logger and `console.*` output is routed to stderr so stdout"
+      },
+      {
         "title": "Web",
         "description": "Pointer Events drag with tap-vs-drag threshold (6 px), safe-area clamping, optional edge-snap on release, per-project `localStorage` persistence, arrow-key nudge for keyboard accessibility. New `draggable?: boolean | { persist?, snapToEdge?, axis? }` config type in `@mushi-mushi/core`."
       },
@@ -724,19 +745,15 @@
       {
         "title": "React Native",
         "description": "`KeyboardAvoidingView` `behavior=\"height\"` (Android) + `ScrollView(keyboardShouldPersistTaps)`."
-      },
-      {
-        "title": "Flutter",
-        "description": "`SingleChildScrollView` + `MediaQuery.viewInsets.bottom` inset."
-      },
-      {
-        "title": "iOS",
-        "description": "`keyboardWillShow` / `keyboardWillHide` observers + `CGAffineTransform` lift."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.16.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.16.0"
       },
       {
@@ -1451,6 +1468,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.15",
       "0.5.14",
       "0.5.13",
       "0.5.12",
@@ -1560,7 +1578,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.14"
+        "version": "0.5.15"
       },
       {
         "name": "mushi-mushi",
