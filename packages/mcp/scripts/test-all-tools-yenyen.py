@@ -18,11 +18,24 @@ if sys.platform == "win32":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-MCP_BIN    = r"C:\Users\kensa\Documents\GitHub\mushi-mushi\packages\mcp\dist\index.js"
-ENDPOINT   = "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api"
-API_KEY    = "mushi_0ee30dfac9f84b9b82ac31b4f46c43c8"   # mcp:read + mcp:write key
-PROJECT_ID = "6e7e0c3a-a777-4f1e-a699-6515993cf3bd"      # yen-yen project
-GRAPH_NODE_UUID = "ee778cc6-f971-46a5-b318-9ee748480dd2"   # valid graph_nodes.id for yen-yen
+# All connection values are read from the environment so no secret is ever
+# committed. Set them before running, e.g.:
+#   export MUSHI_API_KEY="mushi_..."          # an mcp:read + mcp:write key
+#   export MUSHI_API_ENDPOINT="https://<ref>.supabase.co/functions/v1/api"
+#   export MUSHI_PROJECT_ID="<project uuid>"
+#   export MCP_BIN="<abs path to packages/mcp/dist/index.js>"
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+MCP_BIN    = os.environ.get("MCP_BIN") or os.path.join(_repo_root, "packages", "mcp", "dist", "index.js")
+ENDPOINT   = os.environ.get("MUSHI_API_ENDPOINT", "")
+API_KEY    = os.environ.get("MUSHI_API_KEY", "")
+PROJECT_ID = os.environ.get("MUSHI_PROJECT_ID", "")
+GRAPH_NODE_UUID = os.environ.get("MUSHI_GRAPH_NODE_UUID", "")
+
+if not (API_KEY and ENDPOINT and PROJECT_ID):
+    sys.exit(
+        "Missing config. Set MUSHI_API_KEY, MUSHI_API_ENDPOINT, and "
+        "MUSHI_PROJECT_ID in the environment before running this script."
+    )
 
 ENV = {
     **os.environ,
