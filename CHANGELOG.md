@@ -15,7 +15,7 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## v1.14.x
 
-Latest tag: `v1.14.0`
+Latest tag: `v1.14.1`
 
 ### Highlights
 
@@ -35,7 +35,7 @@ Latest tag: `v1.14.0`
 ### Packages bumped
 
 - `@mushi-mushi/core` → 1.14.0
-- `@mushi-mushi/web` → 1.14.0
+- `@mushi-mushi/web` → 1.14.1
 
 ## v1.13.x
 
@@ -253,7 +253,7 @@ Latest tag: `v1.0.0`
 
 ## v0.17.x
 
-Latest tag: `v0.17.1`
+Latest tag: `v0.17.2`
 
 ### Highlights
 
@@ -266,7 +266,7 @@ Latest tag: `v0.17.1`
 
 ### Packages bumped
 
-- `@mushi-mushi/cli` → 0.17.1
+- `@mushi-mushi/cli` → 0.17.2
 
 ## v0.16.x
 
@@ -312,6 +312,7 @@ Latest tag: `v0.15.2`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.15.0
+- `@mushi-mushi/mcp` → 0.15.0
 - `@mushi-mushi/react-native` → 0.15.2
 
 ## v0.14.x

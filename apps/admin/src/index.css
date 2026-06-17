@@ -1825,6 +1825,68 @@ select, input, textarea {
 }
 
 
+/* Ask Mushi header launcher — brand glow until first open */
+@keyframes ask-mushi-launcher-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 color-mix(in oklch, var(--color-brand) 0%, transparent),
+      0 0 10px -2px color-mix(in oklch, var(--color-brand) 35%, transparent);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.12);
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--color-brand) 22%, transparent),
+      0 0 18px -2px color-mix(in oklch, var(--color-brand) 55%, transparent);
+  }
+}
+
+.ask-mushi-launcher--glow {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-brand) 45%, transparent),
+    0 0 14px -3px color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+
+.ask-mushi-launcher__ring {
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in oklch, var(--color-brand) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ask-mushi-launcher--glow .ask-mushi-launcher__ring {
+    animation: ask-mushi-launcher-glow 2.2s var(--ease-out-expo) infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-mushi-launcher--glow {
+    outline: 2px solid color-mix(in oklch, var(--color-brand) 65%, transparent);
+    outline-offset: 2px;
+  }
+  .ask-mushi-launcher__ring {
+    display: none;
+  }
+}
+
+@keyframes portal-toggle-caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.portal-toggle__caret {
+  animation: portal-toggle-caret-blink 900ms step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal-toggle__caret {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    STAMP GLOW UTILITIES (used by PDCA receipts)
    A static box-shadow ring that signals "this stage has landed". Matches the
