@@ -410,14 +410,14 @@ export async function apiKeyAuth(c: Context, next: Next) {
     })
   }
 
-  c.set('projectId', keyRow.project_id)
+  c.set('projectId', keyRow.project_id ?? undefined)
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')
   c.set('apiKeyScopes', keyRow.scopes ?? [])
   if (keyRow.id) c.set('apiKeyId', keyRow.id)
   if (keyRow.key_prefix) c.set('apiKeyPrefix', keyRow.key_prefix)
   applyLogContext(c, {
     authMethod: 'apiKey',
-    projectId: keyRow.project_id,
+    projectId: keyRow.project_id ?? undefined,
     apiKeyId: keyRow.id,
     apiKeyPrefix: keyRow.key_prefix ?? undefined,
   })
