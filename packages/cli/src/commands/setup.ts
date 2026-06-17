@@ -33,6 +33,16 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
 
     const config = requireConfig({ needsProject: true })
 
+    // Mask the API key when echoing config to the terminal (dry-run preview) so
+    // the secret never lands in shell history or CI logs. The file written in a
+    // real run still contains the live key — see the .gitignore reminder below.
+    const redactKeyForDisplay = (text: string): string => {
+      const key = config.apiKey
+      if (!key) return text
+      const masked = key.length > 12 ? `${key.slice(0, 10)}…${key.slice(-2)}` : '••••'
+      return text.split(key).join(masked)
+    }
+
     // Resolve a human-readable project slug: prefer --project-slug, then fetch
     // the project name from the API and slugify it, falling back to the ID prefix.
     let slug: string
@@ -162,7 +172,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
       const output = JSON.stringify(merged, null, 2) + '\n'
       if (opts.dryRun) {
         console.log(`[dry-run] Would write ${configPath}:`)
-        console.log(output)
+        console.log(redactKeyForDisplay(output))
       } else {
         await mkdir(configDir, { recursive: true })
         await writeFile(configPath, output, 'utf8')
@@ -196,7 +206,7 @@ The command reads credentials from ~/.mushirc (run \`mushi login\` first).`)
       const output = JSON.stringify(settings, null, 2) + '\n'
       if (opts.dryRun) {
         console.log(`[dry-run] Would write ${configPath}:`)
-        console.log(output)
+        console.log(redactKeyForDisplay(output))
       } else {
         await mkdir(configDir, { recursive: true })
         await writeFile(configPath, output, 'utf8')
