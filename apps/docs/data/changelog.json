@@ -1,25 +1,27 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.16",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.16.0"
+    ],
     "highlights": [
       {
-        "title": "Reporter identity (fixes anonymous-token reporter):",
-        "description": "`submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`."
+        "title": "In-SDK assistant (\"Ask\" tab):",
+        "description": "the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`."
       },
       {
-        "title": "Sentry-level payload:",
-        "description": "every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin \"Repro timeline\" renders instead of nudging \"Upgrade the SDK\"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb."
+        "title": "Page context:",
+        "description": "`publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type."
       },
       {
-        "title": "Screenshots:",
-        "description": "new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens."
+        "title": "Signed identity:",
+        "description": "`identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for \"My Reports\", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`."
       },
       {
-        "title": "Design parity:",
-        "description": "`MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer \"Your reports\" / \"Community\" tabs."
+        "title": "Design tokens:",
+        "description": "`@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source."
       },
       {
         "title": "In-SDK assistant (\"Ask\" tab):",
@@ -38,7 +40,16 @@
         "description": "`@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.16.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.16.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.15",
@@ -575,6 +586,22 @@
     ],
     "highlights": [
       {
+        "title": "In-SDK assistant (\"Ask\" tab):",
+        "description": "the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`."
+      },
+      {
+        "title": "Page context:",
+        "description": "`publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type."
+      },
+      {
+        "title": "Signed identity:",
+        "description": "`identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for \"My Reports\", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`."
+      },
+      {
+        "title": "Design tokens:",
+        "description": "`@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source."
+      },
+      {
         "title": "`mushi sync-lessons`",
         "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
@@ -601,7 +628,15 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/capacitor",
+        "version": "1.1.0"
+      },
+      {
         "name": "@mushi-mushi/core",
+        "version": "1.1.0"
+      },
+      {
+        "name": "@mushi-mushi/node",
         "version": "1.1.0"
       },
       {
@@ -619,6 +654,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "1.0.1",
       "1.0.0"
     ],
     "highlights": [
@@ -662,7 +698,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "1.0.0"
+        "version": "1.0.1"
       },
       {
         "name": "@mushi-mushi/capacitor",
@@ -682,11 +718,11 @@
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "1.0.0"
+        "version": "1.0.1"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "1.0.0"
+        "version": "1.0.1"
       },
       {
         "name": "@mushi-mushi/web",
@@ -699,13 +735,14 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.18.1",
       "0.18.0"
     ],
     "highlights": [],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.18.0"
+        "version": "0.18.1"
       }
     ]
   },
@@ -742,12 +779,32 @@
       {
         "title": "Hardening:",
         "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
+      },
+      {
+        "title": "Reporter identity (fixes anonymous-token reporter):",
+        "description": "`submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`."
+      },
+      {
+        "title": "Sentry-level payload:",
+        "description": "every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin \"Repro timeline\" renders instead of nudging \"Upgrade the SDK\"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb."
+      },
+      {
+        "title": "Screenshots:",
+        "description": "new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens."
+      },
+      {
+        "title": "Design parity:",
+        "description": "`MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer \"Your reports\" / \"Community\" tabs."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
         "version": "0.17.2"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.17.0"
       }
     ]
   },
@@ -756,6 +813,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.16.1",
       "0.16.0"
     ],
     "highlights": [
@@ -815,7 +873,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.16.0"
+        "version": "0.16.1"
       },
       {
         "name": "@mushi-mushi/react-native",
