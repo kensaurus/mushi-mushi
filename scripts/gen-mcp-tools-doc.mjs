@@ -51,6 +51,8 @@ const writeTools = tools.filter((t) => t.scope === 'mcp:write')
 /**
  * Escape a value for a Markdown/MDX *table cell*:
  *  - collapse all whitespace/newlines (cells are single-line)
+ *  - escape backslashes FIRST so the escapes we add below cannot be subverted
+ *    by a backslash already present in the input (js/incomplete-sanitization)
  *  - escape the pipe (table column delimiter)
  *  - escape `{` and `<`, which MDX otherwise parses as a JS expression / JSX
  *    tag (the cause of "Could not parse expression with acorn").
@@ -58,6 +60,7 @@ const writeTools = tools.filter((t) => t.scope === 'mcp:write')
 function esc(cell) {
   return String(cell ?? '')
     .replace(/\s+/g, ' ')
+    .replace(/\\/g, '\\\\')
     .replace(/\|/g, '\\|')
     .replace(/\{/g, '\\{')
     .replace(/</g, '\\<')
