@@ -45,6 +45,8 @@ import { SnapshotSectionHint,
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PageHero } from '../components/PageHero'
+import type { PageAction } from '../components/PageActionBar'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
 import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
@@ -489,6 +491,29 @@ export function ExplorePage() {
               ? 'ok'
               : 'info'
 
+  const exploreHeroSeverity =
+    bannerSeverity === 'danger' ? 'crit' : bannerSeverity === 'brand' ? 'info' : bannerSeverity
+
+  const exploreAct = useMemo((): PageAction | null => {
+    if (stats.topPriority === 'ready') return null
+    if (stats.topPriorityTo && stats.topPriorityLabel) {
+      const tone =
+        stats.topPriority === 'error'
+          ? 'act'
+          : stats.topPriority === 'empty' || stats.topPriority === 'stale'
+            ? 'check'
+            : 'do'
+      return {
+        tone,
+        title: stats.topPriorityLabel,
+        reason: stats.lastIndexError ?? undefined,
+        primary: { kind: 'link', to: stats.topPriorityTo, label: 'Take action →' },
+        secondary: [{ kind: 'button', label: 'Index debug', onClick: () => setActiveTab('index') }],
+      }
+    }
+    return null
+  }, [stats.topPriority, stats.topPriorityTo, stats.topPriorityLabel, stats.lastIndexError, setActiveTab])
+
   const primaryTabOptions = useMemo(
     () =>
       EXPLORE_PRIMARY_TABS.filter((t) => !(ux.hideIndexTab && t.id === 'index')).map((t) => ({
@@ -777,6 +802,7 @@ export function ExplorePage() {
       <PageHeaderBar
         title={copy?.title ?? 'Explore'}
         projectScope={stats.projectName ?? undefined}
+        withPageHero={!ux.hideOverviewChrome}
         description={copy?.description ?? 'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'}
         helpTitle={copy?.help?.title ?? 'Codebase Atlas'}
         helpWhatIsIt={
@@ -832,6 +858,67 @@ export function ExplorePage() {
           </>
         )}
       </PageHeaderBar>
+
+      {!ux.hideOverviewChrome ? (
+        <PageHero
+          scope="explore"
+          title={copy?.title ?? 'Codebase atlas'}
+          kicker="Index posture"
+          decide={{
+            label: stats.topPriority === 'ready' ? 'Atlas ready' : stats.topPriorityLabel ?? 'Index posture',
+            metric: `${stats.indexedFiles.toLocaleString()} files · ${stats.withEmbeddings.toLocaleString()} embedded`,
+            summary:
+              stats.topPriority === 'ready'
+                ? `${stats.symbolCount.toLocaleString()} symbols indexed — ask, tour, or search the repo.`
+                : stats.topPriorityLabel ?? 'Connect a repo and enable codebase indexing.',
+            severity: exploreHeroSeverity,
+            anchor: 'explore:decide',
+            evidence: {
+              kind: 'metric-breakdown',
+              whyNow:
+                stats.topPriority === 'error' && stats.lastIndexError
+                  ? stats.lastIndexError
+                  : stats.topPriority === 'ready'
+                    ? `${stats.indexedFiles} files indexed with ${stats.withEmbeddings} embedding vectors for semantic search.`
+                    : stats.topPriorityLabel ?? 'Indexing posture drives whether Ask, Tour, and Search can answer grounded questions.',
+              items: [
+                { label: 'Indexed files', value: stats.indexedFiles, tone: stats.indexedFiles > 0 ? 'ok' : 'warn' },
+                { label: 'Embeddings', value: stats.withEmbeddings, tone: stats.withEmbeddings > 0 ? 'ok' : 'warn' },
+                { label: 'Symbols', value: stats.symbolCount, tone: 'neutral' },
+                {
+                  label: 'Index enabled',
+                  value: stats.codebaseIndexEnabled ? 'Yes' : 'No',
+                  tone: stats.codebaseIndexEnabled ? 'ok' : 'warn',
+                },
+              ],
+            },
+          }}
+          act={exploreAct}
+          actAnchor="explore:act"
+          actEvidence={
+            exploreAct
+              ? { kind: 'rule-trace', why: exploreAct.reason ?? exploreAct.title, threshold: stats.topPriority ?? undefined }
+              : undefined
+          }
+          verify={{
+            label: stats.lastIndexedAt ? 'Last indexed' : 'Awaiting first index',
+            detail: stats.lastIndexedAt ?? stats.lastIndexAttemptAt ?? '—',
+            to: '/explore?tab=index',
+            secondaryTo: '/connect',
+            secondaryLabel: 'Connect repo',
+            anchor: 'explore:verify',
+            evidence: stats.lastIndexedAt
+              ? {
+                  kind: 'last-event',
+                  at: stats.lastIndexedAt,
+                  by: 'codebase indexer',
+                  payloadSummary: `${stats.indexedFiles} files`,
+                  status: stats.topPriority === 'error' ? 'warn' : 'ok',
+                }
+              : undefined,
+          }}
+        />
+      ) : null}
 
       <ExploreStatusBanner
         stats={stats}
