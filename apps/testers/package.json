@@ -17,13 +17,13 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@tailwindcss/postcss": "^4.1.7",
-    "@types/node": "^22.0.0",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^22.19.21",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "eslint": "^10.3.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
-    "tailwindcss": "^4.1.7",
+    "tailwindcss": "^4.3.0",
     "typescript": "^5.8.3"
   }
 }
