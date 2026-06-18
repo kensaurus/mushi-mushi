@@ -24,6 +24,21 @@ Tick these off in order. Most are one-time.
   6 MB so GitHub's player auto-plays. Drop at top of `README.md`, replacing or
   above the current hero screenshot (keep the screenshot as fallback inside
   `<picture>`).
+- [ ] **Incident loop GIF (v2 positioning, Jun 2026)** — 20–30s silent loop for
+  vibe-coder GTM: AI ships code → prod breaks → Mushi MCP `get_fix_context` +
+  `summarize_report_for_fix` in Cursor → paste fix prompt → merged. Script:
+  [`apps/docs/content/quickstart/incident-loop.mdx`](../../apps/docs/content/quickstart/incident-loop.mdx).
+  Save as `docs/screenshots/incident-loop.gif` (or `.webp`). **One asset, three
+  pre-wired slots** — drop the file in and uncomment each:
+  1. `README.md` — `TODO(loop-video)` comment above the TL;DR table.
+  2. `apps/docs/content/quickstart/incident-loop.mdx` — `TODO(loop-video)` slot
+     under the intro (served at `/screenshots/incident-loop.gif` via the docs
+     `sync-docs-screenshots` prebuild).
+  3. Launch Week / Product Hunt / Show HN thumbnail.
+  **Target metric:** time-to-first-diagnosis under ~2 minutes for a fresh
+  install. Record only once Workstream C makes the in-editor loop buttery (the
+  human screen-capture is the one step an agent can't automate — the Cursor
+  session + merge must be filmed live).
 - [ ] **Enhance README screenshots with `docs/screenshots/hero-gif.webp`** — use
   `<picture>` with `source srcset="…hero-gif.webp"` + `<img src="…report-detail-dark.png">`
   so the static image still renders in RSS/email clients.
@@ -34,10 +49,12 @@ Tick these off in order. Most are one-time.
 
 Keywords have been populated. Now confirm each package README opens strong:
 
-- [ ] Every SDK `README.md` starts with the canonical tagline (12-word form from
-  `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Sentry sees what code throws.
-  Mushi sees what users feel — and closes the loop with AI."*
-  CI enforces this via `scripts/check-tagline-consistency.mjs`.
+- [ ] Every SDK `README.md` leads with the canonical v2 hero (`MUSHI_TAGLINE_V2.hero`
+  / `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Your AI wrote it. Mushi tells
+  you why it broke."* followed by the sub-hero *"Plain-English diagnosis + a
+  paste-ready fix, right inside Cursor."* The legacy 12-word Sentry-contrast line
+  is comparison-tables-only — never the opener. CI enforces the v2 hero on every
+  primary README via `scripts/check-tagline-consistency.mjs`.
 - [ ] 60-second install snippet immediately under the tagline. No wall-of-text.
 - [ ] Link to the live demo above the API docs.
 - [ ] Badges row: npm version, size (for web), LICENSE-MIT. Keep to 5 or fewer.
@@ -94,8 +111,8 @@ cared-for.
   recommend this for any account that posts via the API.
 - [ ] X / Twitter: `@mushimushi_dev` (the underscore because `@mushimushi` is
   probably taken; check both).
-- [ ] Bio on both: *"Bug reports that fix themselves. Sentry sees what your
-  code throws. Mushi sees what your users feel. 🐛 OSS, MIT."*
+- [ ] Bio on both: *"Your AI wrote it. Mushi tells you why it broke — plain-English
+  diagnosis + a paste-ready fix, in your editor. 🐛 OSS, self-hostable, MIT SDKs."*
 - [ ] Profile image: Mushi-chan's happy cameo
   ([`docs/mascot/mushi-happy.png`](../mascot/mushi-happy.png)).
 - [ ] Header image: same canvas as the GitHub social preview

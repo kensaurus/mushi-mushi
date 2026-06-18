@@ -30,7 +30,7 @@ interface TesterProfile {
 
 export function TesterSettingsPage() {
   const toast = useToast()
-  const { data: profile, loading, reload } = usePageData<TesterProfile>('/v1/tester/me', TESTER_API_OPTS)
+  const { data: profile, loading, error: profileError, reload } = usePageData<TesterProfile>('/v1/tester/me', TESTER_API_OPTS)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -91,6 +91,7 @@ export function TesterSettingsPage() {
       }
     } catch {
       setDeleting(false)
+      toast.error('Could not delete account. Check your connection and try again.')
     }
   }
 
@@ -114,6 +115,7 @@ export function TesterSettingsPage() {
       }
     } catch {
       setFeedbackState('error')
+      toast.error('Could not send feedback. Check your connection and try again.')
     }
   }
 
@@ -136,7 +138,16 @@ export function TesterSettingsPage() {
 
       {loading && <div className="h-64 animate-pulse rounded-md bg-surface-overlay" />}
 
-      {!loading && form && (
+      {!loading && profileError && (
+        <ContainedBlock tone="warn">
+          <p className="text-sm text-fg">Could not load profile: {profileError}</p>
+          <Btn variant="ghost" size="sm" className="mt-2" onClick={() => void reload()}>
+            Retry
+          </Btn>
+        </ContainedBlock>
+      )}
+
+      {!loading && !profileError && form && (
         <>
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-fg">Public profile</h2>

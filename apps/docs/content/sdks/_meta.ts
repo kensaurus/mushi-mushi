@@ -22,6 +22,7 @@ export default {
   cli: '@mushi-mushi/cli',
   launcher: 'mushi-mushi (launcher)',
   mcp: '@mushi-mushi/mcp',
+  'mcp-tools.generated': 'MCP tools (generated)',
   'mcp-ci': '@mushi-mushi/mcp-ci',
   'eslint-plugin': 'eslint-plugin-mushi-mushi',
   'inventory-schema': '@mushi-mushi/inventory-schema',

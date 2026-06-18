@@ -18,7 +18,7 @@ declare const __MUSHI_LAUNCHER_VERSION__: string | undefined
 const VERSION: string =
   typeof __MUSHI_LAUNCHER_VERSION__ === 'string' ? __MUSHI_LAUNCHER_VERSION__ : '0.0.0-dev'
 
-const MIN_NODE_MAJOR = 18
+const MIN_NODE_MAJOR = 20
 
 const ISSUES_URL = 'https://github.com/kensaurus/mushi-mushi/issues'
 

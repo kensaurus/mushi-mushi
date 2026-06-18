@@ -1,6 +1,29 @@
 import { z } from 'npm:zod@3'
 
 // ---------------------------------------------------------------------------
+// Reporter identity (data contract)
+//
+// The host app supplies the signed-in user via `Mushi.identify()`. Two wire
+// shapes exist in the wild and BOTH must resolve to the same end_user so a
+// real user never shows as an anonymous token hash on the report detail page:
+//   - Nested (web SDK, RN >= 0.17): metadata.user = { id, email, name, provider }
+//   - Flat   (RN <= 0.16):          metadata.userId / userEmail / userName / userProvider
+// This schema documents the canonical nested shape; `resolveReporterIdentity()`
+// in api/helpers.ts reads either shape (plus Sentry scope) defensively.
+// `metadata` itself stays a loose record so unknown keys pass through to the
+// jsonb column intact — this is documentation + a reusable validator, not a
+// gate that would reject extra metadata.
+// ---------------------------------------------------------------------------
+export const reporterIdentitySchema = z.object({
+  id: z.string().max(512),
+  email: z.string().max(320).optional(),
+  name: z.string().max(120).optional(),
+  provider: z.string().max(40).optional(),
+})
+
+export type ReporterIdentity = z.infer<typeof reporterIdentitySchema>
+
+// ---------------------------------------------------------------------------
 // Report submission (from SDK)
 // ---------------------------------------------------------------------------
 export const reportSubmissionSchema = z.object({
@@ -80,6 +103,12 @@ export const reportSubmissionSchema = z.object({
   selectedElement: z.any().optional(),
   /** rrweb / lite rolling-buffer events (compressed server-side). */
   replayEvents: z.array(z.record(z.unknown())).max(500).optional(),
+  /**
+   * Free-form host metadata. Reporter identity rides here under either
+   * `user` (nested — see {@link reporterIdentitySchema}) or the flat
+   * `userId`/`userEmail`/`userName`/`userProvider` keys; both are read by
+   * `resolveReporterIdentity()`. Kept loose so other host keys pass through.
+   */
   metadata: z.record(z.unknown()).optional(),
 
   sessionId: z.string().optional(),

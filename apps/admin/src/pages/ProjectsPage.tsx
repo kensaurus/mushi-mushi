@@ -58,6 +58,7 @@ import { HeroPlugIntegration } from '../components/illustrations/HeroIllustratio
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
+import { AssistantConfigCard } from '../components/AssistantConfigCard'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -1560,6 +1561,9 @@ export function ProjectsPage() {
                         card cleanly falls back to the placeholder — which
                         is what we want, since we don't persist plaintext. */}
                     <SdkInstallCard projectId={project.id} projectSlug={project.slug} apiKey={revealed?.key} compact />
+                    <div className="mt-4 border-t border-edge-subtle pt-4">
+                      <AssistantConfigCard projectId={project.id} />
+                    </div>
                   </div>
                 </details>
               </Card>

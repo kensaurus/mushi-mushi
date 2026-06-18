@@ -11,6 +11,8 @@ import { resolveExternalIssue } from '../../_shared/integrations.ts';
 import { dispatchPluginEvent } from '../../_shared/plugins.ts';
 import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, parseUuidParam } from '../shared.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
+import { composeFixPacket, fixPacketContextFromReport, type FixPacketFile } from '../../_shared/fix-packet.ts';
+import { getRelevantCode } from '../../_shared/rag.ts';
 
 export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -619,6 +621,38 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         }
       : null
 
+    // Compose a first-class, paste-ready fix packet so every surface
+    // (report-detail UI, MCP get_fix_context, CLI mushi fix) shares one
+    // generator instead of each reshaping the row. Best-effort: RAG hints and
+    // blast radius enrich the packet when available but never block the response.
+    let fix_packet: string | null = null;
+    try {
+      let ragFiles: FixPacketFile[] = [];
+      if (data.summary) {
+        try {
+          const rag = await getRelevantCode(db, data.project_id as string, {
+            symptom: data.summary as string,
+          });
+          ragFiles = rag.slice(0, 5).map((f) => ({
+            path: f.filePath,
+            snippet: f.preview?.slice(0, 600) ?? '',
+          }));
+        } catch {
+          // RAG is best-effort — a missing index must not break the report view.
+        }
+      }
+      const anchor = inventoryAnchorRes.data as { label?: string; node_id?: string } | null;
+      const blastRadius = anchor?.label
+        ? `This report is filed against the "${anchor.label}" user-story action — changes here may affect that flow.`
+        : null;
+      fix_packet = composeFixPacket(
+        fixPacketContextFromReport(data as Record<string, unknown>, { ragFiles, blastRadius }),
+      );
+    } catch {
+      // Never let packet composition fail the detail fetch.
+      fix_packet = null;
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -630,6 +664,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         reporter_identity: endUserRes.data ?? null,
         child_report_ids: (childrenRes.data ?? []).map((r: { id: string }) => r.id),
         tester_submission,
+        fix_packet,
       },
     });
   });

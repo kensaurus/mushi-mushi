@@ -21,6 +21,7 @@ import { apiFetch } from '../../lib/supabase'
 import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
+import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
 
 interface StatsResponse {
   total?: number
@@ -68,21 +69,28 @@ export function ReportsQuickFilters({ status, severity, onSetFilter }: Props) {
   const total = stats?.total ?? 0
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Quick filters">
-      {STATUS_BUCKETS.map((b) => {
-        const count = b.value === '' ? total : (byStatus[b.value] ?? 0)
-        return (
-          <FilterChip
-            key={b.value || 'all'}
-            label={b.label}
-            count={stats ? count : null}
-            active={status === b.value}
-            onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
-            tone={b.tone}
-            hint={b.value === '' ? 'Show every report regardless of status' : `Show reports with status "${b.value}"`}
-          />
-        )
-      })}
+    <div
+      className="sticky top-0 z-10 -mx-1 mb-2 flex flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm"
+      role="toolbar"
+      aria-label="Quick filters"
+    >
+      <FilterChipRail trackId="reports-status" aria-label="Status filters">
+        {STATUS_BUCKETS.map((b) => {
+          const count = b.value === '' ? total : (byStatus[b.value] ?? 0)
+          return (
+            <FilterChipCell key={b.value || 'all'} active={status === b.value}>
+              <FilterChip
+                label={b.label}
+                count={stats ? count : null}
+                active={status === b.value}
+                onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
+                tone={b.tone}
+                hint={b.value === '' ? 'Show every report regardless of status' : `Show reports with status "${b.value}"`}
+              />
+            </FilterChipCell>
+          )
+        })}
+      </FilterChipRail>
       <span aria-hidden className="mx-1 h-4 w-px bg-edge/60" />
       {SEVERITY_BUCKETS.map((b) => (
         <FilterChip

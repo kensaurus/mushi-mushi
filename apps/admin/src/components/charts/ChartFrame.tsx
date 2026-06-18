@@ -6,6 +6,10 @@
 import type { ReactNode } from 'react'
 import { sparseXLabels } from './chartAxis'
 import { InlineProof } from '../report-detail/ReportSurface'
+import {
+  ChartAccessibleSummary,
+  type ChartAccessibleColumn,
+} from './ChartAccessibleSummary'
 
 export interface ChartFrameProps {
   children: ReactNode
@@ -19,6 +23,10 @@ export interface ChartFrameProps {
   yAxisCaption?: string
   xAxisCaption?: string
   className?: string
+  /** Screen-reader summary for the chart plot. */
+  accessibleCaption?: string
+  accessibleColumns?: ChartAccessibleColumn[]
+  accessibleRows?: Array<Record<string, string | number>>
 }
 
 export function ChartFrame({
@@ -30,13 +38,20 @@ export function ChartFrame({
   yAxisCaption,
   xAxisCaption,
   className = '',
+  accessibleCaption,
+  accessibleColumns,
+  accessibleRows,
 }: ChartFrameProps) {
   const ticks = yTickLabels.length > 0 ? yTickLabels : ['0']
   const xSparse = xLabels?.length ? sparseXLabels(xLabels) : []
   const xLast = xLabels ? xLabels.length - 1 : 0
 
   return (
-    <div className={`flex w-full min-w-0 flex-col gap-1.5 ${className}`}>
+    <div
+      className={`flex w-full min-w-0 flex-col gap-1.5 ${className}`}
+      role={accessibleCaption ? 'img' : undefined}
+      aria-label={accessibleCaption}
+    >
       {yAxisCaption && (
         <span className="text-3xs font-medium uppercase tracking-wider text-fg-muted">
           {yAxisCaption}
@@ -126,6 +141,13 @@ export function ChartFrame({
           )}
         </div>
       </div>
+      {accessibleCaption && accessibleColumns && accessibleRows && (
+        <ChartAccessibleSummary
+          caption={accessibleCaption}
+          columns={accessibleColumns}
+          rows={accessibleRows}
+        />
+      )}
     </div>
   )
 }

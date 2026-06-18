@@ -41,6 +41,12 @@ valid, the classify function ran, and the report appeared in the Reports queue.
 
 Click **Send another** to fire additional test reports.
 
+The **Verify** tab also shows a **Time to first diagnosis** card — the elapsed time
+from when you minted your first API key to when your first report was classified into a
+plain-English diagnosis. The target is **under 2 minutes**; the card reads
+"Under the 2-minute target ✓" once you beat it, or "Target: under 2 minutes" while
+pending. This is Mushi's onboarding north-star metric.
+
 ### Install the SDK
 The **SDK install configurator** shows framework-specific install snippets (React,
 Next.js, React Native, Flutter, etc.) pre-filled with your API key and project ID.
@@ -104,6 +110,7 @@ through setup again. This does not delete any existing projects or data.
 POST /v1/admin/projects               { name }
 POST /v1/admin/projects/:id/keys      { scope: 'ingest' }
 POST /v1/admin/projects/:id/test-report
+GET  /v1/admin/onboarding/time-to-first-diagnosis   → { keyMintedAt, firstDiagnosisAt, ms }
 ```
 
 ---

@@ -7,6 +7,7 @@
 
 import { Handle, Position } from '@xyflow/react'
 import { NODE_COLORS } from '../../lib/tokens'
+import { graphMutedColor } from '../../lib/vizTokens'
 import { nodeMetadataValue, NODE_TYPE_LABELS, type GraphNode } from './types'
 
 interface Props {
@@ -24,7 +25,7 @@ function nodeShape(node_type: string): string {
 
 export function NodeChip({ node, selected }: Props) {
   const occ = nodeMetadataValue(node, 'occurrence_count')
-  const color = NODE_COLORS[node.node_type] ?? 'oklch(0.55 0 0)'
+  const color = NODE_COLORS[node.node_type] ?? graphMutedColor()
   const ring = selected ? 'ring-2 ring-fg shadow-raised' : 'ring-1 ring-edge'
   const shape = nodeShape(node.node_type)
   return (

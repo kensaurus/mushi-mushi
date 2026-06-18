@@ -191,7 +191,13 @@ export function SdkInstallCard({
   const [rotatedKey, setRotatedKey] = useState<string | null>(null)
 
   const activePrefixes = keyPrefixes ?? fetchedPrefixes
-  const snippetKey = apiKey ?? (activePrefixes[0] ? `${activePrefixes[0]}…` : null)
+  // NEVER bake a truncated key (e.g. `mushi_a1b2c3d4…`) into the copyable
+  // snippet: it reads like a real key but fails when pasted, which was a
+  // top setup-failure cause. When we don't hold the full secret in memory we
+  // emit the explicit `mushi_xxx` placeholder (renderSnippet's fallback) so
+  // it's unmistakably a fill-in. The real prefix still shows in the info chip
+  // above, and "Rotate key" mints + reveals a full paste-ready secret inline.
+  const snippetKey = apiKey ?? rotatedKey ?? null
 
   const code = useMemo(
     () => renderSnippet(framework, projectId, snippetKey, config, projectSlug),
@@ -547,6 +553,7 @@ try {
 
 /** Maps each framework tab to the language label on the code-panel chrome. */
 const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
+  loader: 'html',
   react: 'tsx',
   'react-native': 'tsx',
   expo: 'tsx',

@@ -11,3 +11,4 @@ export * from './ui/page-help';
 export * from './ui/forms';
 export * from './ui/misc';
 export * from './ui/chat';
+export * from './ui/prose';

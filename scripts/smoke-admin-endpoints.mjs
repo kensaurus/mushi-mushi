@@ -66,6 +66,7 @@ const CHECKS = [
 
   // Setup wizard — first thing a new user hits.
   { name: 'setup',                 path: '/v1/admin/setup',                             catches: 'projects/api_keys schema' },
+  { name: 'onboarding.ttfd',       path: '/v1/admin/onboarding/time-to-first-diagnosis', catches: 'reports.stage1_classification (no classified_at)' },
 
   // Home — community feature board (feature_requests_with_stats view).
   { name: 'feature-board.list',    path: '/v1/admin/feature-board?limit=5',             catches: 'feature_requests_with_stats view' },

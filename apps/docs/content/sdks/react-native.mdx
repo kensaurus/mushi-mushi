@@ -24,6 +24,7 @@ Optional peer dependencies — install the ones whose features you want:
 |------|---------|
 | `@react-native-async-storage/async-storage` | Offline report queue (recommended for production) |
 | `@react-navigation/native` | Auto-captured navigation timeline via `useNavigationCapture()` |
+| `react-native-view-shot` | Screenshot on widget open (optional; see [Screenshots](#screenshots-react-native-view-shot)) |
 | `expo-sensors` | Shake-to-report trigger |
 
 For shake-to-report on a bare RN CLI project, install Expo modules first:
@@ -102,6 +103,140 @@ See [Quickstart → React Native](/quickstart/react-native) for the end-to-end s
 
 ---
 
+## What gets captured (v0.17+)
+
+Every report submitted through the bottom sheet or `submitReport()` carries
+Sentry-grade context when running SDK **≥ 0.17.0**:
+
+| Field | Description |
+| ----- | ----------- |
+| `sessionId` | Per-launch UUID — groups all reports from one app open |
+| `sdkPackage` / `sdkVersion` | Package name + build-time version stamp |
+| `appVersion` | Native app version from device info |
+| `fingerprintHash` | Stable RN device hash (`rnfp_*` prefix) for anti-gaming |
+| `breadcrumbs` | Ring buffer (default 50) of console, navigation, and host events |
+| `timeline` | Derived repro trail rendered in the admin **Repro timeline** card |
+| `metadata.user` | Nested reporter identity — see [Identifying users](#identifying-users) |
+| `screenshotDataUrl` | Optional JPEG data-URI when capture is enabled |
+
+Configure the ring buffer and screenshot gate under `config.capture`:
+
+```tsx
+<MushiProvider
+  projectId="YOUR_PROJECT_ID"
+  apiKey="YOUR_PUBLIC_API_KEY"
+  config={{
+    capture: {
+      console: true,
+      network: true,
+      screenshot: true,       // default; set false on sensitive screens
+      maxBreadcrumbs: 50,
+    },
+  }}
+>
+  <RootNavigator />
+</MushiProvider>
+```
+
+### Screenshots (`react-native-view-shot`)
+
+Install the optional peer when you want auto-capture on widget open:
+
+```bash
+npx expo install react-native-view-shot
+# v4.x works on Expo SDK 55; v5+ recommended for New Architecture (Fabric)
+```
+
+The SDK captures **before** the bottom sheet overlays the screen. Users can
+remove the thumbnail before submit. On finance/health apps, keep
+`capture.screenshot: false` in config for screens that must never be photographed.
+
+### Manual breadcrumbs
+
+```tsx
+const sdk = useMushi()
+
+sdk?.addBreadcrumb({
+  category: 'user',
+  message: 'Opened FX conversion sheet',
+  level: 'info',
+})
+
+sdk?.setScreen({ name: 'accounts/[id]', route: '/accounts/abc' })
+// ^ also emits a navigation breadcrumb → timeline `route` entry
+```
+
+---
+
+## Reporter identity contract
+
+Call `identify()` or the web-parity `setUser()` alias whenever auth state changes.
+The SDK emits **both** shapes for back-compat:
+
+```tsx
+// Canonical (server reads this first)
+metadata.user = { id, email, name, provider }
+
+// Legacy flat keys (RN ≤ 0.16)
+metadata.userId / userEmail / userName / userProvider
+```
+
+Server-side `resolveReporterIdentity()` in the ingest path reads nested **or** flat
+keys plus Sentry scope user, then links `reports.reporter_user_id` to `end_users`.
+A signed-in Supabase user should never appear as an anonymous token hash on the
+report detail page when identity is wired correctly.
+
+```tsx
+sdk?.setUser({
+  id: session.user.id,
+  email: session.user.email,
+  name: session.user.user_metadata?.full_name ?? session.user.email?.split('@')[0],
+  provider: 'supabase',
+})
+```
+
+Only a SHA-256 hash of the email is stored at rest; the console shows `name` as the
+human-facing reporter label.
+
+---
+
+## End-user progress (in-app inbox)
+
+The bottom sheet (v0.17+) includes **Your reports** and **Community** tabs.
+Host apps can also surface the same data on a dedicated screen:
+
+```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect, useState } from 'react'
+
+function MyReportsScreen() {
+  const sdk = useMushi()
+  const [reports, setReports] = useState([])
+  const [reputation, setReputation] = useState(null)
+
+  useEffect(() => {
+    if (!sdk) return
+    Promise.all([sdk.listMyReports(), sdk.getReputation()])
+      .then(([r, rep]) => { setReports(r); setReputation(rep) })
+  }, [sdk])
+
+  return (/* render status pills + points */)
+}
+```
+
+| Method | Returns |
+| ------ | ------- |
+| `listMyReports()` | User's submitted reports with status, category, timestamps |
+| `listMyComments(reportId)` | Thread between reporter and admin |
+| `replyToReport(reportId, body)` | Post a follow-up from the app |
+| `getReputation()` / `getTier()` | Points balance and tier for contribution UI |
+| `getHallOfFame(limit?)` | Leaderboard entries for community context |
+
+**yen-yen reference:** `apps/mobile/app/feedback.tsx` renders contribution +
+My reports sections below the native Supabase feedback inbox.
+
+---
+
 ## Identifying users
 
 Call `identify()` inside your auth state listener. On bare React Native this
@@ -120,11 +255,13 @@ export function AuthGate({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (session?.user) {
-          sdk?.identify(session.user.id, {
+          sdk?.setUser({
+            id: session.user.id,
             email: session.user.email,
             name: session.user.user_metadata?.full_name,
             provider: 'supabase',
           })
+          // equivalent: sdk?.identify(session.user.id, { email, name, provider })
         }
       }
     )

@@ -36,18 +36,27 @@ interface PlatformCard {
 
 const PLATFORMS: readonly PlatformCard[] = [
   {
+    title: 'Incident loop',
+    icon: '⚡',
+    href: '/quickstart/incident-loop',
+    cmd: 'npx mushi-mushi',
+    desc: 'Broken prod → plain-English diagnosis → paste-ready fix prompt in Cursor.',
+    badge: 'Start here',
+  },
+  {
+    title: 'MCP server',
+    icon: '◉',
+    href: '/quickstart/mcp',
+    cmd: 'npx mushi-mushi setup --ide cursor',
+    desc: 'Triage and fix briefs from Claude, Cursor, or Codex — no second LLM key.',
+    badge: 'AI-native',
+  },
+  {
     title: 'React',
     icon: '⚛',
     href: '/quickstart/react',
-    cmd: 'npm i @mushi-mushi/react',
-    desc: 'Drop in the provider. Your users get shake-to-report the same session.',
-  },
-  {
-    title: 'Vue · Svelte · Angular',
-    icon: '⬡',
-    href: '/quickstart/vue',
-    cmd: 'npm i @mushi-mushi/{vue,svelte,angular}',
-    desc: 'Same widget, same reports, in the framework you already ship.',
+    cmd: 'npx mushi-mushi',
+    desc: 'Wizard installs the SDK, writes env vars, optional test report.',
   },
   {
     title: 'iOS · Android · Flutter',
@@ -56,14 +65,6 @@ const PLATFORMS: readonly PlatformCard[] = [
     cmd: "pod 'MushiMushi'",
     desc: 'Native shake, offline queue, and a Sentry bridge already wired up.',
     badge: 'Native',
-  },
-  {
-    title: 'MCP server',
-    icon: '◉',
-    href: '/sdks/mcp',
-    cmd: 'npx @mushi-mushi/mcp',
-    desc: 'Triage from Claude, Cursor, or Codex without leaving your editor.',
-    badge: 'AI-native',
   },
 ]
 

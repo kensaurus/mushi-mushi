@@ -36,6 +36,28 @@ User opens your app
 
 The entire pipeline is **opt-in per user** (`opted_in_to_rewards = true`) and **scoped per organisation** — different projects under the same org share the same tier ladder and point economy.
 
+### Automatic report awards (zero config)
+
+You don't have to call `track()` for the two moments that matter most — the
+ingest + triage pipeline awards them server-side:
+
+| Moment | Action | Default points | Awarded in |
+|---|---|---|---|
+| Reporter submits a report | `report.submitted` | 10 | `api/helpers.ts` `ingestReport` (after the report is linked to an `end_user`) |
+| Report reaches a classified state | `report.triaged` | 50 | `classify-report` edge function |
+
+Both go through `awardPointsForEndUser` (`_shared/reputation.ts`), which enforces
+your `reward_rules` velocity caps and the tier-evaluator. The dotted actions are
+seeded as fallbacks in `LEGACY_POINT_TABLE`, so they award even with **no**
+console config; add a `reward_rules` row of the same name to override
+points/caps. Awards are fire-and-forget (a rewards failure never blocks ingest
+or triage), and `report.triaged` is idempotent — re-classification can't
+double-award.
+
+> **Fastest path to a working program:** call `POST /v1/admin/rewards/presets/apply`
+> (or click **Use recommended defaults** on the empty Activity rules tab) to
+> install these rules plus a 4-tier ladder in one idempotent shot.
+
 ---
 
 ## Architecture
@@ -69,6 +91,7 @@ The entire pipeline is **opt-in per user** (`opted_in_to_rewards = true`) and **
 │  GET  /v1/admin/rewards/activity                                       │
 │  GET|PUT /v1/admin/rewards/rules                                       │
 │  GET|PUT /v1/admin/rewards/tiers                                       │
+│  POST /v1/admin/rewards/presets/apply   ← one-click default rules+tiers│
 │  GET|POST|DELETE /v1/admin/rewards/webhooks                            │
 │  POST /v1/admin/rewards/webhooks/test                                  │
 │  GET|POST|DELETE /v1/admin/rewards/quests                              │
@@ -101,11 +124,11 @@ The entire pipeline is **opt-in per user** (`opted_in_to_rewards = true`) and **
 ┌───────────────────────────────────────────────────────────────────────┐
 │              Your app (server / webhook handler)                       │
 │                                                                        │
-│  POST /api/mushi/reward-webhook                                        │
+│  POST /api/mushi/reward-webhook  (@mushi-mushi/node receiver)          │
 │    { event: "reward.tier_changed",                                     │
-│      user: { external_user_id },                                       │
-│      tier: { slug: "champion", display_name: "Champion",              │
-│              host_credit_payload: { pro: true, discount_pct: 30 } } } │
+│      end_user_id, external_user_id: "user_123",                       │
+│      tier_after: { slug: "champion", display_name: "Champion" },      │
+│      host_credit_payload: { kind: "pro_coupon", months: 1 } }         │
 │                                                                        │
 │  → apply Pro access, discount, or any custom perk                     │
 └───────────────────────────────────────────────────────────────────────┘
@@ -218,7 +241,8 @@ Outbound HTTPS hooks fired on tier changes.
 | Column | Type | Description |
 |---|---|---|
 | `url` | text | HTTPS endpoint in your app |
-| `secret_hash` | text | HMAC-SHA256 signing key (hashed at rest) |
+| `secret_hash` | text | SHA-256 of the signing secret — for display / equality checks only |
+| `vault_secret_id` | text? | Vault reference to the **raw** HMAC signing secret; dereferenced server-side via `vault_get_secret` at signing time, never returned to clients |
 | `events` | text[] | Currently `['reward.tier_changed']` |
 | `last_delivered_at` | timestamptz | |
 | `last_status` | int | HTTP response code of the last delivery |
@@ -531,6 +555,21 @@ Full profile for one contributor. `id` is the internal `end_users.id` UUID.
 
 Returns `profile`, `points` (with tier details), and `activity` (last 100 events).
 
+### `POST /v1/admin/rewards/presets/apply`
+
+One-click "enable rewards with recommended defaults". Idempotently inserts the
+default rules (`report.submitted`, `report.triaged`, `comment_posted`) and a
+4-tier ladder (Explorer → Contributor → Champion → Legend, each with a
+`host_credit_payload` grant instruction). Only inserts actions/slugs that don't
+already exist, so it's safe to re-run and never clobbers customisations.
+
+```json
+{
+  "ok": true,
+  "data": { "insertedRules": 3, "insertedTiers": 4, "skippedRules": 0, "skippedTiers": 0 }
+}
+```
+
 ### `POST /v1/admin/rewards/bonus-points`
 
 Award points manually. Logs as `bonus_manual` in `end_user_activity`.
@@ -602,35 +641,82 @@ Returns median active span for top-tier users vs all others.
 
 When a user's tier changes, Mushi sends a signed `POST` request to every enabled webhook in `reward_webhooks`.
 
+### Creating a webhook (auto-minted secret)
+
+`POST /v1/admin/rewards/webhooks` accepts an optional `secret`. **Omit it** and
+Mushi mints a strong `mushi_whk_…` secret, stores the raw value in Supabase
+Vault (`vault_secret_id`), and returns it **once** in the create response —
+copy it then, it can't be retrieved again (only the SHA-256 `secret_hash` is
+kept for display). At delivery time the edge function reads the raw secret back
+from Vault to compute the signature, falling back to the
+`MUSHI_REWARD_WEBHOOK_SECRET` env var for legacy hooks.
+
 ### Payload
+
+The envelope is **flat** (it is not nested under `user` / `tier`):
 
 ```json
 {
   "event": "reward.tier_changed",
   "occurred_at": "2026-05-17T06:00:00Z",
-  "organization_id": "org_uuid",
-  "user": {
-    "external_user_id": "user_123",
-    "display_name": "Jane Doe"
-  },
-  "tier": {
-    "slug": "champion",
-    "display_name": "Champion",
-    "host_credit_payload": { "pro": true, "discount_pct": 30 }
-  }
+  "end_user_id": "end_user_uuid",
+  "external_user_id": "user_123",
+  "tier_after": { "slug": "champion", "display_name": "Champion", "perks": {} },
+  "host_credit_payload": { "kind": "pro_coupon", "months": 1 },
+  "webhookId": "webhook_uuid"
 }
 ```
 
-### Signature verification
+`event` is one of `reward.points_awarded`, `reward.tier_changed`,
+`reward.payout_requested`, `reward.payout_paid`, `reward.quest_completed`.
+`external_user_id` is present only when the reporter was JWT-identified.
+`host_credit_payload` is your opaque "grant this" instruction, defined per tier
+in the console.
+
+### Receiving the webhook — `@mushi-mushi/node` (recommended)
+
+The server SDK ships a framework-agnostic receiver that timing-safely verifies
+the `X-Mushi-Signature` header and routes events to typed callbacks. This is the
+Mushi → host-repo trigger for "grant a role / grant a Stripe membership".
+
+```ts
+import { createMushiRewardsHandler } from '@mushi-mushi/node'
+
+const handler = createMushiRewardsHandler({
+  secret: process.env.MUSHI_REWARD_WEBHOOK_SECRET!, // the minted mushi_whk_… value
+  onTierChanged: async (event) => {
+    // flat fields — host_credit_payload is your opaque grant instruction
+    if (event.host_credit_payload?.kind === 'pro_coupon') {
+      await grantProAccess(event.external_user_id)
+    }
+  },
+  onPointsAwarded: async (event) => {
+    // optional — fires on reward.points_awarded (report.submitted/triaged, etc.)
+  },
+})
+
+// Next.js App Router / any Web-standard runtime:
+export const POST = (req: Request) => handler.fetch(req)
+
+// Express (express.raw is required so the raw body is available for HMAC verify):
+// app.post('/api/mushi/reward-webhook', express.raw({ type: '*/*' }), handler.express)
+```
+
+A bad signature short-circuits with `401` before your callback runs.
+
+### Manual verification (no SDK)
 
 Every delivery includes an `X-Mushi-Signature` header: `sha256=<hmac>`.
 
 ```typescript
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 
 function verifyMushiWebhook(body: string, signature: string, secret: string): boolean {
   const expected = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex')
-  return signature === expected
+  // constant-time compare to avoid timing oracles
+  const a = Buffer.from(signature)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 // In your Next.js route handler:
@@ -641,8 +727,8 @@ export async function POST(req: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
   const event = JSON.parse(body)
-  if (event.event === 'reward.tier_changed' && event.tier.host_credit_payload?.pro) {
-    await grantProAccess(event.user.external_user_id)
+  if (event.event === 'reward.tier_changed' && event.host_credit_payload?.kind === 'pro_coupon') {
+    await grantProAccess(event.external_user_id)
   }
   return new Response('ok')
 }

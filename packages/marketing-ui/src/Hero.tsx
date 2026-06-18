@@ -4,23 +4,21 @@ import { useState } from 'react'
 import { useMarketing } from './context'
 import { reportSample } from './canvas/data'
 
-// Three-persona content — each chip swaps the lead paragraph in place.
-// See docs/marketing/VOICE.md for the phrasebook that backs each persona.
 const PERSONAS = [
   {
     id: 'vibe' as const,
     label: 'Vibe coder',
-    lead: 'You build and ship fast with AI. The choke point is testing and observability. Mushi captures what users feel, AI triages it, and opens a draft PR — no QA team, no Jira, no PM bottleneck.',
+    lead: 'You ship fast with AI. When prod breaks, Mushi tells you why — in plain English — and hands Cursor a paste-ready fix prompt. No log archaeology.',
   },
   {
     id: 'team' as const,
     label: 'AI-native team',
-    lead: 'Your agents already write the code. Mushi closes the loop so they also know which bugs to fix next — and never repeat the same class of mistake twice.',
+    lead: 'Your agents write the code. Mushi closes the loop — triage, fix briefs, optional draft PRs, and lessons so the next run starts smarter.',
   },
   {
     id: 'pm' as const,
     label: 'PM / founder',
-    lead: 'Get bug and feature signal direct from users, not through a support queue. The loop fixes the cheap ones automatically. You stay focused on what only you can decide.',
+    lead: 'Bug signal straight from users, not a support queue. The cheap ones get a diagnosis in Cursor; the hard ones graduate to your team.',
   },
 ] as const
 
@@ -37,22 +35,18 @@ export function Hero() {
       <div className="absolute inset-0 opacity-60 [background-image:radial-gradient(circle_at_18%_12%,var(--mushi-vermillion-wash),transparent_32%),radial-gradient(circle_at_84%_18%,rgba(14,13,11,0.05),transparent_34%)]" />
       <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.95fr] lg:items-center lg:gap-8">
         <div className="max-w-4xl">
-          {/* Eyebrow uses the spine sub-tagline from @mushi-mushi/brand MUSHI_TAGLINE.spine */}
           <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]" aria-hidden="true">
             <span className="text-[var(--mushi-ink)]">Mushi</span>
             <span className="mx-2 opacity-40">/</span>
-            the evolution loop for AI-assisted software
+            bug translation for vibe coders
           </p>
 
-          {/* H1 uses MUSHI_TAGLINE.full — canonical, word-for-word. See packages/brand/src/index.js. */}
           <h1 className="mt-3 max-w-3xl font-serif text-5xl font-semibold leading-[0.95] tracking-[-0.06em] text-[var(--mushi-ink)] sm:text-6xl lg:text-7xl">
-            Sentry sees what code throws.{' '}
+            Your AI wrote it.{' '}
             <br className="hidden sm:block" />
-            <span className="text-[var(--mushi-vermillion)]">Mushi closes the loop with AI.</span>
+            <span className="text-[var(--mushi-vermillion)]">Mushi tells you why it broke.</span>
           </h1>
 
-          {/* Three-persona switcher chips — vibe coder / AI-native team / PM+founder.
-              Swaps the lead paragraph without a page navigation. */}
           <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="I am a…">
             {PERSONAS.map((p) => (
               <button
@@ -72,7 +66,6 @@ export function Hero() {
             ))}
           </div>
 
-          {/* Lead paragraph — swaps when persona chip is pressed. */}
           <p key={activePersona.id} className="mt-3 max-w-xl text-base leading-7 text-[var(--mushi-ink-muted)] sm:text-lg sm:leading-7">
             {activePersona.lead}
           </p>
@@ -94,11 +87,13 @@ export function Hero() {
           </div>
 
           <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
+            <li>MCP-first · Cursor + Claude</li>
+            <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
             <li>1,000 reports / mo free</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
-            <li>8 SDKs, web to native</li>
+            <li>MIT-licensed · self-hostable</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
-            <li>MIT-licensed</li>
+            <li>No second LLM key</li>
           </ul>
         </div>
 

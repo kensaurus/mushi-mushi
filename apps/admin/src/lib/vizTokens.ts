@@ -28,6 +28,17 @@ const VIZ_FALLBACKS: Record<string, string> = {
   'viz-lang-go': 'oklch(0.62 0.12 220)',
   'viz-lang-rust': 'oklch(0.72 0.06 55)',
   'viz-lang-react': 'oklch(0.72 0.12 220)',
+  'viz-neutral': 'oklch(0.55 0.02 285)',
+  'viz-node-bg-dark': 'oklch(0.19 0.007 265)',
+  'viz-node-bg-light': 'oklch(0.99 0.004 265)',
+  'viz-node-text-dark': 'oklch(0.90 0.006 265)',
+  'viz-node-text-light': 'oklch(0.16 0.006 265)',
+  'viz-node-subtext': 'oklch(0.52 0.004 265)',
+  'viz-node-border-dark': 'oklch(0.30 0.006 265)',
+  'viz-node-border-light': 'oklch(0.82 0.004 265)',
+  'viz-node-selected-dark': 'oklch(0.24 0.014 265)',
+  'viz-node-selected-light': 'oklch(0.94 0.010 265)',
+  'viz-graph-muted': 'oklch(0.55 0 0)',
 }
 
 const STEP_STATUS_TOKEN: Record<string, keyof typeof VIZ_FALLBACKS> = {
@@ -60,8 +71,47 @@ export function langVizColor(lang: string): string {
     rust: 'viz-lang-rust',
     tsx: 'viz-lang-react',
     jsx: 'viz-lang-react',
+    ts: 'viz-lang-typescript',
+    js: 'viz-lang-javascript',
+    py: 'viz-lang-python',
+    rb: 'viz-flow-danger',
+    rs: 'viz-lang-rust',
+    sql: 'viz-step-running',
+    md: 'viz-neutral',
+    json: 'viz-flow-brand',
+    yaml: 'viz-flow-brand',
+    yml: 'viz-flow-brand',
   }
   return readVizToken(map[lang] ?? 'viz-lang-default')
+}
+
+/** File-extension badge colour for explore / graph canvases. */
+export function extBadgeColor(ext: string): string {
+  return langVizColor(ext)
+}
+
+export function exploreNodeChrome(
+  theme: 'dark' | 'light',
+  _selected: boolean,
+): {
+  nodeBg: string
+  textColor: string
+  subTextColor: string
+  borderColor: string
+  selectedBg: string
+} {
+  const dark = theme === 'dark'
+  return {
+    nodeBg: readVizToken(dark ? 'viz-node-bg-dark' : 'viz-node-bg-light'),
+    textColor: readVizToken(dark ? 'viz-node-text-dark' : 'viz-node-text-light'),
+    subTextColor: readVizToken('viz-node-subtext'),
+    borderColor: readVizToken(dark ? 'viz-node-border-dark' : 'viz-node-border-light'),
+    selectedBg: readVizToken(dark ? 'viz-node-selected-dark' : 'viz-node-selected-light'),
+  }
+}
+
+export function graphMutedColor(): string {
+  return readVizToken('viz-graph-muted')
 }
 
 export function useVizColors() {

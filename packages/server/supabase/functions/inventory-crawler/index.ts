@@ -45,6 +45,7 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inventory.ts'
+import { resolveStoryExternalId } from '../_shared/inventory-story-scope.ts'
 import {
   inventoryAppAllowHosts,
   safeFetch,
@@ -256,7 +257,12 @@ async function runWithConcurrency<T, R>(
   return out
 }
 
-async function crawlAndPersist(db: SupabaseClient, projectId: string, triggeredBy?: string): Promise<{
+async function crawlAndPersist(
+  db: SupabaseClient,
+  projectId: string,
+  triggeredBy?: string,
+  storyNodeId?: string | null,
+): Promise<{
   runId: string
   status: 'pass' | 'fail' | 'warn' | 'error' | 'skipped'
   pages: number
@@ -307,11 +313,45 @@ async function crawlAndPersist(db: SupabaseClient, projectId: string, triggeredB
     path: string
     declared: string[]
   }
-  const items: CrawlItem[] = project.inventory.pages.map((p) => ({
+
+  let pages = project.inventory.pages
+  if (storyNodeId) {
+    const storyExternalId = await resolveStoryExternalId(db, projectId, storyNodeId)
+    if (storyExternalId) {
+      pages = pages.filter((p) => p.user_story === storyExternalId)
+    }
+  }
+
+  const items: CrawlItem[] = pages.map((p) => ({
     id: p.id,
     path: p.path,
     declared: p.elements.map((el) => el.testid ?? el.id),
   }))
+
+  if (items.length === 0) {
+    const { data: skip } = await db
+      .from('gate_runs')
+      .insert({
+        project_id: projectId,
+        gate: 'crawl',
+        status: 'skipped',
+        summary: {
+          reason: storyNodeId ? 'no pages linked to this user story' : 'no pages in inventory',
+          ...(storyNodeId ? { story_node_id: storyNodeId } : {}),
+        },
+        triggered_by: triggeredBy ?? 'crawler',
+        completed_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    return {
+      runId: (skip?.id as string) ?? '',
+      status: 'skipped',
+      pages: 0,
+      findings: 0,
+      discoveredApis: 0,
+    }
+  }
 
   // Build the SSRF allowlist from the inventory app shape. The crawler is
   // only ever supposed to talk to the customer's own app, so the safe
@@ -398,6 +438,7 @@ async function crawlAndPersist(db: SupabaseClient, projectId: string, triggeredB
     findings,
     discovered_apis: Array.from(discoveredApiSet),
     inventory_stats: computeStats(project.inventory),
+    ...(storyNodeId ? { story_node_id: storyNodeId } : {}),
   }
   const overall: 'pass' | 'fail' | 'warn' =
     results.some((r) => r.error) || results.some((r) => r.missing_in_app.length > 0)
@@ -429,7 +470,7 @@ async function handler(req: Request): Promise<Response> {
   const authResp = requireServiceRoleAuth(req)
   if (authResp) return authResp
 
-  let body: { project_id?: string; triggered_by?: string }
+  let body: { project_id?: string; triggered_by?: string; story_node_id?: string | null }
   try {
     body = await req.json()
   } catch {
@@ -447,7 +488,7 @@ async function handler(req: Request): Promise<Response> {
 
   const db = getServiceClient()
   try {
-    const result = await crawlAndPersist(db, body.project_id, body.triggered_by)
+    const result = await crawlAndPersist(db, body.project_id, body.triggered_by, body.story_node_id ?? null)
     return new Response(
       JSON.stringify({ ok: true, data: result }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },

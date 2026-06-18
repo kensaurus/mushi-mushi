@@ -21,6 +21,9 @@ export const MICRO_TRACK_SLIDING = 'sidebar-micro-track--sliding'
 /** Toolbar-inline width (table density, etc.). */
 export const MICRO_TRACK_INLINE = 'sidebar-micro-track--inline'
 
+/** Single-segment track (focus toggle) — fixed width via --sidebar-micro-solo-w. */
+export const MICRO_TRACK_SOLO = 'sidebar-micro-track--solo'
+
 /** Flex cell hosting one segment + optional sliding indicator. */
 export const MICRO_SEG_CELL = 'sidebar-micro-seg-cell'
 

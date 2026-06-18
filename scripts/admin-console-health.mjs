@@ -14,7 +14,7 @@ const BASE = process.argv.includes('--base')
   ? process.argv[process.argv.indexOf('--base') + 1]
   : 'http://localhost:6464'
 
-const ROUTES = ['/dashboard', '/onboarding', '/mcp', '/qa-coverage', '/skills', '/feedback']
+const ROUTES = ['/dashboard', '/onboarding', '/mcp', '/qa-coverage', '/skills', '/feedback', '/reports', '/fixes', '/connect', '/billing', '/inventory', '/tester']
 
 async function main() {
   const browser = await chromium.launch({ headless: true })

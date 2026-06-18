@@ -14,6 +14,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import { useTheme } from '../../lib/useTheme'
+import { extBadgeColor, exploreNodeChrome } from '../../lib/vizTokens'
 import type { ExploreLayer, ExploreNode } from './exploreTypes'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from './exploreLayers'
 
@@ -30,24 +31,6 @@ function dirContext(path: string): string {
   return parts.slice(-3, -1).join('/')
 }
 
-const EXT_BADGE_COLORS: Record<string, string> = {
-  tsx:   'oklch(0.72 0.19 240)',
-  jsx:   'oklch(0.72 0.17 200)',
-  ts:    'oklch(0.62 0.16 240)',
-  js:    'oklch(0.72 0.19 90)',
-  py:    'oklch(0.65 0.18 260)',
-  go:    'oklch(0.65 0.18 200)',
-  rb:    'oklch(0.65 0.22 25)',
-  rs:    'oklch(0.65 0.19 30)',
-  kt:    'oklch(0.65 0.19 280)',
-  swift: 'oklch(0.65 0.22 35)',
-  sql:   'oklch(0.65 0.12 180)',
-  md:    'oklch(0.55 0 0)',
-  json:  'oklch(0.60 0.08 80)',
-  yaml:  'oklch(0.60 0.08 80)',
-  yml:   'oklch(0.60 0.08 80)',
-}
-
 function ExploreNodeChip({
   data,
 }: {
@@ -57,14 +40,13 @@ function ExploreNodeChip({
   const layer = (node.metadata.layer as ExploreLayer) ?? 'other'
   const color = LAYER_COLORS[layer] ?? LAYER_COLORS.other
   const ext = fileExt(node.metadata.file_path)
-  const extColor = EXT_BADGE_COLORS[ext] ?? 'oklch(0.50 0 0)'
+  const extColor = extBadgeColor(ext)
   const dir = dirContext(node.metadata.file_path)
-  const nodeBg = theme === 'dark' ? 'oklch(0.19 0.007 265)' : 'oklch(0.99 0.004 265)'
-  const textColor = theme === 'dark' ? 'oklch(0.90 0.006 265)' : 'oklch(0.16 0.006 265)'
-  const subTextColor = theme === 'dark' ? 'oklch(0.52 0.004 265)' : 'oklch(0.52 0.004 265)'
-  const borderColor = isSelected
-    ? `${color}bb`
-    : theme === 'dark' ? 'oklch(0.30 0.006 265)' : 'oklch(0.82 0.004 265)'
+  const chrome = exploreNodeChrome(theme, isSelected)
+  const nodeBg = chrome.nodeBg
+  const textColor = chrome.textColor
+  const subTextColor = chrome.subTextColor
+  const borderColor = isSelected ? `${color}bb` : chrome.borderColor
 
   return (
     <div
@@ -74,9 +56,7 @@ function ExploreNodeChip({
         borderTop: `1px solid ${borderColor}`,
         borderRight: `1px solid ${borderColor}`,
         borderBottom: `1px solid ${borderColor}`,
-        background: isSelected
-          ? (theme === 'dark' ? 'oklch(0.24 0.014 265)' : 'oklch(0.94 0.010 265)')
-          : nodeBg,
+        background: isSelected ? chrome.selectedBg : nodeBg,
         transition: 'opacity 0.15s, box-shadow 0.15s',
         boxShadow: isSelected
           ? `0 0 0 2px ${color}50, 0 2px 12px oklch(0 0 0 / 0.40)`

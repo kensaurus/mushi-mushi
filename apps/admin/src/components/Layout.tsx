@@ -980,12 +980,12 @@ export function Layout({ children }: { children: ReactNode }) {
             </h1>
             <SidebarBrandToggles mode={mode} onSelectMode={setMode} />
             {onHiddenRoute && (
-              <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn space-y-1.5">
+              <div className="mt-2 rounded-sm border border-chrome-border bg-chrome px-2 py-1.5 text-3xs text-fg-muted space-y-1.5">
                 <p className="leading-snug">{hiddenRouteCopy}</p>
                 <button
                   type="button"
                   onClick={() => setMode(isQuickstart ? 'beginner' : 'advanced')}
-                  className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60 rounded-sm"
+                  className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm"
                 >
                   Switch to {isQuickstart ? 'Beginner' : 'Advanced'} mode →
                 </button>

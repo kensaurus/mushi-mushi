@@ -1,5 +1,46 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Reporter identity (fixes anonymous-token reporter):",
+        "description": "`submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`."
+      },
+      {
+        "title": "Sentry-level payload:",
+        "description": "every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin \"Repro timeline\" renders instead of nudging \"Upgrade the SDK\"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb."
+      },
+      {
+        "title": "Screenshots:",
+        "description": "new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens."
+      },
+      {
+        "title": "Design parity:",
+        "description": "`MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer \"Your reports\" / \"Community\" tabs."
+      },
+      {
+        "title": "In-SDK assistant (\"Ask\" tab):",
+        "description": "the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`."
+      },
+      {
+        "title": "Page context:",
+        "description": "`publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type."
+      },
+      {
+        "title": "Signed identity:",
+        "description": "`identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for \"My Reports\", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`."
+      },
+      {
+        "title": "Design tokens:",
+        "description": "`@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.15",
     "headline": null,
     "pending": false,
