@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.18.1
+
+### Patch Changes
+
+- 94e93e8: CLI MCP-config wiring touch-ups and a stray-import cleanup.
+
 ## 0.18.0
 
 ### Minor Changes
