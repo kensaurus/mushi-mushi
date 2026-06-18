@@ -401,11 +401,11 @@ async function doFetch<T>(
 
 // Same auth + base URL handling as apiFetch but returns the raw Response so
 // callers can stream non-JSON payloads (HTML, CSV, blobs) without parsing.
+// Unlike apiFetch, network failures reject/throw rather than returning
+// `{ ok: false, error }` — callers must catch.
 //
-// FE-API-2 (audit 2026-04-21): previously this bypassed all Sentry
-// instrumentation so streaming endpoints (SSE, CSV export) were invisible
-// to observability. We now emit the same breadcrumb + 5xx capture pattern
-// as apiFetch, but leave body-parsing to the caller.
+// FE-API-2 (audit 2026-04-21): emits the same breadcrumb + 5xx capture pattern
+// as apiFetch, but leaves body-parsing to the caller.
 export async function apiFetchRaw(path: string, options?: RequestInit): Promise<Response> {
   const method = (options?.method ?? 'GET').toUpperCase()
   const t0 = performance.now()

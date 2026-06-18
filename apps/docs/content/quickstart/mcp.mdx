@@ -18,9 +18,7 @@ npx mushi-mushi setup --ide cursor
 # or: npx mushi-mushi setup --ide claude
 ```
 
-This reads `~/.mushirc` (written by `mushi login`), detects the IDE config
-path, and writes the `mcpServers.mushi` block for you. Restart the IDE and
-ask the agent: **"list mushi tools"**.
+This reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
 
 <Callout type="info">
   Run `npx mushi-mushi project create` on a brand-new machine to sign up,

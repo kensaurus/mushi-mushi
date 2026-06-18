@@ -530,10 +530,11 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
       if (!expRes.ok) throw new Error(expRes.error?.message ?? 'Create failed')
       const expId = (expRes.data as { id: string }).id
       for (const v of variants) {
-        await apiFetch(`/v1/admin/experiments/${expId}/variants`, {
+        const variantRes = await apiFetch(`/v1/admin/experiments/${expId}/variants`, {
           method: 'POST',
           body: JSON.stringify(v),
         })
+        if (!variantRes.ok) throw new Error(variantRes.error?.message ?? 'Variant create failed')
       }
       toast.success('Experiment created')
       onCreated()

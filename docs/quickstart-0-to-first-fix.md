@@ -38,7 +38,7 @@ mushi connect --wait   # optional: block until SDK heartbeat lands
 
 ```bash
 mushi connect --wait
-# writes ~/.mushirc + .env.local + .cursor/mcp.json
+# writes ~/.config/mushi/config.json + .env.local + .cursor/mcp.json
 ```
 
 In your IDE agent, call **`diagnose_setup`** (or MCP `get_activation_status`) if reports don't appear — it returns the exact next fix.

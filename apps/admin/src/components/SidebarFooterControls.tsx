@@ -7,7 +7,7 @@ import type { ComponentType, SVGProps } from 'react'
 import { useDensity, type Density } from '../lib/useDensity'
 import { useTheme, type ResolvedTheme } from '../lib/useTheme'
 import { MicroSegmentCell, MicroSegmentedTrack } from './sidebar/MicroSegmentedTrack'
-import { MICRO_SEG, MICRO_TRACK, microSegActive } from './sidebar/SidebarMicroChrome'
+import { MICRO_SEG, microSegActive } from './sidebar/SidebarMicroChrome'
 
 type IconProps = SVGProps<SVGSVGElement>
 
@@ -131,7 +131,7 @@ export function SidebarFooterControls({
                   aria-label={label}
                   title={hint}
                   onClick={() => setDensity(value)}
-                  className={`${MICRO_SEG} ${microSegActive(active)} w-full`}
+                  className={`${MICRO_SEG} ${microSegActive(active)} h-full w-full`}
                 >
                   <Icon />
                 </button>
@@ -141,30 +141,43 @@ export function SidebarFooterControls({
         </MicroSegmentedTrack>
       ) : null}
 
-      <div className="flex min-w-0 items-stretch gap-1">
+      <div
+        className={
+          showFocus
+            ? 'grid w-full min-w-0 grid-cols-[minmax(0,1fr)_var(--sidebar-micro-solo-w)] items-stretch gap-1'
+            : 'w-full min-w-0'
+        }
+      >
         <MicroSegmentedTrack
           trackId="sidebar-footer-theme"
           role="radiogroup"
           aria-label="Theme"
-          className={showFocus ? 'min-w-0 flex-1' : 'min-w-0 w-full'}
+          className="min-w-0 w-full"
         >
           <ThemeCell resolved={resolved} target="dark" setTheme={setTheme} Icon={MoonGlyph} label="Dark theme" />
           <ThemeCell resolved={resolved} target="light" setTheme={setTheme} Icon={SunGlyph} label="Light theme" />
         </MicroSegmentedTrack>
 
         {showFocus ? (
-          <div className={`${MICRO_TRACK} w-[2.75rem] shrink-0`}>
-            <button
-              type="button"
-              aria-pressed={focusMode}
-              aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
-              title={focusTitle}
-              onClick={onToggleFocus}
-              className={`${MICRO_SEG} ${microSegActive(focusMode)} h-full w-full`}
-            >
-              <FocusGlyph />
-            </button>
-          </div>
+          <MicroSegmentedTrack
+            trackId="sidebar-footer-focus"
+            sliding={false}
+            solo
+            className="w-full"
+          >
+            <MicroSegmentCell active={focusMode}>
+              <button
+                type="button"
+                aria-pressed={focusMode}
+                aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
+                title={focusTitle}
+                onClick={onToggleFocus}
+                className={`${MICRO_SEG} ${microSegActive(focusMode)} h-full w-full`}
+              >
+                <FocusGlyph />
+              </button>
+            </MicroSegmentCell>
+          </MicroSegmentedTrack>
         ) : null}
       </div>
     </div>
@@ -194,7 +207,7 @@ function ThemeCell({
         aria-label={label}
         title={label}
         onClick={() => setTheme(target)}
-        className={`${MICRO_SEG} ${microSegActive(active)} w-full`}
+        className={`${MICRO_SEG} ${microSegActive(active)} h-full w-full`}
       >
         <Icon />
       </button>

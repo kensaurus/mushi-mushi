@@ -128,6 +128,16 @@
   --color-viz-lang-rust: oklch(0.72 0.06 55);
   --color-viz-lang-react: oklch(0.72 0.12 220);
   --color-viz-sentry: oklch(0.55 0.12 300);
+  --color-viz-graph-muted: oklch(0.55 0 0);
+  --color-viz-node-bg-dark: oklch(0.19 0.007 265);
+  --color-viz-node-bg-light: oklch(0.99 0.004 265);
+  --color-viz-node-text-dark: oklch(0.90 0.006 265);
+  --color-viz-node-text-light: oklch(0.16 0.006 265);
+  --color-viz-node-subtext: oklch(0.52 0.004 265);
+  --color-viz-node-border-dark: oklch(0.30 0.006 265);
+  --color-viz-node-border-light: oklch(0.82 0.004 265);
+  --color-viz-node-selected-dark: oklch(0.24 0.014 265);
+  --color-viz-node-selected-light: oklch(0.94 0.010 265);
 
   /* Lime-green accent — used exclusively for the beta announcement banner
      so it reads as "active / live" rather than the teal-ish canonical ok.
@@ -1574,6 +1584,32 @@ select, input, textarea {
   animation: tooltip-in 120ms var(--ease-out-expo) forwards;
 }
 
+/* Shared Tooltip primitive — max-width only applies on inline-block/block (not bare inline). */
+.mushi-tooltip {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: min(20rem, calc(100vw - 24px));
+  vertical-align: top;
+}
+
+.mushi-tooltip--wrap {
+  width: max-content;
+  min-width: min(8rem, 100%);
+  white-space: normal;
+  text-align: left;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mushi-tooltip--single {
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 24px));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---------------------------------------------------------------------------
    PAGEHERO — FLOWING ARROW BETWEEN DECIDE / ACT / VERIFY
    The "bezel-less ReactFlow" feel without pulling @xyflow/react into every
@@ -1652,12 +1688,17 @@ select, input, textarea {
    SidebarFooterControls, ResponsiveTable TableDensityToggle.
 --------------------------------------------------------------------------- */
 
+:root {
+  --sidebar-micro-seg-min: 2.25rem;
+  --sidebar-micro-solo-w: 2.75rem;
+}
+
 .sidebar-micro-track {
   display: flex;
   width: 100%;
   min-width: 0;
   align-items: center;
-  gap: 0.125rem;
+  gap: 0.25rem;
   padding: 0.125rem;
   border-radius: var(--radius-sm);
   border: 1px solid color-mix(in oklch, var(--color-edge) 55%, transparent);
@@ -1668,9 +1709,10 @@ select, input, textarea {
 .sidebar-micro-seg {
   position: relative;
   display: flex;
-  height: 1.375rem;
-  min-width: 0;
-  flex: 1 1 0%;
+  min-height: 1.375rem;
+  width: 100%;
+  min-width: min(100%, var(--sidebar-micro-seg-min, 2.25rem));
+  flex: 1 1 auto;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
@@ -1764,16 +1806,78 @@ select, input, textarea {
   display: inline-flex;
 }
 
+/* Single-segment track (focus toggle) — parent grid assigns the column width. */
+.sidebar-micro-track--solo {
+  width: 100%;
+  min-width: var(--sidebar-micro-solo-w, 2.75rem);
+  flex: none;
+}
+
+.sidebar-micro-track--solo .sidebar-micro-seg-cell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .sidebar-micro-seg-cell {
   position: relative;
   display: flex;
-  min-width: 0;
+  min-width: var(--sidebar-micro-seg-min, 2.25rem);
   flex: 1 1 0%;
   align-items: stretch;
 }
 
+/* Tap layer — indicator is pinned to this box so pill and icon always match. */
+.sidebar-micro-seg-interaction {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+  width: 100%;
+  min-height: 1.375rem;
+}
+
+.sidebar-micro-seg-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+  min-height: 1.375rem;
+}
+
+/* Tooltip wrappers in portal/mode rows — stretch to the content shell. */
+.sidebar-micro-seg-content > * {
+  flex: 1 1 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: min(100%, var(--sidebar-micro-seg-min, 2.25rem));
+  min-height: 1.375rem;
+}
+
+.sidebar-micro-seg-content .sidebar-micro-seg,
+.sidebar-micro-seg-content a.sidebar-micro-seg {
+  height: 100%;
+  min-height: 1.375rem;
+}
+
+.sidebar-micro-seg svg {
+  display: block;
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
 .sidebar-micro-track--inline .sidebar-micro-seg-cell {
   flex: 0 1 auto;
+  min-width: 0;
 }
 
 .sidebar-micro-indicator {

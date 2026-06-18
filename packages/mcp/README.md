@@ -1,13 +1,8 @@
 # @mushi-mushi/mcp
 
-> **Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
+> **Your AI wrote it. Mushi tells you why it broke.**
 
-[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi's **evolution loop** into your AI coding agent. The loop is already running in your Mushi project:
-
-```
-User feels a bug → Mushi captures it → AI triages → AI opens a PR
-→ QA verifies → Judge scores → Lesson library remembers → next agent is smarter
-```
+[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi into Cursor, Claude Code, and any MCP client. Pull fix context, run triage, and dispatch fixes without a second LLM vendor key.
 
 Wire it into Cursor, Claude Code, or any MCP client in one command:
 
@@ -16,7 +11,7 @@ npx mushi-mushi setup --ide cursor
 # or: npx mushi-mushi setup --ide claude
 ```
 
-That command reads `~/.mushirc`, writes `.cursor/mcp.json` with the `mushi` server block, and prints "Done — restart Cursor and ask: `list mushi tools`". No copy-pasting environment variables.
+That command reads CLI config at **`~/.config/mushi/config.json`** (legacy `~/.mushirc` auto-migrates), writes `.cursor/mcp.json` with the `mushi-<slug>` server block, and prints "Done — restart Cursor and ask: `list mushi tools`". No copy-pasting environment variables.
 
 ### Codebase Understand tools (indexed repos)
 
@@ -146,7 +141,7 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
-Full catalog is **79 tools**. New installs default to a lean set via:
+Full catalog is **71 tools**. New installs default to a lean set via:
 
 - **Stdio:** `MUSHI_FEATURES=triage,fixes,inventory,setup,docs`
 - **HTTP:** `?features=triage,fixes,inventory,setup,docs` on the MCP URL

@@ -12,7 +12,7 @@
  *          row that becomes hard to scan once 5+ items are active.
  */
 
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { FilterSelect } from '../ui'
 import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
 import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
@@ -38,6 +38,8 @@ interface Props {
   hasFilters: boolean
   onSetFilter: (key: string, value: string) => void
   onClearAll: () => void
+  /** Saved views chip row — rendered in the control bar action slot. */
+  savedViews?: ReactNode
 }
 
 export function ReportsFilterBar({
@@ -53,6 +55,7 @@ export function ReportsFilterBar({
   hasFilters,
   onSetFilter,
   onClearAll,
+  savedViews,
 }: Props) {
   // Compose the rail data: select-driven filters + bridged context chips.
   // Tone'd by semantic — severity uses warn/danger so a glance shows the
@@ -158,6 +161,9 @@ export function ReportsFilterBar({
           <option value="@mushi-mushi/react-native">React Native</option>
           <option value="@mushi-mushi/capacitor">Capacitor</option>
         </select>
+        {savedViews ? (
+          <div className="flex flex-wrap items-center gap-1 min-w-0">{savedViews}</div>
+        ) : null}
         {hasFilters && (
           <button
             type="button"

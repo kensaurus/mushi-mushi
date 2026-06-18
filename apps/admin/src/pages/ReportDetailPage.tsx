@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
-import { useParams, Link, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import {
   Section,
   Field,
-  PageHelp,
   RecommendedAction,
   EmptyState,
   ErrorAlert,
@@ -34,6 +33,7 @@ import {
   IconSkills,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
+import { PageHeaderBar } from '../components/PageHeaderBar'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
@@ -54,10 +54,11 @@ import {
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
+import { screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
 import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { RegressionChain } from '../components/report-detail/RegressionChain'
-import { CursorAgentLaunch } from '../components/report-detail/CursorAgentLaunch'
+import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
@@ -384,30 +385,32 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
   return (
     <div>
-      <Link to="/reports" className="text-xs text-fg-muted hover:text-fg-secondary mb-3 inline-flex items-center gap-1">
-        <span aria-hidden="true">&larr;</span> Back to reports
-      </Link>
-
-      <PageHelp
-        title="About this report"
-        whatIsIt="A single bug report submitted from your app, auto-classified by the LLM pipeline and queued for human triage."
-        useCases={[
+      <PageHeaderBar
+        title="Report detail"
+        contextChip={null}
+        description="Triage, dispatch fixes, and reply to the reporter."
+        helpTitle="About this report"
+        helpWhatIsIt="A single bug report submitted from your app, auto-classified by the LLM pipeline and queued for human triage."
+        helpUseCases={[
           'Decide if this report is real, a duplicate, or noise',
           'Set status and severity to drive routing and notifications',
           'Dispatch an autofix attempt, or reply to the reporter directly',
         ]}
-        howToUse="Use the Recommended action below for the fastest path. Otherwise set Status / Severity manually, dispatch a fix, push to your tracker, or reply in the triage thread."
+        helpHowToUse="Use the Recommended action below for the fastest path. Otherwise set Status / Severity manually, dispatch a fix, push to your tracker, or reply in the triage thread."
       />
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
       <RegressionChain report={report} className="mb-3" />
 
+      {/* The answer first: plain-English diagnosis + paste-ready fix prompt.
+          Delivers the brand sub-promise as one surface at the top; the
+          detailed classification + evidence sections stay below. */}
+      <DiagnosisFixHero report={report} />
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GenerateTestButton report={report} />
       </div>
-
-      <CursorAgentLaunch report={report} />
 
       <ReportPipelineFlow report={report} dispatchState={dispatchState} />
 
@@ -513,7 +516,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           )}
           {!report.screenshot_url && (
             <p className="text-2xs text-fg-faint italic mt-2">
-              No screenshot was captured for this report.
+              {screenshotEmptyText(report)}
             </p>
           )}
         </Section>

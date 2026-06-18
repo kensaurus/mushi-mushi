@@ -1,5 +1,8 @@
 # @mushi-mushi/svelte
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
+
 Svelte SDK for Mushi Mushi bug reporting. **API-only** — captures errors and submits reports but does not include the widget UI. Add `@mushi-mushi/web` alongside this package for the full Shadow DOM widget experience.
 
 > **One-command setup:** `npx mushi-mushi` auto-detects Svelte / SvelteKit and installs this package + `@mushi-mushi/web`.

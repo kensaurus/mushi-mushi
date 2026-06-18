@@ -40,6 +40,11 @@ const LEGACY_POINT_TABLE: Record<string, { base: number; useMultiplier: boolean 
   dom_screenshot_attached: { base: 5, useMultiplier: false },
   element_selected:    { base: 5,   useMultiplier: false },
   first_on_component_sdk: { base: 15, useMultiplier: true },
+  // Canonical dotted actions used by the report ingest + triage pipeline (D1).
+  // Present as legacy fallbacks so incentives work with zero console config;
+  // a project can override the base/cap via a reward_rules row of the same name.
+  'report.submitted':  { base: 10,  useMultiplier: true },
+  'report.triaged':    { base: 50,  useMultiplier: false },
 }
 
 // In-memory rule cache: projectId → { action → rule_row }. 60-second TTL.

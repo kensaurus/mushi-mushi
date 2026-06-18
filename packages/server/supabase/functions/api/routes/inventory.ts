@@ -1277,6 +1277,13 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const scope = await assertProjectScope(c, projectId, db)
       if (!scope.ok) return scope.response
 
+      let body: { story_node_id?: string | null } = {}
+      try {
+        body = await c.req.json()
+      } catch {
+        body = {}
+      }
+
       const verdict = applyRateLimit(reconcileRateLimiter, projectId, 'reconcile')
       if (!verdict.allowed) return rateLimitResponse(c, verdict, 'reconcile')
 
@@ -1302,7 +1309,11 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
             'Content-Type': 'application/json',
             Authorization: `Bearer ${serviceKey}`,
           },
-          body: JSON.stringify({ project_id: projectId, triggered_by: scope.userId }),
+          body: JSON.stringify({
+            project_id: projectId,
+            triggered_by: scope.userId,
+            ...(body.story_node_id ? { story_node_id: body.story_node_id } : {}),
+          }),
         }).catch((e) => log.error('crawler.invoke.error', { error: String(e) }))
         return c.json({ ok: true, data: { status: 'triggered' } })
       } catch (err) {
@@ -1340,7 +1351,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
       const verdict = applyRateLimit(gatesRunRateLimiter, projectId, 'gates.run')
       if (!verdict.allowed) return rateLimitResponse(c, verdict, 'gates.run')
 
-      let body: { commit_sha?: string; pr_number?: number; gates?: string[] }
+      let body: { commit_sha?: string; pr_number?: number; gates?: string[]; story_node_id?: string | null }
       try {
         body = await c.req.json()
       } catch {
@@ -1374,6 +1385,7 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           pr_number: body.pr_number ?? null,
           gates: body.gates ?? ['status_claim', 'api_contract'],
           triggered_by: scope.userId,
+          ...(body.story_node_id ? { story_node_id: body.story_node_id } : {}),
         }),
       })
       const json = await resp.json().catch(() => ({}))

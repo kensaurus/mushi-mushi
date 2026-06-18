@@ -1,5 +1,8 @@
 # `@mushi-mushi/node`
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
+
 Server-side SDK for [Mushi Mushi](https://mushimushi.dev). The browser SDKs
 report user-observed bugs; this package reports **server-observed** ones —
 uncaught exceptions, slow requests, failed integrations — into the same
@@ -97,6 +100,71 @@ attachUnhandledHook({
   projectId: process.env.MUSHI_PROJECT_ID!,
 })
 ```
+
+## Reward webhook receiver
+
+When a reporter crosses a reward tier (or earns points) in the Mushi console,
+Mushi sends a signed webhook to your app. `createMushiRewardsHandler` is a
+framework-agnostic receiver that **timing-safely verifies** the
+`X-Mushi-Signature` HMAC and routes events to typed callbacks — this is where
+you grant a role, unlock Pro, or apply a Stripe coupon.
+
+```ts
+import { createMushiRewardsHandler } from '@mushi-mushi/node'
+
+const handler = createMushiRewardsHandler({
+  // The mushi_whk_… secret shown once when you created the webhook in the console.
+  secret: process.env.MUSHI_REWARD_WEBHOOK_SECRET!,
+
+  onTierChanged: async (event) => {
+    // Flat payload. host_credit_payload is the opaque "grant this" instruction
+    // you defined on the tier in the console.
+    if (event.host_credit_payload?.kind === 'pro_coupon') {
+      await grantProAccess(event.external_user_id)
+    }
+  },
+
+  onPointsAwarded: async (event) => {
+    // Fires on reward.points_awarded (e.g. report.submitted / report.triaged).
+  },
+
+  // onEvent: async (event) => { … }  // catch-all, runs after the specific cb
+})
+```
+
+### Next.js App Router / any Web-standard runtime
+
+```ts
+// app/api/mushi/reward-webhook/route.ts
+export const POST = (req: Request) => handler.fetch(req)
+```
+
+### Express / Connect
+
+`express.raw()` is **required** — the raw body must be available for HMAC
+verification (a re-stringified parsed body can fail verification on key-order
+differences):
+
+```ts
+app.post('/api/mushi/reward-webhook', express.raw({ type: '*/*' }), handler.express)
+```
+
+### API
+
+| Export | Purpose |
+|---|---|
+| `createMushiRewardsHandler(opts)` | Returns `{ express, fetch }` adapters. A bad signature short-circuits with `401` before your callbacks run. |
+| `verifyRewardSignature(rawBody, signature, secret)` | Standalone timing-safe `sha256=<hex>` check if you want to handle routing yourself. |
+| `parseRewardEvent(rawBody)` | Parse a verified raw body into a typed `MushiRewardEvent` (throws on bad JSON). |
+
+**Options:** `secret` (required), `onTierChanged`, `onPointsAwarded`, `onEvent`,
+`signatureHeader` (default `x-mushi-signature`).
+
+**Event types:** `MushiRewardEvent` (flat envelope: `event`, `end_user_id`,
+`external_user_id?`, `occurred_at`), `MushiTierChangedEvent`
+(`host_credit_payload`, `tier_slug`/`tier_after`), `MushiPointsAwardedEvent`
+(`action`, `points`, `total_points`). Full economy reference:
+[`docs/REWARDS.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/REWARDS.md).
 
 ## Distributed tracing
 

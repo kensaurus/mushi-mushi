@@ -1,5 +1,5 @@
 ---
-title: Mushi Mushi — bugs your users feel
+title: Mushi Mushi — bug translation for vibe coders
 ---
 
 import { Callout } from 'nextra/components'
@@ -11,28 +11,18 @@ import { LoopComparison } from '../components/LoopComparison'
     breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack. */}
 
 <EditorialHero
-  eyebrow="Mushi · the evolution loop for AI-assisted software"
-  title={<>Sentry sees what code throws. Mushi sees what users feel &mdash; <em>and closes the loop with AI.</em></>}
-  lead={<>When your users hit a dead button or a 12-second screen, Mushi captures it, triages it with AI, and opens a draft PR &mdash; automatically. Every fix feeds a lesson library your agents inherit. The loop runs without Jira, QA teams, or PM bottlenecks.</>}
+  eyebrow="Mushi · bug translation for vibe coders"
+  title={<>Your AI wrote it. Mushi tells you <em>why it broke.</em></>}
+  lead={<>Plain-English diagnosis + a paste-ready fix, right inside Cursor. Capture user friction, triage with AI, pull fix context via MCP — or optionally dispatch a draft PR when you are ready.</>}
 />
 
-## The evolution loop for AI-assisted software
+## Know why it broke — then close the loop
 
-The vibe-coding era solved the creation bottleneck. AI agents build and ship in hours. The new bottleneck is **selection pressure**: out of everything you could fix next, which changes actually make the app better for real users?
+The vibe-coding era solved the *creation* bottleneck: AI ships in hours. The new bottleneck is **selection** — out of everything you could fix next, which change actually makes the app better for real users? Mushi turns each user-felt bug into a plain-English diagnosis and a paste-ready fix, then encodes every merged fix as a lesson so the next agent run starts smarter.
 
-Without a closed loop: users churn silently, agents write code without knowing which bugs keep reappearing, every sprint starts where the last one ended.
-
-With the evolution loop: every user friction event becomes structured signal, every merged fix promotes a lesson rule into the codebase, every future agent run starts with accumulated knowledge.
-
-Mushi turns the random walk into **cumulative selection**. Every user report is a selection event — captured with context, triaged by AI, fixed by an agent, scored by a judge, and encoded as a permanent lesson. Every iteration starts from a fitter baseline than the last. [Read the five-stage walkthrough &rarr;](/concepts/evolution-loop)
-
-This is **selection with memory** — [Dawkins&rsquo; phrase](https://en.wikipedia.org/wiki/Climbing_Mount_Improbable) for why cumulative selection beats random search by orders of magnitude.
+That is **selection with memory**: cumulative selection beats random search by orders of magnitude. The longer thesis (Dawkins, Taleb, the NTSB black box) lives in the docs. [Read the thesis &rarr;](/concepts/closed-loop) &middot; [The five-stage loop &rarr;](/concepts/evolution-loop)
 
 <LoopComparison />
-
-<Callout type="info">
-  Aviation&rsquo;s NTSB turns every crash into institutional memory. *&ldquo;In a world where crashes are dissected, progress compounds.&rdquo;* &mdash; Matthew Syed, *Black Box Thinking* (2015). Nassim Taleb makes the same argument in *Antifragile*: **systems improve through trial and error, not in spite of it &mdash; provided the error is recorded and inherited.** Mushi is that recording layer for software. [Read the full thesis &rarr;](/concepts/closed-loop)
-</Callout>
 
 ## Four properties selection requires
 
@@ -47,7 +37,11 @@ needs and Sentry alone cannot provide:
 - **Inheritance**: lessons are ranked by severity and packed to &le;&thinsp;3&thinsp;000 tokens before being injected into PR review context &mdash; so neither human reviewer nor AI agent can repeat the same class of mistake.
 - **Reward loop**: the user who found the mutation is credited in the changelog. The SDK shows them a toast: *&ldquo;v1.2.3 shipped &mdash; you helped fix this.&rdquo;* This closes the feedback loop that keeps beta testers reporting.
 
-## Try it in 60 seconds
+## Try it — incident loop first
+
+<Callout type="info">
+  **Today:** classification in seconds + MCP fix brief. **Target:** sub-10-second diagnosis. See the [incident loop quickstart](/quickstart/incident-loop).
+</Callout>
 
 <QuickstartGrid />
 

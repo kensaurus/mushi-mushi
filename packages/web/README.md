@@ -1,5 +1,8 @@
 # @mushi-mushi/web
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
+
 Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM isolation.
 
 > **One-command setup:** `npx mushi-mushi` installs this package for vanilla-JS apps (or alongside the framework SDK for Vue, Svelte, Angular).

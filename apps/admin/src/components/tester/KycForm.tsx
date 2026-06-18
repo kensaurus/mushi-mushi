@@ -55,7 +55,7 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
 
     setSubmitting(true)
     try {
-      await apiFetch('/v1/tester/kyc', {
+      const res = await apiFetch('/v1/tester/kyc', {
         method: 'PUT',
         scope: 'none',
         headers: { 'Content-Type': 'application/json' },
@@ -66,6 +66,11 @@ export function KycForm({ countryCode, onSubmitted }: KycFormProps) {
           tin: tin.trim(),
         }),
       })
+
+      if (!res.ok) {
+        toast.error('KYC submission failed', res.error?.message ?? 'Please try again.')
+        return
+      }
 
       toast.success('KYC information submitted. Redemptions will resume after review (typically < 1 business day).')
       onSubmitted()

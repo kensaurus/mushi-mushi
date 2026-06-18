@@ -232,7 +232,7 @@ npx mushi-mushi --help
 <summary><b>Security notes</b></summary>
 
 - Credentials passed via `--api-key` are visible to other users on the same machine via `ps -ef`. Use the interactive prompt on shared hosts.
-- `~/.mushirc` (the credentials cache) is written with mode `0o600` on Unix; the CLI also tightens the permissions of any existing file on first load.
+- `~/.config/mushi/config.json` (the credentials cache) is written with mode `0o600` on Unix; legacy `~/.mushirc` auto-migrates on first load.
 - The wizard rejects pasted secrets containing CR/LF/NUL to prevent `.env` injection.
 - All prompts validate format: `proj_[A-Za-z0-9_-]{10,}` and `mushi_[A-Za-z0-9_-]{10,}`.
 - This release ships with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) — verify with `npm audit signatures`.

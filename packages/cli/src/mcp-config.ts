@@ -7,7 +7,10 @@
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname } from 'node:path'
+
+/** Lean default — mirrors DEFAULT_FEATURE_GROUPS in @mushi-mushi/mcp/feature-groups */
+const DEFAULT_MUSHI_FEATURES = 'triage,fixes,inventory,setup,docs'
 
 export interface McpServerEntry {
   command: string
@@ -61,7 +64,7 @@ export async function writeMcpServerEntry(opts: WriteMcpOptions): Promise<WriteM
 
   const output = JSON.stringify(merged, null, 2) + '\n'
   if (!dryRun) {
-    await mkdir(join(configPath, '..'), { recursive: true })
+    await mkdir(dirname(configPath), { recursive: true })
     await writeFile(configPath, output, 'utf8')
   }
 
@@ -83,6 +86,7 @@ export function buildMcpServerBlock(opts: {
       MUSHI_API_ENDPOINT: opts.endpoint,
       MUSHI_PROJECT_ID: opts.projectId,
       MUSHI_API_KEY: opts.apiKey,
+      MUSHI_FEATURES: DEFAULT_MUSHI_FEATURES,
     },
   }
 }

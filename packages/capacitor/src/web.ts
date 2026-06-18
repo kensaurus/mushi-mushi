@@ -41,6 +41,8 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   private pluginConfig: MushiCapacitorPluginConfig | null = null;
   private apiClient: MushiApiClient | null = null;
   private currentUser: MushiCapacitorUser | null = null;
+  /** Signed end-user identity JWT (set via identifyWithToken); verified server-side. */
+  private userToken: string | null = null;
 
   async configure(options: MushiCapacitorPluginConfig): Promise<void> {
     this.pluginConfig = options;
@@ -49,6 +51,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
         projectId: options.projectId,
         apiKey: options.apiKey,
         apiEndpoint: options.endpoint,
+        getUserToken: () => this.userToken,
       });
     } else {
       this.apiClient = null;
@@ -124,6 +127,21 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
 
   async setUser(payload: { user: MushiCapacitorUser | null }): Promise<void> {
     this.currentUser = payload.user;
+  }
+
+  async identifyWithToken(payload: { token: string | null }): Promise<void> {
+    this.userToken = payload.token && typeof payload.token === 'string' ? payload.token : null;
+    // Rebuild the API client so the signed token rides on every request via
+    // the X-Mushi-User-Token header (verified server-side).
+    const cfg = this.pluginConfig;
+    if (cfg?.endpoint) {
+      this.apiClient = createApiClient({
+        projectId: cfg.projectId,
+        apiKey: cfg.apiKey,
+        apiEndpoint: cfg.endpoint,
+        getUserToken: () => this.userToken,
+      });
+    }
   }
 
   async setMetadata(): Promise<void> {

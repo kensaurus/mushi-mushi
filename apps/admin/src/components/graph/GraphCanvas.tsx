@@ -16,6 +16,7 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import { useTheme } from '../../lib/useTheme'
+import { readVizToken } from '../../lib/vizTokens'
 import { GraphLegend } from './GraphLegend'
 import { ReactFlowChip } from './NodeChip'
 import { GraphSidePanel } from './GraphSidePanel'
@@ -73,13 +74,6 @@ function ZoomControls() {
   )
 }
 
-// Dot-grid colours are passed straight to SVG attrs by xyflow, which strips
-// `var(--…)` references — so we resolve them per-theme here.
-const DOT_GRID_COLORS = {
-  dark: 'oklch(0.30 0 0)',
-  light: 'oklch(0.86 0.004 285)',
-} as const
-
 interface Props {
   flowNodes: Node[]
   flowEdges: Edge[]
@@ -119,26 +113,43 @@ export function GraphCanvas({
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false)
   const { resolved } = useTheme()
-  const dotGrid = DOT_GRID_COLORS[resolved]
+  const dotGrid = readVizToken(
+    resolved === 'dark' ? 'viz-node-border-dark' : 'viz-node-border-light',
+  )
 
   // Auto-fade the pan/zoom hint after 6s. Stored in localStorage so it doesn't
   // re-appear every refresh once the user has seen it.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (window.localStorage.getItem(HINT_KEY) === '1') {
+    try {
+      if (window.localStorage.getItem(HINT_KEY) === '1') {
+        setHintDismissed(true)
+        return
+      }
+    } catch {
       setHintDismissed(true)
       return
     }
     const t = setTimeout(() => {
       setHintDismissed(true)
-      window.localStorage.setItem(HINT_KEY, '1')
+      try {
+        window.localStorage.setItem(HINT_KEY, '1')
+      } catch {
+        // ignore
+      }
     }, 6000)
     return () => clearTimeout(t)
   }, [])
 
   const dismissHint = () => {
     setHintDismissed(true)
-    if (typeof window !== 'undefined') window.localStorage.setItem(HINT_KEY, '1')
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(HINT_KEY, '1')
+      } catch {
+        // ignore
+      }
+    }
   }
 
   return (

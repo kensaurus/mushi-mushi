@@ -690,16 +690,6 @@ export function ReportsPage() {
 
       <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
 
-      <SavedViewsRow
-        scope="reports"
-        currentQuery={searchParams.toString()}
-        onApply={(q) => {
-          const next = new URLSearchParams(q)
-          setSearchParams(next)
-          setSearchInput(next.get('q') ?? '')
-        }}
-      />
-
       <ReportsFilterBar
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
@@ -716,6 +706,17 @@ export function ReportsPage() {
           setSearchInput('')
           setSearchParams({})
         }}
+        savedViews={
+          <SavedViewsRow
+            scope="reports"
+            currentQuery={searchParams.toString()}
+            onApply={(q) => {
+              const next = new URLSearchParams(q)
+              setSearchParams(next)
+              setSearchInput(next.get('q') ?? '')
+            }}
+          />
+        }
       />
 
       <BulkBar

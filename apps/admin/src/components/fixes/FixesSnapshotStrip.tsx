@@ -4,6 +4,7 @@
 
 import { Link } from 'react-router-dom'
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
+import { MetricStrip } from '../MetricStrip'
 import type { FixesStats } from './FixesStatsTypes'
 import {
   completedDetail,
@@ -51,7 +52,11 @@ export function FixesSnapshotStrip({
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
       <SnapshotSectionHint text={description} />
-      <div className={`grid grid-cols-2 gap-2 ${compact ? 'sm:grid-cols-4' : 'sm:grid-cols-3 lg:grid-cols-6'}`}>
+      <MetricStrip
+        cols={compact ? 4 : 6}
+        ariaLabel="Fix pipeline snapshot"
+        className={compact ? '' : 'sm:grid-cols-3'}
+      >
         {!compact ? (
           <StatCard
             label={statLabels?.totalAttempts ?? 'Attempts (30d)'}
@@ -115,7 +120,7 @@ export function FixesSnapshotStrip({
             to={fixesLinks.prsCiPassing}
           />
         )}
-      </div>
+      </MetricStrip>
       {!hideLinks ? (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">
           <Link to="/reports" className="text-brand hover:underline">

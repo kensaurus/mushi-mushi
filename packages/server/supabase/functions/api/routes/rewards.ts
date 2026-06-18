@@ -97,9 +97,17 @@ const rewardTierUpsertSchema = z.object({
 
 const webhookCreateSchema = z.object({
   url: z.string().url().refine((u) => u.startsWith('https://'), 'Must be HTTPS'),
-  secret: z.string().min(16).max(256),
+  // Optional: when omitted we mint a cryptographically-strong secret and return
+  // it once (API-key style). Hosts paste it into MUSHI_REWARDS_SECRET.
+  secret: z.string().min(16).max(256).optional(),
   events: z.array(z.string()).default(['reward.tier_changed']),
 })
+
+/** Mint a URL-safe 32-byte webhook signing secret. */
+function mintWebhookSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  return 'mushi_whk_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 // ─── HMAC helper for webhook secrets ─────────────────────────
 async function sha256Hex(value: string): Promise<string> {
@@ -1030,6 +1038,72 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
   })
 
   // ===========================================================
+  // ADMIN: POST /v1/admin/rewards/presets/apply
+  // One-click "enable rewards with recommended defaults" (Workstream D4).
+  // Idempotent: only inserts rules/tiers that don't already exist, so it is
+  // safe to re-run and never clobbers an operator's customisations. This is
+  // the "preset, ready-to-go" path — ease of setup before customizability.
+  // ===========================================================
+  app.post('/v1/admin/rewards/presets/apply', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const orgGate = await requireRewardsOrg(c, userId)
+    if (!orgGate.ok) return orgGate.response
+    const orgId = orgGate.orgId
+    const db = getServiceClient()
+
+    // Recommended default rules (org-wide; project_id null). Matches the
+    // dotted actions awarded by the ingest + triage pipeline.
+    const defaultRules = [
+      { action: 'report.submitted', base_points: 10, max_per_day: 20, max_per_user_lifetime: null, multiplier_eligible: true,  requires_jwt_verification: false, enabled: true, project_id: null },
+      { action: 'report.triaged',   base_points: 50, max_per_day: null, max_per_user_lifetime: null, multiplier_eligible: false, requires_jwt_verification: false, enabled: true, project_id: null },
+      { action: 'comment_posted',   base_points: 8,  max_per_day: 30, max_per_user_lifetime: null, multiplier_eligible: false, requires_jwt_verification: false, enabled: true, project_id: null },
+    ]
+
+    // Recommended default tiers. host_credit_payload is the opaque "grant this"
+    // instruction the @mushi-mushi/node webhook handler interprets host-side.
+    const defaultTiers = [
+      { slug: 'explorer',    display_name: 'Explorer',    display_order: 0, points_threshold: 0,    perks: {},                          monetary_reward_usd: null, host_credit_payload: null,                                   enabled: true },
+      { slug: 'contributor', display_name: 'Contributor', display_order: 1, points_threshold: 100,  perks: { badge: 'contributor' },    monetary_reward_usd: null, host_credit_payload: { kind: 'role', role: 'contributor' },   enabled: true },
+      { slug: 'champion',    display_name: 'Champion',    display_order: 2, points_threshold: 500,  perks: { badge: 'champion' },       monetary_reward_usd: null, host_credit_payload: { kind: 'pro_coupon', months: 1 },       enabled: true },
+      { slug: 'legend',      display_name: 'Legend',      display_order: 3, points_threshold: 2000, perks: { badge: 'legend' },         monetary_reward_usd: null, host_credit_payload: { kind: 'pro_annual' },                 enabled: true },
+    ]
+
+    // Idempotent insert: skip actions/slugs that already exist for this org.
+    const [{ data: existingRules }, { data: existingTiers }] = await Promise.all([
+      db.from('reward_rules').select('action').eq('organization_id', orgId),
+      db.from('reward_tiers').select('slug').eq('organization_id', orgId),
+    ])
+    const haveActions = new Set((existingRules ?? []).map((r) => (r as { action: string }).action))
+    const haveSlugs = new Set((existingTiers ?? []).map((t) => (t as { slug: string }).slug))
+
+    const rulesToInsert = defaultRules.filter((r) => !haveActions.has(r.action)).map((r) => ({ ...r, organization_id: orgId }))
+    const tiersToInsert = defaultTiers.filter((t) => !haveSlugs.has(t.slug)).map((t) => ({ ...t, organization_id: orgId }))
+
+    let insertedRules = 0
+    let insertedTiers = 0
+    if (rulesToInsert.length > 0) {
+      const { data, error } = await db.from('reward_rules').insert(rulesToInsert).select('id')
+      if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+      insertedRules = data?.length ?? 0
+    }
+    if (tiersToInsert.length > 0) {
+      const { data, error } = await db.from('reward_tiers').insert(tiersToInsert).select('id')
+      if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+      insertedTiers = data?.length ?? 0
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        insertedRules,
+        insertedTiers,
+        skippedRules: defaultRules.length - rulesToInsert.length,
+        skippedTiers: defaultTiers.length - tiersToInsert.length,
+      },
+    })
+  })
+
+  // ===========================================================
   // SDK: GET /v1/sdk/hall-of-fame
   // Public (apiKeyAuth) leaderboard for the project — safe subset of data
   // with no PII. Powers the Hall of Fame OG image on the host app.
@@ -1280,13 +1354,28 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     if (!parsed.success) return c.json({ ok: false, error: { code: 'INVALID_WEBHOOK' } }, 422)
 
     const db = getServiceClient()
-    const secretHash = await sha256Hex(parsed.data.secret)
     const webhookId = crypto.randomUUID()
+    // Mint a secret if the caller didn't supply one. The raw value is returned
+    // ONCE in the response and stored in Vault — never persisted in plaintext.
+    const rawSecret = parsed.data.secret ?? mintWebhookSecret()
+    const secretHash = await sha256Hex(rawSecret)
 
-    // Store secret in env (Deno.env can't be mutated at runtime; so we store
-    // a hint for the operator and record the hash for signature verification).
-    // The actual raw secret must be set via MUSHI_REWARD_WEBHOOK_SECRET_<id> env var.
-    rlog.info('webhook_created', { webhookId, orgId, urlPrefix: parsed.data.url.slice(0, 32) })
+    // Vault-back the raw secret (Workstream D2). secret_hash is kept only for
+    // display/equality; signing reads the raw value back via vault_get_secret.
+    let vaultSecretId: string | null = null
+    const { data: vaultId, error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: `reward_webhook_${webhookId}`,
+      secret_value: rawSecret,
+    })
+    if (vaultErr) {
+      rlog.warn('vault_store_secret failed for reward webhook; signing will fall back to env var', {
+        webhookId, error: vaultErr.message,
+      })
+    } else if (typeof vaultId === 'string') {
+      vaultSecretId = vaultId
+    }
+
+    rlog.info('webhook_created', { webhookId, orgId, urlPrefix: parsed.data.url.slice(0, 32), vaulted: vaultSecretId != null })
 
     const { data, error } = await db
       .from('reward_webhooks')
@@ -1295,6 +1384,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
         organization_id: orgId,
         url: parsed.data.url,
         secret_hash: secretHash,
+        vault_secret_id: vaultSecretId,
         events: parsed.data.events,
       })
       .select('id, url, events, enabled, created_at')
@@ -1305,8 +1395,14 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       ok: true,
       data,
       meta: {
-        secret_env_var: `MUSHI_REWARD_WEBHOOK_SECRET_${webhookId.replace(/-/g, '').toUpperCase()}`,
-        message: 'Set the secret via Supabase project env vars to enable HMAC signature verification.',
+        // Shown once — paste into the host app's MUSHI_REWARDS_SECRET and use
+        // createMushiRewardsHandler({ secret }) from @mushi-mushi/node.
+        secret: rawSecret,
+        secret_shown_once: true,
+        vaulted: vaultSecretId != null,
+        message: vaultSecretId != null
+          ? 'Copy this secret now — it will not be shown again. Use it with createMushiRewardsHandler from @mushi-mushi/node.'
+          : 'Vault write failed; also set MUSHI_REWARD_WEBHOOK_SECRET_' + webhookId.replace(/-/g, '').toUpperCase() + ' as a fallback.',
       },
     }, 201)
   })

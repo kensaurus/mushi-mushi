@@ -57,6 +57,10 @@ export type {
   MushiBannerConfig,
   MushiBannerLink,
   MushiTracePropagationConfig,
+  MushiPageContext,
+  MushiAssistantConfig,
+  MushiAssistantStep,
+  MushiAssistantReply,
 } from './types';
 
 export {
@@ -104,3 +108,25 @@ export {
   type LoggerOptions,
   type LogEntry,
 } from './logger';
+export {
+  MUSHI_COLORS_LIGHT,
+  MUSHI_COLORS_DARK,
+  MUSHI_SPACING,
+  MUSHI_RADIUS,
+  MUSHI_TYPE,
+  MUSHI_Z,
+  MUSHI_MOTION,
+  MUSHI_GEOMETRY,
+  MUSHI_COPY,
+  mushiPalette,
+  mushiTokens,
+  type MushiThemeMode,
+  type MushiColorPalette,
+  type MushiTokenSnapshot,
+} from './design-tokens';
+export {
+  buildIdentityClaims,
+  parseIdentityToken,
+  MUSHI_IDENTITY_TOKEN_PREFIX,
+  type MushiIdentityClaims,
+} from './identity';

@@ -8,7 +8,7 @@ import {
 
 describe('pageHeroOwnership', () => {
   it('lists all page-owned hero routes', () => {
-    expect(PAGE_ROUTES_WITH_OWN_HERO.size).toBe(16)
+    expect(PAGE_ROUTES_WITH_OWN_HERO.size).toBe(18)
     expect(hasPageOwnedHero('/query')).toBe(true)
     expect(hasPageOwnedHero('/queue')).toBe(true)
     expect(hasPageOwnedHero('/anti-gaming')).toBe(true)

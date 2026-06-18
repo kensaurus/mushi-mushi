@@ -15,6 +15,8 @@ const JOURNEYS = [
   { name: 'mcp help', path: '/mcp' },
   { name: 'feedback hub', path: '/feedback' },
   { name: 'qa coverage', path: '/qa-coverage' },
+  { name: 'connect hub', path: '/connect' },
+  { name: 'reports inbox', path: '/reports' },
 ]
 
 async function main() {

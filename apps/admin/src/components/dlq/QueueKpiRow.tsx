@@ -5,7 +5,8 @@
  */
 
 import { useMemo } from 'react'
-import { KpiRow, KpiTile, type KpiDelta, type Tone } from '../charts'
+import { KpiTile, type KpiDelta, type Tone } from '../charts'
+import { MetricStrip } from '../MetricStrip'
 import type { QueueSummary, ThroughputDay } from './types'
 
 interface Props {
@@ -36,8 +37,10 @@ export function QueueKpiRow({ summary, throughput = [] }: Props) {
   const completedSeries = useMemo(() => throughput.map((d) => d.completed), [throughput])
   const failedSeries = useMemo(() => throughput.map((d) => d.failed), [throughput])
 
+  const dlqCount = summary.byStatus.dead_letter ?? 0
+
   return (
-    <KpiRow cols={5}>
+    <MetricStrip cols={5} ariaLabel="Queue processing metrics" className="mb-3">
       <KpiTile
         label="Pending"
         value={summary.byStatus.pending ?? 0}
@@ -77,11 +80,12 @@ export function QueueKpiRow({ summary, throughput = [] }: Props) {
       />
       <KpiTile
         label="Dead letter"
-        value={summary.byStatus.dead_letter ?? 0}
-        accent={(summary.byStatus.dead_letter ?? 0) > 0 ? 'danger' : 'muted'}
+        value={dlqCount}
+        accent={dlqCount > 0 ? 'danger' : 'muted'}
         sublabel="exhausted retries"
         meaning="Jobs that exceeded their retry budget — they will not run again without a manual replay. Always investigate before clearing."
+        variant={dlqCount > 0 ? 'primary' : 'default'}
       />
-    </KpiRow>
+    </MetricStrip>
   )
 }

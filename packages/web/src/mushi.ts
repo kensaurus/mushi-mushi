@@ -14,6 +14,7 @@ import {
   type MushiReporterComment,
   type MushiHallOfFameEntry,
   type MushiTesterReputation,
+  type MushiPageContext,
   DEFAULT_API_ENDPOINT,
   MUSHI_INTERNAL_INIT_MARKER,
   createApiClient,
@@ -32,6 +33,7 @@ import {
   normaliseThrown,
   newUuid,
   resolveEnvConfig,
+  parseIdentityToken,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -63,7 +65,6 @@ import {
 import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
-import { isLocalhostEndpoint } from './internal-requests';
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version';
 
 let instance: MushiSDKInstance | null = null;
@@ -120,10 +121,17 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     ? createLogger({ scope: 'mushi', level: 'debug', format: 'pretty' })
     : noopLogger;
 
+  // Signed end-user identity JWT (set via identifyWithToken); forwarded on the
+  // X-Mushi-User-Token header and verified server-side. Null when anonymous.
+  let userToken: string | null = null;
+  // Latest page-context snapshot published by the host (assistant + reports).
+  let currentPageContext: MushiPageContext | null = null;
+
   const apiClient = createApiClient({
     projectId: bootstrapConfig.projectId,
     apiKey: bootstrapConfig.apiKey,
     ...(bootstrapConfig.apiEndpoint ? { apiEndpoint: bootstrapConfig.apiEndpoint } : {}),
+    getUserToken: () => userToken,
   });
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
@@ -650,6 +658,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onTesterSignOut(): void {
       clearTesterJwt();
     },
+
+    // ── Assistant tab (P5) ───────────────────────────────────────────────
+    assistantEnabled: bootstrapConfig.assistant?.enabled === true,
+    ...(bootstrapConfig.assistant?.label ? { assistantLabel: bootstrapConfig.assistant.label } : {}),
+    ...(bootstrapConfig.assistant?.greeting ? { assistantGreeting: bootstrapConfig.assistant.greeting } : {}),
+    ...(bootstrapConfig.assistant?.suggestions ? { assistantSuggestions: bootstrapConfig.assistant.suggestions } : {}),
+    async onAssistantAsk(message: string, threadId: string | null) {
+      const res = await apiClient.askAssistant({
+        message,
+        threadId,
+        context: currentPageContext,
+      });
+      return res.ok ? (res.data ?? null) : null;
+    },
   }, MUSHI_SDK_VERSION);
   syncCaptureModules();
 
@@ -748,6 +770,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   if (shouldUseRuntimeConfig(config)) {
     const cached = readCachedRuntimeConfig(config.projectId);
+    // Apply cached config synchronously before first paint so the
+    // console-managed trigger/banner is correct on the very first render
+    // instead of flashing the bootstrap default then snapping.
     if (cached) applyRuntimeConfig(cached);
     apiClient.getSdkConfig().then((result) => {
       if (result.ok && result.data) {
@@ -759,8 +784,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }).catch((err) => {
       log.debug('Runtime SDK config fetch failed', { error: err instanceof Error ? err.message : String(err) });
     });
-  } else if (config.runtimeConfig !== false && isLocalhostEndpoint(resolveApiEndpoint(config))) {
-    log.debug('Runtime SDK config skipped for localhost apiEndpoint; set runtimeConfig: true to force it');
+  } else {
+    log.debug('Runtime SDK config disabled via runtimeConfig:false; using static bootstrap config');
   }
 
   void checkSdkFreshness();
@@ -1352,6 +1377,33 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       }
     },
 
+    identifyWithToken(token) {
+      userToken = token && typeof token === 'string' ? token : null;
+      if (userToken) {
+        const claims = parseIdentityToken(userToken);
+        if (claims?.sub) {
+          // Hydrate display identity from the (unverified) claims so the
+          // widget can greet the user; the server re-verifies for trust.
+          userInfo = {
+            id: claims.sub,
+            ...(claims.email ? { email: claims.email } : {}),
+            ...(claims.name ? { name: claims.name } : {}),
+          };
+        }
+        breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken()' });
+      } else {
+        breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken(null)' });
+      }
+    },
+
+    publishPageContext(context) {
+      currentPageContext = context && context.route ? context : null;
+    },
+
+    openAssistant() {
+      widget.openAssistantTab();
+    },
+
     addBreadcrumb(crumb) {
       breadcrumbs.add(crumb);
     },
@@ -1517,6 +1569,17 @@ function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig)
     runtimeLauncher ??
     runtime.widget?.trigger ??
     (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
+  // Never silently regress a host-configured visible widget to `hidden`.
+  // The console is authoritative, but only when it *explicitly* asks for
+  // `hidden` (launcher/trigger field present and set to hidden). A default
+  // or empty runtime payload must not disable a widget the host wired up —
+  // this was a primary cause of "the SDK doesn't show up" in dev.
+  const explicitHidden = runtimeLauncher === 'hidden' || runtime.widget?.trigger === 'hidden';
+  const hostTrigger = config.widget?.trigger;
+  const safeWidgetTrigger =
+    widgetTrigger === 'hidden' && !explicitHidden && hostTrigger && hostTrigger !== 'hidden'
+      ? hostTrigger
+      : widgetTrigger;
   // Build bannerConfig from flat runtime fields when present.
   const runtimeWidget = runtime.widget as Record<string, unknown> | undefined;
   const runtimeBannerVariant = runtimeWidget?.bannerVariant as string | undefined;
@@ -1551,7 +1614,7 @@ function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig)
     widget: {
       ...config.widget,
       ...runtime.widget,
-      ...(widgetTrigger ? { trigger: widgetTrigger as MushiWidgetConfig['trigger'] } : {}),
+      ...(safeWidgetTrigger ? { trigger: safeWidgetTrigger as MushiWidgetConfig['trigger'] } : {}),
       ...(derivedBannerConfig ? { bannerConfig: derivedBannerConfig } : {}),
       // betaMode is local-only: set by the host app, not the dashboard.
       // Restore it after the runtime spread so it is never silently cleared.
@@ -1631,9 +1694,15 @@ function resolveApiEndpoint(config: Pick<MushiConfig, 'apiEndpoint'>): string {
 }
 
 function shouldUseRuntimeConfig(config: MushiConfig): boolean {
-  if (config.runtimeConfig === false) return false;
-  if (config.runtimeConfig === true) return true;
-  return !isLocalhostEndpoint(resolveApiEndpoint(config));
+  // Workstream B fix: fetch runtime config everywhere by default — including
+  // localhost dev and HTTP origins. The previous behaviour skipped the fetch
+  // when the *API endpoint* itself was localhost, which silently dropped
+  // console-managed appearance (trigger/banner) on self-hosted dev stacks and
+  // forced apps to hand-wire `setTrigger('banner')`. The only opt-out is the
+  // explicit `runtimeConfig: false` (fully static/offline deployments); a
+  // failed fetch (e.g. dev server down) still degrades gracefully to the
+  // cached config + bootstrap defaults.
+  return config.runtimeConfig !== false;
 }
 
 async function runDiagnostics(options: {
@@ -1812,6 +1881,9 @@ function createNoopInstance(): MushiSDKInstance {
     captureEvent: async () => null,
     captureException: async () => null,
     identify: () => {},
+    identifyWithToken: () => {},
+    publishPageContext: () => {},
+    openAssistant: () => {},
     addBreadcrumb: () => {},
     getBreadcrumbs: () => [],
     setTag: () => {},

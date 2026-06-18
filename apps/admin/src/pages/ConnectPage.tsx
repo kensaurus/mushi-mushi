@@ -422,7 +422,7 @@ export function ConnectPage() {
         title={copy?.title ?? 'Connect & Update'}
         description={
           copy?.description ??
-          'Install the SDK, connect your IDE agent, set up the CLI, and keep everything up to date — all in one place.'
+          'Get from install to first diagnosis fast: drop in the SDK, add the MCP to Cursor or Claude, set up the CLI, and keep @mushi-mushi/* up to date — one place, no second LLM key.'
         }
         helpTitle={copy?.help?.title ?? 'About Connect & Update'}
         helpWhatIsIt={

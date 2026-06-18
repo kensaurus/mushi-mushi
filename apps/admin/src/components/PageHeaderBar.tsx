@@ -134,8 +134,11 @@ export function PageHeaderBar({
             <span className="shrink-0">{contextChip}</span>
           ) : null}
 
-          {/* Title */}
-          <h2 className="min-w-0 text-sm font-semibold leading-snug text-fg">
+          {/* Title — aria-label includes the middot scope when present (dot is aria-hidden visually). */}
+          <h2
+            className="min-w-0 text-sm font-semibold leading-snug text-fg text-balance"
+            {...(projectScope ? { 'aria-label': `${title} · ${projectScope}` } : {})}
+          >
             {title}
             {projectScope && (
               <>

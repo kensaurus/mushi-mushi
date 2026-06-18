@@ -6,7 +6,7 @@ import {
   Callout,
   DefinitionChips,
   CodeValue,
-  LongFormText,
+  ProseBlock,
 } from '../ui'
 import {
   CATEGORY_BADGE,
@@ -85,7 +85,7 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
 
       {report.summary && (
         <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
-          <LongFormText value={report.summary} />
+          <ProseBlock value={report.summary} mode="auto" />
         </Callout>
       )}
 
@@ -100,7 +100,7 @@ export function ClassificationFields({ report }: { report: ReportDetail }) {
 
       {reproductionHint && (
         <ContainedBlock label="Reproduction hint" tone="info">
-          <LongFormText value={reproductionHint} tone="muted" maxWidth="max-w-none" />
+          <ProseBlock value={reproductionHint} mode="auto" tone="muted" maxWidth="max-w-none" />
         </ContainedBlock>
       )}
       <ModelFooter model={report.stage1_model} latency={report.stage1_latency_ms} />
@@ -141,8 +141,8 @@ export function ScreenshotBlock({ url }: { url: string | null }) {
         <ImageZoom src={url} alt="Bug report screenshot" thumbClassName="max-h-72 inline-block" />
       ) : (
         <EmptySectionMessage
-          text="No screenshot was captured for this report."
-          hint="Reporters must tap the camera button in the widget before submitting."
+          text="No screenshot was attached to this report."
+          hint="The widget auto-captures the screen on open; the reporter can remove it before sending, and native SDKs need the optional view-shot dependency."
         />
       )}
     </div>

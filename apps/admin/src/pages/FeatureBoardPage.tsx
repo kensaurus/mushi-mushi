@@ -219,7 +219,7 @@ function FeatureRow({
     }
   }
 
-  const isShipped = Boolean(ticket.shipped_in_release_id)
+  const isShipped = ticket.status === 'resolved' || Boolean(ticket.shipped_in_release_id)
 
   return (
     <li className="flex gap-3 px-3 py-3 first:pt-2 last:pb-2">
@@ -369,7 +369,7 @@ export function FeatureBoardPage() {
     if (statusFilter === 'open') {
       list = list.filter((t) => t.status === 'open' || t.status === 'in_progress')
     } else if (statusFilter === 'shipped') {
-      list = list.filter((t) => Boolean(t.shipped_in_release_id))
+      list = list.filter((t) => t.status === 'resolved' || Boolean(t.shipped_in_release_id))
     }
 
     if (search.trim()) {

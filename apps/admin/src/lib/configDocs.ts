@@ -1397,7 +1397,7 @@ const BILLING: ConfigDoc[] = [
     backend: {
       table: 'support_requests',
       column: 'subject',
-      endpoint: 'POST /v1/admin/billing/support',
+      endpoint: 'POST /v1/support/contact',
       readBy: ['billing-support edge function'],
     },
     whenToChange:
@@ -1414,7 +1414,7 @@ const BILLING: ConfigDoc[] = [
     backend: {
       table: 'support_requests',
       column: 'category',
-      endpoint: 'POST /v1/admin/billing/support',
+      endpoint: 'POST /v1/support/contact',
       readBy: ['billing-support edge function'],
     },
     whenToChange: 'Always pick the closest match. Use `other` only when nothing else fits.',
@@ -1430,7 +1430,7 @@ const BILLING: ConfigDoc[] = [
     backend: {
       table: 'support_requests',
       column: 'body',
-      endpoint: 'POST /v1/admin/billing/support',
+      endpoint: 'POST /v1/support/contact',
       readBy: ['billing-support edge function'],
     },
     whenToChange:
@@ -1634,6 +1634,89 @@ const SDK_INSTALL: ConfigDoc[] = [
   },
 ];
 
+const ASSISTANT: ConfigDoc[] = [
+  {
+    id: 'assistant.config.enabled',
+    label: 'Page-aware assistant',
+    summary:
+      'Adds an "Ask" tab to the SDK widget so users get answers about your app, grounded only in the page they\'re on and the knowledge you author.',
+    howItWorks:
+      'When on, GET /v1/sdk/config returns the assistant block and the widget renders the tab. Each question hits POST /v1/sdk/assistant, which grounds the LLM in the published page context plus your knowledge corpus — it never reads user rows, source, or env. Uses your project BYOK key (Anthropic primary, OpenAI fallback) and logs every turn.',
+    default: { value: 'false (off)' },
+    backend: {
+      table: 'project_settings',
+      column: 'assistant_enabled',
+      endpoint: 'PUT /v1/admin/projects/:id/assistant',
+      readBy: ['sdk-assistant route (POST /v1/sdk/assistant)', 'public route (GET /v1/sdk/config)'],
+    },
+    whenToChange:
+      'Turn on once you have written a knowledge corpus (Advanced). Leave off if you only want bug reporting — the widget works fully without it.',
+    learnMore: { label: 'Assistant docs', href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_ASSISTANT.md' },
+  },
+  {
+    id: 'assistant.config.label',
+    label: 'Tab label',
+    summary: 'The label shown on the assistant tab in the widget (e.g. "Ask").',
+    howItWorks:
+      'Pure display string, capped at 24 chars. Returned in the SDK config so the widget can localise the tab without a rebuild.',
+    default: { value: 'Ask' },
+    backend: {
+      table: 'project_settings',
+      column: 'assistant_label',
+      endpoint: 'PUT /v1/admin/projects/:id/assistant',
+      readBy: ['public route (GET /v1/sdk/config)'],
+    },
+    whenToChange: 'Rename to match your product voice ("Help", "Guide", "Concierge").',
+  },
+  {
+    id: 'assistant.config.greeting',
+    label: 'Greeting',
+    summary: 'First message shown on an empty assistant thread.',
+    howItWorks:
+      'Display-only, capped at 400 chars. Shown before the user types anything; it does not prime the LLM.',
+    default: { value: 'Hi! Ask me anything about this page.' },
+    backend: {
+      table: 'project_settings',
+      column: 'assistant_greeting',
+      endpoint: 'PUT /v1/admin/projects/:id/assistant',
+      readBy: ['public route (GET /v1/sdk/config)'],
+    },
+    whenToChange: 'Set expectations — tell users what the assistant can and cannot help with.',
+  },
+  {
+    id: 'assistant.config.suggestions',
+    label: 'Starter questions',
+    summary: 'Up to 6 tappable starter-question chips shown on an empty thread.',
+    howItWorks:
+      'Stored as a JSON array of strings (each ≤ 120 chars, max 6). The widget renders them as one-tap prompts to lower the cold-start barrier.',
+    default: { value: 'unset (no chips)' },
+    backend: {
+      table: 'project_settings',
+      column: 'assistant_suggestions',
+      endpoint: 'PUT /v1/admin/projects/:id/assistant',
+      readBy: ['public route (GET /v1/sdk/config)'],
+    },
+    whenToChange: 'Seed with your top 3-6 FAQs so first-time users see what to ask.',
+  },
+  {
+    id: 'assistant.config.knowledge',
+    label: 'App knowledge corpus',
+    summary:
+      'Operator-authored text the assistant may cite — features, pricing, how-tos, FAQs. Capped at 40k chars and secret-scanned on save.',
+    howItWorks:
+      'This is the only grounding source besides the live page context. It is sent to the LLM on every turn, so it must never contain secrets — the save endpoint rejects text matching key/token/connection-string patterns (SECRET_DETECTED). Never returned in the public SDK config.',
+    default: { value: 'unset', range: 'max 40,000 chars' },
+    backend: {
+      table: 'project_settings',
+      column: 'assistant_knowledge',
+      endpoint: 'PUT /v1/admin/projects/:id/assistant',
+      readBy: ['sdk-assistant route (POST /v1/sdk/assistant)'],
+    },
+    whenToChange:
+      'Expand it whenever users ask something the assistant could not answer. Review recent turns in Advanced → logs to find gaps. Never paste keys, tokens, or source.',
+  },
+];
+
 /* ============================================================================
  *  REGISTRY
  * ============================================================================ */
@@ -1666,6 +1749,7 @@ export const CONFIG_DOC_GROUPS: ReadonlyArray<{
   { route: 'onboarding', label: 'Onboarding', entries: ONBOARDING },
   { route: 'mcp', label: 'MCP install', entries: MCP },
   { route: 'sdk-install', label: 'SDK install card', entries: SDK_INSTALL },
+  { route: 'assistant', label: 'Settings → Page-aware assistant', entries: ASSISTANT },
 ];
 
 /** Flat lookup map. Built once at module load. Anything that takes a `helpId`

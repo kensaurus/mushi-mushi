@@ -89,6 +89,11 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     sdk_native_trigger_mode?: string | null;
     sdk_min_description_length?: number | null;
     sdk_config_updated_at?: string | null;
+    // Workstream E — page-aware assistant.
+    assistant_enabled?: boolean | null;
+    assistant_label?: string | null;
+    assistant_greeting?: string | null;
+    assistant_suggestions?: unknown;
   }
 
   function oneOf<T extends readonly string[]>(
@@ -133,6 +138,22 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       native: {
         triggerMode: oneOf(row?.sdk_native_trigger_mode, SDK_NATIVE_TRIGGER_MODES, 'both'),
         minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
+      },
+      // Workstream E — page-aware assistant. `enabled` gates the "Ask" tab in the
+      // widget; greeting/suggestions are display-only. The knowledge corpus and
+      // LLM keys never leave the server (POST /v1/sdk/assistant).
+      assistant: {
+        enabled: row?.assistant_enabled ?? false,
+        label: (typeof row?.assistant_label === 'string' && row.assistant_label.trim())
+          ? row.assistant_label.trim().slice(0, 24)
+          : 'Ask',
+        greeting: typeof row?.assistant_greeting === 'string' ? row.assistant_greeting.slice(0, 400) : null,
+        suggestions: Array.isArray(row?.assistant_suggestions)
+          ? (row.assistant_suggestions as unknown[])
+              .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+              .map((s) => s.trim().slice(0, 120))
+              .slice(0, 6)
+          : [],
       },
     };
   }
@@ -255,7 +276,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
           'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
+          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
+          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
       )
       .eq('project_id', projectId)
       .maybeSingle();
