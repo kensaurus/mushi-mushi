@@ -7,7 +7,7 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate } from 'react-router-dom'
-import { Input, Btn, PageHelp, Loading } from '../components/ui'
+import { Input, Btn, PageHelpBanner, Loading } from '../components/ui'
 import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { detectRecoveryFromUrl } from '../lib/authRedirect'
 
@@ -78,7 +78,7 @@ export function ResetPasswordPage() {
 
         {!done && (
           <div className="mb-3">
-            <PageHelp
+            <PageHelpBanner
               title="About this page"
               whatIsIt="Set a new password for your admin account. You're seeing this because you opened the password recovery link from your email."
               useCases={[

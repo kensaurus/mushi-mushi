@@ -5,6 +5,7 @@ import type { Variables } from './types.ts';
 import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
+import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
@@ -494,6 +495,7 @@ registerActivationRoutes(app);
 
 registerAskMushiRoutes(app);
 registerConsoleKnowledgeRoutes(app);
+registerSdkAssistantRoutes(app);
 
 registerQueryFixesRepoRoutes(app);
 

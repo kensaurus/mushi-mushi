@@ -24,7 +24,9 @@ import { SnapshotSectionHint, Card,
   StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+  ProseBlock,
+} from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import {
@@ -150,6 +152,7 @@ export function IntelligencePage() {
   const {
     data: findingsPayload,
     loading: findingsLoading,
+    error: findingsError,
     reload: reloadFindings,
   } = usePageData<{ findings: ModernizationFinding[] }>(findingsPath, { deps: [activeProjectId, activeTab] })
 
@@ -644,6 +647,7 @@ export function IntelligencePage() {
 
           {activeTab === 'pipeline' && (
             <div className="space-y-4">
+              {findingsError && <ErrorAlert message={findingsError} onRetry={reloadFindings} />}
               <ModernizationFindings
                 findings={findings}
                 dispatchingId={dispatchingId}
@@ -701,7 +705,6 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
     )
   }
 
-  const headline = firstParagraph(latest.summary_md)
   return (
     <Card className="border-brand/20 bg-brand/5 p-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -713,18 +716,8 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
         )}
       </div>
       <ContainedBlock tone="muted" className="mt-2">
-        <p className="max-w-prose text-xs leading-relaxed whitespace-pre-line text-fg-secondary">
-          {headline}
-        </p>
+        <ProseBlock value={latest.summary_md} mode="excerpt" tone="muted" />
       </ContainedBlock>
     </Card>
   )
-}
-
-function firstParagraph(md: string | null | undefined): string {
-  if (!md) return 'Report generated, but no summary text was captured.'
-  const trimmed = md.trim()
-  const split = trimmed.split(/\n\s*\n/, 2)
-  const first = (split[0] ?? trimmed).replace(/^#+\s*/gm, '').trim()
-  return first.length > 380 ? `${first.slice(0, 380)}…` : first
 }

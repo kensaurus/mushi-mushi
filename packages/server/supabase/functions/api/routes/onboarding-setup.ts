@@ -189,6 +189,62 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
   });
 
   // =================================================================================
+  // GET /v1/admin/onboarding/time-to-first-diagnosis
+  // ---------------------------------------------------------------------------------
+  // The phase-1 north-star: how long from minting an ingest key to the first
+  // *classified* report (a plain-English diagnosis the user can act on).
+  //
+  // There is no dedicated `reports.classified_at` column, and `updated_at` is
+  // polluted by later batch updates (judge runs, replies, migrations), so it is
+  // NOT a reliable classification timestamp. Classification runs within seconds
+  // of ingest, so we use the `created_at` of the earliest report that actually
+  // produced a Stage-1 diagnosis (`stage1_classification IS NOT NULL`) as the
+  // honest, stable proxy for "first diagnosis available". Derived server-side so
+  // the Onboarding Verify tab can show one number.
+  // =================================================================================
+  app.get('/v1/admin/onboarding/time-to-first-diagnosis', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const resolved = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: true, data: { keyMintedAt: null, firstDiagnosisAt: null, ms: null } }),
+    });
+    if ('response' in resolved) return resolved.response;
+    const pid = resolved.project.id;
+
+    const [firstKeyRes, firstDiagnosisRes] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('reports')
+        .select('created_at')
+        .eq('project_id', pid)
+        .not('stage1_classification', 'is', null)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const keyMintedAt = (firstKeyRes.data?.created_at as string | null) ?? null;
+    const firstDiagnosisAt = (firstDiagnosisRes.data?.created_at as string | null) ?? null;
+
+    let ms: number | null = null;
+    if (keyMintedAt && firstDiagnosisAt) {
+      const delta = new Date(firstDiagnosisAt).getTime() - new Date(keyMintedAt).getTime();
+      // Guard against clock skew producing a negative interval.
+      ms = delta >= 0 ? delta : null;
+    }
+
+    return c.json({ ok: true, data: { keyMintedAt, firstDiagnosisAt, ms } });
+  });
+
+  // =================================================================================
   // GET /v1/admin/setup
   // ---------------------------------------------------------------------------------
   // Aggregates the seven onboarding signals per owned project. Single source of truth

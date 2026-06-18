@@ -48,19 +48,38 @@ async function sha256Hmac(secret: string, body: string): Promise<string> {
     .join('')
 }
 
-/** Loads the raw webhook secret from an environment variable reference.
- *  Convention matches the plugin-dispatch loader: the secret_hash column
- *  stores the SHA-256 of the raw secret, but the raw secret itself is
- *  stored in MUSHI_REWARD_WEBHOOK_SECRET_<id> env vars (or via BYOK vault).
- *  For simplicity in P1 we accept the raw secret stored in a separate
- *  project-level secret slot. This is resolved server-side only, never
- *  returned to clients.
+/** Loads the raw webhook secret (Workstream D2 — Vault-backed).
+ *
+ *  The `reward_webhooks.vault_secret_id` column holds a Vault reference to the
+ *  raw HMAC signing secret (the value shown once at creation, API-key style).
+ *  We dereference it server-side via the `vault_get_secret` RPC and never
+ *  return it to clients. `secret_hash` is retained only for display/equality.
+ *
+ *  Backward-compat: if a webhook predates the vault column, fall back to the
+ *  legacy per-id env var so existing deliveries keep signing.
  */
 async function loadWebhookSecret(
-  _db: SupabaseClient,
+  db: SupabaseClient,
   webhookId: string,
 ): Promise<string | null> {
-  // Env var: MUSHI_REWARD_WEBHOOK_SECRET_<uppercased-id-no-dashes>
+  const { data: row, error } = await db
+    .from('reward_webhooks')
+    .select('vault_secret_id')
+    .eq('id', webhookId)
+    .maybeSingle()
+
+  if (!error && row?.vault_secret_id) {
+    const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', {
+      secret_id: row.vault_secret_id as string,
+    })
+    if (vaultErr) {
+      wlog.warn('vault_get_secret failed for reward webhook', { webhookId, error: vaultErr.message })
+    } else if (typeof secret === 'string' && secret.length > 0) {
+      return secret
+    }
+  }
+
+  // Legacy fallback: MUSHI_REWARD_WEBHOOK_SECRET_<uppercased-id-no-dashes>.
   const envKey = `MUSHI_REWARD_WEBHOOK_SECRET_${webhookId.replace(/-/g, '').toUpperCase()}`
   return Deno.env.get(envKey) ?? null
 }

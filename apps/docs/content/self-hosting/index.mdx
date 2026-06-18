@@ -22,7 +22,23 @@ Mushi is **OSS-first**. The cloud product at `app.mushimushi.dev` runs the exact
 | Observability | Langfuse + Sentry | MIT / Commercial |
 | Sandbox | E2B managed (or self-hosted Modal) | External |
 
-## Quick path
+## Fastest path — Docker Compose
+
+The whole stack (Postgres + Auth + REST + Storage + edge functions + console)
+in one command, no managed Supabase project required:
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git
+cd mushi-mushi/deploy
+cp .env.example .env   # set ANTHROPIC_API_KEY + Supabase creds
+docker compose up -d
+```
+
+See [Self-host in minutes](/self-hosting/docker-compose) for the full walkthrough.
+
+## Managed-Supabase path
+
+Prefer a hosted Supabase project? Link it and push the schema:
 
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git

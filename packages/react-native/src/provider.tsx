@@ -39,23 +39,31 @@ import {
 } from 'react'
 import {
   createApiClient,
+  createBreadcrumbBuffer,
   DEFAULT_API_ENDPOINT,
   newUuid,
+  parseIdentityToken,
   type MushiReport,
   type MushiApiClient,
+  type MushiBreadcrumb,
+  type MushiTimelineEntry,
+  type BreadcrumbBuffer,
   type MushiRewardsConfig,
   type MushiReputationResult,
   type MushiTierResult,
   type MushiReporterReport,
   type MushiReporterComment,
   type MushiHallOfFameEntry,
+  type MushiPageContext,
 } from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
+import { getDeviceFingerprintHash } from './capture/fingerprint'
 import { AsyncStorageQueue } from './storage/async-storage-queue'
 import { MushiBottomSheet } from './components/MushiBottomSheet'
 import { MushiFloatingButton } from './components/MushiFloatingButton'
+import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 
 export interface MushiRNConfig {
   projectId: string
@@ -82,8 +90,19 @@ export interface MushiRNConfig {
     console?: boolean
     network?: boolean
     navigation?: boolean
+    /**
+     * Capture a screenshot of the current screen when the widget opens.
+     * Defaults to `true`. Requires the optional `react-native-view-shot`
+     * peer dependency — when it isn't installed, capture is skipped silently
+     * (the report is still sent without an image). The user always sees a
+     * thumbnail in the sheet and can remove it before submitting, so
+     * sensitive screens (balances, PII) are never sent without consent.
+     */
+    screenshot?: boolean
     maxConsoleEntries?: number
     maxNetworkEntries?: number
+    /** Hard cap on the breadcrumb / repro-timeline ring buffer. Default 50. */
+    maxBreadcrumbs?: number
   }
   storage?: {
     maxQueueSize?: number
@@ -108,10 +127,28 @@ export interface MushiRNInstance {
   // v0.10.0: identity methods (previously caused workarounds in glot.it + yen-yen)
   /** Set the current authenticated user. Equivalent to Mushi.identify() on web. */
   identify(userId: string, traits?: { email?: string; name?: string; provider?: string; [k: string]: unknown }): void
+  /**
+   * Alias for {@link identify} matching the web SDK's `Mushi.setUser()`.
+   * Accepts an object so hosts can call `setUser({ id, email, name })`.
+   */
+  setUser(user: { id: string; email?: string; name?: string; provider?: string }): void
+  /**
+   * Identify the current end user with a signed Mushi identity JWT minted by
+   * the host server. Mirrors the web SDK; the backend verifies the signature
+   * before trusting any claim. Pass `null` on logout to go anonymous.
+   */
+  identifyWithToken(token: string | null): void
+  /**
+   * Publish the current screen's context so the assistant can answer
+   * page-aware questions. Pass `null` to clear.
+   */
+  publishPageContext(context: MushiPageContext | null): void
   /** Attach arbitrary key/value metadata to subsequent reports. */
   setMetadata(key: string, value: unknown): void
   /** Set the current screen context attached to subsequent reports. */
   setScreen(screen: { name: string; route?: string; feature?: string }): void
+  /** Append a breadcrumb to the repro timeline ring buffer. */
+  addBreadcrumb(crumb: Omit<MushiBreadcrumb, 'timestamp'> & { timestamp?: number }): void
 
   // Reporter API — returns reports/comments for this device's persistent token
   /** List this device's reports ordered by most recent. Returns [] on failure. */
@@ -147,6 +184,26 @@ type ExpoSensorsModule = {
   }
 }
 
+/** Map a breadcrumb category to the repro-timeline `kind` enum.
+ *  Lifecycle/console crumbs carry a human `message`, so they render as `log`
+ *  rows (the admin TimelineCard reads `payload.message` for `log`); navigation
+ *  crumbs carry a `route` the admin reads for `route` rows. */
+function breadcrumbToTimelineKind(category: MushiBreadcrumb['category']): MushiTimelineEntry['kind'] {
+  switch (category) {
+    case 'navigation':
+      return 'route'
+    case 'ui.click':
+    case 'ui.tap':
+      return 'click'
+    case 'xhr':
+    case 'fetch':
+    case 'network':
+      return 'request'
+    default:
+      return 'log'
+  }
+}
+
 export function MushiProvider({ children, config: configProp, ...barePropConfig }: MushiRNConfig & { children: ReactNode; config?: Partial<MushiRNConfig> }) {
   // Merge: bare props override config prop. Env vars fill in any missing creds.
   // This lets <MushiProvider> be used three ways:
@@ -163,10 +220,30 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     ...configProp,
     ...barePropConfig,
   } as MushiRNConfig
+
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    if (!config.projectId || !config.apiKey) {
+      console.warn(
+        '[MushiProvider] Missing projectId or apiKey — set MUSHI_PROJECT_ID / MUSHI_API_KEY ' +
+          '(or EXPO_PUBLIC_* equivalents) or pass them as props.',
+      )
+    }
+  }
+
   const consoleRef = useRef<ReturnType<typeof setupConsoleCapture> | null>(null)
   const networkRef = useRef<ReturnType<typeof setupNetworkCapture> | null>(null)
   const queueRef = useRef<AsyncStorageQueue | null>(null)
   const apiClientRef = useRef<MushiApiClient | null>(null)
+
+  // Stable per-app-launch session id so the admin console can group every
+  // report + breadcrumb from the same run. Regenerated on each cold start.
+  const sessionIdRef = useRef<string>(`sess_${newUuid()}`)
+  // Breadcrumb / repro-timeline ring buffer (mirrors the web SDK). Captures
+  // SDK lifecycle, screen changes, and host-added crumbs; sent on every report
+  // as both `breadcrumbs` and a derived `timeline` (repro_timeline).
+  const breadcrumbsRef = useRef<BreadcrumbBuffer>(
+    createBreadcrumbBuffer({ max: config.capture?.maxBreadcrumbs ?? 50 }),
+  )
 
   const [sheetVisible, setSheetVisible] = useState(false)
   // Screenshot captured just before the sheet opens (captured while app content is still visible)
@@ -182,6 +259,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       resolveReporterTokenReady = resolve
     }),
   )
+  // Signed end-user identity JWT (set via identifyWithToken) + latest page
+  // context. Forwarded to the backend on the X-Mushi-User-Token header.
+  const userTokenRef = useRef<string | null>(null)
+  const pageContextRef = useRef<MushiPageContext | null>(null)
 
   // Validate: an explicitly empty string is a misconfiguration.
   const rawEndpoint = config.apiEndpoint ?? config.endpoint
@@ -209,6 +290,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       projectId: config.projectId,
       apiKey: config.apiKey,
       apiEndpoint,
+      getUserToken: () => userTokenRef.current,
     })
     queueRef.current = new AsyncStorageQueue({
       maxSize: config.storage?.maxQueueSize,
@@ -221,6 +303,13 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     })
 
     queueRef.current.flush().catch(() => {})
+
+    breadcrumbsRef.current.add({
+      category: 'lifecycle',
+      level: 'info',
+      message: 'Mushi SDK initialised',
+      data: { sdk: MUSHI_SDK_PACKAGE, version: MUSHI_SDK_VERSION },
+    })
 
     // Load or create a stable per-install reporter token from AsyncStorage so
     // listMyReports() scopes results to this device's reports correctly.
@@ -281,6 +370,21 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   }, [])
 
   const open = useCallback(() => {
+    breadcrumbsRef.current.add({
+      category: 'lifecycle',
+      level: 'info',
+      message: 'Widget opened',
+      ...(screenRef.current?.name ? { data: { screen: screenRef.current.name } } : {}),
+    })
+
+    // Screenshot capture is opt-out via `capture.screenshot: false`. When off,
+    // open the sheet immediately with no image.
+    if (config.capture?.screenshot === false) {
+      setSheetScreenshot(null)
+      setSheetVisible(true)
+      return
+    }
+
     // Capture a screenshot of the current app state BEFORE the sheet overlays it.
     // react-native-view-shot is an optional peer dep — fall through immediately when
     // it isn't installed. The sheet opens after capture resolves (typ. <150 ms).
@@ -301,7 +405,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       .then((url: string) => { setSheetScreenshot(url) })
       .catch(() => { setSheetScreenshot(null) })
       .finally(() => { setSheetVisible(true) })
-  }, [])
+  }, [config.capture?.screenshot])
   const close = useCallback(() => setSheetVisible(false), [])
   const attachTo = useCallback(() => ({ onPress: open }), [open])
 
@@ -346,12 +450,30 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     async (data: { description: string; category: string; screenshotDataUrl?: string }) => {
       const deviceInfo = getDeviceInfo()
 
+      breadcrumbsRef.current.add({
+        category: 'lifecycle',
+        level: 'info',
+        message: 'Report submitted',
+        data: { category: data.category },
+      })
+
       // Build rich contextual metadata from identity + screen state so the
       // admin console shows who reported and from which screen without parsing
-      // the description text. Merges explicit setMetadata() calls last so the
-      // host app can override anything.
+      // the description text. Identity is emitted BOTH nested (`metadata.user`,
+      // the canonical shape the web SDK + server `resolveEndUser()` read) AND
+      // flat (`userId`/`userEmail`/`userName`) for back-compat with older
+      // server builds. Merges explicit setMetadata() calls last so the host
+      // app can override anything.
       const contextMeta: Record<string, unknown> = {}
-      if (userRef.current?.id) contextMeta.userId = userRef.current.id
+      if (userRef.current?.id) {
+        contextMeta.user = {
+          id: userRef.current.id,
+          ...(userRef.current.email ? { email: userRef.current.email } : {}),
+          ...(userRef.current.name ? { name: userRef.current.name } : {}),
+          ...(userRef.current.provider ? { provider: userRef.current.provider } : {}),
+        }
+        contextMeta.userId = userRef.current.id
+      }
       if (userRef.current?.email) contextMeta.userEmail = userRef.current.email
       if (userRef.current?.name) contextMeta.userName = userRef.current.name
       if (screenRef.current?.name) contextMeta.screenName = screenRef.current.name
@@ -360,6 +482,18 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       const merged = Object.keys(metadataRef.current).length > 0
         ? { ...contextMeta, ...metadataRef.current }
         : Object.keys(contextMeta).length > 0 ? contextMeta : undefined
+
+      // Snapshot the breadcrumb ring and derive a chronological repro timeline
+      // so the admin console's "Repro timeline" renders instead of nudging
+      // "Upgrade the SDK". One buffer is the single source of truth for both.
+      const breadcrumbs = breadcrumbsRef.current.getAll()
+      const timeline: MushiTimelineEntry[] = breadcrumbs.map((c) => ({
+        ts: c.timestamp,
+        kind: breadcrumbToTimelineKind(c.category),
+        payload: { message: c.message, level: c.level, ...(c.data ?? {}) },
+      }))
+
+      const fingerprintHash = getDeviceFingerprintHash(deviceInfo)
 
       const report: MushiReport = {
         id: newUuid(),
@@ -384,7 +518,14 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           })) ?? [],
         screenshotDataUrl: data.screenshotDataUrl,
         metadata: merged,
+        sessionId: sessionIdRef.current,
         reporterToken: reporterTokenRef.current,
+        ...(fingerprintHash ? { fingerprintHash } : {}),
+        ...(deviceInfo.appVersion ? { appVersion: deviceInfo.appVersion } : {}),
+        sdkPackage: MUSHI_SDK_PACKAGE,
+        sdkVersion: MUSHI_SDK_VERSION,
+        ...(breadcrumbs.length > 0 ? { breadcrumbs } : {}),
+        ...(timeline.length > 0 ? { timeline } : {}),
         createdAt: new Date().toISOString(),
       }
       const client = apiClientRef.current
@@ -452,11 +593,53 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           provider: traits?.provider,
         }
       },
+      setUser(user) {
+        userRef.current = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          provider: user.provider,
+        }
+      },
+      identifyWithToken(token) {
+        userTokenRef.current = token && typeof token === 'string' ? token : null
+        if (userTokenRef.current) {
+          const claims = parseIdentityToken(userTokenRef.current)
+          if (claims?.sub) {
+            userRef.current = {
+              id: claims.sub,
+              ...(claims.email ? { email: claims.email } : {}),
+              ...(claims.name ? { name: claims.name } : {}),
+            }
+          }
+        }
+      },
+      publishPageContext(context) {
+        pageContextRef.current = context && context.route ? context : null
+      },
       setMetadata(key, value) {
         metadataRef.current[key] = value
       },
       setScreen(screen) {
+        const prev = screenRef.current?.name
         screenRef.current = screen
+        if (screen.name && screen.name !== prev) {
+          breadcrumbsRef.current.add({
+            category: 'navigation',
+            level: 'info',
+            message: `Navigated to ${screen.name}`,
+            // Always include `route` (fallback to the screen name) so the
+            // admin repro-timeline renders the destination instead of
+            // "unknown route" when the host only set a screen name.
+            data: {
+              route: screen.route ?? screen.name,
+              ...(screen.feature ? { feature: screen.feature } : {}),
+            },
+          })
+        }
+      },
+      addBreadcrumb(crumb) {
+        breadcrumbsRef.current.add(crumb)
       },
 
       // Reporter API — scoped to the device's persistent reporter token

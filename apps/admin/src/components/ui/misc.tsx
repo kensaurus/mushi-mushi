@@ -6,6 +6,7 @@ import { pctToneClass } from '../../lib/tokens';
 import { Btn } from './forms';
 import { Card } from './layout';
 import { RelativeTime } from './metrics';
+import { shouldTooltipNowrap, tooltipLayoutClasses } from './tooltip-layout';
 
 
 /* ── FilterChip ─────────────────────────────────────────────────────────── */
@@ -305,7 +306,7 @@ interface TooltipProps {
   content: ReactNode
   children: ReactNode
   side?: TooltipSide
-  /** When false, wraps are allowed — use under narrow headers where long tips would clip. */
+  /** When omitted, plain strings wrap once they exceed ~48 chars or read like sentences. */
   nowrap?: boolean
   /** Render in document.body so tips escape overflow:hidden ancestors (e.g. React Flow). */
   portal?: boolean
@@ -417,10 +418,11 @@ export function Tooltip({
   content,
   children,
   side = 'auto',
-  nowrap = true,
+  nowrap,
   portal = true,
   className,
 }: TooltipProps) {
+  const resolvedNowrap = shouldTooltipNowrap(content, nowrap)
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const anchorRef = useRef<HTMLSpanElement>(null)
@@ -498,12 +500,7 @@ export function Tooltip({
     right: 'left-full top-1/2 -translate-y-1/2 ml-1.5',
   }
 
-  const wrapClass = nowrap
-    ? 'whitespace-nowrap'
-    : 'whitespace-normal text-left leading-snug break-words [overflow-wrap:anywhere]'
-  const widthClass = nowrap
-    ? 'w-max max-w-[min(20rem,calc(100vw-24px))]'
-    : 'block w-max min-w-[10rem] max-w-[min(24rem,calc(100vw-24px))]'
+  const layoutClass = tooltipLayoutClasses(resolvedNowrap)
   const tooltipNode = visible ? (
     <span
       ref={portal ? tooltipRef : undefined}
@@ -511,8 +508,8 @@ export function Tooltip({
       style={portal ? portalStyle : undefined}
       className={
         portal
-          ? `${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
-          : `absolute ${positions[resolvedSide]} z-[100] ${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
+          ? `${TOOLTIP_SURFACE} ${layoutClass}`
+          : `absolute ${positions[resolvedSide]} z-[100] ${TOOLTIP_SURFACE} ${layoutClass}`
       }
     >
       {content}

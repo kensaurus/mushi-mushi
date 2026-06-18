@@ -8,16 +8,21 @@
 
 import { useState } from 'react'
 import { NODE_COLORS } from '../../lib/tokens'
+import { readVizToken } from '../../lib/vizTokens'
 import { NODE_TYPE_LABELS, NODE_TYPES } from './types'
 
-const LEGEND_EDGE_COLORS: Array<{ key: string; label: string; color: string }> = [
-  { key: 'regression_of', label: 'regression', color: 'oklch(0.65 0.22 25)' },
-  { key: 'fix_verified', label: 'fix verified', color: 'oklch(0.72 0.19 155)' },
-  { key: 'related', label: 'other', color: 'oklch(0.50 0 0)' },
+const LEGEND_EDGE_SPECS: Array<{ key: string; label: string; token: string }> = [
+  { key: 'regression_of', label: 'regression', token: 'viz-flow-danger' },
+  { key: 'fix_verified', label: 'fix verified', token: 'viz-score-ok' },
+  { key: 'related', label: 'other', token: 'viz-graph-muted' },
 ]
 
 export function GraphLegend() {
   const [open, setOpen] = useState(false)
+  const edgeColors = LEGEND_EDGE_SPECS.map((spec) => ({
+    ...spec,
+    color: readVizToken(spec.token),
+  }))
   return (
     <div className="rounded-md border border-edge-subtle bg-surface-raised/95 backdrop-blur shadow-raised text-2xs">
       <button
@@ -59,7 +64,7 @@ export function GraphLegend() {
           <div>
             <div className="text-3xs uppercase tracking-wider text-fg-faint mb-0.5">Edges</div>
             <div className="space-y-0.5">
-              {LEGEND_EDGE_COLORS.map((e) => (
+              {edgeColors.map((e) => (
                 <div key={e.key} className="flex items-center gap-1.5 text-fg-muted">
                   <span
                     className="inline-block h-px w-4"

@@ -51,11 +51,25 @@ import {
   type ViewStyle,
   type TextStyle,
 } from 'react-native'
+import { mushiPalette } from '@mushi-mushi/core'
 import { useMushiContext } from '../provider'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.55
 const DISMISS_THRESHOLD = 80
+
+/**
+ * Neon-lime accent — matches @mushi-mushi/web `.mushi-banner.neon` (#0FFF50)
+ * so the report sheet reads as the same product surface as the banner the
+ * user tapped to open it. `ink` is the dark text/icon colour used on top of
+ * the lime so contrast stays AA on the bright accent.
+ */
+const NEON = {
+  accent: '#0FFF50',
+  accentHover: '#00E646',
+  ink: '#0a1a0a',
+  border: '#00C43A',
+} as const
 
 const CATEGORIES = [
   { key: 'bug', emoji: '🐛', label: 'Bug' },
@@ -235,9 +249,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 
   const activeScreenshot = screenshotDataUrl && screenshotAttached ? screenshotDataUrl : null
 
+  // Surface/text colours come from the shared washi/sumi tokens so the sheet
+  // reads as the same product as the web widget (cross-platform coherence —
+  // Workstream C). The neon accent is intentionally retained: it matches the
+  // banner the user tapped to open this sheet.
+  const pal = mushiPalette(dark ? 'dark' : 'light')
   const colors = dark
-    ? { bg: '#1c1c1e', text: '#f2f2f7', sub: '#8e8e93', card: '#2c2c2e', accent: '#0a84ff', border: '#38383a', backdrop: 'rgba(0,0,0,0.6)', disabled: '#3a3a3c', disabledText: '#636366' }
-    : { bg: '#ffffff', text: '#1c1c1e', sub: '#8e8e93', card: '#f2f2f7', accent: '#007aff', border: '#e5e5ea', backdrop: 'rgba(0,0,0,0.35)', disabled: '#d1d1d6', disabledText: '#8e8e93' }
+    ? { bg: pal.paper, text: pal.ink, sub: pal.inkMuted, card: pal.paperRaised, accent: NEON.accent, accentInk: NEON.ink, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.6)', disabled: '#3a3a3c', disabledText: pal.inkFaint }
+    : { bg: pal.paperRaised, text: pal.ink, sub: pal.inkMuted, card: pal.paper, accent: NEON.accent, accentInk: NEON.ink, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.35)', disabled: '#d1d1d6', disabledText: pal.inkFaint }
 
   const canSubmit = !!category && description.trim().length > 0 && phase === 'form'
 
@@ -267,6 +286,15 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
             <View style={[s.handle, { backgroundColor: colors.sub }]} />
           </View>
 
+          {/* Neon brand header — mirrors the web SDK banner so the sheet reads
+              as the same surface the user tapped to open it. */}
+          <View style={[s.brandHeader, { backgroundColor: NEON.accent, borderBottomColor: NEON.border }]}>
+            <Text style={[s.brandEyebrow, { color: NEON.ink }]}>MUSHI · BETA</Text>
+            <Text style={[s.brandTitle, { color: NEON.ink }]}>
+              {sheetTab === 'inbox' ? 'Your reports' : sheetTab === 'community' ? 'Community' : 'Report an issue'}
+            </Text>
+          </View>
+
           {/* Tab row */}
           <View style={s.tabRow}>
             {(['report', 'inbox', 'community'] as const).map((tab) => (
@@ -279,8 +307,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 }}
                 style={[s.tabBtn, sheetTab === tab && { borderBottomColor: colors.accent }]}
               >
-                <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.accent : colors.sub }]}>
-                  {tab === 'report' ? 'Report' : tab === 'inbox' ? 'Inbox' : '🌐'}
+                <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.text : colors.sub }]}>
+                  {tab === 'report' ? 'Report' : tab === 'inbox' ? 'Your reports' : 'Community'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -306,7 +334,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                   ) && (
                     <View style={s.verifyRow}>
                       <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.accent }]} onPress={() => submitFeedback('confirms')}>
-                        <Text style={s.submitText}>Yes, fixed</Text>
+                        <Text style={[s.submitText, { color: colors.accentInk }]}>Yes, fixed</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.border }]} onPress={() => submitFeedback('not_fixed')}>
                         <Text style={[s.submitText, { color: colors.text }]}>Not fixed</Text>
@@ -321,7 +349,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                     onChangeText={setReplyText}
                   />
                   <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]} onPress={sendReply}>
-                    <Text style={s.submitText}>Send</Text>
+                    <Text style={[s.submitText, { color: colors.accentInk }]}>Send</Text>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -337,7 +365,6 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
             </ScrollView>
           ) : sheetTab === 'community' ? (
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
-              <Text style={[s.title, { color: colors.text }]}>🌐 Mushi Community</Text>
               <Text style={{ color: colors.sub, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
                 Sign in to track your reports across apps and see the global leaderboard. No password needed.
               </Text>
@@ -351,7 +378,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 textContentType="emailAddress"
               />
               <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]}>
-                <Text style={s.submitText}>Send sign-in link →</Text>
+                <Text style={[s.submitText, { color: colors.accentInk }]}>Send sign-in link →</Text>
               </TouchableOpacity>
               <Text style={{ color: colors.sub, fontSize: 11, textAlign: 'center', marginTop: 12 }}>
                 We'll email you a one-tap sign-in link. No password, ever.
@@ -365,7 +392,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
           ) : (
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 24 }}>
-              <Text style={[s.title, { color: colors.text }]}>Report an issue</Text>
+              <Text style={[s.stepLabel, { color: colors.sub }]}>What kind of issue?</Text>
 
               {/* Categories */}
               <View style={s.catRow}>
@@ -388,7 +415,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       <Text
                         style={[
                           s.catLabel,
-                          { color: active ? '#fff' : colors.text } as TextStyle,
+                          { color: active ? colors.accentInk : colors.text } as TextStyle,
                         ]}
                       >
                         {c.label}
@@ -456,8 +483,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                   { backgroundColor: canSubmit ? colors.accent : colors.disabled },
                 ]}
               >
-                <Text style={[s.submitText, !canSubmit && { color: colors.disabledText }]}>
-                  {phase === 'sending' ? 'Sending…' : 'Submit'}
+                <Text style={[s.submitText, { color: canSubmit ? colors.accentInk : colors.disabledText }]}>
+                  {phase === 'sending' ? 'Sending…' : 'Submit report'}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -498,6 +525,24 @@ const s = StyleSheet.create({
     borderRadius: 3,
     opacity: 0.5,
   },
+  brandHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1.5,
+  },
+  brandEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 2,
+    opacity: 0.7,
+  },
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
   body: {
     paddingHorizontal: 20,
     paddingTop: 4,
@@ -506,6 +551,14 @@ const s = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 16,
+  },
+  stepLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    marginTop: 8,
+    marginBottom: 10,
+    textTransform: 'uppercase',
   },
   catRow: {
     flexDirection: 'row',

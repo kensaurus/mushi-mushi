@@ -201,6 +201,7 @@ export function PublicHomePage() {
           <Hero />
           <MushiCanvas />
           <SwitchingFromStrip />
+          <DogfoodProofSection />
           <SynthesisLayerSection />
           <ClosingCta />
           {/* No public health endpoint reachable from the admin SPA, so the
@@ -345,6 +346,111 @@ function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
         Get started
       </Link>
     </>
+  )
+}
+
+// ─── Dogfood proof ────────────────────────────────────────────────────────
+
+/**
+ * "Mushi runs on Mushi" — real before/after captures from the hosted project
+ * (dxptnwrhwsqckaftyymj), the Langfuse "it observes its own LLM calls" move.
+ * Every row links to the public PR it produced; numbers are pulled from
+ * `docs/dogfood.md`, not invented. If a capture is retired, update both.
+ */
+interface DogfoodCase {
+  user: string
+  diagnosis: string
+  meta: string
+  prHref: string
+  prLabel: string
+}
+
+const DOGFOOD_CASES: DogfoodCase[] = [
+  {
+    user: '"The balance shows the old converted value until I restart the app."',
+    diagnosis:
+      'Wallet balance does not refresh after a currency swap until the app is fully restarted.',
+    meta: 'yen-yen · high · 0.95',
+    prHref: 'https://github.com/kensaurus/yen-yen/pull/69',
+    prLabel: 'yen-yen #69',
+  },
+  {
+    user: '"The fixed header covers the first transaction row when I scroll."',
+    diagnosis:
+      'Sticky header clips the first Transactions row on both iOS and Android.',
+    meta: 'yen-yen · high · 0.95',
+    prHref: 'https://github.com/kensaurus/yen-yen/pull/68',
+    prLabel: 'yen-yen #68',
+  },
+  {
+    user: '(inbox renders empty despite data)',
+    diagnosis:
+      'FeedbackInboxScreen renders an empty list despite the API returning data — state not updated after async load.',
+    meta: 'yen-yen · high · 0.82',
+    prHref: 'https://github.com/kensaurus/yen-yen/pull/67',
+    prLabel: 'yen-yen #67',
+  },
+]
+
+function DogfoodProofSection() {
+  return (
+    <section
+      aria-labelledby="dogfood-heading"
+      className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
+    >
+      <p className="font-mono text-3xs uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+        <span className="text-[var(--mushi-ink)]">Dogfood</span>
+        <span className="mx-2 opacity-40">/</span>
+        Mushi runs on Mushi
+      </p>
+      <h2
+        id="dogfood-heading"
+        className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-3xl"
+      >
+        Real bugs, translated and fixed — in our own apps.
+      </h2>
+      <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+        These aren&rsquo;t mockups. Each row is a real report from a sibling app,
+        the plain-English diagnosis Mushi produced, and the public PR the
+        paste-ready fix prompt opened. One incident-loop run went from{' '}
+        <em className="not-italic font-medium text-[var(--mushi-vermillion)]">
+          report to draft PR in ~18 seconds
+        </em>
+        .
+      </p>
+
+      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {DOGFOOD_CASES.map((c) => (
+          <div
+            key={c.prHref}
+            className="flex flex-col rounded-xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] p-4"
+          >
+            <p className="text-xs leading-relaxed text-[var(--mushi-ink-muted)]">
+              <span className="font-medium text-[var(--mushi-ink)]">User: </span>
+              {c.user}
+            </p>
+            <p className="mt-2 flex-1 text-xs leading-relaxed text-[var(--mushi-ink-muted)]">
+              <span className="font-medium text-[var(--mushi-vermillion)]">Mushi: </span>
+              {c.diagnosis}
+            </p>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <span className="font-mono text-3xs uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
+                {c.meta}
+              </span>
+              <a
+                href={c.prHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] px-2.5 py-1 font-mono text-3xs text-[var(--mushi-ink)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+              >
+                {c.prLabel}
+                <span aria-hidden>↗</span>
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

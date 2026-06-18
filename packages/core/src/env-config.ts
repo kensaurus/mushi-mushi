@@ -15,6 +15,13 @@
  * Vite statically replaces `import.meta.env.VITE_*` at build time, so the
  * literal key references here are intentional — they make bundlers replace
  * the values even when accessed indirectly.
+ *
+ * Next.js and Expo, by contrast, do STATIC string replacement that only
+ * inlines literal `process.env.NEXT_PUBLIC_*` / `process.env.EXPO_PUBLIC_*`
+ * dot-notation references. A dynamic `process.env[key]` lookup is explicitly
+ * unsupported and silently resolves to `undefined` in production client
+ * bundles (Expo even ships an ESLint rule against it). Every `process.env`
+ * read below is therefore a literal, statically-analyzable reference.
  */
 
 export interface ResolvedEnvConfig {
@@ -37,12 +44,20 @@ function tryImportMetaEnv(key: string): string | undefined {
   }
 }
 
-function tryProcessEnv(key: string): string | undefined {
+// `process` is declared locally because the core package intentionally omits
+// `@types/node` to stay browser-safe. The reads below MUST use literal
+// `process.env.<KEY>` dot-notation (never `process.env[key]`) so Next.js and
+// Expo can inline the values during their build-time static replacement pass.
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * Evaluate a literal `process.env.<KEY>` read, degrading to `undefined` when
+ * `process` is not defined (a pure browser runtime where the bundler did not
+ * inline the value) instead of throwing a ReferenceError.
+ */
+function readProcessEnv(read: () => string | undefined): string | undefined {
   try {
-    // Access via globalThis to avoid requiring @types/node in browser packages.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const proc = (globalThis as any).process;
-    return proc && proc.env ? (proc.env[key] as string | undefined) : undefined;
+    return read();
   } catch {
     return undefined;
   }
@@ -59,9 +74,9 @@ export function resolveEnvConfig(): ResolvedEnvConfig {
     tryImportMetaEnv('NEXT_PUBLIC_MUSHI_PROJECT_ID'),
     tryImportMetaEnv('NUXT_PUBLIC_MUSHI_PROJECT_ID'),
     tryImportMetaEnv('EXPO_PUBLIC_MUSHI_PROJECT_ID'),
-    tryProcessEnv('NEXT_PUBLIC_MUSHI_PROJECT_ID'),
-    tryProcessEnv('EXPO_PUBLIC_MUSHI_PROJECT_ID'),
-    tryProcessEnv('MUSHI_PROJECT_ID'),
+    readProcessEnv(() => process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID),
+    readProcessEnv(() => process.env.EXPO_PUBLIC_MUSHI_PROJECT_ID),
+    readProcessEnv(() => process.env.MUSHI_PROJECT_ID),
   );
 
   const apiKey = first(
@@ -69,16 +84,19 @@ export function resolveEnvConfig(): ResolvedEnvConfig {
     tryImportMetaEnv('NEXT_PUBLIC_MUSHI_API_KEY'),
     tryImportMetaEnv('NUXT_PUBLIC_MUSHI_API_KEY'),
     tryImportMetaEnv('EXPO_PUBLIC_MUSHI_API_KEY'),
-    tryProcessEnv('NEXT_PUBLIC_MUSHI_API_KEY'),
-    tryProcessEnv('EXPO_PUBLIC_MUSHI_API_KEY'),
-    tryProcessEnv('MUSHI_API_KEY'),
+    readProcessEnv(() => process.env.NEXT_PUBLIC_MUSHI_API_KEY),
+    readProcessEnv(() => process.env.EXPO_PUBLIC_MUSHI_API_KEY),
+    readProcessEnv(() => process.env.MUSHI_API_KEY),
   );
 
   const apiEndpoint = first(
     tryImportMetaEnv('VITE_MUSHI_API_ENDPOINT'),
     tryImportMetaEnv('NEXT_PUBLIC_MUSHI_API_ENDPOINT'),
-    tryProcessEnv('NEXT_PUBLIC_MUSHI_API_ENDPOINT'),
-    tryProcessEnv('MUSHI_API_ENDPOINT'),
+    tryImportMetaEnv('NUXT_PUBLIC_MUSHI_API_ENDPOINT'),
+    tryImportMetaEnv('EXPO_PUBLIC_MUSHI_API_ENDPOINT'),
+    readProcessEnv(() => process.env.NEXT_PUBLIC_MUSHI_API_ENDPOINT),
+    readProcessEnv(() => process.env.EXPO_PUBLIC_MUSHI_API_ENDPOINT),
+    readProcessEnv(() => process.env.MUSHI_API_ENDPOINT),
   );
 
   const result: ResolvedEnvConfig = {};

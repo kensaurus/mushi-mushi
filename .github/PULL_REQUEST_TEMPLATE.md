@@ -17,6 +17,8 @@ Implementation approach (if non-obvious).
 - [ ] Lint passes (`pnpm lint`)
 - [ ] Changeset added (if modifying a published package)
 - [ ] Documentation updated (if API changed)
+- [ ] Repositioning copy labels unshipped features as **Target** (not shipped)
+- [ ] If MCP catalog changed: `pnpm gen:mcp-tools-doc && pnpm check:onboarding-drift`
 
 ### Supply-chain (only if this PR touches `.github/workflows/`, `scripts/`, package.json files, or adds/upgrades a dependency)
 

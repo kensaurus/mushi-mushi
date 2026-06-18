@@ -45,6 +45,12 @@ function handler(event) {
   }
 
   // Page routes: redirect to admin SPA root so React Router handles navigation.
+  // Avoid redirect loops when the SPA root itself 403/404s.
+  var uri = request.uri;
+  if (uri === '/mushi-mushi/admin/' || uri === '/mushi-mushi/admin') {
+    return response;
+  }
+
   response.statusCode = 302;
   response.statusDescription = 'Found';
   response.headers['location'] = { value: '/mushi-mushi/admin/' };

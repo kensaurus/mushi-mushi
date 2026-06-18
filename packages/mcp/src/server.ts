@@ -418,6 +418,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: { reportId: z.string().describe('The report UUID to fix') },
       outputSchema: {
         report: z.unknown(),
+        fixPrompt: z.unknown(),
         reproductionSteps: z.unknown(),
         component: z.unknown(),
         rootCause: z.unknown(),
@@ -428,6 +429,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`)
       return jsonResult({
         report,
+        // Paste-ready fix prompt composed server-side by composeFixPacket()
+        // (diagnosis + repro + suggested fix + relevant code + blast radius).
+        // Hand this straight to the editing agent — no second LLM key needed.
+        fixPrompt: report.fix_packet ?? null,
         reproductionSteps: report.reproduction_steps ?? [],
         component: report.component,
         rootCause: (report.stage2_analysis as Record<string, unknown> | undefined)?.rootCause,

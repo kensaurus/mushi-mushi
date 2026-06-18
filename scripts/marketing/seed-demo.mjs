@@ -159,7 +159,7 @@ for (let i = 0; i < reports.length; i++) {
     category: r.category,
     description: r.description,
     userIntent: r.userIntent,
-    environment: { ...r.environment, timestamp: now.toISOString() },
+    environment: { referrer: '', ...r.environment, timestamp: now.toISOString() },
     consoleLogs: r.consoleLogs ?? [],
     networkLogs: r.networkLogs ?? [],
     performanceMetrics: r.performanceMetrics,

@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Mushi Mushi — the bug your monitoring can't see, in your queue with a draft fix. Open source.",
+  "description": "Bug translation for vibe coders — plain-English diagnosis + fix prompts via MCP. Open source.",
   "license": "MIT",
   "homepage": "https://github.com/kensaurus/mushi-mushi",
   "repository": {
@@ -9,6 +9,10 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git"
   },
   "keywords": [
+    "bug-translation",
+    "vibe-coding",
+    "mcp-server",
+    "cursor",
     "bug-tracking",
     "user-feedback",
     "ai-triage",
@@ -77,6 +81,8 @@
     "check:internal-doc-links": "node scripts/check-internal-doc-links.mjs",
     "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
     "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
+    "gen:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs",
+    "check:onboarding-drift": "node scripts/check-onboarding-drift.mjs",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"
@@ -120,6 +126,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.6.1",
+    "playwright": "^1.60.0",
     "prettier": "^3.8.3",
     "turbo": "^2.9.8"
   },

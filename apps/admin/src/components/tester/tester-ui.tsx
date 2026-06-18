@@ -19,6 +19,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Card, Section } from '../ui'
 import { StatCard } from '../ui/metrics'
+import { MetricStrip } from '../MetricStrip'
 import { EmptyState } from '../ui/forms'
 import type { REP_TIERS } from '../../lib/useTesterStatus'
 
@@ -69,7 +70,7 @@ export interface TesterStatItem {
 
 export function TesterStatGrid({ items }: { items: TesterStatItem[] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <MetricStrip cols={4} ariaLabel="Tester account stats">
       {items.map((item) => (
         <StatCard
           key={item.label}
@@ -80,7 +81,7 @@ export function TesterStatGrid({ items }: { items: TesterStatItem[] }) {
           to={item.to}
         />
       ))}
-    </div>
+    </MetricStrip>
   )
 }
 

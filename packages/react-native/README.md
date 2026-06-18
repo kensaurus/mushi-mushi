@@ -1,5 +1,8 @@
 # @mushi-mushi/react-native
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
+
 React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — shake-to-report widget, offline queue, and the closed-loop lesson layer for iOS + Android.
 
 > **One-command setup:** `npx mushi-mushi` auto-detects React Native / Expo and installs this package with the right env vars.
@@ -91,11 +94,38 @@ import { MushiBottomSheet, MushiFloatingButton } from '@mushi-mushi/react-native
 
 ## What gets captured
 
-- Device info (platform, OS version, screen dimensions)
+- Device info (platform, OS version, screen dimensions) + a stable device `fingerprintHash`
+- A per-launch `sessionId` so every report from the same run is grouped
+- `sdkPackage` / `sdkVersion` / `appVersion` so the console can flag outdated installs
 - Console logs (monkey-patched `console.*`)
 - Network requests (fetch interceptor, headers redacted)
 - Navigation events (React Navigation integration, optional)
+- A 50-entry breadcrumb ring buffer → sent as `breadcrumbs` + a derived repro `timeline` (SDK lifecycle, screen changes via `setScreen`, and host crumbs via `addBreadcrumb`)
+- Screenshot of the current screen (optional — see below)
 - Offline queue via `@react-native-async-storage/async-storage` — reports survive force-close
+
+## Screenshots
+
+When `react-native-view-shot` is installed, the SDK captures the current screen **before** the report sheet overlays it, and shows the user a thumbnail they can remove before submitting. Enabled by default; turn off with `capture: { screenshot: false }`.
+
+```bash
+npx expo install react-native-view-shot   # v4+ on Expo SDK 55; v5+ for Fabric / New Architecture
+```
+
+> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen, which on a finance/health app can include balances or PII. The user always reviews and can remove the thumbnail before submit, but for screens that should never be captured, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Field-level masking is on the roadmap.
+
+## Identifying the reporter
+
+Call `identify()` / `setUser()` whenever auth state changes so reports show a human name instead of an anonymous token in the console:
+
+```tsx
+const mushi = useMushi()
+mushi.identify(user.id, { email: user.email, name: user.displayName, provider: 'supabase' })
+// or, web-SDK style:
+mushi.setUser({ id: user.id, email: user.email, name: user.displayName, provider: 'supabase' })
+```
+
+Mushi stores only a SHA-256 hash of the email (the host app owns the raw PII) and shows the `name` as the reporter's display name.
 
 ## Peer dependencies
 
@@ -103,14 +133,19 @@ import { MushiBottomSheet, MushiFloatingButton } from '@mushi-mushi/react-native
 - `react-native` >= 0.72
 - `@react-navigation/native` >= 6 (optional — navigation capture)
 - `@react-native-async-storage/async-storage` >= 1.19 (optional — offline queue)
+- `react-native-view-shot` >= 3.8 (optional — screenshot capture; v5+ for New Architecture / Fabric)
 - `expo-sensors` (optional — shake trigger only)
 
 ## Changelog highlights
 
+- **v0.17.0** — Report payload parity with the web SDK: nested `metadata.user` identity (fixes the anonymous-token reporter on the server), `setUser()` alias, per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, device `fingerprintHash`, and a breadcrumb ring buffer → `breadcrumbs` + repro `timeline`. `capture.screenshot` toggle + `addBreadcrumb()`. Bottom sheet restyled to match the web widget.
 - **v0.11.0** — Hermes compatibility fix: replaced `new Function()` dynamic imports with lazy `require()` for `@react-native-community/netinfo` and `expo-sensors`. Enables `trigger: 'button'` safely on all RN 0.84+ Hermes/AOT builds. Adds `MushiTrigger` headless component.
 - **v0.8.x** — Shake-to-report listener, offline queue, navigation capture.
 
 See the full [CHANGELOG](https://github.com/kensaurus/mushi-mushi/blob/master/packages/react-native/CHANGELOG.md).
+
+Maintainers: report ingest contract and empty-state semantics are documented in
+[`docs/report-ingest-contract.md`](../../docs/report-ingest-contract.md).
 
 ## License
 

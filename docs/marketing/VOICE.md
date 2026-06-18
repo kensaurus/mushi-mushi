@@ -1,22 +1,55 @@
 # VOICE — how Mushi-chan talks
 
-## Canonical tagline ladder
+## Canonical tagline ladder (v2 — primary)
 
-These are the **only allowed phrasings** for public surfaces. Import from
-`@mushi-mushi/brand` (`MUSHI_TAGLINE`) instead of hard-coding. The CI script
-`scripts/check-tagline-consistency.mjs` fails any README that opens with a
-non-canonical variant.
+Import from `@mushi-mushi/brand` (`MUSHI_TAGLINE_V2` / `MUSHI_TAGLINE`). CI:
+`scripts/check-tagline-consistency.mjs` fails stale variants; primary READMEs
+should use v2 hero.
+
+| Slot | Form | Use on |
+|------|------|--------|
+| Hero | *"Your AI wrote it. Mushi tells you why it broke."* | README headers, landing H1, docs landing |
+| Sub-hero | *"Plain-English diagnosis + a paste-ready fix, right inside Cursor."* | Lead paragraphs under hero |
+| Category | *"Bug translation for vibe coders"* | Eyebrow, npm, llms.txt |
+| Micro CTA | *"Know why. Fix fast."* | og:description, slide headers |
+| Mark | *"虫虫"* | Logo-adjacent, footer whisper |
+
+**Voice principles (v2):** plain over precise, momentum-obsessed, confident diagnosis,
+playful-not-cutesy, anti-enterprise. Sell recovery speed — never lecture about testing discipline.
+
+## Open by default (the OSS-powerhouse principle)
+
+Mushi earns trust the way Langfuse and Supabase did: by being genuinely open,
+not by claiming it. The proof points live in `@mushi-mushi/brand` (`MUSHI_OSS`)
+so copy stays true to the code. Use them on README badge rows, the landing
+trust strip, the docs open-source page, and anywhere a visitor is deciding
+whether this is "real" open source.
+
+- **Permissive core, no asterisks.** The JS/SDK packages are MIT; the server
+  (Supabase functions + admin) is AGPLv3. Say the split plainly
+  (`MUSHI_OSS.license`) — never imply "open" while gating the thing that matters.
+- **Self-hostable, one command.** "Self-host the whole stack with one command"
+  (`MUSHI_OSS.selfHost`). If the path regresses, fix the path, not the copy.
+- **No lock-in.** "Your reports, your keys, your repo" (`MUSHI_OSS.noLockIn`).
+  BYOK is the default, not an upsell.
+- **Dogfood as proof.** "Mushi runs on Mushi" (`MUSHI_OSS.dogfood`). Every
+  open-source claim should be backed by a real before/after from our own apps
+  (`docs/dogfood.md`), the way Langfuse points at its own traces.
+- **Anti-enterprise, still.** Open source is a trust move, not a "leverage the
+  community" move. The banned-words list below applies here too.
+
+## Legacy tagline ladder (v1 — comparison tables only)
+
+Deprecated on primary surfaces. Keep for Sentry comparison tables and deep concept docs.
 
 | Length | Form | Use on |
 |--------|------|--------|
-| 12 words | *"Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI."* | README headers, landing H1, docs landing |
-| 5 words | *"Bug reports that close themselves."* | Social bios, npm descriptions, secondary headlines |
-| 3 words | *"Capture. Classify. Fix."* | CTAs, slide headers, og:description |
-| 1 word | *"虫虫"* | Logo-adjacent, footer whisper |
-| Sub-tagline | *"the evolution loop for AI-assisted software"* | Eyebrow, section label, positioning line |
+| 12 words | *"Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI."* | Comparison tables, evolution-loop essays |
+| 5 words | *"Bug reports that close themselves."* | Legacy social bios until refreshed |
+| 3 words | *"Capture. Classify. Fix."* | PDCA / team-grade CTAs |
+| Sub-tagline | *"the evolution loop for AI-assisted software"* | Concept pages, not hero |
 
-**Never write a variant.** If none of the five forms fits the context, use the
-closest one and trim — don't rephrase.
+**Never write a variant** of either ladder. If none fits, use the closest canonical form.
 
 
 

@@ -39,7 +39,7 @@ interface NbaAction {
 const NBA_TONES: Record<NbaTone, { ring: string; bg: string; chip: string; chipText: string }> = {
   plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chip: 'bg-info-muted',   chipText: 'text-info' },
   do:    { ring: 'border-brand/40',  bg: 'bg-brand/10',        chip: 'bg-brand/15',     chipText: 'text-brand' },
-  check: { ring: 'border-warn/40',   bg: 'bg-warn/10',         chip: 'bg-warn-muted',   chipText: 'text-warn' },
+  check: { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chip: 'bg-info-muted',   chipText: 'text-info' },
   act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted/15',     chip: 'bg-ok-muted',     chipText: 'text-ok' },
   idle:  { ring: 'border-edge',      bg: 'bg-surface-raised/40', chip: 'bg-surface-overlay', chipText: 'text-fg-muted' },
 }

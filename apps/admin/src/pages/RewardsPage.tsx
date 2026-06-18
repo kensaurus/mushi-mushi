@@ -364,6 +364,16 @@ function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
     else toast.error('Save failed')
   }, [rules, edited, canEdit, reload, toast])
 
+  // One-click "enable rewards with recommended defaults" (Workstream D4).
+  const applyPresets = useCallback(async () => {
+    if (!canEdit) return
+    setSaving(true)
+    const res = await apiFetch('/v1/admin/rewards/presets/apply', { method: 'POST' })
+    setSaving(false)
+    if (res.ok) { toast.success('Recommended rewards enabled'); reload() }
+    else toast.error('Could not apply presets')
+  }, [canEdit, reload, toast])
+
   if (loading) return <TableSkeleton rows={8} />
   if (error) return <ErrorAlert message={error} />
 
@@ -397,8 +407,15 @@ function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
       >
         {allRules.length === 0 ? (
           <EmptyState
-            title="No custom rules"
-            description="Default rule presets apply. Upgrade to configure per-action point values."
+            title="No custom rules yet"
+            description="Enable rewards with recommended defaults (report points + a 4-tier ladder), then fine-tune anytime. Everything is preset and ready to go."
+            action={
+              canEdit ? (
+                <Btn variant="primary" size="sm" loading={saving} onClick={applyPresets}>
+                  Use recommended defaults
+                </Btn>
+              ) : undefined
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -1446,7 +1463,13 @@ function DisputesSection() {
   }, [reload, toast])
 
   if (loading) return <TableSkeleton rows={2} />
-  if (error) return null
+  if (error) {
+    return (
+      <Section title="Disputes" icon={<IconShield />}>
+        <ErrorAlert message={error} onRetry={reload} />
+      </Section>
+    )
+  }
 
   if ((disputes ?? []).length === 0) return null
 
@@ -1517,9 +1540,15 @@ function PayoutLiabilitySection() {
   const { has } = useEntitlements()
   if (!has('rewards_monetary')) return null
 
-  const { data: payouts, loading, error } = usePageData<PayoutRow[]>('/v1/admin/rewards/payouts')
+  const { data: payouts, loading, error, reload } = usePageData<PayoutRow[]>('/v1/admin/rewards/payouts')
   if (loading) return <TableSkeleton rows={3} />
-  if (error) return null
+  if (error) {
+    return (
+      <Section title="Payout ledger" icon={<IconBilling />}>
+        <ErrorAlert message={error} onRetry={reload} />
+      </Section>
+    )
+  }
 
   return (
     <Section title="Payout ledger" icon={<IconBilling />}>

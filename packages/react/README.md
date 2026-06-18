@@ -1,5 +1,8 @@
 # @mushi-mushi/react
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
+
 React / Next.js SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — the closed-loop bug intelligence layer that turns every user-felt friction point into institutional memory.
 
 > **One-command setup:** `npx mushi-mushi` auto-detects React / Next.js and installs this package with the right env vars and prefix (`NEXT_PUBLIC_`, `VITE_`, etc.).

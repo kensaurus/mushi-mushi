@@ -29,7 +29,7 @@
 const PATTERNS: Array<{ regex: RegExp; replacement: string }> = [
   // --- Financial / government ID (run first — most specific) ---
   { regex: /\b\d{3}-\d{2}-\d{4}\b/g, replacement: '[REDACTED_SSN]' },
-  { regex: /\b(?:\d[ -]*){12,18}\d\b/g, replacement: '[REDACTED_CC]' },
+  { regex: /\b(?:\d[ -]*){11,17}\d\b/g, replacement: '[REDACTED_CC]' },
 
   // --- Secret tokens (SEC-4) ---
   // Recognise by shape/prefix. Order: vendor-prefixed first, then generic.

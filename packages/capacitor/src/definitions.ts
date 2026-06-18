@@ -94,6 +94,14 @@ export interface MushiCapacitorPlugin {
   /** Attach app/user identity to subsequent native reports. */
   setUser(payload: { user: MushiCapacitorUser | null }): Promise<void>;
 
+  /**
+   * Identify the current end user with a signed Mushi identity JWT minted by
+   * the host server. The backend verifies the signature before trusting any
+   * claim; this is the trust anchor for "My Reports", rewards, and the
+   * per-user assistant index. Pass `{ token: null }` on logout.
+   */
+  identifyWithToken(payload: { token: string | null }): Promise<void>;
+
   /** Attach or clear a metadata key on subsequent native reports. */
   setMetadata(payload: { key: string; value?: unknown }): Promise<void>;
 

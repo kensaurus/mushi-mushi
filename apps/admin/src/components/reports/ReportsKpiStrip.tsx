@@ -9,6 +9,7 @@
 import { useMemo } from 'react'
 import { usePageData } from '../../lib/usePageData'
 import { KpiTile, type KpiDelta } from '../charts'
+import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
@@ -33,7 +34,7 @@ function severityDelta(values: number[]): KpiDelta | null {
   // a given severity is bad → tone flips to warn on rises.
   if (values.length < 14) return null
   const last7 = values.slice(-7).reduce((a, n) => a + n, 0)
-  const prev7 = values.slice(0, values.length - 7).reduce((a, n) => a + n, 0)
+  const prev7 = values.slice(-14, -7).reduce((a, n) => a + n, 0)
   if (last7 === 0 && prev7 === 0) return null
   if (prev7 === 0) return { value: 'new', direction: 'up', tone: 'warn' }
   const pct = Math.round(((last7 - prev7) / prev7) * 100)
@@ -116,13 +117,16 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
     )
   }
 
+  const criticalCount = counts.critical
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3">
+    <MetricStrip cols={4} ariaLabel="Reports severity breakdown" className="gap-2.5 mb-3" stagger>
       {TILES.map((tile) => {
         const isActive = activeSeverity === tile.key
         const total = data?.total ?? 0
         const count = counts[tile.key]
         const sharePct = total > 0 ? Math.round((count / total) * 100) : 0
+        const isHero = tile.key === 'critical' && criticalCount > 0
         return (
           <button
             key={tile.key}
@@ -153,6 +157,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
               series={sparks[tile.key]}
               delta={severityDelta(sparks[tile.key])}
               seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
+              variant={isHero ? 'primary' : 'default'}
             />
             {!loading && total > 0 && sharePct > 0 ? (
               <div
@@ -168,6 +173,6 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
           </button>
         )
       })}
-    </div>
+    </MetricStrip>
   )
 }

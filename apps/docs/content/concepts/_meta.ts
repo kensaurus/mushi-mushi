@@ -1,5 +1,6 @@
 export default {
   index: 'Overview',
+  'open-source': 'Open source & licensing',
   credentials: 'Project ID & API keys',
   architecture: 'Architecture',
   'trigger-modes': 'Trigger modes',

@@ -19,15 +19,43 @@ export declare const MUSHI_BOUNTIES_NAME: {
   readonly spine: string
 }
 
-export declare const MUSHI_TAGLINE: {
-  /** Full 12-word form — README headers, landing H1, docs landing. */
+/** @deprecated COMPARISON-TABLES-ONLY. Never on a primary surface — use MUSHI_TAGLINE_V2. */
+export declare const MUSHI_TAGLINE_LEGACY: {
   readonly full: string
-  /** 5-word punchy form — social bios, npm descriptions. */
   readonly short: string
-  /** 3-word imperative form — CTAs, slide headers, og:description. */
   readonly micro: string
-  /** 1-word brand mark — logo adjacent, footer whisper. */
   readonly mark: string
-  /** Sub-tagline positioning line — eyebrow or section label. */
   readonly spine: string
+}
+
+export declare const MUSHI_TAGLINE_V2: {
+  readonly hero: string
+  readonly subHero: string
+  readonly category: string
+  readonly micro: string
+  readonly mark: string
+}
+
+export declare const MUSHI_TAGLINE: {
+  readonly full: string
+  readonly short: string
+  readonly micro: string
+  readonly mark: string
+  readonly spine: string
+  readonly subHero: string
+  readonly legacy: typeof MUSHI_TAGLINE_LEGACY
+}
+
+/** Open-source positioning ladder — Langfuse/Supabase-style proof points. */
+export declare const MUSHI_OSS: {
+  /** Trust strip — one line, README/landing/docs. */
+  readonly trustStrip: string
+  /** License split, stated plainly. */
+  readonly license: string
+  /** Self-host promise. */
+  readonly selfHost: string
+  /** No-lock-in promise. */
+  readonly noLockIn: string
+  /** Dogfood proof. */
+  readonly dogfood: string
 }

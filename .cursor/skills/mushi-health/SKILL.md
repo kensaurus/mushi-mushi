@@ -43,7 +43,7 @@ mushi doctor
 Expected output — all lines green:
 
 ```
-✓  ~/.mushirc found
+✓  ~/.config/mushi/config.json found
 ✓  MUSHI_API_KEY valid (mushi_...)
 ✓  MUSHI_API_ENDPOINT reachable (200 OK)
 ✓  MUSHI_PROJECT_ID matches a live project
@@ -179,7 +179,7 @@ If any ❌ → use [`mushi-debug`](../mushi-debug/SKILL.md) for targeted diagnos
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `mushi doctor` can't reach endpoint | Wrong `MUSHI_API_ENDPOINT` in `~/.mushirc` | Re-run `mushi login --endpoint https://...` |
+| `mushi doctor` can't reach endpoint | Wrong `MUSHI_API_ENDPOINT` in `~/.config/mushi/config.json` | Re-run `mushi login --endpoint https://...` |
 | All edge functions ❌ | Supabase project paused (free tier) | Restore the project in the Supabase dashboard |
 | BYOK keys all `quota_exhausted` | Rate limits hit on all keys | Add a backup key for each provider |
 | QA cron never fires | pg_cron job missing | Re-run migration `20260602000003_pdca_qa_improve_cron.sql` |

@@ -173,7 +173,7 @@ jobs:
             --content-type "application/javascript" \
             --no-guess-mime-type \
             --exclude "*" \
-            --include "*.js"
+            --include "**/*.js"
 
       - name: Sync immutable assets to S3 (CSS)
         run: |
@@ -182,15 +182,15 @@ jobs:
             --content-type "text/css" \
             --no-guess-mime-type \
             --exclude "*" \
-            --include "*.css"
+            --include "**/*.css"
 
       - name: Sync immutable assets to S3 (other static)
         run: |
           aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
             --cache-control "public, max-age=31536000, immutable" \
-            --exclude "*.html" \
-            --exclude "*.js" \
-            --exclude "*.css" \
+            --exclude "**/*.html" \
+            --exclude "**/*.js" \
+            --exclude "**/*.css" \
             --exclude "version.json"
 
       - name: Sync HTML to S3 (no cache)

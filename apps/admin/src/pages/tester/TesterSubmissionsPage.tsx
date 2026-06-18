@@ -49,11 +49,11 @@ export function TesterSubmissionsPage() {
   const prefillAppId = searchParams.get('appId') ?? ''
   const openNew = searchParams.get('new') === '1'
 
-  const { data: subsRaw, loading, reload } = usePageData<{ items: TesterSubmission[]; total: number }>(
+  const { data: subsRaw, loading, error: subsError, reload } = usePageData<{ items: TesterSubmission[]; total: number }>(
     '/v1/tester/submissions',
     TESTER_API_OPTS,
   )
-  const { data: appsRaw } = usePageData<JoinedAppOption[] | { data: JoinedAppOption[] }>(
+  const { data: appsRaw, error: appsError } = usePageData<JoinedAppOption[] | { data: JoinedAppOption[] }>(
     '/v1/tester/apps',
     TESTER_API_OPTS,
   )
@@ -117,6 +117,8 @@ export function TesterSubmissionsPage() {
 
   const pendingCount = submissions.filter((s) => s.status === 'pending').length
 
+  const loadError = subsError ?? appsError
+
   return (
     <div className="space-y-6">
       <TesterPageIntro
@@ -139,6 +141,15 @@ export function TesterSubmissionsPage() {
           )
         }
       />
+
+      {loadError && (
+        <div className="rounded-md border border-danger/30 bg-danger-muted/30 p-4 space-y-2">
+          <p className="text-sm text-danger">Could not load submissions: {loadError}</p>
+          <Btn variant="ghost" size="sm" onClick={() => void reload()}>
+            Retry
+          </Btn>
+        </div>
+      )}
 
       {showForm && joinedApps.length > 0 && (
         <TesterPanel className="space-y-3">

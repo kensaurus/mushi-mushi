@@ -12,6 +12,7 @@ OVERVIEW:
 
 NOTES:
 - Idempotency keys: backfill-points:{submission_id}
+- Ledger reason: admin_grant (check constraint allow-list)
 - Safe to re-run (ON CONFLICT on ledger idempotency_key)
 */
 

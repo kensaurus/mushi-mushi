@@ -62,16 +62,16 @@ export function SidebarBrandToggles({
           const active = p.id === 'tester' ? onTester : !onTester
           return (
             <MicroSegmentCell key={p.id} active={active}>
-              <Tooltip content={p.hint} side="auto" nowrap={false} className="flex min-w-0 flex-1">
+              <Tooltip content={p.hint} side="auto" nowrap={false} className="flex h-full w-full min-h-[1.375rem] self-stretch">
                 <Link
                   to={p.to}
                   role="radio"
                   aria-checked={active}
                   aria-current={active ? 'page' : undefined}
                   aria-label={p.label}
-                  className={`${MICRO_SEG} ${microSegActive(active)} w-full`}
+                  className={`${MICRO_SEG} ${microSegActive(active)} h-full w-full`}
                 >
-                  <p.Icon className="h-3 w-3 shrink-0" aria-hidden />
+                  <p.Icon aria-hidden />
                 </Link>
               </Tooltip>
             </MicroSegmentCell>
@@ -90,15 +90,15 @@ export function SidebarBrandToggles({
             const active = mode === m.id
             return (
               <MicroSegmentCell key={m.id} active={active}>
-                <Tooltip content={m.hint} side="auto" nowrap={false} className="flex min-w-0 flex-1">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    aria-label={`${m.label} mode`}
-                    onClick={() => onSelectMode(m.id)}
-                    className={`${MICRO_SEG} ${microSegActive(active)} w-full`}
-                  >
+              <Tooltip content={m.hint} side="auto" nowrap={false} className="flex h-full w-full min-h-[1.375rem] self-stretch">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={`${m.label} mode`}
+                  onClick={() => onSelectMode(m.id)}
+                  className={`${MICRO_SEG} ${microSegActive(active)} h-full w-full`}
+                >
                     <span className={MICRO_SEG_LABEL}>{m.label}</span>
                   </button>
                 </Tooltip>

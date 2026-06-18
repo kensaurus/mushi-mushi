@@ -58,14 +58,14 @@ export function DogfoodNarrativeBanner() {
     <aside
       role="complementary"
       aria-label="Project narrative"
-      className="mb-3 flex items-center gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 motion-safe:animate-mushi-fade-in"
+      className="mb-3 flex items-center gap-3 rounded-md border border-chrome-border bg-chrome px-3 py-2.5 motion-safe:animate-mushi-fade-in"
     >
       <span
         aria-hidden="true"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-warn-muted/50 text-warning-foreground text-sm"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-info-muted/40 text-info text-sm"
         title="Most fragile area"
       >
-        ⚠
+        ◆
       </span>
       <p className="flex-1 min-w-0 text-xs text-fg-secondary leading-snug">{sentence}</p>
       <Link

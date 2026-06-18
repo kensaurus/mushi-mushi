@@ -1,8 +1,10 @@
 import type {
   MushiApiClient,
   MushiApiResponse,
+  MushiAssistantReply,
   MushiCrossAppReport,
   MushiLeaderboardEntry,
+  MushiPageContext,
   MushiReport,
   MushiReportStatus,
   MushiReporterComment,
@@ -14,6 +16,9 @@ import type {
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
 
+/** Header carrying the signed end-user identity token (verified server-side). */
+export const MUSHI_USER_TOKEN_HEADER = 'X-Mushi-User-Token';
+
 export interface ApiClientOptions {
   projectId: string;
   apiKey: string;
@@ -24,6 +29,12 @@ export interface ApiClientOptions {
   apiEndpoint?: string;
   timeout?: number;
   maxRetries?: number;
+  /**
+   * Returns the current signed end-user identity JWT, or null when the user is
+   * anonymous. When present it is sent on the X-Mushi-User-Token header so the
+   * backend can verify it and scope identity-bound features to that user.
+   */
+  getUserToken?: () => string | null | undefined;
 }
 
 // V5.3 (M-cross-cutting): canonical Cloud URL — the older `api.mushimushi.dev`
@@ -44,6 +55,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     apiEndpoint = DEFAULT_API_ENDPOINT,
     timeout = DEFAULT_TIMEOUT,
     maxRetries = DEFAULT_MAX_RETRIES,
+    getUserToken,
   } = options;
 
   let baseUrl = apiEndpoint.replace(/\/$/, '');
@@ -59,6 +71,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     const url = `${baseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
+    const userToken = getUserToken?.() ?? null;
 
     try {
       const response = await fetch(url, {
@@ -67,6 +80,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           'Content-Type': 'application/json',
           'X-Mushi-Api-Key': apiKey,
           'X-Mushi-Project': projectId,
+          ...(userToken ? { [MUSHI_USER_TOKEN_HEADER]: userToken } : {}),
           ...(internalKind ? { [MUSHI_INTERNAL_HEADER]: internalKind } : {}),
           ...extraHeaders,
         },
@@ -195,6 +209,20 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
     async getSdkConfig() {
       return request<MushiRuntimeSdkConfig>('GET', '/v1/sdk/config', undefined, maxRetries, 'sdk-config');
+    },
+
+    async askAssistant(input: { message: string; threadId?: string | null; context?: MushiPageContext | null }) {
+      return request<MushiAssistantReply>(
+        'POST',
+        '/v1/sdk/assistant',
+        {
+          message: input.message,
+          threadId: input.threadId ?? null,
+          context: input.context ?? null,
+        },
+        1,
+        'community',
+      );
     },
 
     async getLatestSdkVersion(packageName: string) {

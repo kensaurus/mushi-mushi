@@ -10,8 +10,8 @@
  * `onClickCapture`, plus `onSubmit` where the same problem applies on
  * forms). Suggestion: wire the handler, log a TODO, or remove the prop.
  *
- * Exceptions allowed via the `allowedNames` option — e.g. you can pass
- * `noopBecauseHandledByParent` if you intentionally need a no-op identifier.
+ * Exceptions allowed via the `allowedNames` option — identifiers listed there
+ * are treated as intentional no-ops (e.g. `noopBecauseHandledByParent`).
  */
 
 const TARGET_PROPS = new Set(['onClick', 'onClickCapture', 'onSubmit'])
@@ -52,7 +52,16 @@ const rule = {
       if (expr.type !== 'ArrowFunctionExpression') return false
       const body = expr.body
       if (body.type === 'BlockStatement' && body.body.length === 0) return true
-      if (body.type === 'Literal' && (body.value === null || body.value === undefined)) return true
+      if (body.type === 'Literal' && body.value === null) return true
+      if (body.type === 'Identifier' && body.name === 'undefined') return true
+      if (
+        body.type === 'UnaryExpression' &&
+        body.operator === 'void' &&
+        body.argument.type === 'Literal' &&
+        body.argument.value === 0
+      ) {
+        return true
+      }
       return false
     }
 
@@ -74,12 +83,12 @@ const rule = {
           reportEmpty(node, propName)
           return
         }
-        if (
-          expr.type === 'Identifier' &&
-          (expr.name === 'noop' || expr.name === '_noop') &&
-          !allowed.has(expr.name)
-        ) {
-          reportEmpty(node, propName)
+        if (expr.type === 'Identifier') {
+          if (allowed.has(expr.name)) return
+          if (expr.name === 'noop' || expr.name === '_noop') {
+            reportEmpty(node, propName)
+          }
+          return
         }
       },
     }

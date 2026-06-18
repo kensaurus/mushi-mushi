@@ -4,8 +4,8 @@
  * activity signals, tester-personal stats, targeting fit pill, and CTAs.
  * Filter rail: search + All / Joined / Eligible chips.
  */
-import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { TESTER_API_OPTS } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
@@ -133,7 +133,10 @@ function AppCard({ app, onJoin, onLeave, acting }: {
     : null
 
   return (
-    <div className="rounded-xl border border-edge-subtle bg-surface-raised overflow-hidden hover:border-accent/30 transition-colors">
+    <div
+      id={`tester-app-${app.slug}`}
+      className="rounded-xl border border-edge-subtle bg-surface-raised overflow-hidden hover:border-accent/30 transition-colors scroll-mt-4"
+    >
       {/* Header row */}
       <div className="flex items-start gap-4 p-4">
         <div className="h-14 w-14 shrink-0 rounded-xl bg-surface-root flex items-center justify-center text-2xl overflow-hidden">
@@ -306,6 +309,8 @@ type FilterChip = 'all' | 'joined' | 'eligible'
 
 export function TesterAppsPage() {
   const toast = useToast()
+  const [searchParams] = useSearchParams()
+  const highlightSlug = searchParams.get('highlight')
   const { data: raw, loading, error, reload } = usePageData<AppsResponse | TesterApp[]>('/v1/tester/apps', TESTER_API_OPTS)
   const [acting, setActing] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -333,6 +338,18 @@ export function TesterAppsPage() {
     if (chip === 'eligible') apps = apps.filter(a => a.meetsReputationGate && !a.joined)
     return apps
   }, [allApps, search, chip])
+
+  useEffect(() => {
+    if (!highlightSlug || loading) return
+    const el = document.getElementById(`tester-app-${highlightSlug}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('ring-2', 'ring-brand/50')
+    const timer = window.setTimeout(() => {
+      el.classList.remove('ring-2', 'ring-brand/50')
+    }, 3000)
+    return () => window.clearTimeout(timer)
+  }, [highlightSlug, loading, filtered.length])
 
   async function handleJoin(slug: string) {
     setActing(slug)

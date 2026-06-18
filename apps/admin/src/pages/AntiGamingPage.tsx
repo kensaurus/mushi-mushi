@@ -924,7 +924,11 @@ function WithheldRedemptionRow({
   const act = async (action: 'approve' | 'deny') => {
     setActing(action)
     try {
-      await apiFetch(`/v1/admin/tester-redemptions/${redemption.id}/${action}`, { method: 'POST' })
+      const res = await apiFetch(`/v1/admin/tester-redemptions/${redemption.id}/${action}`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error(res.error?.message ?? 'Action failed')
+        return
+      }
       toast.success(action === 'approve' ? 'Redemption approved' : 'Redemption denied — points refunded')
       onAction()
     } catch (err) {

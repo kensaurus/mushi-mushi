@@ -98,6 +98,7 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
  * escape hatch last.
  */
 export const FRAMEWORKS = [
+  'loader',
   'react',
   'vue',
   'svelte',
@@ -111,6 +112,16 @@ export const FRAMEWORKS = [
   'vanilla',
 ] as const
 export type Framework = (typeof FRAMEWORKS)[number]
+
+/**
+ * The universal loader: a single `<script async>` tag that needs NO build
+ * step, NO npm install, and NO env-var inlining. Credentials ride on
+ * `data-project` / `data-key` attributes (Sentry/Canny/Featurebase pattern),
+ * so it works on plain HTML, Rails/ERB, Django templates, WordPress, Webflow,
+ * or any server-rendered page. This is the "fastest path" default tab and the
+ * answer to "it doesn't show up on HTTP / non-bundler stacks".
+ */
+export const LOADER_CDN_URL = 'https://cdn.mushi.dev/sdk/v1/mushi.js'
 
 /**
  * Frameworks that ship a native runtime (mobile / hybrid). Used by the
@@ -179,6 +190,7 @@ const API_KEY = process.env.${env.apiKeyVar} ?? ''`,
 }
 
 export function frameworkLabel(fw: Framework): string {
+  if (fw === 'loader') return 'Script tag'
   if (fw === 'vanilla') return 'Vanilla JS'
   if (fw === 'react-native') return 'React Native'
   if (fw === 'capacitor') return 'Capacitor'
@@ -198,6 +210,8 @@ export function frameworkLabel(fw: Framework): string {
  *    in those environments. Capacitor users on the WebView can additionally
  *    add @mushi-mushi/web (covered in the docs migration guide). */
 export function installCommand(fw: Framework): string {
+  // The loader needs no package manager — paste the <script> tag and done.
+  if (fw === 'loader') return '# No install — paste the <script> tag into your <head>.'
   if (fw === 'react') return 'npm install @mushi-mushi/react'
   if (fw === 'vanilla') return 'npm install @mushi-mushi/web'
   if (fw === 'react-native') return 'npm install @mushi-mushi/react-native'
@@ -282,6 +296,29 @@ export function renderSnippet(
 ): string {
   const key = apiKey || API_KEY_PLACEHOLDER
   const env = mushiEnvVarsForProjectSlug(projectSlug)
+
+  // ── Universal loader (no build step) ────────────────────────────────────
+  // Emits a single async <script> tag. Optional widget/capture tuning rides
+  // on data-* attributes so non-JS stacks (Rails, Django, WordPress) still
+  // get a fully-configured widget without touching a bundler.
+  if (fw === 'loader') {
+    const attrs: string[] = [
+      `  src="${LOADER_CDN_URL}"`,
+      `  data-project="${projectId}"`,
+      `  data-key="${key}"`,
+    ]
+    if (cfg.trigger !== DEFAULT_SDK_CONFIG.trigger) attrs.push(`  data-trigger="${cfg.trigger}"`)
+    if (cfg.theme !== DEFAULT_SDK_CONFIG.theme) attrs.push(`  data-theme="${cfg.theme}"`)
+    if (cfg.position !== DEFAULT_SDK_CONFIG.position) attrs.push(`  data-position="${cfg.position}"`)
+    if (cfg.trigger === 'banner') {
+      if (cfg.bannerVariant !== DEFAULT_SDK_CONFIG.bannerVariant) attrs.push(`  data-banner-variant="${cfg.bannerVariant}"`)
+      if (cfg.bannerPosition !== DEFAULT_SDK_CONFIG.bannerPosition) attrs.push(`  data-banner-position="${cfg.bannerPosition}"`)
+    }
+    return `<!-- Paste into your <head>. No build step, no npm install. -->
+<script async
+${attrs.join('\n')}
+></script>`
+  }
 
   if (fw === 'react') {
     const innerIndent = '      '

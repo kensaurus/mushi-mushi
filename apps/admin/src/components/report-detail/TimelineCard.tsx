@@ -1,5 +1,6 @@
 import { EmptyState } from '../ui'
 import type { ReportDetail, ReportTimelineEntry } from './types'
+import { timelineEmpty } from './reportCaptureHints'
 import {
   CONSOLE_LEVEL_PILL,
   formatConsoleMessage,
@@ -15,12 +16,8 @@ import {
 export function TimelineCard({ report }: { report: ReportDetail }) {
   const timeline = Array.isArray(report.repro_timeline) ? report.repro_timeline : []
   if (timeline.length === 0) {
-    return (
-      <EmptyState
-        title="No repro timeline"
-        description="Upgrade the SDK to capture route changes, clicks, logs, and requests in one chronological trail."
-      />
-    )
+    const empty = timelineEmpty(report)
+    return <EmptyState title={empty.title} description={empty.description} />
   }
 
   const entries = timeline.slice(-48)

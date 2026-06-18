@@ -10,7 +10,7 @@ can execute without additional context.
 
 ## Agent Inventory
 
-<sub>18 pipeline agents · 47 edge functions · 243 SQL migrations — updated Jun 16 2026 (one-click SDK install & upgrade: sdk-upgrade-worker + sdk-versions-cron + Connect & Update hub + SdkUpgradeCTA PR action).</sub>
+<sub>18 pipeline agents · 49 edge functions · 273 SQL migrations — updated Jun 18 2026 (reporter incentives: automatic report.submitted/report.triaged point awards + one-click reward presets + vault-backed reward webhooks + `@mushi-mushi/node` receiver; page-aware in-SDK assistant: `POST /v1/sdk/assistant` BYOK + knowledge corpus + audit log).</sub>
 
 | Agent | Location | Trigger | Description |
 |-------|----------|---------|-------------|
@@ -235,7 +235,9 @@ mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed
 
 ### MCP Tools
 
-Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_lessons`, `list_qa_story_runs`, `get_qa_story_run`
+Full catalog: **71 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.generated.mdx`](apps/docs/content/sdks/mcp-tools.generated.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → `summarize_report_for_fix`).
+
+Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `get_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
 Notification tools (`mcp:write` scope): `test_notification_channel`
 
@@ -518,6 +520,122 @@ Server-hosted **Codebase Understand** surface in the admin console — parity wi
 **MCP tools:** `ask_codebase`, `get_file_summary`, `get_codebase_tour`, `search_codebase`, `get_codebase_domains`, `analyze_codebase_impact`, `analyze_wiki_knowledge`.
 
 Graph builder concepts attributed to **Understand-Anything (MIT)** — see `packages/codebase-graph/README.md` and `_shared/codebase-graph-build.ts`.
+
+---
+
+## Production deployment
+
+Maintainers shipping Mushi Cloud or npm SDK releases should follow
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (repo runbook) and the public summary at
+[`apps/docs/content/operating/deployment.mdx`](apps/docs/content/operating/deployment.mdx).
+Key points: Changesets version PR → merge → **manual `release.yml` dispatch** when
+GitHub suppresses the bot merge trigger; Edge Functions / admin / docs deploy on
+path-filtered pushes; **DB migrations are manual** (`supabase db push`).
+
+---
+
+## Reporter incentives & page-aware assistant (Jun 18 2026)
+
+Closes three SDK pain points across the four host repos: (1) reporters had no
+reason to come back, (2) the reward economy needed console wiring + a turnkey
+host receiver, and (3) the console's page-aware chatbot had no in-SDK
+equivalent. **All three migrations are applied and verified on remote
+(`dxptnwrhwsqckaftyymj`); the `api` edge function is deployed.**
+
+### Automatic point awards (no console config required)
+
+Reporters now earn points on the two moments that matter, awarded server-side
+inside the ingest + triage pipeline so incentives work out of the box:
+
+| Moment | Where | Action | Default points |
+|--------|-------|--------|----------------|
+| Report submitted | `api/helpers.ts` `ingestReport` (after `end_user` link) | `report.submitted` | 10 |
+| Report triaged | `classify-report/index.ts` (after classification) | `report.triaged` | 50 |
+
+Both calls go through `awardPointsForEndUser` (`_shared/reputation.ts`), which
+enforces `reward_rules` velocity caps, propagates to the tier-evaluator, and
+fires the `points_awarded` notification. The dotted actions are seeded in
+`LEGACY_POINT_TABLE` so they award with **zero** console config; a project can
+override base/cap by adding a `reward_rules` row of the same name.
+
+- **Fire-and-forget**: a rewards failure never blocks ingest or triage.
+- **Idempotency**: `report.triaged` is guarded by an explicit prior-award check
+  (`end_user_activity.action='report.triaged'` + `metadata->>report_id`) so
+  re-classification / stage-2 retries can't double-award.
+
+### One-click reward presets
+
+`POST /v1/admin/rewards/presets/apply` (`adminOrApiKey`) idempotently installs
+recommended default rules (`report.submitted` / `report.triaged` /
+`comment_posted`) and a 4-tier ladder (Explorer → Contributor → Champion →
+Legend, with `host_credit_payload` grant instructions). Only inserts
+actions/slugs that don't already exist, so it's safe to re-run and never
+clobbers operator customisations. Surfaced as the "Use recommended defaults"
+CTA on the empty-state of `apps/admin/src/pages/RewardsPage.tsx` — ease of
+setup before customizability.
+
+### Vault-backed reward webhook secrets + `@mushi-mushi/node` receiver
+
+- `reward_webhooks.vault_secret_id` (migration `20260618140000`) stores the raw
+  HMAC signing secret in Supabase Vault; `secret_hash` is retained for
+  display/equality only. `_shared/reward-webhooks.ts` `loadWebhookSecret` reads
+  the raw value back via `vault_get_secret`, falling back to the legacy env var.
+  The same migration **restores the canonical `vault_store_secret(text,text,uuid)`**
+  function (it was missing on remote, which also broke BYOK key saves).
+- `POST /v1/admin/rewards/webhooks` now **mints** a `mushi_whk_…` secret when the
+  caller omits one, stores it in Vault, and returns it **once** (API-key style).
+- `@mushi-mushi/node` exports `createMushiRewardsHandler({ secret, onTierChanged,
+  onPointsAwarded })` — a framework-agnostic receiver (Express middleware +
+  Web-standard `fetch` handler) that timing-safely verifies `X-Mushi-Signature`
+  and routes events. This is the Mushi → host-repo "grant a role / grant a Stripe
+  membership" trigger. See `packages/node/README.md`.
+
+### Cross-app "My Reports" fix
+
+`mushi_get_my_cross_app_reports` (migration `20260618130000`) selected
+`reports.short_id` / `reports.title`, neither of which exists — every call 500'd.
+Now derives `short_id` from the UUID's first 8 hex chars and `title` from
+`summary` (falling back to a trimmed `description`). The web widget's My Reports
+tab, leaderboard (rank/points), account rank, and rewards "X pts to <next tier>"
+display consume this.
+
+### Page-aware in-SDK assistant
+
+A knowledge-grounded "Ask" tab in the widget. **v1 has zero cross-user data
+surface** — it answers only from the page context the SDK publishes and the
+operator-authored knowledge corpus, so it structurally cannot leak another
+user's data, source, or env.
+
+```
+Widget "Ask" tab → apiClient.askAssistant({ message, threadId, context })
+  → POST /v1/sdk/assistant (apiKeyAuth, per-project 240/hr cap)
+  → verify optional X-Mushi-User-Token (audit only — no user data fetched)
+  → BYOK LLM via withAnthropicOrOpenAi (Anthropic primary → OpenAI fallback)
+  → structured { kind: 'answer' | 'clarify', … } (generateObject + Zod)
+  → log both turns to sdk_assistant_messages (route, model, tokens, cost, latency)
+  → return MushiAssistantReply + threadId
+```
+
+| Object | Role |
+|--------|------|
+| `project_settings.assistant_*` | `assistant_enabled`, `assistant_label`, `assistant_greeting`, `assistant_suggestions`, `assistant_knowledge` (corpus, 40k cap) — migration `20260618150000` |
+| `sdk_assistant_messages` | Per-turn audit log; RLS `RESTRICTIVE` deny-all (service-role/edge-fn only) |
+| `POST /v1/sdk/assistant` | `apiKeyAuth` — the assistant turn (security-hardened system prompt, BYOK, structured output, logging) |
+| `GET /v1/sdk/config` | Now returns the `assistant` block so the widget shows the tab without a rebuild |
+| `GET\|PUT /v1/admin/projects/:id/assistant` | `jwtAuth` — read/update config; the knowledge corpus is **secret-scanned** (rejects keys/tokens/connection strings with `SECRET_DETECTED`) and 40k-capped before persist |
+| `GET /v1/admin/projects/:id/assistant/logs` | `jwtAuth` — recent turns for audit/cost review |
+
+**Frontend surfaces:**
+
+| Surface | Location | What it adds |
+|---------|----------|-------------|
+| `AssistantConfigCard` | `apps/admin/src/components/AssistantConfigCard.tsx` | One-toggle enable + greeting/label/chips; collapsed "Advanced" holds the knowledge editor + recent-turns log |
+| SDK configurator | `apps/admin/src/pages/ProjectsPage.tsx` | Mounts `AssistantConfigCard` under `SdkInstallCard` |
+
+**Security model:** the system prompt hard-forbids revealing secrets/source/env
+and treats the user's message as untrusted data (prompt-injection resistant);
+the knowledge corpus is the only operator-supplied text and is secret-scanned on
+write; every turn is logged. Full doc: [`docs/SDK_ASSISTANT.md`](docs/SDK_ASSISTANT.md).
 
 ---
 

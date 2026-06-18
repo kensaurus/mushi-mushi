@@ -50,12 +50,15 @@ export function SortHeader({
         ? 'w-full min-w-0 justify-center'
         : 'w-full min-w-0 justify-start'
   return (
-    <th scope="col" className={`${cellPx} py-2 font-medium ${alignCls} ${className}`}>
+    <th
+      scope="col"
+      className={`${cellPx} py-2 font-medium ${alignCls} ${className}`}
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
       <button
         type="button"
         onClick={() => onSort(field)}
         className={`inline-flex items-center gap-1 hover:text-fg ${active ? 'text-fg' : 'text-fg-faint'} ${btnCls}`}
-        aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
         aria-label={fullLabel ? `Sort by ${fullLabel}` : `Sort by ${label}`}
       >
         {labelNode}

@@ -30,6 +30,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { collectDescendantActionIds } from '../_shared/inventory-story-scope.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -96,6 +97,8 @@ interface RequestBody {
     path?: string
     method?: string
   }>
+  /** When set, gates only examine actions under this user_story subtree. */
+  story_node_id?: string | null
 }
 
 async function startGateRun(
@@ -158,9 +161,15 @@ async function runStatusClaimGate(
     .eq('node_type', 'action')
     .returns<Array<{ id: string; label: string; metadata: Record<string, unknown> | null }>>()
 
+  let scopedActions = actions ?? []
+  if (body.story_node_id) {
+    const scopedIds = await collectDescendantActionIds(db, body.project_id!, body.story_node_id)
+    scopedActions = scopedActions.filter((a) => scopedIds.has(a.id))
+  }
+
   let inserted = 0
   const violations: Array<{ id: string; claimed: string; derived: string }> = []
-  for (const a of actions ?? []) {
+  for (const a of scopedActions) {
     const claimed = (a.metadata?.['claimed_status'] as string | undefined) ?? 'unknown'
     const derived = (a.metadata?.['status'] as string | undefined) ?? 'unknown'
     if (claimed === 'unknown') continue
@@ -190,9 +199,10 @@ async function runStatusClaimGate(
 
   const status: GateStatus = violations.length === 0 ? 'pass' : 'fail'
   const summary = {
-    actions_examined: actions?.length ?? 0,
+    actions_examined: scopedActions.length,
     violations: violations.length,
     sample: violations.slice(0, 5),
+    ...(body.story_node_id ? { story_node_id: body.story_node_id } : {}),
   }
   await finishGateRun(db, runId, status, summary, inserted)
   return { gate: 'status_claim', status, summary, findings_count: inserted, run_id: runId }

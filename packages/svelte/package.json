@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "MIT",
   "description": "Svelte SDK for Mushi Mushi — context-based init, SvelteKit error hook integration",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

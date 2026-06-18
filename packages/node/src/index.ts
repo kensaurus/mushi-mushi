@@ -7,3 +7,19 @@ export type { TraceContext } from './trace'
 export { createOtelSpanProcessor } from './otel'
 export { mushiTraceMiddleware, emitMushiSpan } from './middleware'
 export type { TraceMiddlewareOptions } from './middleware'
+
+// Reward webhook receiver (Workstream D3) — turnkey host-side "grant role /
+// grant membership" trigger driven by Mushi reward events.
+export {
+  createMushiRewardsHandler,
+  verifyRewardSignature,
+  parseRewardEvent,
+} from './rewards'
+export type {
+  MushiRewardEventName,
+  MushiRewardEvent,
+  MushiTierChangedEvent,
+  MushiPointsAwardedEvent,
+  MushiRewardsHandlerOptions,
+  MushiRewardsHandler,
+} from './rewards'

@@ -137,7 +137,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                         onRunGatesForStory(story.id)
                       }}
                       className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-colors"
-                      title="Run gates for the whole project (story-scoped runs coming soon)"
+                      title="Run gates for actions in this user story"
                     >
                       Run gates
                     </button>
@@ -150,7 +150,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                         onRunCrawlerForStory(story.id)
                       }}
                       className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-colors"
-                      title="Run crawler for the whole project (story-scoped runs coming soon)"
+                      title="Run crawler for pages linked to this user story"
                     >
                       Run crawler
                     </button>

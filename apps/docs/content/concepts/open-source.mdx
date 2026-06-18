@@ -1,0 +1,61 @@
+---
+title: Open source & licensing
+---
+
+import { Callout } from 'nextra/components'
+
+# Open source & licensing
+
+Mushi is **open by default**. The cloud product at `app.mushimushi.dev` runs the
+exact same code in this repository — there is no closed-source "enterprise"
+fork. What you self-host is what we run.
+
+<Callout type="info">
+  **TL;DR** — the SDKs you embed in your app are **MIT** (use them anywhere, open
+  or closed). The server you self-host is **AGPLv3** (true OSI open source;
+  copyleft applies if you re-offer a modified server as a SaaS).
+</Callout>
+
+## Two licenses, one repo
+
+| Surface | License | What you can do |
+| --- | --- | --- |
+| **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `brand`, `marketing-ui` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
+| **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork. Source must stay open — AGPLv3 §13 applies to SaaS deployments of modified servers. |
+| **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
+
+### Why MIT for the SDK?
+
+The widget runs inside *your* application. A copyleft SDK would force your app's
+license, which is unacceptable — so every package you ship to your users is MIT.
+Drop `@mushi-mushi/react` into a closed-source product with zero obligations.
+
+### Why AGPLv3 for the server?
+
+The server is the value we host. AGPLv3 keeps it genuinely open — you can
+self-host, audit, and modify it — while ensuring that anyone who runs a
+*modified* Mushi as a competing service publishes their changes back. This is
+the Grafana/Plausible model: open core, fair-use copyleft on the hosted part.
+
+## No lock-in
+
+- **Bring your own LLM key.** The diagnosis engine uses *your* Anthropic/OpenAI
+  key (BYOK). The MCP server needs **no second LLM key** — it reads diagnoses the
+  server already produced.
+- **Bring your own storage.** S3, Cloudflare R2, GCS, MinIO, or Supabase Storage,
+  per project.
+- **Your data lives where you choose.** Self-host the whole stack, or use Mushi
+  Cloud — same code either way. Export and leave at any time.
+
+## Run it yourself
+
+- [Self-host in minutes (Docker Compose)](/self-hosting/docker-compose) — the full
+  stack in one command.
+- [Self-hosting overview](/self-hosting) — managed-Supabase and step-by-step paths.
+- [Public roadmap](/roadmap) — everything we're building, in the open.
+
+## Trademarks
+
+The code is open source; the **name and logo are not**. "Mushi Mushi", the
+mushi-chan mascot, and the wordmark are trademarks. Fork the code freely, but
+ship your fork under your own brand — don't imply it's the official Mushi.

@@ -395,7 +395,7 @@ export function OnboardingPage() {
         title={copy?.title ?? 'Setup'}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'}
+        description={copy?.description ?? 'Create a project, mint an ingest key, install the SDK, and watch your first report become a plain-English diagnosis — target: under 2 minutes.'}
         helpTitle={copy?.help?.title ?? 'About this wizard'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -709,6 +709,8 @@ export function OnboardingPage() {
 
       {effectiveTab === 'verify' && (
         <>
+      {project && <TimeToFirstDiagnosisCard hasApiKey={stats.hasApiKey} />}
+
       {project && nextRequired?.id === 'api_key_generated' && (
         <Card className="p-5 space-y-4">
           <div>
@@ -906,6 +908,73 @@ export function OnboardingPage() {
       </p>
       ) : null}
     </div>
+  )
+}
+
+/** Format a millisecond interval as a short human string ("1m 48s", "42s"). */
+function formatDiagnosisDuration(ms: number): string {
+  const totalSec = Math.max(0, Math.round(ms / 1000))
+  if (totalSec < 60) return `${totalSec}s`
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  return rem ? `${h}h ${rem}m` : `${h}h`
+}
+
+interface TimeToFirstDiagnosis {
+  keyMintedAt: string | null
+  firstDiagnosisAt: string | null
+  ms: number | null
+}
+
+/**
+ * Surfaces the phase-1 north-star: time from minting an ingest key to the
+ * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
+ * install — the one number to protect before spending on reach.
+ */
+function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
+  const { data, loading } = usePageData<TimeToFirstDiagnosis>(
+    '/v1/admin/onboarding/time-to-first-diagnosis',
+  )
+  if (!hasApiKey || loading) return null
+
+  const ms = data?.ms ?? null
+  const TARGET_MS = 2 * 60 * 1000
+
+  if (ms != null) {
+    const underTarget = ms <= TARGET_MS
+    return (
+      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
+        <div className="flex items-baseline justify-between gap-3">
+          <div>
+            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Time to first diagnosis</p>
+            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
+              {formatDiagnosisDuration(ms)}
+            </p>
+          </div>
+          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-info'}`}>
+            {underTarget ? 'Under the 2-minute target ✓' : 'Target: under 2 minutes'}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-fg-muted leading-relaxed">
+          From minting your ingest key to your first plain-English diagnosis. This is the one number worth
+          protecting — the faster a fresh install gets an answer, the more the loop earns its place.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="p-5 border border-edge-subtle">
+      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Time to first diagnosis</p>
+      <p className="mt-0.5 text-sm text-fg-secondary">Waiting on your first classified report.</p>
+      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
+        Send a test report below (or trigger one from your app). Target: a plain-English diagnosis in under
+        2 minutes from key mint.
+      </p>
+    </Card>
   )
 }
 
