@@ -23,10 +23,10 @@ export const GLOTIT_DEMO_URL = 'https://kensaur.us/glot-it'
 
 export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   index: {
-    image: 'dashboard-dark.png',
-    gif: 'tour-pdca-loop.gif',
-    alt: 'Mushi admin console — animated walk through the Plan → Do → Check → Act loop',
-    caption: 'Live admin demo · 4-stop PDCA tour',
+    image: 'report-detail-dark.png',
+    gif: 'tour-console-v2.gif',
+    alt: 'Mushi admin console — DiagnosisFixHero plus animated walk through dashboard, reports, fixes, and Connect',
+    caption: 'Live admin demo · free signup · 4-stop incident loop tour',
     route: '/dashboard',
   },
   dashboard: {
@@ -125,10 +125,10 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     route: '/health',
   },
   'qa-coverage': {
-    image: 'reports-dark.png',
-    gif: 'glotit-report-flow.gif',
-    alt: 'QA Coverage — scheduled user-story tests with Firecrawl / Browserbase',
-    caption: 'Dogfood glot.it flows as regression guards on cron',
+    image: 'qa-coverage-dark.png',
+    gif: 'qa-coverage-demo.gif',
+    alt: 'QA Coverage — scheduled user-story tests with Firecrawl / Browserbase / local Playwright',
+    caption: 'NL prompts or Playwright scripts on cron — failures thread to Slack',
     route: '/qa-coverage',
   },
   intelligence: {
@@ -157,7 +157,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   iterate: {
     image: 'intelligence-dark.png',
-    gif: 'tour-pdca-loop.gif',
+    gif: 'tour-console-v2.gif',
     alt: 'Iterate (PDCA) — producer/critic loop with selectable personas',
     caption: 'Live progress + draft-PR exit',
     route: '/iterate',
@@ -194,8 +194,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   mcp: {
     image: 'mcp-dark.png',
-    alt: 'MCP — Model Context Protocol install snippet and tool catalog',
-    caption: '13-tool catalog · pre-filled .cursor/mcp.json',
+    alt: 'MCP — Model Context Protocol install snippet and lean tool catalog',
+    caption: '71-tool catalog · lean default via MUSHI_FEATURES · Add to Cursor deeplink',
     route: '/mcp',
   },
   notifications: {
@@ -211,9 +211,10 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     route: '/cost',
   },
   rewards: {
-    image: 'billing-dark.png',
-    alt: 'Rewards program — point rules and contributor leaderboard',
-    caption: 'Reporter attribution closes the feedback loop',
+    image: 'rewards-dark.png',
+    gif: 'rewards-demo.gif',
+    alt: 'Rewards program — point rules, tier ladder, and contributor leaderboard',
+    caption: 'Automatic report.submitted / report.triaged points + one-click preset install',
     route: '/rewards',
   },
   query: {
@@ -284,9 +285,10 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     route: '/docs-bridge',
   },
   explore: {
-    image: 'graph-dark.png',
+    image: 'explore-dark.png',
+    gif: 'explore-demo.gif',
     alt: 'Codebase Atlas — ReactFlow graph coloured by architectural layer',
-    caption: 'Semantic search over vector embeddings of indexed files',
+    caption: 'Semantic search over vector embeddings of indexed source files',
     route: '/explore',
   },
   queue: {

@@ -10,10 +10,10 @@ Click any image to open the same page in the live admin demo.
 <div align="center">
 
 <a href="https://kensaur.us/mushi-mushi/admin/" title="Open the live admin demo — animated guided tour">
-  <img src="./screenshots/tour-pdca-loop.gif" alt="Animated guided tour through the logged-in admin console, walking the full Plan → Do → Check → Act loop." width="100%" />
+  <img src="./screenshots/tour-console-v2.gif" alt="Animated guided tour through the logged-in admin console — dashboard, reports, fixes, and Connect hub." width="100%" />
 </a>
 
-<sub>↑ animated 4-stop walk through the Plan → Do → Check → Act loop</sub>
+<sub>↑ animated 4-stop tour · free signup · dashboard → reports → fixes → Connect</sub>
 
 <a href="https://kensaur.us/glot-it" title="glot.it dogfood — Mushi SDK in production">
   <img src="./screenshots/glotit-report-flow.gif" alt="glot.it live app — Mushi web SDK feedback flow (dogfood project)" width="100%" />
@@ -200,18 +200,28 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
     <p align="center"><b>Billing</b> · <sub>plan comparison (Hobby Free / Starter $19 / Pro $99 / Enterprise), per-plan reports/month + overage cents/report + retention days + admin seats, Stripe-metered LLM $ per day, in-app support form.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/"><img src="./screenshots/report-detail-dark.png" alt="Report detail page for a High-severity login-button bug — 4-stamp PDCA receipt, live Branch & PR timeline." /></a>
-    <p align="center"><b>Report detail</b> · <sub>4-stamp PDCA receipt + live Branch & PR timeline — every step of the dispatch lifecycle in a single round-trip so it never N+1s.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/admin/rewards"><img src="./screenshots/rewards-dark.png" alt="Rewards program — point rules, tier ladder with host_credit_payload grants, and contributor leaderboard." /></a>
+    <p align="center"><b>Rewards</b> · <sub>automatic <code>report.submitted</code> / <code>report.triaged</code> point awards, one-click preset install, vault-backed reward webhooks, and <code>@mushi-mushi/node</code> HMAC receiver for host-side tier grants.</sub></p>
   </td>
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/explore"><img src="./screenshots/dashboard-dark.png" alt="Codebase Atlas (/explore) — Graph view with nodes coloured by architectural layer (UI blue, Library green, Backend red, Tests purple), directed import arrows, layer legend bottom-left, floating file detail panel top-right." /></a>
-    <p align="center"><b>Codebase Atlas — Graph</b> · <sub>every indexed source file as a node, coloured by layer (UI / Library / Backend / Tests / Config). Directed import arrows show how modules depend on each other. Click any node for path, language, line count, and a content preview with line numbers.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/admin/"><img src="./screenshots/report-detail-dark.png" alt="Report detail — DiagnosisFixHero, PDCA receipt strip, Branch and PR timeline." /></a>
+    <p align="center"><b>Report detail</b> · <sub><code>DiagnosisFixHero</code> at the fold — plain-English root cause, confidence chip, paste-ready Cursor fix prompt, plus 4-stamp PDCA receipt and live Branch &amp; PR timeline.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/explore"><img src="./screenshots/dashboard-dark.png" alt="Codebase Atlas (/explore) — Layers view with horizontal Sankey columns (UI → Library → Backend → Tests → Config), proportional fill bars per column, bezier import curves with arrows." /></a>
-    <p align="center"><b>Codebase Atlas — Layers + Search</b> · <sub>Layers tab: horizontal Sankey with proportional fill bars and bezier import curves. Search tab: semantic search over vector embeddings — describe what you need in plain English and ranked results appear with colour-coded similarity bars and layer filter chips.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/admin/qa-coverage"><img src="./screenshots/qa-coverage-dark.png" alt="QA Coverage — scheduled user-story tests with Firecrawl / Browserbase / local Playwright providers." /></a>
+    <p align="center"><b>QA Coverage Suite</b> · <sub>NL prompts or Playwright scripts on cron — Firecrawl Actions default, Browserbase BYOK, local CLI — pass/fail history and Slack failure threading.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/explore"><img src="./screenshots/explore-dark.png" alt="Codebase Atlas (/explore) — Graph view with nodes coloured by architectural layer, directed import arrows, layer legend." /></a>
+    <p align="center"><b>Codebase Atlas — Graph</b> · <sub>every indexed source file as a node, coloured by layer (UI / Library / Backend / Tests / Config). Directed import arrows show module dependencies. Semantic search tab ranks pgvector chunks by similarity.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/skills"><img src="./screenshots/skills-dark.png" alt="Skill Pipelines — skills.sh catalog synced daily, attach skill chains to reports, handoff or Cursor Cloud mode." /></a>
+    <p align="center"><b>Skill Pipelines</b> · <sub>skills.sh-compatible catalog synced daily; attach a skill chain to a report and stream step status over Realtime — handoff or Cursor Cloud mode.</sub></p>
   </td>
 </tr>
 </table>
