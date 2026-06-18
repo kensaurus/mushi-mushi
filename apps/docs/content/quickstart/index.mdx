@@ -1,9 +1,17 @@
 # Quickstart
 
-Pick your stack. Each guide takes ≈ 5 minutes from `pnpm add` to your first
-report landing in the admin dashboard.
+**Start here if you vibe-code:** the [incident loop](/quickstart/incident-loop) gets you from broken prod to a paste-ready fix prompt in Cursor — usually under a few minutes.
+
+Or run the wizard: `npx mushi-mushi` (detects your framework, writes env vars, optional test report).
 
 import { Cards } from 'nextra/components'
+
+## MCP-first (recommended)
+
+<Cards>
+  <Cards.Card title="Incident loop" href="/quickstart/incident-loop" arrow />
+  <Cards.Card title="MCP server" href="/quickstart/mcp" arrow />
+</Cards>
 
 ## Web
 
@@ -25,14 +33,8 @@ import { Cards } from 'nextra/components'
   <Cards.Card title="Capacitor" href="/quickstart/capacitor" arrow />
 </Cards>
 
-## AI agents
-
-<Cards>
-  <Cards.Card title="MCP server" href="/quickstart/mcp" arrow />
-</Cards>
-
 ## Need a project ID?
 
 Sign up at [app.mushimushi.dev](https://app.mushimushi.dev) (or
-[self-host](/self-hosting)) and create a project. Each guide assumes you have
-a project ID and an API key — the project page shows both.
+[self-host](/self-hosting)) and create a project. Copy env vars from
+[`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example).

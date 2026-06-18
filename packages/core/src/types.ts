@@ -24,6 +24,8 @@ export interface MushiConfig {
   integrations?: MushiIntegrationsConfig;
   offline?: MushiOfflineConfig;
   rewards?: MushiRewardsConfig;
+  /** Page-aware, user-data-aware in-SDK assistant (P5). */
+  assistant?: MushiAssistantConfig;
 
   debug?: boolean;
   enabled?: boolean;
@@ -1108,6 +1110,56 @@ export interface MushiDiagnosticsResult {
   bannerRendered: boolean;
 }
 
+/**
+ * Page-aware assistant (P5). The host app publishes a structured snapshot of
+ * what the current screen is showing; the SDK forwards only this narrow,
+ * server-validated subset so a malicious page cannot inject arbitrary prompt
+ * fields. Ported from the admin console's page-context registry.
+ */
+export interface MushiPageContext {
+  /** Current route/path (e.g. '/activity'). */
+  route: string;
+  /** Human title of the screen. */
+  title?: string;
+  /** One-line description of what is on screen. */
+  summary?: string;
+  /** Active filters as a flat key/value map. */
+  filters?: Record<string, string | number | boolean | null | undefined>;
+  /** The focused/selected entity, if any. */
+  selection?: { kind: string; id: string; label?: string } | null;
+}
+
+export interface MushiAssistantConfig {
+  /**
+   * Enable the in-SDK assistant tab. Defaults to false; the console can also
+   * enable it via runtime config so it can be turned on without a rebuild.
+   */
+  enabled?: boolean;
+  /** Tab label (default: "Ask"). */
+  label?: string;
+  /** Greeting shown on an empty assistant thread. */
+  greeting?: string;
+  /** Suggested starter questions shown on an empty thread. */
+  suggestions?: string[];
+}
+
+export interface MushiAssistantStep {
+  label: string;
+  detail?: string;
+}
+
+export interface MushiAssistantReply {
+  /** 'answer' resolves the turn; 'clarify' asks the user a follow-up. */
+  kind: 'answer' | 'clarify';
+  text?: string;
+  steps?: MushiAssistantStep[];
+  /** For 'clarify' replies. */
+  question?: string;
+  options?: string[];
+  /** Server-assigned thread id so the next turn continues the conversation. */
+  threadId?: string;
+}
+
 export interface MushiSDKInstance {
   /**
    * Open the reporter widget. With no options, opens to the category
@@ -1178,6 +1230,29 @@ export interface MushiSDKInstance {
    * users already know.
    */
   identify(userId: string, traits?: { email?: string; name?: string; [k: string]: unknown }): void;
+
+  /**
+   * Identify the current end user with a signed Mushi identity JWT minted by
+   * the host app's server (see `@mushi-mushi/node`'s `mintMushiIdentityToken`).
+   * This is the trust anchor for secure "My Reports", rewards-to-membership
+   * grants, and the per-user assistant data index — the backend re-verifies
+   * the signature against the project's identity secret. Unlike `identify()`,
+   * which is spoofable, claims from this token are trusted server-side.
+   *
+   * Pass `null` (or call on logout) to clear the identity and fall back to the
+   * anonymous reporter token.
+   */
+  identifyWithToken(token: string | null): void;
+
+  /**
+   * Publish the current screen's context so the in-SDK assistant can answer
+   * page-aware questions. Call on every route/selection change. Pass `null`
+   * to clear (e.g. on unmount). Only a narrow subset is sent to the server.
+   */
+  publishPageContext(context: MushiPageContext | null): void;
+
+  /** Open the widget on the assistant ("Ask") tab. */
+  openAssistant(): void;
 
   /**
    * Sentry-grade observability surface (2026-05-07).
@@ -1322,6 +1397,16 @@ export interface MushiApiClient {
   submitReport(report: MushiReport): Promise<MushiApiResponse<{ reportId: string }>>;
   getReportStatus(reportId: string): Promise<MushiApiResponse<{ status: MushiReportStatus }>>;
   getSdkConfig(): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
+  /**
+   * Send one assistant turn. Forwards the page context + thread id; the
+   * end-user identity token (when set) travels on the X-Mushi-User-Token
+   * header so the backend can scope retrieval to the verified user.
+   */
+  askAssistant(input: {
+    message: string;
+    threadId?: string | null;
+    context?: MushiPageContext | null;
+  }): Promise<MushiApiResponse<MushiAssistantReply>>;
   getLatestSdkVersion(packageName: string): Promise<MushiApiResponse<MushiSdkVersionInfo>>;
   /**
    * Mushi v2.1: ship a single passive-discovery observation (route +

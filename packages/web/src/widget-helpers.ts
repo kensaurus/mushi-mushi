@@ -25,10 +25,19 @@
  * - Behaviour-preserving move: bodies are identical to the pre-split widget.ts.
  */
 import type {
+  MushiAssistantReply,
   MushiReportCategory,
   MushiReporterComment,
   MushiReporterReport,
 } from '@mushi-mushi/core';
+
+/** One rendered turn in the in-widget assistant thread. */
+export interface AssistantTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  /** For clarify replies — present on assistant turns only. */
+  options?: string[];
+}
 
 export type WidgetStep =
   | 'category'
@@ -40,7 +49,8 @@ export type WidgetStep =
   | 'leaderboard'
   | 'roadmap'
   | 'account'
-  | 'cross-app-reports';
+  | 'cross-app-reports'
+  | 'assistant';
 
 export const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
   bug: '\u26A0\uFE0F',
@@ -182,6 +192,7 @@ export const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
   roadmap: 1,
   account: 1,
   'cross-app-reports': 1,
+  assistant: 1,
 };
 
 /** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
@@ -257,4 +268,14 @@ export interface WidgetCallbacks {
   /** Called when the user signs out of the in-widget community session.
    *  Host should clear any persisted tester JWT. */
   onTesterSignOut?(): void;
+
+  // ─── Assistant tab (P5) ──────────────────────────────────────────
+  /** Whether the assistant tab should be shown at all. */
+  assistantEnabled?: boolean;
+  /** Tab label + greeting + starter suggestions for the empty thread. */
+  assistantLabel?: string;
+  assistantGreeting?: string;
+  assistantSuggestions?: string[];
+  /** Send one assistant turn; resolves with the structured reply. */
+  onAssistantAsk?(message: string, threadId: string | null): Promise<MushiAssistantReply | null>;
 }

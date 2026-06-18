@@ -22,6 +22,10 @@ import {
   clampPlotTopPercent,
   summarizeSeriesValues,
 } from './charts/ChartSeriesSummary'
+import {
+  ChartAccessibleSummary,
+  sparklineSummaryRows,
+} from './charts/ChartAccessibleSummary'
 import { ChartInlineDataLabels, buildInlineLabelPoints, formatInlineLabelValue, INLINE_LABEL_CLASS, INLINE_LABEL_KIND_ACCENT } from './charts/ChartInlineDataLabels'
 import { SeverityColorLegend } from './charts/SeverityColorLegend'
 import { SEVERITY_TRAFFIC } from '../lib/severityTraffic'
@@ -86,6 +90,8 @@ export interface KpiTileProps {
   seriesDays?: string[]
   /** Optional Y-axis caption for the sparkline (e.g. "runs / day"). */
   seriesYAxisCaption?: string
+  /** Hero emphasis — 2× value size, spans two columns in MetricStrip grids. */
+  variant?: 'default' | 'primary'
 }
 
 const TONE_SPARK_ACCENT: Record<Tone, string> = {
@@ -109,13 +115,17 @@ export function KpiTile({
   seriesAccent,
   seriesAriaLabel,
   seriesDays,
+  variant = 'default',
 }: KpiTileProps) {
+  const isPrimary = variant === 'primary'
   const hasSeries = Array.isArray(series) && series.length >= 2
   const showSparkAxes = hasSeries && Array.isArray(seriesDays) && seriesDays.length === series!.length
   const showSpark = hasSeries && (series!.some((v) => v > 0) || showSparkAxes)
   const sparkColour = seriesAccent ?? (accent ? TONE_SPARK_ACCENT[accent] : 'text-fg-faint')
+  const sparkAria = seriesAriaLabel ?? `${label} trend`
+  const summaryRows = showSpark ? sparklineSummaryRows(seriesDays, series!) : []
   const inner = (
-    <div className="px-3 py-2.5">
+    <div className={`px-3 ${isPrimary ? 'py-3.5' : 'py-2.5'} ${isPrimary ? 'lg:col-span-2' : ''}`}>
       <div className={`pb-1.5 ${PANEL_HEADER_SEPARATOR}`}>
         <div className="flex items-center gap-1 truncate">
           <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
@@ -133,9 +143,9 @@ export function KpiTile({
       </div>
       <div className="flex items-center gap-1.5 mt-1 min-w-0">
         <div
-          className={`flex-1 min-w-0 text-lg font-semibold font-mono truncate ${
-            accent ? TONE_TEXT[accent] : 'text-fg'
-          }`}
+          className={`flex-1 min-w-0 font-semibold font-mono truncate ${
+            isPrimary ? 'text-2xl sm:text-3xl' : 'text-lg'
+          } ${accent ? TONE_TEXT[accent] : 'text-fg'}`}
         >
           {value}
         </div>
@@ -154,18 +164,30 @@ export function KpiTile({
         </InlineProof>
       )}
       {showSpark && (
-        <div className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible" aria-hidden={seriesAriaLabel ? undefined : true}>
+        <div
+          className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible"
+          role="img"
+          aria-label={sparkAria}
+        >
           <LineSparkline
             values={series!}
             timestamps={showSparkAxes ? seriesDays : undefined}
             accent={sparkColour}
-            ariaLabel={seriesAriaLabel ?? `${label} trend`}
+            ariaLabel={sparkAria}
             showAxes={showSparkAxes}
             scaleToData={showSparkAxes}
             valueFormat="count"
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
-            height={showSparkAxes ? 52 : 18}
+            height={showSparkAxes ? (isPrimary ? 64 : 52) : 18}
+          />
+          <ChartAccessibleSummary
+            caption={sparkAria}
+            columns={[
+              { key: 'period', label: 'Period' },
+              { key: 'value', label: label },
+            ]}
+            rows={summaryRows}
           />
         </div>
       )}
@@ -173,17 +195,22 @@ export function KpiTile({
   )
   if (to) {
     return (
-      <Card elevated interactive>
+      <Card elevated interactive className={isPrimary ? 'ring-1 ring-brand/25' : undefined}>
         <Link
           to={to}
           className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md"
+          aria-label={`${label}: ${value}`}
         >
           {inner}
         </Link>
       </Card>
     )
   }
-  return <Card elevated>{inner}</Card>
+  return (
+    <Card elevated className={isPrimary ? 'ring-1 ring-brand/25' : undefined}>
+      {inner}
+    </Card>
+  )
 }
 
 /* ── LegendDot ──────────────────────────────────────────────────────────── */
@@ -651,6 +678,25 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
   )
   const inlineByIdx = new Map(inlineLabels.map((p) => [p.idx, p]))
 
+  const accessibleRows = chartDays.map((d) => ({
+    day: shortDay(d.day),
+    total: d.total,
+    critical: d.critical,
+    high: d.high,
+    medium: d.medium,
+    low: d.low,
+    ...(showUnscored ? { unscored: d.unscored ?? 0 } : {}),
+  }))
+  const accessibleColumns = [
+    { key: 'day', label: 'Day' },
+    { key: 'total', label: 'Total' },
+    { key: 'critical', label: 'Critical' },
+    { key: 'high', label: 'High' },
+    { key: 'medium', label: 'Medium' },
+    { key: 'low', label: 'Low' },
+    ...(showUnscored ? [{ key: 'unscored', label: 'Unscored' }] : []),
+  ]
+
   return (
     <div className="w-full min-w-0">
       <ChartFrame
@@ -658,6 +704,9 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
         yTickLabels={yTicks}
         xLabels={chartDays.map((d) => d.day)}
         xBucketCount={chartDays.length}
+        accessibleCaption={`Report intake by severity over ${chartDays.length} days — ${totalReports} reports total`}
+        accessibleColumns={accessibleColumns}
+        accessibleRows={accessibleRows}
       >
         <div
           className="relative h-full w-full min-w-0"

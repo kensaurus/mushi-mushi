@@ -250,8 +250,8 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     @keyframes mushi-pulse {
       0%   { box-shadow: 0 0 0 0 ${widgetAccent}; opacity: 1; }
-      70%  { box-shadow: 0 0 0 8px rgba(224,60,44,0); opacity: 0.5; }
-      100% { box-shadow: 0 0 0 0 rgba(224,60,44,0); opacity: 1; }
+      70%  { box-shadow: 0 0 0 8px ${widgetAccent}00; opacity: 0.5; }
+      100% { box-shadow: 0 0 0 0 ${widgetAccent}00; opacity: 1; }
     }
 
     .mushi-panel {
@@ -1397,12 +1397,18 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       position: fixed;
       left: 0;
       right: 0;
-      height: 36px;
+      /* min-height (not fixed height) + border-box so the safe-area padding
+         below extends the bar into the notch/home-indicator zone instead of
+         letting content bleed under the status bar (mobile safe-area bleed
+         fix — Workstream C). Horizontal padding also clears the left/right
+         insets for landscape notches. */
+      box-sizing: border-box;
+      min-height: 36px;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      padding: 0 16px;
+      padding: 0 calc(16px + env(safe-area-inset-right, 0px)) 0 calc(16px + env(safe-area-inset-left, 0px));
       font-family: ${fontMono};
       font-size: 12px;
       letter-spacing: 0.04em;
@@ -1412,8 +1418,8 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       animation: mushi-banner-slide-in 0.3s ${easeStamp} both;
     }
 
-    .mushi-banner.top    { top: 0; }
-    .mushi-banner.bottom { bottom: 0; }
+    .mushi-banner.top    { top: 0; padding-top: env(safe-area-inset-top, 0px); }
+    .mushi-banner.bottom { bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
 
     /* --- neon variant (electric lime — dev / beta tool aesthetic) --- */
     .mushi-banner.neon {
@@ -1665,5 +1671,26 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-xapp-app-name{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px}
     .mushi-xapp-group{margin-bottom:14px}
     .mushi-label{display:block;font-weight:600;margin-bottom:6px}
+
+    /* ── Assistant tab (P5) ──────────────────────────────────────── */
+    .mushi-assistant{display:flex;flex-direction:column;height:100%;min-height:0;max-height:60vh}
+    .mushi-assistant-log{flex:1;min-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px}
+    .mushi-assistant-greeting{font:400 14px/1.5 ${fontBody};color:${inkMuted};padding:6px 2px}
+    .mushi-assistant-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    .mushi-assistant-chip{background:${widgetAccentWash};color:${widgetAccentInk};border:1px solid ${ruleStrong};border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:${fontBody};transition:background .15s}
+    .mushi-assistant-chip:hover{background:${isDark ? 'rgba(255,90,71,0.22)' : 'rgba(224,60,44,0.14)'}}
+    .mushi-assistant-chip:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}
+    .mushi-assistant-msg{max-width:85%;padding:8px 12px;border-radius:12px;font:400 14px/1.45 ${fontBody};white-space:pre-wrap;word-break:break-word}
+    .mushi-assistant-msg-user{align-self:flex-end;background:${widgetAccent};color:#fff;border-bottom-right-radius:4px}
+    .mushi-assistant-msg-bot{align-self:flex-start;background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};color:${ink};border-bottom-left-radius:4px}
+    .mushi-assistant-thinking{opacity:0.6;font-size:18px;letter-spacing:2px}
+    .mushi-assistant-error{align-self:flex-start;color:${isDark ? '#F87171' : '#DC2626'};font-size:12px;padding:4px 2px}
+    .mushi-assistant-form{display:flex;align-items:flex-end;gap:8px;border-top:1px solid ${rule};padding-top:8px}
+    .mushi-assistant-input{flex:1;resize:none;max-height:120px;border:1px solid ${ruleStrong};border-radius:10px;padding:8px 12px;font:400 14px/1.4 ${fontBody};background:${paper};color:${ink}}
+    .mushi-assistant-input:focus-visible{outline:2px solid ${widgetAccent};outline-offset:1px}
+    .mushi-assistant-submit{flex-shrink:0;width:36px;height:36px;border:none;border-radius:50%;background:${widgetAccent};color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,opacity .15s}
+    .mushi-assistant-submit:hover{transform:translateY(-1px)}
+    .mushi-assistant-submit:disabled{opacity:0.5;cursor:default;transform:none}
+    .mushi-assistant-submit:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}
   `;
 }

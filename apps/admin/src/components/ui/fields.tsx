@@ -344,13 +344,11 @@ export function MetricHelpTrigger({
 }: {
   content: ReactNode
   ariaLabel?: string
-  /** When omitted, auto-picks based on plain-string length. */
+  /** When omitted, Tooltip auto-picks based on plain-string length / shape. */
   nowrap?: boolean
 }) {
-  const isPlainString = typeof content === 'string'
-  const resolvedNowrap = nowrap ?? (isPlainString ? content.length <= 48 : false)
   return (
-    <Tooltip content={content} side="auto" portal nowrap={resolvedNowrap}>
+    <Tooltip content={content} side="auto" portal nowrap={nowrap}>
       <button
         type="button"
         aria-label={ariaLabel}

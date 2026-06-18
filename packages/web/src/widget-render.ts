@@ -46,7 +46,7 @@ import {
   STEP_NUMBER,
   TOTAL_STEPS,
 } from './widget-helpers';
-import type { WidgetCallbacks, WidgetRewardsState, WidgetStep } from './widget-helpers';
+import type { AssistantTurn, WidgetCallbacks, WidgetRewardsState, WidgetStep } from './widget-helpers';
 
 export interface WidgetRenderCtx {
   config: Required<MushiWidgetConfig>;
@@ -92,6 +92,10 @@ export interface WidgetRenderCtx {
   effectiveMinLength: () => number;
   categoryLabel: (id: string) => string;
   categoryIcon: (id: string) => string;
+  // ─── Assistant tab (P5) ──────────────────────────────────────────
+  assistantTurns: AssistantTurn[];
+  assistantSending: boolean;
+  assistantError: string | null;
 }
 
 export function renderStep(ctx: WidgetRenderCtx): string {
@@ -106,8 +110,66 @@ export function renderStep(ctx: WidgetRenderCtx): string {
       case 'roadmap': return renderRoadmapStep(ctx);
       case 'account': return renderAccountStep(ctx);
       case 'cross-app-reports': return renderCrossAppReportsStep(ctx);
+      case 'assistant': return renderAssistantStep(ctx);
     }
   }
+
+/**
+ * Page-aware assistant tab. A simple chat transcript + composer that shares
+ * the panel chrome. Replies (answer / clarify) are rendered as assistant
+ * bubbles; clarify options become quick-reply chips. The greeting + starter
+ * suggestions come from the assistant config (console-overridable).
+ */
+export function renderAssistantStep(ctx: WidgetRenderCtx): string {
+  const label = ctx.callbacks.assistantLabel || 'Ask';
+  const greeting = ctx.callbacks.assistantGreeting || 'Ask me anything about this app.';
+  const suggestions = ctx.callbacks.assistantSuggestions ?? [];
+  const empty = ctx.assistantTurns.length === 0;
+
+  const transcript = empty
+    ? `<div class="mushi-assistant-greeting">${escapeHtml(greeting)}</div>
+       ${suggestions.length ? `<div class="mushi-assistant-suggestions">${suggestions
+         .map((s) => `<button type="button" class="mushi-assistant-chip" data-action="assistant-suggest" data-value="${escapeHtml(s)}">${escapeHtml(s)}</button>`)
+         .join('')}</div>` : ''}`
+    : ctx.assistantTurns
+        .map((turn) => {
+          const cls = turn.role === 'user' ? 'mushi-assistant-msg-user' : 'mushi-assistant-msg-bot';
+          const opts = turn.options && turn.options.length
+            ? `<div class="mushi-assistant-suggestions">${turn.options
+                .map((o) => `<button type="button" class="mushi-assistant-chip" data-action="assistant-suggest" data-value="${escapeHtml(o)}">${escapeHtml(o)}</button>`)
+                .join('')}</div>`
+            : '';
+          return `<div class="mushi-assistant-msg ${cls}">${escapeHtml(turn.text)}</div>${opts}`;
+        })
+        .join('');
+
+  const thinking = ctx.assistantSending
+    ? `<div class="mushi-assistant-msg mushi-assistant-msg-bot mushi-assistant-thinking">…</div>`
+    : '';
+  const error = ctx.assistantError
+    ? `<div class="mushi-assistant-error" role="alert">${escapeHtml(ctx.assistantError)}</div>`
+    : '';
+
+  return `
+    ${renderHeader(ctx, { title: label, showBack: true })}
+    <div class="mushi-assistant">
+      <div class="mushi-assistant-log">
+        ${transcript}
+        ${thinking}
+        ${error}
+      </div>
+      <form class="mushi-assistant-form" data-action="assistant-send">
+        <textarea
+          class="mushi-assistant-input"
+          rows="1"
+          placeholder="Type your question…"
+          ${ctx.assistantSending ? 'disabled' : ''}
+        ></textarea>
+        <button type="submit" class="mushi-assistant-submit" ${ctx.assistantSending ? 'disabled' : ''} aria-label="Send">\u2191</button>
+      </form>
+    </div>
+  `;
+}
 export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
     if (!ctx.sdkFreshness) return '';
     if (ctx.config.outdatedBanner === 'off' || ctx.config.outdatedBanner === 'console-only') return '';

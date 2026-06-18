@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_94 configuration knobs across 18 sections · last regenerated 2026-06-17._
+_99 configuration knobs across 19 sections · last regenerated 2026-06-18._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -27,6 +27,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
 - [SDK install card](#sdk-install-card) (12)
+- [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
 
@@ -1316,7 +1317,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty`
 
-**Where it lives** — table `support_requests.subject` · endpoint `POST /v1/admin/billing/support` · read by `billing-support edge function`
+**Where it lives** — table `support_requests.subject` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
 
 **When to change** — Always fill before submitting. The edge function rejects empty subjects with a 400.
 
@@ -1332,7 +1333,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `billing`
 
-**Where it lives** — table `support_requests.category` · endpoint `POST /v1/admin/billing/support` · read by `billing-support edge function`
+**Where it lives** — table `support_requests.category` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
 
 **When to change** — Always pick the closest match. Use `other` only when nothing else fits.
 
@@ -1348,7 +1349,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `empty`
 
-**Where it lives** — table `support_requests.body` · endpoint `POST /v1/admin/billing/support` · read by `billing-support edge function`
+**Where it lives** — table `support_requests.body` · endpoint `POST /v1/support/contact` · read by `billing-support edge function`
 
 **When to change** — Include the invoice id and the dollar amount you're asking about — billing tickets without specifics get bounced.
 
@@ -1583,4 +1584,90 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Default** — `react`
 
 **When to change** — Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://docs.mushimushi.dev/migrations/capacitor-to-react-native.
+
+## Settings → Page-aware assistant
+
+<a id="settings-page-aware-assistant"></a>
+
+### Page-aware assistant
+
+<a id="assistant-config-enabled"></a>
+
+`assistant.config.enabled`
+
+**Summary** — Adds an "Ask" tab to the SDK widget so users get answers about your app, grounded only in the page they're on and the knowledge you author.
+
+**How it works** — When on, GET /v1/sdk/config returns the assistant block and the widget renders the tab. Each question hits POST /v1/sdk/assistant, which grounds the LLM in the published page context plus your knowledge corpus — it never reads user rows, source, or env. Uses your project BYOK key (Anthropic primary, OpenAI fallback) and logs every turn.
+
+**Default** — `false (off)`
+
+**Where it lives** — table `project_settings.assistant_enabled` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `sdk-assistant route (POST /v1/sdk/assistant)`, `public route (GET /v1/sdk/config)`
+
+**When to change** — Turn on once you have written a knowledge corpus (Advanced). Leave off if you only want bug reporting — the widget works fully without it.
+
+**Learn more** — [Assistant docs](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_ASSISTANT.md)
+
+### Tab label
+
+<a id="assistant-config-label"></a>
+
+`assistant.config.label`
+
+**Summary** — The label shown on the assistant tab in the widget (e.g. "Ask").
+
+**How it works** — Pure display string, capped at 24 chars. Returned in the SDK config so the widget can localise the tab without a rebuild.
+
+**Default** — `Ask`
+
+**Where it lives** — table `project_settings.assistant_label` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `public route (GET /v1/sdk/config)`
+
+**When to change** — Rename to match your product voice ("Help", "Guide", "Concierge").
+
+### Greeting
+
+<a id="assistant-config-greeting"></a>
+
+`assistant.config.greeting`
+
+**Summary** — First message shown on an empty assistant thread.
+
+**How it works** — Display-only, capped at 400 chars. Shown before the user types anything; it does not prime the LLM.
+
+**Default** — `Hi! Ask me anything about this page.`
+
+**Where it lives** — table `project_settings.assistant_greeting` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `public route (GET /v1/sdk/config)`
+
+**When to change** — Set expectations — tell users what the assistant can and cannot help with.
+
+### Starter questions
+
+<a id="assistant-config-suggestions"></a>
+
+`assistant.config.suggestions`
+
+**Summary** — Up to 6 tappable starter-question chips shown on an empty thread.
+
+**How it works** — Stored as a JSON array of strings (each ≤ 120 chars, max 6). The widget renders them as one-tap prompts to lower the cold-start barrier.
+
+**Default** — `unset (no chips)`
+
+**Where it lives** — table `project_settings.assistant_suggestions` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `public route (GET /v1/sdk/config)`
+
+**When to change** — Seed with your top 3-6 FAQs so first-time users see what to ask.
+
+### App knowledge corpus
+
+<a id="assistant-config-knowledge"></a>
+
+`assistant.config.knowledge`
+
+**Summary** — Operator-authored text the assistant may cite — features, pricing, how-tos, FAQs. Capped at 40k chars and secret-scanned on save.
+
+**How it works** — This is the only grounding source besides the live page context. It is sent to the LLM on every turn, so it must never contain secrets — the save endpoint rejects text matching key/token/connection-string patterns (SECRET_DETECTED). Never returned in the public SDK config.
+
+**Default** — `unset` · range `max 40,000 chars`
+
+**Where it lives** — table `project_settings.assistant_knowledge` · endpoint `PUT /v1/admin/projects/:id/assistant` · read by `sdk-assistant route (POST /v1/sdk/assistant)`
+
+**When to change** — Expand it whenever users ask something the assistant could not answer. Review recent turns in Advanced → logs to find gaps. Never paste keys, tokens, or source.
 

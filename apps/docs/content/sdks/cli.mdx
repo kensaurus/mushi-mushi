@@ -32,8 +32,8 @@ mushi fixes merge <fixId>          # squash-merge the PR + mark report Fixed
 | Command | Purpose |
 | ------- | ------- |
 | `mushi init` | Wizard: detect framework, install SDK, write `.env.local`, optional test report |
-| `mushi connect` | Non-interactive wiring: `~/.mushirc` + env + Cursor MCP + optional heartbeat wait |
-| `mushi login` | Save credentials to `~/.mushirc` (mode `0o600`) |
+| `mushi connect` | Non-interactive wiring: `~/.config/mushi/config.json` + env + Cursor MCP + optional heartbeat wait |
+| `mushi login` | Save credentials to `~/.config/mushi/config.json` (mode `0o600`; legacy `~/.mushirc` auto-migrates) |
 | `mushi whoami` | Verify API key and show project info |
 | `mushi ping` | Backend connectivity probe |
 | `mushi config` | View or update CLI config |
@@ -207,7 +207,7 @@ mushi test                           # synthetic report end-to-end
 | `MUSHI_BYOK_KEY` | BYOK key value for `mushi keys add` (keeps key out of shell history) |
 | `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
 
-Config file: `~/.mushirc` (Unix mode `0o600`).
+Config file: `~/.config/mushi/config.json` (Unix mode `0o600`; legacy `~/.mushirc` auto-migrates on first load).
 
 ---
 

@@ -1,18 +1,22 @@
 # Mushi Mushi
 
-> Bug intelligence SDK — shake-to-report, AI triage, agentic fixes.
+> Bug translation for vibe coders — plain-English diagnosis + fix prompts via MCP.
 
 Canonical docs: https://docs.mushimushi.dev
 GitHub: https://github.com/kensaurus/mushi-mushi
 npm org: https://www.npmjs.com/org/mushi-mushi
 
+## Start here (MCP-first)
+
+- [Incident loop](https://docs.mushimushi.dev/quickstart/incident-loop)
+- [MCP server](https://docs.mushimushi.dev/quickstart/mcp)
+- [Choose your stack](https://docs.mushimushi.dev/quickstart)
+
 ## SDK quickstarts
 
-- [Choose your stack](https://docs.mushimushi.dev/quickstart)
 - [React](https://docs.mushimushi.dev/quickstart/react)
 - [Web / vanilla JS](https://docs.mushimushi.dev/quickstart/web)
 - [React Native](https://docs.mushimushi.dev/quickstart/react-native)
-- [MCP server](https://docs.mushimushi.dev/quickstart/mcp)
 
 ## SDK reference
 
@@ -70,6 +74,9 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Storage](https://docs.mushimushi.dev/admin/storage)
 - [Teams and Members](https://docs.mushimushi.dev/admin/teams)
 - [Users](https://docs.mushimushi.dev/admin/users)
+- [Blog](https://docs.mushimushi.dev/blog)
+- [Mushi goes AGPLv3 — the honest open source story](https://docs.mushimushi.dev/blog/agplv3-relicense)
+- [Launch Week 1 — five features, five days](https://docs.mushimushi.dev/blog/launch-week-1)
 - [Changelog](https://docs.mushimushi.dev/changelog)
 - [Mushi Cloud](https://docs.mushimushi.dev/cloud)
 - [Concepts](https://docs.mushimushi.dev/concepts)
@@ -90,6 +97,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Rewards & contributor identity](https://docs.mushimushi.dev/concepts/rewards)
 - [Trigger Modes](https://docs.mushimushi.dev/concepts/trigger-modes)
 - [Cursor integration](https://docs.mushimushi.dev/integrations/cursor)
+- [Launch Week](https://docs.mushimushi.dev/launch-week)
 - [Migration guides](https://docs.mushimushi.dev/migrations)
 - [BugHerd → Mushi](https://docs.mushimushi.dev/migrations/bugherd-to-mushi)
 - [Migration: Capacitor → React Native](https://docs.mushimushi.dev/migrations/capacitor-to-react-native)
@@ -122,11 +130,13 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Sentry](https://docs.mushimushi.dev/plugins/sentry)
 - [Slack app](https://docs.mushimushi.dev/plugins/slack)
 - [Zapier](https://docs.mushimushi.dev/plugins/zapier)
+- [Pricing](https://docs.mushimushi.dev/pricing)
 - [Quickstart](https://docs.mushimushi.dev/quickstart)
 - [Android (Kotlin) quickstart](https://docs.mushimushi.dev/quickstart/android)
 - [Angular quickstart](https://docs.mushimushi.dev/quickstart/angular)
 - [Capacitor quickstart](https://docs.mushimushi.dev/quickstart/capacitor)
 - [Flutter quickstart](https://docs.mushimushi.dev/quickstart/flutter)
+- [Incident loop — bug to fix prompt](https://docs.mushimushi.dev/quickstart/incident-loop)
 - [iOS (Swift) quickstart](https://docs.mushimushi.dev/quickstart/ios)
 - [MCP server quickstart](https://docs.mushimushi.dev/quickstart/mcp)
 - [Mobile (overview)](https://docs.mushimushi.dev/quickstart/mobile)
@@ -152,6 +162,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [mushi-mushi (launcher)](https://docs.mushimushi.dev/sdks/launcher)
 - [@mushi-mushi/mcp](https://docs.mushimushi.dev/sdks/mcp)
 - [@mushi-mushi/mcp-ci](https://docs.mushimushi.dev/sdks/mcp-ci)
+- [MCP tools (generated)](https://docs.mushimushi.dev/sdks/mcp-tools.generated)
 - [Next.js App Router + CSP](https://docs.mushimushi.dev/sdks/nextjs-app-router-csp)
 - [Next.js static export](https://docs.mushimushi.dev/sdks/nextjs-static-export)
 - [@mushi-mushi/node](https://docs.mushimushi.dev/sdks/node)

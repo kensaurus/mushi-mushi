@@ -38,6 +38,7 @@ export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
     const skipped: string[] = []
 
     // Org
+    let resolvedOrgId = orgId ?? null
     if (orgName) {
       const { data: existingOrg } = orgId
         ? await db.from('organizations').select('id').eq('id', orgId).maybeSingle()
@@ -45,6 +46,7 @@ export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
 
       if (existingOrg) {
         skipped.push('org')
+        resolvedOrgId = existingOrg.id as string
       } else {
         const newId = orgId ?? crypto.randomUUID()
         const { error } = await db.from('organizations').insert({
@@ -55,11 +57,12 @@ export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
           return c.json({ ok: false, error: { code: 'ORG_CREATE_FAILED', message: error.message } }, 500)
         }
         result.org_id = newId
+        resolvedOrgId = newId
       }
     }
 
     // Project
-    const resolvedOrgId = result.org_id ?? orgId
+    let resolvedProjectId = projectId ?? null
     if (projectName && resolvedOrgId) {
       const { data: existingProject } = projectId
         ? await db.from('projects').select('id').eq('id', projectId).maybeSingle()
@@ -67,6 +70,7 @@ export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
 
       if (existingProject) {
         skipped.push('project')
+        resolvedProjectId = existingProject.id as string
       } else {
         const newId = projectId ?? crypto.randomUUID()
         const { error } = await db.from('projects').insert({
@@ -78,11 +82,11 @@ export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
           return c.json({ ok: false, error: { code: 'PROJECT_CREATE_FAILED', message: error.message } }, 500)
         }
         result.project_id = newId
+        resolvedProjectId = newId
       }
     }
 
     // Reporter API key
-    const resolvedProjectId = result.project_id ?? projectId
     if (reporterKey && resolvedProjectId) {
       const keyPrefix = reporterKey.slice(0, 12)
       const { data: existingKey } = await db

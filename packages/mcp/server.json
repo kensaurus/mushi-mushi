@@ -1,0 +1,63 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.kensaurus/mushi-mushi",
+  "description": "Bug translation for vibe coders — pull a plain-English diagnosis and a paste-ready fix prompt for any user-felt bug, plus evidence (screenshots, console, network), blast radius, and fix dispatch, all from your AI coding agent. No second LLM key.",
+  "version": "0.16.0",
+  "repository": {
+    "url": "https://github.com/kensaurus/mushi-mushi",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "websiteUrl": "https://docs.mushimushi.dev/quickstart/mcp",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@mushi-mushi/mcp",
+      "version": "0.16.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MUSHI_API_KEY",
+          "description": "Project ingest/admin API key minted in the Mushi console (Settings → API Keys). Scope mcp:read for triage, mcp:write to dispatch fixes.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "MUSHI_PROJECT_ID",
+          "description": "Project UUID the key belongs to. Optional for single-project account keys.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MUSHI_API_ENDPOINT",
+          "description": "Override the API base URL (self-hosted deployments). Defaults to the hosted Mushi Cloud endpoint.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "MUSHI_FEATURES",
+          "description": "Comma-separated feature groups to expose (triage,fixes,inventory,setup,docs). Defaults to the lean catalog; use 'all' for the full tool set.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <MUSHI_API_KEY> — a project API key with the mcp:read (and optionally mcp:write) scope.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

@@ -72,10 +72,19 @@ export function ProjectSwitcher() {
       if (fromStorage !== known.project_id) {
         setActiveProjectIdSnapshot(known.project_id)
       }
+      if (fromUrl !== known.project_id) {
+        const next = new URLSearchParams(searchParams)
+        next.set(ACTIVE_PROJECT_QUERY_PARAM, known.project_id)
+        setSearchParams(next, { replace: true })
+      }
       return
     }
     // No valid candidate — fall back to first owned project.
-    setActiveProjectIdSnapshot(projects[0].project_id)
+    const fallbackId = projects[0].project_id
+    setActiveProjectIdSnapshot(fallbackId)
+    const next = new URLSearchParams(searchParams)
+    next.set(ACTIVE_PROJECT_QUERY_PARAM, fallbackId)
+    setSearchParams(next, { replace: true })
   }, [setup.loading, setup.data, searchParams])
 
   // Close on outside click so the dropdown doesn't stay pinned open behind nav.

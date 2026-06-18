@@ -1,5 +1,8 @@
 # @mushi-mushi/cli
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
+
 CLI for Mushi Mushi — set up the SDK in one command, then triage reports and monitor the pipeline from your terminal.
 
 ## One-command setup
@@ -51,9 +54,9 @@ mushi --version
 ## Other commands
 
 ```bash
-mushi login --api-key mushi_xxx     # store credentials in ~/.mushirc (mode 0o600)
+mushi login --api-key mushi_xxx     # store credentials in ~/.config/mushi/config.json (mode 0o600)
 mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --wait
-                                     # one-shot wiring: ~/.mushirc + .env.local + .cursor/mcp.json + heartbeat wait
+                                     # one-shot wiring: ~/.config/mushi/config.json + .env.local + .cursor/mcp.json + heartbeat wait
 mushi upgrade                        # bump installed @mushi-mushi/* packages to latest stable
 mushi status                         # project overview
 mushi reports list                   # recent reports
@@ -73,7 +76,7 @@ mushi sourcemaps upload --release <ver> --dir <dist>   # upload .js.map / .css.m
 Non-interactive equivalent of `mushi init` for agents and scripts — wires a
 repo to an existing project in one shot:
 
-1. Saves credentials to `~/.mushirc` (mode `0o600`).
+1. Saves credentials to `~/.config/mushi/config.json` (mode `0o600`).
 2. Merges `MUSHI_*` / framework-prefixed env vars into `.env.local` —
    existing keys are never overwritten (skip with `--no-env`).
 3. Writes the `@mushi-mushi/mcp` server block into `.cursor/mcp.json` and
@@ -177,7 +180,7 @@ Local checks performed:
 
 | Check | What it verifies |
 |---|---|
-| CLI config | `~/.mushirc` exists, `projectId` and `apiKey` fields are present |
+| CLI config | `~/.config/mushi/config.json` exists, `projectId` and `apiKey` fields are present |
 | Endpoint reachability | `GET /v1/sdk/config?project_id=...` returns 200 |
 | SDK install | `@mushi-mushi/web` or framework-specific SDK is in `node_modules` |
 
@@ -301,7 +304,7 @@ mushi slack test
 
 ## Security notes
 
-- `~/.mushirc` is written with mode `0o600` on Unix. Legacy configs with looser permissions are tightened on load.
+- `~/.config/mushi/config.json` is written with mode `0o600` on Unix. Legacy configs with looser permissions are tightened on load.
 - `--endpoint` values are parsed through `new URL()` and required to use `https://` except for `localhost` / `127.0.0.1` / `*.local`.
 - The `--api-key` flag leaks into `ps -ef` — prefer the interactive prompt on shared machines.
 - Full stack traces on error: `DEBUG=mushi mushi init`.

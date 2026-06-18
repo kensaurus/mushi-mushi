@@ -103,7 +103,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_context',
     title: 'Fix context bundle',
     description:
-      'Bundle the full context an agent needs to fix a bug: report detail, reproduction steps, component, root cause, ontology tags. One call instead of several.',
+      'Bundle the full context an agent needs to fix a bug: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, reproduction steps, component, root cause, and ontology tags. One call instead of several. No second LLM key needed.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Give me everything I need to fix this in one payload.',

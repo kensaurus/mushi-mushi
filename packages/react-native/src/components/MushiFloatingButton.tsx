@@ -20,6 +20,7 @@ import {
   useColorScheme,
   type ViewStyle,
 } from 'react-native'
+import { mushiPalette, MUSHI_COPY } from '@mushi-mushi/core'
 
 const FAB_SIZE = 56
 const EDGE_PADDING = 12
@@ -108,7 +109,10 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
   const currentY = useRef(0)
   const isDragging = useRef(false)
 
-  const accentColor = accent ?? (dark ? '#0a84ff' : '#007aff')
+  // Default to the shared Mushi hanko-red accent (cross-platform coherence)
+  // instead of platform blue, so the RN FAB matches the web widget. Hosts can
+  // still override via the `accent` prop / console accent.
+  const accentColor = accent ?? mushiPalette(dark ? 'dark' : 'light').accent
 
   useEffect(() => {
     if (!persist) return
@@ -228,7 +232,7 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
       onResponderGrant={handlePressIn}
       onResponderRelease={handlePressOut}
     >
-      <Animated.Text style={s.emoji}>🐛</Animated.Text>
+      <Animated.Text style={s.emoji}>{MUSHI_COPY.triggerText}</Animated.Text>
     </Animated.View>
   )
 }

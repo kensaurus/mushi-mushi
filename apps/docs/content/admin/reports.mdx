@@ -11,7 +11,34 @@ The Reports list shows every incoming user report, filtered by status,
 severity, category, component, reporter (token hash), and free-text. The
 list also surfaces a **status-aware "Recommended action"** card above the
 filters — e.g. "X critical reports need triage" with a one-click filter
-shortcut. Selecting a report opens the detail view:
+shortcut.
+
+## Diagnosis + Fix hero
+
+The top of every report detail leads with the brand promise — *plain-English
+diagnosis + a paste-ready fix* — as a single block:
+
+1. **"Here's why it broke"** — a 1–3 sentence plain-English diagnosis (the
+   Stage-2 `summary`) with severity, category, and a **confidence chip**
+   (`NN% sure`), plus the likely component.
+2. **"Here's the fix"** — the paste-ready Cursor prompt and Open-in-Cursor
+   deeplink (the same `CursorAgentLaunch` brief exposed to MCP as `fixPrompt`).
+
+**Fail-graceful, by design.** Accuracy matters most for this audience — a
+confident-but-wrong diagnosis is worse than none — so when classifier
+confidence is **below 0.7** (or the summary is missing), the header flips to
+**"Not sure yet — here's what I'd check first"** and lists the most concrete
+signals (component, reproduction hint, raw summary) instead of asserting a
+single root cause. The detailed sections below are unchanged; the hero just
+lifts the answer to the top.
+
+## Compact diagnosis preview
+
+Hovering a row in the list (or opening the **Action inbox**) shows a preview
+drawer with the same confidence-aware label and, when a fix brief is ready, a
+**Copy fix prompt** button — so you get the answer before the click.
+
+Selecting a report opens the full detail view:
 
 - **Recommended next action** — single-sentence guidance derived from the
   report's status, severity, and elapsed time, with one CTA. Replaces the

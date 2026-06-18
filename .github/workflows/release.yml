@@ -58,7 +58,6 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 jobs:
   ci:
@@ -150,6 +149,10 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
       # See note on the `ci` job above. Harden-Runner is doubly important
       # on the publish job because this is where NPM_TOKEN and the OIDC
@@ -320,6 +323,23 @@ jobs:
           else
             echo "changelog: no drift to commit"
           fi
+
+      - name: Publish MCP server to the official registry
+        # When @mushi-mushi/mcp ships a new version, register it with the
+        # official MCP registry (registry.modelcontextprotocol.io). Everything
+        # downstream (Glama, PulseMCP, Cursor's directory) auto-syncs from there.
+        # GitHub OIDC authenticates the `io.github.kensaurus/*` namespace using
+        # the job's `id-token: write` permission — no extra secret needed.
+        # continue-on-error: a registry hiccup must never fail the npm release.
+        if: steps.changesets.outputs.published == 'true' && contains(steps.changesets.outputs.publishedPackages, '@mushi-mushi/mcp')
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          node scripts/sync-server-json-version.mjs
+          os=$(uname -s | tr '[:upper:]' '[:lower:]')
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          cd packages/mcp && ../../mcp-publisher publish
 
       - name: Sync published versions to sdk_versions catalog
         # Keep the console freshness chips accurate without hand-written

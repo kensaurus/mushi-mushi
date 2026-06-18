@@ -15,6 +15,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { withSentry } from '../_shared/sentry.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
+import { awardPointsForEndUser } from '../_shared/reputation.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { createExternalIssue } from '../_shared/integrations.ts';
 import { buildReportGraph } from '../_shared/knowledge-graph.ts';
@@ -869,6 +870,48 @@ CRITICAL SECURITY RULES (immutable):
           severity: classification.severity,
           reportId,
         }).catch((e) => log.error('Reporter notification failed', { err: String(e) }));
+      }
+
+      // D1: award report.triaged points once the report reaches a classified
+      // state. Guarded on a linked end_user; awardPointsForEndUser enforces the
+      // reward_rules lifetime cap (so re-classification can't double-award when
+      // the rule sets max_per_user_lifetime appropriately) and propagates the
+      // tier-evaluator + host webhook. Fire-and-forget — never blocks triage.
+      if (report.end_user_id) {
+        void (async () => {
+          try {
+            const { data: proj } = await db
+              .from('projects')
+              .select('organization_id')
+              .eq('id', report.project_id)
+              .single();
+            const organizationId = (proj as { organization_id?: string | null } | null)?.organization_id;
+            if (!organizationId) return;
+
+            // Idempotency: award report.triaged at most once per report. stage2
+            // can re-run on reconciliation/retries, and the legacy fallback rule
+            // carries no lifetime cap, so guard explicitly on a prior award row.
+            const { count: alreadyAwarded } = await db
+              .from('end_user_activity')
+              .select('id', { count: 'exact', head: true })
+              .eq('end_user_id', report.end_user_id)
+              .eq('action', 'report.triaged')
+              .eq('metadata->>report_id', reportId);
+            if ((alreadyAwarded ?? 0) > 0) return;
+
+            await awardPointsForEndUser(db, {
+              projectId: report.project_id,
+              organizationId,
+              endUserId: report.end_user_id,
+              action: 'report.triaged',
+              reporterTokenHash: report.reporter_token_hash ?? null,
+              reportId,
+              metadata: { category: classification.category, severity: classification.severity, report_id: reportId },
+            });
+          } catch (e) {
+            log.warn('report.triaged award failed', { reportId, err: String(e) });
+          }
+        })();
       }
 
       _otlpSpanCtx?.setStatus('ok');

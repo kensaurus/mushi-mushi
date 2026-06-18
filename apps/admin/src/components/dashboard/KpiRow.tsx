@@ -7,6 +7,7 @@
 
 import { useMemo } from 'react'
 import { KpiTile, formatTokens, type KpiTileProps } from '../charts'
+import { MetricStrip } from '../MetricStrip'
 import type { DashboardCounts, FixSummary, LlmDay, PdcaStage, ReportDay } from './types'
 
 function last7UtcDays(): string[] {
@@ -88,20 +89,10 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
     return pctDelta(last3, prev3)
   }, [stage7d.fixes])
 
+  const heroIsBacklog = counts.openBacklog > 0
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
-      <KpiTile
-        label="Reports (14d)"
-        value={counts.reports14d}
-        sublabel="all severities"
-        to="/reports"
-        accent="brand"
-        delta={intakeDelta}
-        series={intakeSeries}
-        seriesDays={intakeDays}
-        seriesAriaLabel="Reports per day, last 14 days"
-        meaning="Total user-reported friction events received in the last 14 days. Up = more pain reaching users; down = healthier release."
-      />
+    <MetricStrip cols={4} ariaLabel="Dashboard key metrics" className="mb-3" stagger>
       <KpiTile
         label="Triage backlog"
         value={counts.openBacklog}
@@ -113,6 +104,20 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         seriesDays={stage7d.triage ? stage7d.days : undefined}
         seriesAriaLabel="New reports per day, last 7 days"
         meaning="Reports that have sat untriaged for more than an hour. The sparkline tracks daily inbound volume — spikes usually precede backlog growth."
+        variant={heroIsBacklog ? 'primary' : 'default'}
+      />
+      <KpiTile
+        label="Reports (14d)"
+        value={counts.reports14d}
+        sublabel="all severities"
+        to="/reports"
+        accent="brand"
+        delta={intakeDelta}
+        series={intakeSeries}
+        seriesDays={intakeDays}
+        seriesAriaLabel="Reports per day, last 14 days"
+        meaning="Total user-reported friction events received in the last 14 days. Up = more pain reaching users; down = healthier release."
+        variant={heroIsBacklog ? 'default' : 'primary'}
       />
       <KpiTile
         label="Auto-fix PRs"
@@ -138,6 +143,6 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         seriesAriaLabel="LLM tokens per day, last 14 days"
         meaning="Tokens consumed by the Haiku→Sonnet classification pipeline. Compare against your Anthropic budget; spikes signal noisy intake."
       />
-    </div>
+    </MetricStrip>
   )
 }

@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import type { EnvStatus } from '../lib/env'
 import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY, saveAndApplyInstanceConfig } from '../lib/env'
-import { PageHelp, Btn, CopyButton } from '../components/ui'
+import { PageHelpBanner, Btn, CopyButton } from '../components/ui'
 import { ContainedBlock, InlineProof, SignalChip, ActionPill } from '../components/report-detail/ReportSurface'
 
 const CLOUD_ENV_TEMPLATE = `VITE_SUPABASE_URL=${CLOUD_SUPABASE_URL}
@@ -44,7 +44,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
         </div>
 
         <div className="mb-3">
-          <PageHelp
+          <PageHelpBanner
             title="Why am I seeing this?"
             whatIsIt="The admin console can't reach a Supabase backend. You either haven't created the .env file yet, or one of the required variables is missing or empty."
             useCases={[

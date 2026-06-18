@@ -43,6 +43,8 @@ import {
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
+import { PageHero } from '../components/PageHero'
+import type { PageAction } from '../components/PageActionBar'
 import {
   contractEdgesDetail,
   contractEdgesTooltip,
@@ -274,11 +276,33 @@ export function DriftPage() {
               ? 'ok'
               : 'info'
 
+  const driftHeroSeverity =
+    bannerSeverity === 'danger' ? 'crit' : bannerSeverity === 'brand' ? 'info' : bannerSeverity
+
+  const driftAct = useMemo((): PageAction | null => {
+    if (stats.topPriority === 'healthy') return null
+    if (stats.topPriorityTo && stats.topPriorityLabel) {
+      const tone =
+        stats.topPriority === 'critical_findings'
+          ? 'act'
+          : stats.topPriority === 'never_scanned'
+            ? 'do'
+            : 'check'
+      return {
+        tone,
+        title: stats.topPriorityLabel,
+        primary: { kind: 'link', to: stats.topPriorityTo, label: 'Take action →' },
+      }
+    }
+    return null
+  }, [stats.topPriority, stats.topPriorityTo, stats.topPriorityLabel])
+
   return (
     <div className="space-y-4" data-testid="mushi-page-drift">
       <PageHeaderBar
         title={copy?.title ?? 'Drift'}
         projectScope={stats.projectName ?? projectName ?? undefined}
+        withPageHero={!ux.hideOverviewChrome}
         description={copy?.description ?? 'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'}
         contextChip={<PdcaContextHint stage="check" />}
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
@@ -325,6 +349,70 @@ export function DriftPage() {
           </>
         )}
       </PageHeaderBar>
+
+      {!ux.hideOverviewChrome ? (
+        <PageHero
+          scope="drift"
+          title={copy?.title ?? 'Drift'}
+          kicker="Contract sync"
+          decide={{
+            label:
+              stats.topPriority === 'healthy'
+                ? 'Contracts in sync'
+                : stats.topPriorityLabel ?? 'Contract drift',
+            metric: `${stats.openFindings} open · ${stats.criticalOpen} crit`,
+            summary:
+              stats.topPriority === 'healthy'
+                ? `${stats.snapshotCount} snapshot${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} edges tracked.`
+                : stats.topPriorityLabel ?? 'OpenAPI, inventory nodes, and DB schema gaps surface here before users hit them.',
+            severity: driftHeroSeverity,
+            anchor: 'drift:decide',
+            evidence: {
+              kind: 'metric-breakdown',
+              whyNow:
+                stats.criticalOpen > 0
+                  ? `${stats.criticalOpen} critical finding${stats.criticalOpen === 1 ? '' : 's'} need triage before the next release.`
+                  : stats.openFindings > 0
+                    ? `${stats.openFindings} open finding${stats.openFindings === 1 ? '' : 's'} — dismiss false positives or promote gaps to lessons.`
+                    : stats.snapshotCount === 0
+                      ? 'No contract snapshot yet — run the drift-walker to capture a baseline.'
+                      : 'Contract surfaces are in sync — keep scanning after API or schema changes.',
+              items: [
+                { label: 'Open', value: stats.openFindings, tone: stats.openFindings > 0 ? 'warn' : 'ok' },
+                { label: 'Critical', value: stats.criticalOpen, tone: stats.criticalOpen > 0 ? 'crit' : 'ok' },
+                { label: 'Warnings', value: stats.warnOpen, tone: stats.warnOpen > 0 ? 'warn' : 'neutral' },
+                { label: 'Snapshots', value: stats.snapshotCount, tone: stats.snapshotCount > 0 ? 'ok' : 'warn' },
+              ],
+            },
+          }}
+          act={driftAct}
+          actAnchor="drift:act"
+          actEvidence={
+            driftAct
+              ? { kind: 'rule-trace', why: driftAct.title, threshold: stats.topPriority ?? undefined }
+              : undefined
+          }
+          verify={{
+            label: stats.lastSnapshotAt ? 'Latest snapshot' : 'No snapshot yet',
+            detail: stats.lastSnapshotAt
+              ? `${stats.lastSnapshotEdges} edges · ${new Date(stats.lastSnapshotAt).toISOString().slice(0, 10)}`
+              : '—',
+            to: '/drift?tab=snapshots',
+            secondaryTo: '/drift?tab=findings',
+            secondaryLabel: 'Open findings',
+            anchor: 'drift:verify',
+            evidence: stats.lastSnapshotAt
+              ? {
+                  kind: 'last-event',
+                  at: stats.lastSnapshotAt,
+                  by: 'drift-walker',
+                  payloadSummary: `${stats.lastSnapshotEdges} contract edges`,
+                  status: stats.criticalOpen > 0 ? 'warn' : 'ok',
+                }
+              : undefined,
+          }}
+        />
+      ) : null}
 
       <DriftStatusBanner
         stats={stats}

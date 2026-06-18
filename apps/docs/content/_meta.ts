@@ -26,6 +26,7 @@ export default {
   '-- Operate': { type: 'separator', title: 'Operate Mushi' },
   admin: 'Admin console',
   cloud: 'Mushi Cloud',
+  operating: 'Operating (maintainers)',
   'self-hosting': 'Self-hosting',
   security: 'Security & compliance',
 

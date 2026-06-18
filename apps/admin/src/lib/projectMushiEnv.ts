@@ -99,3 +99,98 @@ export function mushiEnvVarsForProjectSlug(slug: string | null | undefined): Pro
 export function formatEnvVarPair(env: ProjectMushiEnvVars): string {
   return `${env.projectIdVar} / ${env.apiKeyVar}`
 }
+
+/**
+ * Public-env prefix that a given bundler actually inlines into the client
+ * bundle. This is the heart of the Workstream B "kill per-slug hardcoding"
+ * fix: instead of mapping a project *slug* to a guessed prefix (which silently
+ * disabled the SDK whenever a repo wasn't on the allow-list), we derive the
+ * prefix from the *detected framework* of the repo. The detection itself lives
+ * in `frameworkDetect.ts`; this map turns its result into the right env names.
+ *
+ *  - Vite (react/vue/svelte SPA) → `VITE_`
+ *  - Next.js / Remix / Gatsby    → `NEXT_PUBLIC_` (Next is the dominant case;
+ *                                   the loader/data-attr path covers the rest)
+ *  - Nuxt                        → `NUXT_PUBLIC_`
+ *  - Expo / React Native         → `EXPO_PUBLIC_`
+ *  - vanilla / unknown           → no prefix (use the universal loader script
+ *                                   with `data-project` / `data-key`, which
+ *                                   needs no bundler inlining at all)
+ */
+export type MushiBundlerKind =
+  | 'vite'
+  | 'next'
+  | 'nuxt'
+  | 'expo'
+  | 'webpack'
+  | 'none'
+
+export interface MushiEnvPrefixInfo {
+  /** The env-var prefix the bundler inlines, e.g. `VITE_`. Empty for `none`. */
+  prefix: string
+  /** Whether this stack needs build-time inlining at all. */
+  buildTimeInlined: boolean
+  /** Human label for the configurator. */
+  bundlerLabel: string
+}
+
+const BUNDLER_PREFIX: Record<MushiBundlerKind, MushiEnvPrefixInfo> = {
+  vite: { prefix: 'VITE_', buildTimeInlined: true, bundlerLabel: 'Vite' },
+  next: { prefix: 'NEXT_PUBLIC_', buildTimeInlined: true, bundlerLabel: 'Next.js' },
+  nuxt: { prefix: 'NUXT_PUBLIC_', buildTimeInlined: true, bundlerLabel: 'Nuxt' },
+  expo: { prefix: 'EXPO_PUBLIC_', buildTimeInlined: true, bundlerLabel: 'Expo' },
+  webpack: { prefix: 'NEXT_PUBLIC_', buildTimeInlined: true, bundlerLabel: 'Webpack/CRA' },
+  none: { prefix: '', buildTimeInlined: false, bundlerLabel: 'No build (loader script)' },
+}
+
+/** Map a detected framework name (from frameworkDetect) to its bundler kind. */
+export function bundlerKindForFramework(framework: string | null | undefined): MushiBundlerKind {
+  switch (framework) {
+    case 'vue':
+    case 'svelte':
+      // Vue/Svelte SPAs are overwhelmingly Vite-powered in 2026. Nuxt/Next
+      // metas are handled by their own detection branch upstream.
+      return 'vite'
+    case 'react':
+      // React is ambiguous (Vite vs Next vs CRA). The detector tags Next.js
+      // separately via reason text; callers that know it's Next pass 'next'.
+      return 'vite'
+    case 'react-native':
+    case 'expo':
+      return 'expo'
+    case 'vanilla':
+      return 'none'
+    default:
+      return 'none'
+  }
+}
+
+/**
+ * Resolve env-var naming from a detected bundler kind. Prefer this over
+ * `mushiEnvVarsForProjectSlug` whenever a repo `package.json` has been
+ * inspected — it is accurate for *any* repo, not just the hardcoded few.
+ */
+export function mushiEnvVarsForBundler(kind: MushiBundlerKind): ProjectMushiEnvVars {
+  const info = BUNDLER_PREFIX[kind]
+  if (kind === 'none') {
+    // Loader-script path: no env inlining; credentials come from data-attrs.
+    return {
+      projectIdVar: 'MUSHI_PROJECT_ID',
+      apiKeyVar: 'MUSHI_API_KEY',
+      endpointVar: 'MUSHI_API_ENDPOINT',
+      envFileHint: '(use the loader <script> data-project / data-key attributes)',
+      stackLabel: info.bundlerLabel,
+    }
+  }
+  return {
+    projectIdVar: `${info.prefix}MUSHI_PROJECT_ID`,
+    apiKeyVar: `${info.prefix}MUSHI_API_KEY`,
+    endpointVar: `${info.prefix}MUSHI_API_ENDPOINT`,
+    envFileHint: kind === 'expo' ? 'apps/mobile/.env.local' : '.env.local',
+    stackLabel: info.bundlerLabel,
+  }
+}
+
+export function bundlerPrefixInfo(kind: MushiBundlerKind): MushiEnvPrefixInfo {
+  return BUNDLER_PREFIX[kind]
+}

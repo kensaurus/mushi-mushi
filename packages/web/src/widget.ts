@@ -13,6 +13,7 @@ import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
 import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, isSubmitShortcut } from './widget-helpers';
 import type {
+  AssistantTurn,
   WidgetCallbacks,
   WidgetRewardsState,
   WidgetStep,
@@ -126,6 +127,12 @@ export class MushiWidget {
   private magicLinkEmail = '';
   private magicLinkError = '';
   private magicLinkSending = false; // double-submit guard
+
+  // ─── Assistant tab (P5) ──────────────────────────────────────────
+  private assistantTurns: AssistantTurn[] = [];
+  private assistantThreadId: string | null = null;
+  private assistantSending = false;
+  private assistantError: string | null = null;
 
   constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = MUSHI_SDK_VERSION) {
     this.config = {
@@ -294,11 +301,19 @@ export class MushiWidget {
       this.viaFeatureRequest = true;
       this.step = 'details';
     } else if (options?.category) {
-      this.selectedCategory = options.category;
-      this.selectedIntent = null;
-      // Custom categories with no intents go straight to the description step.
       const custom = this.resolveCustomCategory(options.category);
-      this.step = (custom && (!custom.intents || custom.intents.length === 0)) ? 'details' : 'intent';
+      const builtIn = ['bug', 'slow', 'visual', 'confusing', 'other'] as const;
+      const isKnown =
+        (builtIn as readonly string[]).includes(options.category) || custom !== undefined;
+      if (!isKnown) {
+        this.selectedCategory = null;
+        this.selectedIntent = null;
+        this.step = 'category';
+      } else {
+        this.selectedCategory = options.category;
+        this.selectedIntent = null;
+        this.step = (custom && (!custom.intents || custom.intents.length === 0)) ? 'details' : 'intent';
+      }
     } else {
       this.selectedCategory = null;
       this.selectedIntent = null;
@@ -314,6 +329,63 @@ export class MushiWidget {
     this.isOpen = false;
     this.render();
     this.callbacks.onClose();
+  }
+
+  /** Open the panel directly on the assistant ("Ask") tab. */
+  openAssistantTab(): void {
+    if (!this.callbacks.assistantEnabled) {
+      // Assistant disabled — fall back to opening the normal report flow so
+      // the call is never a silent no-op.
+      this.open();
+      return;
+    }
+    if (!this.isOpen) {
+      this.isOpen = true;
+      this.callbacks.onOpen();
+    }
+    this.step = 'assistant';
+    this.assistantError = null;
+    this.render();
+    // Focus the composer after paint.
+    setTimeout(() => {
+      this.shadow.querySelector<HTMLTextAreaElement>('.mushi-assistant-input')?.focus();
+    }, 0);
+  }
+
+  /** Send one assistant turn and re-render as the reply streams back. */
+  async sendAssistantMessage(message: string): Promise<void> {
+    const text = message.trim();
+    if (!text || this.assistantSending || !this.callbacks.onAssistantAsk) return;
+    this.assistantSending = true;
+    this.assistantError = null;
+    this.assistantTurns.push({ role: 'user', text });
+    this.render();
+    try {
+      const reply = await this.callbacks.onAssistantAsk(text, this.assistantThreadId);
+      if (reply) {
+        if (reply.threadId) this.assistantThreadId = reply.threadId;
+        if (reply.kind === 'clarify') {
+          this.assistantTurns.push({
+            role: 'assistant',
+            text: reply.question ?? 'Could you tell me a bit more?',
+            ...(reply.options && reply.options.length ? { options: reply.options } : {}),
+          });
+        } else {
+          this.assistantTurns.push({ role: 'assistant', text: reply.text ?? '…' });
+        }
+      } else {
+        this.assistantError = 'No response — please try again.';
+      }
+    } catch {
+      this.assistantError = 'Something went wrong. Please try again.';
+    } finally {
+      this.assistantSending = false;
+      this.render();
+      setTimeout(() => {
+        const log = this.shadow.querySelector<HTMLElement>('.mushi-assistant-log');
+        if (log) log.scrollTop = log.scrollHeight;
+      }, 0);
+    }
   }
 
   /**
@@ -1078,6 +1150,28 @@ export class MushiWidget {
     return maxBottom > 0 ? Math.ceil(maxBottom) + gap : null;
   }
 
+  /**
+   * Minimum bottom-offset in px so a bottom-anchored trigger clears avoided
+   * elements (tab bars, fixed CTAs). Mirrors {@link computeAvoidTopPx}.
+   */
+  private computeAvoidBottomPx(gap = 8): number | null {
+    const sels = this.config.avoidSelectors;
+    if (!sels?.length) return null;
+    let maxClearance = 0;
+    for (const sel of sels) {
+      try {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          const clearance = window.innerHeight - r.top + gap;
+          if (clearance > maxClearance) maxClearance = clearance;
+        }
+      } catch { /* invalid selector — skip silently */ }
+    }
+    return maxClearance > 0 ? Math.ceil(maxClearance) : null;
+  }
+
   private applyInsetVars(el: HTMLElement): void {
     const { anchor } = this.config;
     if (anchor && Object.keys(anchor).length > 0) {
@@ -1106,12 +1200,21 @@ export class MushiWidget {
     // Only applies when the element is top-anchored (top CSS var or top-* position class).
     const isTopAnchored =
       anchor?.top !== undefined ||
-      this.config.position?.startsWith('top') ||
-      (!this.config.position && !anchor?.bottom); // default position is bottom-right
+      this.config.position?.startsWith('top');
+    const isBottomAnchored =
+      anchor?.bottom !== undefined ||
+      this.config.position?.startsWith('bottom') ||
+      !this.config.position;
     if (isTopAnchored) {
       const avoidPx = this.computeAvoidTopPx();
       if (avoidPx !== null) {
         el.style.setProperty('--mushi-top', `${avoidPx}px`);
+      }
+    }
+    if (isBottomAnchored) {
+      const avoidBottomPx = this.computeAvoidBottomPx();
+      if (avoidBottomPx !== null) {
+        el.style.setProperty('--mushi-bottom', `${avoidBottomPx}px`);
       }
     }
   }
@@ -1397,6 +1500,9 @@ export class MushiWidget {
       effectiveMinLength: () => this.effectiveMinLength(),
       categoryLabel: (id) => this.categoryLabel(id),
       categoryIcon: (id) => this.categoryIcon(id),
+      assistantTurns: this.assistantTurns,
+      assistantSending: this.assistantSending,
+      assistantError: this.assistantError,
     };
   }
 
@@ -1421,8 +1527,38 @@ export class MushiWidget {
       else if (this.step === 'report-detail') { this.step = 'reports'; this.selectedReportId = null; }
       else if (this.step === 'leaderboard') { this.step = 'reports'; }
       else if (this.step === 'roadmap') { this.step = 'category'; }
+      else if (this.step === 'assistant') { this.step = 'category'; }
       this.render();
     });
+
+    // ─── Assistant tab handlers (P5) ───────────────────────────────
+    panel.querySelector('[data-action="assistant"]')?.addEventListener('click', () => {
+      this.openAssistantTab();
+    });
+    panel.querySelectorAll('[data-action="assistant-suggest"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const value = (btn as HTMLElement).dataset.value;
+        if (value) void this.sendAssistantMessage(value);
+      });
+    });
+    {
+      const form = panel.querySelector<HTMLFormElement>('[data-action="assistant-send"]');
+      if (form) {
+        const input = form.querySelector<HTMLTextAreaElement>('.mushi-assistant-input');
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const value = input?.value ?? '';
+          if (input) input.value = '';
+          void this.sendAssistantMessage(value);
+        });
+        input?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            form.requestSubmit();
+          }
+        });
+      }
+    }
 
     panel.querySelector('[data-action="reports"]')?.addEventListener('click', () => {
       void this.loadReporterReports();

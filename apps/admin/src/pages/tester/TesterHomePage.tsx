@@ -21,7 +21,7 @@ import {
   TesterStatGrid,
   TesterTierBadge,
 } from '../../components/tester/tester-ui'
-import { Badge } from '../../components/ui'
+import { Badge, Btn } from '../../components/ui'
 
 interface TesterApp {
   id: string
@@ -112,10 +112,10 @@ function RecommendedAppCard({ app }: { app: TesterApp }) {
 }
 
 export function TesterHomePage() {
-  const { data: status, loading: statusLoading } = useTesterStatus()
-  const { data: appsRaw } = usePageData<{ data?: TesterApp[] } | TesterApp[]>('/v1/tester/apps', TESTER_API_OPTS)
-  const { data: walletRaw } = usePageData<{ data?: WalletData } | WalletData>('/v1/tester/wallet', TESTER_API_OPTS)
-  const { data: subsRaw } = usePageData<{ items: Submission[]; total: number }>('/v1/tester/submissions', TESTER_API_OPTS)
+  const { data: status, loading: statusLoading, error: statusError } = useTesterStatus()
+  const { data: appsRaw, error: appsError, reload: reloadApps } = usePageData<{ data?: TesterApp[] } | TesterApp[]>('/v1/tester/apps', TESTER_API_OPTS)
+  const { data: walletRaw, error: walletError, reload: reloadWallet } = usePageData<{ data?: WalletData } | WalletData>('/v1/tester/wallet', TESTER_API_OPTS)
+  const { data: subsRaw, error: subsError, reload: reloadSubs } = usePageData<{ items: Submission[]; total: number }>('/v1/tester/submissions', TESTER_API_OPTS)
 
   const apps: TesterApp[] = Array.isArray(appsRaw)
     ? appsRaw
@@ -145,8 +145,31 @@ export function TesterHomePage() {
   const kycCap = wallet?.kycCapUsd ?? 599
   const pendingRedemptions = wallet?.pendingRedemptions ?? []
 
+  const loadError = statusError ?? appsError ?? walletError ?? subsError
+
   if (statusLoading) {
     return <TesterLoadingSkeleton rows={3} />
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4">
+        <TesterPageIntro
+          title="Could not load dashboard"
+          description={loadError}
+        />
+        <Btn
+          variant="primary"
+          onClick={() => {
+            void reloadApps()
+            void reloadWallet()
+            void reloadSubs()
+          }}
+        >
+          Retry
+        </Btn>
+      </div>
+    )
   }
 
   return (

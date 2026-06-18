@@ -75,11 +75,11 @@ export function Confetti({ triggerKey, count = 16 }: Props) {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed inset-x-0 top-16 z-[70] mx-auto h-0 w-0"
+      className="pointer-events-none fixed inset-x-0 top-16 z-[70] mx-auto h-0 w-full max-w-full"
     >
       {active.pieces.map((p) => {
         const style: CSSProperties = {
-          left: `${p.left - 50}vw`,
+          left: `${p.left}%`,
           width: `${p.size}px`,
           height: `${p.size}px`,
           animationDelay: `${p.delay}ms`,

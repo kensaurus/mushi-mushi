@@ -55,7 +55,7 @@ npx @mushi-mushi/cli init     # scoped name
 ## Security
 
 - Credentials accepted via `--api-key` flag leak into `ps -ef`. Prefer the interactive prompt on dev machines; on CI, pass them via the environment and an explicit `--api-key "$MUSHI_API_KEY"` at the boundary.
-- The `~/.mushirc` credentials cache is written with mode `0o600` (owner read/write only) on Unix.
+- The `~/.config/mushi/config.json` credentials cache is written with mode `0o600` (owner read/write only) on Unix. Legacy `~/.mushirc` auto-migrates on first load.
 - All env-file writes strip CR/LF/NUL from secrets to prevent accidental `.env` injection.
 
 ## Links

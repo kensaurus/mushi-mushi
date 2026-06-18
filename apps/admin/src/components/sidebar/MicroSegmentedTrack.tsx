@@ -16,16 +16,14 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from 'react'
-import {
-  microLayoutTransition,
-  microLayoutTransitionReduced,
-  microTapScale,
-} from '../../lib/motion-tokens'
+import { useMotionTransition } from '../../lib/useMotionTransition'
+import { microTapScale } from '../../lib/motion-tokens'
 import {
   MICRO_SEG_CELL,
   MICRO_TRACK,
   MICRO_TRACK_INLINE,
   MICRO_TRACK_SLIDING,
+  MICRO_TRACK_SOLO,
 } from './SidebarMicroChrome'
 
 const MicroTrackContext = createContext<string>('')
@@ -38,6 +36,7 @@ export function MicroSegmentedTrack({
   trackId,
   sliding = true,
   inline = false,
+  solo = false,
   className,
   children,
   ...rest
@@ -47,6 +46,8 @@ export function MicroSegmentedTrack({
   sliding?: boolean
   /** Shrink-to-content width (table toolbars). */
   inline?: boolean
+  /** Fixed-width single-segment track (sidebar focus toggle). */
+  solo?: boolean
   className?: string
   children: ReactNode
 } & Pick<HTMLAttributes<HTMLDivElement>, 'role' | 'aria-label' | 'aria-labelledby'> &
@@ -57,6 +58,7 @@ export function MicroSegmentedTrack({
         MICRO_TRACK,
         sliding && MICRO_TRACK_SLIDING,
         inline && MICRO_TRACK_INLINE,
+        solo && MICRO_TRACK_SOLO,
         className,
       )}
       data-micro-track={trackId}
@@ -81,25 +83,25 @@ export function MicroSegmentCell({
   children: ReactNode
 }) {
   const trackId = useContext(MicroTrackContext)
+  const layoutTransition = useMotionTransition()
   const reduceMotion = useReducedMotion()
-  const layoutTransition = reduceMotion ? microLayoutTransitionReduced : microLayoutTransition
 
   return (
     <div className={cx(MICRO_SEG_CELL, className)}>
-      {active && trackId ? (
-        <motion.div
-          layoutId={`micro-ind-${trackId}`}
-          className="sidebar-micro-indicator"
-          transition={layoutTransition}
-          initial={false}
-          aria-hidden
-        />
-      ) : null}
       <motion.div
-        className="sidebar-micro-seg-interaction relative z-[1] flex min-w-0 w-full"
+        className="sidebar-micro-seg-interaction"
         whileTap={reduceMotion ? undefined : { scale: microTapScale }}
       >
-        {children}
+        {active && trackId ? (
+          <motion.div
+            layoutId={`micro-ind-${trackId}`}
+            className="sidebar-micro-indicator"
+            transition={layoutTransition}
+            initial={false}
+            aria-hidden
+          />
+        ) : null}
+        <div className="sidebar-micro-seg-content">{children}</div>
       </motion.div>
     </div>
   )

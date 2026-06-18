@@ -14,6 +14,8 @@ export const PAGE_ROUTES_WITH_OWN_HERO = new Set([
   '/compliance',
   '/graph',
   '/explore',
+  '/qa-coverage',
+  '/drift',
   '/inventory',
   '/judge',
   '/storage',

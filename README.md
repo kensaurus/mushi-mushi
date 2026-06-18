@@ -2,28 +2,66 @@
 
 # Mushi Mushi
 
-**Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
+**Your AI wrote it. Mushi tells you why it broke.**
 
+Plain-English diagnosis + a paste-ready fix, right inside Cursor and Claude Code. No log-reading. No second LLM API key for MCP.
+
+**Fastest path — drop Mushi into your AI editor:**
+
+```bash
+npx mushi-mushi setup --ide cursor   # or: --ide claude
 ```
+
+Already shipping an app? One command installs the SDK + env vars + an optional test report:
+
+```bash
 npx mushi-mushi
 ```
 
-Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android.
+**Open source, self-hostable, MIT JS core** — bring your own LLM key, no second key for MCP, no lock-in. [Self-host in minutes](./SELF_HOSTED.md) · [licensing](https://kensaur.us/mushi-mushi/docs/concepts/open-source).
 
-Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **13 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier, Cursor Cloud) so every tool in your stack stays in the loop.
+<!-- TODO(loop-video): embed the 20–30s incident-loop gif here once buttery (docs/screenshots/incident-loop.gif):
+     AI ships code → prod breaks → Mushi diagnoses in Cursor → paste fix prompt → merged.
+     Script + target metric (time-to-first-diagnosis < 2 min) in docs/marketing/STOREFRONTS.md. -->
+
+| | Before | Now |
+|---|---|---|
+| **Category** | Bug intelligence / observability | **Bug translation for vibe coders** |
+| **Front door** | SDK-first, Sentry contrast | **MCP-first** + one-command wizard |
+| **Hero output** | Dashboards and stack traces | Plain-English diagnosis + fix prompt in your editor |
+| **Sentry** | Headline foil | Optional enrichment layer (Path B below) |
+
+**Today:** AI classifies reports in seconds. Pull a full fix brief via MCP [`get_fix_context`](https://kensaur.us/mushi-mushi/docs/quickstart/incident-loop) + prompt `summarize_report_for_fix`. **Target:** sub-10-second diagnosis end-to-end.
+
+**Path A — vibe coder (start here):** `npx mushi-mushi` → [Connect & Update](https://kensaur.us/mushi-mushi/admin/connect) → **Add to Cursor** → ask *"what's broken in prod?"*
+
+**Path B — already on Sentry:** inbound adapters forward alerts into Mushi for deeper fix context — see [Team graduation](#whats-new-in-v2--team-graduation-inventory--agentic-failure-gates) below.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Node](https://img.shields.io/badge/Node-%E2%89%A522-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
 [![Server](https://img.shields.io/badge/server-AGPLv3-brightgreen.svg)](./packages/server/LICENSE)
 
-[Quick start](#try-it) · [Connect & Update hub](https://kensaur.us/mushi-mushi/admin/connect) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
+[Quick start](#try-it) · [Connect & Update hub](https://kensaur.us/mushi-mushi/admin/connect) · [Live admin demo](https://kensaur.us/mushi-mushi/admin/) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Marketing landing](https://kensaur.us/mushi-mushi/) · [Self-hosting](./SELF_HOSTED.md) · [Roadmap](https://kensaur.us/mushi-mushi/docs/roadmap) · [Rewards program](./docs/REWARDS.md) · [Full screenshot tour](./docs/SCREENSHOTS.md)
 
-<a href="https://kensaur.us/mushi-mushi/admin/" title="Live demo — one click, no sign-up required">
-  <img src="./docs/screenshots/tour-pdca-loop.gif" alt="Animated guided tour through the logged-in admin console, walking the full Plan → Do → Check → Act loop." width="100%" />
+<a href="https://kensaur.us/mushi-mushi/admin/" title="Live admin demo — free signup, explore the console">
+  <img src="./docs/screenshots/tour-console-v2.gif" alt="Animated guided tour through the logged-in admin console — dashboard, reports triage, fix pipeline, and Connect hub." width="100%" />
 </a>
 
-<sub>↑ live demo — one click, no sign-up required &nbsp;·&nbsp; a 4-stop walk through the Plan → Do → Check → Act loop</sub>
+<sub>↑ live admin demo · free signup · seeded demo data · 4-stop walk through dashboard → reports → fixes → Connect</sub>
+
+<br><br>
+
+<a href="https://kensaur.us/mushi-mushi/admin/reports" title="Open a classified report in the live demo">
+  <img alt="Report detail — DiagnosisFixHero with plain-English root cause, confidence chip, paste-ready Cursor fix prompt, and PDCA receipt strip." src="./docs/screenshots/report-detail-dark.png" width="100%" />
+</a>
+
+<sub>↑ plain-English diagnosis + paste-ready fix prompt · click to open the live demo</sub>
 
 <br><br>
 
@@ -31,11 +69,11 @@ Mushi is the **synthesis layer**: the one signal none of your existing tools cap
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/dashboard-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/dashboard-light.png">
-    <img alt="Mushi admin dashboard — the new v2 PDCA cockpit. Plan / Do / Check / Act pills along the top, Workspace snapshot, the bug-fix loop summary, the next action callout, and the project setup checklist down the right." src="./docs/screenshots/dashboard-dark.png" width="100%">
+    <img alt="Mushi admin dashboard — v2 PDCA cockpit with React Flow canvas, NextBestAction strip, severity histogram, and project setup checklist." src="./docs/screenshots/dashboard-dark.png" width="100%">
   </picture>
 </a>
 
-<sub>↑ the v2 admin · click to open the live demo · the image swaps with your system theme</sub>
+<sub>↑ the v2 PDCA cockpit · click to open the live demo · dashboard image swaps with your GitHub theme</sub>
 
 </div>
 
@@ -63,7 +101,7 @@ The console, CLI, MCP server, and SDK install path were unified around one **Con
 
 - **Connect & Update hub** (`/connect`) — one page wires GitHub, SDK install snippet, MCP deeplinks (**Add to Cursor** / **Add to VS Code**), CLI install copy, and per-package freshness chips. Beginner sidebar pins it as **Connect** under Start here.
 - **One-click SDK upgrade PR** — **Create Upgrade PR** reads your linked repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm stable (never `workspace:` / `file:` / git specifiers), opens a draft GitHub PR, and marks it ready. Backed by `sdk-upgrade-worker` + daily `sdk-versions-cron` (npm registry sync into `sdk_versions`). CLI equivalent: `mushi upgrade`.
-- **MCP lean catalog (79 tools)** — default installs expose `triage,fixes,inventory,setup,docs` via `MUSHI_FEATURES` (stdio) or `?features=` (hosted HTTP). Unified `diagnose_setup` + `search_mushi_docs` replace the old setup trilogy. Full catalog: `features=all`. Catalog sync guarded by `pnpm check:catalog-sync`.
+- **MCP lean catalog (71 tools)** — default installs expose `triage,fixes,inventory,setup,docs` via `MUSHI_FEATURES` (stdio) or `?features=` (hosted HTTP). Unified `diagnose_setup` + `search_mushi_docs` replace the old setup trilogy. Full catalog: `features=all`. Catalog sync guarded by `pnpm check:catalog-sync`.
 - **Skill Pipelines** (`/skills`) — attach a [cursor-kenji](https://github.com/kensaurus/cursor-kenji) / skills.sh skill to a report; run handoff or Cursor Cloud mode with live step updates. CLI: `mushi pipeline start|watch|checkin`.
 - **Console v2 density** — `PageHeaderBar` replaces stacked header + help chrome; neutral zinc frames (amber reserved for CTAs); 12px type floor on labels. See [`apps/admin/README.md`](./apps/admin/README.md#design-system-v2-2026-06--compact-console-grade-uiux).
 
@@ -71,16 +109,18 @@ Quick path for a new repo:
 
 ```bash
 npx mushi-mushi                    # wizard: SDK + env vars + optional test report
-mushi connect --wait               # ~/.mushirc + .env.local + .cursor/mcp.json + heartbeat (IDE wired by default; use --no-ide to skip)
+mushi connect --wait               # ~/.config/mushi/config.json + .env.local + .cursor/mcp.json + heartbeat (IDE wired by default; use --no-ide to skip)
 # or open Admin → Connect & Update → Add to Cursor → Create Upgrade PR when GitHub is linked
 ```
 
 ---
 
-## What's new in v2 — bidirectional inventory + agentic-failure gates
+## What's new in v2 — Team graduation: inventory + agentic-failure gates
 
 Mushi v1 was the negative side: catch what your users _felt_ break and triage it.
-**v2 adds the positive side**: a declarative `inventory.yaml` of user stories, pages, and actions — with five pre-release **gates** that fail the build when the agent's drafts diverge from the contract, and a **synthetic monitor** that re-walks the same surface against staging on a schedule.
+**v2 adds the positive side** for teams graduating from solo vibe-coding: a declarative `inventory.yaml` of user stories, pages, and actions — with five pre-release **gates** that fail the build when the agent's drafts diverge from the contract, and a **synthetic monitor** that re-walks the same surface against staging on a schedule.
+
+Mushi is also the **synthesis layer** for operators who already run Sentry, Datadog, or Firebase: inbound adapters for **11 monitoring sources** and **13 outbound plugins** keep every tool in the loop — but that's the upgrade path, not the front door.
 
 - 🌱 **Sketch your app, not just its bugs.** A `User stories · Inventory` page (sidebar → User stories) groups every user-facing action under the story it serves and shows verified / unwired / regressed counts at a glance.
 - 🤖 **The SDK proposes the inventory.** Turn on `capture.discoverInventory` and the SDK quietly observes routes, `data-testid`s, and outbound API paths in production — Claude drafts an `inventory.yaml` from the stream, you accept or edit. Most teams will never hand-author one.
@@ -249,7 +289,7 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 </td>
 <td align="center" width="16%">
 
-**267**
+**273**
 <br/>
 <sub>SQL Migrations</sub>
 
@@ -412,44 +452,93 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 ## Tour the rooms
 
-A quick look at where you'll spend your time. Every panel is a click-through to the live demo.
+A quick look at where you'll spend your time. Every panel links to the **live admin demo** — free signup, real seeded data.
+
+### Start here — wire GitHub, SDK, and MCP in one sitting
 
 <table>
   <tr>
-    <td width="50%" align="center">
-      <a href="https://kensaur.us/mushi-mushi/admin/dashboard" title="Open the live dashboard">
-        <img alt="Dashboard — PDCA cockpit with PLAN / DO / CHECK / ACT pills along the top, the bug-fix loop summary, the next action callout, and the project setup checklist." src="./docs/screenshots/dashboard-dark.png" width="100%">
-      </a>
-      <br>
-      <sub><b>Dashboard</b> · the PDCA cockpit — PLAN / DO / CHECK / ACT in one row, the next action explained in plain English, and the setup checklist that moves itself off-screen once you finish</sub>
-    </td>
-    <td width="50%" align="center">
-      <a href="https://kensaur.us/mushi-mushi/admin/inventory" title="Open the live inventory">
-        <img alt="User stories · Inventory — the new v2 positive-side surface. Truth layer summary across the top, then per-story cards with verified / unwired / regressed counts and a Run gates button." src="./docs/screenshots/inventory-dark.png" width="100%">
-      </a>
-      <br>
-      <sub><b>User stories · Inventory</b> · the new v2 positive surface — every user-facing action grouped under its story, with verified / unwired / regressed counts and one-click <i>Run gates</i> / <i>Run crawler</i> from the row</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <a href="https://kensaur.us/mushi-mushi/admin/graph" title="Open the live knowledge graph">
-        <img alt="Knowledge graph — Bug graph view with quick-view filters (All / Regressions / Fragile components / Fix coverage), 12 node types, 19 edge types, and Graph / Surface / Table tabs in the upper-right." src="./docs/screenshots/graph-dark.png" width="100%">
-      </a>
-      <br>
-      <sub><b>Knowledge graph</b> · component / page / release adjacency weighted by bug incidence — toggle <i>Surface</i> to overlay the positive inventory and see the dead corners</sub>
-    </td>
     <td width="50%" align="center">
       <a href="https://kensaur.us/mushi-mushi/admin/connect" title="Open Connect & Update">
         <img alt="Connect & Update — GitHub linked, SDK install card with live preview, MCP Add to Cursor, CLI copy, and Create Upgrade PR freshness chips." src="./docs/screenshots/connect-dark.png" width="100%">
       </a>
       <br>
-      <sub><b>Connect & Update</b> · one hub for GitHub, SDK snippet + trigger preview, MCP deeplinks, CLI install, and <i>Create Upgrade PR</i> — semver-only bumps via <code>sdk-upgrade-worker</code></sub>
+      <sub><b>Connect & Update</b> · one hub for GitHub link, SDK snippet + trigger preview, MCP deeplinks, CLI install, and <i>Create Upgrade PR</i> — semver-only bumps via <code>sdk-upgrade-worker</code></sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/mcp" title="Open MCP install">
+        <img alt="MCP page — lean feature groups (triage, fixes, inventory, setup, docs), Add to Cursor deeplink, 71-tool catalog." src="./docs/screenshots/mcp-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>MCP — Model Context Protocol</b> · lean default via <code>MUSHI_FEATURES</code>, one-click Cursor deeplink, hosted Streamable HTTP at <code>/functions/v1/mcp</code>, catalog parity guarded by <code>pnpm check:catalog-sync</code></sub>
     </td>
   </tr>
 </table>
 
-For the full screenshot tour (28 surfaces, every page in the console) see [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).
+### The incident loop — classify, diagnose, dispatch, merge
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/reports" title="Open the triage queue">
+        <img alt="Reports triage queue — 14d KPI strip, 4px severity stripe per row, status pills, and Dispatch fix primary action." src="./docs/screenshots/reports-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Reports</b> · two-stage Haiku fast-filter → Sonnet classify pipeline tags severity and category before you click in — blast-radius dedup, save-view presets, one primary action per row</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/fixes" title="Open the fix pipeline">
+        <img alt="Fix orchestrator — PR-ready banner, per-attempt PDCA cards with Langfuse trace links and real GitHub PR URLs." src="./docs/screenshots/fixes-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Fixes</b> · agent sandbox runs stream into draft PRs — per-attempt PDCA cards, 30d KPI sparklines, Langfuse trace per run, squash-merge from console via <code>POST /v1/admin/fixes/:id/merge</code></sub>
+    </td>
+  </tr>
+</table>
+
+### Team graduation — inventory, graph, and regression guards
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/inventory" title="Open the live inventory">
+        <img alt="User stories · Inventory — truth-layer hero, per-story verified / unwired / regressed counts, Run gates buttons." src="./docs/screenshots/inventory-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>User stories · Inventory</b> · every user-facing action grouped under its story — verified / unwired / regressed counts, one-click <i>Run gates</i> / <i>Run crawler</i>, SDK-driven discovery feed drafts the first <code>inventory.yaml</code></sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/graph" title="Open the knowledge graph in Surface mode">
+        <img alt="Knowledge graph Surface mode — inventory overlay on React Flow canvas with Page, Element, Action, and User story node types." src="./docs/screenshots/graph-surface-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Graph · Surface mode</b> · flips the same React Flow canvas to overlay <code>inventory.yaml</code> on bug-incidence weights — unwired actions and regressed elements light up against working ones (Apache AGE when installed, SQL adjacency fallback)</sub>
+    </td>
+  </tr>
+</table>
+
+### Ship with confidence — QA stories and codebase atlas
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/qa-coverage" title="Open QA Coverage">
+        <img alt="QA Coverage — scheduled user-story tests, Firecrawl / Browserbase / local Playwright providers, pass-fail run history." src="./docs/screenshots/qa-coverage-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>QA Coverage Suite</b> · NL prompts or Playwright scripts on cron — Firecrawl Actions (default), Browserbase BYOK, or local CLI — failures thread to Slack Block Kit and <code>qa_story.failed</code> plugin events</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/explore" title="Open Codebase Atlas">
+        <img alt="Codebase Atlas Graph view — indexed source files as nodes coloured by layer with directed import arrows." src="./docs/screenshots/explore-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Codebase Atlas</b> · Understand-Anything-shaped graph over indexed repos — layer-coloured nodes (UI / Library / Backend / Tests), semantic search via pgvector, Ask tab grounded on project knowledge corpus</sub>
+    </td>
+  </tr>
+</table>
+
+For the full screenshot tour (28+ surfaces, every page in the console) see [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).
 
 ---
 
@@ -742,7 +831,7 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all SQL migrations from a bundled ConfigMap mirror (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) and the [Self-host in minutes](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) guide are the long-form walkthroughs. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all SQL migrations from a bundled ConfigMap mirror (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet — see [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 

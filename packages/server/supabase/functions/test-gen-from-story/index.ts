@@ -116,7 +116,7 @@ async function openGithubPr(opts: {
   const { default_branch: defaultBranch } = await repoRes.json() as { default_branch: string }
 
   // Resolve the default-branch tip SHA so we can branch from it.
-  const refRes = await fetch(`${apiBase}/git/ref/heads/${defaultBranch}`, { headers })
+  const refRes = await fetch(`${apiBase}/git/ref/heads/${encodeURIComponent(defaultBranch)}`, { headers })
   if (!refRes.ok) return null
   const { object: { sha: baseSha } } = await refRes.json() as { object: { sha: string } }
 
@@ -144,6 +144,9 @@ async function openGithubPr(opts: {
   if (existingRes.ok) {
     const existingData = await existingRes.json() as { sha?: string }
     existingSha = existingData.sha
+  } else if (existingRes.status !== 404) {
+    // Transient or permission errors must not fall through to a PUT without sha.
+    return null
   }
 
   const putRes = await fetch(`${apiBase}/contents/${encodedPath}`, {

@@ -184,9 +184,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const isSchemaNotSynced =
       poolError !== null &&
       poolError !== undefined &&
-      (poolError.code === '42P01' ||
-        (typeof (poolError as { message?: string }).message === 'string' &&
-          (poolError as { message: string }).message.includes('PGRST205')));
+      (poolError.code === '42P01' || poolError.code === 'PGRST205');
     if (poolError && !isSchemaNotSynced) return dbError(c, poolError);
 
     const row = (data as Record<string, unknown> | null) ?? {};

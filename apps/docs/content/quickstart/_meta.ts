@@ -1,5 +1,7 @@
 export default {
   index: 'Choose your stack',
+  'incident-loop': 'Incident loop (start here)',
+  mcp: 'MCP server',
   react: 'React',
   web: 'Vanilla JS',
   vue: 'Vue 3',
@@ -11,5 +13,4 @@ export default {
   flutter: 'Flutter',
   capacitor: 'Capacitor',
   mobile: { title: 'Mobile (overview)', display: 'hidden' },
-  mcp: 'MCP server',
 }

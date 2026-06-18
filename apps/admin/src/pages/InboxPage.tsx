@@ -100,7 +100,7 @@ const GROUP_TONE: Record<Group, { chip: string; chipText: string; ring: string }
 const TONE_RING: Record<PageAction['tone'], string> = {
   plan: 'border-info/40 bg-info-muted/15',
   do: 'border-brand/40 bg-brand/10',
-  check: 'border-warn/40 bg-warn/10',
+  check: 'border-info/40 bg-info-muted/15',
   act: 'border-ok/40 bg-ok-muted/15',
   idle: 'border-edge bg-surface-raised/40',
 }
