@@ -1,5 +1,14 @@
 # @mushi-mushi/angular
 
+## 1.0.1
+
+### Patch Changes
+
+- 94e93e8: Fix the CommonJS entry point. `package.json` `"main"` now points at `./dist/index.cjs` (the CJS build) instead of `./dist/index.js` (the ESM build), so `require('@mushi-mushi/svelte' | '/vue' | '/angular')` loads the correct bundle instead of throwing on the ESM `export` syntax.
+- Updated dependencies [94e93e8]
+  - @mushi-mushi/core@1.16.0
+  - @mushi-mushi/web@1.16.0
+
 ## 1.0.0
 
 ### Major Changes
