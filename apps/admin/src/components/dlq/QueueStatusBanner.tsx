@@ -3,9 +3,9 @@
  * PURPOSE: Processing queue posture — dead letter, failed, circuit breaker, stalled, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
+import { deadLetterHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { QueueStats, QueueTabId } from './QueueStatsTypes'
 
 interface Props {
@@ -30,6 +30,7 @@ export function QueueStatusBanner({
   flushing,
 }: Props) {
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
@@ -37,11 +38,7 @@ export function QueueStatusBanner({
         tone="info"
         title="No projects — queue empty"
         subtitle="Create a project before reports enter the pipeline."
-        action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">Go to Setup</Btn>
-          </Link>
-        }
+        action={<StatusBannerAction label="Go to Setup" to="/onboarding" tone="info" />}
       />
     )
   }
@@ -50,18 +47,26 @@ export function QueueStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.deadLetter} dead-letter on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
+        title={
+          `${stats.deadLetter} report${stats.deadLetter === 1 ? '' : 's'} stuck after retries on ${projectLabel}`
+        }
+        subtitle={stats.topPriorityLabel ?? deadLetterHint(stats.deadLetter)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Open dead-letter</Btn>
-            </Link>
+            <StatusBannerAction
+              label="Inspect dead-letter queue"
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('items')}>
-              Open items
-            </Btn>
-          ) : null
+            <StatusBannerAction label="Open stuck items" onClick={() => onTab('items')} tone="danger" />
+          ) : (
+            <StatusBannerAction
+              label="Inspect dead-letter queue"
+              to={scopedHref('/queue?tab=items&filter=dead_letter', pid)}
+              tone="danger"
+            />
+          )
         }
       />
     )
@@ -71,14 +76,21 @@ export function QueueStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.failed} failed job${stats.failed === 1 ? '' : 's'}`}
-        subtitle={stats.topPriorityLabel}
+        title={`${stats.failed} pipeline job${stats.failed === 1 ? '' : 's'} failed`}
+        subtitle={
+          stats.topPriorityLabel ??
+          'A background step broke while processing reports — inspect the failure before replaying.'
+        }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Inspect failures</Btn>
-            </Link>
-          ) : null
+            <StatusBannerAction label="Inspect failures" to={stats.topPriorityTo} tone="warn" />
+          ) : (
+            <StatusBannerAction
+              label="Inspect failures"
+              to={scopedHref('/queue?tab=items&filter=failed', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
@@ -88,13 +100,20 @@ export function QueueStatusBanner({
     return (
       <StatusBannerShell
         tone="brand"
-        title={`${stats.reportsQueued} report${stats.reportsQueued === 1 ? '' : 's'} behind circuit breaker`}
-        subtitle={stats.topPriorityLabel}
+        title={`${stats.reportsQueued} report${stats.reportsQueued === 1 ? '' : 's'} paused by circuit breaker`}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Ingest is temporarily throttled to protect the pipeline — flush when the upstream issue is fixed.'
+        }
         action={
           onFlush ? (
-            <Btn size="sm" variant="ghost" onClick={onFlush} loading={flushing} disabled={flushing}>
-              Flush queued
-            </Btn>
+            <StatusBannerAction
+              label="Flush queued reports"
+              onClick={onFlush}
+              loading={flushing}
+              disabled={flushing}
+              tone="brand"
+            />
           ) : null
         }
       />
@@ -106,16 +125,28 @@ export function QueueStatusBanner({
       <StatusBannerShell
         tone="warn"
         title="Pipeline may be stalled"
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Reports are not moving through triage — recover stranded jobs or refresh to see current state.'
+        }
         action={
           onRecover ? (
-            <Btn size="sm" variant="ghost" onClick={onRecover} loading={recovering} disabled={recovering}>
-              Recover stranded
-            </Btn>
+            <StatusBannerAction
+              label="Recover stranded jobs"
+              onClick={onRecover}
+              loading={recovering}
+              disabled={recovering}
+              tone="warn"
+            />
           ) : onRefresh ? (
-            <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-              Refresh
-            </Btn>
+            <StatusBannerAction
+              label="Refresh"
+              onClick={onRefresh}
+              loading={refreshing}
+              disabled={refreshing}
+              tone="warn"
+              emphasis="ghost"
+            />
           ) : null
         }
       />
@@ -129,17 +160,18 @@ export function QueueStatusBanner({
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            Refresh
-          </Btn>
+          <StatusBannerAction
+            label="Refresh"
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">View backlog</Btn>
-          </Link>
+          <StatusBannerAction label="View backlog" to={stats.topPriorityTo} tone="ok" />
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('backlog')}>
-            View backlog
-          </Btn>
+          <StatusBannerAction label="View backlog" onClick={() => onTab('backlog')} tone="ok" />
         ) : null
       }
     />

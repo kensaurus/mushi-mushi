@@ -56,7 +56,82 @@ export interface AuditResult {
   recent_backend_errors: number
 }
 
+export interface FullstackAuditStats {
+  hasAnyProject: boolean
+  projectId: string | null
+  projectName: string | null
+  errorCount: number
+  warnCount: number
+  failedGateCount: number
+  topPriority: 'no_project' | 'failures' | 'warnings' | 'healthy'
+}
+
 export function registerFullstackAuditRoutes(parent: Hono<{ Variables: Variables }>) {
+  parent.get('/v1/admin/fullstack-audit/stats', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty: FullstackAuditStats = {
+      hasAnyProject: false,
+      projectId: null,
+      projectName: null,
+      errorCount: 0,
+      warnCount: 0,
+      failedGateCount: 0,
+      topPriority: 'no_project',
+    }
+
+    const resolved = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    })
+    if ('response' in resolved) return resolved.response
+    const { project } = resolved
+    const projectId = project.id as string
+    const projectName = (project.project_name as string | null) ?? null
+
+    const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentRuns } = await db
+      .from('gate_runs')
+      .select('id, status')
+      .eq('project_id', projectId)
+      .gte('completed_at', since)
+      .neq('gate', 'code_health')
+
+    const runIds = (recentRuns ?? []).map((r) => r.id as string)
+    const failedGateCount = (recentRuns ?? []).filter((r) => r.status === 'fail').length
+
+    let errorCount = 0
+    let warnCount = 0
+    if (runIds.length > 0) {
+      const { data: findings } = await db
+        .from('gate_findings')
+        .select('severity')
+        .in('gate_run_id', runIds.slice(0, 50))
+
+      for (const row of findings ?? []) {
+        if (row.severity === 'error') errorCount += 1
+        else if (row.severity === 'warn') warnCount += 1
+      }
+    }
+
+    let topPriority: FullstackAuditStats['topPriority'] = 'healthy'
+    if (failedGateCount > 0 || errorCount > 0) topPriority = 'failures'
+    else if (warnCount > 0) topPriority = 'warnings'
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId,
+        projectName,
+        errorCount,
+        warnCount,
+        failedGateCount,
+        topPriority,
+      } satisfies FullstackAuditStats,
+    })
+  })
+
   parent.post('/v1/admin/projects/:id/audit', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string
     const projectId = c.req.param('id')!

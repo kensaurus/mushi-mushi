@@ -98,7 +98,7 @@ export const COPY: CopyRegistry = {
         backlog: 'Waiting',
         reports: 'Bugs this week',
         fixes: 'Fixes running',
-        focus: 'Next step',
+        focus: 'Focus',
       },
       actionLabels: {
         setup: 'Finish setup',
@@ -120,7 +120,7 @@ export const COPY: CopyRegistry = {
           'Finish setup when charts are still empty',
         ],
         howToUse:
-          'Read the colored banner at the top — yellow means unread help, green means you have opened it. Click the action button to go to the next step.',
+          'Read the colored banner at the top — yellow means unread help, green means you have opened it. Click the action button to continue.',
       },
     },
     '/inbox': {
@@ -1207,7 +1207,7 @@ export const COPY: CopyRegistry = {
           'Use Health for platform probes and QA coverage on the active project',
         ],
         howToUse:
-          'Start on Overview. Click any KPI tile or tab badge to jump to the stage that needs attention. Green banner = loop healthy.',
+          'Plan = triage untriaged reports. Do = fix dispatch and draft PRs. Check = judge quality scores. Act = merge PRs and wire integrations. The live PDCA canvas shows counts and the current bottleneck — expand “About this page” above for the full glossary.',
       },
     },
     '/reports': {

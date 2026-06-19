@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Btn } from './ui'
 import { useAdminMode } from '../lib/mode'
-import { hasPageOwnedHero } from '../lib/pageHeroOwnership'
+import { shouldShowDavCoachmark } from '../lib/chromeLayers'
 
 const DISMISS_KEY = 'mushi:davChromeCoachmark:dismissed:v1'
 
@@ -31,7 +31,7 @@ export function DavChromeCoachmark() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    setVisible(isAdvanced && hasPageOwnedHero(pathname) && !isDismissed())
+    setVisible(isAdvanced && shouldShowDavCoachmark(pathname) && !isDismissed())
   }, [isAdvanced, pathname])
 
   if (!visible) return null
@@ -40,7 +40,7 @@ export function DavChromeCoachmark() {
     <div
       role="note"
       data-testid="dav-chrome-coachmark"
-      className="mb-3 flex flex-col gap-2 rounded-md border border-brand/25 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between"
+      className="mb-3 flex flex-col gap-2 rounded-md border border-brand/25 bg-brand-subtle px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between"
     >
       <div className="min-w-0 space-y-1">
         <p className="text-xs font-medium text-fg">Two strips, two jobs</p>
@@ -51,7 +51,7 @@ export function DavChromeCoachmark() {
           {' '}
           <span className="font-medium text-fg-secondary">This page</span>
           {' '}
-          shows status, your next step, and evidence for the route you are on.
+          shows what matters now, what to do, and how to verify on this route.
         </p>
       </div>
       <Btn

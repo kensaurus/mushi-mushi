@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.16.1
+
+### Patch Changes
+
+- 679b158: Ship a `server.json` MCP registry manifest (modelcontextprotocol.io 2025-09-29 schema) so the server can be listed in the official MCP registry, and minor server/catalog metadata touch-ups.
+- Updated dependencies [679b158]
+  - @mushi-mushi/core@1.17.0
+
 ## 0.16.0
 
 ### Minor Changes

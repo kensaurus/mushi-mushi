@@ -4,6 +4,7 @@ import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
 import { SnapshotSectionHint,Badge,
@@ -27,6 +28,9 @@ import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/Upgrade
 import { useEntitlements } from '../lib/useEntitlements'
 import { useUpdateOrganization } from '../lib/useUpdateOrganization'
 import { MembersStatusBanner } from '../components/members/MembersStatusBanner'
+import { OrgRoleGuideCard } from '../components/members/OrgRoleGuideCard'
+import { SeatBillingCallout } from '../components/members/SeatBillingCallout'
+import { orgRoleDefinition } from '../lib/orgRoleGuide'
 import {
   EMPTY_MEMBERS_STATS,
   type MembersStats,
@@ -164,12 +168,12 @@ const MEMBER_TABS: Array<{ id: MembersTabId; label: string; description: string 
   {
     id: 'roster',
     label: 'Roster',
-    description: 'Every teammate in this org — activity, roles, and seat hygiene.',
+    description: 'Who is on the team, what they can do, and when they last signed in.',
   },
   {
     id: 'invites',
     label: 'Invites',
-    description: 'Send invitations, resend email, or copy accept links for deliverability fallbacks.',
+    description: 'Email invitations — resend or copy a link if deliverability is flaky.',
   },
   {
     id: 'setup',
@@ -256,6 +260,7 @@ export function OrganizationSettingsPage() {
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
   const { data: statsData, reload: reloadStats } = usePageData<MembersStats>(statsPath)
   const stats = statsData ?? EMPTY_MEMBERS_STATS
+  usePublishPageHeroStats('/organization/members', statsData)
 
   const reloadAll = useCallback(() => {
     reload()
@@ -745,6 +750,14 @@ export function OrganizationSettingsPage() {
         </div>
       </Section>
 
+      <SeatBillingCallout
+        planDisplayName={stats.planDisplayName}
+        planId={stats.planId}
+        seatLimit={stats.seatLimit}
+        seatsUsed={stats.seatsUsed}
+        teamsEnabled={teamsEnabled}
+      />
+
       {(activeTab === 'setup' || !teamsEnabled) && (
         <UpgradeBanner
           flag="teams"
@@ -863,9 +876,9 @@ export function OrganizationSettingsPage() {
               disabled={!teamsEnabled || !canManage}
             />
             <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as Invitation['role'])} disabled={!teamsEnabled || !canManage}>
-              <option value="admin">Admin</option>
-              <option value="member">Member</option>
-              <option value="viewer">Viewer</option>
+              <option value="admin">Admin — manage team + all projects</option>
+              <option value="member">Member — triage and fix work</option>
+              <option value="viewer">Viewer — read-only</option>
             </SelectField>
             <div className="flex items-end">
               {!canManage && teamsEnabled ? (
@@ -941,6 +954,9 @@ export function OrganizationSettingsPage() {
             </div>
           )}
         </UpgradeLockOverlay>
+        <p className="mt-2 text-2xs text-fg-faint">
+          {orgRoleDefinition(role).tagline}. See the role guide on the Roster tab for the full permission matrix.
+        </p>
       </Card>
 
       {visibleInvitations.length === 0 ? (
@@ -1091,8 +1107,10 @@ export function OrganizationSettingsPage() {
       )}
 
       {activeTab === 'roster' && (
+      <>
+      <OrgRoleGuideCard />
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
           <span>
             {showInactiveOnly
               ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
@@ -1119,7 +1137,11 @@ export function OrganizationSettingsPage() {
           <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
             <tr>
               <th className="px-3 py-2">Member</th>
-              <th className="px-3 py-2">Role</th>
+              <th className="px-3 py-2">
+                <Tooltip content="Owner, Admin, Member, or Viewer — controls invite rights, billing access, and whether someone can triage or only view.">
+                  <span className="cursor-help">Role</span>
+                </Tooltip>
+              </th>
               <th className="hidden px-3 py-2 sm:table-cell">Active</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
@@ -1157,12 +1179,17 @@ export function OrganizationSettingsPage() {
                         </Tooltip>
                       )}
                     </div>
-                    <div className="font-mono text-3xs text-fg-faint">{member.user_id}</div>
+                    {!member.email && (
+                      <div className="font-mono text-3xs text-fg-faint" title="Internal user id">
+                        {member.user_id}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {canManage ? (
                       <select
                         value={member.role}
+                        title={orgRoleDefinition(member.role).tagline}
                         onChange={(e) => {
                           const next = e.target.value as OrgRole
                           if (next === member.role) return
@@ -1175,13 +1202,15 @@ export function OrganizationSettingsPage() {
                         }}
                         className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
                       >
-                        <option value="owner">Owner</option>
-                        <option value="admin">Admin</option>
-                        <option value="member">Member</option>
-                        <option value="viewer">Viewer</option>
+                        <option value="owner" title={orgRoleDefinition('owner').tagline}>Owner</option>
+                        <option value="admin" title={orgRoleDefinition('admin').tagline}>Admin</option>
+                        <option value="member" title={orgRoleDefinition('member').tagline}>Member</option>
+                        <option value="viewer" title={orgRoleDefinition('viewer').tagline}>Viewer</option>
                       </select>
                     ) : (
-                      <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
+                      <Tooltip content={orgRoleDefinition(member.role).tagline}>
+                        <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
+                      </Tooltip>
                     )}
                   </td>
                   <td className="hidden px-3 py-2 text-xs sm:table-cell">
@@ -1218,6 +1247,7 @@ export function OrganizationSettingsPage() {
           </tbody>
         </table>
       </Card>
+      </>
       )}
 
       {pendingRemove && (

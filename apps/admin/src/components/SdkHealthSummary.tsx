@@ -60,7 +60,7 @@ import {
   expoReporterGithubRepo,
   type ProjectMushiEnvVars,
 } from '../lib/projectMushiEnv'
-import { sdkPlatformHintFromUserAgent } from '../lib/sdkClientPlatform'
+import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
 
 // Heartbeat columns mirror the server-side select in
 // routes/billing-projects-queue-graph.ts on /v1/admin/projects.
@@ -238,36 +238,42 @@ export const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
   'no-key': 'No key',
 }
 
-const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string }> = {
+const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string; subtitle: string }> = {
   healthy: {
     dot: 'bg-ok',
     chip: 'bg-ok-muted text-ok border border-ok/30',
-    headline: 'SDK connected',
+    headline: 'Feedback widget is connected',
+    subtitle: 'Your app is checking in — new bug reports should appear within seconds.',
   },
   'endpoint-mismatch': {
     dot: 'bg-danger',
     chip: 'bg-danger-muted text-danger border border-danger/30',
-    headline: 'Wrong endpoint',
+    headline: 'SDK is pointed at the wrong backend',
+    subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
   stale: {
     dot: 'bg-warn',
     chip: 'bg-warn-muted text-warn border border-warn/30',
-    headline: 'Stale heartbeat',
+    headline: 'App has not checked in recently',
+    subtitle: 'Normal for low-traffic apps. If you just shipped an update, confirm SDK env vars are still in the build.',
   },
   cold: {
     dot: 'bg-warn',
     chip: 'bg-warn-muted text-warn border border-warn/30',
-    headline: 'Silent 7d+',
+    headline: 'No app activity in 7+ days',
+    subtitle: 'The SDK may have been removed from a recent deploy, or the API key was rotated.',
   },
   never: {
     dot: 'bg-danger',
     chip: 'bg-danger-muted text-danger border border-danger/30',
-    headline: 'Never connected',
+    headline: 'SDK not connected yet',
+    subtitle: 'Your API key exists but your app has never used it — usually missing env vars in the build.',
   },
   'no-key': {
     dot: 'bg-fg-faint',
     chip: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
-    headline: 'No API key',
+    headline: 'No API key yet',
+    subtitle: 'Generate a key above, then add it to your app config.',
   },
 }
 
@@ -295,6 +301,80 @@ const CARD_BLOCK_TONE: Record<
   'no-key': 'muted',
 }
 
+function humanOriginLabel(origin: string | null | undefined): string | null {
+  if (!origin?.trim()) return null
+  const kind = sdkOriginKind(origin)
+  if (kind === 'web') {
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) return 'Local dev (browser)'
+    try {
+      return `Web app (${new URL(origin).host})`
+    } catch {
+      return 'Web app'
+    }
+  }
+  if (origin.startsWith('capacitor://')) return 'Native app (Capacitor)'
+  if (origin.startsWith('android-app://')) return 'Native app (Android)'
+  return origin.length > 48 ? `${origin.slice(0, 45)}…` : origin
+}
+
+function humanKeySummary(
+  k: SdkHealthApiKey,
+  d: KeyDiagnostic,
+  adminHost: string | null,
+): string {
+  if (d.status === 'never') {
+    return 'This key has never been used by your app — add SDK env vars and rebuild.'
+  }
+  if (d.status === 'endpoint-mismatch' && k.last_seen_endpoint_host && adminHost) {
+    return `Your app is sending data to ${k.last_seen_endpoint_host}, but this project reads from ${adminHost}.`
+  }
+  const when = k.last_seen_at ? relTime(k.last_seen_at) : 'never'
+  const platform = sdkPlatformHintFromUserAgent(k.last_seen_user_agent)
+  const where = humanOriginLabel(k.last_seen_origin)
+  const parts = [`Last heard from your app ${when}`]
+  if (platform) parts.push(platform)
+  else if (where) parts.push(where)
+  return parts.join(' · ')
+}
+
+function SdkKeyHumanRow({
+  apiKey: k,
+  adminHost,
+  envVars,
+}: {
+  apiKey: SdkHealthApiKey
+  adminHost: string | null
+  envVars: ProjectMushiEnvVars
+}) {
+  const d = diagnoseKey(k, adminHost, envVars)
+  const summary = humanKeySummary(k, d, adminHost)
+  const showMismatch =
+    d.status === 'endpoint-mismatch' && k.last_seen_endpoint_host && adminHost
+
+  return (
+    <div className="border-t border-edge-subtle/40 px-3 py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <IconKey className="h-3.5 w-3.5 shrink-0 text-warn" aria-hidden />
+            <code className="truncate font-mono text-xs font-medium text-fg" title={k.label ?? k.key_prefix}>
+              {k.label?.trim() || `${k.key_prefix}…`}
+            </code>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-fg-secondary">{summary}</p>
+          {showMismatch ? (
+            <p className="mt-1 text-2xs text-danger">
+              Expected backend: <span className="font-mono">{adminHost}</span>
+            </p>
+          ) : null}
+        </div>
+        <SignalChip tone={KEY_STATUS_CHIP[d.status]} className="shrink-0 whitespace-nowrap">
+          {d.label}
+        </SignalChip>
+      </div>
+    </div>
+  )
+}
 function keyHeartbeatTitle(k: SdkHealthApiKey, d: KeyDiagnostic): string {
   const parts: string[] = [d.description]
   if (k.last_seen_at) parts.push(`Last seen ${absTime(k.last_seen_at)}`)
@@ -345,8 +425,8 @@ function SdkKeyCompactTableRow({
               }`}
               title={
                 endpointMatches
-                  ? 'Matches this admin backend'
-                  : `Mismatch — admin reads from ${adminHost ?? 'unknown'}`
+                  ? 'Backend your SDK is calling — matches this project'
+                  : `Wrong backend — this project reads from ${adminHost ?? 'unknown'}`
               }
             >
               {k.last_seen_endpoint_host}
@@ -364,7 +444,7 @@ function SdkKeyCompactTableRow({
               className="min-w-0 truncate font-mono text-xs text-fg-secondary"
               title={k.last_seen_origin}
             >
-              {k.last_seen_origin}
+              {humanOriginLabel(k.last_seen_origin) ?? k.last_seen_origin}
             </code>
           ) : (
             <span className="text-xs text-fg-faint">—</span>
@@ -557,6 +637,9 @@ export function SdkHealthSummary({
   const envVars = mushiEnvVarsForProjectSlug(projectSlug)
   const status = summarizeCardStatus(apiKeys, adminHost, envVars)
   const [open, setOpen] = useState(status !== 'healthy' && status !== 'no-key')
+  const [showTechnical, setShowTechnical] = useState(
+    status === 'endpoint-mismatch',
+  )
 
   // Re-open the diagnostics when a refetch degrades the status while the card
   // stays mounted (e.g. endpoint-mismatch detected after a test report).
@@ -625,6 +708,7 @@ export function SdkHealthSummary({
               {statusChipLabel}
             </SignalChip>
           </div>
+          <p className="text-xs leading-relaxed text-fg-secondary">{tone.subtitle}</p>
           {!compact && (
             <p className="mt-1 text-xs text-fg-muted">
               {projectName} ·{' '}
@@ -632,16 +716,16 @@ export function SdkHealthSummary({
                 ? 'no reports yet'
                 : `${reportCount.toLocaleString()} ${reportCount === 1 ? 'report' : 'reports'}`}
               {lastReportAt && ` · last report ${relTime(lastReportAt)}`}
-              {freshest?.last_seen_at && ` · last SDK ${relTime(freshest.last_seen_at)}`}
+              {freshest?.last_seen_at && ` · last heard from app ${relTime(freshest.last_seen_at)}`}
             </p>
           )}
-          {adminHost && (
+          {adminHost && (showTechnical || status === 'endpoint-mismatch') && (
             <div className="flex min-w-0 items-center gap-1.5 text-xs text-fg-secondary">
               <IconGlobe className="h-4 w-4 shrink-0 text-info" />
-              <span className="shrink-0 font-medium text-fg-muted">Backend</span>
+              <span className="shrink-0 font-medium text-fg-muted">This project reads from</span>
               <code
                 className="min-w-0 truncate font-mono text-fg"
-                title="Host this admin console reads from"
+                title="Backend host for this Mushi project"
               >
                 {adminHost}
               </code>
@@ -652,40 +736,53 @@ export function SdkHealthSummary({
 
       {activeKeys.length > 0 && (
         compact ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] table-fixed border-collapse text-xs">
-              <colgroup>
-                <col className="w-[28%]" />
-                <col className="w-[30%]" />
-                <col className="w-[26%]" />
-                <col className="w-[16%]" />
-              </colgroup>
-              <thead className="hidden border-b border-edge-subtle/40 bg-surface-overlay/30 lg:table-header-group">
-                <tr>
-                  <th className="px-3 py-2 text-left text-2xs font-semibold text-fg-muted">Key</th>
-                  <th className="border-l border-edge-subtle/45 px-3 py-2 text-left text-2xs font-semibold text-fg-muted">
-                    Endpoint
-                  </th>
-                  <th className="border-l border-edge-subtle/45 px-3 py-2 text-left text-2xs font-semibold text-fg-muted">
-                    Origin
-                  </th>
-                  <th className="border-l border-edge-subtle/45 px-3 py-2 text-right text-2xs font-semibold text-fg-muted">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeKeys.map((k) => (
-                  <SdkKeyCompactTableRow
-                    key={k.id}
-                    apiKey={k}
-                    adminHost={adminHost}
-                    envVars={envVars}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          showTechnical ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[40rem] table-fixed border-collapse text-xs">
+                <colgroup>
+                  <col className="w-[28%]" />
+                  <col className="w-[30%]" />
+                  <col className="w-[26%]" />
+                  <col className="w-[16%]" />
+                </colgroup>
+                <thead className="hidden border-b border-edge-subtle/40 bg-surface-overlay/30 lg:table-header-group">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-2xs font-semibold text-fg-muted">API key</th>
+                    <th className="border-l border-edge-subtle/45 px-3 py-2 text-left text-2xs font-semibold text-fg-muted">
+                      Backend called
+                    </th>
+                    <th className="border-l border-edge-subtle/45 px-3 py-2 text-left text-2xs font-semibold text-fg-muted">
+                      App source
+                    </th>
+                    <th className="border-l border-edge-subtle/45 px-3 py-2 text-right text-2xs font-semibold text-fg-muted">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeKeys.map((k) => (
+                    <SdkKeyCompactTableRow
+                      key={k.id}
+                      apiKey={k}
+                      adminHost={adminHost}
+                      envVars={envVars}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div>
+              {activeKeys.map((k) => (
+                <SdkKeyHumanRow
+                  key={k.id}
+                  apiKey={k}
+                  adminHost={adminHost}
+                  envVars={envVars}
+                />
+              ))}
+            </div>
+          )
         ) : (
           <div className="overflow-x-auto -mx-1">
             <table className="w-full min-w-[40rem] text-2xs">
@@ -725,6 +822,17 @@ export function SdkHealthSummary({
             {playbook.cta}
           </Btn>
         )}
+        {compact && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowTechnical((v) => !v)}
+            aria-expanded={showTechnical}
+          >
+            {showTechnical ? 'Hide technical details' : 'Show technical details'}
+            <span aria-hidden="true" className="ml-1.5">{showTechnical ? '▴' : '▾'}</span>
+          </Btn>
+        )}
         <Btn
           size="sm"
           variant="ghost"
@@ -732,7 +840,7 @@ export function SdkHealthSummary({
           aria-expanded={open}
           aria-controls={`sdk-health-playbook-${projectId}`}
         >
-          {open ? 'Hide diagnostics' : 'Diagnose connection'}
+          {open ? 'Hide fix steps' : 'How to fix'}
           <span aria-hidden="true" className="ml-1.5">{open ? '▴' : '▾'}</span>
         </Btn>
         <Link

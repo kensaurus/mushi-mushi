@@ -36,6 +36,16 @@ export interface SdkUpgradeState {
   prUrl?: string
   plan?: BumpEntry[]
   error?: string
+  /** True when POST returned an existing open upgrade PR instead of enqueueing. */
+  reused?: boolean
+  // Release cockpit fields — populated after PR is opened via syncStatus / mergePr
+  releaseStatus?: string
+  prState?: string
+  checkRunStatus?: string
+  checkRunConclusion?: string
+  deployStatus?: string
+  deployUrl?: string
+  workflowUrl?: string
 }
 
 interface JobRow {
@@ -44,6 +54,13 @@ interface JobRow {
   pr_url?: string | null
   plan?: BumpEntry[] | null
   error?: string | null
+  pr_state?: string | null
+  release_status?: string | null
+  check_run_status?: string | null
+  check_run_conclusion?: string | null
+  deploy_status?: string | null
+  deploy_url?: string | null
+  merged_at?: string | null
 }
 
 interface SsePayload {
@@ -102,11 +119,14 @@ export function useSdkUpgrade(projectId: string) {
   const cancelled = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const reachedTerminal = useRef(false)
+  const creatingRef = useRef(false)
+  const mergeSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(
     () => () => {
       cancelled.current = true
       abortRef.current?.abort()
+      if (mergeSyncTimer.current) clearTimeout(mergeSyncTimer.current)
     },
     [],
   )
@@ -119,6 +139,9 @@ export function useSdkUpgrade(projectId: string) {
         return
       }
       const res = await apiFetch<JobRow>(`/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}`)
+      // Re-check after the await: the row may have unmounted mid-request, in
+      // which case we must not setState or schedule another poll.
+      if (cancelled.current) return
       if (!res.ok || !res.data) {
         setState((s) => ({ ...s, status: 'failed', error: 'Failed to fetch upgrade status' }))
         return
@@ -239,7 +262,18 @@ export function useSdkUpgrade(projectId: string) {
       if (!job?.id) return
       if (['completed', 'completed_no_pr', 'failed', 'cancelled'].includes(job.status)) {
         if (job.status === 'completed' && job.pr_url) {
-          const next = { status: 'completed' as const, jobId: job.id, prUrl: job.pr_url, plan: job.plan ?? undefined }
+          const next: SdkUpgradeState = {
+            status: 'completed',
+            jobId: job.id,
+            prUrl: job.pr_url,
+            plan: job.plan ?? undefined,
+            releaseStatus: job.release_status ?? undefined,
+            prState: job.pr_state ?? undefined,
+            checkRunStatus: job.check_run_status ?? undefined,
+            checkRunConclusion: job.check_run_conclusion ?? undefined,
+            deployStatus: job.deploy_status ?? undefined,
+            deployUrl: job.deploy_url ?? undefined,
+          }
           persistTerminal(projectId, next)
           setState(next)
         } else if (job.status === 'completed_no_pr') {
@@ -253,7 +287,16 @@ export function useSdkUpgrade(projectId: string) {
         }
         return
       }
-      setState({ status: job.status as SdkUpgradeStatus, jobId: job.id })
+      setState({
+        status: job.status as SdkUpgradeStatus,
+        jobId: job.id,
+        releaseStatus: job.release_status ?? undefined,
+        prState: job.pr_state ?? undefined,
+        checkRunStatus: job.check_run_status ?? undefined,
+        checkRunConclusion: job.check_run_conclusion ?? undefined,
+        deployStatus: job.deploy_status ?? undefined,
+        deployUrl: job.deploy_url ?? undefined,
+      })
       void subscribeStream(job.id)
     })()
 
@@ -262,32 +305,146 @@ export function useSdkUpgrade(projectId: string) {
     }
   }, [projectId, subscribeStream])
 
-  const createUpgradePr = useCallback(async () => {
-    cancelled.current = false
-    reachedTerminal.current = false
-    clearPersistedTerminal(projectId)
-    setState({ status: 'queueing' })
-    const res = await apiFetch<{ jobId: string; status: string; createdAt: string }>(
-      `/v1/admin/projects/${projectId}/sdk-upgrade`,
-      { method: 'POST', body: JSON.stringify({}) },
-    )
-    if (!res.ok || !res.data) {
-      const err = (res as { error?: { code?: string; message?: string; jobId?: string } }).error
-      const errCode = err?.code ?? 'UPGRADE_FAILED'
-      const errMsg = err?.message ?? 'Could not start upgrade'
-      // Resume tracking when the server reports an in-flight job (409 dedupe).
-      if (errCode === 'ALREADY_IN_PROGRESS' && err?.jobId) {
-        setState({ status: 'queued', jobId: err.jobId })
-        void subscribeStream(err.jobId)
-        return
+  const enqueueUpgrade = useCallback(
+    async (options?: { refresh?: boolean }) => {
+      if (creatingRef.current) return
+      creatingRef.current = true
+      cancelled.current = false
+      reachedTerminal.current = false
+      if (!options?.refresh) {
+        clearPersistedTerminal(projectId)
       }
-      setState({ status: 'failed', error: `${errCode}: ${errMsg}` })
+      setState({ status: 'queueing' })
+      try {
+        const res = await apiFetch<{
+          jobId?: string
+          status?: string
+          createdAt?: string
+          reused?: boolean
+          prUrl?: string
+          prNumber?: number
+          branch?: string
+          message?: string
+          priorJob?: JobRow | null
+        }>(
+          `/v1/admin/projects/${projectId}/sdk-upgrade`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ refresh: options?.refresh === true }),
+          },
+        )
+        if (!res.ok || !res.data) {
+          const err = (res as { error?: { code?: string; message?: string; jobId?: string } }).error
+          const errCode = err?.code ?? 'UPGRADE_FAILED'
+          const errMsg = err?.message ?? 'Could not start upgrade'
+          if (errCode === 'ALREADY_IN_PROGRESS' && err?.jobId) {
+            setState({ status: 'queued', jobId: err.jobId })
+            void subscribeStream(err.jobId)
+            return
+          }
+          setState({ status: 'failed', error: `${errCode}: ${errMsg}` })
+          return
+        }
+
+        const data = res.data
+        if (data.reused && data.prUrl) {
+          reachedTerminal.current = true
+          const prior = data.priorJob
+          const next: SdkUpgradeState = {
+            status: 'completed',
+            jobId: data.jobId ?? prior?.id ?? undefined,
+            prUrl: data.prUrl,
+            plan: prior?.plan ?? undefined,
+            reused: true,
+            releaseStatus: prior?.release_status ?? undefined,
+            prState: prior?.pr_state ?? undefined,
+            checkRunStatus: prior?.check_run_status ?? undefined,
+            checkRunConclusion: prior?.check_run_conclusion ?? undefined,
+            deployStatus: prior?.deploy_status ?? undefined,
+            deployUrl: prior?.deploy_url ?? undefined,
+            error: data.message,
+          }
+          persistTerminal(projectId, next)
+          setState(next)
+          return
+        }
+
+        if (!data.jobId) {
+          setState({ status: 'failed', error: 'Upgrade enqueue returned no job id' })
+          return
+        }
+
+        const { jobId } = data
+        setState({ status: 'queued', jobId })
+        void subscribeStream(jobId)
+      } finally {
+        creatingRef.current = false
+      }
+    },
+    [projectId, subscribeStream],
+  )
+
+  const createUpgradePr = useCallback(async () => {
+    await enqueueUpgrade()
+  }, [enqueueUpgrade])
+
+  const refreshUpgradePr = useCallback(async () => {
+    await enqueueUpgrade({ refresh: true })
+  }, [enqueueUpgrade])
+
+  const syncStatus = useCallback(async (jobId: string) => {
+    const res = await apiFetch<{
+      releaseStatus: string
+      prState: string
+      checkRunStatus: string | null
+      checkRunConclusion: string | null
+      workflowStatus: string | null
+      workflowConclusion: string | null
+      workflowUrl: string | null
+      deployStatus: string | null
+      deployUrl: string | null
+      deployEnvironment: string | null
+    }>(`/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/sync`, { method: 'POST' })
+    if (!res.ok || !res.data) return
+    const d = res.data
+    setState((s) => {
+      const updated: SdkUpgradeState = {
+        ...s,
+        releaseStatus: d.releaseStatus,
+        prState: d.prState,
+        checkRunStatus: d.checkRunStatus ?? undefined,
+        checkRunConclusion: d.checkRunConclusion ?? undefined,
+        deployStatus: d.deployStatus ?? undefined,
+        deployUrl: d.deployUrl ?? undefined,
+        workflowUrl: d.workflowUrl ?? undefined,
+      }
+      // Persist cockpit fields so a hot-reload restores the freshest sync result
+      if (updated.status === 'completed' || updated.status === 'completed_no_pr') {
+        persistTerminal(projectId, updated)
+      }
+      return updated
+    })
+  }, [projectId])
+
+  const mergePr = useCallback(async (jobId: string, method: 'squash' | 'merge' | 'rebase' = 'squash') => {
+    setState((s) => ({ ...s, releaseStatus: 'merging' }))
+    const res = await apiFetch<{ ok: boolean; sha?: string | null; alreadyMerged?: boolean }>(
+      `/v1/admin/projects/${projectId}/sdk-upgrade/${jobId}/merge`,
+      { method: 'POST', body: JSON.stringify({ method }) },
+    )
+    if (!res.ok) {
+      const err = (res as { error?: { message?: string } }).error
+      setState((s) => ({ ...s, releaseStatus: 'pr_opened', error: err?.message ?? 'Merge failed' }))
       return
     }
-    const { jobId } = res.data
-    setState({ status: 'queued', jobId })
-    void subscribeStream(jobId)
-  }, [projectId, subscribeStream])
+    setState((s) => ({ ...s, releaseStatus: 'merged', prState: 'merged' }))
+    // Auto-sync after merge to pick up CI / deploy status. Tracked + guarded so
+    // an unmount inside the 5s window doesn't fire a setState on a dead component.
+    if (mergeSyncTimer.current) clearTimeout(mergeSyncTimer.current)
+    mergeSyncTimer.current = setTimeout(() => {
+      if (!cancelled.current) void syncStatus(jobId)
+    }, 5000)
+  }, [projectId, syncStatus])
 
   const cancel = useCallback(() => {
     cancelled.current = true
@@ -302,5 +459,5 @@ export function useSdkUpgrade(projectId: string) {
     setState({ status: 'idle' })
   }, [projectId])
 
-  return { state, createUpgradePr, cancel, reset }
+  return { state, createUpgradePr, refreshUpgradePr, cancel, reset, mergePr, syncStatus }
 }

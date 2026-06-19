@@ -793,6 +793,9 @@ export function renderSuccessStep(ctx: WidgetRenderCtx): string {
           ${renderSuccessReceipt(ctx)}
           ${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}
           ${ctx.config.betaMode?.enabled ? renderBetaSuccessFooter(ctx) : ''}
+          <button type="button" class="mushi-link-btn mushi-success-my-reports" data-action="view-my-reports">
+            📬 Track this report &rsaquo;
+          </button>
         </div>
       </div>
     `;

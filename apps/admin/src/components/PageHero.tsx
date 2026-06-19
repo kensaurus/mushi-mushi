@@ -53,11 +53,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PageAction } from './PageActionBar'
 import { useAdminMode } from '../lib/mode'
 import { HeroFlow } from './hero-flow/HeroFlow'
-import type { HeroSeverity } from './hero-flow/heroFlow.data'
+import type { HeroActIdle, HeroSeverity } from './hero-flow/heroFlow.data'
 import type { DavEvidence } from '../lib/davManifest'
 import { useDavSpotlight } from '../lib/useDavSpotlight'
 import { HeroDetailPanel } from './hero-flow/HeroDetailPanel'
-import { buildOperatorTrace, summarizeOperatorTrace, type OperatorTraceLine } from './hero-flow/operatorTrace'
+import { buildOperatorTrace, type OperatorTraceLine } from './hero-flow/operatorTrace'
+import { heroMetricChips } from '../lib/pageHeroSnapshot'
 
 type Severity = HeroSeverity
 
@@ -119,6 +120,8 @@ interface PageHeroProps {
    *  calm "nothing to do" affordance — many pages have no rule-engine
    *  next-best-action and want the placid Act tile by default. */
   act?: PageAction | null
+  /** Contextual calm copy for the Act tile when `act` is null. */
+  actIdle?: HeroActIdle
   /** data-dav-anchor value for the Act tile's on-page element. */
   actAnchor?: string
   /** Structured evidence for the Act tile detail panel
@@ -147,11 +150,11 @@ const SEVERITY_STYLE: Record<
   Severity,
   { ring: string; bg: string; text: string; dot: string }
 > = {
-  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted/15',      text: 'text-ok-foreground',     dot: 'bg-ok' },
-  info:    { ring: 'border-info/40',    bg: 'bg-info-muted/15',    text: 'text-info-foreground',   dot: 'bg-info' },
-  warn:    { ring: 'border-warn/40',    bg: 'bg-warn-muted/15',    text: 'text-warning-foreground', dot: 'bg-warn' },
-  crit:    { ring: 'border-err/40',     bg: 'bg-danger-muted/15',  text: 'text-danger-foreground', dot: 'bg-err' },
-  neutral: { ring: 'border-edge',       bg: 'bg-surface-raised/40', text: 'text-fg',    dot: 'bg-fg-muted' },
+  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted',      text: 'text-ok-foreground',     dot: 'bg-ok' },
+  info:    { ring: 'border-info/40',    bg: 'bg-info-muted',    text: 'text-info-foreground',   dot: 'bg-info' },
+  warn:    { ring: 'border-warn/40',    bg: 'bg-warn-muted',    text: 'text-warning-foreground', dot: 'bg-warn' },
+  crit:    { ring: 'border-err/40',     bg: 'bg-danger-muted',  text: 'text-danger-foreground', dot: 'bg-err' },
+  neutral: { ring: 'border-edge',       bg: 'bg-surface-raised', text: 'text-fg',    dot: 'bg-fg-muted' },
 }
 
 // Persisted hero collapse state — same pattern Pipeline Pulse uses so
@@ -182,6 +185,30 @@ function writeCollapsedScopes(state: Record<string, boolean>) {
   }
 }
 
+/** Live metric chips for the snapshot header — avoids truncating backend strings. */
+function HeroSnapshotMeta({ metric, kicker }: { metric?: string; kicker?: string }) {
+  const chips = heroMetricChips(metric)
+  if (chips.length === 0 && !kicker) return null
+  return (
+    <>
+      {chips.map((chip) => (
+        <span
+          key={chip}
+          className="inline-flex shrink-0 items-center rounded border border-edge-subtle bg-surface-overlay px-1.5 py-0.5 text-3xs font-mono tabular-nums leading-none text-fg-secondary"
+        >
+          {chip}
+        </span>
+      ))}
+      {kicker && (
+        <>
+          {chips.length > 0 && <span aria-hidden className="text-fg-faint">·</span>}
+          <span className="text-2xs text-fg-muted shrink-0">{kicker}</span>
+        </>
+      )}
+    </>
+  )
+}
+
 /**
  * Render the 3-tile hero. Beginners collapse it to a single friendlier
  * pill (they still get the global NextBestAction strip above the layout
@@ -193,6 +220,7 @@ export function PageHero({
   kicker,
   decide,
   act: actProp,
+  actIdle,
   actAnchor,
   actEvidence,
   actMissingConfigIds,
@@ -257,15 +285,6 @@ export function PageHero({
     }),
     [scope, decide, act, actEvidence, actAnchor, actDebugLines, verify],
   )
-
-  const traceAlert = useMemo(() => {
-    const all = [
-      ...operatorTraces.decide,
-      ...operatorTraces.act,
-      ...operatorTraces.verify,
-    ]
-    return summarizeOperatorTrace(all)
-  }, [operatorTraces])
 
   if (!isAdvanced) {
     // Beginner: one-line summary card — no tile grid. The global NBA
@@ -332,25 +351,17 @@ export function PageHero({
           onClick={toggleCollapsed}
           aria-expanded={false}
           aria-controls={`hero-${scope}-tiles`}
-          className={`group flex items-center gap-2.5 w-full rounded-sm bg-surface-raised/25 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
-          title="This page · Status → Next step → Evidence · click to expand"
+          className={`group flex items-center gap-2.5 w-full rounded-sm bg-surface-overlay px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          title="Expand page snapshot"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
           <span className="text-3xs font-medium text-fg-secondary uppercase tracking-wider shrink-0">
-            This page
-          </span>
-          <span className="hidden sm:inline text-3xs text-fg-muted shrink-0">
-            Status → Next step → Evidence
+            Snapshot
           </span>
           <span className={`text-2xs font-medium truncate ${style.text}`}>
             {decide.label}
           </span>
-          {decide.metric && (
-            <>
-              <span aria-hidden className="text-fg-faint shrink-0">·</span>
-              <span className="text-2xs font-mono tabular-nums text-fg-secondary shrink-0">{decide.metric}</span>
-            </>
-          )}
+          <HeroSnapshotMeta metric={decide.metric} />
           {act && (
             <>
               <span aria-hidden className="text-fg-faint shrink-0">·</span>
@@ -374,40 +385,20 @@ export function PageHero({
       data-hero-variant="decide-act-verify-flow"
       data-collapsed="false"
       className={[
-        'mb-5 w-full overflow-visible rounded-md bg-surface-raised/20 border-t-2',
-        severity === 'crit' ? 'border-t-err/60' : severity === 'warn' ? 'border-t-warn/50' : 'border-t-transparent',
+        'mb-5 w-full overflow-visible rounded-md bg-surface-raised border border-edge-subtle shadow-card',
+        'hero-snapshot-shell',
+        severity === 'crit' ? 'hero-snapshot-shell--crit' : severity === 'warn' ? 'hero-snapshot-shell--warn' : '',
       ].join(' ')}
     >
       {/* Header strip — title + collapse toggle. Stays tight (~28px) so the
           hero's vertical footprint barely grows from the previous version. */}
       <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle/25">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
-          <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
-          <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">
-            This page
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
+          <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0">
+            Snapshot
           </span>
-          <span className="hidden sm:inline text-3xs text-fg-muted font-normal normal-case tracking-normal">
-            · Status → Next step → Evidence
-          </span>
-          {traceAlert.errorCount > 0 && (
-            <span className="rounded bg-err/15 px-1.5 py-px text-3xs font-semibold text-err">
-              {traceAlert.errorCount} in trace
-            </span>
-          )}
-          {traceAlert.errorCount === 0 && traceAlert.warnCount > 0 && (
-            <span className="rounded bg-warn/15 px-1.5 py-px text-3xs font-semibold text-warn">
-              {traceAlert.warnCount} warn
-            </span>
-          )}
-          <span className="hidden sm:inline text-3xs text-fg-faint/80" title="Expand a tile for live metrics, lineage, and operator trace">
-            · click tile for trace
-          </span>
-          {kicker && (
-            <>
-              <span aria-hidden className="text-fg-faint">·</span>
-              <span className="text-2xs text-fg-muted truncate">{kicker}</span>
-            </>
-          )}
+          <HeroSnapshotMeta metric={decide.metric} kicker={kicker} />
         </div>
         <button
           type="button"
@@ -438,6 +429,7 @@ export function PageHero({
           }}
           act={{
             action: act,
+            idle: actIdle,
             anchor: actAnchor,
             evidence: actEvidence,
             missingConfigIds: actMissingConfigIds,

@@ -5,7 +5,7 @@
 
 import type { ComponentType, SVGProps } from 'react'
 import { useDensity, type Density } from '../lib/useDensity'
-import { useTheme, type ResolvedTheme } from '../lib/useTheme'
+import { useTheme, type Theme } from '../lib/useTheme'
 import { MicroSegmentCell, MicroSegmentedTrack } from './sidebar/MicroSegmentedTrack'
 import { MICRO_SEG, microSegActive } from './sidebar/SidebarMicroChrome'
 
@@ -74,6 +74,15 @@ function SunGlyph(p: IconProps) {
     </Glyph>
   )
 }
+function SystemGlyph(p: IconProps) {
+  return (
+    <Glyph {...p}>
+      <rect x="2.5" y="3.5" width="11" height="7.5" rx="1" />
+      <line x1="5.5" y1="12.5" x2="10.5" y2="12.5" />
+      <line x1="8" y1="11" x2="8" y2="12.5" />
+    </Glyph>
+  )
+}
 function FocusGlyph(p: IconProps) {
   return (
     <Glyph {...p} strokeWidth={1.6}>
@@ -106,7 +115,7 @@ export function SidebarFooterControls({
   showFocus?: boolean
 }) {
   const { density, setDensity } = useDensity()
-  const { resolved, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
 
   const focusTitle = focusMode
     ? 'Exit focus mode (Esc or Cmd/Ctrl+.)'
@@ -154,8 +163,9 @@ export function SidebarFooterControls({
           aria-label="Theme"
           className="min-w-0 w-full"
         >
-          <ThemeCell resolved={resolved} target="dark" setTheme={setTheme} Icon={MoonGlyph} label="Dark theme" />
-          <ThemeCell resolved={resolved} target="light" setTheme={setTheme} Icon={SunGlyph} label="Light theme" />
+          <ThemeCell theme={theme} target="system" setTheme={setTheme} Icon={SystemGlyph} label="System theme" title="Match OS appearance" />
+          <ThemeCell theme={theme} target="dark" setTheme={setTheme} Icon={MoonGlyph} label="Dark theme" />
+          <ThemeCell theme={theme} target="light" setTheme={setTheme} Icon={SunGlyph} label="Light theme" />
         </MicroSegmentedTrack>
 
         {showFocus ? (
@@ -185,19 +195,21 @@ export function SidebarFooterControls({
 }
 
 function ThemeCell({
-  resolved,
+  theme,
   target,
   setTheme,
   Icon,
   label,
+  title,
 }: {
-  resolved: ResolvedTheme
-  target: 'dark' | 'light'
-  setTheme: (t: 'dark' | 'light') => void
+  theme: Theme
+  target: Theme
+  setTheme: (t: Theme) => void
   Icon: ComponentType<IconProps>
   label: string
+  title?: string
 }) {
-  const active = resolved === target
+  const active = theme === target
   return (
     <MicroSegmentCell active={active}>
       <button
@@ -205,7 +217,7 @@ function ThemeCell({
         role="radio"
         aria-checked={active}
         aria-label={label}
-        title={label}
+        title={title ?? label}
         onClick={() => setTheme(target)}
         className={`${MICRO_SEG} ${microSegActive(active)} h-full w-full`}
       >

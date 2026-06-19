@@ -37,6 +37,12 @@ export interface DashboardStats {
     | 'healthy'
   topPriorityLabel: string | null
   topPriorityTo: string | null
+  failed_fixes_preview?: Array<{
+    id: string
+    report_id: string
+    error_head: string | null
+    report_title: string | null
+  }>
 }
 
 export const EMPTY_DASHBOARD_STATS: DashboardStats = {

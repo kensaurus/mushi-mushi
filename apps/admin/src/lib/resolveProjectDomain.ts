@@ -13,6 +13,8 @@ export interface ProjectFaviconSource {
   project_slug: string
   /** e.g. https://kensaur.us — from SDK heartbeat or API key last_seen_origin */
   sdk_origin?: string | null
+  /** Connected GitHub/GitLab repo — used when SDK has not heartbeated yet. */
+  repo_url?: string | null
 }
 
 /**
@@ -45,11 +47,38 @@ function originToDomain(origin: string): string | null {
   }
 }
 
+/** Derive a production hostname from a connected repo URL when possible. */
+export function githubRepoDomainHint(repoUrl: string | null | undefined): string | null {
+  if (!repoUrl?.trim()) return null
+  try {
+    const u = new URL(repoUrl.trim())
+    const host = u.hostname.toLowerCase()
+    const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
+    if (parts.length < 2) return null
+    const repo = parts[1]!.replace(/\.git$/i, '').toLowerCase()
+
+    // Repo slug is a domain (e.g. kensaurus/glot.it → glot.it favicon).
+    if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(repo)) return repo
+
+    // GitHub Pages user site: owner.github.io
+    if (host === 'github.com' && repo.endsWith('.github.io')) return repo
+
+    // Non-GitHub remotes — favicon from host (GitLab self-hosted, etc.)
+    if (host !== 'github.com' && host !== 'www.github.com') return host
+
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function resolveProjectDomain(source: ProjectFaviconSource): string | null {
   if (source.sdk_origin) {
     const fromOrigin = originToDomain(source.sdk_origin)
     if (fromOrigin) return fromOrigin
   }
+  const fromRepo = githubRepoDomainHint(source.repo_url)
+  if (fromRepo) return fromRepo
   const hinted = SLUG_DOMAIN_HINTS[source.project_slug.toLowerCase()]
   if (hinted) return hinted
   return null

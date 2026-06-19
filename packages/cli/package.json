@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/cli",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "license": "MIT",
   "description": "CLI for Mushi Mushi — `mushi init` wizard installs the right SDK for your framework, plus report triage and pipeline health commands",
   "bin": {
@@ -13,16 +13,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@clack/prompts": "^1.3.0",
-    "commander": "^14.0.3"
+    "@clack/prompts": "^1.5.1",
+    "commander": "^15.0.0"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@types/node": "^22.19.17",
-    "eslint": "^10.3.0",
+    "@types/node": "^22.19.21",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.8"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

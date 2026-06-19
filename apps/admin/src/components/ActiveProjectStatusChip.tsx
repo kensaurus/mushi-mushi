@@ -4,9 +4,16 @@
  *          rich tooltips explaining bottleneck, trend, and SDK signals.
  */
 
+import { Link } from 'react-router-dom'
 import type { ProjectSnapshot } from '../lib/projectSnapshotTypes'
-import { PDCA_BOTTLENECK_TONE, bottleneckStageLetter } from '../lib/pdcaBottleneck'
-import { buildBottleneckTooltip, buildTrendTooltip } from '../lib/projectMetaTooltips'
+import {
+  PDCA_BOTTLENECK_TONE,
+  bottleneckChipLabel,
+  bottleneckDeepLink,
+  bottleneckHumanHeadline,
+  bottleneckHumanHint,
+} from '../lib/pdcaBottleneck'
+import { buildTrendTooltip } from '../lib/projectMetaTooltips'
 import { resolveSdkDisplay } from '../lib/sdkVersionCompare'
 import { MetricTooltipContent, Tooltip } from './ui'
 
@@ -34,24 +41,57 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
     return null
   }
 
+  const bottleneckCtx = bottleneck
+    ? {
+        stage: bottleneck,
+        label: snapshot.pdca_bottleneck_label,
+      }
+    : null
+
   return (
     <span className="inline-flex items-center gap-1 shrink-0">
-      {bottleneck && snapshot.pdca_bottleneck_label && (
+      {bottleneck && snapshot.pdca_bottleneck_label && bottleneckCtx && (
         <Tooltip
           content={
             <MetricTooltipContent
-              data={buildBottleneckTooltip(bottleneck, snapshot.pdca_bottleneck_label)}
+              data={{
+                sections: [
+                  {
+                    kind: 'shows',
+                    label: 'Needs attention',
+                    body: bottleneckHumanHeadline(bottleneckCtx),
+                  },
+                  {
+                    kind: 'takeaway',
+                    label: 'What to do',
+                    body: bottleneckHumanHint(bottleneckCtx),
+                  },
+                ],
+                callout: {
+                  tone: 'info',
+                  text: 'Click to open the page that clears this.',
+                },
+              }}
             />
           }
           side="bottom"
           nowrap={false}
           portal
         >
-          <span
-            className={`inline-flex h-5 min-w-[1.25rem] cursor-help items-center justify-center rounded-sm px-1 text-3xs font-bold leading-none ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
+          <Link
+            to={bottleneckDeepLink(
+              bottleneck,
+              snapshot.id,
+              snapshot.pdca_bottleneck_label,
+            )}
+            // The chip renders inside the ProjectSwitcher trigger button; stop
+            // the click from bubbling so navigating doesn't also toggle the
+            // project dropdown.
+            onClick={(e) => e.stopPropagation()}
+            className={`inline-flex h-5 max-w-[6.5rem] cursor-pointer items-center truncate rounded-sm px-1 text-3xs font-semibold leading-none hover:opacity-90 ${PDCA_BOTTLENECK_TONE[bottleneck]}`}
           >
-            {bottleneckStageLetter(bottleneck)}
-          </span>
+            {bottleneckChipLabel(bottleneckCtx)}
+          </Link>
         </Tooltip>
       )}
       {trendUp && (
@@ -95,8 +135,10 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
           nowrap={false}
           portal
         >
-          <span
-            className={`inline-flex h-5 cursor-help items-center rounded-sm px-1 text-3xs font-medium ${
+          <Link
+            to={`/connect?project=${encodeURIComponent(snapshot.id)}`}
+            onClick={(e) => e.stopPropagation()}
+            className={`inline-flex h-5 cursor-pointer items-center rounded-sm px-1 text-3xs font-medium hover:opacity-90 ${
               sdkResolution.kind === 'deprecated'
                 ? 'bg-danger-muted text-danger'
                 : sdkResolution.kind === 'catalog-ahead'
@@ -105,7 +147,7 @@ export function ActiveProjectStatusChip({ snapshot }: ActiveProjectStatusChipPro
             }`}
           >
             SDK
-          </span>
+          </Link>
         </Tooltip>
       )}
     </span>

@@ -75,7 +75,11 @@ export function ProjectSnapshotMeta({
             </span>
           ) : (
             <Link
-              to={bottleneckDeepLink(snapshot.pdca_bottleneck, snapshot.id)}
+              to={bottleneckDeepLink(
+                snapshot.pdca_bottleneck,
+                snapshot.id,
+                snapshot.pdca_bottleneck_label,
+              )}
               onClick={(e) => e.stopPropagation()}
               className={`inline-flex min-w-0 max-w-full cursor-help items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-3xs font-medium hover:opacity-90 motion-safe:transition-opacity ${PDCA_BOTTLENECK_TONE[snapshot.pdca_bottleneck]}`}
             >

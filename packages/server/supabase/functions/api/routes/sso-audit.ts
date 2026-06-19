@@ -17,6 +17,7 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     const db = getServiceClient();
 
     const empty = {
+      hasAnyProject: false,
       projectId: null as string | null,
       projectName: null as string | null,
       ssoEntitlement: false,
@@ -34,6 +35,15 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
       defaultAcsUrl: null as string | null,
       latestFailure: null as string | null,
       latestProviderName: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'upgrade_required'
+        | 'registration_failed'
+        | 'pending_setup'
+        | 'no_providers'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -91,11 +101,37 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
     const defaultAcsUrl =
       acsFromConfig ?? (supabaseUrl ? `${supabaseUrl}/auth/v1/sso/saml/acs` : null);
 
+    const projectName = project.name as string;
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = '/sso';
+
+    if (!ssoEntitlement) {
+      topPriority = 'upgrade_required';
+      topPriorityLabel = `${plan?.display_name ?? 'Hobby'} does not include SAML/OIDC — upgrade to Enterprise to enable corporate login.`;
+      topPriorityTo = '/billing?tab=plans';
+    } else if (failedCount > 0) {
+      topPriority = 'registration_failed';
+      topPriorityLabel =
+        latestFailure ??
+        `${failedCount} provider registration${failedCount === 1 ? '' : 's'} failed — fix metadata URL or IdP mapping.`;
+    } else if (pendingCount > 0 || manualRequiredCount > 0) {
+      topPriority = 'pending_setup';
+      topPriorityLabel = `${pendingCount + manualRequiredCount} provider${pendingCount + manualRequiredCount === 1 ? '' : 's'} waiting — paste ACS URL + Entity ID into your IdP and test login.`;
+    } else if (registeredCount === 0) {
+      topPriority = 'no_providers';
+      topPriorityLabel = 'Add your first SAML metadata URL below — OIDC can be saved for audit but needs support to go live.';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${registeredCount} registered · ${activeCount} active · ${domainCount} domain${domainCount === 1 ? '' : 's'} mapped on ${projectName}.`;
+    }
+
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
         projectId: project.id,
-        projectName: project.name,
+        projectName,
         ssoEntitlement,
         planId: plan?.id ?? 'hobby',
         planDisplayName: plan?.display_name ?? 'Hobby',
@@ -111,6 +147,9 @@ export function registerSsoAuditRoutes(app: Hono<{ Variables: Variables }>): voi
         defaultAcsUrl,
         latestFailure,
         latestProviderName,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });

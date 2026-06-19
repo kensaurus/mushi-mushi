@@ -56,9 +56,17 @@ export interface HeroDecideData {
   debugLines?: OperatorTraceLine[]
 }
 
+export interface HeroActIdle {
+  label: string
+  metric?: string
+  summary: string
+}
+
 export interface HeroActData {
-  /** When `null`, the node renders an "all clear" calm state. */
+  /** When `null`, the node renders contextual idle copy from `idle`. */
   action: PageAction | null
+  /** Shown when `action` is null — driven by live nav-meta, not generic filler. */
+  idle?: HeroActIdle
   /** data-dav-anchor value for on-page spotlight. */
   anchor?: string
   /** Structured live data for the detail panel. */
@@ -115,6 +123,8 @@ export interface HeroEdgeData extends Record<string, unknown> {
   targetColor: string
   flowing?: boolean
   failing?: boolean
+  /** Warn/crit pages get a faint tinted rail even when idle. */
+  severityTint?: boolean
   /** Full metadata label (tooltip when truncated). */
   label?: string
   /** Single-line display copy for the edge pill. */
@@ -151,12 +161,18 @@ export function formatHeroEdgeLabel(
 // sitting in a fixed ~910px band with dead margins on wide screens.
 
 const DEFAULT_NODE_WIDTH = 250
-const DEFAULT_NODE_HEIGHT = 132
-const DEFAULT_NODE_GAP = 72
+/** Content-sized lane height — every tile (Decide / Act+CTA / Verify+proof)
+ *  fits in this band with its action row pinned to the bottom, so the lane
+ *  reads as one aligned strip without dead vertical whitespace. */
+const DEFAULT_NODE_HEIGHT = 118
+const DEFAULT_NODE_GAP = 80
 
 export interface HeroLayoutMetrics {
   nodeWidth: number
   nodeHeight: number
+  /** Act tile is slightly taller when a primary CTA is present. */
+  actNodeHeight: number
+  actOffsetY: number
   gap: number
   /** Max width for edge midpoint pills — derived from gap so long copy wraps
    *  instead of overlapping the next node. */
@@ -172,7 +188,7 @@ export interface HeroLayoutMetrics {
 /** Compute node geometry from the hero container's client width. */
 export function computeHeroLayout(
   containerWidth: number,
-  opts?: { expanded?: boolean },
+  opts?: { expanded?: boolean; hasActiveCta?: boolean },
 ): HeroLayoutMetrics {
   const padding = 12
   const usable = Math.max(360, containerWidth - padding * 2)
@@ -180,8 +196,8 @@ export function computeHeroLayout(
   const maxNode = 420
   // Gaps are the "label channels" between nodes — keep them wide enough that
   // edge pills can wrap to 2–3 readable lines instead of one char per line.
-  const minGap = 56
-  const maxGap = 96
+  const minGap = 64
+  const maxGap = 112
 
   let gap = Math.min(maxGap, Math.max(minGap, Math.floor(usable * 0.11)))
   let nodeWidth = Math.floor((usable - 2 * gap) / 3)
@@ -195,14 +211,15 @@ export function computeHeroLayout(
 
   const totalWidth = 3 * nodeWidth + 2 * gap
   const offsetX = padding + Math.max(0, (usable - totalWidth) / 2)
-  const nodeHeight = opts?.expanded ? 152 : DEFAULT_NODE_HEIGHT
-  const labelMaxWidth = Math.max(120, Math.min(220, Math.floor(gap * 0.88)))
+  const laneHeight = opts?.expanded ? 150 : DEFAULT_NODE_HEIGHT
 
   return {
     nodeWidth,
-    nodeHeight,
+    nodeHeight: laneHeight,
+    actNodeHeight: laneHeight,
+    actOffsetY: 0,
     gap,
-    labelMaxWidth,
+    labelMaxWidth: Math.max(80, Math.min(160, Math.floor(gap * 0.5))),
     positions: {
       decide: { x: offsetX, y: 0 },
       act: { x: offsetX + nodeWidth + gap, y: 0 },
@@ -275,6 +292,7 @@ export function buildHeroNodes(input: BuildHeroFlowInput): Node<HeroNodeData>[] 
       id: 'act',
       type: 'heroAct',
       position: layout.positions.act,
+      height: layout.nodeHeight,
       data: {
         kind: 'act',
         scope: input.scope,
@@ -311,18 +329,21 @@ export function buildHeroEdges(input: {
   layout: HeroLayoutMetrics
 }): Edge<HeroEdgeData>[] {
   const decideHex = HERO_SEVERITY_HEX[input.decide.severity]
-  // Idle act still reads as amber so the lane doesn't go gray mid-flow.
   const actHex = input.act.action
     ? HERO_ACTION_TONE_HEX[input.act.action.tone]
-    : HERO_ACTION_TONE_HEX.do
+    : HERO_ACTION_TONE_HEX.idle
   const verifyHex = HERO_SEVERITY_HEX.ok
 
   const failingFirst = input.decide.severity === 'crit'
   const failingSecond = false
   const needsAttention =
-    input.decide.severity === 'warn' || input.decide.severity === 'crit'
+    input.decide.severity === 'warn' ||
+    input.decide.severity === 'crit' ||
+    Boolean(input.act.action)
   const flowingFirst = needsAttention
   const flowingSecond = needsAttention && Boolean(input.verify.to)
+  const severityIdle =
+    input.decide.severity === 'warn' || input.decide.severity === 'crit'
 
   return [
     {
@@ -337,6 +358,8 @@ export function buildHeroEdges(input: {
         targetColor: actHex,
         flowing: flowingFirst,
         failing: failingFirst,
+        severityTint: severityIdle,
+        label: input.act.action?.reason ?? input.decide.summary,
       },
     },
     {
@@ -351,6 +374,8 @@ export function buildHeroEdges(input: {
         targetColor: verifyHex,
         flowing: flowingSecond,
         failing: failingSecond,
+        severityTint: false,
+        label: input.verify.detail,
       },
     },
   ]

@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/mcp",
   "mcpName": "io.github.kensaurus/mushi-mushi",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "license": "MIT",
   "description": "MCP server for Mushi Mushi — triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs, all from your AI coding agent",
   "type": "module",
@@ -58,15 +58,15 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@mushi-mushi/core": "workspace:^",
-    "zod": "^4.4.2"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@types/node": "^22.19.17",
-    "eslint": "^10.3.0",
+    "@types/node": "^22.19.21",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.8"
   },
   "repository": {
     "type": "git",

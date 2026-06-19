@@ -155,8 +155,8 @@ export function OnboardingStatusBanner({
       tone="warn"
       title={
         plainLanguage
-          ? `Next: ${stats.nextStepLabel ?? 'finish setup'}`
-          : `Next: ${stats.nextStepLabel ?? 'Continue setup'}`
+          ? stats.nextStepLabel ?? 'Finish setup'
+          : stats.nextStepLabel ?? 'Continue setup'
       }
       subtitle={
         plainLanguage

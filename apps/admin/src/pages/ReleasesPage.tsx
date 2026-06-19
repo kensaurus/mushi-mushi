@@ -8,6 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -470,6 +471,7 @@ export function ReleasesPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
+  usePublishPageHeroStats('/releases', statsData)
   const stats = { ...EMPTY_RELEASES_STATS, ...statsData }
 
   const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')

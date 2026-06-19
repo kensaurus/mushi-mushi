@@ -39,11 +39,11 @@ export interface PageAction {
 }
 
 const TONES: Record<PageActionTone, { ring: string; bg: string; chip: string; chipText: string; chipLabel: string }> = {
-  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',     chip: 'bg-info-muted',       chipText: 'text-info',      chipLabel: 'Plan' },
-  do:    { ring: 'border-brand/40',  bg: 'bg-brand/10',          chip: 'bg-brand/15',         chipText: 'text-brand',     chipLabel: 'Do' },
-  check: { ring: 'border-info/40',   bg: 'bg-info-muted/15',     chip: 'bg-info-muted',       chipText: 'text-info',      chipLabel: 'Check' },
-  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted/15',       chip: 'bg-ok-muted',         chipText: 'text-ok',        chipLabel: 'Act' },
-  idle:  { ring: 'border-edge',      bg: 'bg-surface-raised/40', chip: 'bg-surface-overlay',  chipText: 'text-fg-muted',  chipLabel: 'Idle' },
+  plan:  { ring: 'border-info/40',   bg: 'bg-info-muted',     chip: 'bg-info-muted',       chipText: 'text-info',      chipLabel: 'Plan' },
+  do:    { ring: 'border-brand/40',  bg: 'bg-brand-subtle',   chip: 'bg-brand-subtle',     chipText: 'text-brand',     chipLabel: 'Do' },
+  check: { ring: 'border-info/40',   bg: 'bg-info-muted',     chip: 'bg-info-muted',       chipText: 'text-info',      chipLabel: 'Check' },
+  act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted',       chip: 'bg-ok-muted',         chipText: 'text-ok',        chipLabel: 'Act' },
+  idle:  { ring: 'border-edge',      bg: 'bg-surface-overlay', chip: 'bg-surface-overlay',  chipText: 'text-fg-muted',  chipLabel: 'Idle' },
 }
 
 interface PageActionBarProps {

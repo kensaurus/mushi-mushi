@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/vue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "description": "Vue 3 SDK for Mushi Mushi — plugin, composables, error handler integration",
   "main": "./dist/index.cjs",
@@ -21,12 +21,12 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "eslint": "^10.3.0",
+    "eslint": "^10.4.1",
     "jsdom": "^29.1.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5",
-    "vue": "^3.5.33"
+    "vitest": "^4.1.8",
+    "vue": "^3.5.38"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

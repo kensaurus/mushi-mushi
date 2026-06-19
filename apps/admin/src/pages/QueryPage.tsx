@@ -7,6 +7,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
+import { QueryGuide } from '../components/query/QueryGuide'
 import { EMPTY_QUERY_STATS, type QueryStats, type QueryTabId } from '../components/query/types'
 import {
   errors24hDetail,
@@ -1019,6 +1020,8 @@ export function QueryPage() {
           }}
         />
       )}
+
+      <QueryGuide errors24h={stats.errors24h} />
 
       <SegmentedControl
         value={activeTab}

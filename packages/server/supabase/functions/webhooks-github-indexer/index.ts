@@ -601,7 +601,8 @@ async function indexFixIntoCorpus(
 /**
  * Resolve a GitHub token for a project. Preference order:
  *   1. `project_settings.github_installation_token_ref` (PAT in vault or raw)
- *   2. `GITHUB_TOKEN` env fallback (self-host / founder dogfood)
+ *   2. `organization_integration_settings.github_installation_token_ref` (org default)
+ *   3. `GITHUB_TOKEN` env fallback (self-host / founder dogfood)
  * Returns null if nothing resolves. Callers that prefer App installs should
  * call `mintInstallationToken` first and fall through to this helper.
  */
@@ -609,6 +610,16 @@ async function resolveProjectGithubToken(
   db: ReturnType<typeof getDb>,
   projectId: string,
 ): Promise<string | null> {
+  const resolveRef = async (ref: string): Promise<string | null> => {
+    if (ref.startsWith('vault://')) {
+      const id = ref.slice('vault://'.length);
+      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id });
+      return !vaultErr && typeof secret === 'string' && secret.length > 0 ? secret : null;
+    }
+    return ref.length > 0 ? ref : null;
+  };
+
+  // Step 1: project-level.
   const { data, error } = await db
     .from('project_settings')
     .select('github_installation_token_ref')
@@ -616,17 +627,30 @@ async function resolveProjectGithubToken(
     .maybeSingle();
 
   if (!error && data?.github_installation_token_ref) {
-    const ref = String(data.github_installation_token_ref);
-    if (ref.startsWith('vault://')) {
-      const id = ref.slice('vault://'.length);
-      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id });
-      if (!vaultErr && typeof secret === 'string' && secret.length > 0) {
-        return secret;
-      }
-    } else if (ref.length > 0) {
-      return ref;
+    const resolved = await resolveRef(String(data.github_installation_token_ref));
+    if (resolved) return resolved;
+  }
+
+  // Step 2: org-level default.
+  const { data: projectRow } = await db
+    .from('projects')
+    .select('organization_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  const orgId = (projectRow as { organization_id: string | null } | null)?.organization_id ?? null;
+  if (orgId) {
+    const { data: orgRow } = await db
+      .from('organization_integration_settings')
+      .select('github_installation_token_ref')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    if (orgRow?.github_installation_token_ref) {
+      const resolved = await resolveRef(String(orgRow.github_installation_token_ref));
+      if (resolved) return resolved;
     }
   }
+
+  // Step 3: env fallback.
   return Deno.env.get('GITHUB_TOKEN') ?? null;
 }
 

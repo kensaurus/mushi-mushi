@@ -13,6 +13,7 @@ import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, 
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
 import { composeFixPacket, fixPacketContextFromReport, type FixPacketFile } from '../../_shared/fix-packet.ts';
 import { getRelevantCode } from '../../_shared/rag.ts';
+import { getStorageAdapter } from '../../_shared/storage.ts';
 
 export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -127,30 +128,35 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const setupDone = hasKey && hasSdk && hasIngest;
     const lastReportAt = recentReports[0]?.created_at ?? null;
 
+    const pid = activeProject.id as string;
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
+
     let topPriority: 'critical' | 'backlog' | 'untriaged' | 'clear' | 'waiting_ingest' = 'waiting_ingest';
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
 
     if (!hasIngest) {
       topPriority = 'waiting_ingest';
-      topPriorityLabel = 'No reports ingested yet — verify SDK + send test report';
-      topPriorityTo = '/onboarding?tab=verify';
+      topPriorityLabel =
+        'No bugs received yet — send a test report from Setup to confirm the widget works.';
+      topPriorityTo = scoped('/onboarding?tab=verify');
     } else if (critical14d > 0 && newUntriaged > 0) {
       topPriority = 'critical';
-      topPriorityLabel = `${critical14d} critical in 14d — triage before dispatch`;
-      topPriorityTo = '/reports?tab=queue&status=new&severity=critical';
+      topPriorityLabel = `${critical14d} critical bug${critical14d === 1 ? '' : 's'} still untriaged — users may be blocked right now.`;
+      topPriorityTo = scoped('/reports?status=new&severity=critical');
     } else if (openBacklog > 0) {
       topPriority = 'backlog';
-      topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting > 1h to triage`;
-      topPriorityTo = '/reports?tab=queue&status=new';
+      topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting over an hour — confirm severity before auto-fix runs.`;
+      topPriorityTo = scoped('/reports?status=new');
     } else if (newUntriaged > 0) {
       topPriority = 'untriaged';
-      topPriorityLabel = `${newUntriaged} new report${newUntriaged === 1 ? '' : 's'} in queue`;
-      topPriorityTo = '/reports?tab=queue&status=new';
+      topPriorityLabel = `${newUntriaged} new report${newUntriaged === 1 ? '' : 's'} — classifier scored severity; you confirm or dismiss.`;
+      topPriorityTo = scoped('/reports?status=new');
     } else {
       topPriority = 'clear';
-      topPriorityLabel = `${total14d} reports in 14d — queue current`;
-      topPriorityTo = '/reports?tab=queue';
+      topPriorityLabel = `Queue is current — ${total14d} report${total14d === 1 ? '' : 's'} in the last 14 days.`;
+      topPriorityTo = scoped('/reports');
     }
 
     return c.json({
@@ -657,11 +663,36 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       ok: true,
       data: {
         ...data,
+        // Re-sign screenshot URL when the original signed URL is stale/missing
+        // but the storage path is present (e.g. old reports whose signed URL
+        // expired, or reports where upload succeeded but the URL write failed).
+        screenshot_url: await (async () => {
+          if (data.screenshot_url) return data.screenshot_url as string;
+          const storagePath = data.screenshot_path as string | null;
+          if (!storagePath) return null;
+          try {
+            // storagePath format: storage://supabase/<bucket>/<key>
+            const match = storagePath.match(/^storage:\/\/supabase\/([^/]+)\/(.+)$/);
+            if (!match) return null;
+            const [, , key] = match;
+            const adapter = await getStorageAdapter(data.project_id as string);
+            return await adapter.signedUrl(key, 220_752_000);
+          } catch (err) {
+            log.warn('Failed to re-sign screenshot URL on detail fetch', { err: String(err) });
+            return null;
+          }
+        })(),
         llm_invocations: invocationsRes.data ?? [],
         fix_attempts: fixesRes.data ?? [],
         judge_eval: judgeRes.data ?? null,
         inventory_action: inventoryAnchorRes.data ?? null,
         reporter_identity: endUserRes.data ?? null,
+        // Flat fallback so the console can show a reporter name even when
+        // end_user_id was set after classification (or is missing entirely).
+        reporter_display_name:
+          (endUserRes.data as { display_name?: string | null } | null)?.display_name
+          ?? (data as { reporter_user_id?: string | null }).reporter_user_id
+          ?? null,
         child_report_ids: (childrenRes.data ?? []).map((r: { id: string }) => r.id),
         tester_submission,
         fix_packet,

@@ -10,14 +10,30 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
-- **Reporter identity (fixes anonymous-token reporter):** — `submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`.
-- **Sentry-level payload:** — every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin "Repro timeline" renders instead of nudging "Upgrade the SDK"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb.
-- **Screenshots:** — new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens.
-- **Design parity:** — `MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer "Your reports" / "Community" tabs.
+- **inventory-schema** — migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths.
+- **cli** — bump `commander` to **v15** (ESM-only; the CLI is already pure ESM, so the change is transparent to consumers).
+- **mcp-ci** — bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup).
+- **react-native** — build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`.
+
+## v1.17.x
+
+Latest tag: `v1.17.0`
+
+### Highlights
+
 - **In-SDK assistant ("Ask" tab):** — the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`.
 - **Page context:** — `publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type.
 - **Signed identity:** — `identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for "My Reports", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`.
 - **Design tokens:** — `@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source.
+- **In-SDK assistant ("Ask" tab):** — the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`.
+- **Page context:** — `publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type.
+- **Signed identity:** — `identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for "My Reports", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`.
+- **Design tokens:** — `@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source.
+
+### Packages bumped
+
+- `@mushi-mushi/core` → 1.17.0
+- `@mushi-mushi/web` → 1.17.0
 
 ## v1.15.x
 
@@ -230,6 +246,10 @@ Latest tag: `v1.1.0`
 
 ### Highlights
 
+- **In-SDK assistant ("Ask" tab):** — the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`.
+- **Page context:** — `publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type.
+- **Signed identity:** — `identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for "My Reports", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`.
+- **Design tokens:** — `@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source.
 - **`mushi sync-lessons`** — — pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs.
 - **MCP** — — `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources.
 - **`mushi sync-lessons`** — — pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs.
@@ -239,13 +259,15 @@ Latest tag: `v1.1.0`
 
 ### Packages bumped
 
+- `@mushi-mushi/capacitor` → 1.1.0
 - `@mushi-mushi/core` → 1.1.0
+- `@mushi-mushi/node` → 1.1.0
 - `@mushi-mushi/react` → 1.1.0
 - `@mushi-mushi/web` → 1.1.0
 
 ## v1.0.x
 
-Latest tag: `v1.0.0`
+Latest tag: `v1.0.1`
 
 ### Highlights
 
@@ -261,22 +283,38 @@ Latest tag: `v1.0.0`
 
 ### Packages bumped
 
-- `@mushi-mushi/angular` → 1.0.0
+- `@mushi-mushi/angular` → 1.0.1
 - `@mushi-mushi/capacitor` → 1.0.0
 - `@mushi-mushi/core` → 1.0.0
 - `@mushi-mushi/node` → 1.0.0
 - `@mushi-mushi/react` → 1.0.0
-- `@mushi-mushi/svelte` → 1.0.0
-- `@mushi-mushi/vue` → 1.0.0
+- `@mushi-mushi/svelte` → 1.0.1
+- `@mushi-mushi/vue` → 1.0.1
 - `@mushi-mushi/web` → 1.0.0
 
 ## v0.18.x
 
-Latest tag: `v0.18.0`
+Latest tag: `v0.18.1`
+
+### Highlights
+
+- **inventory-schema** — migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths.
+- **cli** — bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers).
+- **mcp-ci** — bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup).
+- **react-native** — build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`.
+- **Reporter identity (fixes anonymous-token reporter):** — `submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`.
+- **Sentry-level payload:** — every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin "Repro timeline" renders instead of nudging "Upgrade the SDK"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb.
+- **Screenshots:** — new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens.
+- **Design parity:** — `MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer "Your reports" / "Community" tabs.
+- **inventory-schema** — migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths.
+- **cli** — bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers).
+- **mcp-ci** — bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup).
+- **react-native** — build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`.
 
 ### Packages bumped
 
-- `@mushi-mushi/cli` → 0.18.0
+- `@mushi-mushi/cli` → 0.18.1
+- `@mushi-mushi/react-native` → 0.18.0
 
 ## v0.17.x
 
@@ -297,7 +335,7 @@ Latest tag: `v0.17.2`
 
 ## v0.16.x
 
-Latest tag: `v0.16.0`
+Latest tag: `v0.16.1`
 
 ### Highlights
 
@@ -317,7 +355,7 @@ Latest tag: `v0.16.0`
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.16.0
-- `@mushi-mushi/mcp` → 0.16.0
+- `@mushi-mushi/mcp` → 0.16.1
 - `@mushi-mushi/react-native` → 0.16.0
 
 ## v0.15.x
@@ -545,13 +583,16 @@ Latest tag: `v0.6.5`
 - **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday).
 - **`mushi sync-lessons`** — — pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs.
 - **MCP** — — `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources.
+- **inventory-schema** — migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths.
+- **cli** — bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers).
+- **mcp-ci** — bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup).
 
 ### Packages bumped
 
 - `@mushi-mushi/capacitor` → 0.6.0
 - `@mushi-mushi/cli` → 0.6.1
 - `@mushi-mushi/mcp` → 0.6.0
-- `@mushi-mushi/mcp-ci` → 0.6.0
+- `@mushi-mushi/mcp-ci` → 0.6.1
 - `@mushi-mushi/node` → 0.6.0
 - `@mushi-mushi/plugin-sdk` → 0.6.0
 - `mushi-mushi` → 0.6.5
@@ -648,6 +689,7 @@ Latest tag: `v0.3.8`
 - `@mushi-mushi/angular` → 0.3.2
 - `@mushi-mushi/capacitor` → 0.3.3
 - `@mushi-mushi/core` → 0.3.1
+- `@mushi-mushi/inventory-schema` → 0.3.0
 - `@mushi-mushi/mcp` → 0.3.8
 - `@mushi-mushi/mcp-ci` → 0.3.0
 - `@mushi-mushi/node` → 0.3.5

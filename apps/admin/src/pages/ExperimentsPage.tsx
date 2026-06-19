@@ -8,6 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -150,6 +151,7 @@ export function ExperimentsPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExperimentsStats>('/v1/admin/experiments/stats')
+  usePublishPageHeroStats('/experiments', statsData)
   const stats = { ...EMPTY_EXPERIMENTS_STATS, ...statsData }
 
   const {

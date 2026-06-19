@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mushi QA · SDK KPI Harness</title>
+  <style>
+    :root {
+      --bg: #0f0f13;
+      --surface: #1a1a24;
+      --surface2: #22222e;
+      --border: #2e2e3e;
+      --text: #e8e8f0;
+      --muted: #7878a0;
+      --accent: #a78bfa;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --blue: #60a5fa;
+      --orange: #fb923c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    header h1 { font-size: 15px; font-weight: 600; color: var(--accent); }
+    .badge { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--muted); }
+    .badge-ok { border-color: rgba(74,222,128,0.3); color: var(--green); }
+    .badge-err { border-color: rgba(248,113,113,0.3); color: var(--red); }
+    .container { max-width: 1240px; margin: 0 auto; padding: 20px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+    .kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .kpi-value { font-size: 26px; font-weight: 700; }
+    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .green { color: var(--green); } .yellow { color: var(--yellow); } .red { color: var(--red); } .blue { color: var(--blue); } .muted { color: var(--muted); } .orange { color: var(--orange); }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .section-header h2 { font-size: 14px; font-weight: 600; }
+    .section-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn { border: none; cursor: pointer; border-radius: 6px; padding: 7px 14px; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: opacity 0.15s; white-space: nowrap; }
+    .btn:hover:not(:disabled) { opacity: 0.82; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #0f0f13; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-green { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-xs { padding: 2px 8px; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    thead { background: var(--surface2); }
+    th { text-align: left; padding: 9px 12px; font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    td { padding: 9px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    tr.row-active td { background: rgba(167,139,250,0.06); }
+    tr.row-done td { background: rgba(74,222,128,0.04); }
+    tr.row-error td { background: rgba(248,113,113,0.04); }
+    .pill { display: inline-flex; align-items: center; gap: 3px; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
+    .pill-green { background: rgba(74,222,128,0.12); color: var(--green); }
+    .pill-yellow { background: rgba(251,191,36,0.12); color: var(--yellow); }
+    .pill-red { background: rgba(248,113,113,0.12); color: var(--red); }
+    .pill-blue { background: rgba(96,165,250,0.12); color: var(--blue); }
+    .pill-orange { background: rgba(251,146,60,0.12); color: var(--orange); }
+    .pill-muted { background: var(--surface2); color: var(--muted); }
+    code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: monospace; font-size: 11px; color: var(--accent); }
+    a { color: var(--blue); text-decoration: none; font-size: 12px; }
+    a:hover { text-decoration: underline; }
+    .loading { display: flex; align-items: center; gap: 8px; color: var(--muted); padding: 40px 0; }
+    .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-card { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 14px; margin-bottom: 14px; color: var(--red); }
+    .warn-card { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.25); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; color: var(--yellow); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .auth-wall { text-align: center; padding: 60px 24px; }
+    .auth-wall h2 { font-size: 20px; margin-bottom: 8px; }
+    .auth-wall p { color: var(--muted); margin-bottom: 16px; }
+    .inline-spinner { display: inline-block; width: 11px; height: 11px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; }
+    #log-wrap { margin-top: 20px; }
+    #log-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 11px; color: var(--muted); }
+    #log { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 11px; font-family: monospace; color: var(--muted); height: 160px; overflow-y: auto; white-space: pre-wrap; }
+    .log-ok { color: var(--green); }
+    .log-err { color: var(--red); }
+    .log-info { color: var(--blue); }
+    .log-warn { color: var(--yellow); }
+    .v-from { color: var(--yellow); }
+    .v-to { color: var(--green); }
+    .v-same { color: var(--muted); }
+    .proj-name { font-weight: 600; font-size: 13px; }
+    .proj-slug { color: var(--muted); font-size: 11px; font-family: monospace; }
+    #progress-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 16px; overflow: hidden; display: none; }
+    #progress-bar { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
+    #pr-summary { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 14px; }
+    #pr-summary h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+    #pr-summary pre { font-size: 11px; font-family: monospace; color: var(--text); overflow-x: auto; white-space: pre-wrap; }
+    .copy-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+    .copy-btn:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🍄 Mushi QA · SDK KPI Harness</h1>
+  <span class="badge" id="project-badge">project: all</span>
+  <span class="badge" id="auth-badge">auth: checking…</span>
+  <span class="badge" id="progress-badge" style="display:none"></span>
+  <button class="btn btn-secondary btn-sm" onclick="refresh()">↻ Refresh</button>
+  <button class="btn btn-secondary btn-sm" onclick="window.open('http://localhost:6464/projects','_blank')">Open console ↗</button>
+</header>
+<div class="container" id="main">
+  <div class="loading"><div class="spinner"></div> Loading…</div>
+</div>
+
+<script>
+const SUPABASE_REF = 'dxptnwrhwsqckaftyymj'
+const LOCAL_API = 'http://localhost:6464/functions/v1/api'
+const params = new URLSearchParams(location.search)
+const ACTIVE_PROJECT = params.get('project') || null
+
+document.getElementById('project-badge').textContent = ACTIVE_PROJECT
+  ? `project: ${ACTIVE_PROJECT.slice(0,8)}…` : 'project: all'
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function getToken() {
+  try {
+    const raw = localStorage.getItem(`sb-${SUPABASE_REF}-auth-token`)
+    return raw ? JSON.parse(raw)?.access_token : null
+  } catch { return null }
+}
+
+function isTokenExpired() {
+  try {
+    const raw = localStorage.getItem(`sb-${SUPABASE_REF}-auth-token`)
+    if (!raw) return true
+    const payload = JSON.parse(raw)
+    const exp = payload?.expires_at || (JSON.parse(atob(payload?.access_token?.split('.')[1] || 'e30='))?.exp)
+    if (!exp) return false
+    return Date.now() / 1000 > exp - 30  // 30s buffer
+  } catch { return false }
+}
+
+function showAuthExpiredBanner() {
+  const existing = document.getElementById('auth-expired-banner')
+  if (existing) return
+  const banner = document.createElement('div')
+  banner.id = 'auth-expired-banner'
+  banner.className = 'warn-card'
+  banner.innerHTML = `<span>⚠ Session expired — sign in again to continue</span>
+    <button class="btn btn-sm btn-primary" onclick="reAuthenticate()">Re-authenticate →</button>`
+  document.getElementById('main')?.prepend(banner)
+  document.getElementById('auth-badge').textContent = 'auth: ✗ expired'
+  document.getElementById('auth-badge').className = 'badge badge-err'
+}
+
+function reAuthenticate() {
+  const popup = window.open('http://localhost:6464/dashboard', '_blank', 'width=900,height=700')
+  if (!popup) { window.open('http://localhost:6464/dashboard', '_blank'); return }
+  const interval = setInterval(() => {
+    if (!isTokenExpired()) {
+      clearInterval(interval)
+      popup.close()
+      document.getElementById('auth-expired-banner')?.remove()
+      document.getElementById('auth-badge').textContent = 'auth: ✓ signed in'
+      document.getElementById('auth-badge').className = 'badge badge-ok'
+      refresh()
+    }
+  }, 1500)
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const token = getToken()
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(`${LOCAL_API}${path}`, { ...opts, headers })
+  if (res.status === 401) {
+    showAuthExpiredBanner()
+    throw new Error('Session expired — please re-authenticate')
+  }
+  if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => res.statusText)}`)
+  const ct = res.headers.get('content-type') || ''
+  return ct.includes('json') ? res.json() : res.text()
+}
+
+// ── Upgrade via SSE + poll ────────────────────────────────────────────────────
+function triggerUpgrade(projectId, { timeoutMs = 120000 } = {}) {
+  return new Promise(async (resolve, reject) => {
+    let job
+    try {
+      const resp = await api(`/v1/admin/projects/${projectId}/sdk-upgrade`, { method: 'POST' })
+      job = resp?.data
+      if (!job?.jobId) throw new Error('No jobId returned from server')
+    } catch (e) { return reject(e) }
+
+    const token = getToken()
+    const streamUrl = `${LOCAL_API}/v1/admin/projects/${projectId}/sdk-upgrade/${job.jobId}/stream`
+    const esUrl = streamUrl + (token ? `?token=${encodeURIComponent(token)}` : '')
+    const es = new EventSource(esUrl)
+
+    let done = false
+    const finish = (res, err) => {
+      if (done) return
+      done = true
+      clearInterval(pollTimer)
+      clearTimeout(timeout)
+      es.close()
+      if (err) reject(err)
+      else resolve(res)
+    }
+
+    const pollTimer = setInterval(async () => {
+      try {
+        const d = await api(`/v1/admin/projects/${projectId}/sdk-upgrade/${job.jobId}`)
+        const s = d?.data
+        if (s?.status === 'completed' || s?.status === 'completed_no_pr') {
+          finish({ ...s, prUrl: s.prUrl ?? s.pr_url ?? null })
+        } else if (s?.status === 'failed') {
+          finish(null, new Error(s.error || 'Worker reported failure'))
+        }
+      } catch (e) {
+        if (e.message.includes('expired')) finish(null, e)
+      }
+    }, 2000)
+
+    es.addEventListener('status', e => {
+      try {
+        const d = JSON.parse(e.data)
+        if (d.status === 'completed' || d.status === 'completed_no_pr') {
+          finish({ ...d, prUrl: d.prUrl ?? d.pr_url ?? null })
+        } else if (d.status === 'failed') {
+          finish(null, new Error(d.error || 'Worker reported failure'))
+        }
+      } catch {}
+    })
+    es.addEventListener('done', () => finish({ prUrl: null }))
+    es.onerror = () => {}
+
+    const timeout = setTimeout(() => {
+      finish(null, new Error(`Timed out after ${timeoutMs / 1000}s — the repo may have no @mushi-mushi/* dependencies or the worker is busy`))
+    }, timeoutMs)
+  })
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function isNativeOrigin(ua) {
+  if (!ua) return false
+  return /okhttp|CFNetwork|capacitor:\/\/|Dalvik|Darwin\/\d/.test(ua)
+}
+
+function nativeStatus(keys) {
+  const nativeSeen = (keys || []).some(k => isNativeOrigin(k.last_seen_user_agent))
+  return nativeSeen
+    ? `<span class="pill pill-green">✓ yes</span>`
+    : `<span class="pill pill-muted">never seen</span>`
+}
+
+function sdkPill(status) {
+  if (!status || status === 'unknown') return `<span class="pill pill-muted">unknown</span>`
+  if (status === 'ok' || status === 'up-to-date') return `<span class="pill pill-green">✓ ok</span>`
+  if (status === 'outdated') return `<span class="pill pill-yellow">↑ outdated</span>`
+  if (status === 'ci-secret-missing') return `<span class="pill pill-red">⚠ CI secrets</span>`
+  if (status === 'native-never-seen') return `<span class="pill pill-orange">⚠ native</span>`
+  return `<span class="pill pill-muted">${status}</span>`
+}
+
+function versionDisplay(from, to) {
+  if (!from && !to) return '<span class="muted">—</span>'
+  if (!to || from === to) return `<span class="v-same">${from || '—'}</span>`
+  return `<span class="v-from">${from || '?'}</span> → <span class="v-to">${to}</span>`
+}
+
+// ── In-session tracking ───────────────────────────────────────────────────────
+let _initOutdated = 0
+let _totalActionable = 0
+let _sessionUpgraded = 0
+let _sessionPRs = []  // { slug, prUrl, pkgs }
+
+function _refreshKpiLine() {
+  const outdatedEl = document.getElementById('kpi-outdated-val')
+  const prCountEl = document.getElementById('kpi-prs-val')
+  const bulkBtn = document.getElementById('bulk-btn')
+  if (!outdatedEl) return
+
+  const remaining = Math.max(0, _initOutdated - _sessionUpgraded)
+  outdatedEl.textContent = remaining
+  outdatedEl.className = `kpi-value ${remaining > 0 ? 'yellow' : 'green'}`
+
+  const prCount = _sessionPRs.filter(p => p.prUrl).length
+  if (prCountEl) {
+    prCountEl.textContent = prCount
+    prCountEl.className = `kpi-value ${prCount > 0 ? 'green' : 'muted'}`
+  }
+
+  if (bulkBtn) {
+    const actionableLeft = _totalActionable - _sessionUpgraded
+    if (actionableLeft <= 0) { bulkBtn.innerHTML = '✓ All done'; bulkBtn.disabled = true }
+    else bulkBtn.innerHTML = `⚡ Bulk Upgrade All (${actionableLeft} remaining)`
+  }
+
+  if (_sessionPRs.length > 0) _renderPRSummary()
+}
+
+function _setProgress(current, total) {
+  const wrap = document.getElementById('progress-bar-wrap')
+  const bar = document.getElementById('progress-bar')
+  const badge = document.getElementById('progress-badge')
+  if (!wrap || !bar) return
+  if (total <= 0) { wrap.style.display = 'none'; badge.style.display = 'none'; return }
+  wrap.style.display = 'block'
+  bar.style.width = `${Math.min(100, (current / total) * 100)}%`
+  badge.style.display = 'inline-block'
+  badge.textContent = `${current}/${total} upgrading…`
+}
+
+function _renderPRSummary() {
+  const el = document.getElementById('pr-summary')
+  if (!el) return
+  const prs = _sessionPRs.filter(p => p.prUrl)
+  if (!prs.length) return
+  const lines = prs.map(p => `- [${p.slug}] ${p.prUrl}${p.pkgs ? '  ('+p.pkgs+')' : ''}`).join('\n')
+  el.style.display = 'block'
+  el.querySelector('#pr-summary-pre').textContent = lines
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+let logEl
+function log(msg, type = '') {
+  if (!logEl) { console.log(`[${type || 'log'}] ${msg}`); return }
+  const span = document.createElement('span')
+  if (type) span.className = `log-${type}`
+  span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n`
+  logEl.appendChild(span)
+  logEl.scrollTop = logEl.scrollHeight
+}
+function clearLog() { if (logEl) logEl.innerHTML = '' }
+
+// ── Row state helpers ─────────────────────────────────────────────────────────
+function rowClass(id, cls) {
+  const row = document.getElementById(`row-${id}`)
+  if (!row) return
+  row.className = row.className.replace(/\brow-(active|done|error)\b/g, '').trim()
+  if (cls) row.classList.add(`row-${cls}`)
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+async function refresh() {
+  const main = document.getElementById('main')
+  main.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>'
+
+  const token = getToken()
+  const authBadge = document.getElementById('auth-badge')
+
+  if (!token) {
+    authBadge.textContent = 'auth: ✗ not signed in'
+    authBadge.className = 'badge badge-err'
+    main.innerHTML = `<div class="auth-wall">
+      <h2>Not signed in</h2>
+      <p>Open the Mushi admin console, sign in, then return here.</p>
+      <a class="btn btn-primary" href="http://localhost:6464/dashboard" target="_blank">Sign in →</a>
+    </div>`
+    return
+  }
+
+  if (isTokenExpired()) {
+    authBadge.textContent = 'auth: ✗ expired'
+    authBadge.className = 'badge badge-err'
+    main.innerHTML = `<div class="auth-wall">
+      <h2>Session expired</h2>
+      <p>Your auth token has expired. Sign in again to continue.</p>
+      <button class="btn btn-primary" onclick="reAuthenticate()">Re-authenticate →</button>
+    </div>`
+    return
+  }
+
+  authBadge.textContent = 'auth: ✓ signed in'
+  authBadge.className = 'badge badge-ok'
+
+  let projects = [], latestVersions = {}
+  try {
+    const resp = await api('/v1/admin/projects')
+    projects = resp?.data?.projects || []
+    latestVersions = resp?.data?.latest_sdk_versions || {}
+  } catch (e) {
+    if (e.message.includes('expired')) return  // banner already shown
+    main.innerHTML = `<div class="error-card">Failed to fetch projects: ${e.message}
+      <br><br><button class="btn btn-secondary btn-sm" onclick="refresh()" style="margin-top:8px">↻ Retry</button></div>`
+    return
+  }
+
+  const latestWeb = latestVersions['@mushi-mushi/web']?.version || '—'
+  const total = projects.length
+  const sdkKnown = projects.filter(p => p.sdk_version).length
+  const outdated = projects.filter(p => p.sdk_status === 'outdated').length
+  const unknownCount = projects.filter(p => !p.sdk_version && (!p.sdk_status || p.sdk_status === 'unknown')).length
+  const actionable = outdated + unknownCount
+
+  _initOutdated = outdated
+  _totalActionable = actionable
+  _sessionUpgraded = 0
+  _sessionPRs = []
+
+  const nativeSeen = projects.filter(p => (p.api_keys || []).some(k => isNativeOrigin(k.last_seen_user_agent))).length
+
+  main.innerHTML = `
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Projects</div>
+        <div class="kpi-value blue">${total}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">SDK known</div>
+        <div class="kpi-value ${sdkKnown > 0 ? 'green' : 'muted'}">${sdkKnown}/${total}</div>
+        <div class="kpi-sub">${total - sdkKnown} unknown</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Outdated</div>
+        <div class="kpi-value ${outdated > 0 ? 'yellow' : 'green'}" id="kpi-outdated-val">${outdated}</div>
+        <div class="kpi-sub">${unknownCount} to scan</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">PRs opened</div>
+        <div class="kpi-value muted" id="kpi-prs-val">0</div>
+        <div class="kpi-sub">this session</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Native seen</div>
+        <div class="kpi-value ${nativeSeen > 0 ? 'green' : 'muted'}">${nativeSeen}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Latest SDK</div>
+        <div class="kpi-value blue" style="font-size:15px;margin-top:6px">${latestWeb}</div>
+        <div class="kpi-sub">@mushi-mushi/web</div>
+      </div>
+    </div>
+
+    <div class="section-header">
+      <h2>Projects · SDK Upgrade Status</h2>
+      <div class="section-actions">
+        <button class="btn btn-secondary btn-sm" onclick="refresh()" title="Reload project data">↻ Refresh</button>
+        <button class="btn btn-primary btn-sm" id="bulk-btn" onclick="bulkUpgrade()" ${actionable === 0 ? 'disabled' : ''}>
+          ⚡ Bulk Upgrade All (${actionable} ready)
+        </button>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Reports</th>
+          <th>SDK version</th>
+          <th>Status</th>
+          <th>Native?</th>
+          <th>Upgrade PR</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        ${projects.map(p => renderRow(p, latestWeb)).join('')}
+      </tbody>
+    </table>
+
+    <div id="pr-summary">
+      <h3>
+        <span>PRs opened this session</span>
+        <button class="copy-btn" onclick="copyPRSummary()">Copy markdown</button>
+      </h3>
+      <pre id="pr-summary-pre"></pre>
+    </div>
+
+    <div id="log-wrap">
+      <div id="log-header">
+        <span>Activity log</span>
+        <button class="copy-btn" onclick="clearLog()">Clear</button>
+      </div>
+      <div id="log">[harness ready · ${projects.length} projects · ${new Date().toLocaleTimeString()}]\n</div>
+    </div>
+  `
+
+  logEl = document.getElementById('log')
+}
+
+function renderRow(p, latestWeb) {
+  const isOutdated = p.sdk_status === 'outdated' || (p.sdk_version && p.sdk_version !== latestWeb)
+  const isUnknown = !p.sdk_version && (!p.sdk_status || p.sdk_status === 'unknown')
+  const canUpgrade = isOutdated || isUnknown
+  const btnLabel = !canUpgrade ? '✓ Done' : (isUnknown ? '? Scan' : '⚡ Upgrade')
+  const btnTitle = !canUpgrade
+    ? 'Already up to date'
+    : (isUnknown ? 'SDK version unknown — scan repo for @mushi-mushi/* packages' : 'Open a PR to upgrade to latest SDK')
+
+  return `<tr id="row-${p.id}">
+    <td>
+      <div class="proj-name">${p.name || p.slug}</div>
+      <div class="proj-slug">${p.slug}</div>
+    </td>
+    <td><span class="muted">${p.report_count ?? 0}</span></td>
+    <td>${versionDisplay(p.sdk_version, p.sdk_latest_version || latestWeb)}</td>
+    <td>${sdkPill(p.sdk_status)}</td>
+    <td>${nativeStatus(p.api_keys)}</td>
+    <td id="pr-${p.id}"><span class="pill pill-muted">—</span></td>
+    <td>
+      <button class="btn btn-secondary btn-sm" id="btn-${p.id}"
+        onclick="upgradeOne('${p.id}', '${p.slug || p.name}')"
+        title="${btnTitle}"
+        ${!canUpgrade ? 'disabled' : ''}>
+        ${btnLabel}
+      </button>
+    </td>
+  </tr>`
+}
+
+// ── Single upgrade ────────────────────────────────────────────────────────────
+async function upgradeOne(id, slug, { silent = false } = {}) {
+  const btn = document.getElementById(`btn-${id}`)
+  const prCell = document.getElementById(`pr-${id}`)
+  if (btn?.disabled) return
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="inline-spinner"></span>' }
+  rowClass(id, 'active')
+  if (!silent) log(`[${slug}] upgrading…`, 'info')
+
+  try {
+    const result = await triggerUpgrade(id)
+    const pkgs = (result.plan || [])
+      .map(p => `${p.package.replace('@mushi-mushi/', '')} ${p.from}→${p.to}`)
+      .join(', ')
+
+    if (btn) { btn.innerHTML = '✓'; btn.disabled = true }
+    rowClass(id, 'done')
+    _sessionUpgraded++
+    _refreshKpiLine()
+
+    if (result.prUrl) {
+      prCell.innerHTML = `<a href="${result.prUrl}" target="_blank" title="${result.prUrl}">↗ PR opened</a>`
+      _sessionPRs.push({ slug, prUrl: result.prUrl, pkgs })
+      if (!silent) log(`[${slug}] ✓ PR: ${result.prUrl}${pkgs ? '  ('+pkgs+')' : ''}`, 'ok')
+    } else {
+      prCell.innerHTML = `<span class="pill pill-green">✓ up to date</span>`
+      if (!silent) log(`[${slug}] ✓ already up to date${pkgs ? '  ('+pkgs+')' : ''}`, 'ok')
+    }
+    return true
+  } catch (e) {
+    rowClass(id, 'error')
+    if (btn) { btn.innerHTML = '↻ Retry'; btn.disabled = false; btn.title = e.message }
+    if (!silent) log(`[${slug}] ✗ ${e.message}`, 'err')
+    return false
+  }
+}
+
+// ── Bulk upgrade ──────────────────────────────────────────────────────────────
+async function bulkUpgrade() {
+  const bulkBtn = document.getElementById('bulk-btn')
+  if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.innerHTML = '<span class="inline-spinner"></span> Upgrading…' }
+
+  const tbody = document.getElementById('tbody')
+  const rows = tbody ? [...tbody.querySelectorAll('tr')] : []
+  const targets = rows.map(r => {
+    const id = r.id?.replace('row-', '')
+    const b = document.getElementById(`btn-${id}`)
+    return b && !b.disabled ? { id, slug: r.querySelector('.proj-slug')?.textContent?.trim() || id } : null
+  }).filter(Boolean)
+
+  if (!targets.length) {
+    if (bulkBtn) { bulkBtn.innerHTML = '✓ All done'; bulkBtn.disabled = true }
+    return
+  }
+
+  log(`Bulk upgrade: ${targets.length} project(s)`, 'info')
+  _setProgress(0, targets.length)
+
+  for (let i = 0; i < targets.length; i++) {
+    const t = targets[i]
+    _setProgress(i + 1, targets.length)
+    const progressBadge = document.getElementById('progress-badge')
+    if (progressBadge) progressBadge.textContent = `${i+1}/${targets.length} · ${t.slug}`
+    await upgradeOne(t.id, t.slug).catch(() => {})
+  }
+
+  _setProgress(0, 0)
+  if (bulkBtn) { bulkBtn.innerHTML = '✓ All done'; bulkBtn.disabled = true }
+  log(`Bulk upgrade complete — ${_sessionPRs.length} PR(s) opened`, 'ok')
+}
+
+// ── Copy PR summary ───────────────────────────────────────────────────────────
+function copyPRSummary() {
+  const text = document.getElementById('pr-summary-pre')?.textContent || ''
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn')
+    if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 1500) }
+  })
+}
+
+refresh()
+</script>
+</body>
+</html>

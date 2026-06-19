@@ -19,6 +19,8 @@
  * remote dashboard default cannot resurrect the FAB or a second banner.
  */
 
+import { RESOLVED_API_URL } from './env'
+
 type MushiInitOptions = {
   projectId: string
   apiKey: string
@@ -81,7 +83,7 @@ export async function initMushiSelf(options?: {
 
       const endpoint =
         import.meta.env.VITE_MUSHI_SELF_API_ENDPOINT ||
-        'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api';
+        RESOLVED_API_URL;
 
       _sdk = Mushi.init({
         projectId: import.meta.env.VITE_MUSHI_SELF_PROJECT_ID!,

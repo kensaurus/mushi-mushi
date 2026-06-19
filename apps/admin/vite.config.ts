@@ -212,6 +212,9 @@ export default defineConfig({
   },
   server: {
     port: 6464,
+    // Bind IPv4 explicitly — Windows Node can listen on ::1 only, which breaks
+    // Playwright/curl against 127.0.0.1 and breaks the Vite proxy for some clients.
+    host: '127.0.0.1',
     // pnpm workspace packages resolve via symlinks under ../../packages;
     // without this, Vite 8 refuses to serve/transform @mushi-mushi/web (mushi-self.ts).
     fs: {

@@ -53,6 +53,7 @@ import { registerBackendRoutes } from './routes/backend.ts';
 import { registerFullstackAuditRoutes } from './routes/fullstack-audit.ts';
 import { registerSkillsRoutes } from './routes/skills.ts';
 import { registerCodeHealthRoutes } from './routes/code-health.ts';
+import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
@@ -126,6 +127,16 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
 // Note: 'baggage' and 'sentry-trace' are W3C / Sentry tracing headers emitted
 // by every host app that instruments Sentry. Without them in allowHeaders the
 // browser blocks all SDK preflight requests with a CORS error.
+//
+// X-Mushi-SDK-* + X-Mushi-User-Token are stamped on every authenticated SDK
+// heartbeat (Jun 2026 sdk-observation). Omitting them breaks browser preflight
+// when host apps call /v1/sdk/latest-version directly against the cloud API.
+const SDK_OBSERVATION_HEADERS = [
+  'X-Mushi-SDK-Version',
+  'X-Mushi-SDK-Package',
+  'X-Mushi-User-Token',
+] as const;
+
 app.use(
   '/v1/sdk/*',
   cors({
@@ -135,6 +146,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'baggage',
       'sentry-trace',
     ],
@@ -151,6 +163,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'X-Sentry-Hook-Signature',
       'baggage',
       'sentry-trace',
@@ -168,6 +181,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'X-Sentry-Hook-Signature',
       'baggage',
       'sentry-trace',
@@ -186,6 +200,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'traceparent',
       'tracestate',
     ],
@@ -201,6 +216,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'X-Reporter-Token',
       'X-Reporter-Token-Hash',
       'X-Reporter-Ts',
@@ -220,6 +236,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'X-Reporter-Token',
       'X-Reporter-Token-Hash',
       'X-Reporter-Ts',
@@ -239,6 +256,7 @@ app.use(
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',
+      ...SDK_OBSERVATION_HEADERS,
       'X-Reporter-Token',
       'X-Reporter-Token-Hash',
       'X-Reporter-Ts',
@@ -533,6 +551,7 @@ registerFeatureBoardRoutes(app);
 registerBackendRoutes(app);
 registerFullstackAuditRoutes(app);
 registerCodeHealthRoutes(app);
+registerWorkspaceNavMetaRoutes(app);
 registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);
 registerBootstrapRoutes(app);

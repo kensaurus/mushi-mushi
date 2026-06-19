@@ -45,7 +45,7 @@ export function FeedbackStatusBanner({
       <StatusBannerShell
         tone="brand"
         title={`No submissions yet on ${stats.projectName ?? 'your project'}`}
-        subtitle="Report a console bug or request a feature — we read every ticket and link shipped ideas to release versions."
+        subtitle="Report a console bug or request a feature about Mushi — we read every ticket and link shipped ideas to release versions. For end-user bugs from your app, see Reports."
         action={
           <div className="flex flex-wrap gap-2">
             {onSubmitBug ? (

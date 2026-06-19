@@ -75,7 +75,8 @@ export async function mintInstallationToken(installationId: number): Promise<str
  * the caller provides one. Order:
  *   1. `installationId` (when present, try App mint; on failure fall through)
  *   2. `project_settings.github_installation_token_ref` — PAT stored in vault
- *   3. `GITHUB_TOKEN` env fallback (self-host / founder dogfood)
+ *   3. `organization_integration_settings.github_installation_token_ref` — org default
+ *   4. `GITHUB_TOKEN` env fallback (self-host / founder dogfood)
  *
  * Returns null when nothing resolves — callers should surface a "connect
  * GitHub" error rather than proceed with an unauthenticated request.
@@ -94,6 +95,16 @@ export async function resolveProjectGithubToken(
     }
   }
 
+  const resolveRef = async (ref: string): Promise<string | null> => {
+    if (ref.startsWith('vault://')) {
+      const id = ref.slice('vault://'.length)
+      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id })
+      return !vaultErr && typeof secret === 'string' && secret.length > 0 ? secret : null
+    }
+    return ref.length > 0 ? ref : null
+  }
+
+  // Step 1: project-level setting.
   const { data, error } = await db
     .from('project_settings')
     .select('github_installation_token_ref')
@@ -101,17 +112,30 @@ export async function resolveProjectGithubToken(
     .maybeSingle()
 
   if (!error && data?.github_installation_token_ref) {
-    const ref = String(data.github_installation_token_ref)
-    if (ref.startsWith('vault://')) {
-      const id = ref.slice('vault://'.length)
-      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id })
-      if (!vaultErr && typeof secret === 'string' && secret.length > 0) {
-        return secret
-      }
-    } else if (ref.length > 0) {
-      return ref
+    const resolved = await resolveRef(String(data.github_installation_token_ref))
+    if (resolved) return resolved
+  }
+
+  // Step 2: org-level default.
+  const { data: projectRow } = await db
+    .from('projects')
+    .select('organization_id')
+    .eq('id', projectId)
+    .maybeSingle()
+  const orgId = (projectRow as { organization_id: string | null } | null)?.organization_id ?? null
+  if (orgId) {
+    const { data: orgRow } = await db
+      .from('organization_integration_settings')
+      .select('github_installation_token_ref')
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    if (orgRow?.github_installation_token_ref) {
+      const resolved = await resolveRef(String(orgRow.github_installation_token_ref))
+      if (resolved) return resolved
     }
   }
+
+  // Step 3: env fallback.
   return Deno.env.get('GITHUB_TOKEN') ?? null
 }
 
@@ -135,6 +159,15 @@ export interface PullRequestSnapshot {
   state: string
   merged: boolean
   nodeId?: string | null
+}
+
+export interface PullRequestDetails extends PullRequestSnapshot {
+  htmlUrl: string | null
+  headRef: string | null
+  headSha: string | null
+  baseRef: string | null
+  mergeable: boolean | null
+  mergeableState: string | null
 }
 
 function githubAuthHeaders(token: string): Record<string, string> {
@@ -170,6 +203,44 @@ export async function fetchPullRequest(
     state: body.state ?? 'open',
     merged: body.merged === true,
     nodeId: body.node_id ?? null,
+  }
+}
+
+export async function fetchPullRequestDetails(
+  token: string,
+  ref: GithubRepoRef,
+  pullNumber: number,
+): Promise<PullRequestDetails | null> {
+  const res = await fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${pullNumber}`,
+    { headers: githubAuthHeaders(token) },
+  )
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`pull fetch ${res.status}`)
+  const body = await res.json() as {
+    number?: number
+    draft?: boolean
+    state?: string
+    merged?: boolean
+    node_id?: string
+    html_url?: string
+    head?: { ref?: string; sha?: string }
+    base?: { ref?: string }
+    mergeable?: boolean | null
+    mergeable_state?: string | null
+  }
+  return {
+    number: body.number ?? pullNumber,
+    draft: body.draft === true,
+    state: body.state ?? 'open',
+    merged: body.merged === true,
+    nodeId: body.node_id ?? null,
+    htmlUrl: body.html_url ?? null,
+    headRef: body.head?.ref ?? null,
+    headSha: body.head?.sha ?? null,
+    baseRef: body.base?.ref ?? null,
+    mergeable: body.mergeable ?? null,
+    mergeableState: body.mergeable_state ?? null,
   }
 }
 
@@ -298,4 +369,127 @@ export async function fetchLatestCheckRun(
     }
   }
   return { status: 'completed', conclusion: worst }
+}
+
+export interface WorkflowRunSnapshot {
+  id: number
+  name: string | null
+  status: string | null
+  conclusion: string | null
+  htmlUrl: string | null
+  headSha: string | null
+  updatedAt: string | null
+}
+
+export async function fetchLatestWorkflowRunForSha(
+  token: string,
+  ref: GithubRepoRef,
+  branch: string | null,
+  commitSha: string,
+): Promise<WorkflowRunSnapshot | null> {
+  const params = new URLSearchParams({ per_page: '20' })
+  if (branch) params.set('branch', branch)
+  const res = await fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/actions/runs?${params.toString()}`,
+    { headers: githubAuthHeaders(token) },
+  )
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`workflow runs fetch ${res.status}`)
+  const body = await res.json() as {
+    workflow_runs?: Array<{
+      id?: number
+      name?: string | null
+      status?: string | null
+      conclusion?: string | null
+      html_url?: string | null
+      head_sha?: string | null
+      updated_at?: string | null
+    }>
+  }
+  const run = (body.workflow_runs ?? []).find((r) => r.head_sha === commitSha)
+  if (!run?.id) return null
+  return {
+    id: run.id,
+    name: run.name ?? null,
+    status: run.status ?? null,
+    conclusion: run.conclusion ?? null,
+    htmlUrl: run.html_url ?? null,
+    headSha: run.head_sha ?? null,
+    updatedAt: run.updated_at ?? null,
+  }
+}
+
+export interface DeploymentStatusSnapshot {
+  state: string | null
+  environment: string | null
+  environmentUrl: string | null
+  updatedAt: string | null
+}
+
+export async function fetchLatestDeploymentStatusForSha(
+  token: string,
+  ref: GithubRepoRef,
+  commitSha: string,
+): Promise<DeploymentStatusSnapshot | null> {
+  const params = new URLSearchParams({ sha: commitSha, per_page: '10' })
+  const deploymentsRes = await fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/deployments?${params.toString()}`,
+    { headers: githubAuthHeaders(token) },
+  )
+  if (deploymentsRes.status === 404) return null
+  if (!deploymentsRes.ok) throw new Error(`deployments fetch ${deploymentsRes.status}`)
+  const deployments = await deploymentsRes.json() as Array<{
+    id?: number
+    environment?: string | null
+  }>
+  const deployment = deployments.find((d) => d.id)
+  if (!deployment?.id) return null
+  const statusesRes = await fetch(
+    `https://api.github.com/repos/${ref.owner}/${ref.repo}/deployments/${deployment.id}/statuses?per_page=1`,
+    { headers: githubAuthHeaders(token) },
+  )
+  if (statusesRes.status === 404) return null
+  if (!statusesRes.ok) throw new Error(`deployment statuses fetch ${statusesRes.status}`)
+  const statuses = await statusesRes.json() as Array<{
+    state?: string | null
+    environment_url?: string | null
+    updated_at?: string | null
+  }>
+  const status = statuses[0]
+  if (!status) return null
+  return {
+    state: status.state ?? null,
+    environment: deployment.environment ?? null,
+    environmentUrl: status.environment_url ?? null,
+    updatedAt: status.updated_at ?? null,
+  }
+}
+
+/**
+ * GitHub deployment-status states (`error`, `inactive`, `in_progress`, `queued`,
+ * `pending`, `success`, `failure`, `waiting`) are broader than the
+ * `sdk_upgrade_jobs.deploy_status` CHECK constraint allows
+ * (`unknown | pending | success | failure | waiting`). Persisting a raw
+ * `in_progress`/`queued`/`error`/`inactive` value would violate the CHECK
+ * (Postgres 23514) and silently abort the entire job-row update, freezing the
+ * release cockpit. Normalize to the constrained vocabulary at every write site.
+ */
+export function normalizeDeployStatus(
+  raw: string | null | undefined,
+): 'unknown' | 'pending' | 'success' | 'failure' | 'waiting' {
+  switch (raw) {
+    case 'success':
+      return 'success'
+    case 'failure':
+    case 'error':
+      return 'failure'
+    case 'in_progress':
+    case 'queued':
+    case 'pending':
+      return 'pending'
+    case 'waiting':
+      return 'waiting'
+    default:
+      return 'unknown'
+  }
 }

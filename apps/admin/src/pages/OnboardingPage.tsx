@@ -14,9 +14,11 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
+import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
 import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -126,6 +128,7 @@ export function OnboardingPage() {
   )
 
   const statsData = activationEnabled ? activation.stats : legacyStatsData
+  usePublishPageHeroStats('/onboarding', statsData)
   const statsLoading = activationEnabled ? activation.loading : legacyStatsLoading
   const statsError = activationEnabled ? activation.error : legacyStatsError
   const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
@@ -133,8 +136,14 @@ export function OnboardingPage() {
   const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
   const stats = statsData ?? EMPTY_ONBOARDING_STATS
 
+  // In Quickstart mode the overview tab is hidden and the segmented control
+  // shows "Create / Verify / Install" labels. Previously effectiveTab was hard-
+  // locked to resolveQuickOnboardingTab(stats), making the segmented tabs
+  // clickable but inert. Now an explicit URL param always wins so the user can
+  // navigate freely; we only fall back to the computed default when no valid
+  // param is present.
   const effectiveTab: OnboardingTabId = ux.hideOverviewTab
-    ? resolveQuickOnboardingTab(stats)
+    ? (isOnboardingTab(tabParam) && tabParam !== 'overview' ? tabParam : resolveQuickOnboardingTab(stats))
     : activeTab
   const activeTabMeta = ONBOARDING_TABS.find((t) => t.id === effectiveTab) ?? ONBOARDING_TABS[1]
 
@@ -179,6 +188,9 @@ export function OnboardingPage() {
     onCreated: () => {
       setProjectName('')
       setup.reload()
+      // In Quickstart linear flow: project created → advance to Verify so the
+      // user can immediately mint an API key without an extra click.
+      if (ux.hideOverviewTab) setActiveTab('verify')
     },
   })
 
@@ -271,7 +283,7 @@ export function OnboardingPage() {
     setGeneratingKey(false)
     if (res.ok && res.data) {
       setApiKey(res.data)
-      toast.success('API key generated', 'Copy it now \u2014 it will not be shown again.')
+      toast.success('API key generated', 'Copy it now \u2014 it will not be shown again. Then submit a test report below to verify the pipeline.')
       setup.reload()
     } else {
       const msg = res.error?.message ?? 'Failed to generate API key'
@@ -293,6 +305,8 @@ export function OnboardingPage() {
       toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
       setup.reload()
       reloadStats()
+      // In Quickstart linear flow: pipeline verified → advance to Install SDK.
+      if (ux.hideOverviewTab) setActiveTab('sdk')
     } else {
       const msg = res.error?.message ?? 'Test report submission failed'
       setError(msg)
@@ -420,6 +434,51 @@ export function OnboardingPage() {
         testing={testStatus === 'running'}
         plainLanguage={ux.plainBanner}
       />
+
+      <OnboardingStepsGuide
+        stats={{
+          setupDone: stats.setupDone,
+          hasAnyProject: stats.hasAnyProject,
+          requiredComplete: stats.requiredComplete,
+          requiredTotal: stats.requiredTotal,
+        }}
+      />
+
+      {ux.hideOverviewTab && (
+        <div className="flex items-center gap-1.5 text-2xs" aria-label="Setup progress">
+          {(['steps', 'verify', 'sdk'] as const).map((id, i) => {
+            const STEP_LABELS: Record<string, string> = {
+              steps: tabOptions.find((t) => t.id === 'steps')?.label ?? 'Create',
+              verify: tabOptions.find((t) => t.id === 'verify')?.label ?? 'Verify',
+              sdk: tabOptions.find((t) => t.id === 'sdk')?.label ?? 'Install',
+            }
+            const stepOrder = ['steps', 'verify', 'sdk']
+            const currentIdx = stepOrder.indexOf(effectiveTab)
+            const thisIdx = stepOrder.indexOf(id)
+            const isDone = thisIdx < currentIdx
+            const isActive = id === effectiveTab
+            return (
+              <span key={id} className="flex items-center gap-1.5">
+                {i > 0 && (
+                  <span className="text-fg-faint" aria-hidden="true">›</span>
+                )}
+                <span
+                  className={`font-medium transition-colors ${
+                    isActive
+                      ? 'text-brand'
+                      : isDone
+                        ? 'text-ok'
+                        : 'text-fg-faint'
+                  }`}
+                >
+                  {isDone && <span className="mr-0.5" aria-hidden="true">✓</span>}
+                  {i + 1}. {STEP_LABELS[id]}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+      )}
 
       {!ux.hideOverviewTab || tabOptions.length > 1 ? (
         <SegmentedControl

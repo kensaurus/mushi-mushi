@@ -7,6 +7,7 @@ import { Btn } from './forms';
 import { Card } from './layout';
 import { RelativeTime } from './metrics';
 import { shouldTooltipNowrap, tooltipLayoutClasses } from './tooltip-layout';
+import { TOOLTIP_POPOVER_SHELL } from '../../lib/pageHelpSurfaces';
 
 
 /* ── FilterChip ─────────────────────────────────────────────────────────── */
@@ -317,7 +318,7 @@ interface TooltipProps {
 }
 
 const TOOLTIP_SURFACE =
-  'px-3 py-2.5 text-2xs text-fg bg-surface-raised border border-edge rounded-md shadow-lg pointer-events-none tooltip-enter'
+  `px-3 py-2.5 text-2xs rounded-md pointer-events-none tooltip-enter ${TOOLTIP_POPOVER_SHELL}`
 
 const TOOLTIP_VIEWPORT_PAD = 12
 const TOOLTIP_GAP = 8

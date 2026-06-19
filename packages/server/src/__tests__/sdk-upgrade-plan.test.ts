@@ -168,6 +168,30 @@ describe('computeBumpPlan — catalog guards', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Supply-chain guard: never auto-bump more than one major ahead
+// ---------------------------------------------------------------------------
+describe('computeBumpPlan — major-jump quarantine', () => {
+  it('quarantines a >1 major jump (poisoned/hijacked latest)', () => {
+    const pkg = { dependencies: { '@mushi-mushi/web': '1.7.0' } }
+    const { bumps } = computeBumpPlan(pkg, { '@mushi-mushi/web': '99.0.0' })
+    expect(bumps).toHaveLength(0)
+  })
+
+  it('allows a single major jump (legitimate breaking release)', () => {
+    const pkg = { dependencies: { '@mushi-mushi/web': '1.7.0' } }
+    const { bumps } = computeBumpPlan(pkg, { '@mushi-mushi/web': '2.0.0' })
+    expect(bumps).toHaveLength(1)
+    expect(bumps[0]).toMatchObject({ from: '1.7.0', to: '2.0.0' })
+  })
+
+  it('still bumps minor/patch within the same major', () => {
+    const pkg = { dependencies: { '@mushi-mushi/web': '1.7.0' } }
+    const { bumps } = computeBumpPlan(pkg, { '@mushi-mushi/web': '1.9.3' })
+    expect(bumps).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Guard: packages not in UPGRADEABLE_PACKAGES are ignored
 // ---------------------------------------------------------------------------
 describe('computeBumpPlan — allow-list', () => {

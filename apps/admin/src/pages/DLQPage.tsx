@@ -19,7 +19,10 @@ import {
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { usePageData } from '../lib/usePageData'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
+import { QueueStatusBanner } from '../components/dlq/QueueStatusBanner'
+import { EMPTY_QUEUE_STATS, type QueueStats } from '../components/dlq/QueueStatsTypes'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
 import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
@@ -58,6 +61,11 @@ export function DLQPage() {
   const [filterTouched, setFilterTouched] = useState(false)
   const [stage, setStage] = useState<string>('')
   const toast = useToast()
+  const {
+    data: queueStats,
+    reload: reloadQueueStats,
+  } = usePageData<QueueStats>('/v1/admin/queue/stats')
+  const stats = queueStats ?? EMPTY_QUEUE_STATS
 
   const loadAll = useCallback(async () => {
     setError(false)
@@ -80,8 +88,9 @@ export function DLQPage() {
     }
     if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
     if (throughRes.ok && throughRes.data) setThroughput(throughRes.data.days)
+    reloadQueueStats()
     setLoading(false)
-  }, [filter, page, pageSize, stage])
+  }, [filter, page, pageSize, stage, reloadQueueStats])
 
   useEffect(() => {
     setLoading(true)
@@ -245,6 +254,16 @@ export function DLQPage() {
           Recover stranded
         </Btn>
       </PageHeaderBar>
+
+      <QueueStatusBanner
+        stats={stats}
+        onRefresh={() => void loadAll()}
+        refreshing={loading}
+        onRecover={recoverStranded}
+        onFlush={flushCircuitBreakerQueue}
+        recovering={flushing}
+        flushing={flushingQueued}
+      />
 
       {(deadLetter > 0 || failedCount > 0) && (
         <Card

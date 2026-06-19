@@ -813,3 +813,12 @@ export function IconRefresh(p: IconProps) {
   </>)
 }
 
+// Horizontal ellipsis — "More actions / Overflow menu".
+export function IconDots(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="4" cy="8" r="1" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none" />
+  </>)
+}
+

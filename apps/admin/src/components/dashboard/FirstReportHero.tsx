@@ -68,7 +68,7 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
         </span>
         <div className="min-w-0 flex-1">
           <SignalChip tone="brand" className="uppercase tracking-wider text-3xs">
-            Plan · Your next step
+            Plan · Start here
           </SignalChip>
           <h2 id="first-report-hero-title" className="text-sm font-semibold text-fg mt-1.5">
             Send a test report from{' '}

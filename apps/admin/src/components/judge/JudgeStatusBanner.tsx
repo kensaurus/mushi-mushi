@@ -3,10 +3,10 @@
  * PURPOSE: Judge posture — no evals, low score, drift, disagreements, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { judgeDisagreementHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { JudgeStats, JudgeTabId } from './JudgeStatsTypes'
 
 /** Healthy posture is covered by the page hero + snapshot — skip the banner. */
@@ -37,6 +37,7 @@ export function JudgeStatusBanner({
   const copy = usePageCopy('/judge')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
@@ -49,9 +50,7 @@ export function JudgeStatusBanner({
             : 'Create a project and classify reports before running judge.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />
         }
       />
     )
@@ -62,20 +61,33 @@ export function JudgeStatusBanner({
       <StatusBannerShell
         tone="brand"
         title={plainBanner ? `No grades yet on ${projectLabel}` : `No judge evaluations on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          (stats.classifiedReports > 0
+            ? `${stats.classifiedReports} classified report${stats.classifiedReports === 1 ? '' : 's'} ready to grade.`
+            : 'Classify a few bugs in Reports first — then run the judge.')
+        }
         action={
           onRunJudge ? (
-            <Btn size="sm" variant="ghost" onClick={onRunJudge} loading={running} disabled={running}>
-              {actions.run ?? 'Run judge now'}
-            </Btn>
+            <StatusBannerAction
+              label={actions.run ?? 'Run judge now'}
+              onClick={onRunJudge}
+              loading={running}
+              disabled={running}
+              tone="brand"
+            />
           ) : stats.classifiedReports > 0 ? (
-            <Link to="/judge?action=run">
-              <Btn size="sm" variant="ghost">{actions.run ?? 'Run judge now'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.run ?? 'Run judge now'}
+              to={scopedHref('/judge?action=run', pid)}
+              tone="brand"
+            />
           ) : (
-            <Link to="/reports">
-              <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.reports ?? 'Open Reports'}
+              to={scopedHref('/reports?tab=queue', pid)}
+              tone="brand"
+            />
           )
         }
       />
@@ -83,54 +95,81 @@ export function JudgeStatusBanner({
   }
 
   if (stats.topPriority === 'low_score' || stats.topPriority === 'drifting') {
+    const drifting = stats.topPriority === 'drifting'
     return (
       <StatusBannerShell
         tone="danger"
         title={
           plainBanner
-            ? stats.topPriority === 'low_score'
-              ? 'Classifier scores below 60% — triage may be wrong'
-              : 'Scores dropped week-over-week'
-            : stats.topPriority === 'low_score'
-              ? 'Classifier score below 60%'
-              : 'Score drifting week-over-week'
+            ? drifting
+              ? 'Classifier scores dropped week-over-week'
+              : 'Classifier scores below 60% — triage may be wrong'
+            : drifting
+              ? 'Score drifting week-over-week'
+              : 'Classifier score below 60%'
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          (drifting
+            ? 'Recent grades are worse than last week — review mismatches before merging fixes.'
+            : 'The judge thinks triage quality is poor — review Prompt Lab or recent evaluations.')
+        }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.investigate ?? 'Investigate'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.investigate ?? 'Review evaluations'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('evaluations')}>
-              {actions.investigate ?? 'Investigate'}
-            </Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.investigate ?? 'Review evaluations'}
+              onClick={() => onTab('evaluations')}
+              tone="danger"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.investigate ?? 'Review evaluations'}
+              to={scopedHref('/judge?tab=evaluations&filter=disagreement', pid)}
+              tone="danger"
+            />
+          )
         }
       />
     )
   }
 
   if (stats.topPriority === 'disagreements') {
+    const rate = stats.disagreementRatePct ?? 0
     return (
       <StatusBannerShell
         tone="warn"
         title={
           plainBanner
-            ? `${stats.disagreementRatePct ?? 0}% of grades disagree with the classifier`
-            : `${stats.disagreementRatePct ?? 0}% disagreement rate`
+            ? `${rate}% of grades disagree with the classifier`
+            : `${rate}% disagreement rate`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={stats.topPriorityLabel ?? judgeDisagreementHint(rate)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.disagreements ?? 'View disagreements'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.disagreements ?? 'Review disagreements'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('evaluations')}>
-              {actions.disagreements ?? 'View disagreements'}
-            </Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.disagreements ?? 'Review disagreements'}
+              onClick={() => onTab('evaluations')}
+              tone="warn"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.disagreements ?? 'Review disagreements'}
+              to={scopedHref('/judge?tab=evaluations&filter=disagreement', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
@@ -141,16 +180,25 @@ export function JudgeStatusBanner({
       <StatusBannerShell
         tone="warn"
         title={plainBanner ? 'Judge grades are out of date' : 'Judge scores stale'}
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Run the judge again so you know whether triage quality still holds.'
+        }
         action={
           onRunJudge ? (
-            <Btn size="sm" variant="ghost" onClick={onRunJudge} loading={running} disabled={running}>
-              {actions.run ?? 'Run judge now'}
-            </Btn>
+            <StatusBannerAction
+              label={actions.run ?? 'Run judge now'}
+              onClick={onRunJudge}
+              loading={running}
+              disabled={running}
+              tone="warn"
+            />
           ) : (
-            <Link to="/judge?action=run">
-              <Btn size="sm" variant="ghost">{actions.run ?? 'Run judge now'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.run ?? 'Run judge now'}
+              to={scopedHref('/judge?action=run', pid)}
+              tone="warn"
+            />
           )
         }
       />
@@ -164,17 +212,18 @@ export function JudgeStatusBanner({
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.trend ?? 'View trend'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.trend ?? 'View trend'} to={stats.topPriorityTo} tone="ok" />
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('trend')}>
-            {actions.trend ?? 'View trend'}
-          </Btn>
+          <StatusBannerAction label={actions.trend ?? 'View trend'} onClick={() => onTab('trend')} tone="ok" />
         ) : null
       }
     />

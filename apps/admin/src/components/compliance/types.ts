@@ -2,6 +2,10 @@
  * FILE: apps/admin/src/components/compliance/types.ts
  */
 
+import type { ComplianceTopPriority } from '../../lib/complianceExplainer'
+
+export type { ComplianceTopPriority }
+
 export type ComplianceTabId = 'overview' | 'evidence' | 'retention' | 'dsars' | 'residency'
 
 export interface ComplianceStats {
@@ -24,6 +28,9 @@ export interface ComplianceStats {
   evidenceNeverGenerated: boolean
   currentRegion: string
   activeProjectRegion: string | null
+  topPriority: ComplianceTopPriority
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
 export const EMPTY_COMPLIANCE_STATS: ComplianceStats = {
@@ -46,5 +53,8 @@ export const EMPTY_COMPLIANCE_STATS: ComplianceStats = {
   evidenceNeverGenerated: true,
   currentRegion: 'us',
   activeProjectRegion: null,
+  topPriority: 'no_project',
+  topPriorityLabel: null,
+  topPriorityTo: null,
 }
 

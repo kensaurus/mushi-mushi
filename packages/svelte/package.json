@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/svelte",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "description": "Svelte SDK for Mushi Mushi — context-based init, SvelteKit error hook integration",
   "main": "./dist/index.cjs",
@@ -21,11 +21,11 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "eslint": "^10.3.0",
-    "svelte": "^5.55.5",
+    "eslint": "^10.4.1",
+    "svelte": "^5.56.3",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.8"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

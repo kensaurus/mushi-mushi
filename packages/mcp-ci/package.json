@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp-ci",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "GitHub Action entrypoint for running Mushi Mushi MCP tools in CI — trigger judge, dispatch fixes, gate merges on classification coverage.",
   "license": "MIT",
   "type": "module",
@@ -48,16 +48,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@actions/core": "^1.11.1"
+    "@actions/core": "^3.0.1"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
-    "@types/node": "^22.19.17",
-    "eslint": "^10.3.0",
+    "@types/node": "^22.19.21",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.8"
   },
   "author": "Kenji Sakuramoto",
   "engines": {

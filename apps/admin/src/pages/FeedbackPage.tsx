@@ -178,8 +178,8 @@ export function FeedbackPage() {
 
   usePublishPageContext({
     route: '/feedback',
-    title: 'My feedback',
-    summary: `${activeTabMeta.label} · ${stats.totalTickets} submissions · ${stats.activeTickets} active`,
+    title: 'Support',
+    summary: `${activeTabMeta.label} · ${stats.totalTickets} submission${stats.totalTickets === 1 ? '' : 's'} · ${stats.activeTickets} active`,
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.awaitingReply,
     questions: [
@@ -234,10 +234,10 @@ export function FeedbackPage() {
   return (
     <div className="space-y-4">
       <PageHeaderBar
-        title={copy?.title ?? 'My feedback'}
+        title={copy?.title ?? 'Support'}
         projectScope={stats.projectName ?? undefined}
-        description={copy?.description ?? 'Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app.'}
-        helpTitle={copy?.help?.title ?? 'About My feedback'}
+        description={copy?.description ?? 'Your support tickets to the Mushi team — bugs and feature requests about the console itself. End-user bug reports from your app live under Reports.'}
+        helpTitle={copy?.help?.title ?? 'About Support'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'A personal inbox for bugs and feature requests you file to the Mushi team. When we ship your idea, the release version appears on the row.'

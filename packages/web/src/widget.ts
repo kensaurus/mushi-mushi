@@ -106,6 +106,7 @@ export class MushiWidget {
   private lastSubmitQueuedOffline = false;
   /** Whether the user has clicked ✕ on the header banner this session. */
   private bannerDismissed = false;
+  private bannerResizeObserver: ResizeObserver | null = null;
   /** Persisted FAB position when draggable is enabled. */
   private fabPos: { x: number; y: number } | null = null;
   /** Cleanup fn for visualViewport keyboard listener. */
@@ -782,32 +783,55 @@ export class MushiWidget {
     return action !== 'never' && action !== 'manual';
   }
 
-  /** Height of the banner in px — kept in sync with the CSS `.mushi-banner` height (36px). */
+  /** Height of the banner in px — used as a fallback before first layout. */
   private static readonly BANNER_HEIGHT = 36;
 
-  /** CSS property applied to document.body so host-app content doesn't slide under the banner. */
+  /** CSS property applied to documentElement so host-app content doesn't slide under the banner. */
   private static readonly BODY_NUDGE_PROP = '--mushi-banner-offset';
 
-  private applyBodyNudge(position: 'top' | 'bottom'): void {
-    const h = `${MushiWidget.BANNER_HEIGHT}px`;
+  private applyBodyNudge(position: 'top' | 'bottom', heightPx = MushiWidget.BANNER_HEIGHT): void {
+    const h = `${heightPx}px`;
+    // Always update the CSS custom property so apps reading --mushi-banner-offset get the correct value.
+    document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
     if (position === 'top') {
-      document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
-      // Only nudge if the host hasn't already set an explicit body padding-top
-      // (check inline style only — computed style includes CSS rules we shouldn't clobber).
-      if (!document.body.style.paddingTop) {
+      if (document.body.dataset.mushiBannerNudged === 'top') {
+        // We already own the padding — update it to the newly measured height.
+        document.body.style.paddingTop = h;
+      } else if (!document.body.style.paddingTop) {
         document.body.style.paddingTop = h;
         document.body.dataset.mushiBannerNudged = 'top';
       }
     } else {
-      document.documentElement.style.setProperty(MushiWidget.BODY_NUDGE_PROP, h);
-      if (!document.body.style.paddingBottom) {
+      if (document.body.dataset.mushiBannerNudged === 'bottom') {
+        document.body.style.paddingBottom = h;
+      } else if (!document.body.style.paddingBottom) {
         document.body.style.paddingBottom = h;
         document.body.dataset.mushiBannerNudged = 'bottom';
       }
     }
   }
 
+  /**
+   * Schedule a height measurement after the next paint and set up a ResizeObserver
+   * so --mushi-banner-offset always tracks the actual rendered banner height
+   * (which can exceed BANNER_HEIGHT when safe-area-inset-top is in play on iOS,
+   * or when rich-layout text wraps on narrow viewports).
+   */
+  private trackBannerHeight(banner: HTMLElement, position: 'top' | 'bottom'): void {
+    const update = () => {
+      const h = banner.getBoundingClientRect().height;
+      if (h > 0) this.applyBodyNudge(position, h);
+    };
+    requestAnimationFrame(update);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.bannerResizeObserver = new ResizeObserver(update);
+      this.bannerResizeObserver.observe(banner);
+    }
+  }
+
   private removeBodyNudge(): void {
+    this.bannerResizeObserver?.disconnect();
+    this.bannerResizeObserver = null;
     document.documentElement.style.removeProperty(MushiWidget.BODY_NUDGE_PROP);
     const nudged = document.body.dataset.mushiBannerNudged;
     if (nudged === 'top') {
@@ -902,8 +926,7 @@ export class MushiWidget {
         appendAction(featLabel, () => this.open({ featureRequest: true }), true);
       }
 
-      for (const link of bc.links ?? []) {
-        const linkLabel = link.label?.trim();
+      for (const link of bc.links ?? []) {        const linkLabel = link.label?.trim();
         if (!linkLabel) continue;
         // Defense-in-depth: only http(s) and same-origin paths may render as
         // anchors. If banner links ever become remotely configurable, a
@@ -928,6 +951,12 @@ export class MushiWidget {
         }
       }
 
+      // Always show "My reports" as the last extra action — lets reporters
+      // check their submission history and admin replies without opening a
+      // fresh report form.
+      appendDivider(true);
+      appendAction('📬 My reports', () => this.openReporter(), true);
+
       banner.appendChild(nav);
       // Dismiss lives OUTSIDE the actions <nav>: it isn't navigation, and as
       // a direct flex child of the banner it can't be clipped off-screen when
@@ -948,13 +977,24 @@ export class MushiWidget {
         banner.appendChild(featBtn);
       }
 
+      const myReportsBtn = document.createElement('button');
+      myReportsBtn.className = 'mushi-banner-my-reports';
+      myReportsBtn.textContent = '📬 My reports';
+      myReportsBtn.setAttribute('aria-label', 'View my submitted reports');
+      myReportsBtn.addEventListener('click', () => this.openReporter());
+      banner.appendChild(myReportsBtn);
+
       banner.appendChild(dismissBtn);
     }
 
     this.shadow.appendChild(banner);
 
-    // Push body content so the banner doesn't overlap the host app's navigation.
+    // Apply body nudge immediately with the fallback height so host content
+    // shifts down on the very first paint, then re-measure after layout so
+    // --mushi-banner-offset reflects the actual rendered height (including
+    // env(safe-area-inset-top) on iOS and text-wrap on narrow viewports).
     this.applyBodyNudge(position);
+    this.trackBannerHeight(banner, position);
   }
 
   private effectiveTrigger(): NonNullable<MushiWidgetConfig['trigger']> {
@@ -1023,6 +1063,8 @@ export class MushiWidget {
     const pos = this.config.position;
     const t = this.locale;
 
+    this.bannerResizeObserver?.disconnect();
+    this.bannerResizeObserver = null;
     this.shadow.innerHTML = '';
 
     const style = document.createElement('style');
@@ -1677,6 +1719,10 @@ export class MushiWidget {
     // inside the widget rather than emitting a callback so the
     // optical feedback (button label flips to "Copied") is instant
     // and the host doesn't have to wire anything to enjoy it.
+    panel.querySelector('[data-action="view-my-reports"]')?.addEventListener('click', () => {
+      void this.loadReporterReports();
+    });
+
     panel.querySelector('[data-action="copy-report-id"]')?.addEventListener('click', (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
       const id = btn.dataset.copyId;
@@ -2070,6 +2116,19 @@ export class MushiWidget {
   recorderClickTrigger(): void {
     if (this.isOpen) this.close();
     this.open();
+  }
+
+  /**
+   * Open the widget directly to the reporter's "My reports" history view.
+   * Can be called from host apps via `sdk.openReporter()` or triggered by
+   * the banner's "My reports" link button.
+   */
+  openReporter(): void {
+    if (!this.isOpen) {
+      this.isOpen = true;
+      this.render();
+    }
+    void this.loadReporterReports();
   }
 
   recorderSelectCategory(category: MushiReportCategory): void {
