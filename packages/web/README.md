@@ -88,7 +88,7 @@ Each trigger respects its config flag — set `rageClick: false` to disable rage
 
 ## Bundle Size
 
-~7 KB brotli, enforced at **70 KB gzipped** (105 KB uncompressed) via `size-limit` in CI — budget raised for the 2026 editorial widget refresh. Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
+~7 KB brotli, enforced at **72 KB gzipped** (105 KB uncompressed) via `size-limit` in CI — budget raised for the 2026 editorial widget refresh + screenshot preview/consent surface. Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
 
 ## Quick Start
 
@@ -398,7 +398,7 @@ report — without you having to plumb it through the report payload yourself:
 const mushi = Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
 
 // Identify the active reporter (also sent to Sentry if @sentry/browser is loaded).
-mushi.identify({ id: 'usr_42', email: 'aya@example.com', segment: 'beta' });
+mushi.identify('usr_42', { email: 'aya@example.com', segment: 'beta' });
 
 // Sticky scalar tags. Up to 64 keys; values are string | number | boolean.
 mushi.setTag('feature', 'checkout-v2');
@@ -531,4 +531,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 50 edge functions · 278 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

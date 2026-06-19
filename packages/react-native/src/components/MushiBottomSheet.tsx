@@ -92,6 +92,11 @@ export interface MushiBottomSheetProps {
   screenshotDataUrl?: string
   /** Called when the user removes the attached screenshot. */
   onClearScreenshot?: () => void
+  /**
+   * Privacy caption shown beneath the screenshot preview. `null` hides it.
+   * Resolved by the provider from `widget.screenshotSensitiveHint`.
+   */
+  screenshotSensitiveHint?: string | null
 }
 
 export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
@@ -99,6 +104,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   onClose,
   screenshotDataUrl,
   onClearScreenshot,
+  screenshotSensitiveHint,
 }) => {
   const mushi = useMushiContext()
   const scheme = useColorScheme()
@@ -457,7 +463,9 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       Screenshot attached
                     </Text>
                     <Text style={[s.screenshotSub, { color: colors.sub }]}>
-                      Helps the team see the issue
+                      {screenshotSensitiveHint && screenshotSensitiveHint.trim()
+                        ? `⚠ ${screenshotSensitiveHint}`
+                        : 'Helps the team see the issue'}
                     </Text>
                   </View>
                   <TouchableOpacity
