@@ -1,5 +1,5 @@
 /**
- * Compact dashboard / get-started strip — nudges users to My feedback.
+ * Compact dashboard / get-started strip — nudges users to Support.
  */
 
 import { Link } from 'react-router-dom'
@@ -41,7 +41,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
           </div>
           <div className="flex gap-1.5 shrink-0">
             <Link to="/feedback">
-              <Btn size="sm">My feedback</Btn>
+              <Btn size="sm">Support</Btn>
             </Link>
           </div>
         </div>
@@ -54,7 +54,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-medium text-fg">My feedback</p>
+            <p className="text-xs font-medium text-fg">Support</p>
             {hasNews && (
               <Badge className="bg-brand/15 text-brand border border-brand/30 text-3xs">
                 {s.with_reply > 0

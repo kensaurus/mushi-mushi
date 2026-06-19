@@ -96,6 +96,8 @@ export interface WidgetRenderCtx {
   assistantTurns: AssistantTurn[];
   assistantSending: boolean;
   assistantError: string | null;
+  // ─── Progressive disclosure ──────────────────────────────────────
+  showAllCategories: boolean;
 }
 
 export function renderStep(ctx: WidgetRenderCtx): string {
@@ -208,7 +210,7 @@ export function renderHeader(ctx: WidgetRenderCtx, opts: {
     const { title, showBack = false, step, eyebrow } = opts;
 
     const eyebrowHtml = showBack
-      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190</button>`
+      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190 ${escapeHtml(t.widget.back)}</button>`
       : `<span class="mushi-header-eyebrow">${eyebrow ?? 'Mushi \u00B7 Report'}</span>`;
 
     const counterHtml = step
@@ -267,17 +269,38 @@ export function renderCategoryStep(ctx: WidgetRenderCtx): string {
             desc: t.step1.categoryDescriptions[id],
           }));
 
-    const categories = categoryEntries
-      .map(({ id, icon, label, desc }) => `
-        <button type="button" class="mushi-option-btn" data-category="${escapeHtml(id)}" role="radio" aria-checked="false">
-          <span class="mushi-option-icon" aria-hidden="true">${escapeHtml(icon)}</span>
-          <div class="mushi-option-text">
-            <span class="mushi-option-label">${escapeHtml(label)}</span>
-            ${desc ? `<span class="mushi-option-desc">${escapeHtml(desc)}</span>` : ''}
-          </div>
-          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-        </button>
-      `).join('');
+    const renderEntry = ({ id, icon, label, desc }: typeof categoryEntries[0]) => `
+      <button type="button" class="mushi-option-btn" data-category="${escapeHtml(id)}" role="radio" aria-checked="false">
+        <span class="mushi-option-icon" aria-hidden="true">${escapeHtml(icon)}</span>
+        <div class="mushi-option-text">
+          <span class="mushi-option-label">${escapeHtml(label)}</span>
+          ${desc ? `<span class="mushi-option-desc">${escapeHtml(desc)}</span>` : ''}
+        </div>
+        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+      </button>
+    `;
+
+    // Progressive disclosure: for the default built-in set, always show 'bug'
+    // (the most common) and hide slower/rarer categories behind a toggle.
+    // Custom category sets are shown in full (host knows which are primary).
+    const isCustom = ctx.config.categories && ctx.config.categories.length > 0;
+    const PRIMARY_LIMIT = 1; // show only 'bug' (index 0) by default
+    const primaryEntries = isCustom ? categoryEntries : categoryEntries.slice(0, PRIMARY_LIMIT);
+    const secondaryEntries = isCustom ? [] : categoryEntries.slice(PRIMARY_LIMIT);
+    const hasMore = secondaryEntries.length > 0;
+
+    const primaryCategories = primaryEntries.map(renderEntry).join('');
+    const secondaryCategories = secondaryEntries.map(renderEntry).join('');
+
+    const secondaryHtml = hasMore
+      ? ctx.showAllCategories
+        ? `<div class="mushi-categories-expanded">${secondaryCategories}</div>`
+        : `<button type="button" class="mushi-more-toggle" data-action="show-all-categories">
+             <span class="mushi-more-toggle-text">More issue types</span>
+             <span class="mushi-more-toggle-count">${secondaryEntries.length} more</span>
+             <span class="mushi-more-toggle-arrow" aria-hidden="true">\u2192</span>
+           </button>`
+      : '';
 
     return `
       ${renderHeader(ctx, { title: t.step1.heading, step: STEP_NUMBER.category })}
@@ -301,7 +324,8 @@ export function renderCategoryStep(ctx: WidgetRenderCtx): string {
           </div>
           <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
         </button>` : ''}
-        ${categories}
+        ${primaryCategories}
+        ${secondaryHtml}
         ${ctx.rewardsState ? renderRewardsNudge(ctx) : ''}
         <div class="mushi-community-footer">
           <button type="button" class="mushi-link-btn mushi-community-btn" data-action="open-account">
@@ -781,7 +805,7 @@ export function renderSuccessStep(ctx: WidgetRenderCtx): string {
     const time = stamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
     return `
-      ${renderHeader(ctx, { title: t.widget.title, eyebrow: 'Mushi \u00B7 Receipt' })}
+      ${renderHeader(ctx, { title: t.widget.title, showBack: true, eyebrow: 'Mushi \u00B7 Receipt' })}
       <div class="mushi-body">
         <div class="mushi-success">
           <div class="mushi-success-stamp" aria-hidden="true">
