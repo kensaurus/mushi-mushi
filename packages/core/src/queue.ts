@@ -28,6 +28,17 @@ const LS_KEY = 'mushi_offline_queue';
 const BATCH_SIZE = 10;
 const MAX_BACKOFF_MS = 60_000;
 const AUTO_FLUSH_INTERVAL_MS = 30_000;
+// A queued report that can never be delivered (corrupt payload, a permanently
+// offline host, or a network layer that keeps rejecting the POST) must not
+// loop forever — otherwise it hammers the API and floods the console on every
+// flush tick and page load. Two independent give-up gates bound the retry
+// surface:
+//   - MAX_DELIVERY_ATTEMPTS: drop a row after this many transient failures.
+//   - MAX_QUEUE_AGE_MS: hard backstop — evict any row older than this on the
+//     next flush regardless of attempt count (also clears legacy rows that
+//     predate the per-row attempt counter so they stop re-flushing).
+const MAX_DELIVERY_ATTEMPTS = 8;
+const MAX_QUEUE_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface OfflineQueue {
   enqueue(report: MushiReport): Promise<void>;
@@ -77,6 +88,24 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
 
   function isEncryptedRecord(row: StoredRow): row is EncryptedRecord {
     return !!(row as EncryptedRecord).payload && isEncryptedPayload((row as EncryptedRecord).payload);
+  }
+
+  // The delivery-attempt counter lives on the OUTER row (alongside `id` /
+  // `queuedAt`), so it can be read and bumped for an encrypted record without
+  // decrypting the payload.
+  function rowAttempts(row: StoredRow): number {
+    const n = (row as { attempts?: number }).attempts;
+    return typeof n === 'number' && Number.isFinite(n) ? n : 0;
+  }
+
+  // True when a row has outlived MAX_QUEUE_AGE_MS. Rows without a parseable
+  // `queuedAt` are never age-evicted here — the attempt counter is their gate.
+  function isExpired(row: StoredRow, now: number): boolean {
+    const queuedAt = (row as { queuedAt?: string }).queuedAt;
+    if (!queuedAt) return false;
+    const ts = Date.parse(queuedAt);
+    if (Number.isNaN(ts)) return false;
+    return now - ts > MAX_QUEUE_AGE_MS;
   }
 
   function detectBackend(): StorageBackend {
@@ -141,6 +170,18 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     });
   }
 
+  // Overwrite an existing row in place (keyed by `id`) — used to persist the
+  // incremented attempt counter after a transient failure.
+  async function idbPutRow(row: StoredRow): Promise<void> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(row);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async function idbSize(): Promise<number> {
     const db = await openDb();
     return new Promise((resolve, reject) => {
@@ -189,6 +230,17 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
   function lsDelete(id: string): void {
     const rows = lsRead().filter((r) => r.id !== id);
     lsWrite(rows);
+  }
+
+  // Replace an existing row in place (matched by `id`) — used to persist the
+  // incremented attempt counter after a transient failure.
+  function lsUpdateRow(row: StoredRow): void {
+    const rows = lsRead();
+    const idx = rows.findIndex((r) => (r as { id: string }).id === (row as { id: string }).id);
+    if (idx >= 0) {
+      rows[idx] = row;
+      lsWrite(rows);
+    }
   }
 
   // --- Unified interface ---
@@ -242,6 +294,29 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     } else {
       rows = lsRead();
     }
+
+    // Backstop: evict any row that has outlived MAX_QUEUE_AGE_MS before we
+    // spend a network attempt on it. This sweeps the whole queue (IndexedDB
+    // getAll() is key-ordered, not FIFO, so a stale row may not be in the
+    // batch window) and clears legacy rows that predate the attempt counter so
+    // they can't re-flush forever on every page load.
+    const now = Date.now();
+    const fresh: StoredRow[] = [];
+    for (const row of rows) {
+      if (isExpired(row, now)) {
+        const rowId = (row as { id: string }).id;
+        try {
+          if (backend === 'indexeddb') await idbDelete(rowId);
+          else lsDelete(rowId);
+        } catch {
+          lsDelete(rowId);
+        }
+        queueLog.debug('Offline queue: evicting stale report', { id: rowId });
+      } else {
+        fresh.push(row);
+      }
+    }
+    rows = fresh;
 
     const batch = rows.slice(0, BATCH_SIZE);
     let sent = 0;
@@ -308,10 +383,36 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
             lsDelete(rowId);
           }
         } else if (transient) {
-          queueLog.debug('Offline queue: transient failure, will retry', {
-            id: rowId,
-            code: result.error?.code,
-          });
+          // Bump the per-row attempt counter and give up once it crosses the
+          // ceiling, so a report the network keeps rejecting eventually leaves
+          // the queue instead of retrying forever on every flush + page load.
+          const nextAttempts = rowAttempts(row) + 1;
+          if (nextAttempts >= MAX_DELIVERY_ATTEMPTS) {
+            try {
+              if (backend === 'indexeddb') await idbDelete(rowId);
+              else lsDelete(rowId);
+            } catch {
+              lsDelete(rowId);
+            }
+            queueLog.warn('Offline queue: giving up on report after repeated failures', {
+              id: rowId,
+              attempts: nextAttempts,
+              code: result.error?.code,
+            });
+          } else {
+            (row as { attempts?: number }).attempts = nextAttempts;
+            try {
+              if (backend === 'indexeddb') await idbPutRow(row);
+              else lsUpdateRow(row);
+            } catch {
+              lsUpdateRow(row);
+            }
+            queueLog.debug('Offline queue: transient failure, will retry', {
+              id: rowId,
+              attempts: nextAttempts,
+              code: result.error?.code,
+            });
+          }
         }
         failed++;
         if (i < batch.length - 1) {

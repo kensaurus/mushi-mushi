@@ -492,7 +492,13 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         created_at?: string | null
       }>,
     )[activeProject.id] ?? [];
-    const failedFixesPreview = await attachReportTitles(db, failedPreviewRaw.slice(0, 3));
+    // deno-ts-ignore is not needed; cast breaks the deep Supabase generic
+    // instantiation that causes TS2589 when the full SupabaseClient type is
+    // traversed to verify the narrow structural parameter type.
+    const failedFixesPreview = await attachReportTitles(
+      db as unknown as Parameters<typeof attachReportTitles>[0],
+      failedPreviewRaw.slice(0, 3),
+    );
 
     const openBacklog = recentReports.filter((r) => {
       const status = String(r.status ?? '');

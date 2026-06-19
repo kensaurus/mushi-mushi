@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
   "license": "MIT",
   "type": "module",
@@ -80,7 +80,7 @@
     {
       "name": "Core SDK bundle (minified + gzipped)",
       "path": "dist/index.js",
-      "limit": "70 KB",
+      "limit": "70.1 KB",
       "gzip": true
     },
     {

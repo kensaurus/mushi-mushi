@@ -8,7 +8,6 @@
   "baseBranch": "master",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "mushi-mushi",
     "@mushi-mushi/server",
     "@mushi-mushi/agents",
     "@mushi-mushi/verify",
