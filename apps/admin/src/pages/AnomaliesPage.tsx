@@ -8,6 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -37,6 +38,7 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { AnomaliesStatusBanner } from '../components/anomalies/AnomaliesStatusBanner'
+import { AnomaliesDetectionGuide } from '../components/anomalies/AnomaliesDetectionGuide'
 import {
   EMPTY_ANOMALIES_STATS,
   type AnomaliesStats,
@@ -132,6 +134,7 @@ export function AnomaliesPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<AnomaliesStats>('/v1/admin/anomalies/stats')
+  usePublishPageHeroStats('/anomalies', statsData)
   const stats = { ...EMPTY_ANOMALIES_STATS, ...statsData }
 
   const {
@@ -316,6 +319,8 @@ export function AnomaliesPage() {
         refreshing={statsValidating}
         plainBanner={ux.plainBanner}
       />
+
+      {activeTab === 'overview' && <AnomaliesDetectionGuide topPriority={stats.topPriority} />}
 
       {!ux.hideTabs && (
       <SegmentedControl<AnomaliesTabId>

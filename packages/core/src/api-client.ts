@@ -18,6 +18,9 @@ import { checkReportPayloadSize } from './payload-guard';
 
 /** Header carrying the signed end-user identity token (verified server-side). */
 export const MUSHI_USER_TOKEN_HEADER = 'X-Mushi-User-Token';
+/** Build-time SDK package identity — recorded on every authenticated heartbeat. */
+export const MUSHI_SDK_PACKAGE_HEADER = 'X-Mushi-SDK-Package';
+export const MUSHI_SDK_VERSION_HEADER = 'X-Mushi-SDK-Version';
 
 export interface ApiClientOptions {
   projectId: string;
@@ -29,6 +32,9 @@ export interface ApiClientOptions {
   apiEndpoint?: string;
   timeout?: number;
   maxRetries?: number;
+  /** When set, sent on every request so heartbeats record the running SDK version. */
+  sdkPackage?: string;
+  sdkVersion?: string;
   /**
    * Returns the current signed end-user identity JWT, or null when the user is
    * anonymous. When present it is sent on the X-Mushi-User-Token header so the
@@ -56,6 +62,8 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     timeout = DEFAULT_TIMEOUT,
     maxRetries = DEFAULT_MAX_RETRIES,
     getUserToken,
+    sdkPackage,
+    sdkVersion,
   } = options;
 
   let baseUrl = apiEndpoint.replace(/\/$/, '');
@@ -80,6 +88,8 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           'Content-Type': 'application/json',
           'X-Mushi-Api-Key': apiKey,
           'X-Mushi-Project': projectId,
+          ...(sdkPackage ? { [MUSHI_SDK_PACKAGE_HEADER]: sdkPackage } : {}),
+          ...(sdkVersion ? { [MUSHI_SDK_VERSION_HEADER]: sdkVersion } : {}),
           ...(userToken ? { [MUSHI_USER_TOKEN_HEADER]: userToken } : {}),
           ...(internalKind ? { [MUSHI_INTERNAL_HEADER]: internalKind } : {}),
           ...extraHeaders,
@@ -164,6 +174,8 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         'Content-Type': 'application/json',
         'X-Mushi-Api-Key': apiKey,
         'X-Mushi-Project': projectId,
+        ...(sdkPackage ? { [MUSHI_SDK_PACKAGE_HEADER]: sdkPackage } : {}),
+        ...(sdkVersion ? { [MUSHI_SDK_VERSION_HEADER]: sdkVersion } : {}),
         [MUSHI_INTERNAL_HEADER]: 'reporter-poll',
         'X-Reporter-Token-Hash': tokenHash,
         'X-Reporter-Ts': ts,

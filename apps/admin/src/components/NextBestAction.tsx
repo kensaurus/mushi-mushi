@@ -107,7 +107,7 @@ export function NextBestAction() {
           Done: {NBA_LABELS[handoff.from]}
         </span>
         <p className="text-xs font-medium text-fg leading-tight truncate flex-1 min-w-0">
-          Nice. Next up: <span className="text-fg-muted">{handoff.nextTitle}</span>
+          Nice. Now: <span className="text-fg-muted">{handoff.nextTitle}</span>
         </p>
       </aside>
     )

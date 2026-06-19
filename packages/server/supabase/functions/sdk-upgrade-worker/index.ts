@@ -11,7 +11,13 @@ import { runSdkUpgradeJob } from '../_shared/sdk-upgrade-runner.ts'
 
 const app = new Hono()
 
-app.post('/', async (c) => {
+// Supabase serves this function at `/functions/v1/sdk-upgrade-worker`; Hono sees
+// the path WITH the function name, so routes MUST be prefixed with it (mirrors
+// `library-modernizer` / `prompt-auto-tune` and the api function's
+// `.basePath('/api')`). A bare `'/'` route silently 404s every invocation.
+app.get('/sdk-upgrade-worker/health', (c) => c.json({ ok: true }))
+
+app.post('/sdk-upgrade-worker', async (c) => {
   const unauthorized = requireServiceRoleAuth(c.req.raw)
   if (unauthorized) return unauthorized
 

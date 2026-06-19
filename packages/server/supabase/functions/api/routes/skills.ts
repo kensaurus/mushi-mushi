@@ -90,6 +90,103 @@ function skillsRoutes() {
 
   // ── Catalog ─────────────────────────────────────────────────────────────
 
+  // ── Sidebar stats ───────────────────────────────────────────────────────
+
+  r.get('/stats', async (c) => {
+    const projectId = projectIdFromRequest(c)
+    if (!projectId) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id required' } }, 400)
+    }
+
+    const { data: projectRow } = await db()
+      .from('projects')
+      .select('id, project_name')
+      .eq('id', projectId)
+      .maybeSingle()
+
+    const [{ count: catalogTotal }, { data: runs }] = await Promise.all([
+      db()
+        .from('agent_skills')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true),
+      db()
+        .from('skill_pipeline_runs')
+        .select('id, status')
+        .eq('project_id', projectId)
+        .in('status', ['pending', 'running', 'failed'])
+        .limit(200),
+    ])
+
+    let activeRuns = 0
+    let failedRuns = 0
+    const activeRunIds: string[] = []
+    for (const run of runs ?? []) {
+      const status = run.status as string
+      if (status === 'running' || status === 'pending') {
+        activeRuns += 1
+        activeRunIds.push(run.id as string)
+      } else if (status === 'failed') {
+        failedRuns += 1
+      }
+    }
+
+    let awaitingCheckin = 0
+    if (activeRunIds.length > 0) {
+      const { count } = await db()
+        .from('skill_pipeline_step_runs')
+        .select('id', { count: 'exact', head: true })
+        .in('run_id', activeRunIds)
+        .eq('status', 'pending')
+      awaitingCheckin = count ?? 0
+    }
+
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(projectId)}`
+
+    let topPriority: 'empty_catalog' | 'failed_runs' | 'awaiting_checkin' | 'active_runs' | 'healthy' =
+      'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if ((catalogTotal ?? 0) === 0) {
+      topPriority = 'empty_catalog'
+      topPriorityLabel = 'Skill catalog is empty — add a GitHub source and sync (try kensaurus/cursor-kenji).'
+      topPriorityTo = scoped('/skills?tab=sources')
+    } else if (failedRuns > 0) {
+      topPriority = 'failed_runs'
+      topPriorityLabel = `${failedRuns} pipeline run${failedRuns === 1 ? '' : 's'} failed — open the run to read the step error.`
+      topPriorityTo = scoped('/skills?tab=pipelines')
+    } else if (awaitingCheckin > 0) {
+      topPriority = 'awaiting_checkin'
+      topPriorityLabel = `${awaitingCheckin} step${awaitingCheckin === 1 ? '' : 's'} waiting for handoff check-in in your IDE.`
+      topPriorityTo = scoped('/skills?tab=pipelines')
+    } else if (activeRuns > 0) {
+      topPriority = 'active_runs'
+      topPriorityLabel = `${activeRuns} pipeline run${activeRuns === 1 ? '' : 's'} in progress — watch steps update live.`
+      topPriorityTo = scoped('/skills?tab=pipelines')
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${catalogTotal ?? 0} skills synced — attach one to a report or start from the catalog.`
+      topPriorityTo = scoped('/skills?tab=catalog')
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId,
+        projectName: projectRow?.project_name ?? null,
+        catalogTotal: catalogTotal ?? 0,
+        activeRuns,
+        failedRuns,
+        awaitingCheckin,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   // List skills — paginated, filterable by category or free-text search
   r.get('/', async (c) => {
     const category = c.req.query('category')

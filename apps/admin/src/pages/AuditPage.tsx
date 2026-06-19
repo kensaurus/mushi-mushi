@@ -13,6 +13,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { AuditStatusBanner, isAuditStatusBannerCritical } from '../components/audit/AuditStatusBanner'
+import { AuditGuide } from '../components/audit/AuditGuide'
 import { EMPTY_AUDIT_STATS, type AuditStats, type AuditTabId } from '../components/audit/types'
 import {
   actorMixDetail,
@@ -708,6 +709,8 @@ export function AuditPage() {
           onFilterWarns={() => applyPreset({ tab: 'log', action: 'api_key.revoked', since: '24h' })}
         />
       )}
+
+      <AuditGuide failCount24h={stats.failCount24h} />
 
       <SegmentedControl
         value={activeTab}

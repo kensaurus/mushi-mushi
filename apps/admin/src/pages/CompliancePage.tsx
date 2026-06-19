@@ -32,6 +32,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { ComplianceStatusBanner, isComplianceStatusBannerCritical } from '../components/compliance/ComplianceStatusBanner'
+import { ComplianceGuide } from '../components/compliance/ComplianceGuide'
 import {
   EMPTY_COMPLIANCE_STATS,
   type ComplianceStats,
@@ -619,6 +620,8 @@ export function CompliancePage() {
           refreshing={refreshing}
         />
       )}
+
+      <ComplianceGuide topPriority={stats.topPriority} />
 
       <SegmentedControl
         value={activeTab}

@@ -19,9 +19,28 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { apiKeyAuth, jwtAuth, timingSafeEqual } from '../../_shared/auth.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
-import { dbError, userCanAccessProject } from '../shared.ts';
+import { dbError, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
 
 const cqlog = log.child('content-quality');
+
+export interface ContentQualityStats {
+  hasAnyProject: boolean;
+  projectId: string | null;
+  projectName: string | null;
+  openCount: number;
+  inReviewCount: number;
+  regeneratingCount: number;
+  userFlagOpenCount: number;
+  failedRegenCount: number;
+  needsAttentionCount: number;
+  topPriority:
+    | 'no_project'
+    | 'regen_failed'
+    | 'user_flags'
+    | 'open_issues'
+    | 'regenerating'
+    | 'healthy';
+}
 
 /**
  * Load a content_quality_issue by id and verify the JWT caller can access
@@ -330,6 +349,97 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
 
     cqlog.info('callback_processed', { issueId: issue_id, status });
     return c.json({ ok: true });
+  });
+
+  // ── GET /v1/admin/content-quality/stats — sidebar badge slice ─────────────
+  app.get('/v1/admin/content-quality/stats', jwtAuth, async (c) => {
+    const db = getServiceClient();
+    const userId = c.get('userId') as string;
+
+    const empty: ContentQualityStats = {
+      hasAnyProject: false,
+      projectId: null,
+      projectName: null,
+      openCount: 0,
+      inReviewCount: 0,
+      regeneratingCount: 0,
+      userFlagOpenCount: 0,
+      failedRegenCount: 0,
+      needsAttentionCount: 0,
+      topPriority: 'no_project',
+    };
+
+    const resolved = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolved) return resolved.response;
+    const { project } = resolved;
+    const projectId = project.id as string;
+    const projectName = (project.project_name as string | null) ?? null;
+
+    const [
+      openRes,
+      inReviewRes,
+      regenStatusRes,
+      userFlagRes,
+      failedRegenRes,
+    ] = await Promise.all([
+      db
+        .from('content_quality_issues')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('status', 'open'),
+      db
+        .from('content_quality_issues')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('status', 'in_review'),
+      db
+        .from('content_quality_issues')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('status', 'regenerating'),
+      db
+        .from('content_quality_issues')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('status', 'open')
+        .eq('reason', 'user_flag'),
+      db
+        .from('content_quality_issues')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('regen_status', 'failed')
+        .in('status', ['open', 'in_review', 'regenerating']),
+    ]);
+
+    const openCount = openRes.count ?? 0;
+    const inReviewCount = inReviewRes.count ?? 0;
+    const regeneratingCount = regenStatusRes.count ?? 0;
+    const userFlagOpenCount = userFlagRes.count ?? 0;
+    const failedRegenCount = failedRegenRes.count ?? 0;
+
+    const needsAttentionCount = openCount + inReviewCount;
+    let topPriority: ContentQualityStats['topPriority'] = 'healthy';
+    if (failedRegenCount > 0) topPriority = 'regen_failed';
+    else if (userFlagOpenCount > 0) topPriority = 'user_flags';
+    else if (needsAttentionCount > 0) topPriority = 'open_issues';
+    else if (regeneratingCount > 0) topPriority = 'regenerating';
+
+    const stats: ContentQualityStats = {
+      hasAnyProject: true,
+      projectId,
+      projectName,
+      openCount,
+      inReviewCount,
+      regeneratingCount,
+      userFlagOpenCount,
+      failedRegenCount,
+      needsAttentionCount,
+      topPriority,
+    };
+
+    return c.json({ ok: true, data: stats });
   });
 
   // ── GET /v1/admin/content-quality — list issues ────────────────────────────

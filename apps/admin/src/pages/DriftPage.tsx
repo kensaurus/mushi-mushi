@@ -8,6 +8,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -35,6 +36,7 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { DriftStatusBanner } from '../components/drift/DriftStatusBanner'
+import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
 import {
   EMPTY_DRIFT_STATS,
   type DriftStats,
@@ -145,6 +147,7 @@ export function DriftPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<DriftStats>('/v1/admin/drift/stats')
+  usePublishPageHeroStats('/drift', statsData)
   const stats = { ...EMPTY_DRIFT_STATS, ...statsData }
 
   const {
@@ -421,6 +424,8 @@ export function DriftPage() {
         refreshing={statsValidating}
         plainBanner={ux.plainBanner}
       />
+
+      {activeTab === 'overview' && <DriftSchemaGuide topPriority={stats.topPriority} />}
 
       {!ux.hideTabs && (
       <SegmentedControl<DriftTabId>

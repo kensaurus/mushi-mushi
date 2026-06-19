@@ -47,7 +47,11 @@ export function Badge({ children, className = '', title }: BadgeProps) {
   )
 }
 
-/* ── Card ───────────────────────────────────────────────────────────────── */
+/* ── Card ─────────────────────────────────────────────────────────────────
+ *
+ * Guide surface elevation: page bg → FeatureExplainPanel (raised) → stage rows
+ * (overlay or semantic muted). Inside Card use variant="inset" (page surface).
+ * Never use bg-transparent or alpha-mixed surface tokens — they bleed page gray. */
 
 interface CardProps {
   children: ReactNode
@@ -56,9 +60,21 @@ interface CardProps {
   elevated?: boolean
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void
   title?: string
+  /** Inline style forwarded to the card root. Needed so callers (e.g.
+   *  staggered KPI tiles) can pass an `animationDelay` to the actual grid
+   *  item rather than a nested wrapper that the keyframe never reaches. */
+  style?: React.CSSProperties
 }
 
-export function Card({ children, className = '', interactive, elevated, onClick, title }: CardProps) {
+export function Card({
+  children,
+  className = '',
+  interactive,
+  elevated,
+  onClick,
+  title,
+  style,
+}: CardProps) {
   // When the card has an onClick handler we promote it to button semantics so
   // the keyboard story is honest — a div with a click handler isn't reachable.
   const interactiveProps = onClick
@@ -81,6 +97,7 @@ export function Card({ children, className = '', interactive, elevated, onClick,
     return (
       <div
         className={`card-elevated ${interactiveCls} ${className}`}
+        style={style}
         onClick={onClick}
         title={title}
         {...interactiveProps}
@@ -92,6 +109,7 @@ export function Card({ children, className = '', interactive, elevated, onClick,
   return (
     <div
       className={`bg-surface-raised border border-edge-subtle rounded-md shadow-card ${interactiveCls} ${interactive || onClick ? 'hover:bg-surface-overlay' : ''} ${className}`}
+      style={style}
       onClick={onClick}
       title={title}
       {...interactiveProps}
@@ -252,9 +270,9 @@ export function Section({ title, children, className = '', action, icon, freshne
 /** Neutral chrome surface for informational help strips (de-amber rule). */
 const HELP_BANNER_TONE: Record<'neutral' | 'warn' | 'danger' | 'info', string> = {
   neutral: 'border-chrome-border bg-chrome text-fg-secondary',
-  warn: 'border-warn/30 bg-warn-muted/20 text-fg',
-  danger: 'border-danger/30 bg-danger-muted/20 text-fg',
-  info: 'border-info/30 bg-info-muted/20 text-fg',
+  warn: 'border-warn/30 bg-warn-muted text-fg',
+  danger: 'border-danger/30 bg-danger-muted text-fg',
+  info: 'border-info/30 bg-info-muted text-fg',
 }
 
 export interface HelpBannerProps {

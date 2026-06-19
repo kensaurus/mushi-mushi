@@ -1139,6 +1139,20 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-success-receipt-warn {
       color: ${widgetAccent};
     }
+    .mushi-success-my-reports {
+      display: block;
+      margin: 12px auto 0;
+      font-size: 12px;
+      font-family: ${fontMono};
+      color: ${widgetAccent};
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 2px;
+    }
+    .mushi-success-my-reports:hover { opacity: 0.75; }
     .mushi-success-sla {
       margin-top: 2px;
       font-family: ${fontDisplay};
@@ -1629,6 +1643,28 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       background: rgba(0,0,0,0.12) !important;
     }
     .mushi-banner.neon .mushi-banner-dismiss:hover { background: rgba(0,0,0,0.18) !important; }
+
+    /* "My reports" link in the simple (non-rich) banner layout */
+    .mushi-banner-my-reports {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: ${fontMono};
+      opacity: 0.75;
+      color: inherit;
+      padding: 2px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: opacity 0.15s, background 0.15s;
+      margin-left: 4px;
+    }
+    .mushi-banner-my-reports:hover {
+      opacity: 1;
+      background: rgba(0,0,0,0.10);
+    }
+    .mushi-banner.neon .mushi-banner-my-reports:hover { background: rgba(0,0,0,0.18); }
 
     @keyframes mushi-banner-slide-in {
       from { transform: translateY(calc(-1 * 100%)); opacity: 0.5; }

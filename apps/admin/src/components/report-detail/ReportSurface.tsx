@@ -37,10 +37,11 @@ export interface ContainedBlockProps {
   children: ReactNode
   tone?: BlockTone
   label?: string
+  icon?: ReactNode
   className?: string
 }
 
-export function ContainedBlock({ children, tone = 'muted', label, className = '' }: ContainedBlockProps) {
+export function ContainedBlock({ children, tone = 'muted', label, icon, className = '' }: ContainedBlockProps) {
   return (
     <div className={`rounded-md border px-3 py-2.5 text-xs ${BLOCK_TONE[tone]} ${className}`}>
       {label && (
@@ -48,7 +49,14 @@ export function ContainedBlock({ children, tone = 'muted', label, className = ''
           {label}
         </p>
       )}
-      {children}
+      {icon ? (
+        <div className="flex gap-2 items-start">
+          {icon}
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   )
 }
@@ -60,10 +68,10 @@ type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand'
 
 const CHIP_TONE: Record<ChipTone, string> = {
   neutral: 'bg-surface-overlay text-fg-muted border-edge',
-  ok:      'bg-ok/15 text-ok border-ok/35',
-  warn:    'bg-warn-muted/50 text-warning-foreground border-warn/35',
-  danger:  'bg-danger-muted/50 text-danger-foreground border-danger/35',
-  info:    'bg-info/15 text-info border-info/35',
+  ok:      'bg-ok-muted text-ok border-ok/35',
+  warn:    'bg-warn-muted text-warning-foreground border-warn/35',
+  danger:  'bg-danger-muted text-danger-foreground border-danger/35',
+  info:    'bg-info-muted text-info border-info/35',
   brand:   'bg-brand-subtle text-brand border-brand/35',
 }
 

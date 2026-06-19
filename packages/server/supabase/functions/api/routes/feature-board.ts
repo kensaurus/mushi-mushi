@@ -209,6 +209,41 @@ function featureBoardRoutes() {
     })
   })
 
+  r.get('/stats', async (c) => {
+    const projectId = projectIdFromRequest(c)
+    if (!projectId) return jsonErr(c, 'MISSING_PROJECT', 'project_id is required', 400)
+
+    const { data: tickets, error } = await db()
+      .from('feature_requests_with_stats')
+      .select('vote_count, shipped_at')
+      .eq('project_id', projectId)
+
+    if (error) return jsonErr(c, 'DB_ERROR', error.message, 500)
+
+    const rows = tickets ?? []
+    let openCount = 0
+    let shippedCount = 0
+    let totalVotes = 0
+    let trendingCount = 0
+    for (const row of rows) {
+      const votes = Number(row.vote_count ?? 0)
+      totalVotes += votes
+      if (row.shipped_at) {
+        shippedCount += 1
+      } else {
+        openCount += 1
+        if (votes >= 3) trendingCount += 1
+      }
+    }
+
+    return jsonOk(c, {
+      openCount,
+      shippedCount,
+      totalVotes,
+      trendingCount,
+    })
+  })
+
   r.get('/:id', async (c) => {
     const userId = c.get('userId') as string
     const projectId = projectIdFromRequest(c)

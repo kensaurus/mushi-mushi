@@ -243,35 +243,46 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     let topPriority = empty.topPriority;
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
 
     if (errorRatePct > 5) {
       topPriority = 'llm_errors';
-      topPriorityLabel = `LLM error rate ${errorRatePct}% over ${windowParam} — check provider status or rotate API keys.`;
-      topPriorityTo = '/health?tab=llm';
+      topPriorityLabel = `${errorRatePct}% of AI calls failed recently. Check your API keys in Settings or inspect the failing model on the LLM tab.`;
+      topPriorityTo = scoped('/health?tab=llm');
     } else if (cronErrorCount > 0) {
       topPriority = 'cron_error';
-      topPriorityLabel = `${cronErrorCount} cron job${cronErrorCount === 1 ? '' : 's'} failing — trigger manually to confirm, then inspect logs.`;
-      topPriorityTo = '/health?tab=cron';
+      topPriorityLabel =
+        cronErrorCount === 1
+          ? 'A scheduled background job failed. Open Cron to see which job broke and when it last ran.'
+          : `${cronErrorCount} scheduled jobs failed. Open Cron to see which jobs broke and when they last ran.`;
+      topPriorityTo = scoped('/health?tab=cron');
     } else if (fallbackRatePct > 10) {
       topPriority = 'llm_fallbacks';
-      topPriorityLabel = `Fallback rate ${fallbackRatePct}% — primary provider may be rate-limiting.`;
-      topPriorityTo = '/health?tab=llm';
+      topPriorityLabel = `${fallbackRatePct}% of AI calls used the backup model — your primary provider may be rate-limiting.`;
+      topPriorityTo = scoped('/health?tab=llm');
     } else if (cronStaleCount > 0) {
       topPriority = 'cron_stale';
-      topPriorityLabel = `${cronStaleCount} cron job${cronStaleCount === 1 ? '' : 's'} stale — last run exceeded 3× expected cadence.`;
-      topPriorityTo = '/health?tab=cron';
+      topPriorityLabel =
+        cronStaleCount === 1
+          ? 'A scheduled job missed its expected run time — open Cron to see which one and when it last ran.'
+          : `${cronStaleCount} scheduled jobs missed their expected run time — open Cron to inspect each one.`;
+      topPriorityTo = scoped('/health?tab=cron');
     } else if (totalCalls === 0) {
       topPriority = 'idle';
-      topPriorityLabel = `No LLM activity in the last ${windowParam} — send a test report to verify routing.`;
-      topPriorityTo = '/onboarding';
+      topPriorityLabel = `No AI activity in the last ${windowParam} — send a test report from Setup to verify routing.`;
+      topPriorityTo = scoped('/onboarding?tab=verify');
     } else if (cronWarnCount > 0) {
       topPriority = 'cron_warn';
-      topPriorityLabel = `${cronWarnCount} cron job${cronWarnCount === 1 ? '' : 's'} running late — not yet blocking.`;
-      topPriorityTo = '/health?tab=cron';
+      topPriorityLabel =
+        cronWarnCount === 1
+          ? 'One scheduled job is running late — not yet blocking the pipeline.'
+          : `${cronWarnCount} scheduled jobs are running late — not yet blocking the pipeline.`;
+      topPriorityTo = scoped('/health?tab=cron');
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${totalCalls} LLM calls · ${errorRatePct}% errors · ${fallbackRatePct}% fallbacks — all systems nominal.`;
-      topPriorityTo = '/health?tab=activity';
+      topPriorityTo = scoped('/health?tab=activity');
     }
 
     return c.json({

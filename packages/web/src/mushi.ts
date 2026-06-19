@@ -132,6 +132,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     apiKey: bootstrapConfig.apiKey,
     ...(bootstrapConfig.apiEndpoint ? { apiEndpoint: bootstrapConfig.apiEndpoint } : {}),
     getUserToken: () => userToken,
+    sdkPackage: MUSHI_SDK_PACKAGE,
+    sdkVersion: MUSHI_SDK_VERSION,
   });
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
@@ -1161,6 +1163,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.setTrigger(trigger);
     },
 
+    openReporter() {
+      widget.openReporter();
+    },
+
     close() {
       widget.close();
     },
@@ -1875,6 +1881,7 @@ function createNoopInstance(): MushiSDKInstance {
     hide: () => {},
     attachTo: () => () => {},
     setTrigger: () => {},
+    openReporter: () => {},
     destroy: () => {
       instance = null;
     },

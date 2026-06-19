@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -122,6 +123,7 @@ export function ResearchPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ResearchStats>('/v1/admin/research/stats')
+  usePublishPageHeroStats('/research', statsData)
   const stats = { ...EMPTY_RESEARCH_STATS, ...statsData }
 
   const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null

@@ -10,6 +10,11 @@ import { CopyViewLinkButton } from '../CopyViewLinkButton';
 import { usePageHelpRegister } from '../../lib/pageHelpContext';
 import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../../lib/pageHelpRead';
 import { isDevFacingHint } from '../../lib/devHintCopy';
+import {
+  PAGE_HELP_BANNER_INNER_BORDER,
+  PAGE_HELP_BANNER_SHELL,
+  PAGE_HELP_BANNER_SUMMARY_HOVER,
+} from '../../lib/pageHelpSurfaces';
 import { Tooltip } from './misc';
 
 
@@ -188,19 +193,6 @@ function writePageHelpDismissed(title: string, dismissed: boolean) {
   }
 }
 
-/** Returning users (anyone who has visited the admin before) shouldn't be
- *  bombarded with help disclosures on every page. We mark the visit on first
- *  page-help mount and use it to flip the default from open -> closed for
- * subsequent sessions on pages they haven't explicitly opened. . */
-function isReturningUser(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(PAGEHELP_VISITED_FLAG) === '1'
-  } catch {
-    return false
-  }
-}
-
 function markVisited() {
   if (typeof window === 'undefined') return
   try {
@@ -210,7 +202,7 @@ function markVisited() {
   }
 }
 
-/** Top-of-page "About this page" banner — yellow until read, green after. */
+/** Top-of-page "About this page" banner — green guide surface; collapsed by default. */
 export function PageHelpBanner({
   title,
   whatIsIt,
@@ -238,10 +230,6 @@ export function PageHelpBanner({
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
     if (readPageHelpDismissed(title)) return false
-    // Returning users start collapsed on every page — expand only the first
-    // time they land on a route whose help has never been marked read.
-    if (isReturningUser()) return false
-    if (!isPageHelpRead(routeKey)) return true
     return false
   })
 
@@ -259,16 +247,13 @@ export function PageHelpBanner({
     }
   }
 
-  // Neutral chrome surface — amber was competing with semantic ok/warn/danger
-  // colours that actually mean something. The unread badge is the status signal.
-  const surfaceClass = 'border-chrome-border bg-chrome open:bg-chrome'
-  const iconClass = isRead
-    ? 'bg-ok-muted/40 text-ok'
-    : 'bg-brand-subtle text-brand'
+  // Moss-green guide surface — calm, readable, distinct from warn/danger chrome.
+  const surfaceClass = PAGE_HELP_BANNER_SHELL
+  const iconClass = 'bg-ok-muted/60 text-ok'
   const statusLabel = isRead ? 'Read' : 'New'
   const statusBadgeClass = isRead
-    ? 'bg-ok-muted/40 text-ok border border-ok/35'
-    : 'bg-brand-subtle text-brand border border-brand/35'
+    ? 'bg-ok-muted/70 text-ok border border-ok/40'
+    : 'bg-ok-muted/50 text-ok border border-ok/35'
 
   return (
     <details
@@ -276,7 +261,7 @@ export function PageHelpBanner({
       onToggle={handleToggle}
       className={`group mb-3 w-full min-w-0 rounded-md border motion-safe:transition-colors motion-safe:duration-150 ${surfaceClass}`}
     >
-      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted hover:bg-surface-overlay/30 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
+      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER}`}>
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
@@ -305,7 +290,7 @@ export function PageHelpBanner({
         </span>
         <span className="ml-auto hidden text-3xs text-fg-faint sm:inline">{open ? 'Click to collapse' : 'Click to expand'}</span>
       </summary>
-      <div className="w-full min-w-0 border-t border-chrome-border px-3 py-3 sm:px-4">
+      <div className={`w-full min-w-0 border-t px-3 py-3 sm:px-4 ${PAGE_HELP_BANNER_INNER_BORDER}`}>
         <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2">
           <HelpSection tone="info" title="What it is" className="md:col-span-2">
             <HelpRichText text={whatIsIt} />

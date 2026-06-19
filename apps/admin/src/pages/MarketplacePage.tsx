@@ -8,6 +8,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -121,6 +122,7 @@ export function MarketplacePage() {
   const installed = installedQuery.data?.plugins ?? []
   const dispatchLog = dispatchQuery.data?.entries ?? []
   const stats = { ...EMPTY_MARKETPLACE_STATS, ...statsQuery.data, catalogTotal: statsQuery.data?.catalogTotal ?? catalog.length }
+  usePublishPageHeroStats('/marketplace', statsQuery.data)
 
   const loading = Boolean(
     catalogQuery.loading ||

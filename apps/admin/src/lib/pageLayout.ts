@@ -27,3 +27,6 @@ export const PAGE_SHELL_CLASS: Record<PageLayoutWidth, string> = {
   fluid:
     'w-full max-w-none mx-auto px-3 sm:px-4 lg:px-5 xl:px-6 py-3 sm:py-4 motion-safe:transition-[padding] motion-safe:duration-base',
 }
+
+/** Full-width page body stack — matches shell padding, no extra horizontal inset. */
+export const PAGE_CONTENT_STACK = 'flex w-full min-w-0 flex-col gap-4'

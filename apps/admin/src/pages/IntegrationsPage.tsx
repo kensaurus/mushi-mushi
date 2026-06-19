@@ -31,12 +31,17 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   PLATFORM_DEFS,
   ROUTING_PROVIDERS,
+  EMPTY_INTEGRATION_STATS,
   type HealthRow,
+  type IntegrationStats,
   type Kind,
   type PlatformResponse,
   type RoutingIntegration,
   type RoutingProviderDef,
 } from '../components/integrations/types'
+import { IntegrationStatusBanner } from '../components/integrations/IntegrationStatusBanner'
+import { IntegrationsPageIntro } from '../components/integrations/IntegrationsPageIntro'
+import { isIntegrationsBannerVisible } from '../lib/integrationsExplainer'
 import { usePageCopy } from '../lib/copy'
 
 export function IntegrationsPage() {
@@ -52,8 +57,13 @@ export function IntegrationsPage() {
   const settingsQuery = usePageData<{ slackConfigured?: boolean; slackTeamName?: string | null }>(
     '/v1/admin/settings/stats',
   )
+  const statsQuery = usePageData<IntegrationStats>('/v1/admin/integrations/stats')
+  const stats = statsQuery.data ?? EMPTY_INTEGRATION_STATS
 
   const platform = platformQuery.data?.platform ?? null
+  /** Flat map: field name → where the effective value came from ('project'|'org'|'env'|null) */
+  const sourceByField = platformQuery.data?.sourceByField ?? {}
+  const organizationId = platformQuery.data?.organizationId ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
   const vercelSlug = (routing.find((r) => r.integration_type === 'vercel')?.config?.project_slug as string | null) ?? null
@@ -72,7 +82,45 @@ export function IntegrationsPage() {
     platformQuery.reload()
     historyQuery.reload()
     routingQuery.reload()
-  }, [platformQuery, historyQuery, routingQuery])
+    statsQuery.reload()
+  }, [platformQuery, historyQuery, routingQuery, statsQuery])
+
+  /** True when GitHub is effectively configured (project, org, or env-backed). */
+  const githubConnected = useMemo(() => {
+    const githubDef = PLATFORM_DEFS.find((d) => d.kind === 'github')
+    if (!githubDef) return false
+    return githubDef.fields
+      .filter((f) => f.required)
+      .every((f) => {
+        if (platform?.github?.[f.name] != null) return true
+        const src = sourceByField[f.name]
+        return src === 'org' || src === 'env'
+      })
+  }, [platform, sourceByField])
+
+  const confirmApplyToAll = async () => {
+    if (!pendingApplyKind) return
+    const kind = pendingApplyKind
+    setPendingApplyKind(null)
+    setApplyingKind(kind)
+    const res = await apiFetch(`/v1/admin/integrations/platform/${kind}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ target: 'org-all' }),
+    })
+    setApplyingKind(null)
+    if (!res.ok) {
+      toast.error(
+        `Failed to apply ${kind} to all projects`,
+        (res.error as { message?: string })?.message ?? 'Unknown error',
+      )
+    } else {
+      const data = res.data as { applied?: number; skipped?: number } | null
+      toast.success(
+        `Applied to ${data?.applied ?? 0} project${data?.applied !== 1 ? 's' : ''}`,
+        data?.skipped ? `${data.skipped} skipped (no credentials to copy)` : undefined,
+      )
+    }
+  }
 
   const [editing, setEditing] = useState<Kind | null>(null)
   const [drafts, setDrafts] = useState<Record<Kind, Record<string, string>>>({
@@ -93,6 +141,10 @@ export function IntegrationsPage() {
   const [routingSaving, setRoutingSaving] = useState<RoutingProviderDef['type'] | null>(null)
   const [pendingDeleteRouting, setPendingDeleteRouting] = useState<RoutingProviderDef | null>(null)
   const [deletingRouting, setDeletingRouting] = useState(false)
+
+  // Bulk-apply: pending confirmation + in-flight state
+  const [pendingApplyKind, setPendingApplyKind] = useState<Kind | null>(null)
+  const [applyingKind, setApplyingKind] = useState<Kind | null>(null)
 
   const latestByKind = useMemo(() => {
     const map: Partial<Record<string, HealthRow>> = {}
@@ -124,8 +176,26 @@ export function IntegrationsPage() {
   const cancelEdit = () => setEditing(null)
 
   const saveKind = async (kind: Kind) => {
-    setSaving(kind)
     const body = drafts[kind]
+    const def = PLATFORM_DEFS.find((d) => d.kind === kind)
+    if (def) {
+      // A required field only needs to be filled if there is no existing coverage
+      // (project draft, org default, or env var). If sourceByField shows 'env' or 'org'
+      // the resolver will fall back to those values even when the project draft is empty.
+      const missing = def.fields.filter((f) => {
+        if (!f.required) return false
+        const draftEmpty = !(body[f.name] ?? '').trim()
+        if (!draftEmpty) return false
+        const src = sourceByField[f.name]
+        return src !== 'env' && src !== 'org'
+      })
+      if (missing.length > 0) {
+        const msg = `Required: ${missing.map((f) => f.label).join(', ')}`
+        setInlineErrors((e) => ({ ...e, [kind]: msg }))
+        return
+      }
+    }
+    setSaving(kind)
     const res = await apiFetch(`/v1/admin/integrations/platform/${kind}`, {
       method: 'PUT',
       body: JSON.stringify(body),
@@ -284,6 +354,17 @@ export function IntegrationsPage() {
         }
       />
 
+      {!loading &&
+        isIntegrationsBannerVisible(stats.topPriority, stats.hasAnyProject ?? setup.hasAnyProject) && (
+        <IntegrationStatusBanner
+          stats={stats}
+          projectName={stats.projectName ?? null}
+          plainBanner={false}
+        />
+      )}
+
+      <IntegrationsPageIntro topPriority={stats.topPriority} />
+
       {!setup.hasAnyProject && (
         <SetupNudge
           requires={['project_created']}
@@ -316,28 +397,80 @@ export function IntegrationsPage() {
       </Section>
 
       <Section title="Core platform">
-        <div className="space-y-2" data-dav-anchor="integrations:decide">
-          {PLATFORM_DEFS.map((def) => (
-            <PlatformIntegrationCard
-              key={def.kind}
-              def={def}
-              config={platform?.[def.kind] ?? {}}
-              latestProbe={latestByKind[def.kind]}
-              sparkline={sparklineByKind[def.kind] ?? []}
-              isEditing={editing === def.kind}
-              draft={drafts[def.kind] ?? {}}
-              saving={saving === def.kind}
-              testing={testing === def.kind}
-              onStartEdit={() => startEdit(def.kind)}
-              onCancelEdit={cancelEdit}
-              onChangeField={(name, value) =>
-                setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-              }
-              inlineError={inlineErrors[def.kind] ?? null}
-              onSave={() => void saveKind(def.kind)}
-              onTest={() => void testKind(def.kind)}
-            />
-          ))}
+        <div className="space-y-4" data-dav-anchor="integrations:decide">
+          {/* Required sub-group — connect all three */}
+          <div>
+            <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+              Connect all three to close the full loop: Sentry surfaces error context, Langfuse traces every LLM call, and GitHub lets the fix-worker open draft PRs.
+            </p>
+            <div className="space-y-2" id="integrations-required">
+              {PLATFORM_DEFS.filter((d) => d.group === 'required').map((def) => (
+                <div key={def.kind} id={`platform-card-${def.kind}`}>
+                  <PlatformIntegrationCard
+                    def={def}
+                    config={platform?.[def.kind] ?? {}}
+                    sourceByField={sourceByField}
+                    latestProbe={latestByKind[def.kind]}
+                    sparkline={sparklineByKind[def.kind] ?? []}
+                    isEditing={editing === def.kind}
+                    draft={drafts[def.kind] ?? {}}
+                    saving={saving === def.kind}
+                    testing={testing === def.kind}
+                    onStartEdit={() => startEdit(def.kind)}
+                    onCancelEdit={cancelEdit}
+                    onChangeField={(name, value) => {
+                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                      clearInlineError(def.kind)
+                    }}
+                    inlineError={inlineErrors[def.kind] ?? null}
+                    onSave={() => void saveKind(def.kind)}
+                    onTest={() => void testKind(def.kind)}
+                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                    applyingToAll={applyingKind === def.kind}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Fix-agent sub-group — pick one */}
+          <div>
+            <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+              Pick one AI fix agent. Both can be configured — Mushi will use the one set in Settings → Autofix.
+            </p>
+            <div className="space-y-2" id="integrations-fix-agent">
+              {PLATFORM_DEFS.filter((d) => d.group === 'fix-agent').map((def) => (
+                <div key={def.kind} id={`platform-card-${def.kind}`}>
+                  <PlatformIntegrationCard
+                    def={def}
+                    config={platform?.[def.kind] ?? {}}
+                    sourceByField={sourceByField}
+                    latestProbe={latestByKind[def.kind]}
+                    sparkline={sparklineByKind[def.kind] ?? []}
+                    isEditing={editing === def.kind}
+                    draft={drafts[def.kind] ?? {}}
+                    saving={saving === def.kind}
+                    testing={testing === def.kind}
+                    onStartEdit={() => startEdit(def.kind)}
+                    onCancelEdit={cancelEdit}
+                    onChangeField={(name, value) => {
+                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                      clearInlineError(def.kind)
+                    }}
+                    inlineError={inlineErrors[def.kind] ?? null}
+                    onSave={() => void saveKind(def.kind)}
+                    onTest={() => void testKind(def.kind)}
+                    dependencyOk={githubConnected}
+                    dependencyLabel="GitHub (code repo)"
+                    dependencyAnchorId="platform-card-github"
+                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+                    applyingToAll={applyingKind === def.kind}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
           {activeProjectId && (
             <div data-dav-anchor="integrations:verify">
               <CodebaseIndexCard projectId={activeProjectId} />
@@ -411,6 +544,19 @@ export function IntegrationsPage() {
           onCancel={() => {
             if (!deletingRouting) setPendingDeleteRouting(null)
           }}
+        />
+      )}
+
+      {pendingApplyKind && (
+        <ConfirmDialog
+          title={`Apply ${PLATFORM_DEFS.find((d) => d.kind === pendingApplyKind)?.label ?? pendingApplyKind} to all projects?`}
+          body={`This will copy the current project-level credentials for ${PLATFORM_DEFS.find((d) => d.kind === pendingApplyKind)?.label ?? pendingApplyKind} to every other project in your organization. Projects that already have credentials configured will not be overwritten. Secrets are re-vaulted — no plain-text values are shared.`}
+          confirmLabel="Apply to all projects"
+          cancelLabel="Cancel"
+          tone="default"
+          loading={false}
+          onConfirm={() => void confirmApplyToAll()}
+          onCancel={() => setPendingApplyKind(null)}
         />
       )}
     </div>

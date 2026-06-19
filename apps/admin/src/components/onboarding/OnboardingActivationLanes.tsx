@@ -135,7 +135,7 @@ export function OnboardingActivationLanes({
         </div>
         {topPriority ? (
           <Link to={topPriority.to} className="shrink-0 text-2xs font-medium text-brand underline">
-            Next: {topPriority.label} →
+            {topPriority.label} →
           </Link>
         ) : null}
       </div>

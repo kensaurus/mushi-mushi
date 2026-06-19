@@ -38,6 +38,8 @@ const VIZ_FALLBACKS: Record<string, string> = {
   'viz-node-border-light': 'oklch(0.82 0.004 265)',
   'viz-node-selected-dark': 'oklch(0.24 0.014 265)',
   'viz-node-selected-light': 'oklch(0.94 0.010 265)',
+  'viz-canvas-bg': 'oklch(0.11 0.004 265)',
+  'viz-canvas-dot': 'oklch(0.28 0 0)',
   'viz-graph-muted': 'oklch(0.55 0 0)',
 }
 

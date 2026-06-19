@@ -13,6 +13,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
@@ -185,6 +186,7 @@ export function StoragePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<StorageStats>(statsPath)
+  usePublishPageHeroStats('/storage', statsData)
   const stats = statsData ?? EMPTY_STORAGE_STATS
 
   const settingsQuery = usePageData<{ settings: StorageSetting[] }>(

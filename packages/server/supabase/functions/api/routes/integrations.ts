@@ -6,9 +6,11 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { callerProjectIds, resolveOwnedProject } from '../shared.ts';
+import { callerProjectIds, resolveOwnedProject, resolveAccessibleOrg } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
+import { resolveEffectivePlatformSettings } from '../../_shared/integration-settings.ts';
+import { getMushiClaudeFixWorkflowYaml, MUSHI_CLAUDE_GITHUB_SECRETS } from '../../_shared/mushi-claude-workflow.ts';
 
 export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -143,6 +145,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         c.json({
           ok: true,
           data: {
+            hasAnyProject: false,
+            projectId: null,
+            projectName: null,
             platformTotal: 3,
             platformConnected: 0,
             platformHealthy: 0,
@@ -151,6 +156,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
             routingPaused: 0,
             routingTotal: 0,
             lastProbeAt: null,
+            topPriority: 'no_project',
+            topPriorityLabel: 'Create a project first — integrations are scoped per app.',
+            topPriorityTo: '/projects',
           },
         }),
     });
@@ -163,31 +171,30 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       github: ['github_repo_url', 'github_installation_token_ref'],
     };
     const platformKinds = Object.keys(requiredByKind);
-    const allFields = [
-      'sentry_org_slug',
-      'sentry_auth_token_ref',
-      'langfuse_host',
-      'langfuse_public_key_ref',
-      'langfuse_secret_key_ref',
-      'github_repo_url',
-      'github_installation_token_ref',
-    ].join(', ');
 
-    const [{ data: settings }, { data: routingRows }, { data: probes }] = await Promise.all([
-      db.from('project_settings').select(allFields).eq('project_id', project.id).maybeSingle(),
-      db
-        .from('project_integrations')
-        .select('integration_type, is_active')
-        .eq('project_id', project.id),
-      db
-        .from('integration_health_history')
-        .select('kind, status, checked_at')
-        .eq('project_id', project.id)
-        .order('checked_at', { ascending: false })
-        .limit(50),
-    ]);
+    // Use the effective resolver so inherited org credentials count as connected.
+    const [{ settings: effectiveSettings, sourceByField }, { data: routingRows }, { data: probes }] =
+      await Promise.all([
+        resolveEffectivePlatformSettings(db, project.id as string),
+        db
+          .from('project_integrations')
+          .select('integration_type, is_active')
+          .eq('project_id', project.id),
+        db
+          .from('integration_health_history')
+          .select('kind, status, checked_at')
+          .eq('project_id', project.id)
+          .order('checked_at', { ascending: false })
+          .limit(50),
+      ]);
 
-    const row = (settings ?? {}) as Record<string, unknown>;
+    const row = (effectiveSettings ?? {}) as Record<string, unknown>;
+    // Also collect env-backed fields so we count them as connected in stats.
+    const envBackedFields = new Set(
+      Object.entries(sourceByField)
+        .filter(([, src]) => src === 'env')
+        .map(([f]) => f),
+    );
     let platformConnected = 0;
     let platformHealthy = 0;
     let platformDown = 0;
@@ -204,7 +211,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
 
     for (const kind of platformKinds) {
       const required = requiredByKind[kind] ?? [];
-      const connected = required.every((f) => row[f] != null && row[f] !== '');
+      const connected = required.every(
+        (f) => (row[f] != null && row[f] !== '') || envBackedFields.has(f),
+      );
       if (!connected) continue;
       platformConnected += 1;
       const probe = latestProbeByKind.get(kind);
@@ -216,9 +225,41 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const routingActive = routing.filter((r) => r.is_active).length;
     const routingPaused = routing.filter((r) => !r.is_active).length;
 
+    const pid = project.id as string;
+    const pname = (project.project_name as string | null) ?? null;
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
+
+    let topPriority: 'platform_down' | 'incomplete' | 'empty' | 'healthy' = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (platformDown > 0) {
+      topPriority = 'platform_down';
+      topPriorityLabel = `${platformDown} connection${platformDown === 1 ? '' : 's'} failing health checks — open the card below and click Test, or run a probe in Health.`;
+      topPriorityTo = scoped('/health?fn=integration-probe');
+    } else if (platformConnected < platformKinds.length) {
+      const missing = platformKinds.length - platformConnected;
+      topPriority = 'incomplete';
+      topPriorityLabel = `${missing} of ${platformKinds.length} core tools still need credentials — GitHub is required before auto-fix PRs can ship.`;
+      topPriorityTo = scoped('/integrations/config');
+    } else if (platformConnected === 0 && routingActive === 0) {
+      topPriority = 'empty';
+      topPriorityLabel =
+        'Start with GitHub so fix-worker can open draft PRs, then add Sentry or Langfuse for richer bug context.';
+      topPriorityTo = scoped('/integrations/config');
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${platformConnected}/${platformKinds.length} platform tools connected · ${routingActive} routing rule${routingActive === 1 ? '' : 's'} active`;
+      topPriorityTo = scoped('/integrations/config');
+    }
+
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: pname,
         platformTotal: platformKinds.length,
         platformConnected,
         platformHealthy,
@@ -227,6 +268,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
         routingPaused,
         routingTotal: routing.length,
         lastProbeAt: (probes?.[0]?.checked_at as string | null) ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });
@@ -271,17 +315,15 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
-      noProjectResponse: () => c.json({ ok: true, data: { platform: null } }),
+      noProjectResponse: () => c.json({ ok: true, data: { platform: null, sourceByField: {} } }),
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const allFields = Object.values(PLATFORM_KIND_FIELDS).flat().join(', ');
-    const { data: settings } = await db
-      .from('project_settings')
-      .select(allFields)
-      .eq('project_id', project.id)
-      .maybeSingle();
+    // Use the effective resolver so org-inherited and env-backed fields are
+    // reflected in the card's "configured" state and inheritance badges.
+    const { settings: effectiveSettings, sourceByField, organizationId } =
+      await resolveEffectivePlatformSettings(db, project.id as string);
 
     // Mask secret-shaped values; we only return whether a credential is set,
     // never the value itself. The UI shows "configured" badges, not secrets.
@@ -309,11 +351,11 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     for (const kind of platformKinds) {
       platform[kind] = {};
       for (const f of PLATFORM_KIND_FIELDS[kind]) {
-        platform[kind][f] = maskField(f, (settings as Record<string, unknown> | null)?.[f]);
+        platform[kind][f] = maskField(f, (effectiveSettings as Record<string, unknown>)[f]);
       }
     }
 
-    return c.json({ ok: true, data: { platform } });
+    return c.json({ ok: true, data: { platform, sourceByField, organizationId } });
   });
 
   // Fields that should be auto-vaulted: when the user submits a raw secret
@@ -406,6 +448,298 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       kind,
     });
     return c.json({ ok: true });
+  });
+
+  // ----- Org-level integration defaults (org owner / admin only) -----------
+  // GET  /v1/admin/org/integrations/platform/:kind  — read org defaults
+  // PUT  /v1/admin/org/integrations/platform/:kind  — write org defaults (auto-vault)
+  //
+  // These endpoints mirror the per-project GET/PUT above but target the
+  // organization_integration_settings table. The caller must pass
+  // X-Mushi-Org-Id (JWT) or own a project in the org (API key).
+
+  app.get('/v1/admin/org/integrations/platform/:kind', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const kind = c.req.param('kind')! as IntegrationKind;
+    if (!PLATFORM_API_KINDS.includes(kind)) {
+      return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
+    }
+    const db = getServiceClient();
+    const orgResult = await resolveAccessibleOrg(c, db, userId);
+    if (!orgResult.ok) return orgResult.response;
+    const { organizationId } = orgResult;
+
+    const fields = PLATFORM_KIND_FIELDS[kind] ?? [];
+    const { data: orgRow } = await db
+      .from('organization_integration_settings')
+      .select(fields.join(', '))
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    const maskField = (k: string, v: unknown): unknown => {
+      if (v == null) return null;
+      if (k.endsWith('_ref') || k.endsWith('_secret') || k.endsWith('_token') || k.endsWith('_key')) {
+        return typeof v === 'string' ? `…${v.slice(-4)}` : '****';
+      }
+      return v;
+    };
+
+    const config: Record<string, unknown> = {};
+    for (const f of fields) {
+      config[f] = maskField(f, (orgRow as Record<string, unknown> | null)?.[f]);
+    }
+
+    return c.json({ ok: true, data: { config, organizationId } });
+  });
+
+  app.put('/v1/admin/org/integrations/platform/:kind', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const kind = c.req.param('kind')! as IntegrationKind;
+    if (!PLATFORM_API_KINDS.includes(kind)) {
+      return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    const db = getServiceClient();
+    const orgResult = await resolveAccessibleOrg(c, db, userId);
+    if (!orgResult.ok) return orgResult.response;
+    const { organizationId, role } = orgResult;
+
+    // Only org owners and admins may update org defaults.
+    if (role !== 'owner' && role !== 'admin') {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Only org owners and admins can set org-level integration defaults.' } },
+        403,
+      );
+    }
+
+    const allowed = PLATFORM_KIND_FIELDS[kind];
+    const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
+    const updates: Record<string, unknown> = { organization_id: organizationId };
+
+    for (const k of allowed) {
+      if (!(k in body)) continue;
+      const v = body[k];
+      if (typeof v === 'string' && v.startsWith('…') && v.length <= 6) continue;
+
+      if (v === '' || v === null) {
+        updates[k] = null;
+        continue;
+      }
+
+      if (vaulted.has(k) && typeof v === 'string' && !v.startsWith('vault://')) {
+        const secretName = `mushi/org-integration/${organizationId}/${kind}/${k}`;
+        const { error: vaultErr } = await db.rpc('vault_store_secret', {
+          secret_name: secretName,
+          secret_value: v,
+        });
+        if (vaultErr) {
+          log.warn('vault_store_secret failed for org setting; persisting raw value', {
+            scope: 'org-integrations',
+            kind,
+            field: k,
+            err: vaultErr.message,
+          });
+          updates[k] = v;
+        } else {
+          updates[k] = `vault://${secretName}`;
+        }
+      } else {
+        updates[k] = v;
+      }
+    }
+
+    if (Object.keys(updates).length === 1) {
+      return c.json({ ok: false, error: { code: 'NO_FIELDS', message: 'No editable fields supplied.' } }, 400);
+    }
+
+    // Look up the first project in the org for audit logging (org-level actions
+    // need a project_id FK for audit rows; use the lexicographically first one).
+    const { data: anyProject } = await db
+      .from('projects')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const auditProjectId = anyProject?.id as string | null;
+
+    const { error } = await db
+      .from('organization_integration_settings')
+      .upsert(updates, { onConflict: 'organization_id' });
+
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400);
+    }
+    if (auditProjectId) {
+      await logAudit(db, auditProjectId, userId, 'settings.updated', 'org_integration_platform', undefined, { kind, organizationId });
+    }
+    return c.json({ ok: true });
+  });
+
+  // ----- Bulk "Apply to all projects" / "Copy to projects…" ---------------
+  // POST /v1/admin/integrations/platform/:kind/apply
+  //
+  // Body: { target: 'org-all' | { projectIds: string[] } }
+  //
+  // Copies the caller's current project credentials for :kind into every
+  // target project inside the same organization. Re-vaults per-project (so
+  // each project gets its own vault entry). Owner-gated and audited.
+  //
+  // On success returns { ok: true, data: { applied: N, skipped: N, failed: N } }.
+
+  app.post('/v1/admin/integrations/platform/:kind/apply', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const kind = c.req.param('kind')! as IntegrationKind;
+    if (!PLATFORM_API_KINDS.includes(kind)) {
+      return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as {
+      target?: 'org-all' | { projectIds: string[] };
+    };
+    if (!body.target) {
+      return c.json({ ok: false, error: { code: 'TARGET_REQUIRED', message: 'Provide target: "org-all" or { projectIds: [...] }' } }, 400);
+    }
+
+    const db = getServiceClient();
+    // Source project (the one whose creds to copy).
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const sourceProjectId = resolvedProject.project.id as string;
+    const orgId = resolvedProject.project.organization_id as string | null;
+
+    if (!orgId) {
+      return c.json({ ok: false, error: { code: 'NO_ORG', message: 'Project has no organization. Assign it to an org before using bulk-apply.' } }, 422);
+    }
+
+    // Read source credentials (raw, not masked).
+    const fields = PLATFORM_KIND_FIELDS[kind] ?? [];
+    const { data: sourceSettings } = await db
+      .from('project_settings')
+      .select(fields.join(', '))
+      .eq('project_id', sourceProjectId)
+      .maybeSingle();
+    const sourceRow = (sourceSettings ?? {}) as Record<string, unknown>;
+
+    // Determine target project IDs.
+    let targetProjectIds: string[];
+    if (body.target === 'org-all') {
+      const { data: orgProjects } = await db
+        .from('projects')
+        .select('id')
+        .eq('organization_id', orgId);
+      targetProjectIds = (orgProjects ?? [])
+        .map((p: { id: string }) => p.id)
+        .filter((id: string) => id !== sourceProjectId);
+    } else {
+      // Validate requested IDs belong to this org.
+      const { data: orgProjects } = await db
+        .from('projects')
+        .select('id')
+        .eq('organization_id', orgId);
+      const orgProjectSet = new Set((orgProjects ?? []).map((p: { id: string }) => p.id));
+      targetProjectIds = (body.target as { projectIds: string[] }).projectIds.filter(
+        (id) => orgProjectSet.has(id) && id !== sourceProjectId,
+      );
+    }
+
+    if (targetProjectIds.length === 0) {
+      return c.json({ ok: true, data: { applied: 0, skipped: 0, failed: 0, message: 'No target projects.' } });
+    }
+
+    const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
+    let applied = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const targetProjectId of targetProjectIds) {
+      try {
+        const updates: Record<string, unknown> = { project_id: targetProjectId };
+        let hasAnyField = false;
+
+        for (const k of fields) {
+          const v = sourceRow[k];
+          if (v == null || v === '') continue;
+          hasAnyField = true;
+
+          if (vaulted.has(k) && typeof v === 'string') {
+            // If the source value is a vault ref, resolve it and re-vault under the target project's key.
+            let rawValue = v;
+            if (v.startsWith('vault://')) {
+              const id = v.slice('vault://'.length);
+              const { data: secret } = await db.rpc('vault_get_secret', { secret_id: id });
+              rawValue = typeof secret === 'string' ? secret : v;
+            }
+            // Re-vault under the target project namespace.
+            if (!rawValue.startsWith('vault://')) {
+              const secretName = `mushi/integration/${targetProjectId}/${kind}/${k}`;
+              const { error: vaultErr } = await db.rpc('vault_store_secret', {
+                secret_name: secretName,
+                secret_value: rawValue,
+              });
+              updates[k] = vaultErr ? rawValue : `vault://${secretName}`;
+            } else {
+              updates[k] = rawValue;
+            }
+          } else {
+            updates[k] = v;
+          }
+        }
+
+        if (!hasAnyField) { skipped++; continue; }
+
+        const { error: upsertErr } = await db
+          .from('project_settings')
+          .upsert(updates, { onConflict: 'project_id' });
+
+        if (upsertErr) {
+          log.warn('bulk-apply upsert failed', { targetProjectId, err: upsertErr.message });
+          failed++;
+        } else {
+          applied++;
+        }
+      } catch (err) {
+        log.warn('bulk-apply error for project', { targetProjectId, err: String(err) });
+        failed++;
+      }
+    }
+
+    await logAudit(db, sourceProjectId, userId, 'settings.updated', 'integration_bulk_apply', undefined, {
+      kind,
+      target: body.target,
+      applied,
+      skipped,
+      failed,
+    });
+
+    return c.json({ ok: true, data: { applied, skipped, failed } });
+  });
+
+  // ── Claude Code Agent BYOK setup instructions ──────────────────────────────
+  // Returns the workflow YAML + required GitHub secrets so the operator can
+  // copy them into their repo. No secrets are written here — pure read.
+  app.get('/v1/admin/integrations/claude-code-agent/setup', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project selected' } }, 400),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+
+    const mushiSupabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+
+    return c.json({
+      ok: true,
+      data: {
+        workflowYaml: getMushiClaudeFixWorkflowYaml(),
+        workflowPath: '.github/workflows/mushi-claude-fix.yml',
+        githubSecrets: MUSHI_CLAUDE_GITHUB_SECRETS,
+        mushiSupabaseUrl,
+        serviceRoleHint:
+          'MUSHI_SERVICE_ROLE_KEY is only used by the workflow to PATCH the fix_attempts row when the run finishes — it never leaves your GitHub Actions environment.',
+      },
+    });
   });
 
   app.post('/v1/admin/integrations/sync/:reportId', jwtAuth, async (c) => {

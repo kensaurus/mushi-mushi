@@ -1,5 +1,6 @@
 import type { Context, Next } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
+import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 import { mergeLogContext, type LogContext } from './log-context.ts'
 
 export interface ProjectContext {
@@ -173,14 +174,20 @@ const MAX_HEARTBEAT_UA_LEN = 512
  *   3. Bounded payload. UA is truncated; origin/host come straight from
  *      headers we already trust. None of these fields contain user data.
  */
+export const MUSHI_SDK_PACKAGE_HEADER = 'X-Mushi-SDK-Package'
+export const MUSHI_SDK_VERSION_HEADER = 'X-Mushi-SDK-Version'
+
 function recordSdkHeartbeat(opts: {
   db: ReturnType<typeof getServiceClient>
   keyHash: string
+  projectId: string | null
   origin: string | null
   userAgent: string | null
   endpointHost: string | null
+  sdkPackage?: string | null
+  sdkVersion?: string | null
 }): void {
-  const { db, keyHash, origin, userAgent, endpointHost } = opts
+  const { db, keyHash, projectId, origin, userAgent, endpointHost, sdkPackage, sdkVersion } = opts
   const cutoffIso = new Date(Date.now() - SDK_HEARTBEAT_THROTTLE_MS).toISOString()
   const truncatedUa =
     userAgent && userAgent.length > MAX_HEARTBEAT_UA_LEN
@@ -201,7 +208,14 @@ function recordSdkHeartbeat(opts: {
     .eq('key_hash', keyHash)
     .or(`last_seen_at.is.null,last_seen_at.lt.${cutoffIso}`)
     .then(() => {
-      // Intentional no-op: the heartbeat is best-effort metadata.
+      if (projectId && sdkPackage && sdkVersion) {
+        upsertProjectSdkObservationAsync(db, {
+          projectId,
+          sdkPackage,
+          sdkVersion,
+          source: 'heartbeat',
+        })
+      }
     }, () => {
       // Swallow — never fail the auth path on a heartbeat write.
     })
@@ -409,12 +423,17 @@ export async function apiKeyAuth(c: Context, next: Next) {
   // SDK — stamping last_seen_at here would make the route's own
   // "SDK heartbeat" step self-satisfy from the second poll onward.
   if (!c.req.path.endsWith('/ingest-setup')) {
+    const sdkPackage = c.req.header(MUSHI_SDK_PACKAGE_HEADER) ?? null
+    const sdkVersion = c.req.header(MUSHI_SDK_VERSION_HEADER) ?? null
     recordSdkHeartbeat({
       db,
       keyHash,
+      projectId: keyRow.project_id,
       origin: c.req.header('Origin') ?? c.req.header('Referer') ?? null,
       userAgent: c.req.header('User-Agent') ?? null,
       endpointHost: extractEndpointHost(c.req.url),
+      sdkPackage,
+      sdkVersion,
     })
   }
 

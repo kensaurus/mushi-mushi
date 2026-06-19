@@ -21,6 +21,7 @@ import { SnapshotSectionHint,
 import { IconIntegrations, IconCheck, IconArrowRight } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -32,6 +33,7 @@ import { useMcpUx, resolveQuickMcpTab } from '../lib/mcpModeUx'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { detectFromPackageJson } from '../lib/frameworkDetect'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
+import { McpConnectGuide } from '../components/mcp/McpConnectGuide'
 import {
   ActionPill,
   ActionPillRow,
@@ -498,6 +500,7 @@ export function McpPage() {
   }, [projectsQuery.data, activeProjectId])
 
   const stats = { ...EMPTY_MCP_STATS, ...statsQuery.data }
+  usePublishPageHeroStats('/mcp', statsQuery.data)
 
   const loading = projectsQuery.loading || statsQuery.loading
   const error = projectsQuery.error ?? statsQuery.error
@@ -677,6 +680,25 @@ export function McpPage() {
   const readTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:read')
   const writeTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:write')
 
+  // Use-case groups for the Catalog display — derived from USE_CASES.calls
+  const USE_CASE_GROUPS: Array<{ label: string; tools: string[]; description: string }> = [
+    {
+      label: 'Start my day / triage',
+      tools: ['triage_next_steps', 'get_recent_reports', 'get_account_overview', 'project://dashboard'],
+      description: 'Survey the queue, understand what needs attention, check project health.',
+    },
+    {
+      label: 'Fix a bug end-to-end',
+      tools: ['summarize_report_for_fix', 'get_fix_context', 'get_blast_radius', 'submit_fix_result', 'get_fix_timeline', 'explain_judge_result'],
+      description: 'Get full context on a report, dispatch a fix, track CI, and merge.',
+    },
+    {
+      label: 'Query production data',
+      tools: ['run_nl_query', 'get_similar_bugs', 'list_projects', 'get_project_context', 'ingest_setup_check'],
+      description: 'Ask your bug data questions in plain English — no dashboard browsing needed.',
+    },
+  ]
+
   const hasReadKey = stats.mcpReadKeyCount > 0
   const hasWriteKey = stats.mcpWriteKeyCount > 0
   const step1Tone: QuickstartStepProps['tone'] = hasReadKey ? 'done' : 'next'
@@ -849,6 +871,8 @@ export function McpPage() {
         plainBanner={ux.plainBanner}
       />
 
+      <McpConnectGuide topPriority={stats.topPriority} toolCount={stats.toolCount} />
+
       {!ux.hideTabs && (
       <SegmentedControl
         value={activeTab}
@@ -925,6 +949,32 @@ export function McpPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          {/* Capability framing strip — leads with what the user can DO, not connection metrics */}
+          <div className="rounded-md border border-edge-subtle bg-surface-raised/30 px-4 py-3">
+            <p className="text-xs font-semibold text-fg mb-2">What you can do with MCP connected</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {USE_CASES.slice(0, 4).map((uc) => (
+                <div key={uc.title} className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
+                  <p className="text-2xs font-semibold text-fg">{uc.title}</p>
+                  <p className="mt-0.5 text-2xs italic text-fg-secondary line-clamp-2">
+                    &ldquo;{uc.ask}&rdquo;
+                  </p>
+                  <p className="mt-1 text-2xs text-fg-faint line-clamp-1">
+                    {uc.calls.slice(0, 2).join(', ')}
+                    {uc.calls.length > 2 ? ` +${uc.calls.length - 2} more` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setTab('examples')}
+              className="mt-2 text-2xs text-brand hover:underline"
+            >
+              See all {USE_CASES.length} examples →
+            </button>
+          </div>
+
           {/* RecommendedAction is shown for all modes — every user benefits from a
               clear next step rather than staring at blank space below the KPI snapshot. */}
           {stats.topPriority === 'healthy' && (
@@ -1582,7 +1632,32 @@ export function McpPage() {
             />
 
             {catalogTab === 'tools' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Use-case groups — the "what can I do?" view */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-fg">By use-case</p>
+                    <span className="text-2xs text-fg-faint">(quick orientation)</span>
+                  </div>
+                  {USE_CASE_GROUPS.map((group) => {
+                    const groupTools = TOOL_CATALOG.filter((t) => group.tools.includes(t.name))
+                    if (groupTools.length === 0) return null
+                    return (
+                      <div key={group.label} className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3">
+                        <p className="text-xs font-semibold text-fg mb-0.5">{group.label}</p>
+                        <p className="text-2xs text-fg-muted mb-2">{group.description}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {groupTools.map((t) => (
+                            <span key={t.name} className="font-mono text-2xs rounded-sm border border-edge-subtle bg-surface-overlay px-1.5 py-0.5 text-fg-secondary" title={t.useCase}>
+                              {t.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
                 <div>
                   <SignalChip tone="info" className="mb-2 uppercase tracking-wider font-medium">
                     Read — always safe to loop on ({readTools.length})

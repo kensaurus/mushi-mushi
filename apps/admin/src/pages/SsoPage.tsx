@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiFetch } from '../lib/supabase';
 import { usePageData } from '../lib/usePageData';
+import { usePublishPageHeroStats } from '../lib/heroSnapshots';
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import {
   Card,
@@ -17,6 +18,9 @@ import { useToast } from '../lib/toast';
 import { useEntitlements } from '../lib/useEntitlements';
 import { UpgradePrompt } from '../components/billing/UpgradePrompt';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { SsoProtocolGuide } from '../components/sso/SsoProtocolGuide';
+import { SsoStatusBanner } from '../components/sso/SsoStatusBanner';
+import { EMPTY_SSO_STATS, type SsoStats } from '../components/sso/types';
 
 interface SsoConfig {
   id: string;
@@ -52,6 +56,13 @@ const REGISTRATION_TONE: Record<string, string> = {
 
 export function SsoPage() {
   const { data, loading, error, reload } = usePageData<{ configs: SsoConfig[] }>('/v1/admin/sso');
+  const {
+    data: statsData,
+    reload: reloadStats,
+    isValidating: statsValidating,
+  } = usePageData<SsoStats>('/v1/admin/sso/stats');
+  usePublishPageHeroStats('/sso', statsData);
+  const stats = statsData ?? EMPTY_SSO_STATS;
   const configs = data?.configs ?? [];
   const [form, setForm] = useState({
     providerType: 'saml',
@@ -160,6 +171,18 @@ export function SsoPage() {
         ]}
         helpHowToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
+
+      <SsoStatusBanner
+        stats={stats}
+        ssoUnlocked={ssoUnlocked}
+        onRefresh={() => {
+          reloadStats();
+          reload();
+        }}
+        refreshing={statsValidating}
+      />
+
+      <SsoProtocolGuide topPriority={stats.topPriority} />
 
       {!ssoUnlocked && !entitlements.loading && (
         <UpgradePrompt flag="sso" currentPlan={entitlements.planName} />

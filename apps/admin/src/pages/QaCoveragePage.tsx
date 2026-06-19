@@ -25,6 +25,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import {
@@ -44,6 +45,14 @@ import { Drawer } from '../components/Drawer'
 import { Modal } from '../components/Modal'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
+import {
+  QaCoverageStatusBanner,
+} from '../components/qa-coverage/QaCoverageStatusBanner'
+import {
+  EMPTY_QA_COVERAGE_STATS,
+  type QaCoverageStats,
+} from '../components/qa-coverage/QaCoverageStatsTypes'
+import { QaProviderGuideCard } from '../components/qa-coverage/QaProviderGuideCard'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -891,10 +900,29 @@ export function QaCoveragePage() {
     { deps: [projectId] },
   )
 
+  const {
+    data: qaStatsData,
+    loading: qaStatsLoading,
+    reload: reloadQaStats,
+    isValidating: qaStatsValidating,
+  } = usePageData<QaCoverageStats>(
+    projectId ? `/v1/admin/projects/${projectId}/qa-coverage/stats` : null,
+    { deps: [projectId] },
+  )
+  usePublishPageHeroStats('/qa-coverage', qaStatsData)
+  const qaStats = qaStatsData ?? EMPTY_QA_COVERAGE_STATS
+
   const { data: pendingData, reload: reloadPending } = usePageData<{ stories: PendingReviewStory[] }>(
     `/v1/admin/inventory/${projectId}/stories/pending-review`,
     { deps: [projectId] },
   ) // error-handled-by-parent — supplementary queue; main coverage query surfaces errors.
+
+  const reloadAll = useCallback(() => {
+    reload()
+    reloadQaStats()
+    reloadPending()
+  }, [reload, reloadQaStats, reloadPending])
+
   const pendingReview = (pendingData?.stories ?? []).filter((s) => !optimisticHiddenIds.has(s.id))
 
   const coverage = data?.coverage ?? []
@@ -1028,6 +1056,17 @@ export function QaCoveragePage() {
         </Btn>
       </PageHeaderBar>
 
+      {!qaStatsLoading && (
+        <QaCoverageStatusBanner
+          stats={qaStats}
+          onRefresh={reloadAll}
+          refreshing={qaStatsValidating || loading}
+          onCreateStory={() => setShowCreate(true)}
+        />
+      )}
+
+      <QaProviderGuideCard topPriority={qaStats.topPriority} />
+
       {isAdvanced ? (
         <PageHero
           scope="qa-coverage"
@@ -1086,7 +1125,7 @@ export function QaCoveragePage() {
         />
       ) : null}
 
-      {error && <ErrorAlert message={error} onRetry={reload} />}
+      {error && <ErrorAlert message={error} onRetry={reloadAll} />}
 
       {/* Summary stats */}
       {!loading && coverage.length > 0 && (

@@ -1,10 +1,11 @@
 # @mushi-mushi/web
 
-## 1.16.0
+## 1.17.0
 
 ### Minor Changes
 
-- 94e93e8: Page-aware in-SDK assistant, signed end-user identity, and shared design tokens.
+- 679b158: Page-aware in-SDK assistant, signed end-user identity, and shared design tokens.
+
   - **In-SDK assistant ("Ask" tab):** the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`.
   - **Page context:** `publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type.
   - **Signed identity:** `identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for "My Reports", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`.
@@ -12,8 +13,14 @@
 
 ### Patch Changes
 
-- Updated dependencies [94e93e8]
-  - @mushi-mushi/core@1.16.0
+- Fix banner height overlap, screenshot taint fallback, and add "Track this report" shortcut on submission success.
+
+  - `widget.ts`: measure real banner height via `ResizeObserver` and write it to `--mushi-banner-offset`; re-measure on resize so `safe-area-inset-top` and wrapped text are handled correctly (fixes header overlap on glot.it and similar apps)
+  - `capture/screenshot.ts`: strip cross-origin CSS `url()` references before rasterising; return `null` and emit `mushi:screenshot_failed` instead of a degraded gray placeholder when the canvas is tainted
+  - `widget-render.ts` / `styles.ts`: add a "📬 Track this report" link button on the submission success step that opens the reporter's "Your reports" list
+
+- Updated dependencies [679b158]
+  - @mushi-mushi/core@1.17.0
 
 ## 1.14.1
 

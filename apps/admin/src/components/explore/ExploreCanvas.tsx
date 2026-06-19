@@ -136,13 +136,13 @@ const EXPLORE_NODE_TYPES = {
 } as const
 
 const CANVAS_BG = {
-  dark:  'oklch(0.11 0.004 265)',
-  light: 'oklch(0.97 0.004 265)',
+  dark:  'var(--color-viz-canvas-bg)',
+  light: 'var(--color-viz-canvas-bg)',
 } as const
 
 const DOT_GRID_COLORS = {
-  dark:  'oklch(0.28 0 0)',
-  light: 'oklch(0.84 0.004 285)',
+  dark:  'var(--color-viz-canvas-dot)',
+  light: 'var(--color-viz-canvas-dot)',
 } as const
 
 const HINT_KEY = 'mushi.explore.hintSeen'

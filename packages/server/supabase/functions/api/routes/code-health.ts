@@ -69,7 +69,112 @@ export interface CodeHealthResponse {
 
 // ── Route registration ────────────────────────────────────────────────────────
 
+export interface CodeHealthStats {
+  hasAnyProject: boolean
+  projectId: string | null
+  projectName: string | null
+  errorCount: number
+  warnCount: number
+  godFileCount: number
+  hasRun: boolean
+  latestRunAt: string | null
+  topPriority: 'no_project' | 'no_data' | 'errors' | 'warnings' | 'healthy'
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
+}
+
 export function registerCodeHealthRoutes(app: Hono<{ Variables: Variables }>): void {
+  /**
+   * GET /v1/admin/code-health/stats — sidebar badge slice (no trends payload).
+   */
+  app.get('/v1/admin/code-health/stats', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty: CodeHealthStats = {
+      hasAnyProject: false,
+      projectId: null,
+      projectName: null,
+      errorCount: 0,
+      warnCount: 0,
+      godFileCount: 0,
+      hasRun: false,
+      latestRunAt: null,
+      topPriority: 'no_project',
+      topPriorityLabel: null,
+      topPriorityTo: null,
+    }
+
+    const resolved = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    })
+    if ('response' in resolved) return resolved.response
+    const { project } = resolved
+    const projectId = project.id as string
+    const projectName = (project.project_name as string | null) ?? null
+
+    const { data: latestRun } = await db
+      .from('gate_runs')
+      .select('id, completed_at')
+      .eq('project_id', projectId)
+      .eq('gate', 'code_health')
+      .order('completed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    let errorCount = 0
+    let warnCount = 0
+    let godFileCount = 0
+
+    if (latestRun?.id) {
+      const { data: findingRows } = await db
+        .from('gate_findings')
+        .select('severity')
+        .eq('gate_run_id', latestRun.id)
+
+      for (const row of findingRows ?? []) {
+        godFileCount += 1
+        if (row.severity === 'error') errorCount += 1
+        else if (row.severity === 'warn') warnCount += 1
+      }
+    }
+
+    const hasRun = !!latestRun?.id
+    let topPriority: CodeHealthStats['topPriority'] = 'no_data'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = `/code-health?project=${projectId}`
+
+    if (errorCount > 0) {
+      topPriority = 'errors'
+      topPriorityLabel = `${errorCount} file${errorCount === 1 ? '' : 's'} over the 2,000 LOC budget — split before the next release.`
+    } else if (warnCount > 0) {
+      topPriority = 'warnings'
+      topPriorityLabel = `${warnCount} file${warnCount === 1 ? '' : 's'} approaching the god-file threshold — plan a refactor.`
+    } else if (hasRun) {
+      topPriority = 'healthy'
+      topPriorityLabel = `${godFileCount} finding${godFileCount === 1 ? '' : 's'} on last CI run · bundle trends updating on each push.`
+    } else {
+      topPriorityLabel = `No code_health gate run yet for ${projectName ?? 'this project'} — add MUSHI_INGEST_KEY to CI and push to main.`
+      topPriorityTo = '/connect'
+    }
+
+    const stats: CodeHealthStats = {
+      hasAnyProject: true,
+      projectId,
+      projectName,
+      errorCount,
+      warnCount,
+      godFileCount,
+      hasRun,
+      latestRunAt: (latestRun?.completed_at as string | null) ?? null,
+      topPriority,
+      topPriorityLabel,
+      topPriorityTo,
+    }
+
+    return c.json({ ok: true, data: stats })
+  })
+
   /**
    * GET /v1/admin/code-health
    *

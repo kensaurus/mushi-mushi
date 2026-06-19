@@ -3,10 +3,11 @@
  * PURPOSE: Triage queue posture — ingest, backlog, critical, clear.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn, RelativeTime } from '../ui'
+import { RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
+import { scopedHref, triageBacklogHint } from '../../lib/humanPageHints'
 import type { ReportsStats, ReportsTabId } from './ReportsStatsTypes'
 
 interface Props {
@@ -27,6 +28,7 @@ export function ReportsStatusBanner({
   const copy = usePageCopy('/reports')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
@@ -39,9 +41,7 @@ export function ReportsStatusBanner({
             : 'Create a project and install the SDK before user-felt bugs can land here.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />
         }
       />
     )
@@ -63,9 +63,11 @@ export function ReportsStatusBanner({
             : 'SDK ingest must be live — send a test report from Setup to populate the triage queue.')
         }
         action={
-          <Link to={stats.topPriorityTo ?? '/onboarding?tab=verify'}>
-            <Btn size="sm" variant="ghost">{actions.verify ?? 'Send test report'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.verify ?? 'Send test report'}
+            to={stats.topPriorityTo ?? scopedHref('/onboarding?tab=verify', pid)}
+            tone="brand"
+          />
         }
       />
     )
@@ -75,22 +77,17 @@ export function ReportsStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={
-          plainBanner
-            ? `${stats.critical14d} critical bug${stats.critical14d === 1 ? '' : 's'} need review`
-            : `${stats.critical14d} critical report${stats.critical14d === 1 ? '' : 's'} in 14d`
+        title={`${stats.critical14d} critical bug${stats.critical14d === 1 ? '' : 's'} need review`}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Critical bugs block user workflows — confirm severity and dispatch fixes first.'
         }
-        subtitle={stats.topPriorityLabel ?? 'Confirm severity and dispatch fixes before they spread.'}
         action={
-          stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.triage ?? 'Triage critical'}</Btn>
-            </Link>
-          ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('queue')}>
-              {actions.queue ?? 'Open queue'}
-            </Btn>
-          ) : null
+          <StatusBannerAction
+            label={actions.triage ?? `Review ${stats.critical14d} critical`}
+            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&severity=critical', pid)}
+            tone="danger"
+          />
         }
       />
     )
@@ -100,18 +97,14 @@ export function ReportsStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={
-          plainBanner
-            ? `${stats.openBacklog} bug${stats.openBacklog === 1 ? '' : 's'} waiting over an hour`
-            : `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} stale > 1h untriaged`
-        }
-        subtitle={stats.topPriorityLabel ?? 'Stale reports lose context — triage or dismiss to keep the queue honest.'}
+        title={`${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting to triage`}
+        subtitle={stats.topPriorityLabel ?? triageBacklogHint(stats.openBacklog)}
         action={
-          stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.backlog ?? 'Open backlog'}</Btn>
-            </Link>
-          ) : null
+          <StatusBannerAction
+            label={actions.backlog ?? `Triage ${stats.openBacklog} waiting`}
+            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&status=new', pid)}
+            tone="warn"
+          />
         }
       />
     )
@@ -140,14 +133,18 @@ export function ReportsStatusBanner({
         }
         action={
           onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('queue')}>
-              {actions.queue ?? 'Open queue'}
-            </Btn>
-          ) : stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.queue ?? 'Open queue'}</Btn>
-            </Link>
-          ) : null
+            <StatusBannerAction
+              label={actions.queue ?? 'Open queue'}
+              onClick={() => onTab('queue')}
+              tone="info"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.queue ?? 'Open queue'}
+              to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue', pid)}
+              tone="info"
+            />
+          )
         }
       />
     )
@@ -170,13 +167,20 @@ export function ReportsStatusBanner({
       }
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('severity')}>
-            {actions.severity ?? 'Severity view'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.severity ?? 'Severity view'}
+            onClick={() => onTab('severity')}
+            tone="ok"
+          />
         ) : null
       }
     />

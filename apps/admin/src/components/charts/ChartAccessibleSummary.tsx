@@ -14,7 +14,7 @@ export interface ChartAccessibleSummaryProps {
   rows: Array<Record<string, string | number>>
 }
 
-/** Hidden data table for assistive tech — pair with role="img" on the visual chart. */
+/** Hidden data table for assistive tech — must be a sibling of (not inside) the visual chart's role="img". */
 export function ChartAccessibleSummary({
   caption,
   columns,

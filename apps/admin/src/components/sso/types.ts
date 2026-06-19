@@ -1,17 +1,13 @@
 /**
- * FILE: apps/admin/src/components/sso/types.ts
+ * SSO stats slice for banner + nav badges.
  */
 
-export type SsoTabId = 'overview' | 'providers' | 'setup'
+import type { SsoTopPriority } from '../../lib/ssoExplainer'
 
-export type SsoRegistrationStatus =
-  | 'pending'
-  | 'registered'
-  | 'failed'
-  | 'disabled'
-  | 'manual_required'
+export type { SsoTopPriority }
 
 export interface SsoStats {
+  hasAnyProject: boolean
   projectId: string | null
   projectName: string | null
   ssoEntitlement: boolean
@@ -29,9 +25,13 @@ export interface SsoStats {
   defaultAcsUrl: string | null
   latestFailure: string | null
   latestProviderName: string | null
+  topPriority: SsoTopPriority
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
 export const EMPTY_SSO_STATS: SsoStats = {
+  hasAnyProject: false,
   projectId: null,
   projectName: null,
   ssoEntitlement: false,
@@ -49,19 +49,7 @@ export const EMPTY_SSO_STATS: SsoStats = {
   defaultAcsUrl: null,
   latestFailure: null,
   latestProviderName: null,
-}
-
-export interface SsoConfig {
-  id: string
-  provider_type: string
-  provider_name: string
-  metadata_url: string | null
-  entity_id: string | null
-  acs_url: string | null
-  is_active: boolean
-  sso_provider_id: string | null
-  registration_status: SsoRegistrationStatus
-  registration_error: string | null
-  registered_at: string | null
-  domains: string[] | null
+  topPriority: 'no_project',
+  topPriorityLabel: null,
+  topPriorityTo: null,
 }

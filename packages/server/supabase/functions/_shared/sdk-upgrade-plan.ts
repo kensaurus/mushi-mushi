@@ -13,6 +13,15 @@ const SAFE_SEMVER = /^\d+\.\d+\.\d+(-[\w.]+)?$/
 
 const MUSHI_SCOPE = '@mushi-mushi/'
 
+/** Never auto-bump more than this many majors ahead of the installed version. */
+const MAX_MAJOR_JUMP = 1
+
+/** Major-version component of a plain semver core (e.g. "2.3.1" → 2). */
+function majorOf(version: string): number {
+  const n = Number(version.split('.')[0])
+  return Number.isFinite(n) ? n : 0
+}
+
 /** Package names the bump plan considers. */
 export const UPGRADEABLE_PACKAGES = [
   '@mushi-mushi/core',
@@ -81,6 +90,12 @@ export function computeBumpPlan(
 
       // Only bump if latest is strictly newer.
       if (!isNewerSemver(latest, currentCore)) continue
+
+      // Supply-chain guard: never auto-bump more than one major ahead of the
+      // installed version. A poisoned/compromised npm `latest` (e.g. a hijacked
+      // 1.x → 99.0.0) is quarantined here so it can never be written into an
+      // automated upgrade PR. Mirrors shouldQuarantineCatalogVersion's policy.
+      if (majorOf(latest) - majorOf(currentCore) > MAX_MAJOR_JUMP) continue
 
       // Preserve the specifier prefix (^, ~, etc.) when present.
       const prefix = current.match(/^([\^~>=<]+)/)?.[1] ?? ''

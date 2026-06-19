@@ -88,7 +88,7 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
                 <video
                   src={a.url}
                   controls
-                  className="w-full max-h-64 object-contain bg-black"
+                  className="w-full max-h-64 object-contain bg-surface-root"
                 />
               </div>
             ) : (

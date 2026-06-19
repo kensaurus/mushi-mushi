@@ -57,15 +57,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.60.0"
   },
   "devDependencies": {
     "@mushi-mushi/tsconfig": "workspace:*",
-    "@types/node": "^22.19.17",
+    "@types/node": "^22.19.21",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.8"
   },
   "author": "Kenji Sakuramoto",
   "engines": {
