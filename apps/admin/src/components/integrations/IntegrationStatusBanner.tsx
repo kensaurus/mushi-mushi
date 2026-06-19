@@ -3,10 +3,10 @@
  * PURPOSE: Top-level integration health summary for the active project.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { integrationIssuesHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { IntegrationStats } from './types'
 
 interface Props {
@@ -25,6 +25,7 @@ export function IntegrationStatusBanner({
   const copy = usePageCopy('/integrations/config')
   const actions = copy?.actionLabels ?? {}
   const label = stats.projectName ?? projectName ?? 'workspace'
+  const pid = stats.projectId
   const priority = stats.topPriority ?? (stats.platformDown > 0 ? 'platform_down' : stats.platformConnected === 0 ? 'empty' : 'healthy')
 
   if (priority === 'platform_down' || stats.platformDown > 0) {
@@ -34,25 +35,28 @@ export function IntegrationStatusBanner({
         title={
           plainBanner
             ? `${stats.platformDown} connection${stats.platformDown === 1 ? '' : 's'} failing on ${label}`
-            : `${stats.platformDown} platform probe${stats.platformDown === 1 ? '' : 's'} failing`
+            : `${stats.platformDown} integration${stats.platformDown === 1 ? '' : 's'} failing health checks`
         }
-        subtitle={
-          stats.topPriorityLabel ??
-          'Auto-fix and classification degrade without healthy Sentry, Langfuse, or GitHub wiring.'
-        }
+        subtitle={stats.topPriorityLabel ?? integrationIssuesHint(stats.platformDown)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.platform ?? 'Fix platform'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.platform ?? 'Fix connections'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('platform')}>
-              {actions.platform ?? 'Fix platform'}
-            </Btn>
+            <StatusBannerAction
+              label={actions.platform ?? 'Fix connections'}
+              onClick={() => onTab('platform')}
+              tone="danger"
+            />
           ) : (
-            <Link to="/health?fn=integration-probe">
-              <Btn size="sm" variant="ghost">{actions.health ?? 'Open health'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.health ?? 'Run health probe'}
+              to={scopedHref('/health?fn=integration-probe', pid)}
+              tone="danger"
+            />
           )
         }
       />
@@ -67,23 +71,27 @@ export function IntegrationStatusBanner({
         title={
           plainBanner
             ? `${missing} service${missing === 1 ? '' : 's'} still need credentials`
-            : `${missing} platform integration${missing === 1 ? '' : 's'} incomplete`
+            : `${missing} integration${missing === 1 ? '' : 's'} missing credentials`
         }
         subtitle={
           stats.topPriorityLabel ??
           (plainBanner
-            ? 'Add keys on each card below, then click Test.'
-            : `Finish credentials for ${label} on the cards below, then click Test on each.`)
+            ? 'Add API keys on each card below, then click Test to confirm they work.'
+            : `Finish credentials for ${label} on the cards below — fixes may not reach GitHub until GitHub is connected.`)
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.platform ?? 'Finish setup'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.platform ?? 'Finish setup'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('platform')}>
-              {actions.platform ?? 'Finish setup'}
-            </Btn>
+            <StatusBannerAction
+              label={actions.platform ?? 'Finish setup'}
+              onClick={() => onTab('platform')}
+              tone="warn"
+            />
           ) : null
         }
       />
@@ -97,17 +105,21 @@ export function IntegrationStatusBanner({
         title={plainBanner ? `No tools connected for ${label}` : `No integrations wired for ${label}`}
         subtitle={
           stats.topPriorityLabel ??
-          'Start with GitHub for auto-fix PRs, Langfuse for trace links, and Sentry for production context.'
+          'Start with GitHub for auto-fix PRs, then add Sentry or Langfuse for richer context on each bug.'
         }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.platform ?? 'Connect GitHub'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.platform ?? 'Connect GitHub'}
+              to={stats.topPriorityTo}
+              tone="info"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('platform')}>
-              {actions.platform ?? 'Connect GitHub'}
-            </Btn>
+            <StatusBannerAction
+              label={actions.platform ?? 'Connect GitHub'}
+              onClick={() => onTab('platform')}
+              tone="info"
+            />
           ) : null
         }
       />
@@ -120,13 +132,11 @@ export function IntegrationStatusBanner({
       title={plainBanner ? `Tools connected on ${label}` : 'Integrations healthy'}
       subtitle={
         stats.topPriorityLabel ??
-        `${stats.platformConnected}/${stats.platformTotal} platform · ${stats.routingActive} routing destination${stats.routingActive === 1 ? '' : 's'} active`
+        `${stats.platformConnected}/${stats.platformTotal} platform tools connected · ${stats.routingActive} routing rule${stats.routingActive === 1 ? '' : 's'} active`
       }
       action={
         stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.repo ?? 'Check repo index'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.repo ?? 'Check repo index'} to={stats.topPriorityTo} tone="ok" />
         ) : stats.lastProbeAt ? (
           <span className="shrink-0 font-mono text-3xs text-fg-faint">Last probe recorded</span>
         ) : null

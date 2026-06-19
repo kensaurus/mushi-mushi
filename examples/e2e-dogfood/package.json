@@ -15,10 +15,10 @@
   "devDependencies": {
     "@mushi-mushi/core": "workspace:*",
     "@mushi-mushi/web": "workspace:*",
-    "@playwright/test": "^1.59.1",
-    "@supabase/supabase-js": "^2.105.1",
-    "@types/node": "^25.6.0",
-    "msw": "^2.14.2",
+    "@playwright/test": "^1.60.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "@types/node": "^25.9.3",
+    "msw": "^2.14.6",
     "typescript": "^6.0.3"
   }
 }

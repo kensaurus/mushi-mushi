@@ -1191,6 +1191,8 @@ export interface MushiSDKInstance {
   hide(): void;
   attachTo(selectorOrElement: string | Element, options?: MushiWidgetConfig): () => void;
   setTrigger(trigger: NonNullable<MushiWidgetConfig['trigger']>): void;
+  /** Open the widget directly to the reporter's "My reports" history view. */
+  openReporter(): void;
   close(): void;
   destroy(): void;
   updateConfig(config: MushiRuntimeSdkConfig): void;

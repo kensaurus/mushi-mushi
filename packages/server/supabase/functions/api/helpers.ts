@@ -22,6 +22,7 @@ import { childTraceparent } from '../_shared/trace.ts';
 // future data export. Scrubbing at insert time closes that gap.
 import { scrubPii } from '../_shared/pii-scrubber.ts';
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts';
+import { upsertProjectSdkObservationAsync } from '../_shared/sdk-observation.ts';
 
 // Fixed namespace for deriving deterministic report ids from non-UUID client
 // ids (RFC 4122 §4.3 name-based v5). Arbitrary but stable — it only has to be
@@ -676,6 +677,16 @@ export async function ingestReport(
       errHint: (insertError as { hint?: string }).hint,
     });
     return { ok: false, error: 'Failed to store report' };
+  }
+
+  if (report.sdkPackage && report.sdkVersion) {
+    upsertProjectSdkObservationAsync(db, {
+      projectId,
+      sdkPackage: report.sdkPackage,
+      sdkVersion: report.sdkVersion,
+      source: 'report',
+      observedAt: report.createdAt ?? new Date().toISOString(),
+    });
   }
 
   // Link the report to an end_user if the SDK sent identify() data.

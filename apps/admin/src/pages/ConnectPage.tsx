@@ -25,6 +25,7 @@ import { ResponsiveTable } from '../components/ResponsiveTable'
 import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
+import { ConnectHubGuide } from '../components/connect/ConnectHubGuide'
 import { McpInstallButtons } from '../components/McpInstallButtons'
 import { SdkVersionBadge } from '../components/SdkVersionBadge'
 import { useSdkUpgrade, type BumpEntry } from '../lib/useSdkUpgrade'
@@ -34,12 +35,14 @@ import {
   IconGit,
   IconCheck,
   IconExternalLink,
+  IconRefresh,
   IconBolt,
   IconTerminal,
   IconAlertTriangle,
   IconArrowRight,
   IconMcp,
   IconIntegrations,
+  IconInfo,
 } from '../components/icons'
 import { CodeInline } from '../components/CodePanel'
 import type { SdkStatus } from '../components/SdkVersionBadge'
@@ -74,6 +77,96 @@ function isExpoReporterNeverConnected(project: ProjectRow): boolean {
 
 interface ProjectsPayload {
   projects: ProjectRow[]
+}
+
+// ---------------------------------------------------------------------------
+// Connection status strip — compact one-line verdict + primary CTA
+// ---------------------------------------------------------------------------
+interface ConnectStatusStripProps {
+  projectSelected: boolean
+  githubConnected: boolean
+  sdkConnected: boolean
+  mcpConnected?: boolean
+}
+
+function ConnectStatusStrip({ projectSelected, githubConnected, sdkConnected, mcpConnected }: ConnectStatusStripProps) {
+  const steps = [
+    { done: githubConnected, label: 'GitHub', href: '/integrations/config' },
+    { done: sdkConnected,    label: 'SDK',    href: '#sdk-install' },
+    { done: mcpConnected,    label: 'MCP',    href: '#mcp-install' },
+  ]
+  const doneCount = steps.filter((s) => s.done).length
+  const allDone = doneCount === steps.length
+
+  if (!projectSelected) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-edge-subtle bg-surface-raised/50 px-3 py-2 text-xs text-fg-muted">
+        <IconInfo className="h-3.5 w-3.5 shrink-0 text-fg-faint" aria-hidden />
+        Select a project above to see connection status and next steps.
+      </div>
+    )
+  }
+
+  if (allDone) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-ok/30 bg-ok-muted/50 px-3 py-2 text-xs">
+        <IconCheck className="h-3.5 w-3.5 shrink-0 text-ok" aria-hidden />
+        <span className="font-medium text-ok">All connected</span>
+        <span className="text-fg-muted">— GitHub linked · SDK reporting · MCP in Cursor</span>
+      </div>
+    )
+  }
+
+  const firstIncomplete = steps.find((s) => !s.done)
+  const nextStepLabel = firstIncomplete?.label ?? 'Next step'
+  const nextStepHref = firstIncomplete?.href ?? '#'
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-brand/25 bg-brand-subtle/40 px-3 py-2 text-xs">
+      <span className="font-medium text-brand">
+        Step {doneCount + 1} of {steps.length}: {nextStepLabel}
+      </span>
+      <span className="text-fg-muted">
+        {doneCount === 0
+          ? 'Connect GitHub first — it unlocks SDK upgrade PRs and codebase indexing.'
+          : doneCount === 1
+            ? 'GitHub connected — drop the SDK into your app to start capturing reports.'
+            : 'SDK live — add MCP to Cursor or Claude for IDE-based triage and fix dispatch.'}
+      </span>
+      <div className="ml-auto flex items-center gap-3">
+        {/* Mini stepper pill */}
+        <span className="flex items-center gap-1">
+          {steps.map((s, i) => (
+            <span
+              key={s.label}
+              className={`flex items-center gap-px ${i > 0 ? 'ml-1' : ''}`}
+              aria-label={`${s.label}: ${s.done ? 'done' : 'pending'}`}
+            >
+              {i > 0 && <IconArrowRight className="h-2.5 w-2.5 text-fg-faint" aria-hidden />}
+              <span
+                className={`rounded-full px-1.5 py-px font-medium ${
+                  s.done
+                    ? 'bg-ok/20 text-ok'
+                    : i === doneCount
+                      ? 'bg-brand/20 text-brand'
+                      : 'bg-surface-overlay text-fg-faint'
+                }`}
+              >
+                {s.label}
+              </span>
+            </span>
+          ))}
+        </span>
+        <a
+          href={nextStepHref}
+          className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand hover:bg-brand/20 transition-colors focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          Go to {nextStepLabel}
+          <IconArrowRight className="h-3 w-3" aria-hidden />
+        </a>
+      </div>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -201,10 +294,12 @@ function BumpPlanTable({ bumps }: { bumps: BumpEntry[] }) {
 // Update center section
 // ---------------------------------------------------------------------------
 function UpdateCenter({ project, preflight }: { project: ProjectRow; preflight: PreflightState }) {
-  const { state, createUpgradePr, reset } = useSdkUpgrade(project.id)
+  const { state, createUpgradePr, refreshUpgradePr, syncStatus } = useSdkUpgrade(project.id)
 
   const isInFlight = ['queueing', 'queued', 'running'].includes(state.status)
-  const isDone = ['completed', 'completed_no_pr', 'failed'].includes(state.status)
+  const hasOpenPr = state.status === 'completed' && Boolean(state.prUrl)
+  const isUpToDate = state.status === 'completed_no_pr'
+  const isFailed = state.status === 'failed'
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
   const hasRepoRow = Boolean(project.primary_repo?.repo_url) || Boolean(preflight.repoUrl)
   const hasGithubReady = githubCheck?.ready ?? hasRepoRow
@@ -257,29 +352,82 @@ function UpdateCenter({ project, preflight }: { project: ProjectRow; preflight: 
 
       <div className="flex flex-wrap items-center gap-3">
         {hasGithubReady ? (
-          <Tooltip
-            content={
-              isInFlight
-                ? 'Upgrade in progress…'
-                : 'Bumps @mushi-mushi/* in your connected repo and opens a draft PR for review.'
-            }
-            side="top"
-          >
-            <Btn
-              size="md"
-              variant="primary"
-              loading={isInFlight}
-              disabled={isInFlight}
-              onClick={() => {
-                if (isDone) reset()
-                void createUpgradePr()
-              }}
-              className="gap-2"
-            >
-              <IconBolt className="h-4 w-4" aria-hidden />
-              Create Upgrade PR
-            </Btn>
-          </Tooltip>
+          <>
+            {hasOpenPr && state.prUrl ? (
+              <>
+                <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
+                  <Btn size="md" variant="primary" className="gap-2">
+                    <IconExternalLink className="h-4 w-4" aria-hidden />
+                    View upgrade PR
+                  </Btn>
+                </a>
+                <Tooltip
+                  content="Refresh the open PR branch if newer @mushi-mushi/* versions shipped since it was opened."
+                  side="top"
+                >
+                  <Btn
+                    size="md"
+                    variant="ghost"
+                    loading={isInFlight}
+                    disabled={isInFlight}
+                    onClick={() => void refreshUpgradePr()}
+                    className="gap-2"
+                  >
+                    <IconRefresh className="h-4 w-4" aria-hidden />
+                    Refresh PR
+                  </Btn>
+                </Tooltip>
+                {state.jobId && (
+                  <Btn
+                    size="md"
+                    variant="ghost"
+                    disabled={isInFlight}
+                    onClick={() => void syncStatus(state.jobId!)}
+                    className="gap-2"
+                  >
+                    Sync CI
+                  </Btn>
+                )}
+              </>
+            ) : isUpToDate ? (
+              <Tooltip content="Re-scan the connected repo for newer catalog versions." side="top">
+                <Btn
+                  size="md"
+                  variant="ghost"
+                  loading={isInFlight}
+                  disabled={isInFlight}
+                  onClick={() => void createUpgradePr()}
+                  className="gap-2"
+                >
+                  <IconRefresh className="h-4 w-4" aria-hidden />
+                  Check again
+                </Btn>
+              </Tooltip>
+            ) : (
+              <Tooltip
+                content={
+                  isInFlight
+                    ? 'Upgrade in progress…'
+                    : isFailed
+                      ? 'Retry opening or refreshing the upgrade PR.'
+                      : 'Opens one upgrade PR per repo — reuses an existing open PR when present.'
+                }
+                side="top"
+              >
+                <Btn
+                  size="md"
+                  variant="primary"
+                  loading={isInFlight}
+                  disabled={isInFlight}
+                  onClick={() => void (isFailed ? refreshUpgradePr() : createUpgradePr())}
+                  className="gap-2"
+                >
+                  <IconBolt className="h-4 w-4" aria-hidden />
+                  {isFailed ? 'Retry upgrade PR' : 'Create Upgrade PR'}
+                </Btn>
+              </Tooltip>
+            )}
+          </>
         ) : (
           <Link to="/integrations/config">
             <Btn size="md" variant="ghost" className="gap-2">
@@ -314,7 +462,9 @@ function UpdateCenter({ project, preflight }: { project: ProjectRow; preflight: 
 
       {state.status === 'completed' && state.prUrl && (
         <p className="text-xs text-fg-muted">
-          After merging the PR, run your package manager to refresh the lockfile.
+          {state.reused
+            ? 'Reused the existing open upgrade PR for this repo — no duplicate branch was created.'
+            : 'After merging the PR, run your package manager to refresh the lockfile.'}{' '}
           Capacitor/RN projects also need <CodeInline>npx cap sync</CodeInline>.
         </p>
       )}
@@ -385,6 +535,48 @@ function SectionDescription({ children }: { children: React.ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
+// Project-resolution fallback — shared by every project-scoped section so a
+// deep link or a failed `/v1/admin/projects` fetch never dead-ends on a bare
+// "Select a project" that gives no hint and no way to recover.
+// ---------------------------------------------------------------------------
+function resolveProjectFallback(opts: {
+  pending: boolean
+  missing: boolean
+  hasError: boolean
+}): { text: string; busy: boolean } {
+  if (opts.pending) return { text: 'Loading project…', busy: true }
+  if (opts.hasError) return { text: "Couldn't load your projects — use Retry above.", busy: false }
+  if (opts.missing) {
+    return {
+      text: "That project isn't in your account (or hasn't loaded). Pick one from the project switcher above.",
+      busy: false,
+    }
+  }
+  return { text: 'Select a project above.', busy: false }
+}
+
+function ProjectFallbackNote({
+  pending,
+  missing,
+  hasError,
+  card,
+}: {
+  pending: boolean
+  missing: boolean
+  hasError: boolean
+  /** Wrap in a Card for sections whose project view renders its own card. */
+  card?: boolean
+}) {
+  const { text, busy } = resolveProjectFallback({ pending, missing, hasError })
+  const note = (
+    <p className={`text-sm text-fg-muted${card ? ' p-4' : ''}`} {...(busy ? { 'aria-busy': true } : {})}>
+      {text}
+    </p>
+  )
+  return card ? <Card>{note}</Card> : note
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 export function ConnectPage() {
@@ -410,11 +602,22 @@ export function ConnectPage() {
     : null
   const projectPending =
     Boolean(activeProjectId) && projectsFeed.loading && project == null
+  // An active project id is set (deep link or remembered) but it's not in the
+  // successfully-loaded list — different account, deleted, or paginated out.
+  const projectMissing =
+    Boolean(activeProjectId) && !projectsFeed.loading && !projectsFeed.error && project == null
+  const feedError = projectsFeed.error
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
+  const githubConnected = Boolean(project?.primary_repo?.github_app_connected)
+  const sdkConnected = Boolean(
+    project?.api_keys?.some((k) => k.is_active && k.last_seen_at),
+  )
 
   const CLI_INSTALL = 'npm install -g @mushi-mushi/cli@latest'
-  const CLI_INIT = 'mushi init'
+  // Prefill the active project's id (a non-secret UUID) so the dev only has to
+  // paste/confirm the API key during `mushi init`, not hunt for the project id.
+  const CLI_INIT = project ? `mushi init --project-id ${project.id}` : 'mushi init'
 
   return (
     <div className="space-y-6">
@@ -441,6 +644,39 @@ export function ConnectPage() {
           'Connect GitHub first. Copy the SDK install snippet into your app, then use MCP deeplinks for Cursor. When versions drift, click Create Upgrade PR and merge after CI passes.'
         }
       />
+
+      <ConnectStatusStrip
+        projectSelected={Boolean(project)}
+        githubConnected={githubConnected}
+        sdkConnected={sdkConnected}
+      />
+
+      <ConnectHubGuide
+        githubConnected={githubConnected}
+        sdkConnected={sdkConnected}
+        nativeCiNeedsAttention={Boolean(project && isExpoReporterNeverConnected(project))}
+        upgradeComplete={
+          Boolean(
+            project &&
+              (project.sdk_status === 'up-to-date' ||
+                (!project.sdk_status && sdkConnected)),
+          )
+        }
+      />
+
+      {feedError && (
+        <HelpBanner
+          tone="danger"
+          role="alert"
+          title="Couldn't load your projects"
+          icon={<IconAlertTriangle className="h-4 w-4 text-[var(--color-error-foreground)]" />}
+        >
+          <p className="text-xs">{feedError}</p>
+          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => projectsFeed.reload()}>
+            Retry
+          </Btn>
+        </HelpBanner>
+      )}
 
       <div className="xl:grid xl:grid-cols-2 xl:items-start xl:gap-6">
       <div className="space-y-6">
@@ -501,16 +737,8 @@ export function ConnectPage() {
             projectSlug={project.slug}
             compact
           />
-        ) : projectPending ? (
-          <Card>
-            <p className="p-4 text-sm text-fg-muted" aria-busy="true">
-              Loading project…
-            </p>
-          </Card>
         ) : (
-          <Card>
-            <p className="p-4 text-sm text-fg-muted">Select a project to see install snippets.</p>
-          </Card>
+          <ProjectFallbackNote card pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
         )}
       </Section>
 
@@ -528,14 +756,8 @@ export function ConnectPage() {
             projectId={project.id}
             projectSlug={project.slug}
           />
-        ) : projectPending ? (
-          <Card>
-            <p className="p-4 text-sm text-fg-muted" aria-busy="true">Loading project…</p>
-          </Card>
         ) : (
-          <Card>
-            <p className="p-4 text-sm text-fg-muted">Select a project above.</p>
-          </Card>
+          <ProjectFallbackNote card pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
         )}
       </Section>
 
@@ -564,10 +786,8 @@ export function ConnectPage() {
             </div>
             {project ? (
               <McpInstallButtons projectId={project.id} projectName={project.name} />
-            ) : projectPending ? (
-              <p className="text-sm text-fg-muted" aria-busy="true">Loading project…</p>
             ) : (
-              <p className="text-sm text-fg-muted">Select a project above.</p>
+              <ProjectFallbackNote pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
             )}
             <p className="text-xs text-fg-muted">
               Prefer a manual snippet?{' '}
@@ -632,10 +852,8 @@ export function ConnectPage() {
           <div className="p-4">
             {project ? (
               <UpdateCenter project={project} preflight={preflight} />
-            ) : projectPending ? (
-              <p className="text-sm text-fg-muted" aria-busy="true">Loading project…</p>
             ) : (
-              <p className="text-sm text-fg-muted">Select a project above.</p>
+              <ProjectFallbackNote pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
             )}
           </div>
         </Card>

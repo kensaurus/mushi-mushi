@@ -29,8 +29,15 @@ export type Kind = 'sentry' | 'langfuse' | 'github' | 'cursor_cloud' | 'claude_c
  *  reuse the same probe endpoint. */
 export type ProbeKind = Kind | 'jira' | 'linear' | 'github_issues' | 'pagerduty' | 'vercel'
 
+/** Where an effective credential value came from. */
+export type FieldSource = 'project' | 'org' | 'env' | null
+
 export interface PlatformResponse {
   platform: Partial<Record<Kind, Record<string, unknown>>>
+  /** Per-field origin map returned by GET /platform. Undefined for older API responses. */
+  sourceByField?: Record<string, FieldSource>
+  /** The organization the project belongs to (for bulk-apply). */
+  organizationId?: string | null
 }
 
 export interface HealthRow {
@@ -173,7 +180,10 @@ export type IntegrationTopPriority =
   | 'healthy'
 
 export const EMPTY_INTEGRATION_STATS: IntegrationStats = {
-  platformTotal: 5,
+  hasAnyProject: false,
+  projectId: null,
+  projectName: null,
+  platformTotal: 3,
   platformConnected: 0,
   platformHealthy: 0,
   platformDown: 0,

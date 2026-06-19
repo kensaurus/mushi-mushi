@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
 import { SnapshotSectionHint,ErrorAlert,
@@ -18,6 +19,7 @@ import { SnapshotSectionHint,ErrorAlert,
   StatCard, } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { JudgeStatusBanner, isJudgeStatusBannerCritical } from '../components/judge/JudgeStatusBanner'
+import { JudgePipelineGuide } from '../components/judge/JudgePipelineGuide'
 import {
   ActionPill,
   ActionPillRow,
@@ -296,6 +298,7 @@ export function JudgePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<JudgeStats>('/v1/admin/judge/stats')
+  usePublishPageHeroStats('/judge', statsData)
   const stats = { ...EMPTY_JUDGE_STATS, ...statsData }
 
   const setActiveTab = useCallback(
@@ -757,6 +760,8 @@ export function JudgePage() {
           plainBanner={ux.plainBanner}
         />
       )}
+
+      <JudgePipelineGuide topPriority={stats.topPriority} />
 
       {!ux.hideTabs && (
       <SegmentedControl<JudgeTabId>

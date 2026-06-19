@@ -282,14 +282,14 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 </td>
 <td align="center" width="16%">
 
-**49**
+**50**
 <br/>
 <sub>Edge Functions</sub>
 
 </td>
 <td align="center" width="16%">
 
-**273**
+**278**
 <br/>
 <sub>SQL Migrations</sub>
 
@@ -298,7 +298,7 @@ These never trigger an alert. Your users just leave. Mushi gives them a way to t
 <tr>
 <td align="center">
 
-**18**
+**19**
 <br/>
 <sub>Pipeline Agents</sub>
 

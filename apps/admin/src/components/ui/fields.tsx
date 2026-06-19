@@ -131,11 +131,11 @@ export function LongFormText({ value, className = '', tone = 'fg', maxWidth = 'm
 type CalloutTone = 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
 
 const CALLOUT_TONE: Record<CalloutTone, string> = {
-  neutral: 'border-l-2 border-edge-subtle bg-surface-overlay/35',
-  info:    'border-l-2 border-info/55 bg-info-muted/12',
-  ok:      'border-l-2 border-ok/50 bg-ok-muted/10',
-  warn:    'border-l-2 border-warn/50 bg-warn-muted/12',
-  danger:  'border-l-2 border-danger/45 bg-danger-muted/10',
+  neutral: 'border-l-2 border-edge-subtle bg-surface-overlay',
+  info:    'border-l-2 border-info/55 bg-info-muted',
+  ok:      'border-l-2 border-ok/50 bg-ok-muted',
+  warn:    'border-l-2 border-warn/50 bg-warn-muted',
+  danger:  'border-l-2 border-danger/45 bg-danger-muted',
 }
 
 interface CalloutProps {

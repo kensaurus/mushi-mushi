@@ -16,6 +16,7 @@ import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
 import { SettingsChangeHint } from './SettingsChangeHint'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
+import { SettingEffectCallout } from '../FeatureExplainPanel'
 import { countChangedFields } from './settingsDiff'
 import { ContainedBlock } from '../report-detail/ReportSurface'
 import { ConsoleHelpPanel } from '../ConsoleHelpPanel'
@@ -104,11 +105,10 @@ export function GeneralPanel() {
     <>
     <SettingsPanelLayout
       fullWidth={
-        <ContainedBlock tone="muted">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            Slack webhooks, Sentry forwarding, and classifier model knobs — saved per project on Save.
-          </p>
-        </ContainedBlock>
+        <SettingEffectCallout label="Overview">
+          Controls where bug alerts go (Slack), whether Sentry errors become reports, and how the AI
+          triages and groups similar bugs. Save applies changes to this project only.
+        </SettingEffectCallout>
       }
       footer={
         <SettingsFormFooter
@@ -121,7 +121,11 @@ export function GeneralPanel() {
       }
     >
       <div id="slack" className="scroll-mt-6">
-        <Section title="Slack Integration" className="space-y-4">
+        <Section title="Bug alerts in Slack" className="space-y-4">
+          <SettingEffectCallout>
+            When someone submits a bug, Mushi can post to a Slack channel with Triage and Dispatch fix
+            buttons. Fix progress replies appear in the same thread when you use the bot (recommended).
+          </SettingEffectCallout>
           {/* Bot channel config (preferred — supports threading) */}
           <div className="rounded-md border border-edge-subtle bg-surface-raised/50 p-3 space-y-3">
             <div className="flex items-start justify-between gap-2">
@@ -194,7 +198,11 @@ export function GeneralPanel() {
         </Section>
       </div>
 
-      <Section title="Sentry Integration" className="space-y-3">
+      <Section title="Sentry error tracking" className="space-y-3">
+        <SettingEffectCallout>
+          Connect your Sentry project so production crashes and optional user-feedback widgets become
+          Mushi reports — same triage queue as in-app bug reports.
+        </SettingEffectCallout>
         <div>
           <Input
             label="Sentry DSN"
@@ -218,6 +226,7 @@ export function GeneralPanel() {
             type="password"
             value={settings.sentry_webhook_secret ?? ''}
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
+            placeholder="Paste from Sentry → Settings → Integrations → Webhook → Client Secret"
             validate={token({ minLength: 16 })}
           />
           <SettingsChangeHint
@@ -241,7 +250,11 @@ export function GeneralPanel() {
         </div>
       </Section>
 
-      <Section title="LLM Pipeline" className="space-y-3">
+      <Section title="Triage AI" className="space-y-3">
+        <SettingEffectCallout>
+          Chooses which AI model scores severity and category when a bug arrives, and how confident
+          the fast first pass must be before calling the bigger model.
+        </SettingEffectCallout>
         <div>
           <SelectField
             label="Stage 2 Model"
@@ -283,7 +296,11 @@ export function GeneralPanel() {
         </div>
       </Section>
 
-      <Section title="Deduplication" className="space-y-3">
+      <Section title="Grouping similar bugs" className="space-y-3">
+        <SettingEffectCallout>
+          Higher = only very similar reports merge into one cluster. Lower = more aggressive grouping
+          (fewer duplicate tickets, but unrelated bugs may lump together).
+        </SettingEffectCallout>
         <div>
           <Slider
             label="Similarity Threshold"
@@ -299,7 +316,7 @@ export function GeneralPanel() {
         </div>
       </Section>
 
-      <Section title="Autofix Branch Naming" className="space-y-3">
+      <Section title="Auto-fix branch names" className="space-y-3">
         <ContainedBlock tone="muted">
           <p className="text-2xs leading-relaxed text-fg-muted">
             Template for branches opened by the fix-worker. Available tokens:{' '}
@@ -342,13 +359,11 @@ export function GeneralPanel() {
         </div>
       </Section>
 
-      <Section title="Daily Budget Quotas" className="space-y-3">
-        <ContainedBlock tone="muted">
-          <p className="text-2xs leading-relaxed text-fg-muted">
-            Hard caps on LLM + Firecrawl spend per UTC day. Requests over the limit get a 429 response.
-            Resets at 00:00 UTC. Raise limits here when you need more headroom.
-          </p>
-        </ContainedBlock>
+      <Section title="Daily spend limits" className="space-y-3">
+        <SettingEffectCallout>
+          Safety caps on automated web crawls and test generation per day. When a limit is hit, new
+          runs wait until midnight UTC instead of silently running up a bill.
+        </SettingEffectCallout>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <label className="block">
             <ContainedBlock tone="muted" className="mb-1">

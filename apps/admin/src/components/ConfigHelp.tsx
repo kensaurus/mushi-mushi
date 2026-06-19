@@ -49,6 +49,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom'
 import { DetailRows, type DetailRowItem } from './ui'
 import { getConfigDoc } from '../lib/configDocs'
+import { CONFIG_HELP_POPOVER_SHELL } from '../lib/pageHelpSurfaces'
 
 interface ConfigHelpProps {
   /** Stable id matching an entry in `configDocs.ts`, e.g.
@@ -300,7 +301,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
             display: 'flex',
             flexDirection: 'column',
           }}
-          className="z-[100] rounded-md border border-edge bg-surface-overlay shadow-overlay text-2xs text-fg-secondary text-pretty tooltip-enter outline-none"
+          className={`z-[100] rounded-md border text-2xs text-fg-secondary text-pretty tooltip-enter outline-none ${CONFIG_HELP_POPOVER_SHELL}`}
           onClick={(e) => e.stopPropagation()}
           data-side={pos?.side ?? 'bottom'}
         >

@@ -4,64 +4,36 @@
  */
 
 import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts'
-
-interface ProjectSettings {
-  github_repo_url: string | null
-  github_installation_token_ref: string | null
-}
-
-interface InFlightJob {
-  id: string
-  status: string
-}
-
-type GateResult =
-  | { ok: true }
-  | { ok: false; code: string; status: number; jobId?: string }
-
-function evaluateSdkUpgradePostGate(
-  settings: ProjectSettings | null,
-  inFlight: InFlightJob[],
-): GateResult {
-  if (!settings?.github_repo_url) {
-    return {
-      ok: false,
-      code: 'GITHUB_NOT_CONNECTED',
-      status: 400,
-    }
-  }
-  if (!settings.github_installation_token_ref) {
-    return {
-      ok: false,
-      code: 'GITHUB_TOKEN_MISSING',
-      status: 400,
-    }
-  }
-  if (inFlight.length > 0) {
-    return {
-      ok: false,
-      code: 'ALREADY_IN_PROGRESS',
-      status: 409,
-      jobId: inFlight[0].id,
-    }
-  }
-  return { ok: true }
-}
+import {
+  evaluateSdkUpgradePostGate,
+  type SdkUpgradeProjectSettings,
+  type SdkUpgradeInFlightJob,
+} from '../../_shared/sdk-upgrade-gates.ts'
 
 Deno.test('sdk-upgrade gate — rejects when github_repo_url missing', () => {
   const result = evaluateSdkUpgradePostGate(
     { github_repo_url: null, github_installation_token_ref: 'vault:abc' },
     [],
+    null,
   )
-  assertEquals(result, { ok: false, code: 'GITHUB_NOT_CONNECTED', status: 400 })
+  assertEquals(result.action, 'reject')
+  if (result.action === 'reject') {
+    assertEquals(result.code, 'GITHUB_NOT_CONNECTED')
+    assertEquals(result.status, 400)
+  }
 })
 
 Deno.test('sdk-upgrade gate — rejects when github token ref missing', () => {
   const result = evaluateSdkUpgradePostGate(
     { github_repo_url: 'https://github.com/acme/app', github_installation_token_ref: null },
     [],
+    null,
   )
-  assertEquals(result, { ok: false, code: 'GITHUB_TOKEN_MISSING', status: 400 })
+  assertEquals(result.action, 'reject')
+  if (result.action === 'reject') {
+    assertEquals(result.code, 'GITHUB_TOKEN_MISSING')
+    assertEquals(result.status, 400)
+  }
 })
 
 Deno.test('sdk-upgrade gate — dedupes in-flight queued/running jobs', () => {
@@ -71,13 +43,14 @@ Deno.test('sdk-upgrade gate — dedupes in-flight queued/running jobs', () => {
       github_installation_token_ref: 'vault:abc',
     },
     [{ id: 'job-123', status: 'running' }],
+    null,
   )
-  assertEquals(result, {
-    ok: false,
-    code: 'ALREADY_IN_PROGRESS',
-    status: 409,
-    jobId: 'job-123',
-  })
+  assertEquals(result.action, 'reject')
+  if (result.action === 'reject') {
+    assertEquals(result.code, 'ALREADY_IN_PROGRESS')
+    assertEquals(result.status, 409)
+    assertEquals(result.jobId, 'job-123')
+  }
 })
 
 Deno.test('sdk-upgrade gate — allows enqueue when github connected and idle', () => {
@@ -87,11 +60,69 @@ Deno.test('sdk-upgrade gate — allows enqueue when github connected and idle', 
       github_installation_token_ref: 'vault:abc',
     },
     [],
+    null,
   )
-  assertEquals(result, { ok: true })
+  assertEquals(result, { action: 'enqueue' })
 })
 
 Deno.test('sdk-upgrade gate — treats missing settings row as not connected', () => {
-  const result = evaluateSdkUpgradePostGate(null, [])
-  assertEquals(result, { ok: false, code: 'GITHUB_NOT_CONNECTED', status: 400 })
+  const result = evaluateSdkUpgradePostGate(null, [], null)
+  assertEquals(result.action, 'reject')
+  if (result.action === 'reject') {
+    assertEquals(result.code, 'GITHUB_NOT_CONNECTED')
+  }
+})
+
+Deno.test('sdk-upgrade gate — reuses open upgrade PR instead of enqueueing', () => {
+  const result = evaluateSdkUpgradePostGate(
+    {
+      github_repo_url: 'https://github.com/acme/app',
+      github_installation_token_ref: 'vault:abc',
+    },
+    [],
+    {
+      number: 42,
+      url: 'https://github.com/acme/app/pull/42',
+      headRef: 'mushi/sdk-upgrade-mqj867a3',
+    },
+  )
+  assertEquals(result.action, 'reuse')
+  if (result.action === 'reuse') {
+    assertEquals(result.prNumber, 42)
+    assertEquals(result.branch, 'mushi/sdk-upgrade-mqj867a3')
+  }
+})
+
+Deno.test('sdk-upgrade gate — refresh bypasses open PR reuse', () => {
+  const result = evaluateSdkUpgradePostGate(
+    {
+      github_repo_url: 'https://github.com/acme/app',
+      github_installation_token_ref: 'vault:abc',
+    },
+    [],
+    {
+      number: 42,
+      url: 'https://github.com/acme/app/pull/42',
+      headRef: 'mushi/sdk-upgrade-mqj867a3',
+    },
+    { refresh: true },
+  )
+  assertEquals(result, { action: 'enqueue' })
+})
+
+Deno.test('sdk-upgrade gate — force alias bypasses open PR reuse', () => {
+  const result = evaluateSdkUpgradePostGate(
+    {
+      github_repo_url: 'https://github.com/acme/app',
+      github_installation_token_ref: 'vault:abc',
+    },
+    [],
+    {
+      number: 42,
+      url: 'https://github.com/acme/app/pull/42',
+      headRef: 'mushi/sdk-upgrade-mqj867a3',
+    },
+    { force: true },
+  )
+  assertEquals(result, { action: 'enqueue' })
 })

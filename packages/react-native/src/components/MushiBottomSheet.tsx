@@ -498,7 +498,13 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 const s = StyleSheet.create({
   flex: { flex: 1 },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    // Inlined StyleSheet.absoluteFillObject — RN 0.86 dropped it from the
+    // StyleSheet TS types; the literal is equivalent and works on all RN >=0.72.
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   sheet: {
     position: 'absolute',

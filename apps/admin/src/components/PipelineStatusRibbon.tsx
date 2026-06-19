@@ -35,6 +35,8 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { hasPageOwnedHero } from '../lib/pageHeroOwnership'
+import { shouldDefaultCollapsePipelineRibbon } from '../lib/chromeLayers'
+import { shouldShowPipelineRibbon } from '../lib/pipelineRibbonVisibility'
 import type { PdcaStageId } from '../lib/pdca'
 
 type Tone = 'ok' | 'warn' | 'danger' | 'idle'
@@ -52,8 +54,9 @@ type Tone = 'ok' | 'warn' | 'danger' | 'idle'
 // ----------------------------------------------------------------------------
 
 const COLLAPSE_KEY = 'mushi:pipelineRibbon:collapsed:v1'
+const DASHBOARD_COLLAPSE_KEY = 'mushi:pipelineRibbon:dashboardCollapsed:v1'
 
-/** User preference on layout-fallback routes (dashboard, billing, …). */
+/** User preference on layout-fallback routes (billing, …). */
 function readGlobalRibbonCollapsed(): boolean {
   if (typeof window === 'undefined') return false
   const stored = window.localStorage.getItem(COLLAPSE_KEY)
@@ -62,15 +65,29 @@ function readGlobalRibbonCollapsed(): boolean {
   return false
 }
 
+function readDashboardRibbonCollapsed(): boolean {
+  if (typeof window === 'undefined') return true
+  const stored = window.localStorage.getItem(DASHBOARD_COLLAPSE_KEY)
+  if (stored === '1') return true
+  if (stored === '0') return false
+  return true
+}
+
+function ribbonCollapsePersists(pathname: string): boolean {
+  return !hasPageOwnedHero(pathname) && pathname !== '/dashboard'
+}
+
 function readInitialCollapsed(pathname: string): boolean {
+  if (shouldDefaultCollapsePipelineRibbon(pathname)) return readDashboardRibbonCollapsed()
   if (hasPageOwnedHero(pathname)) return true
   return readGlobalRibbonCollapsed()
 }
 
-function writeCollapsed(value: boolean): void {
+function writeCollapsed(pathname: string, value: boolean): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(COLLAPSE_KEY, value ? '1' : '0')
+    const key = pathname === '/dashboard' ? DASHBOARD_COLLAPSE_KEY : COLLAPSE_KEY
+    window.localStorage.setItem(key, value ? '1' : '0')
   } catch {
     // localStorage write can fail in private mode; non-fatal.
   }
@@ -98,10 +115,10 @@ const TONE_CLASS: Record<Tone, { dot: string; ring: string; label: string }> = {
 }
 
 const STAGE_TONE: Record<RibbonTile['stage'], string> = {
-  P: 'bg-info/15 text-info border border-info/35',
-  D: 'bg-brand/15 text-brand border border-brand/35',
-  C: 'bg-warn-muted/50 text-warning-foreground border border-warn/35',
-  A: 'bg-ok/15 text-ok border border-ok/35',
+  P: 'bg-info-muted text-info border border-info/35',
+  D: 'bg-brand-subtle text-brand border border-brand/35',
+  C: 'bg-warn-muted text-warning-foreground border border-warn/35',
+  A: 'bg-ok-muted text-ok border border-ok/35',
 }
 
 const STAGE_BORDER: Record<RibbonTile['stage'], string> = {
@@ -156,7 +173,7 @@ function PulseArrow({
             Tint to the source stage colour so the pill matches the arrow's gradient origin
             (NN/g #6 Recognition over Recall — colour signals direction without reading copy). */}
         <span
-          className="absolute top-0 left-1/2 z-[2] -translate-x-1/2 whitespace-nowrap rounded-full border bg-surface-overlay/95 px-1.5 py-px text-3xs font-semibold uppercase tracking-wide shadow-sm pointer-events-none"
+          className="absolute top-0 left-1/2 z-[2] -translate-x-1/2 whitespace-nowrap rounded-full border bg-surface-overlay px-1.5 py-px text-3xs font-semibold uppercase tracking-wide shadow-sm pointer-events-none"
           style={{ color: fromColor, borderColor: fromColor }}
           title={fullLabel}
         >
@@ -226,16 +243,16 @@ export function PipelineStatusRibbon() {
   // Manual expand on those routes is session-only — preference persists only on
   // layout-fallback routes where the ribbon is the sole hero chrome.
   useEffect(() => {
-    if (hasPageOwnedHero(pathname)) {
-      setCollapsed(true)
+    if (hasPageOwnedHero(pathname) || shouldDefaultCollapsePipelineRibbon(pathname)) {
+      setCollapsed(readInitialCollapsed(pathname))
     } else {
       setCollapsed(readGlobalRibbonCollapsed())
     }
   }, [pathname])
 
   useEffect(() => {
-    if (!hasPageOwnedHero(pathname)) {
-      writeCollapsed(collapsed)
+    if (ribbonCollapsePersists(pathname)) {
+      writeCollapsed(pathname, collapsed)
     }
   }, [collapsed, pathname])
 
@@ -243,6 +260,9 @@ export function PipelineStatusRibbon() {
   // users have the NextBestAction strip which is higher signal for their
   // level of context.
   if (!isAdvanced) return null
+
+  // Workspace timeline only on PDCA hub routes — not billing, projects, etc.
+  if (!shouldShowPipelineRibbon(pathname)) return null
 
   // Plan: backlog of untriaged reports.
   const planTone: Tone =
@@ -346,7 +366,7 @@ export function PipelineStatusRibbon() {
           // Reads as a single chip rather than a card so collapsed mode
           // costs ~28px instead of the expanded ~64px. Tone-tints to the
           // worst stage so a danger condition still grabs the eye.
-          className={`group flex items-center gap-2 w-full rounded-sm bg-surface-raised/25 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          className={`group flex items-center gap-2 w-full rounded-sm bg-surface-overlay px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
           title="Pipeline pulse — click to expand"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${worstTone.dot}`} />
@@ -386,7 +406,7 @@ export function PipelineStatusRibbon() {
       aria-label="Pipeline pulse"
       data-testid="pipeline-status-ribbon"
       data-collapsed="false"
-      className="mb-3 w-full rounded-md border border-edge-subtle/70 bg-surface-raised/35 px-1 py-1"
+      className="mb-3 w-full rounded-md border border-edge-subtle bg-surface-raised shadow-card px-1 py-1"
     >
       {/* Header strip — provides the collapse affordance + a context label.
           Kept tight (one line) so the ribbon's vertical footprint barely
@@ -398,7 +418,7 @@ export function PipelineStatusRibbon() {
             <span className="inline-block h-1.5 w-8 animate-pulse rounded-full bg-fg-faint/30" aria-label="Loading counts" />
           )}
           {nav.ready && worst.tone === 'danger' && (
-            <span className="normal-case rounded bg-danger/15 px-1 py-px text-3xs font-semibold text-danger motion-safe:animate-pulse">
+            <span className="normal-case rounded bg-danger-muted px-1 py-px text-3xs font-semibold text-danger motion-safe:animate-pulse">
               attention
             </span>
           )}
@@ -426,7 +446,7 @@ export function PipelineStatusRibbon() {
             <Fragment key={tile.stage}>
               <Link
                 to={tile.to}
-                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle/80 border-l-[4px] bg-surface-raised/80 px-2.5 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
+                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle border-l-[4px] bg-surface-raised px-2.5 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
                   focusRibbonStage === tile.stage
                     ? 'ring-2 ring-brand/40 shadow-sm'
                     : ''

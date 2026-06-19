@@ -12,11 +12,15 @@ import { apiFetch } from '../lib/supabase'
 import { PublishingTab } from '../components/rewards/PublishingTab'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useActiveOrgSignal } from '../lib/activeOrg'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
+import { RewardsEconomyGuide } from '../components/rewards/RewardsEconomyGuide'
+import { EMPTY_REWARDS_STATS, type RewardsStats } from '../components/rewards/types'
 import {
   Card,
   Section,
@@ -1650,14 +1654,15 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
               onChange={(ev) => setWebhookUrl(ev.target.value)}
             />
             <Input
-              label="Signing secret (≥ 16 chars)"
+              label="Signing secret (≥ 16 chars, optional)"
               type="password"
-              placeholder="super-secret-value"
+              placeholder="Leave blank to auto-generate — shown once after save"
               value={webhookSecret}
               onChange={(ev) => setWebhookSecret(ev.target.value)}
             />
             <p className="text-2xs text-fg-faint">
-              After saving, set <code className="font-mono text-fg-secondary">MUSHI_REWARD_WEBHOOK_SECRET_&lt;ID&gt;</code> in your Supabase project env.
+              Leave blank to auto-generate a secret. It is shown once after saving — copy it immediately.
+              Wire it as <code className="font-mono text-fg-secondary">MUSHI_REWARD_WEBHOOK_SECRET</code> in your server environment to verify the HMAC signature.
             </p>
             <div className="flex gap-2 justify-end pt-1">
               <Btn variant="cancel" size="sm" onClick={() => setShowNewWebhook(false)}>Cancel</Btn>
@@ -2121,6 +2126,14 @@ export function RewardsPage() {
   const rewardsEnabled = has('rewards_program')
   const canEdit = rewardsEnabled
 
+  const {
+    data: rewardsStatsData,
+    reload: reloadRewardsStats,
+    isValidating: rewardsStatsValidating,
+  } = usePageData<RewardsStats>('/v1/admin/rewards/stats')
+  usePublishPageHeroStats('/rewards', rewardsStatsData)
+  const rewardsStats = rewardsStatsData ?? EMPTY_REWARDS_STATS
+
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
   const active: TabId = isTabId(param) ? param : 'overview'
@@ -2177,6 +2190,16 @@ export function RewardsPage() {
           ? <Badge className="bg-ok-muted text-ok">Active</Badge>
           : <Badge className="bg-surface-overlay text-fg-muted">Hobby — read-only</Badge>}
       </PageHeaderBar>
+
+      <RewardsStatusBanner
+        stats={rewardsStats}
+        rewardsEntitlement={rewardsEnabled}
+        onTab={setActive}
+        onRefresh={reloadRewardsStats}
+        refreshing={rewardsStatsValidating}
+      />
+
+      <RewardsEconomyGuide topPriority={rewardsStats.topPriority} />
 
       {!rewardsEnabled && (
         <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">

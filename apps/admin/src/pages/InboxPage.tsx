@@ -22,6 +22,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
+import { InboxPdcaGuide } from '../components/inbox/InboxPdcaGuide'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
@@ -98,11 +99,11 @@ const GROUP_TONE: Record<Group, { chip: string; chipText: string; ring: string }
 }
 
 const TONE_RING: Record<PageAction['tone'], string> = {
-  plan: 'border-info/40 bg-info-muted/15',
-  do: 'border-brand/40 bg-brand/10',
-  check: 'border-info/40 bg-info-muted/15',
-  act: 'border-ok/40 bg-ok-muted/15',
-  idle: 'border-edge bg-surface-raised/40',
+  plan: 'border-info/40 bg-info-muted',
+  do: 'border-brand/40 bg-brand-subtle',
+  check: 'border-info/40 bg-info-muted',
+  act: 'border-ok/40 bg-ok-muted',
+  idle: 'border-edge bg-surface-overlay',
 }
 
 type FilterValue = 'all' | 'open' | 'clear' | Group
@@ -268,7 +269,7 @@ export function InboxPage() {
         helpTitle={copy?.help?.title ?? 'About the inbox'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up.'
+          'Your cross-loop action worklist — not the same as the Reports page. Reports lists end-user bugs. The Inbox tells you what to do about them, and aggregates all other actions across triage, failed fixes, integration health, and ops into one priority-ordered list.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
@@ -287,10 +288,10 @@ export function InboxPage() {
             bannerSeverity === 'ok'
               ? 'bg-ok-muted text-ok'
               : bannerSeverity === 'danger'
-                ? 'bg-danger-muted/50 text-danger-foreground'
+                ? 'bg-danger-muted text-danger-foreground'
                 : bannerSeverity === 'warn'
-                  ? 'bg-warn-muted/50 text-warning-foreground'
-                  : 'bg-info-muted/50 text-info-foreground'
+                  ? 'bg-warn-muted text-warning-foreground'
+                  : 'bg-info-muted text-info-foreground'
           }
         >
           {bannerSeverity === 'ok'
@@ -320,6 +321,8 @@ export function InboxPage() {
         />
       )}
 
+      <InboxPdcaGuide stats={stats} />
+
       {!ux.hideTabs && (
         <SegmentedControl
           value={activeTab}
@@ -333,7 +336,7 @@ export function InboxPage() {
       {activeTab === 'overview' && (
         <>
           {stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
-            <Card className="border-danger/30 bg-danger/5 p-4">
+            <Card className="border-danger/30 bg-danger-muted p-4">
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <SignalChip tone="danger">Top priority</SignalChip>
                 {stats.topPriorityStage ? (
@@ -572,7 +575,7 @@ export function InboxPage() {
                   Last {activity.length} events
                 </SignalChip>
               </header>
-              <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle bg-surface-raised/30">
+              <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle bg-surface-raised">
                 {activity.map((item) => (
                   <ActivityFeedRow key={`${item.kind}-${item.id}`} item={item} />
                 ))}
@@ -619,7 +622,7 @@ function FilterChip({
       className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
         active
           ? 'border-brand/40 bg-brand/15 text-brand'
-          : 'border-edge-subtle bg-surface-raised/40 text-fg-muted hover:bg-surface-overlay hover:text-fg'
+          : 'border-edge-subtle bg-surface-overlay text-fg-muted hover:bg-surface-overlay hover:text-fg'
       }`}
     >
       <span>{children}</span>
@@ -637,7 +640,7 @@ function ClearChip({ card }: { card: InboxCard }) {
       data-inbox-card={card.id}
       data-inbox-state="clear"
       to={card.pageTo}
-      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted/15 hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       title={`${card.pageLabel} — all clear. Click to open.`}
     >
       <SignalChip tone="ok">✓</SignalChip>
@@ -657,7 +660,7 @@ function ActivityFeedRow({ item }: { item: ActivityItem }) {
     <li>
       <Link
         to={to}
-        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay/60 motion-safe:transition-colors"
+        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-colors"
       >
         <SignalChip tone={item.kind === 'report' ? 'info' : 'brand'}>{item.kind}</SignalChip>
         <ContainedBlock tone="neutral" className="min-w-0 flex-1 px-2 py-1">

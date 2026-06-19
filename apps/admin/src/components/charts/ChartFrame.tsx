@@ -46,12 +46,8 @@ export function ChartFrame({
   const xSparse = xLabels?.length ? sparseXLabels(xLabels) : []
   const xLast = xLabels ? xLabels.length - 1 : 0
 
-  return (
-    <div
-      className={`flex w-full min-w-0 flex-col gap-1.5 ${className}`}
-      role={accessibleCaption ? 'img' : undefined}
-      aria-label={accessibleCaption}
-    >
+  const chartVisual = (
+    <>
       {yAxisCaption && (
         <span className="text-3xs font-medium uppercase tracking-wider text-fg-muted">
           {yAxisCaption}
@@ -141,6 +137,22 @@ export function ChartFrame({
           )}
         </div>
       </div>
+    </>
+  )
+
+  return (
+    <div className={`flex w-full min-w-0 flex-col gap-1.5 ${className}`}>
+      {accessibleCaption ? (
+        <div
+          role="img"
+          aria-label={accessibleCaption}
+          className="flex flex-col gap-1.5"
+        >
+          {chartVisual}
+        </div>
+      ) : (
+        chartVisual
+      )}
       {accessibleCaption && accessibleColumns && accessibleRows && (
         <ChartAccessibleSummary
           caption={accessibleCaption}

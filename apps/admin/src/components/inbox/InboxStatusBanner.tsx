@@ -3,10 +3,11 @@
  * PURPOSE: Action inbox posture — open work, setup gaps, all-clear state.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn, RelativeTime } from '../ui'
+import { RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { InboxStats, InboxTabId } from './types'
 
 /** Nominal inbox-zero posture is covered by the page hero + snapshot. */
@@ -35,6 +36,7 @@ export function InboxStatusBanner({
   const copy = usePageCopy('/inbox')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (stats.topPriority === 'no_project' || !stats.hasAnyProject) {
     return (
@@ -48,9 +50,11 @@ export function InboxStatusBanner({
             : 'Create a project on Setup first. Actions appear here once reports and integrations are wired.')
         }
         action={
-          <Link to={stats.nextStepTo ?? '/onboarding'}>
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.setup ?? 'Go to Setup'}
+            to={stats.nextStepTo ?? '/onboarding'}
+            tone="info"
+          />
         }
       />
     )
@@ -72,9 +76,11 @@ export function InboxStatusBanner({
             : 'Finish ingest before the inbox can surface real triage and fix actions.')
         }
         action={
-          <Link to={stats.nextStepTo ?? '/onboarding?tab=steps'}>
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Continue setup'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.setup ?? 'Continue setup'}
+            to={stats.nextStepTo ?? scopedHref('/onboarding?tab=steps', pid)}
+            tone="warn"
+          />
         }
       />
     )
@@ -89,20 +95,25 @@ export function InboxStatusBanner({
             ? `${stats.openActions} thing${stats.openActions === 1 ? '' : 's'} need you`
             : `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — start with ${stats.topPriorityStage ?? 'Plan'}`
         }
-        subtitle={stats.topPriorityLabel ?? stats.topPriorityTitle ?? 'Work the queue top to bottom.'}
+        subtitle={
+          stats.topPriorityLabel ??
+          stats.topPriorityTitle ??
+          'Work the queue top to bottom — each item links to the page that clears it.'
+        }
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            {onTab ? (
-              <Btn size="sm" variant="ghost" onClick={() => onTab('actions')}>
-                {actions.queue ?? 'View queue'}
-              </Btn>
-            ) : null}
-            {stats.topPriorityTo ? (
-              <Link to={stats.topPriorityTo}>
-                <Btn size="sm" variant="ghost">{actions.takeAction ?? 'Take action'}</Btn>
-              </Link>
-            ) : null}
-          </div>
+          stats.topPriorityTo ? (
+            <StatusBannerAction
+              label={actions.takeAction ?? 'Take action'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
+          ) : onTab ? (
+            <StatusBannerAction
+              label={actions.queue ?? 'View queue'}
+              onClick={() => onTab('actions')}
+              tone="danger"
+            />
+          ) : null
         }
       />
     )
@@ -133,13 +144,16 @@ export function InboxStatusBanner({
       }
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('stages')}>
-            {actions.stages ?? 'View stages'}
-          </Btn>
+          <StatusBannerAction label={actions.stages ?? 'View stages'} onClick={() => onTab('stages')} tone="ok" />
         ) : null
       }
     />

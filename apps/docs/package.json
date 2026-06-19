@@ -7,8 +7,8 @@
   "type": "module",
   "scripts": {
     "prebuild": "node ../../scripts/sync-docs-screenshots.mjs",
-    "dev": "next --turbopack",
-    "build": "next build && pagefind --site out --output-subdir _pagefind",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack && pagefind --site out --output-subdir _pagefind",
     "start": "next start -p 3001",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -17,22 +17,22 @@
   "dependencies": {
     "@mushi-mushi/brand": "workspace:*",
     "@theguild/remark-mermaid": "^0.3.0",
-    "next": "^15.5.18",
+    "next": "^16.2.9",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "@tailwindcss/postcss": "^4.2.4",
-    "@types/node": "^22.19.17",
-    "@types/react": "^19.2.14",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/node": "^22.19.21",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "eslint": "^10.3.0",
+    "eslint": "^10.4.1",
     "pagefind": "^1.5.2",
-    "postcss": "^8.5.13",
-    "tailwindcss": "^4.2.4",
-    "typescript": "^5.9.3"
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3"
   }
 }

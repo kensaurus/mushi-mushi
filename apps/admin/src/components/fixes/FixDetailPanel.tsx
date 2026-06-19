@@ -3,6 +3,7 @@
  * a row is expanded so the attempts list stays scannable.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
 import { PdcaReceipt } from './PdcaReceipt'
@@ -12,6 +13,8 @@ import { FixErrorPanel } from './FixErrorPanel'
 import { pluralizeWithCount } from '../../lib/format'
 import { formatTokens } from '../charts'
 import type { FixAttempt } from './types'
+import { RelativeTime } from '../ui'
+import { apiFetch } from '../../lib/supabase'
 
 interface InventoryActionSummary {
   actionNodeId: string
@@ -28,6 +31,7 @@ interface Props {
   timeline: FixTimelineEvent[] | undefined
   traceUrl: string | null
   onRetry: () => Promise<void>
+  onRefreshed?: () => void
   isInFlight?: boolean
   inventoryAction?: InventoryActionSummary | null
 }
@@ -37,11 +41,26 @@ export function FixDetailPanel({
   timeline,
   traceUrl,
   onRetry,
+  onRefreshed,
   isInFlight = false,
   inventoryAction,
 }: Props) {
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0)
   const specWarnings = fix.spec_validation_warnings ?? []
+
+  const [ciRefreshing, setCiRefreshing] = useState(false)
+  const handleRefreshCi = async () => {
+    if (ciRefreshing) return
+    setCiRefreshing(true)
+    try {
+      await apiFetch(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' })
+      onRefreshed?.()
+    } catch {
+      // best-effort
+    } finally {
+      setCiRefreshing(false)
+    }
+  }
 
   return (
     <div className="border-t border-edge bg-surface-overlay/30 px-3 py-3 space-y-3">
@@ -90,6 +109,22 @@ export function FixDetailPanel({
           >
             {`PR${fix.pr_number ? ` #${fix.pr_number}` : ''} ↗`}
           </a>
+        )}
+        {fix.pr_url && (
+          <button
+            type="button"
+            onClick={() => void handleRefreshCi()}
+            disabled={ciRefreshing}
+            className="text-fg-muted hover:text-fg underline disabled:opacity-50 disabled:cursor-wait"
+            title="Fetch latest CI / merge state from GitHub"
+          >
+            {ciRefreshing ? 'Refreshing…' : 'Refresh from GitHub'}
+          </button>
+        )}
+        {fix.check_run_updated_at && (
+          <span className="text-fg-faint" title={`CI last synced: ${new Date(fix.check_run_updated_at).toLocaleString()}`}>
+            CI synced <RelativeTime value={fix.check_run_updated_at} />
+          </span>
         )}
         <Link to={`/reports/${fix.report_id}`} className="text-brand hover:underline">
           Source report →

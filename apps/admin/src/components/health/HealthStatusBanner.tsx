@@ -3,10 +3,10 @@
  * PURPOSE: Health posture — LLM errors, fallbacks, cron failures, idle, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { cronErrorsHint, llmErrorsHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { HealthStats, HealthTabId } from './HealthStatsTypes'
 
 /** Nominal/idle posture is covered by the page hero + snapshot — skip the banner. */
@@ -39,6 +39,7 @@ export function HealthStatusBanner({
   const copy = usePageCopy('/health')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
@@ -51,9 +52,7 @@ export function HealthStatusBanner({
             : 'Create a project before LLM and cron telemetry appear.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />
         }
       />
     )
@@ -66,19 +65,29 @@ export function HealthStatusBanner({
         title={
           plainBanner
             ? `${stats.errorRatePct}% of AI calls failed on ${projectLabel}`
-            : `LLM error rate ${stats.errorRatePct}% on ${projectLabel}`
+            : `${stats.errorRatePct}% of AI calls failed recently`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={stats.topPriorityLabel ?? llmErrorsHint(stats.errorRatePct)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.llm ?? 'Inspect LLM'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.llm ?? 'Inspect LLM errors'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('llm')}>
-              {actions.llm ?? 'Inspect LLM'}
-            </Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.llm ?? 'Inspect LLM errors'}
+              onClick={() => onTab('llm')}
+              tone="danger"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.llm ?? 'Inspect LLM errors'}
+              to={scopedHref('/health?tab=llm', pid)}
+              tone="danger"
+            />
+          )
         }
       />
     )
@@ -91,19 +100,29 @@ export function HealthStatusBanner({
         title={
           plainBanner
             ? `${stats.cronErrorCount} scheduled job${stats.cronErrorCount === 1 ? '' : 's'} failing`
-            : `${stats.cronErrorCount} cron job${stats.cronErrorCount === 1 ? '' : 's'} failing`
+            : `${stats.cronErrorCount} background job${stats.cronErrorCount === 1 ? '' : 's'} failing`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={stats.topPriorityLabel ?? cronErrorsHint(stats.cronErrorCount)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.cron ?? 'Open cron'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.cron ?? 'Open Cron jobs'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('cron')}>
-              {actions.cron ?? 'Open cron'}
-            </Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.cron ?? 'Open Cron jobs'}
+              onClick={() => onTab('cron')}
+              tone="danger"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.cron ?? 'Open Cron jobs'}
+              to={scopedHref('/health?tab=cron', pid)}
+              tone="danger"
+            />
+          )
         }
       />
     )
@@ -116,48 +135,77 @@ export function HealthStatusBanner({
         title={
           plainBanner
             ? `${stats.fallbackRatePct}% of calls fell back to backup model`
-            : `Fallback rate ${stats.fallbackRatePct}% — primary may be flaky`
+            : `${stats.fallbackRatePct}% of AI calls used the backup model`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Your primary AI provider may be rate-limiting — check API keys or switch models in Settings.'
+        }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.llm ?? 'Review LLM'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.llm ?? 'Review LLM activity'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('llm')}>
-              {actions.llm ?? 'Review LLM'}
-            </Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.llm ?? 'Review LLM activity'}
+              onClick={() => onTab('llm')}
+              tone="warn"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.llm ?? 'Review LLM activity'}
+              to={scopedHref('/health?tab=llm', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
   }
 
   if (stats.topPriority === 'cron_stale' || stats.topPriority === 'cron_warn') {
+    const late = stats.topPriority === 'cron_stale'
     return (
       <StatusBannerShell
         tone="warn"
         title={
           plainBanner
-            ? stats.topPriority === 'cron_stale'
+            ? late
               ? 'Scheduled jobs have not run on time'
               : 'Scheduled jobs running late'
-            : stats.topPriority === 'cron_stale'
-              ? 'Cron jobs stale'
-              : 'Cron jobs running late'
+            : late
+              ? `${stats.cronStaleCount} job${stats.cronStaleCount === 1 ? '' : 's'} overdue`
+              : `${stats.cronWarnCount} job${stats.cronWarnCount === 1 ? '' : 's'} running late`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          (late
+            ? 'A background job missed its expected schedule — open Cron to see which one and when it last ran.'
+            : 'Jobs are slower than usual but not yet blocking the pipeline.')
+        }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.cron ?? 'Open cron'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.cron ?? 'Open Cron jobs'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('cron')}>
-              {actions.cron ?? 'Open cron'}
-            </Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.cron ?? 'Open Cron jobs'}
+              onClick={() => onTab('cron')}
+              tone="warn"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.cron ?? 'Open Cron jobs'}
+              to={scopedHref('/health?tab=cron', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
@@ -168,11 +216,16 @@ export function HealthStatusBanner({
       <StatusBannerShell
         tone="brand"
         title={plainBanner ? `No AI activity on ${projectLabel} yet` : `No LLM activity on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Send a test bug report from Setup — AI routing shows up here once triage runs.'
+        }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.verify ?? 'Send test report'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.verify ?? 'Send test report'}
+            to={scopedHref('/onboarding?tab=verify', pid)}
+            tone="brand"
+          />
         }
       />
     )
@@ -185,17 +238,26 @@ export function HealthStatusBanner({
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.activity ?? 'View activity'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.activity ?? 'View activity'}
+            to={stats.topPriorityTo}
+            tone="ok"
+          />
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('activity')}>
-            {actions.activity ?? 'View activity'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.activity ?? 'View activity'}
+            onClick={() => onTab('activity')}
+            tone="ok"
+          />
         ) : null
       }
     />

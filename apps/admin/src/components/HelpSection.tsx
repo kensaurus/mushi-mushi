@@ -12,6 +12,7 @@
 
 import React from 'react'
 import type { ReactNode } from 'react'
+import { PAGE_HELP_SECTION_SHELL } from '../lib/pageHelpSurfaces'
 
 type HelpTone = 'info' | 'tip' | 'steps' | 'nav'
 
@@ -44,7 +45,7 @@ export function HelpSection({
 }: HelpSectionProps): React.ReactElement {
   return React.createElement(
     'div',
-    { className: `flex gap-2.5 ${className}` },
+    { className: `${PAGE_HELP_SECTION_SHELL} flex gap-2.5 ${className}` },
     // Left accent rail
     React.createElement('div', {
       className: `mt-0.5 w-0.5 shrink-0 self-stretch rounded-full ${TONE_RAIL[tone]}`,

@@ -27,7 +27,16 @@ import {
 } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { BarSparkline } from '../components/charts'
+import { formatChartDayLabel } from '../components/charts/chartAxis'
+import {
+  EMPTY_CODE_HEALTH_STATS,
+  type CodeHealthStats,
+} from '../components/code-health/CodeHealthStatsTypes'
+import { CodeHealthStatusBanner } from '../components/code-health/CodeHealthStatusBanner'
+import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
 
@@ -69,6 +78,22 @@ interface CodeHealthResponse {
   summary: CodeHealthSummary
 }
 
+// ── Direction-of-travel arrow + tone ─────────────────────────────────────────
+
+function TrendArrow({ delta, higherIsBad }: { delta: number; higherIsBad: boolean }) {
+  const bad = higherIsBad ? delta > 0 : delta < 0
+  const neutral = delta === 0
+  if (neutral) return <span className="text-fg-faint text-sm">→</span>
+  return (
+    <span
+      className={`text-sm font-bold ${bad ? 'text-danger' : 'text-ok'}`}
+      aria-label={delta > 0 ? 'increased' : 'decreased'}
+    >
+      {delta > 0 ? '↑' : '↓'}
+    </span>
+  )
+}
+
 // ── Severity badge ────────────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: GodFileFinding['severity'] }) {
@@ -97,21 +122,29 @@ function Scorecard({ data }: { data: CodeHealthResponse }) {
   const overallTextCls =
     overall === 'fail' ? 'text-danger' : overall === 'warn' ? 'text-warn' : 'text-ok'
 
+  // Plain-language verdict for at-a-glance reading
+  const LOC_BUDGET = 2000
+  const verdictParts: string[] = []
+  if (error_count > 0) verdictParts.push(`${error_count} file${error_count === 1 ? '' : 's'} over the ${LOC_BUDGET.toLocaleString()} LOC budget (errors)`)
+  if (warn_count > 0) verdictParts.push(`${warn_count} file${warn_count === 1 ? '' : 's'} approaching budget (warnings)`)
+  if (max_loc != null && max_loc > LOC_BUDGET) verdictParts.push(`largest file is ${max_loc.toLocaleString()} LOC — split it to get under budget`)
+  if (latest_bundle_kb != null) verdictParts.push(`latest bundle ${latest_bundle_kb.toFixed(1)} KB gzip`)
+  if (verdictParts.length === 0) verdictParts.push('All files within budget · bundle size looks healthy')
+  const verdict = verdictParts.join(' · ')
+
   return (
     <div className={`rounded-md border px-4 py-3 ${overallCls}`}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex-1 min-w-0">
           <p className={`text-sm font-semibold ${overallTextCls}`}>{overallLabel}</p>
-          <p className="mt-0.5 text-xs text-fg-secondary">
-            {error_count} error{error_count !== 1 ? 's' : ''} ·{' '}
-            {warn_count} warning{warn_count !== 1 ? 's' : ''}
-            {max_loc != null && <> · largest file: {max_loc.toLocaleString()} LOC</>}
-            {latest_bundle_kb != null && (
-              <> · latest bundle: {latest_bundle_kb.toFixed(1)} KB gzip</>
-            )}
+          <p className="mt-0.5 text-xs text-fg-secondary">{verdict}</p>
+          <p className="mt-1.5 text-2xs text-fg-muted">
+            <span className="font-medium">What counts:</span> errors = files over {LOC_BUDGET.toLocaleString()} LOC (must fix);
+            warnings = files approaching budget (track trend);
+            bundle KB = gzip size of the deployed JS bundle (lower is better).
           </p>
         </div>
-        <div className="text-right">
+        <div className="shrink-0 text-right">
           {latestRunAt ? (
             <>
               <p className="text-xs text-fg-faint">
@@ -151,28 +184,41 @@ interface BundleSeries {
 
 function LocTrendChart({ series }: { series: BundleSeries }) {
   const values = series.points.map((p) => p.value)
-  const xLabels = series.points.map((p) =>
-    new Date(p.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+  const timestamps = series.points.map((p) => p.ts)
+  const xLabels = timestamps.map((ts) =>
+    formatChartDayLabel(ts.slice(0, 10)),
   )
 
   if (values.length === 0) return null
 
   const latestVal = values[values.length - 1] ?? 0
+  const prevVal = values.length > 1 ? (values[values.length - 2] ?? 0) : null
+  const delta = prevVal != null ? latestVal - prevVal : null
   const budget = 2000
+  const overBudget = latestVal >= budget
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-baseline gap-3">
+      <div className="flex flex-wrap items-baseline gap-2">
         <p className="text-2xs uppercase tracking-wider text-fg-muted">{series.label}</p>
         <span
-          className={`text-lg font-semibold tabular-nums ${latestVal >= budget ? 'text-danger' : 'text-fg-primary'}`}
+          className={`text-lg font-semibold tabular-nums ${overBudget ? 'text-danger' : 'text-fg-primary'}`}
         >
           {Math.round(latestVal).toLocaleString()} LOC
         </span>
-        <span className="text-xs text-fg-faint">budget {budget.toLocaleString()}</span>
+        {delta != null && <TrendArrow delta={delta} higherIsBad />}
+        {delta != null && (
+          <span className={`text-xs tabular-nums ${delta > 0 ? 'text-danger' : delta < 0 ? 'text-ok' : 'text-fg-muted'}`}>
+            {delta > 0 ? `+${Math.round(delta).toLocaleString()}` : Math.round(delta).toLocaleString()} LOC vs prev
+          </span>
+        )}
+        <span className={`text-xs ${overBudget ? 'text-danger font-medium' : 'text-fg-faint'}`}>
+          budget {budget.toLocaleString()} {overBudget ? '— over budget!' : '— within budget'}
+        </span>
       </div>
       <BarSparkline
         values={values}
+        timestamps={timestamps}
         xLabels={xLabels}
         barTitles={xLabels.map((l, i) => `${l}: ${Math.round(values[i] ?? 0).toLocaleString()} LOC`)}
         height={72}
@@ -186,10 +232,17 @@ function LocTrendChart({ series }: { series: BundleSeries }) {
   )
 }
 
+/** Bundle budget targets in gzip KB. Higher = worse, lower = better. */
+const BUNDLE_TARGETS: Record<string, number> = {
+  'Web bundle': 300,
+  default: 500,
+}
+
 function BundleTrendChart({ series }: { series: BundleSeries }) {
   const values = series.points.map((p) => p.value)
-  const xLabels = series.points.map((p) =>
-    new Date(p.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+  const timestamps = series.points.map((p) => p.ts)
+  const xLabels = timestamps.map((ts) =>
+    formatChartDayLabel(ts.slice(0, 10)),
   )
 
   if (values.length === 0) return null
@@ -197,26 +250,30 @@ function BundleTrendChart({ series }: { series: BundleSeries }) {
   const latestVal = values[values.length - 1] ?? 0
   const prevVal = values.length > 1 ? (values[values.length - 2] ?? 0) : null
   const delta = prevVal != null ? latestVal - prevVal : null
-  const deltaSign = delta != null && delta > 0 ? '+' : ''
-  const deltaCls =
-    delta == null ? '' : delta > 0 ? 'text-warn' : delta < 0 ? 'text-ok' : 'text-fg-muted'
+  const target = BUNDLE_TARGETS[series.label] ?? BUNDLE_TARGETS.default
+  const overTarget = latestVal > target
+  const pctVsTarget = target > 0 ? ((latestVal / target - 1) * 100) : 0
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-baseline gap-3">
+      <div className="flex flex-wrap items-baseline gap-2">
         <p className="text-2xs uppercase tracking-wider text-fg-muted">{series.label}</p>
-        <span className="text-lg font-semibold tabular-nums text-brand">
+        <span className={`text-lg font-semibold tabular-nums ${overTarget ? 'text-warn' : 'text-brand'}`}>
           {latestVal.toFixed(1)} KB
         </span>
+        {delta != null && <TrendArrow delta={delta} higherIsBad />}
         {delta != null && (
-          <span className={`text-xs tabular-nums ${deltaCls}`}>
-            {deltaSign}
-            {delta.toFixed(1)} KB vs prev
+          <span className={`text-xs tabular-nums ${delta > 0 ? 'text-warn' : delta < 0 ? 'text-ok' : 'text-fg-muted'}`}>
+            {delta > 0 ? '+' : ''}{delta.toFixed(1)} KB vs prev push
           </span>
         )}
+        <span className={`text-xs ${overTarget ? 'text-warn font-medium' : 'text-fg-faint'}`}>
+          target {target} KB{overTarget ? ` — ${pctVsTarget.toFixed(0)}% over` : ' — within target'}
+        </span>
       </div>
       <BarSparkline
         values={values}
+        timestamps={timestamps}
         xLabels={xLabels}
         barTitles={xLabels.map((l, i) => `${l}: ${(values[i] ?? 0).toFixed(1)} KB`)}
         height={72}
@@ -298,8 +355,18 @@ export function CodeHealthPage() {
   const path = projectId ? `/v1/admin/code-health?project_id=${projectId}` : null
 
   const { data: codeHealth, loading, error, reload } = usePageData<CodeHealthResponse>(path)
+  const {
+    data: statsData,
+    reload: reloadStats,
+    isValidating: statsValidating,
+  } = usePageData<CodeHealthStats>('/v1/admin/code-health/stats')
+  usePublishPageHeroStats('/code-health', statsData)
+  const stats = statsData ?? EMPTY_CODE_HEALTH_STATS
 
-  const handleReload = useCallback(() => reload(), [reload])
+  const handleReload = useCallback(() => {
+    reload()
+    reloadStats()
+  }, [reload, reloadStats])
 
   // Compile all bundle series for the trend chart section.
   const bundleSeries = useMemo<BundleSeries[]>(() => {
@@ -369,7 +436,7 @@ export function CodeHealthPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
         title="Code Health"
         description="Tracks bundle KB trends and files over the 2,000-LOC budget across CI pushes."
@@ -383,7 +450,10 @@ export function CodeHealthPage() {
         </Btn>
       </PageHeaderBar>
 
-      <div className="flex flex-col gap-6 px-4 pb-8 pt-4">
+      <CodeHealthStatusBanner stats={stats} onRefresh={handleReload} refreshing={statsValidating} />
+      <CodeHealthGuide topPriority={stats.topPriority} />
+
+      <div className="flex w-full min-w-0 flex-col gap-6">
         {error && <ErrorAlert message={error} />}
 
         {loading && !codeHealth && (

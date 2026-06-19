@@ -344,6 +344,40 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     const spendSpike24h =
       prior24hSpendUsd >= 0.01 && spend24hUsd >= prior24hSpendUsd * 3 && spend24hUsd >= 0.05
 
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(projectId)}`
+
+    let topPriority: 'no_calls' | 'spike' | 'failed' | 'byok_recommended' | 'legacy_only' | 'healthy' =
+      'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (totalCalls === 0) {
+      topPriority = 'no_calls'
+      topPriorityLabel = 'No LLM calls logged yet — ingest a report or run a Health test to populate telemetry.'
+      topPriorityTo = scoped('/health')
+    } else if (spendSpike24h) {
+      topPriority = 'spike'
+      topPriorityLabel = `Spend jumped to $${spend24hUsd.toFixed(2)} in 24h (was $${prior24hSpendUsd.toFixed(2)}) — check Raw log for runaway crons.`
+      topPriorityTo = scoped('/cost?tab=log')
+    } else if (failedCalls24h > 0) {
+      topPriority = 'failed'
+      topPriorityLabel = `${failedCalls24h} failed LLM call${failedCalls24h === 1 ? '' : 's'} in 24h — may still incur partial token cost.`
+      topPriorityTo = scoped('/cost?tab=log')
+    } else if (!settingsRow?.byok_anthropic_key_ref && platformKeyCalls24h > 0) {
+      topPriority = 'byok_recommended'
+      topPriorityLabel = `${platformKeyCalls24h} call${platformKeyCalls24h === 1 ? '' : 's'} on platform keys in 24h — add BYOK in Settings to control billing.`
+      topPriorityTo = scoped('/settings?tab=byok')
+    } else if (ledgerCount > 0 && invocationCount === 0) {
+      topPriority = 'legacy_only'
+      topPriorityLabel = 'Only legacy cost rows — new telemetry writes to llm_invocations after the next LLM run.'
+      topPriorityTo = scoped('/cost?tab=log')
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `$${spend24hUsd.toFixed(2)} in 24h · ${calls24h} calls · top: ${topOperation ?? '—'}`
+      topPriorityTo = scoped('/cost?tab=breakdown')
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -374,6 +408,9 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
         byokCalls24h,
         byokAnthropicConfigured: Boolean(settingsRow?.byok_anthropic_key_ref),
         avgCostPerCall24h: Math.round(avgCostPerCall24h * 10000) / 10000,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     })
   })

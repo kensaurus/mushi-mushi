@@ -126,37 +126,39 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
     let topPriority: typeof empty.topPriority = 'healthy';
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
 
     if (totalEvaluations === 0) {
       topPriority = 'no_evals';
       topPriorityLabel =
         classifiedReports > 0
-          ? `No judge scores yet — ${classifiedReports} classified report${classifiedReports === 1 ? '' : 's'} ready to grade`
-          : 'No judge evaluations yet — classify reports first, then run judge';
-      topPriorityTo = classifiedReports > 0 ? '/judge?action=run' : '/reports';
+          ? `No judge scores yet — ${classifiedReports} classified report${classifiedReports === 1 ? '' : 's'} ready to grade.`
+          : 'Classify a few bugs in Reports first — then run the judge.';
+      topPriorityTo = classifiedReports > 0 ? scoped('/judge?action=run') : scoped('/reports?tab=queue');
     } else if (latestWeekScore != null && latestWeekScore < 0.6) {
       topPriority = 'low_score';
-      topPriorityLabel = `Mean score ${Math.round(latestWeekScore * 100)}% — classifier may be drifting; review Prompt Lab`;
-      topPriorityTo = '/prompt-lab?tab=prompts';
+      topPriorityLabel = `Classifier scores are ${Math.round(latestWeekScore * 100)}% — triage quality may be wrong. Review recent evaluations or Prompt Lab.`;
+      topPriorityTo = scoped('/prompt-lab?tab=prompts');
     } else if (weekOverWeekDriftPct != null && weekOverWeekDriftPct >= 5) {
       topPriority = 'drifting';
-      topPriorityLabel = `Score down ${weekOverWeekDriftPct}% week-over-week — inspect recent evaluations`;
-      topPriorityTo = '/judge?tab=evaluations&filter=disagreement';
+      topPriorityLabel = `Scores dropped ${weekOverWeekDriftPct}% week-over-week — review mismatches before merging fixes.`;
+      topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
     } else if (disagreementRatePct != null && disagreementRatePct >= 20) {
       topPriority = 'disagreements';
-      topPriorityLabel = `${disagreementRatePct}% disagreement rate — classifier overriding user categories`;
-      topPriorityTo = '/judge?tab=evaluations&filter=disagreement';
+      topPriorityLabel = `The judge disagreed with the classifier on ${disagreementRatePct}% of recent grades. Review mismatches before merging fixes.`;
+      topPriorityTo = scoped('/judge?tab=evaluations&filter=disagreement');
     } else if (staleHours != null && staleHours > 72) {
       topPriority = 'stale';
-      topPriorityLabel = `Last eval ${staleHours}h ago — run judge to refresh scores`;
-      topPriorityTo = '/judge?action=run';
+      topPriorityLabel = `Last judge run was ${staleHours}h ago — run again so you know triage quality still holds.`;
+      topPriorityTo = scoped('/judge?action=run');
     } else {
       topPriority = 'healthy';
       topPriorityLabel =
         latestWeekScore != null
           ? `${Math.round(latestWeekScore * 100)}% this week · ${latestWeekEvalCount} evals`
           : `${totalEvaluations} total evaluations`;
-      topPriorityTo = '/judge?tab=trend';
+      topPriorityTo = scoped('/judge?tab=trend');
     }
 
     return c.json({

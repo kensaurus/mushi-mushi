@@ -2,6 +2,8 @@
  * FILE: apps/admin/src/components/cost/types.ts
  */
 
+import type { CostTopPriority } from '../../lib/costExplainer'
+
 export type CostTabId = 'overview' | 'breakdown' | 'log'
 
 export interface CostStats {
@@ -32,6 +34,9 @@ export interface CostStats {
   byokCalls24h: number
   byokAnthropicConfigured: boolean
   avgCostPerCall24h: number
+  topPriority: CostTopPriority
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
 export const EMPTY_COST_STATS: CostStats = {
@@ -62,6 +67,9 @@ export const EMPTY_COST_STATS: CostStats = {
   byokCalls24h: 0,
   byokAnthropicConfigured: false,
   avgCostPerCall24h: 0,
+  topPriority: 'no_project',
+  topPriorityLabel: null,
+  topPriorityTo: null,
 }
 
 export interface SummaryRow {

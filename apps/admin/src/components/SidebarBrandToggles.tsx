@@ -18,7 +18,7 @@ const PORTALS = [
 
 const MODES: Array<{ id: AdminMode; label: string; hint: string }> = [
   { id: 'quickstart', label: 'Quick', hint: 'Quickstart — fastest path to a draft PR' },
-  { id: 'beginner', label: 'Beginner', hint: 'Beginner — guided next steps' },
+  { id: 'beginner', label: 'Beginner', hint: 'Beginner — guided actions' },
   { id: 'advanced', label: 'Advanced', hint: 'Advanced — full console' },
 ]
 

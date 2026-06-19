@@ -4,8 +4,17 @@
  *          tabs on desktop (Finder-like), horizontal scroll chips on compact.
  */
 
+import { Link } from 'react-router-dom'
+import { Badge } from '../ui'
+import { SignalChip } from '../report-detail/ReportSurface'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
+import {
+  bottleneckDeepLink,
+  bottleneckHumanHeadline,
+} from '../../lib/pdcaBottleneck'
+import type { PdcaStageId } from '../../lib/pdca'
+import type { SdkStatus } from '../SdkVersionBadge'
 
 export interface ProjectFolderTabItem {
   id: string
@@ -13,12 +22,25 @@ export interface ProjectFolderTabItem {
   slug: string
   report_count: number
   active_key_count: number
+  member_count?: number
+  last_report_at?: string | null
+  indexed_file_count?: number
+  plan_tier?: string | null
+  primary_repo?: { repo_url: string | null; default_branch?: string | null } | null
+  trend_7d?: { direction: 'up' | 'down' | 'flat'; delta: number; last7d?: number }
   api_keys: Array<{
     last_seen_at?: string | null
     last_seen_origin?: string | null
     is_active?: boolean
     revoked?: boolean
   }>
+  sdk_status?: SdkStatus
+  sdk_version?: string | null
+  sdk_package?: string | null
+  pdca_bottleneck?: PdcaStageId | null
+  pdca_bottleneck_label?: string | null
+  pdca_bottleneck_count?: number | null
+  severity_breakdown_30d?: { critical: number }
 }
 
 interface ProjectFolderTabRailProps {
@@ -27,10 +49,115 @@ interface ProjectFolderTabRailProps {
   onSelect: (projectId: string, name: string) => void
 }
 
+function projectHasHeartbeat(project: ProjectFolderTabItem): boolean {
+  return project.api_keys.some(
+    (key) => !key.revoked && key.is_active !== false && Boolean(key.last_seen_at),
+  )
+}
+
+function shortRepoLabel(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    const u = new URL(url)
+    const trimmed = u.pathname.replace(/^\/+/, '').replace(/\.git$/, '')
+    return trimmed || u.host
+  } catch {
+    return url
+  }
+}
+
+function relativeShort(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const ms = Date.now() - new Date(iso).getTime()
+  if (ms < 86_400_000) return `${Math.max(1, Math.floor(ms / 3_600_000))}h ago`
+  return `${Math.floor(ms / 86_400_000)}d ago`
+}
+
 function projectStatusDot(project: ProjectFolderTabItem): string {
-  if (project.report_count > 0) return 'bg-ok'
+  const critical = project.severity_breakdown_30d?.critical ?? 0
+  if (critical > 0) return 'bg-danger'
+  if (project.sdk_status === 'deprecated' || project.sdk_status === 'outdated') return 'bg-warn'
+  if (project.report_count > 0 && projectHasHeartbeat(project)) return 'bg-ok'
+  if (project.report_count > 0) return 'bg-warn'
   if (project.active_key_count > 0) return 'bg-warn'
   return 'bg-fg-faint'
+}
+
+function faviconSource(project: ProjectFolderTabItem) {
+  return {
+    project_id: project.id,
+    project_name: project.name,
+    project_slug: project.slug,
+    sdk_origin: sdkOriginFromApiKeys(project.api_keys),
+    repo_url: project.primary_repo?.repo_url ?? null,
+  }
+}
+
+function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
+  const critical = project.severity_breakdown_30d?.critical ?? 0
+  const heartbeat = projectHasHeartbeat(project)
+  const repoLabel = shortRepoLabel(project.primary_repo?.repo_url ?? null)
+  const trend = project.trend_7d
+  const showTrend =
+    trend && trend.direction !== 'flat' && (trend.last7d ?? 0) + Math.abs(trend.delta) > 0
+
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1">
+      {repoLabel ? (
+        <span className="truncate font-mono text-3xs text-fg-muted" title={repoLabel}>
+          {repoLabel}
+        </span>
+      ) : null}
+      {project.indexed_file_count != null && project.indexed_file_count > 0 ? (
+        <span className="text-3xs text-fg-muted tabular-nums">{project.indexed_file_count} idx</span>
+      ) : null}
+      {project.plan_tier ? (
+        <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle text-3xs px-1 py-0 capitalize">
+          {project.plan_tier}
+        </Badge>
+      ) : null}
+      {project.sdk_version && project.sdk_status && project.sdk_status !== 'unknown' ? (
+        <span className="font-mono text-2xs text-fg-muted">v{project.sdk_version}</span>
+      ) : null}
+      {showTrend && trend ? (
+        <SignalChip
+          tone={trend.direction === 'up' ? 'warn' : 'ok'}
+          className="text-3xs normal-case tracking-normal tabular-nums"
+        >
+          {trend.direction === 'up' ? '+' : '−'}
+          {Math.abs(trend.delta)} 7d
+        </SignalChip>
+      ) : null}
+      {critical > 0 ? (
+        <Badge className="bg-danger-muted text-danger border border-danger/30 text-3xs px-1 py-0">
+          {critical} critical
+        </Badge>
+      ) : null}
+      {!heartbeat && project.active_key_count > 0 ? (
+        <SignalChip tone="warn" className="text-3xs normal-case tracking-normal">
+          No heartbeat
+        </SignalChip>
+      ) : null}
+      {project.pdca_bottleneck && project.pdca_bottleneck_label ? (
+        <Link
+          to={bottleneckDeepLink(
+            project.pdca_bottleneck,
+            project.id,
+            project.pdca_bottleneck_label,
+          )}
+          onClick={(e) => e.stopPropagation()}
+          className="truncate text-3xs font-medium text-warn hover:underline underline-offset-2"
+          title={project.pdca_bottleneck_label}
+        >
+          {bottleneckHumanHeadline({
+            stage: project.pdca_bottleneck,
+            label: project.pdca_bottleneck_label,
+            count: project.pdca_bottleneck_count,
+          })}
+        </Link>
+      ) : null}
+    </span>
+  )
 }
 
 function FolderTabButton({
@@ -45,6 +172,8 @@ function FolderTabButton({
   layout: 'vertical' | 'horizontal'
 }) {
   const dot = projectStatusDot(project)
+  const source = faviconSource(project)
+  const lastReport = relativeShort(project.last_report_at)
 
   if (layout === 'horizontal') {
     return (
@@ -62,14 +191,11 @@ function FolderTabButton({
         ].join(' ')}
         title={project.name}
       >
-        <ProjectFavicon
-          project_id={project.id}
-          project_name={project.name}
-          project_slug={project.slug}
-          sdk_origin={sdkOriginFromApiKeys(project.api_keys)}
-          size={14}
-        />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{project.name}</span>
+        <ProjectFavicon {...source} size={14} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium text-fg">{project.name}</span>
+          <ProjectMetaRow project={project} />
+        </span>
         <span
           aria-hidden
           className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`}
@@ -93,20 +219,27 @@ function FolderTabButton({
       ].join(' ')}
       title={project.name}
     >
-      <ProjectFavicon
-        project_id={project.id}
-        project_name={project.name}
-        project_slug={project.slug}
-        sdk_origin={sdkOriginFromApiKeys(project.api_keys)}
-        size={16}
-      />
+      <ProjectFavicon {...source} size={16} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-semibold text-fg">{project.name}</span>
         <span className="mt-0.5 block truncate font-mono text-2xs text-fg-muted">{project.slug}</span>
-        <span className="mt-1 inline-flex items-center gap-1.5 text-2xs text-fg-secondary">
+        <span className="mt-1 inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs text-fg-secondary">
           <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
-          <span className="tabular-nums">{project.report_count.toLocaleString()}</span> reports
+          <span className="tabular-nums">{project.report_count.toLocaleString()} reports</span>
+          {project.member_count != null && project.member_count > 0 ? (
+            <>
+              <span className="text-fg-faint">·</span>
+              <span className="tabular-nums">{project.member_count} members</span>
+            </>
+          ) : null}
+          {lastReport ? (
+            <>
+              <span className="text-fg-faint">·</span>
+              <span>{lastReport}</span>
+            </>
+          ) : null}
         </span>
+        <ProjectMetaRow project={project} />
       </span>
     </button>
   )

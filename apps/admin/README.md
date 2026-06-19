@@ -151,6 +151,12 @@ Amber (`brand`) is **reserved** for primary CTAs and the nav active-state. Every
 
 `chrome` and `chrome-border` are neutral zinc surfaces for non-semantic UI frames (help banners, "About" panels, info sidebars). They auto-adapt in light/dark mode.
 
+### Theme control (light / dark / system)
+
+The sidebar footer exposes **System**, **Dark**, and **Light** via `useTheme()` (`data-theme` on `<html>`). System honours `prefers-color-scheme` and reacts to OS changes without reload. Light mode maps `--color-brand` to `--mushi-vermillion` (editorial vermillion) while dark mode keeps amber oklch — intentional perceptual mapping per theme.
+
+Optional **high-contrast** mode is available via `html[data-theme="high-contrast"]` for WCAG-maximum chrome; `forced-colors: active` maps edge/fg to system colors.
+
 ### Semantic colors
 
 `brand` (amber, CTA-only), `accent` (violet), `ok` (green), `warn` (amber), `danger` (red), `info` (blue)
@@ -190,6 +196,9 @@ Use this checklist before shipping any new page or modal:
 - [ ] Dense tables routed through `<ResponsiveTable>` or `<DataTable>` with bottom-only dividers
 - [ ] Numeric data in tables is right-aligned with `tabular-nums`
 - [ ] Amber/brand used only for primary CTAs and active-nav — not for info banners or section frames
+- [ ] Verified in **light and dark** (toggle sidebar theme row; System follows OS)
+- [ ] No new raw hex in TSX — use `@theme` tokens or `readVizToken()`
+- [ ] Global chrome respects posture contract (`chromePosture.ts` — NBA vs pipeline ribbon)
 - [ ] `eslint`, `lint:tokens`, and `typecheck` all pass before opening a PR
 
 ### Contrast budget (WCAG 2.2)

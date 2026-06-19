@@ -7,6 +7,8 @@ export interface ScreenshotCapture {
 
 export interface ScreenshotCaptureOptions {
   privacy?: MushiPrivacyConfig;
+  /** Callback invoked when capture fails (taint, security policy, etc.). */
+  onFailed?: (reason: 'taint' | 'error') => void;
 }
 
 export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}): ScreenshotCapture {
@@ -16,8 +18,6 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
     try {
       if (typeof document === 'undefined') return null;
 
-      // Prefer native getDisplayMedia if available (requires user gesture)
-      // Fall back to simple canvas-based capture of visible viewport
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
@@ -30,7 +30,8 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
       canvas.height = height * dpr;
       ctx.scale(dpr, dpr);
 
-      // Capture via SVG foreignObject — works for most DOM content
+      // Capture via SVG foreignObject — strips cross-origin media + CSS URL refs
+      // so the canvas never becomes tainted by external resources.
       const safeDocument = buildPrivacySafeDocument(activeOptions.privacy);
       const svgData = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
@@ -51,21 +52,28 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
           try {
             ctx.drawImage(img, 0, 0, width, height);
             URL.revokeObjectURL(url);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            resolve(dataUrl);
           } catch {
             URL.revokeObjectURL(url);
-            // Cross-origin paints taint the canvas — fall back to a fresh
-            // canvas so reports still carry a degraded viewport receipt.
-            resolve(buildDegradedScreenshot(width, height));
+            // Canvas tainted — emit event and return null so the report is submitted
+            // without a screenshot rather than with a misleading gray placeholder.
+            activeOptions.onFailed?.('taint');
+            emitScreenshotFailed('taint');
+            resolve(null);
           }
         };
         img.onerror = () => {
           URL.revokeObjectURL(url);
-          resolve(buildDegradedScreenshot(width, height));
+          activeOptions.onFailed?.('error');
+          emitScreenshotFailed('error');
+          resolve(null);
         };
         img.src = url;
       });
     } catch {
+      activeOptions.onFailed?.('error');
+      emitScreenshotFailed('error');
       return null;
     }
   }
@@ -76,6 +84,15 @@ export function createScreenshotCapture(options: ScreenshotCaptureOptions = {}):
       activeOptions = nextOptions;
     },
   };
+}
+
+/** Dispatch a CustomEvent on document so host apps can react to capture failures. */
+function emitScreenshotFailed(reason: 'taint' | 'error'): void {
+  try {
+    document.dispatchEvent(new CustomEvent('mushi:screenshot_failed', { detail: { reason }, bubbles: false }));
+  } catch {
+    // Silently ignore if CustomEvent is not available (SSR/test env)
+  }
 }
 
 const DEFAULT_REDACT_SELECTORS: readonly string[] = [
@@ -142,19 +159,51 @@ function redactElement(el: HTMLElement): void {
   while (el.firstChild) el.removeChild(el.firstChild);
 }
 
-/** Remove embedded media / cross-origin assets that taint canvas export. */
+/** Remove embedded media and cross-origin CSS asset references that taint canvas export. */
 function stripTaintSources(root: Element): void {
   const pageOrigin = typeof location !== 'undefined' ? location.origin : '';
+
+  // Remove all media elements — they reliably taint the canvas.
   for (const el of root.querySelectorAll('img, video, iframe, object, embed, picture')) {
     el.remove();
   }
+
+  // Remove cross-origin external stylesheets.
   for (const link of root.querySelectorAll('link[rel="stylesheet"], link[as="style"]')) {
     const href = link.getAttribute('href');
     if (!href || isCrossOriginUrl(href, pageOrigin)) link.remove();
   }
+
+  // Strip cross-origin url() references from <style> content.
+  for (const styleEl of root.querySelectorAll('style')) {
+    const cleaned = stripCssUrlRefs(styleEl.textContent ?? '', pageOrigin);
+    if (cleaned !== styleEl.textContent) styleEl.textContent = cleaned;
+  }
+
+  // Strip cross-origin url() references from inline style attributes.
+  for (const el of root.querySelectorAll('[style]')) {
+    const s = el.getAttribute('style');
+    if (!s) continue;
+    const cleaned = stripCssUrlRefs(s, pageOrigin);
+    if (cleaned !== s) el.setAttribute('style', cleaned);
+  }
+
   for (const script of root.querySelectorAll('script')) {
     script.remove();
   }
+}
+
+/**
+ * Replace cross-origin url() references in a CSS string with `none` so the
+ * browser never fetches an external resource that would taint the canvas.
+ */
+function stripCssUrlRefs(css: string, pageOrigin: string): string {
+  return css.replace(/url\(\s*(['"]?)([^)'"]+)\1\s*\)/gi, (_match, _q, href) => {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('#')) return _match;
+    if (isCrossOriginUrl(trimmed, pageOrigin)) return 'none';
+    return _match;
+  });
 }
 
 function isCrossOriginUrl(raw: string, pageOrigin: string): boolean {
@@ -167,24 +216,7 @@ function isCrossOriginUrl(raw: string, pageOrigin: string): boolean {
   }
 }
 
-function buildDegradedScreenshot(width: number, height: number): string | null {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  canvas.width = width;
-  canvas.height = height;
-  ctx.fillStyle = '#111827';
-  ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = '#e5e7eb';
-  ctx.font = '13px system-ui, sans-serif';
-  ctx.fillText('Screenshot: layout captured (external media stripped)', 16, 28);
-  ctx.fillText(`${width}×${height}px`, 16, 48);
-  try {
-    return canvas.toDataURL('image/jpeg', 0.7);
-  } catch {
-    return null;
-  }
-}
+
 
 function maskElement(el: HTMLElement): void {
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {

@@ -32,6 +32,7 @@ interface Props {
   inventoryActions: Record<string, InventoryActionNodeLike | null | undefined>
   onToggle: (fixId: string) => void
   onRetry: (reportId: string) => void
+  onRefreshed?: () => void
   compactTable?: boolean
   hideTableChrome?: boolean
   actionLabels?: {
@@ -52,6 +53,7 @@ export function FixesTable({
   inventoryActions,
   onToggle,
   onRetry,
+  onRefreshed,
   compactTable = false,
   hideTableChrome = false,
   actionLabels,
@@ -147,6 +149,7 @@ export function FixesTable({
                           timeline={timelines[fix.id]}
                           traceUrl={traceUrlFor(fix.langfuse_trace_id)}
                           onRetry={() => Promise.resolve(onRetry(fix.report_id))}
+                          onRefreshed={onRefreshed}
                           isInFlight={inFlightReportIds.has(fix.report_id)}
                           inventoryAction={inventoryAction}
                         />
