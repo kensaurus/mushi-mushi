@@ -45,6 +45,8 @@ export const th: MushiLocale = {
     screenshotAttached: 'แนบสกรีนช็อตแล้ว ✓',
     screenshotCapturing: 'กำลังถ่ายสกรีนช็อต…',
     screenshotFailed: 'ไม่สามารถถ่ายภาพได้ — โปรดอธิบายแทน',
+    screenshotPreviewAlt: 'ตัวอย่างสกรีนช็อตที่จะถูกส่ง',
+    screenshotSensitiveHint: 'ตรวจสอบตัวอย่างภาพ — หากมีข้อมูลส่วนตัว (ยอดเงิน ข้อมูลส่วนบุคคล) โปรดลบออก',
     elementButton: 'เลือกองค์ประกอบ',
     elementSelected: 'เลือกองค์ประกอบแล้ว ✓',
     elementCapturing: 'คลิกองค์ประกอบบนหน้า…',

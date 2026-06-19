@@ -54,6 +54,8 @@ export class MushiWidget {
   private screenshotCapturing = false;
   private screenshotError = false;
   private allowScreenshotRemove = true;
+  /** Data URL of the attached screenshot, rendered as a visible preview. */
+  private screenshotPreview: string | null = null;
   private elementSelected = false;
   private elementCapturing = false;
   private submitting = false;
@@ -166,6 +168,7 @@ export class MushiWidget {
       draggable: config.draggable ?? false,
       brandFooter: config.brandFooter ?? true,
       outdatedBanner: config.outdatedBanner ?? 'auto',
+      screenshotSensitiveHint: config.screenshotSensitiveHint ?? true,
       betaMode: config.betaMode ?? {},
       minDescriptionLength: config.minDescriptionLength ?? 20,
       dashboardUrl: config.dashboardUrl ?? '',
@@ -224,6 +227,7 @@ export class MushiWidget {
       ...(config.draggable !== undefined ? { draggable: config.draggable } : {}),
       ...(config.brandFooter !== undefined ? { brandFooter: config.brandFooter } : {}),
       ...(config.outdatedBanner !== undefined ? { outdatedBanner: config.outdatedBanner } : {}),
+      ...(config.screenshotSensitiveHint !== undefined ? { screenshotSensitiveHint: config.screenshotSensitiveHint } : {}),
       ...(config.betaMode !== undefined ? { betaMode: config.betaMode } : {}),
       ...(config.minDescriptionLength !== undefined ? { minDescriptionLength: config.minDescriptionLength } : {}),
       ...(config.dashboardUrl !== undefined ? { dashboardUrl: config.dashboardUrl } : {}),
@@ -287,6 +291,7 @@ export class MushiWidget {
     this.screenshotAttached = false;
     this.screenshotCapturing = false;
     this.screenshotError = false;
+    this.screenshotPreview = null;
     this.elementSelected = false;
     this.elementCapturing = false;
     this.submitting = false;
@@ -450,7 +455,28 @@ export class MushiWidget {
 
   setScreenshotAttached(attached: boolean): void {
     this.screenshotAttached = attached;
+    // A detached screenshot has no preview to show.
+    if (!attached) this.screenshotPreview = null;
     if (this.isOpen) this.render();
+  }
+
+  /** Provide the captured screenshot data URL so the widget can preview it. */
+  setScreenshotPreview(dataUrl: string | null): void {
+    this.screenshotPreview = dataUrl;
+    if (this.isOpen) this.render();
+  }
+
+  /**
+   * Resolve the privacy caption shown beside the screenshot preview from the
+   * `screenshotSensitiveHint` widget config (kept in sync via updateConfig, so
+   * it honours console/runtime config): `false` → hidden, a non-empty string →
+   * that copy, anything else (`true`/unset) → the localized default.
+   */
+  private resolveScreenshotHint(): string | null {
+    const v = this.config.screenshotSensitiveHint;
+    if (v === false) return null;
+    if (typeof v === 'string') return v.trim() ? v : null;
+    return this.locale.step3.screenshotSensitiveHint;
   }
 
   setAllowScreenshotRemove(allow: boolean): void {
@@ -1511,6 +1537,8 @@ export class MushiWidget {
       testerInfo: this.testerInfo,
       screenshotCapturing: this.screenshotCapturing,
       screenshotAttached: this.screenshotAttached,
+      screenshotPreview: this.screenshotPreview,
+      screenshotHint: this.resolveScreenshotHint(),
       reporterError: this.reporterError,
       magicLinkError: this.magicLinkError,
       elementCapturing: this.elementCapturing,
@@ -1582,6 +1610,10 @@ export class MushiWidget {
         this.selectedIntent = null;
         this.viaFeatureRequest = false;
       }
+      // Progressive disclosure collapses again whenever we land back on the
+      // category step, so a previously-expanded list doesn't stay open across
+      // navigation (Sentry 14751132/1).
+      if (this.step === 'category') this.showAllCategories = false;
       this.render();
     });
 

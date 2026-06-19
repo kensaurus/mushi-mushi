@@ -81,6 +81,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     sdk_banner_feature_cta?: boolean | null;
     sdk_banner_message?: string | null;
     sdk_banner_label?: string | null;
+    sdk_screenshot_sensitive_hint?: string | null;
     sdk_capture_console?: boolean | null;
     sdk_capture_network?: boolean | null;
     sdk_capture_performance?: boolean | null;
@@ -127,6 +128,15 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         bannerFeatureCta: row?.sdk_banner_feature_cta ?? true,
         bannerMessage: row?.sdk_banner_message ?? null,
         bannerLabel: row?.sdk_banner_label ?? null,
+        // Only emit when the console has set it (non-null) so an unset column
+        // never clobbers a host-configured value. '' → false (hide caption);
+        // any other string → custom caption.
+        ...(row?.sdk_screenshot_sensitive_hint != null
+          ? {
+              screenshotSensitiveHint:
+                row.sdk_screenshot_sensitive_hint === '' ? false : row.sdk_screenshot_sensitive_hint,
+            }
+          : {}),
       },
       capture: {
         console: row?.sdk_capture_console ?? true,
@@ -275,6 +285,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       .select(
         'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
           'sdk_widget_launcher, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
+          'sdk_screenshot_sensitive_hint, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
           'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',

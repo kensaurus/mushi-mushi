@@ -51,6 +51,12 @@ export interface SdkPreviewConfig {
   bannerLabel: string
   bannerBugCta: string
   bannerFeatureCta: boolean
+  /**
+   * Privacy caption shown under the screenshot preview before submit.
+   * `true` = show the SDK's localized default caption, `false` = hide it,
+   * a string = custom caption copy.
+   */
+  screenshotSensitiveHint: boolean | string
   capture: {
     console: boolean
     network: boolean
@@ -78,6 +84,7 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   bannerLabel: '',
   bannerBugCta: '',
   bannerFeatureCta: true,
+  screenshotSensitiveHint: true,
   capture: {
     console: true,
     network: true,
@@ -267,6 +274,19 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   // surrounding whitespace.
   if (cfg.triggerText.trim() && cfg.triggerText !== d.triggerText) {
     lines.push(`${indent}  triggerText: ${JSON.stringify(cfg.triggerText)},`)
+  }
+  // Screenshot privacy caption. Default (`true`) is omitted; `false` hides the
+  // caption and a string supplies custom copy.
+  if (cfg.screenshotSensitiveHint !== d.screenshotSensitiveHint) {
+    const hint =
+      typeof cfg.screenshotSensitiveHint === 'string'
+        ? cfg.screenshotSensitiveHint.trim()
+        : cfg.screenshotSensitiveHint
+    if (typeof hint === 'string') {
+      if (hint) lines.push(`${indent}  screenshotSensitiveHint: ${JSON.stringify(hint)},`)
+    } else {
+      lines.push(`${indent}  screenshotSensitiveHint: ${hint},`)
+    }
   }
   if (cfg.trigger === 'banner') {
     const bannerLines: string[] = []

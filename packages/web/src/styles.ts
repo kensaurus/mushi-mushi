@@ -871,6 +871,30 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-annotate-host:empty {
       margin-top: 0;
     }
+    .mushi-screenshot-preview {
+      margin: 10px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .mushi-screenshot-preview img {
+      display: block;
+      max-width: 100%;
+      max-height: 160px;
+      width: auto;
+      border: 1px solid ${ruleStrong};
+      border-radius: 3px;
+      object-fit: contain;
+      align-self: flex-start;
+    }
+    .mushi-screenshot-hint {
+      margin: 0;
+      color: ${inkMuted};
+      font-family: ${fontMono};
+      font-size: 10.5px;
+      line-height: 1.4;
+      letter-spacing: 0.02em;
+    }
     .mushi-annotate-toolbar {
       display: flex;
       flex-wrap: wrap;

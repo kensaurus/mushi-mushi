@@ -439,6 +439,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     log.debug('Auto-capturing screenshot', { when, mode });
     pendingScreenshot = await takeScreenshotWithoutChrome();
     widget.setScreenshotAttached(pendingScreenshot !== null);
+    widget.setScreenshotPreview(pendingScreenshot);
   }
 
   widget = new MushiWidget(bootstrapConfig.widget, {
@@ -482,6 +483,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.debug('Taking screenshot');
       pendingScreenshot = await takeScreenshotWithoutChrome();
       widget.setScreenshotAttached(pendingScreenshot !== null);
+      widget.setScreenshotPreview(pendingScreenshot);
     },
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
@@ -513,6 +515,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         if (commit) {
           pendingScreenshot = session.getDataUrl();
           widget.setScreenshotAttached(true);
+          // Keep the visible preview in sync with the annotated image so the
+          // reporter sees exactly what will be submitted (not the pre-markup shot).
+          widget.setScreenshotPreview(pendingScreenshot);
         }
         session.destroy();
         toolbar.remove();
