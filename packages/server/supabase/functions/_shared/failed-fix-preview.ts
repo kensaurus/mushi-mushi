@@ -48,7 +48,7 @@ export async function attachReportTitles(
   db: {
     from: (table: string) => {
       select: (cols: string) => {
-        in: (col: string, ids: string[]) => Promise<{ data: unknown[] | null }>
+        in: (col: string, ids: string[]) => PromiseLike<{ data: unknown[] | null }>
       }
     }
   },

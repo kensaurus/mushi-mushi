@@ -18,6 +18,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
+  Handle,
+  Position,
   type Node,
   type Edge,
   type NodeProps,
@@ -119,6 +121,7 @@ function StepNode({ data }: NodeProps<Node<StepNodeData>>) {
       className={`relative flex flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-2 text-center ${ring} ${bg} w-[84px] h-[60px] transition-all select-none`}
       style={{ boxShadow: isCurrent ? '0 0 0 3px var(--color-brand-subtle)' : undefined }}
     >
+      <Handle type="target" position={Position.Left} style={{ opacity: 0, pointerEvents: 'none' }} />
       {/* Status indicator */}
       <span className={`text-xs font-bold leading-none ${textTone} flex items-center gap-0.5`}>
         {isCurrent && (
@@ -137,6 +140,7 @@ function StepNode({ data }: NodeProps<Node<StepNodeData>>) {
       <span className="text-3xs text-fg-faint tabular-nums">
         {data.stepIdx + 1}/{data.totalSteps}
       </span>
+      <Handle type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: 'none' }} />
     </div>
   )
 }

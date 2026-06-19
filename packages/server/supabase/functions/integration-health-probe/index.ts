@@ -136,7 +136,7 @@ async function handler(req: Request): Promise<Response> {
     }
     const orgSettingsMap = new Map<string, PlatformSettingsRow>()
     for (const os of (orgSettingsRows ?? []) as Array<PlatformSettingsRow & { organization_id: string }>) {
-      orgSettingsMap.set((os as Record<string, string>).organization_id, os as PlatformSettingsRow)
+      orgSettingsMap.set(os.organization_id, os as PlatformSettingsRow)
     }
 
     /** Merge project settings with org defaults (project wins). */
@@ -154,7 +154,8 @@ async function handler(req: Request): Promise<Response> {
       ]
       for (const f of fields) {
         if (merged[f] == null || merged[f] === '') {
-          merged[f] = orgSettings[f] ?? null
+          const orgVal = orgSettings[f]
+          if (orgVal != null) merged[f] = orgVal as typeof merged[f]
         }
       }
       return merged

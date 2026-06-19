@@ -54,7 +54,7 @@ export function IntegrationsPage() {
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
   // /v1/admin/settings returns raw project_settings rows (no slackConfigured
   // computed field). Stats endpoint derives webhook/channel/bot truth.
-  const settingsQuery = usePageData<{ slackConfigured?: boolean; slackTeamName?: string | null }>(
+  const settingsQuery = usePageData<{ slackConfigured?: boolean; slackTeamName?: string | null; slackChannelId?: string | null }>(
     '/v1/admin/settings/stats',
   )
   const statsQuery = usePageData<IntegrationStats>('/v1/admin/integrations/stats')
@@ -114,10 +114,17 @@ export function IntegrationsPage() {
         (res.error as { message?: string })?.message ?? 'Unknown error',
       )
     } else {
-      const data = res.data as { applied?: number; skipped?: number } | null
+      const data = res.data as { applied?: number; skipped?: number; failed?: number; projectNames?: string[] } | null
+      const count = data?.applied ?? 0
+      const names = data?.projectNames ?? []
+      const detail = [
+        names.length > 0 ? `Projects: ${names.join(', ')}` : null,
+        data?.skipped ? `${data.skipped} skipped (no credentials to copy)` : null,
+        data?.failed ? `${data.failed} failed` : null,
+      ].filter(Boolean).join(' · ')
       toast.success(
-        `Applied to ${data?.applied ?? 0} project${data?.applied !== 1 ? 's' : ''}`,
-        data?.skipped ? `${data.skipped} skipped (no credentials to copy)` : undefined,
+        `Copied to ${count} project${count !== 1 ? 's' : ''}`,
+        detail || undefined,
       )
     }
   }
@@ -380,6 +387,7 @@ export function IntegrationsPage() {
           projectId={activeProjectId ?? null}
           slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
           teamName={settingsQuery.data?.slackTeamName ?? null}
+          channelId={settingsQuery.data?.slackChannelId ?? null}
           latestProbe={latestByKind['slack']}
           sparkline={sparklineByKind['slack'] ?? []}
         />

@@ -621,22 +621,25 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       .maybeSingle();
     const sourceRow = (sourceSettings ?? {}) as Record<string, unknown>;
 
-    // Determine target project IDs.
+    // Determine target project IDs (also fetch names for the response summary).
     let targetProjectIds: string[];
+    const projectNameById = new Map<string, string>();
     if (body.target === 'org-all') {
       const { data: orgProjects } = await db
         .from('projects')
-        .select('id')
+        .select('id, name')
         .eq('organization_id', orgId);
+      for (const p of orgProjects ?? []) { projectNameById.set((p as { id: string; name: string }).id, (p as { id: string; name: string }).name ?? ''); }
       targetProjectIds = (orgProjects ?? [])
-        .map((p: { id: string }) => p.id)
+        .map((p: { id: string; name: string }) => p.id)
         .filter((id: string) => id !== sourceProjectId);
     } else {
       // Validate requested IDs belong to this org.
       const { data: orgProjects } = await db
         .from('projects')
-        .select('id')
+        .select('id, name')
         .eq('organization_id', orgId);
+      for (const p of orgProjects ?? []) { projectNameById.set((p as { id: string; name: string }).id, (p as { id: string; name: string }).name ?? ''); }
       const orgProjectSet = new Set((orgProjects ?? []).map((p: { id: string }) => p.id));
       targetProjectIds = (body.target as { projectIds: string[] }).projectIds.filter(
         (id) => orgProjectSet.has(id) && id !== sourceProjectId,
@@ -651,6 +654,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     let applied = 0;
     let skipped = 0;
     let failed = 0;
+    const appliedNames: string[] = [];
 
     for (const targetProjectId of targetProjectIds) {
       try {
@@ -697,6 +701,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           failed++;
         } else {
           applied++;
+          appliedNames.push(projectNameById.get(targetProjectId) ?? targetProjectId);
         }
       } catch (err) {
         log.warn('bulk-apply error for project', { targetProjectId, err: String(err) });
@@ -712,7 +717,7 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       failed,
     });
 
-    return c.json({ ok: true, data: { applied, skipped, failed } });
+    return c.json({ ok: true, data: { applied, skipped, failed, projectNames: appliedNames.slice(0, 30) } });
   });
 
   // ── Claude Code Agent BYOK setup instructions ──────────────────────────────

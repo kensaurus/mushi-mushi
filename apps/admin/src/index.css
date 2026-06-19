@@ -2718,6 +2718,7 @@ html[data-theme="light"] .report-path-code {
   color: color-mix(in oklch, var(--color-info) 78%, #1a3d52);
 }
 
+
 /* Section + page rhythm helpers — keep vertical spacing consistent across
    pages. The audit found rhythm drifted: some pages used `mb-3`, others
    `mb-4`, others bare `space-y-2`. Standardise on these two utilities.
