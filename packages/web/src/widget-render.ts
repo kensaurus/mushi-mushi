@@ -58,6 +58,10 @@ export interface WidgetRenderCtx {
   testerInfo: { id: string; public_handle: string | null; display_name: string | null } | null;
   screenshotCapturing: boolean;
   screenshotAttached: boolean;
+  /** Data URL of the attached screenshot, rendered as a visible preview. */
+  screenshotPreview: string | null;
+  /** Resolved privacy caption shown beside the preview; null hides it. */
+  screenshotHint: string | null;
   reporterError: string | null;
   magicLinkError: string;
   elementCapturing: boolean;
@@ -778,6 +782,14 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
             ${escapeHtml(elementLabel)}
           </button>
         </div>
+        ${ctx.screenshotAttached && ctx.screenshotPreview
+          ? `<figure class="mushi-screenshot-preview">
+              <img src="${escapeHtml(ctx.screenshotPreview)}" alt="${escapeHtml(t.step3.screenshotPreviewAlt)}" />
+              ${ctx.screenshotHint
+                ? `<figcaption class="mushi-screenshot-hint">\u26A0 ${escapeHtml(ctx.screenshotHint)}</figcaption>`
+                : ''}
+            </figure>`
+          : ''}
         <div class="mushi-error" style="display:none" role="alert"></div>
       </div>
       <div class="mushi-footer">

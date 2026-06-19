@@ -85,6 +85,16 @@ export interface MushiRNConfig {
     shakeThreshold?: number
     buttonPosition?: 'bottom-right' | 'bottom-left'
     inset?: { bottom?: number; left?: number; right?: number }
+    /**
+     * Privacy nudge shown beneath the attached-screenshot preview, reminding
+     * the reporter to remove anything sensitive (balances, PII) before sending.
+     * The sheet always shows the captured image as a preview the user can
+     * remove; this only controls the caption.
+     * - `true` (default) — show the default caption.
+     * - string — show this custom caption.
+     * - `false` — hide the caption (preview + remove still show).
+     */
+    screenshotSensitiveHint?: boolean | string
   }
   capture?: {
     console?: boolean
@@ -176,6 +186,21 @@ export interface MushiRNInstance {
 }
 
 const MushiContext = createContext<MushiRNInstance | null>(null)
+
+/** Default privacy caption shown beneath the screenshot preview. */
+const DEFAULT_SCREENSHOT_HINT =
+  'Check the preview — remove it if any private info (balances, personal details) is visible.'
+
+/**
+ * Resolve the `widget.screenshotSensitiveHint` config into the caption string
+ * the sheet renders: `false` → hidden (null), a non-empty string → that copy,
+ * anything else (`true`/unset) → the default.
+ */
+function resolveScreenshotHint(v: boolean | string | undefined): string | null {
+  if (v === false) return null
+  if (typeof v === 'string') return v.trim() ? v : null
+  return DEFAULT_SCREENSHOT_HINT
+}
 
 type ExpoSensorsModule = {
   Accelerometer: {
@@ -739,6 +764,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         onClose={close}
         screenshotDataUrl={sheetScreenshot ?? undefined}
         onClearScreenshot={() => setSheetScreenshot(null)}
+        screenshotSensitiveHint={resolveScreenshotHint(config.widget?.screenshotSensitiveHint)}
       />
     </MushiContext.Provider>
   )

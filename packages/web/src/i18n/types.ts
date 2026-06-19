@@ -27,6 +27,10 @@ export interface MushiLocale {
     screenshotAttached: string;
     screenshotCapturing: string;
     screenshotFailed: string;
+    /** Alt text for the attached-screenshot preview image. */
+    screenshotPreviewAlt: string;
+    /** Default privacy caption shown beside the screenshot preview. */
+    screenshotSensitiveHint: string;
     elementButton: string;
     elementSelected: string;
     elementCapturing: string;
