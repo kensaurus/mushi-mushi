@@ -1622,6 +1622,23 @@ const SDK_INSTALL: ConfigDoc[] = [
       'Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.',
   },
   {
+    id: 'sdk-install.screenshot_sensitive_hint',
+    label: 'Screenshot privacy caption',
+    summary:
+      'A short "don\'t share sensitive information" caption shown under the screenshot preview before a reporter submits.',
+    howItWorks:
+      'When on, the widget shows the preview the reporter is about to send plus a privacy caption so they can redact or drop it first. Leave the custom box empty to use the SDK\'s localized default copy, type your own to override it, or turn the caption off entirely. Surfaces as `widget.screenshotSensitiveHint` in GET /v1/sdk/config and is honored by both the web and React Native widgets.',
+    default: { value: 'on (default caption)' },
+    backend: {
+      table: 'project_settings',
+      column: 'sdk_screenshot_sensitive_hint',
+      endpoint: 'PUT /v1/admin/projects/:id/sdk-config',
+      readBy: ['public route (GET /v1/sdk/config)', '@mushi-mushi/web widget', '@mushi-mushi/react-native widget'],
+    },
+    whenToChange:
+      'Keep on for any app that captures screenshots — it is the reporter\'s chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.',
+  },
+  {
     id: 'sdk-install.framework',
     label: 'Framework tab',
     summary:

@@ -128,6 +128,12 @@ export interface SdkConfigRow {
   sdk_banner_message?: string | null;
   /** Rich banner pill label (e.g. Beta). */
   sdk_banner_label?: string | null;
+  /**
+   * Screenshot privacy caption control. NULL = use the SDK default caption,
+   * '' (empty) = hide the caption (maps to `false`), any other string = custom
+   * caption copy. Surfaces in the widget block as `screenshotSensitiveHint`.
+   */
+  sdk_screenshot_sensitive_hint?: string | null;
   sdk_capture_console?: boolean | null;
   sdk_capture_network?: boolean | null;
   sdk_capture_performance?: boolean | null;
@@ -169,6 +175,15 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null) {
       bannerFeatureCta: row?.sdk_banner_feature_cta ?? true,
       bannerMessage: row?.sdk_banner_message ?? null,
       bannerLabel: row?.sdk_banner_label ?? null,
+      // Only surface the hint when the console has set it (non-null), so an
+      // unset column never overrides a host-configured value. '' → false
+      // (hide caption); any other string → custom caption.
+      ...(row?.sdk_screenshot_sensitive_hint != null
+        ? {
+            screenshotSensitiveHint:
+              row.sdk_screenshot_sensitive_hint === '' ? false : row.sdk_screenshot_sensitive_hint,
+          }
+        : {}),
     },
     capture: {
       console: row?.sdk_capture_console ?? true,
@@ -218,6 +233,19 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
     updates.sdk_banner_label = trimmed ? trimmed.slice(0, 24) : null;
   } else if (widget.bannerLabel === null) {
     updates.sdk_banner_label = null;
+  }
+  // screenshotSensitiveHint: boolean | string | null.
+  //   true  → NULL  (use the SDK's localized default caption)
+  //   false → ''    (hide the caption; normalizeSdkConfig maps '' back to false)
+  //   string → custom caption (empty/whitespace falls back to NULL = default)
+  //   null  → NULL  (clear the override)
+  if (typeof widget.screenshotSensitiveHint === 'boolean') {
+    updates.sdk_screenshot_sensitive_hint = widget.screenshotSensitiveHint ? null : '';
+  } else if (typeof widget.screenshotSensitiveHint === 'string') {
+    const trimmed = widget.screenshotSensitiveHint.trim();
+    updates.sdk_screenshot_sensitive_hint = trimmed ? trimmed.slice(0, 200) : null;
+  } else if (widget.screenshotSensitiveHint === null) {
+    updates.sdk_screenshot_sensitive_hint = null;
   }
   if (typeof capture.console === 'boolean') updates.sdk_capture_console = capture.console;
   if (typeof capture.network === 'boolean') updates.sdk_capture_network = capture.network;
