@@ -1582,6 +1582,10 @@ export class MushiWidget {
         this.selectedIntent = null;
         this.viaFeatureRequest = false;
       }
+      // Progressive disclosure collapses again whenever we land back on the
+      // category step, so a previously-expanded list doesn't stay open across
+      // navigation (Sentry 14751132/1).
+      if (this.step === 'category') this.showAllCategories = false;
       this.render();
     });
 

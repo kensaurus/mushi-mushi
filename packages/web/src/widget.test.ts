@@ -547,3 +547,49 @@ describe('MushiWidget banner body-nudge cleanup', () => {
     w.destroy();
   });
 });
+
+// ── progressive disclosure — reset on back to category ────────────────────────
+
+describe('MushiWidget progressive disclosure — back navigation', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+  const readStep = (w: MushiWidget): string => (w as unknown as { step: string }).step;
+  const readShowAll = (w: MushiWidget): boolean =>
+    (w as unknown as { showAllCategories: boolean }).showAllCategories;
+  const setShowAll = (w: MushiWidget, v: boolean): void => {
+    (w as unknown as { showAllCategories: boolean }).showAllCategories = v;
+  };
+
+  it('collapses an expanded category list when navigating back to the category step', () => {
+    // Regression (Sentry 14751132/1): expanding "More issue types", drilling
+    // into a sub-step, then pressing Back left the category list expanded.
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ category: 'bug' }); // → intent step, renders a Back control
+    setShowAll(w, true); // simulate the list having been expanded beforehand
+
+    const back = getShadow(w).querySelector('[data-action="back"]') as HTMLElement | null;
+    expect(back).not.toBeNull();
+    back!.click();
+
+    expect(readStep(w)).toBe('category');
+    expect(readShowAll(w)).toBe(false);
+    w.destroy();
+  });
+});

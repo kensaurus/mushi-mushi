@@ -226,7 +226,9 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
     const routingPaused = routing.filter((r) => !r.is_active).length;
 
     const pid = project.id as string;
-    const pname = (project.project_name as string | null) ?? null;
+    // resolveOwnedProject selects `name` (not `project_name`); reading the
+    // wrong key made projectName always null in the integrations widget.
+    const pname = (project.name as string | null) ?? null;
     const scoped = (path: string) =>
       `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
 
@@ -238,15 +240,17 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
       topPriority = 'platform_down';
       topPriorityLabel = `${platformDown} connection${platformDown === 1 ? '' : 's'} failing health checks — open the card below and click Test, or run a probe in Health.`;
       topPriorityTo = scoped('/health?fn=integration-probe');
+    } else if (platformConnected === 0 && routingActive === 0) {
+      // Nothing configured at all — must precede the `incomplete` check below,
+      // which would otherwise always swallow this case (0 < platformKinds.length).
+      topPriority = 'empty';
+      topPriorityLabel =
+        'Start with GitHub so fix-worker can open draft PRs, then add Sentry or Langfuse for richer bug context.';
+      topPriorityTo = scoped('/integrations/config');
     } else if (platformConnected < platformKinds.length) {
       const missing = platformKinds.length - platformConnected;
       topPriority = 'incomplete';
       topPriorityLabel = `${missing} of ${platformKinds.length} core tools still need credentials — GitHub is required before auto-fix PRs can ship.`;
-      topPriorityTo = scoped('/integrations/config');
-    } else if (platformConnected === 0 && routingActive === 0) {
-      topPriority = 'empty';
-      topPriorityLabel =
-        'Start with GitHub so fix-worker can open draft PRs, then add Sentry or Langfuse for richer bug context.';
       topPriorityTo = scoped('/integrations/config');
     } else {
       topPriority = 'healthy';
@@ -701,7 +705,10 @@ export function registerIntegrationsRoutes(app: Hono<{ Variables: Variables }>):
           failed++;
         } else {
           applied++;
-          appliedNames.push(projectNameById.get(targetProjectId) ?? targetProjectId);
+          // `??` alone would keep a stored empty-string name and render a blank
+          // entry ("Projects: , Foo"); fall back to the id when the name is empty.
+          const nm = projectNameById.get(targetProjectId);
+          appliedNames.push(nm && nm.trim() ? nm : targetProjectId);
         }
       } catch (err) {
         log.warn('bulk-apply error for project', { targetProjectId, err: String(err) });

@@ -1,5 +1,26 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "core/queue",
+        "description": "A transient submit failure whose bumped attempt-counter could not be persisted (e.g. an IndexedDB write error) previously re-flushed the row forever, bypassing `MAX_DELIVERY_ATTEMPTS` until the 24h age sweep. Row mutation now goes through backend-aware `removeRow`/`persistRow` helpers (no silent cross-backend no-op), and a report whose counter can't be saved is dropped immediately instead of looping (Sentry 14751132/0)."
+      },
+      {
+        "title": "web/widget",
+        "description": "Pressing Back to the category step now collapses an expanded \"more issue types\" list instead of leaving it open across navigation (Sentry 14751132/1)."
+      },
+      {
+        "title": "web/widget-render",
+        "description": "`aria-label`, `placeholder`, and the header eyebrow now route their interpolated locale strings through `escapeHtml`, closing a latent XSS vector if a translation contains markup."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.18",
     "headline": null,
     "pending": false,
@@ -7,14 +28,6 @@
       "1.18.0"
     ],
     "highlights": [
-      {
-        "title": "web",
-        "description": "Category step now shows only the primary \"bug\" option by default; a \"More issue types →\" toggle reveals the remaining categories. Back navigation added for `success`, `account`, and `cross-app-reports` steps. Back button now renders with \"← Back\" label. Panel width 384px→360px and max-height 640px→480px for better fit on smaller viewports."
-      },
-      {
-        "title": "core",
-        "description": "Offline queue no longer retries forever on undeliverable reports. `MAX_DELIVERY_ATTEMPTS = 8` drops a row after 8 transient failures; `MAX_QUEUE_AGE_MS = 24h` hard-evicts stale rows on the next flush, including legacy rows that predate the per-row attempt counter."
-      },
       {
         "title": "web",
         "description": "Category step now shows only the primary \"bug\" option by default; a \"More issue types →\" toggle reveals the remaining categories. Back navigation added for `success`, `account`, and `cross-app-reports` steps. Back button now renders with \"← Back\" label. Panel width 384px→360px and max-height 640px→480px for better fit on smaller viewports."
@@ -43,22 +56,6 @@
       "1.17.0"
     ],
     "highlights": [
-      {
-        "title": "In-SDK assistant (\"Ask\" tab):",
-        "description": "the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`."
-      },
-      {
-        "title": "Page context:",
-        "description": "`publishPageContext()` lets the host publish the current route/title/summary/filters/selection so the assistant and reports are page-aware. New `MushiPageContext` type."
-      },
-      {
-        "title": "Signed identity:",
-        "description": "`identifyWithToken({ token })` forwards a host-minted identity JWT on the `X-Mushi-User-Token` header (verified server-side) — the trust anchor for \"My Reports\", rewards, and the per-user assistant index. Added on web and the Capacitor bridge. `@mushi-mushi/core` exports `buildIdentityClaims`, `parseIdentityToken`, and `MUSHI_IDENTITY_TOKEN_PREFIX`."
-      },
-      {
-        "title": "Design tokens:",
-        "description": "`@mushi-mushi/core` now exports `mushiTokens` / `mushiPalette` plus `MUSHI_COLORS_LIGHT`, `MUSHI_COLORS_DARK`, `MUSHI_SPACING`, `MUSHI_RADIUS`, `MUSHI_TYPE`, `MUSHI_Z`, `MUSHI_MOTION`, `MUSHI_GEOMETRY`, and `MUSHI_COPY` so every SDK skins the widget from one source."
-      },
       {
         "title": "In-SDK assistant (\"Ask\" tab):",
         "description": "the web widget gains a knowledge-grounded `Ask` tab backed by `apiClient.askAssistant({ message, threadId, context })`. New `MushiAssistantConfig` / `MushiAssistantStep` / `MushiAssistantReply` types in `@mushi-mushi/core`."
@@ -199,30 +196,6 @@
       "1.12.0"
     ],
     "highlights": [
-      {
-        "title": "New:",
-        "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
-      },
-      {
-        "title": "Hardening:",
-        "description": "the offline retry queue now treats `PAYLOAD_TOO_LARGE` and `SERIALIZE_FAILED` as permanent failures, so a single oversized report can no longer poison-pill the queue and block every later report."
-      },
-      {
-        "title": "New — session replay:",
-        "description": "opt-in `capture.replay: 'rrweb' | 'lite' | 'sentry' | 'off'` records a rolling buffer that attaches to the report on submit. rrweb recording masks all text and inputs by default (`maskAllText` + `maskAllInputs`), records continuously from init, and trims the buffer while preserving the most recent full snapshot so replays stay playable. `'off'` is the default."
-      },
-      {
-        "title": "New — screenshot annotation:",
-        "description": "the report panel's \"Mark up\" button opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting. The annotation session stays open until the reporter confirms with \"Done\"; touch strokes now resolve correctly on lift (`touchend`)."
-      },
-      {
-        "title": "New — screenshot compression",
-        "description": "before upload to keep payloads small."
-      },
-      {
-        "title": "Hardening:",
-        "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
-      },
       {
         "title": "New:",
         "description": "`checkReportPayloadSize`, `estimateJsonBytes`, `formatBytes`, and `MAX_REPORT_PAYLOAD_BYTES` payload-guard helpers. `checkReportPayloadSize` serializes once and reports a distinct `serializeFailed` outcome (e.g. circular references in metadata) instead of a generic \"too large\"."
@@ -453,22 +426,6 @@
       {
         "title": "`mushi nudge`",
         "description": "generates a paste-ready `Mushi.init()` snippet tuned for alpha / beta / ga release phases."
-      },
-      {
-        "title": "Rewards subsystem",
-        "description": "(`src/rewards.ts`): full tester-rewards API — `initRewards`, `updateRewardsUser`, `getTier`, `enqueueActivity`. Connects to `/v1/rewards/*` backend endpoints."
-      },
-      {
-        "title": "Proactive triggers",
-        "description": "(`src/proactive-triggers.ts`): schedule-based and event-based triggers that surface the widget at the right moment without developer code."
-      },
-      {
-        "title": "`pulseTrigger()`",
-        "description": "widget-level pulse animation accessible from `Mushi.pulseTrigger()`."
-      },
-      {
-        "title": "Screenshot simplification",
-        "description": "`screenshot.take()` now returns `Promise<string | null>` — callers no longer need to check an `{ ok, dataUrl }` result object."
       }
     ],
     "packages": [
@@ -524,18 +481,6 @@
       {
         "title": "`onCrashedLastRun` hook",
         "description": "(Sentry SDK feedback spec §6): fires once on `Mushi.init` after detecting that the previous tab session ended without a clean `pagehide`. The SDK never auto-opens the widget — copy and timing are the host's call. Implementation uses a `localStorage` sentinel that's set on init and cleared on `pagehide` (the only reliably-fired end-of-session event in 2026)."
-      },
-      {
-        "title": "INP (Interaction to Next Paint) capture",
-        "description": "a Google Core Web Vital since March 2024, replacing First Input Delay. The SDK now installs a `PerformanceObserver({ type: 'event', durationThreshold: 40 })` and records the worst-observed user-interaction latency on every report, with **attribution** — `eventType`, `targetSelector` (e.g. `button#submit.primary`), and per-phase timings (input delay / processing / presentation) so the triage UI can render \"1200 ms click on `<button.checkout>`\" instead of a bare number. Falls back to a `first-input` observer for FID on Safari < 16.4. Adds ~700 B gzipped to the bundle (still under the 44 KB budget at 43.07 kB)."
-      },
-      {
-        "title": "`beforeSendFeedback` hook",
-        "description": "(Sentry SDK feedback spec §4): last-chance synchronous or async hook fired AFTER pre-filter / on-device classifier / rate-limit gates pass and BEFORE the report is sent or queued. Returning `null` drops the report silently; throwing or timing out (>2 s) ships the unmodified report so a buggy hook never swallows feedback."
-      },
-      {
-        "title": "`onCrashedLastRun` hook",
-        "description": "(Sentry SDK feedback spec §6): fires once on `Mushi.init` after detecting that the previous tab session ended without a clean `pagehide`. The SDK never auto-opens the widget — copy and timing are the host's call. Implementation uses a `localStorage` sentinel that's set on init and cleared on `pagehide` (the only reliably-fired end-of-session event in 2026)."
       }
     ],
     "packages": [
@@ -573,22 +518,6 @@
       "1.2.0"
     ],
     "highlights": [
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
       {
         "title": "`mushi sync-lessons`",
         "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
@@ -644,22 +573,6 @@
       {
         "title": "MCP",
         "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       }
     ],
     "packages": [
@@ -694,30 +607,6 @@
       "1.0.0"
     ],
     "highlights": [
-      {
-        "title": "`createBreadcrumbBuffer(options?)`",
-        "description": "— 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
-      },
-      {
-        "title": "`normaliseThrown(thrown)`",
-        "description": "— turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation."
-      },
-      {
-        "title": "`captureEnvironment()` expansion",
-        "description": "— same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload."
-      },
-      {
-        "title": "`createBreadcrumbBuffer(options?)`",
-        "description": "— 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
-      },
-      {
-        "title": "`normaliseThrown(thrown)`",
-        "description": "— turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation."
-      },
-      {
-        "title": "`captureEnvironment()` expansion",
-        "description": "— same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload."
-      },
       {
         "title": "`createBreadcrumbBuffer(options?)`",
         "description": "— 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
@@ -793,36 +682,24 @@
         "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
       },
       {
-        "title": "inventory-schema",
-        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
-      },
-      {
         "title": "cli",
         "description": "bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
       },
       {
-        "title": "mcp-ci",
-        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
+        "title": "Reporter identity (fixes anonymous-token reporter):",
+        "description": "`submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`."
       },
       {
-        "title": "react-native",
-        "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
+        "title": "Sentry-level payload:",
+        "description": "every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin \"Repro timeline\" renders instead of nudging \"Upgrade the SDK\"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb."
       },
       {
-        "title": "inventory-schema",
-        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
+        "title": "Screenshots:",
+        "description": "new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens."
       },
       {
-        "title": "cli",
-        "description": "bump `commander` to **v15** (ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
-      },
-      {
-        "title": "mcp-ci",
-        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
-      },
-      {
-        "title": "react-native",
-        "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
+        "title": "Design parity:",
+        "description": "`MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer \"Your reports\" / \"Community\" tabs."
       }
     ],
     "packages": [
@@ -1371,22 +1248,6 @@
         "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
         "title": "Fix `fix.status` event name",
         "description": "the `fix poll` loop was emitting `poll.status` instead of the documented `fix.status`. Fixes `--json` consumers and automations that subscribe to fix lifecycle events."
       },
@@ -1397,18 +1258,6 @@
       {
         "title": "Fix scope fallback on typo",
         "description": "if `MUSHI_SCOPES` is set but contains only unrecognised values (e.g. a typo like `mcp:writes`), the MCP server now falls back to `ALL_SCOPES` instead of registering zero tools and silently deregistering the entire tool surface. Only an explicitly empty `MUSHI_SCOPES=\"\"` opts in to zero tools."
-      },
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       }
     ],
     "packages": [
@@ -1481,14 +1330,6 @@
         "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
       },
       {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
         "title": "Graph",
         "description": "— interactive ReactFlow canvas with layer-filter pills"
       },
@@ -1519,6 +1360,14 @@
       {
         "title": "MCP",
         "description": "five new tools so a Cursor agent can close the loop without leaving the IDE — `list_skills` and `get_skill` (read), plus `start_skill_pipeline`, `get_pipeline_run`, and `checkin_pipeline_step` (write). Each tool now advertises the correct title and `readOnlyHint` from the shared catalog so MCP clients render the right UI."
+      },
+      {
+        "title": "plugin-sdk",
+        "description": "new `skill_pipeline.step.dispatched` event. Plugins can subscribe to react when a pipeline step is dispatched in cloud mode; the event payload carries `{ runId, stepIndex, skillSlug, contextPacket, projectId }`."
+      },
+      {
+        "title": "plugin-cursor-cloud",
+        "description": "handles `skill_pipeline.step.dispatched` by running the step's pre-composed context packet as a Cursor Cloud agent, storing the agent run id on the step, and checking the step back in. Emits a clear warning when `MUSHI_API_KEY` or `repoUrl` is unset so dispatches can no longer fail silently."
       }
     ],
     "packages": [
@@ -1614,14 +1463,6 @@
         "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
       },
       {
-        "title": "`mushi sync-lessons`",
-        "description": "— pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
-      },
-      {
-        "title": "MCP",
-        "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
-      },
-      {
         "title": "inventory-schema",
         "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
       },
@@ -1632,6 +1473,14 @@
       {
         "title": "mcp-ci",
         "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
+      },
+      {
+        "title": "react-native",
+        "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
+      },
+      {
+        "title": "cli",
+        "description": "bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
       }
     ],
     "packages": [
@@ -1721,20 +1570,20 @@
         "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
       },
       {
-        "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
+        "title": "Hero image up top.",
+        "description": "`docs/screenshots/report-detail-dark.png` is now embedded (via absolute `raw.githubusercontent.com` URL so npmjs.com renders it), linking to the live admin demo."
       },
       {
-        "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
+        "title": "15-word tagline.",
+        "description": "\"Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports.\" Frameworks listed directly under."
       },
       {
-        "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
+        "title": "\"What you get\"",
+        "description": "— 6 benefit bullets with emoji, each tied to a capability, not a wizard step."
       },
       {
-        "title": "Community files in-tarball.",
-        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+        "title": "\"Who it's for\"",
+        "description": "— 4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds."
       }
     ],
     "packages": [
@@ -1838,16 +1687,16 @@
         "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
       },
       {
-        "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package."
+        "title": "inventory-schema",
+        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
       },
       {
-        "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、 ⭐ をひとつ\"_ line with links to the stargazers page, issue tracker, and Bluesky handle. Research says a single explicit star ask converts 2–5% of lurkers."
+        "title": "cli",
+        "description": "bump `commander` to **v15** (ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
       },
       {
-        "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`, `STOREFRONTS.md`, `snippets.md` (drafted hooks, Show HN, Reddit, LinkedIn, dev.to, Product Hunt, YouTube Short), `launch-week.md`, `content-plan.md` (8 compounding blog post outlines), `drip-channels.md` (11 awesome-lists, 9 newsletter targets, Discord / Slack etiquette), `social-cadence.md` (Bluesky / X weekly rhythm), and `measurement.md` (the 5 numbers to watch each Friday)."
+        "title": "mcp-ci",
+        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
       }
     ],
     "packages": [
@@ -2071,18 +1920,6 @@
         "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
       },
       {
-        "title": "Community files in-tarball.",
-        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
-      },
-      {
-        "title": "`publishConfig.provenance: true` everywhere.",
-        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
-      },
-      {
-        "title": "`.github/FUNDING.yml`",
-        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
-      },
-      {
         "title": "`@mushi-mushi/cli` `0.3.0`",
         "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
       },
@@ -2093,6 +1930,18 @@
       {
         "title": "`create-mushi-mushi` `0.3.0` (NEW)",
         "description": "`npm create mushi-mushi` — same wizard via the standard npm-create convention."
+      },
+      {
+        "title": "All 16 published packages",
+        "description": "keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking."
+      },
+      {
+        "title": "All SDK READMEs",
+        "description": "discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa."
+      },
+      {
+        "title": "Root README",
+        "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
       }
     ],
     "packages": [

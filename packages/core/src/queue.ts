@@ -243,6 +243,49 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     }
   }
 
+  // --- Backend-aware row mutators ---
+  //
+  // A queue row lives in exactly one backend (chosen once per session by
+  // detectBackend). We must NOT cross-write to the other backend on failure: a
+  // row read from IndexedDB does not exist in localStorage, so an `lsDelete` /
+  // `lsUpdateRow` fallback is a guaranteed silent no-op. The earlier
+  // `catch { lsUpdateRow(row) }` form meant a failed IndexedDB attempt-counter
+  // write never persisted, so the row re-flushed forever (bypassing
+  // MAX_DELIVERY_ATTEMPTS) until the 24h age sweep — see Sentry 14751132/0.
+
+  // Remove a row from the active backend. A failure is non-fatal: the row
+  // survives to the next flush, where the MAX_QUEUE_AGE_MS sweep is the
+  // backstop. No cross-backend fallback (see note above).
+  async function removeRow(backend: StorageBackend, rowId: string): Promise<void> {
+    try {
+      if (backend === 'indexeddb') await idbDelete(rowId);
+      else lsDelete(rowId);
+    } catch (err) {
+      queueLog.debug('Offline queue: row removal failed (will age out)', {
+        id: rowId,
+        err: String(err),
+      });
+    }
+  }
+
+  // Persist a row in place to save its bumped attempt counter. Returns false
+  // when the write could not land, so the caller can give up on the row rather
+  // than loop forever on a counter that never advances. No cross-backend
+  // fallback (see note above).
+  async function persistRow(backend: StorageBackend, row: StoredRow): Promise<boolean> {
+    try {
+      if (backend === 'indexeddb') await idbPutRow(row);
+      else lsUpdateRow(row);
+      return true;
+    } catch (err) {
+      queueLog.debug('Offline queue: row persist failed', {
+        id: (row as { id: string }).id,
+        err: String(err),
+      });
+      return false;
+    }
+  }
+
   // --- Unified interface ---
 
   async function enqueue(report: MushiReport): Promise<void> {
@@ -305,12 +348,7 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
     for (const row of rows) {
       if (isExpired(row, now)) {
         const rowId = (row as { id: string }).id;
-        try {
-          if (backend === 'indexeddb') await idbDelete(rowId);
-          else lsDelete(rowId);
-        } catch {
-          lsDelete(rowId);
-        }
+        await removeRow(backend, rowId);
         queueLog.debug('Offline queue: evicting stale report', { id: rowId });
       } else {
         fresh.push(row);
@@ -329,12 +367,7 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
 
       if (!report) {
         // Undecryptable row — drop so it doesn't re-poison the queue forever.
-        try {
-          if (backend === 'indexeddb') await idbDelete(rowId);
-          else lsDelete(rowId);
-        } catch {
-          lsDelete(rowId);
-        }
+        await removeRow(backend, rowId);
         failed++;
         continue;
       }
@@ -342,12 +375,7 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
       const result = await client.submitReport(report);
 
       if (result.ok) {
-        try {
-          if (backend === 'indexeddb') await idbDelete(rowId);
-          else lsDelete(rowId);
-        } catch {
-          lsDelete(rowId);
-        }
+        await removeRow(backend, rowId);
         sent++;
       } else {
         const permanent =
@@ -376,24 +404,14 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
             result.error?.code === 'HTTP_504' ||
             (typeof result.error?.code === 'string' && result.error.code.startsWith('HTTP_5')));
         if (permanent) {
-          try {
-            if (backend === 'indexeddb') await idbDelete(rowId);
-            else lsDelete(rowId);
-          } catch {
-            lsDelete(rowId);
-          }
+          await removeRow(backend, rowId);
         } else if (transient) {
           // Bump the per-row attempt counter and give up once it crosses the
           // ceiling, so a report the network keeps rejecting eventually leaves
           // the queue instead of retrying forever on every flush + page load.
           const nextAttempts = rowAttempts(row) + 1;
           if (nextAttempts >= MAX_DELIVERY_ATTEMPTS) {
-            try {
-              if (backend === 'indexeddb') await idbDelete(rowId);
-              else lsDelete(rowId);
-            } catch {
-              lsDelete(rowId);
-            }
+            await removeRow(backend, rowId);
             queueLog.warn('Offline queue: giving up on report after repeated failures', {
               id: rowId,
               attempts: nextAttempts,
@@ -401,17 +419,24 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
             });
           } else {
             (row as { attempts?: number }).attempts = nextAttempts;
-            try {
-              if (backend === 'indexeddb') await idbPutRow(row);
-              else lsUpdateRow(row);
-            } catch {
-              lsUpdateRow(row);
+            const persisted = await persistRow(backend, row);
+            if (persisted) {
+              queueLog.debug('Offline queue: transient failure, will retry', {
+                id: rowId,
+                attempts: nextAttempts,
+                code: result.error?.code,
+              });
+            } else {
+              // The bumped counter could not be saved (e.g. an IndexedDB write
+              // failure). Leaving the row would re-flush it forever with a
+              // counter that never advances, defeating MAX_DELIVERY_ATTEMPTS —
+              // so drop it now rather than wait 24h for the age sweep.
+              await removeRow(backend, rowId);
+              queueLog.warn('Offline queue: dropping report (attempt counter unpersistable)', {
+                id: rowId,
+                code: result.error?.code,
+              });
             }
-            queueLog.debug('Offline queue: transient failure, will retry', {
-              id: rowId,
-              attempts: nextAttempts,
-              code: result.error?.code,
-            });
           }
         }
         failed++;

@@ -210,8 +210,8 @@ export function renderHeader(ctx: WidgetRenderCtx, opts: {
     const { title, showBack = false, step, eyebrow } = opts;
 
     const eyebrowHtml = showBack
-      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190 ${escapeHtml(t.widget.back)}</button>`
-      : `<span class="mushi-header-eyebrow">${eyebrow ?? 'Mushi \u00B7 Report'}</span>`;
+      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${escapeHtml(t.widget.back)}">\u2190 ${escapeHtml(t.widget.back)}</button>`
+      : `<span class="mushi-header-eyebrow">${escapeHtml(eyebrow ?? 'Mushi \u00B7 Report')}</span>`;
 
     const counterHtml = step
       ? `<span class="mushi-step-counter" aria-label="Step ${step} of ${TOTAL_STEPS}"><b>${pad2(step)}</b> / ${pad2(TOTAL_STEPS)}</span>`
@@ -226,7 +226,7 @@ export function renderHeader(ctx: WidgetRenderCtx, opts: {
         </div>
         <div class="mushi-header-meta">
           ${counterHtml}
-          <button type="button" class="mushi-close" data-action="close" aria-label="${t.widget.close}">\u2715</button>
+          <button type="button" class="mushi-close" data-action="close" aria-label="${escapeHtml(t.widget.close)}">\u2715</button>
         </div>
       </div>
     `;
@@ -305,7 +305,7 @@ export function renderCategoryStep(ctx: WidgetRenderCtx): string {
     return `
       ${renderHeader(ctx, { title: t.step1.heading, step: STEP_NUMBER.category })}
       ${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}
-      <div class="mushi-body" role="radiogroup" aria-label="${t.step1.heading}">
+      <div class="mushi-body" role="radiogroup" aria-label="${escapeHtml(t.step1.heading)}">
         <button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
           <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
           <div class="mushi-option-text">
@@ -745,9 +745,9 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
         <div class="mushi-textarea-wrap">
           <textarea
             class="mushi-textarea"
-            placeholder="${t.step3.descriptionPlaceholder}"
+            placeholder="${escapeHtml(t.step3.descriptionPlaceholder)}"
             rows="4"
-            aria-label="${t.step3.heading}"
+            aria-label="${escapeHtml(t.step3.heading)}"
             autofocus
           ></textarea>
           <div class="mushi-char-counter" data-role="char-counter" aria-hidden="true">
