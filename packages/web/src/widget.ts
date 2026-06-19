@@ -48,6 +48,8 @@ export class MushiWidget {
    * landing on the intent picker the user explicitly skipped.
    */
   private viaFeatureRequest = false;
+  /** Whether the category list is fully expanded (progressive disclosure). */
+  private showAllCategories = false;
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
@@ -328,6 +330,7 @@ export class MushiWidget {
   close(): void {
     if (!this.isOpen) return;
     this.isOpen = false;
+    this.showAllCategories = false;
     this.render();
     this.callbacks.onClose();
   }
@@ -1545,6 +1548,7 @@ export class MushiWidget {
       assistantTurns: this.assistantTurns,
       assistantSending: this.assistantSending,
       assistantError: this.assistantError,
+      showAllCategories: this.showAllCategories,
     };
   }
 
@@ -1570,6 +1574,19 @@ export class MushiWidget {
       else if (this.step === 'leaderboard') { this.step = 'reports'; }
       else if (this.step === 'roadmap') { this.step = 'category'; }
       else if (this.step === 'assistant') { this.step = 'category'; }
+      else if (this.step === 'account') { this.step = 'category'; }
+      else if (this.step === 'cross-app-reports') { this.step = 'account'; }
+      else if (this.step === 'success') {
+        this.step = 'category';
+        this.selectedCategory = null;
+        this.selectedIntent = null;
+      }
+      this.render();
+    });
+
+    // ─── Progressive disclosure: expand full category list ─────────
+    panel.querySelector('[data-action="show-all-categories"]')?.addEventListener('click', () => {
+      this.showAllCategories = true;
       this.render();
     });
 

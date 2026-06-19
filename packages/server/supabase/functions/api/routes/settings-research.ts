@@ -244,6 +244,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           Boolean(row.slack_channel_id) ||
           Boolean(row.slack_bot_token_ref),
         slackTeamName: (row.slack_team_name as string | null) ?? null,
+        slackChannelId: (row.slack_channel_id as string | null) ?? null,
         discordConfigured: Boolean(row.discord_webhook_url),
         notificationPrefs: (row.notification_prefs as Record<string, unknown> | null) ?? null,
         sentryConfigured: Boolean(row.sentry_dsn),
@@ -500,8 +501,23 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const res = await fetch('https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200&exclude_archived=true', {
       headers: { Authorization: `Bearer ${botToken}` },
     });
-    const data = await res.json() as { ok: boolean; channels?: Array<{ id: string; name: string; is_private: boolean }> };
-    if (!data.ok) return c.json({ ok: false }, 502);
+    const data = await res.json() as { ok: boolean; error?: string; channels?: Array<{ id: string; name: string; is_private: boolean }> };
+    if (!data.ok) {
+      const errCode = data.error ?? 'SLACK_API_ERROR';
+      const isScopeError = errCode === 'missing_scope';
+      const isAuthError = ['invalid_auth', 'not_authed', 'account_inactive', 'token_revoked'].includes(errCode);
+      return c.json({
+        ok: false,
+        error: {
+          code: errCode,
+          message: isScopeError
+            ? "Your Slack app doesn't have 'channels:read' permission. Re-add to Slack with the correct scopes."
+            : isAuthError
+              ? 'Slack token is invalid or revoked. Re-add to Slack to reconnect.'
+              : `Slack API error: ${errCode}. Re-add to Slack to fix this.`,
+        },
+      }, 502);
+    }
     return c.json({ channels: (data.channels ?? []).map((ch) => ({ id: ch.id, name: ch.name, private: ch.is_private })) });
   });
 

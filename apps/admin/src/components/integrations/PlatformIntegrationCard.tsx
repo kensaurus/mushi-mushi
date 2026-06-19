@@ -6,7 +6,7 @@
  *          up to the page via callbacks.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip, ErrorAlert } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
@@ -18,6 +18,7 @@ import { ServiceFavicon } from './ServiceFavicon'
 import { InlineProof } from '../report-detail/ReportSurface'
 import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
+import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
 
 /**
@@ -132,6 +133,19 @@ export function PlatformIntegrationCard({
   applyingToAll,
 }: Props) {
   const [overflowOpen, setOverflowOpen] = useState(false)
+  const errorRef = useRef<HTMLDivElement>(null)
+
+  // Scroll the inline error into view whenever it first appears or changes.
+  useEffect(() => {
+    if (inlineError && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [inlineError])
+
+  // Close overflow menu when clicking outside
+  const handleOverflowBlur = useCallback(() => {
+    setTimeout(() => setOverflowOpen(false), 150)
+  }, [])
 
   // A required field is "ok" if config has a non-null value OR the resolver
   // filled it from org defaults or an environment variable.
@@ -231,8 +245,19 @@ export function PlatformIntegrationCard({
                 <span className="leading-snug font-mono truncate">{latestProbe.message}</span>
               </div>
             )}
+            {/* "Never tested" nudge — shown when required fields are OK but no probe has run yet */}
+            {requiredOk && !latestProbe && !isEditing && (
+              <p className="mt-1 text-2xs text-fg-faint leading-snug">
+                Click <strong className="font-medium text-fg-muted">Test</strong> to verify the connection.
+              </p>
+            )}
 
             <p className="text-2xs text-fg-secondary mt-1.5 pl-2 border-l border-brand/20 leading-snug">{def.whyItMatters}</p>
+
+            {/* Credential chips — show which secrets are set in read-only mode */}
+            {requiredOk && !isEditing && (
+              <IntegrationCredentialChips fields={def.fields} config={config} />
+            )}
 
             {!requiredOk && def.setupSteps && def.setupSteps.length > 0 && (
               <IntegrationSetupGuide
@@ -319,7 +344,7 @@ export function PlatformIntegrationCard({
             )}
             {/* Overflow menu — "Apply to all projects" */}
             {onApplyToAll && requiredOk && !isEditing && (
-              <div className="relative">
+              <div className="relative" onBlur={handleOverflowBlur}>
                 <Tooltip content="More actions">
                   <Btn
                     variant="ghost"
@@ -331,9 +356,9 @@ export function PlatformIntegrationCard({
                   </Btn>
                 </Tooltip>
                 {overflowOpen && (
-                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[200px] rounded-md border border-edge bg-surface shadow-lg py-1">
+                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[220px] rounded-md border border-edge bg-surface shadow-lg py-1">
                     <button
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-fg hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       onClick={() => {
                         setOverflowOpen(false)
                         onApplyToAll()
@@ -341,11 +366,9 @@ export function PlatformIntegrationCard({
                       disabled={applyingToAll}
                     >
                       {applyingToAll ? (
-                        <span className="text-fg-muted">Applying…</span>
+                        <span className="text-fg-muted">Applying to all projects…</span>
                       ) : (
-                        <>
-                          <span>Apply to all projects in org</span>
-                        </>
+                        <span>Copy credentials to all projects in org</span>
                       )}
                     </button>
                   </div>
@@ -393,28 +416,51 @@ export function PlatformIntegrationCard({
               </a>
             </p>
           )}
-          {def.fields.map((field) => (
-            <div key={field.name}>
-              <label className="text-2xs text-fg-muted mb-0.5 flex items-center gap-1">
-                <span>
-                  {field.label}
-                  {field.required && <span className="text-danger ml-0.5">*</span>}
-                </span>
-                {field.helpId && <ConfigHelp helpId={field.helpId} />}
-              </label>
-              <Input
-                type={field.type ?? 'text'}
-                placeholder={field.placeholder}
-                value={draft[field.name] ?? ''}
-                onChange={(e) => onChangeField(field.name, e.target.value)}
-                validate={resolveValidator(field.validator)}
-                autoComplete={field.type === 'password' ? 'new-password' : 'off'}
-              />
-              {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
-            </div>
-          ))}
+          {def.fields.map((field) => {
+            const fieldSource = sourceByField?.[field.name]
+            const isDraftEmpty = !(draft[field.name] ?? '').trim()
+            return (
+              <div key={field.name}>
+                <label className="text-2xs text-fg-muted mb-0.5 flex items-center gap-1">
+                  <span>
+                    {field.label}
+                    {field.required && <span className="text-danger ml-0.5">*</span>}
+                  </span>
+                  {field.helpId && <ConfigHelp helpId={field.helpId} />}
+                </label>
+                <Input
+                  type={field.type ?? 'text'}
+                  placeholder={
+                    isDraftEmpty && fieldSource === 'env'
+                      ? '(set by environment variable)'
+                      : isDraftEmpty && fieldSource === 'org'
+                        ? '(inherited from org)'
+                        : field.placeholder
+                  }
+                  value={draft[field.name] ?? ''}
+                  onChange={(e) => onChangeField(field.name, e.target.value)}
+                  validate={resolveValidator(field.validator)}
+                  autoComplete={field.type === 'password' ? 'new-password' : 'off'}
+                />
+                {/* Source coverage hint — shown when the draft is empty but covered */}
+                {isDraftEmpty && fieldSource === 'env' && (
+                  <p className="mt-0.5 text-2xs text-fg-faint leading-snug">
+                    ↳ Provided by environment variable — leave empty to keep using it, or enter a value to override.
+                  </p>
+                )}
+                {isDraftEmpty && fieldSource === 'org' && (
+                  <p className="mt-0.5 text-2xs text-fg-faint leading-snug">
+                    ↳ Inherited from org defaults — leave empty to keep using it, or enter a value to set a project override.
+                  </p>
+                )}
+                {field.help ? <InlineProof className="mt-1">{field.help}</InlineProof> : null}
+              </div>
+            )
+          })}
           {inlineError && (
-            <ErrorAlert title="Save failed" message={inlineError} />
+            <div ref={errorRef}>
+              <ErrorAlert title="Save failed" message={inlineError} />
+            </div>
           )}
           <div className="flex items-center gap-2 pt-1">
             <Btn onClick={onSave} disabled={saving} loading={saving}>

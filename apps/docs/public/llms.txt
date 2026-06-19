@@ -28,7 +28,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 
 ## All pages
 
-- [Mushi Mushi — bugs your users feel](https://docs.mushimushi.dev)
+- [Mushi Mushi — bug translation for vibe coders](https://docs.mushimushi.dev)
 - [Admin console](https://docs.mushimushi.dev/admin)
 - [Anomaly detection](https://docs.mushimushi.dev/admin/anomalies)
 - [Anti-gaming](https://docs.mushimushi.dev/admin/anti-gaming)
@@ -93,6 +93,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Judge & self-improvement](https://docs.mushimushi.dev/concepts/judge-loop)
 - [Knowledge graph](https://docs.mushimushi.dev/concepts/knowledge-graph)
 - [Multi-repo coordinated fixes](https://docs.mushimushi.dev/concepts/multi-repo-fixes)
+- [Open source & licensing](https://docs.mushimushi.dev/concepts/open-source)
 - [Connecting your orchestrator (MCP / A2A / REST / AG-UI)](https://docs.mushimushi.dev/concepts/orchestrator-interop)
 - [Rewards & contributor identity](https://docs.mushimushi.dev/concepts/rewards)
 - [Trigger Modes](https://docs.mushimushi.dev/concepts/trigger-modes)
@@ -114,6 +115,8 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Shake → Mushi](https://docs.mushimushi.dev/migrations/shake-to-mushi)
 - [SPA → SSR (Next.js / Nuxt / SvelteKit)](https://docs.mushimushi.dev/migrations/spa-to-ssr)
 - [Vue 2 → Vue 3](https://docs.mushimushi.dev/migrations/vue-2-to-vue-3)
+- [Operating (maintainers)](https://docs.mushimushi.dev/operating)
+- [Deployment & releases](https://docs.mushimushi.dev/operating/deployment)
 - [Plugin marketplace](https://docs.mushimushi.dev/plugins)
 - [Bugsnag](https://docs.mushimushi.dev/plugins/bugsnag)
 - [Building a plugin](https://docs.mushimushi.dev/plugins/building)
@@ -184,6 +187,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [SOC 2 readiness](https://docs.mushimushi.dev/security/soc2)
 - [Self-hosting](https://docs.mushimushi.dev/self-hosting)
 - [Admin SPA deploy](https://docs.mushimushi.dev/self-hosting/admin-spa)
+- [Self-host in minutes (Docker Compose)](https://docs.mushimushi.dev/self-hosting/docker-compose)
 - [Edge Functions deploy](https://docs.mushimushi.dev/self-hosting/edge-functions)
 - [Langfuse + Sentry](https://docs.mushimushi.dev/self-hosting/observability)
 - [Supabase setup](https://docs.mushimushi.dev/self-hosting/supabase)

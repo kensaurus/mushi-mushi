@@ -256,9 +256,9 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     .mushi-panel {
       position: fixed;
-      width: 384px;
+      width: 360px;
       max-width: calc(100vw - 32px);
-      max-height: min(640px, calc(100dvh - 120px - var(--mushi-keyboard-inset, 0px)));
+      max-height: min(480px, calc(100dvh - 120px - var(--mushi-keyboard-inset, 0px)));
       background: ${paper};
       border: 1px solid ${ruleStrong};
       border-radius: 6px;
@@ -344,12 +344,12 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     }
 
     .mushi-header {
-      padding: 18px 20px 14px;
+      padding: 13px 18px 10px;
       border-bottom: 1px solid ${rule};
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: end;
-      gap: 12px;
+      gap: 10px;
     }
     .mushi-header-mark {
       display: inline-flex;
@@ -424,17 +424,22 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       background: none;
       border: none;
       cursor: pointer;
-      padding: 0;
+      padding: 3px 0;
       margin: 0 0 2px;
+      min-height: 22px;
       color: ${inkMuted};
       font-family: ${fontMono};
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 500;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       line-height: 1.2;
       border-radius: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       transition: color 150ms ${easeStamp};
+      white-space: nowrap;
     }
     .mushi-close:hover { color: ${widgetAccent}; }
     .mushi-back:hover { color: ${ink}; }
@@ -467,9 +472,9 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       display: grid;
       grid-template-columns: auto 1fr auto;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       width: 100%;
-      padding: 14px 0;
+      padding: 11px 0;
       border: none;
       border-bottom: 1px solid ${rule};
       background: transparent;
@@ -1693,6 +1698,56 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     .mushi-community-footer{display:flex;align-items:center;gap:8px;padding:10px 0 2px;border-top:1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'};margin-top:8px;flex-wrap:wrap}
     .mushi-community-btn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* ── "More issue types →" toggle (progressive disclosure) ─────── */
+    .mushi-more-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 11px 0;
+      border: none;
+      border-top: 1px dashed ${rule};
+      background: transparent;
+      cursor: pointer;
+      color: ${inkMuted};
+      font-family: ${fontBody};
+      font-size: 13px;
+      text-align: left;
+      transition: color 180ms ${easeStamp};
+    }
+    .mushi-more-toggle:hover { color: ${widgetAccent}; }
+    .mushi-more-toggle:hover .mushi-more-toggle-arrow { transform: translateX(3px); }
+    .mushi-more-toggle-text { flex: 1; }
+    .mushi-more-toggle-count {
+      font-family: ${fontMono};
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: ${inkFaint};
+      background: ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'};
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+    .mushi-more-toggle-arrow {
+      font-size: 14px;
+      opacity: 0.5;
+      transition: transform 180ms ${easeStamp};
+    }
+    /* ── Step slide-in ────────────────────────────────────────────── */
+    @keyframes mushi-step-in {
+      0%   { opacity: 0; transform: translateX(8px); }
+      100% { opacity: 1; transform: translateX(0); }
+    }
+    .mushi-body {
+      animation: mushi-step-in 160ms ease both;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mushi-body { animation: none; }
+    }
+    /* Expanded secondary categories animate in */
+    .mushi-categories-expanded {
+      animation: mushi-step-in 180ms ease both;
+    }
     .mushi-link-btn{background:none;border:none;padding:4px 2px;cursor:pointer;color:${widgetAccent};font-size:12px;font-family:${fontMono};text-decoration:underline;text-underline-offset:2px}
     .mushi-link-btn:hover{opacity:0.8}
     .mushi-link-btn:focus-visible,.mushi-nav-item:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px;border-radius:2px}

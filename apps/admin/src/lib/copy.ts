@@ -254,10 +254,10 @@ export const COPY: CopyRegistry = {
       },
     },
     '/feedback': {
-      title: 'My feedback',
-      description: 'Bugs and features you send to the Mushi team — banner and FEEDBACK SNAPSHOT before Overview, Active, Shipped, or All tabs.',
+      title: 'Support',
+      description: 'Your support tickets to the Mushi team — banner and FEEDBACK SNAPSHOT before Overview, Active, Shipped, or All tabs.',
       help: {
-        title: 'About My feedback',
+        title: 'About Support',
         whatIsIt:
           'Your personal ticket inbox for console bugs and product ideas — separate from end-user Reports ingested via SDK.',
         useCases: [
@@ -1539,7 +1539,7 @@ export const COPY: CopyRegistry = {
       description: 'Cross-stage action queue — INBOX SNAPSHOT KPIs, then Overview | Actions | Stages | Activity tabs.',
     },
     '/feedback': {
-      title: 'My feedback',
+      title: 'Support',
       description: 'Support ticket inbox — FEEDBACK SNAPSHOT KPIs, then Overview | Active | Shipped | All tabs.',
     },
     '/projects': {
