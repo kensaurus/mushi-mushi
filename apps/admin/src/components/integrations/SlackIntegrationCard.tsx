@@ -245,8 +245,9 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                   >
                     Retry
                   </button>
-                  {/* Scope errors are fixed by re-auth; auth errors too */}
-                  {(channelErrorCode === 'missing_scope' || channelErrorCode?.includes('auth')) && (
+                  {/* Scope errors are fixed by re-auth; auth/token errors too */}
+                  {(channelErrorCode === 'missing_scope' ||
+                    ['invalid_auth', 'not_authed', 'account_inactive', 'token_revoked'].includes(channelErrorCode ?? '')) && (
                     <button
                       className="inline-flex items-center gap-1 text-xs font-medium text-brand underline hover:no-underline"
                       onClick={handleAddToSlack}

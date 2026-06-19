@@ -1580,6 +1580,7 @@ export class MushiWidget {
         this.step = 'category';
         this.selectedCategory = null;
         this.selectedIntent = null;
+        this.viaFeatureRequest = false;
       }
       this.render();
     });

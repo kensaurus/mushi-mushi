@@ -210,7 +210,7 @@ export function renderHeader(ctx: WidgetRenderCtx, opts: {
     const { title, showBack = false, step, eyebrow } = opts;
 
     const eyebrowHtml = showBack
-      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190 Back</button>`
+      ? `<button type="button" class="mushi-back" data-action="back" aria-label="${t.widget.back}">\u2190 ${escapeHtml(t.widget.back)}</button>`
       : `<span class="mushi-header-eyebrow">${eyebrow ?? 'Mushi \u00B7 Report'}</span>`;
 
     const counterHtml = step
