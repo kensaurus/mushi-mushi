@@ -155,7 +155,7 @@ async function handler(req: Request): Promise<Response> {
       for (const f of fields) {
         if (merged[f] == null || merged[f] === '') {
           const orgVal = orgSettings[f]
-          if (orgVal != null) merged[f] = orgVal as typeof merged[f]
+          if (orgVal != null) Object.assign(merged, { [f]: orgVal })
         }
       }
       return merged
