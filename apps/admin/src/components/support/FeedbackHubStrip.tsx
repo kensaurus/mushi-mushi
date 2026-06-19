@@ -50,7 +50,7 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
   }
 
   return (
-    <Card className={`p-3 ${hasNews ? 'border-brand/30 bg-brand/5' : 'border-edge-subtle bg-surface-raised/20'} ${className}`}>
+    <Card className={`p-3 ${hasNews ? 'border-brand/30 bg-brand-subtle' : 'border-edge-subtle bg-surface-raised'} ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

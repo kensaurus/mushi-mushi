@@ -42,6 +42,18 @@ describe('resolveProjectDomain', () => {
       }),
     ).toBe('kensaur.us')
   })
+
+  it('derives domain from repo slug when it looks like a TLD', () => {
+    expect(
+      resolveProjectDomain({
+        project_id: '4',
+        project_name: 'glot.it',
+        project_slug: 'glot-it',
+        sdk_origin: null,
+        repo_url: 'https://github.com/kensaurus/glot.it',
+      }),
+    ).toBe('glot.it')
+  })
 })
 
 describe('projectInitials', () => {

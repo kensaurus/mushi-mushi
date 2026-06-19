@@ -140,27 +140,30 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
     let topPriority = empty.topPriority
     let topPriorityLabel: string | null = null
     let topPriorityTo: string | null = null
+    const pid = project.id as string
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`
 
     if (endpointMismatch) {
       topPriority = 'endpoint_mismatch'
-      topPriorityLabel = `Last heartbeat hit ${lastSeenEndpointHost} — snippet should use ${expectedEndpointHost}.`
-      topPriorityTo = '/mcp?tab=setup'
+      topPriorityLabel = `Your IDE is hitting ${lastSeenEndpointHost} but this console expects ${expectedEndpointHost} — update the MCP snippet endpoint.`
+      topPriorityTo = scoped('/mcp?tab=setup')
     } else if (mcpReadKeyCount === 0 && reportOnlyKeyCount > 0) {
       topPriority = 'report_only_keys'
-      topPriorityLabel = `${reportOnlyKeyCount} active key${reportOnlyKeyCount === 1 ? '' : 's'} with report:write only — mint mcp:read or mcp:write on /projects.`
-      topPriorityTo = '/projects'
+      topPriorityLabel = `${reportOnlyKeyCount} key${reportOnlyKeyCount === 1 ? '' : 's'} can ingest bugs but cannot expose MCP tools — mint mcp:read on Projects.`
+      topPriorityTo = scoped('/projects')
     } else if (mcpReadKeyCount === 0) {
       topPriority = 'no_mcp_key'
-      topPriorityLabel = 'Generate an mcp:read key on /projects, paste the snippet, then ask your agent to list Mushi tools.'
-      topPriorityTo = '/projects'
+      topPriorityLabel = 'No MCP key yet — mint mcp:read on Projects, paste the snippet, restart your IDE.'
+      topPriorityTo = scoped('/projects')
     } else if (neverConnectedCount > 0 && connectedKeyCount === 0) {
       topPriority = 'never_connected'
-      topPriorityLabel = `${neverConnectedCount} MCP key${neverConnectedCount === 1 ? '' : 's'} minted — paste .cursor/mcp.json, restart IDE, run "list mushi tools".`
-      topPriorityTo = '/mcp?tab=setup'
+      topPriorityLabel = `${neverConnectedCount} MCP key${neverConnectedCount === 1 ? '' : 's'} minted but no heartbeat — paste .cursor/mcp.json and ask the agent to list tools.`
+      topPriorityTo = scoped('/mcp?tab=setup')
     } else {
       topPriority = 'healthy'
-      topPriorityLabel = `${mcpReadKeyCount} read · ${mcpWriteKeyCount} write · ${connectedKeyCount} connected · ${TOOL_COUNT} tools advertised.`
-      topPriorityTo = '/mcp?tab=catalog'
+      topPriorityLabel = `${connectedKeyCount} connected · ${TOOL_COUNT} tools ready for your IDE agent.`
+      topPriorityTo = scoped('/mcp?tab=catalog')
     }
 
     return c.json({

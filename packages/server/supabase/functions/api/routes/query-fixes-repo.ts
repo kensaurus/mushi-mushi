@@ -542,8 +542,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       topPriorityTo = '/integrations/config'
     } else if (failed > 0) {
       topPriority = 'failed'
-      topPriorityLabel = `${failed} fix attempt${failed === 1 ? '' : 's'} failed — retry or inspect the timeline.`
-      topPriorityTo = '/fixes?status=failed'
+      topPriorityLabel = `${failed} fix attempt${failed === 1 ? '' : 's'} failed — open each one to read the error, then retry or hand off to Cursor.`
+      topPriorityTo = `/fixes?status=failed&project=${encodeURIComponent(pid)}`
     } else if (inflightDispatches > 0) {
       topPriority = 'inflight'
       topPriorityLabel = `${inflightDispatches} fix${inflightDispatches === 1 ? '' : 'es'} dispatching — check back shortly.`

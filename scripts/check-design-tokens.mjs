@@ -362,15 +362,18 @@ if (paletteHits.length > 0) {
 }
 
 // ── Page hero duplication guard ───────────────────────────────────────────
-// Pages that render both PageHeaderBar and PageHero must pass withPageHero
-// on PageHeaderBar so the subtitle does not stack under the DAV hero strip.
+// Pages that render both PageHeaderBar and the PageHero component must pass
+// withPageHero on PageHeaderBar so the subtitle does not stack under the DAV
+// hero strip. Match the JSX render (`<PageHero`) rather than the bare substring
+// so the `usePublishPageHeroStats` hook (which only feeds the shared hero strip
+// and renders no inline hero) is not flagged as a duplicate.
 const heroDupHits = []
 const PAGES_DIR = resolve(ADMIN_SRC, 'pages')
 try {
   for (const file of walk(PAGES_DIR)) {
     if (!/\.tsx?$/.test(file)) continue
     const src = readFileSync(file, 'utf8')
-    if (!src.includes('PageHero') || !src.includes('PageHeaderBar')) continue
+    if (!src.includes('<PageHero') || !src.includes('PageHeaderBar')) continue
     if (src.includes('withPageHero')) continue
     heroDupHits.push(file)
   }
@@ -424,7 +427,41 @@ if (hexHits.length > 0) {
   )
 }
 
-if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0 || paletteHits.length > 0 || heroDupHits.length > 0 || hexHits.length > 0) process.exit(1)
+// ── Light/dark theme pair guard ───────────────────────────────────────────
+// Tokens that must appear in at least one html[data-theme="light"] block.
+const THEME_PAIR_REQUIRED = [
+  'code-kw',
+  'code-str',
+  'code-cmd',
+  'code-type',
+  'code-tag',
+  'code-attr',
+  'viz-canvas-bg',
+  'viz-canvas-dot',
+]
+
+function parseLightThemeRoots(css) {
+  const roots = new Set()
+  for (const match of css.matchAll(/html\[data-theme="light"\][^{]*\{([^}]+)\}/g)) {
+    for (const m of match[1].matchAll(/--color-([a-z0-9-]+):/g)) {
+      roots.add(m[1])
+    }
+  }
+  return roots
+}
+
+const lightRoots = parseLightThemeRoots(css)
+const themePairMissing = THEME_PAIR_REQUIRED.filter((t) => !lightRoots.has(t))
+
+if (themePairMissing.length > 0) {
+  console.error(`\n[theme-pair] Missing light-mode overrides in index.css:\n`)
+  for (const t of themePairMissing) {
+    console.error(`  --color-${t}`)
+  }
+  console.error(`\nFix: add each token under html[data-theme="light"] { … } in apps/admin/src/index.css\n`)
+}
+
+if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0 || paletteHits.length > 0 || heroDupHits.length > 0 || hexHits.length > 0 || themePairMissing.length > 0) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
 console.log(`[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). Type floor: clean across ${totalTypeFloorFiles} files. Palette guard: clean on apps/testers. Hex guard: clean.`)

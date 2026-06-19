@@ -10,6 +10,11 @@ import { PAGE_FLOW_LINKS, flowLinkBlurb, resolveFlowPath, type PageFlowLink } fr
 import { PAGEHELP_PREFS_EVENT, readPageHelpAlwaysOpen, writePageHelpAlwaysOpen } from '../lib/pageHelpPrefs'
 import { navIconForPath } from '../lib/pageNavIcons'
 import { commandPalette } from '../lib/useCommandPalette'
+import {
+  PAGE_HELP_BANNER_INNER_BORDER,
+  PAGE_HELP_BANNER_SHELL,
+  PAGE_HELP_BANNER_SUMMARY_HOVER,
+} from '../lib/pageHelpSurfaces'
 
 export interface PageHelpProps {
   title: string
@@ -43,15 +48,6 @@ function writePageHelpDismissed(title: string, dismissed: boolean) {
     }
   } catch {
     /* best effort */
-  }
-}
-
-function isReturningUser(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(PAGEHELP_VISITED_FLAG) === '1'
-  } catch {
-    return false
   }
 }
 
@@ -148,7 +144,7 @@ export function PageHelp({
     if (defaultOpen !== undefined) return defaultOpen
     if (readPageHelpAlwaysOpen()) return true
     if (readPageHelpDismissed(title)) return false
-    return !isReturningUser()
+    return false
   })
 
   useEffect(() => {
@@ -192,9 +188,9 @@ export function PageHelp({
     <details
       open={open}
       onToggle={handleToggle}
-      className="group mb-4 w-full min-w-0 rounded-lg border border-edge-subtle bg-surface-raised/30 open:border-edge open:bg-surface-raised/50 motion-safe:transition-colors motion-safe:duration-150"
+      className={`group mb-4 w-full min-w-0 rounded-lg border motion-safe:transition-colors motion-safe:duration-150 ${PAGE_HELP_BANNER_SHELL}`}
     >
-      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted hover:bg-surface-overlay/40 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 [&::-webkit-details-marker]:hidden">
+      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER} [&::-webkit-details-marker]:hidden`}>
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
@@ -206,7 +202,7 @@ export function PageHelp({
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-muted/30 text-brand"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-ok-muted/60 text-ok"
           aria-hidden="true"
         >
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -232,7 +228,7 @@ export function PageHelp({
           {open ? 'Click to collapse' : 'Click to expand'}
         </span>
       </summary>
-      <div className="w-full min-w-0 border-t border-edge-subtle px-3 py-3 sm:px-4">
+      <div className={`w-full min-w-0 border-t px-3 py-3 sm:px-4 ${PAGE_HELP_BANNER_INNER_BORDER}`}>
         <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2">
           <HelpSection tone="info" title="What it is" className="md:col-span-2">
             <HelpRichText text={whatIsIt} />

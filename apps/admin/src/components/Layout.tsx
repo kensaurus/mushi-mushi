@@ -6,7 +6,7 @@
 
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode, ComponentType } from 'react'
 import type { FeatureFlag } from '../lib/useEntitlements'
 import {
@@ -20,9 +20,10 @@ import {
   IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
   IconInbox, IconGauge, IconUser, IconExplore, IconChat, IconSkills, IconBolt,
 } from './icons'
-import { IntegrationHealthDot } from './IntegrationHealthDot'
-import { SidebarHealthDot } from './SidebarHealthDot'
-import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight, toneForOpen } from '../lib/useNavCounts'
+import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
+import { renderNavBadge } from '../lib/navBadges'
+import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
+import { checkSectionAttention, actSectionAttention, doSectionAttention, startSectionAttention, planSectionAttention, workspaceSlicesAttention } from '../lib/extendedNavMeta'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { readJudgeStaleHours } from '../lib/judgeFreshness'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -56,7 +57,10 @@ import { AskMushiSidebar } from './AskMushiSidebar'
 import { useAskMushiPanel } from '../lib/useAskMushiPanel'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
-import { shouldSkipLayoutHero } from '../lib/pageHeroOwnership'
+import { shouldShowLayoutPageHero } from '../lib/chromeLayers'
+import { shouldShowPipelineRibbonChrome } from '../lib/chromePosture'
+import { resolveLayoutHero } from '../lib/layoutHeroFromStats'
+import { usePageHeroSnapshot } from '../lib/pageHeroSnapshot'
 import { useFaviconBadge } from '../lib/favicon'
 import { useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
@@ -147,7 +151,7 @@ const NAV: NavSection[] = [
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'My feedback',    path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
+      { label: 'Support',         path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Support' },
       { label: 'Feature board',  path: '/feature-board', icon: IconInbox,     beginner: false },
     ],
   },
@@ -680,6 +684,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [activityUnread, setActivityUnread] = useState(0)
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
+  const pageHeroSnapshot = usePageHeroSnapshot()
   const projectSnapshots = useProjectSnapshots()
   const activeProjectId = useActiveProjectId()
   const setupStatus = useSetupStatus(activeProjectId)
@@ -688,9 +693,13 @@ export function Layout({ children }: { children: ReactNode }) {
     : undefined
   const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
   const { isSuperAdmin, has } = useEntitlements()
-  const fallbackHero = shouldSkipLayoutHero(pathname)
-    ? null
-    : PAGE_HERO_FALLBACKS[pathname]
+  const fallbackHero = shouldShowLayoutPageHero(pathname)
+    ? PAGE_HERO_FALLBACKS[pathname]
+    : null
+  const resolvedHero = useMemo(
+    () => resolveLayoutHero(pathname, fallbackHero, navCounts, pageHeroSnapshot),
+    [pathname, fallbackHero, navCounts, pageHeroSnapshot],
+  )
   const pageShellWidth = pageLayoutWidthForPath(pathname)
   const [focusMode, setFocusMode] = useFocusMode()
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
@@ -1059,184 +1068,7 @@ export function Layout({ children }: { children: ReactNode }) {
                             className="ml-auto"
                           />
                         )}
-                        {path === '/integrations/config' && <IntegrationHealthDot />}
-                        {path === '/inventory' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={navCounts.regressedActions > 0 ? 'danger' : 'ok'}
-                            count={navCounts.regressedActions}
-                            label={
-                              navCounts.regressedActions > 0
-                                ? `${navCounts.regressedActions} regressed inventory actions`
-                                : 'No regressed inventory actions'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {/* Graph + Inventory share the same underlying
-                            inventory data — the graph is just the visual
-                            view of those nodes — so a regressed action
-                            should fire on BOTH rails. Operators who land
-                            on /graph from a deep link still see the same
-                            "needs attention" signal they'd see if they
-                            entered through /inventory. Mirrors the
-                            inventory tone exactly. */}
-                        {path === '/graph' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={navCounts.regressedActions > 0 ? 'danger' : 'ok'}
-                            count={navCounts.regressedActions}
-                            label={
-                              navCounts.regressedActions > 0
-                                ? `${navCounts.regressedActions} regressed actions in the graph`
-                                : 'Graph healthy — no regressions'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {/* Anti-gaming flagged-device count. Any flag is
-                            critical (someone tried to abuse the report
-                            firehose), so we use toneForFailed which
-                            steps ok → warn (≤2) → danger (>2) — even a
-                            single flag is amber, three or more is red.
-                            Sourced via the cheap count_only=1 mode of
-                            /v1/admin/anti-gaming/devices?flagged=true. */}
-                        {path === '/anti-gaming' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={toneForFailed(navCounts.flaggedDevices)}
-                            count={navCounts.flaggedDevices}
-                            label={
-                              navCounts.flaggedDevices > 0
-                                ? `${navCounts.flaggedDevices} flagged ${navCounts.flaggedDevices === 1 ? 'device' : 'devices'} — review for abuse`
-                                : 'No flagged devices'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/reports' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={
-                              criticalReports30d > 0
-                                ? 'danger'
-                                : toneForBacklog(navCounts.untriagedBacklog)
-                            }
-                            count={
-                              criticalReports30d > 0
-                                ? criticalReports30d
-                                : navCounts.untriagedBacklog
-                            }
-                            label={
-                              criticalReports30d > 0
-                                ? `${criticalReports30d} critical ${criticalReports30d === 1 ? 'report' : 'reports'} (30d)`
-                                : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/judge' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={toneForFailed(navCounts.judgeDisagreements)}
-                            count={navCounts.judgeDisagreements}
-                            label={
-                              navCounts.judgeDisagreements > 0
-                                ? `${navCounts.judgeDisagreements} classifier vs judge ${navCounts.judgeDisagreements === 1 ? 'disagreement' : 'disagreements'}`
-                                : 'Judge agrees with classifier'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/fixes' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={navCounts.fixesFailed > 0 ? toneForFailed(navCounts.fixesFailed) : toneForInFlight(navCounts.fixesInFlight)}
-                            count={navCounts.fixesFailed > 0 ? navCounts.fixesFailed : navCounts.fixesInFlight}
-                            label={
-                              navCounts.fixesFailed > 0
-                                ? `${navCounts.fixesFailed} failed fixes — needs attention`
-                                : navCounts.fixesInFlight > 0
-                                  ? `${navCounts.fixesInFlight} fixes in flight`
-                                  : 'No active fixes'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/repo' && navCounts.ready && navCounts.prsOpen > 0 && (
-                          <SidebarHealthDot
-                            tone="ok"
-                            count={navCounts.prsOpen}
-                            label={`${navCounts.prsOpen} PRs open awaiting review`}
-                          />
-                        )}
-                        {path === '/feedback' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={navCounts.feedbackWithReply > 0 ? 'warn' : 'idle'}
-                            count={navCounts.feedbackWithReply}
-                            label={
-                              navCounts.feedbackWithReply > 0
-                                ? `${navCounts.feedbackWithReply} feedback ${navCounts.feedbackWithReply === 1 ? 'reply' : 'replies'} to read`
-                                : 'No new feedback replies'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/inbox' && navCounts.ready && (
-                          // Escalates to danger (red) once the open-action
-                          // backlog hits 6 — six is roughly "more than a
-                          // single working session can clear", which is
-                          // exactly when the sidebar should stop reading
-                          // as amber-warn and switch to a red squint
-                          // signal. Symmetric with toneForFailed (≤2 warn,
-                          // >2 danger) and toneForBacklog (≤5 warn, >5
-                          // danger). 0 stays hidden via hideWhenZero.
-                          <SidebarHealthDot
-                            tone={toneForOpen(navCounts.inboxOpenActions, 6)}
-                            count={navCounts.inboxOpenActions}
-                            label={
-                              navCounts.inboxOpenActions > 0
-                                ? `${navCounts.inboxOpenActions} open action${navCounts.inboxOpenActions === 1 ? '' : 's'} in Action Inbox`
-                                : 'Action Inbox — all clear'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/notifications' && navCounts.ready && (
-                          // Notifications escalate at 11 — under 10 unread
-                          // is a normal day's worth of fix / judge / CI
-                          // pings; >10 means the user is missing their
-                          // own alerts and the sidebar should shout in
-                          // red instead of staying amber.
-                          <SidebarHealthDot
-                            tone={toneForOpen(navCounts.notificationsUnread, 11)}
-                            count={navCounts.notificationsUnread}
-                            label={
-                              navCounts.notificationsUnread > 0
-                                ? `${navCounts.notificationsUnread} unread notification${navCounts.notificationsUnread === 1 ? '' : 's'}`
-                                : 'All notifications read'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/queue' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={toneForFailed(navCounts.queueFailed)}
-                            count={navCounts.queueFailed}
-                            label={
-                              navCounts.queueFailed > 0
-                                ? `${navCounts.queueFailed} dead-letter / failed queue ${navCounts.queueFailed === 1 ? 'item' : 'items'}`
-                                : 'Queue clear — no stuck items'
-                            }
-                            hideWhenZero
-                          />
-                        )}
-                        {path === '/health' && navCounts.ready && (
-                          <SidebarHealthDot
-                            tone={toneForFailed(navCounts.healthIssues)}
-                            count={navCounts.healthIssues}
-                            label={
-                              navCounts.healthIssues > 0
-                                ? `${navCounts.healthIssues} integration${navCounts.healthIssues === 1 ? '' : 's'} reporting issues`
-                                : 'All integrations healthy'
-                            }
-                            hideWhenZero
-                          />
-                        )}
+                        {renderNavBadge(path, navCounts, { criticalReports30d })}
                       </Link>
                     )
                   })}
@@ -1463,7 +1295,9 @@ export function Layout({ children }: { children: ReactNode }) {
               {!focusMode && <QuickstartMegaCta />}
               {!focusMode && (
                 <>
-                  <PipelineStatusRibbon />
+                  {shouldShowPipelineRibbonChrome(isAdvanced, pathname) ? (
+                    <PipelineStatusRibbon />
+                  ) : null}
                   <DavChromeCoachmark />
                 </>
               )}
@@ -1472,14 +1306,15 @@ export function Layout({ children }: { children: ReactNode }) {
               {!focusMode && <RoutePageHelp />}
               {/* Beginner mode uses NextBestAction — skip layout PageHero to avoid
                   duplicating the same guidance (NN/g #8 Aesthetic & Minimalist). */}
-              {fallbackHero && !isBeginner && (
+              {resolvedHero && !isBeginner && (
                 <PageHero
-                  scope={fallbackHero.scope}
-                  title={fallbackHero.title}
-                  kicker={fallbackHero.kicker}
-                  decide={fallbackHero.decide}
-                  act={null}
-                  verify={fallbackHero.verify}
+                  scope={resolvedHero.scope}
+                  title={resolvedHero.title}
+                  kicker={resolvedHero.kicker}
+                  decide={resolvedHero.decide}
+                  act={resolvedHero.act}
+                  actIdle={resolvedHero.actIdle}
+                  verify={resolvedHero.verify}
                 />
               )}
               {children}
@@ -1537,15 +1372,42 @@ function computeStaleness(
 ): SectionStaleness | null {
   if (!navCounts.ready) return null
   switch (sectionId) {
+    case 'start': {
+      const extended = startSectionAttention(navCounts.slices)
+      if (!extended) return null
+      return {
+        count: extended.count,
+        tone: extended.tone,
+        label: extended.label,
+      }
+    }
     case 'plan': {
       const backlog = navCounts.untriagedBacklog
       const reg = navCounts.regressedActions
-      if (backlog === 0 && reg === 0) return null
+      const contentAttention = planSectionAttention(navCounts.slices)
+      if (backlog === 0 && reg === 0 && !contentAttention) return null
       if (reg > 0) {
         return {
-          count: reg,
+          count: reg + (contentAttention?.count ?? 0),
           tone: 'danger',
-          label: `${reg} regressed inventory action${reg === 1 ? '' : 's'} — check User stories`,
+          label: contentAttention
+            ? `${reg} regressed inventory actions · ${contentAttention.label}`
+            : `${reg} regressed inventory action${reg === 1 ? '' : 's'} — check User stories`,
+        }
+      }
+      if (backlog > 0 && contentAttention) {
+        const tone = toneForBacklog(backlog) as SectionStaleness['tone']
+        return {
+          count: backlog + contentAttention.count,
+          tone: contentAttention.tone === 'danger' ? 'danger' : tone,
+          label: `${backlog} untriaged report${backlog === 1 ? '' : 's'} · ${contentAttention.label}`,
+        }
+      }
+      if (contentAttention) {
+        return {
+          count: contentAttention.count,
+          tone: contentAttention.tone,
+          label: contentAttention.label,
         }
       }
       const tone = toneForBacklog(backlog) as SectionStaleness['tone']
@@ -1557,24 +1419,42 @@ function computeStaleness(
     }
     case 'do': {
       const active = navCounts.fixesFailed + navCounts.fixesInFlight
-      if (active === 0) return null
-      const tone = navCounts.fixesFailed > 0 ? 'danger' : 'warn'
+      const extended = doSectionAttention(navCounts.slices)
+      if (active === 0 && !extended) return null
+      const count = active + (extended?.count ?? 0)
+      const tone =
+        navCounts.fixesFailed > 0 || extended?.tone === 'danger' ? 'danger' : 'warn'
+      const parts: string[] = []
+      if (navCounts.fixesFailed > 0) {
+        parts.push(`${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'}`)
+      } else if (navCounts.fixesInFlight > 0) {
+        parts.push(`${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`)
+      }
+      if (extended) parts.push(extended.label)
       return {
-        count: active,
+        count,
         tone,
-        label: navCounts.fixesFailed > 0
-          ? `${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'} · ${navCounts.fixesInFlight} in flight`
-          : `${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`,
+        label: parts.join(' · '),
       }
     }
     case 'check': {
       const disagreements = navCounts.judgeDisagreements
       const staleHours = readJudgeStaleHours()
+      const extended = checkSectionAttention(navCounts.slices)
       if (disagreements > 0) {
         return {
-          count: disagreements,
+          count: disagreements + (extended?.count ?? 0),
           tone: disagreements > 3 ? 'danger' : 'warn',
-          label: `${disagreements} judge ${disagreements === 1 ? 'disagreement' : 'disagreements'} with classifier`,
+          label: extended
+            ? `${disagreements} judge disagreements · ${extended.label}`
+            : `${disagreements} judge ${disagreements === 1 ? 'disagreement' : 'disagreements'} with classifier`,
+        }
+      }
+      if (extended) {
+        return {
+          count: extended.count,
+          tone: extended.tone,
+          label: extended.label,
         }
       }
       if (staleHours != null && staleHours > 48) {
@@ -1588,11 +1468,58 @@ function computeStaleness(
     }
     case 'act': {
       const issues = navCounts.healthIssues
-      if (issues === 0) return null
+      const extended = actSectionAttention(navCounts.slices)
+      if (issues === 0 && !extended) return null
+      const count = issues + (extended?.count ?? 0)
+      const tone =
+        issues > 2 || extended?.tone === 'danger'
+          ? 'danger'
+          : 'warn'
+      const parts: string[] = []
+      if (issues > 0) parts.push(`${issues} integration${issues === 1 ? '' : 's'}`)
+      if (extended) parts.push(extended.label)
       return {
-        count: issues,
-        tone: issues > 2 ? 'danger' : 'warn',
-        label: `${issues} integration${issues === 1 ? '' : 's'} need attention`,
+        count,
+        tone,
+        label: parts.join(' · '),
+      }
+    }
+    case 'workspace': {
+      const attention = workspaceSectionAttention({
+        projectsNeedingAttention: navCounts.projectsNeedingAttention,
+        pendingInvites: navCounts.pendingInvites,
+      })
+      const billing = navCounts.slices.billing
+      const billingAttention =
+        (billing?.pastDueProjects ?? 0) +
+        (billing?.unpaidProjects ?? 0) +
+        (billing?.overQuota ? 1 : 0) +
+        (billing?.approachingQuota ? 1 : 0)
+      const rewards = navCounts.slices.rewards
+      const rewardsAttention =
+        (rewards?.openDisputesCount ?? 0) + (rewards?.webhooksFailing ?? 0)
+      const sliceAttention = workspaceSlicesAttention(navCounts.slices)
+      const total =
+        (attention?.count ?? 0) +
+        billingAttention +
+        rewardsAttention +
+        (sliceAttention?.count ?? 0)
+      if (total === 0) return null
+      const parts: string[] = []
+      if (attention) parts.push(attention.label)
+      if (billingAttention > 0) parts.push('billing')
+      if (rewardsAttention > 0) parts.push('rewards')
+      if (sliceAttention) parts.push(sliceAttention.label)
+      return {
+        count: total,
+        tone:
+          billing?.pastDueProjects ||
+          billing?.overQuota ||
+          rewards?.openDisputesCount ||
+          sliceAttention?.tone === 'danger'
+            ? 'danger'
+            : attention?.tone ?? sliceAttention?.tone ?? 'warn',
+        label: parts.join(' · '),
       }
     }
     default:

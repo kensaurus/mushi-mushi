@@ -3,6 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds } from '../shared.ts';
+import { attachReportTitles, bucketFailedFixPreviews } from '../../_shared/failed-fix-preview.ts';
 
 export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
@@ -87,6 +88,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       topPriorityTitle: null as string | null,
       topPriorityStage: null as string | null,
       topPriorityTo: null as string | null,
+      topPriority: 'no_project' as 'no_project' | 'setup' | 'actions' | 'clear',
+      topPriorityLabel: null as string | null,
+      nextStepTo: '/onboarding' as string | null,
       openPlan: false,
       openDo: false,
       openCheck: false,
@@ -217,51 +221,62 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const openOps = integrationRed > 0 || integrationAmber > 0;
     const openAct = integrationRed > 0;
 
+    const pid = activeProject.id as string;
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
+
     const openFlags = [
       openPlan
         ? {
             stage: 'plan',
-            title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} in 14d`,
-            to: '/reports?severity=critical',
+            title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} need triage`,
+            hint: 'Confirm severity on the worst bugs first — auto-fix waits for triage.',
+            to: scoped('/reports?severity=critical&status=new'),
           }
         : null,
       openDo
         ? {
             stage: 'do',
-            title: `${failedFixes14d} failed fix${failedFixes14d === 1 ? '' : 'es'} in 14d`,
-            to: '/fixes?status=failed',
+            title: `${failedFixes14d} fix attempt${failedFixes14d === 1 ? '' : 's'} failed in 14d`,
+            hint: 'Open each failure, read the error, then retry or hand off to Cursor.',
+            to: scoped('/fixes?status=failed'),
           }
         : null,
       openCheck
         ? {
             stage: 'check',
-            title: judgeStaleHours == null
-              ? 'No judge evaluations yet'
-              : `Judge scores stale (${Math.round(judgeStaleHours)}h ago)`,
-            to: '/judge?action=run',
+            title:
+              judgeStaleHours == null
+                ? 'No judge scores yet — run an evaluation'
+                : `Judge scores are ${Math.round(judgeStaleHours)}h old`,
+            hint: 'The judge audits classifier quality — run after prompt changes.',
+            to: scoped('/judge?action=run'),
           }
         : null,
       openAct
         ? {
             stage: 'act',
             title: `${integrationRed} integration${integrationRed === 1 ? '' : 's'} disconnected`,
-            to: '/integrations?status=disconnected',
+            hint: 'Fix-worker cannot ship PRs until GitHub and routing are healthy.',
+            to: scoped('/integrations/config'),
           }
         : null,
       openOps
         ? integrationRed > 0
           ? {
               stage: 'ops',
-              title: `${integrationRed} integration probe${integrationRed === 1 ? '' : 's'} failing`,
-              to: '/health?status=red',
+              title: `${integrationRed} health probe${integrationRed === 1 ? '' : 's'} failing`,
+              hint: 'Run probes in Health — degraded tools may silently drop context.',
+              to: scoped('/health?status=red'),
             }
           : {
               stage: 'ops',
               title: `${integrationAmber} probe${integrationAmber === 1 ? '' : 's'} degraded`,
-              to: '/health?status=amber',
+              hint: 'Not blocking yet — fix before the next deploy.',
+              to: scoped('/health?status=amber'),
             }
         : null,
-    ].filter(Boolean) as Array<{ stage: string; title: string; to: string }>;
+    ].filter(Boolean) as Array<{ stage: string; title: string; hint: string; to: string }>;
 
     const openActions = openFlags.length;
     const clearStages = 5 - openActions;
@@ -294,11 +309,29 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       lastActivityKind = 'fix';
     }
 
+    let topPriority: 'no_project' | 'setup' | 'actions' | 'clear' = 'clear';
+    let topPriorityLabel: string | null = null;
+    let nextStepTo: string | null = scoped('/onboarding?tab=steps');
+
+    if (!setupDone) {
+      topPriority = 'setup';
+      topPriorityLabel = `${requiredComplete} of ${4} setup steps done — finish SDK + first report before the inbox fills up.`;
+      nextStepTo = scoped('/onboarding?tab=steps');
+    } else if (openActions > 0 && top) {
+      topPriority = 'actions';
+      topPriorityLabel = top.hint;
+      nextStepTo = top.to;
+    } else {
+      topPriority = 'clear';
+      topPriorityLabel = `All ${5} PDCA stages clear — new bugs and failed fixes will appear here automatically.`;
+      nextStepTo = scoped('/inbox?tab=activity');
+    }
+
     return c.json({
       ok: true,
       data: {
         hasAnyProject: true,
-        projectId: activeProject.id,
+        projectId: pid,
         projectName: activeProject.name,
         projectCount: projectIds.length,
         setupDone,
@@ -314,6 +347,9 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         integrationAmber,
         judgeStale,
         judgeStaleHours,
+        topPriority,
+        topPriorityLabel,
+        nextStepTo,
         topPriorityTitle: top?.title ?? null,
         topPriorityStage: top?.stage ?? null,
         topPriorityTo: top?.to ?? null,
@@ -386,6 +422,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       keysRes,
       heartbeatRes,
       reportCountRes,
+      failedFixesRes,
     ] = await Promise.all([
       db
         .from('reports')
@@ -433,11 +470,29 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         .from('reports')
         .select('id', { count: 'exact', head: true })
         .eq('project_id', activeProject.id),
+      db
+        .from('fix_attempts')
+        .select('id, project_id, report_id, error, finished_at, created_at')
+        .eq('project_id', activeProject.id)
+        .eq('status', 'failed')
+        .order('finished_at', { ascending: false })
+        .limit(10),
     ]);
 
     const recentReports = reportsRes.data ?? [];
     const recentFixes = fixesRes.data ?? [];
     const recentLlm = llmRes.data ?? [];
+    const failedPreviewRaw = bucketFailedFixPreviews(
+      (failedFixesRes.data ?? []) as Array<{
+        id: string
+        project_id: string
+        report_id: string
+        error?: string | null
+        finished_at?: string | null
+        created_at?: string | null
+      }>,
+    )[activeProject.id] ?? [];
+    const failedFixesPreview = await attachReportTitles(db, failedPreviewRaw.slice(0, 3));
 
     const openBacklog = recentReports.filter((r) => {
       const status = String(r.status ?? '');
@@ -520,6 +575,44 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       lastActivityKind = 'fix';
     }
 
+    const pid = activeProject.id;
+    let topPriority:
+      | 'setup'
+      | 'backlog'
+      | 'fixes_failed'
+      | 'integrations'
+      | 'waiting_data'
+      | 'healthy' = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!setupDone) {
+      topPriority = 'setup';
+      topPriorityLabel =
+        'Finish project, API key, SDK install, and first report before the loop metrics unlock.';
+      topPriorityTo = `/onboarding?tab=steps&project=${encodeURIComponent(pid)}`;
+    } else if (openBacklog > 0) {
+      topPriority = 'backlog';
+      topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting over an hour — triage the oldest first.`;
+      topPriorityTo = `/reports?tab=queue&status=new&project=${encodeURIComponent(pid)}`;
+    } else if (fixesFailed > 0) {
+      topPriority = 'fixes_failed';
+      topPriorityLabel =
+        'The fix agent could not finish these runs — open each failure, read the error, then retry.';
+      topPriorityTo = `/fixes?status=failed&project=${encodeURIComponent(pid)}`;
+    } else if (integrationIssues > 0) {
+      topPriority = 'integrations';
+      topPriorityLabel = `${integrationIssues} integration${integrationIssues === 1 ? '' : 's'} failing — fixes may not reach GitHub until connections recover.`;
+      topPriorityTo = `/integrations/config?project=${encodeURIComponent(pid)}`;
+    } else if (!hasSdk && reportCount === 0) {
+      topPriority = 'waiting_data';
+      topPriorityLabel = 'Send a test report from Setup — charts populate once ingest is live.';
+      topPriorityTo = `/onboarding?tab=verify&project=${encodeURIComponent(pid)}`;
+    } else {
+      topPriorityLabel = `${projectIds.length > 1 ? `${projectIds.length} projects · ` : ''}loop healthy.`;
+      topPriorityTo = `/dashboard?project=${encodeURIComponent(pid)}`;
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -544,6 +637,10 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         integrationIssues,
         lastActivityAt,
         lastActivityKind,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+        failed_fixes_preview: failedFixesPreview,
       },
     });
   });

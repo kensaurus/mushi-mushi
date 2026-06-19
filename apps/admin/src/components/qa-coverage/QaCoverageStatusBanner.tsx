@@ -3,10 +3,10 @@
  * PURPOSE: QA Coverage posture — no stories, failing, pending, idle, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { qaFailingHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { QaCoverageStats, QaCoverageTabId } from './QaCoverageStatsTypes'
 
 interface Props {
@@ -29,6 +29,7 @@ export function QaCoverageStatusBanner({
   const copy = usePageCopy('/qa-coverage')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
@@ -41,9 +42,7 @@ export function QaCoverageStatusBanner({
             : 'Pick a project to manage QA stories and scheduled runs.'
         }
         action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />
         }
       />
     )
@@ -54,14 +53,23 @@ export function QaCoverageStatusBanner({
       <StatusBannerShell
         tone="brand"
         title={plainBanner ? 'No automated tests yet' : `No QA stories on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Write a user-story test — it runs on a schedule and posts screenshots when it fails.'
+        }
         action={
           onCreateStory ? (
-            <Btn size="sm" variant="ghost" onClick={onCreateStory}>{actions.newStory ?? '+ New story'}</Btn>
+            <StatusBannerAction
+              label={actions.newStory ?? '+ New story'}
+              onClick={onCreateStory}
+              tone="brand"
+            />
           ) : (
-            <Link to="/qa-coverage?tab=overview">
-              <Btn size="sm" variant="ghost">{actions.create ?? 'Create story'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.create ?? 'Create story'}
+              to={scopedHref('/qa-coverage?tab=overview', pid)}
+              tone="brand"
+            />
           )
         }
       />
@@ -77,15 +85,27 @@ export function QaCoverageStatusBanner({
             ? `${stats.failingStories} test${stats.failingStories === 1 ? '' : 's'} failing`
             : `${stats.failingStories} failing stor${stats.failingStories === 1 ? 'y' : 'ies'} (24h)`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={stats.topPriorityLabel ?? qaFailingHint(stats.failingStories)}
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.failures ?? 'Review failures'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.failures ?? 'Review failing tests'}
+              to={stats.topPriorityTo}
+              tone="danger"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('failing')}>{actions.failures ?? 'Review failures'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.failures ?? 'Review failing tests'}
+              onClick={() => onTab('failing')}
+              tone="danger"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.failures ?? 'Review failing tests'}
+              to={scopedHref('/qa-coverage?tab=failing', pid)}
+              tone="danger"
+            />
+          )
         }
       />
     )
@@ -101,38 +121,69 @@ export function QaCoverageStatusBanner({
             ? `${stats.pendingRuns} test run${stats.pendingRuns === 1 ? '' : 's'} in progress`
             : `${stats.pendingRuns} run${stats.pendingRuns === 1 ? '' : 's'} in flight`
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Tests are running in the cloud — refresh or open Stories to watch progress.'
+        }
         action={
           onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>{actions.stories ?? 'View stories'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.stories ?? 'View stories'}
+              onClick={() => onTab('stories')}
+              tone="brand"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.stories ?? 'View stories'}
+              to={scopedHref('/qa-coverage?tab=stories', pid)}
+              tone="brand"
+            />
+          )
         }
       />
     )
   }
 
   if (stats.topPriority === 'no_runs' || stats.topPriority === 'disabled_all') {
+    const disabled = stats.topPriority === 'disabled_all'
     return (
       <StatusBannerShell
         tone="warn"
         title={
           plainBanner
-            ? stats.topPriority === 'disabled_all'
+            ? disabled
               ? 'All tests are turned off'
               : 'No test runs in the last 24 hours'
-            : stats.topPriority === 'disabled_all'
+            : disabled
               ? 'All stories disabled'
               : 'No runs in the last 24h'
         }
-        subtitle={stats.topPriorityLabel}
+        subtitle={
+          stats.topPriorityLabel ??
+          (disabled
+            ? 'Re-enable at least one story so scheduled QA can catch regressions.'
+            : 'Stories exist but nothing ran recently — check schedules or run one manually.')
+        }
         action={
           stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.openStories ?? 'Open stories'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.openStories ?? 'Open stories'}
+              to={stats.topPriorityTo}
+              tone="warn"
+            />
           ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>{actions.openStories ?? 'Open stories'}</Btn>
-          ) : null
+            <StatusBannerAction
+              label={actions.openStories ?? 'Open stories'}
+              onClick={() => onTab('stories')}
+              tone="warn"
+            />
+          ) : (
+            <StatusBannerAction
+              label={actions.openStories ?? 'Open stories'}
+              to={scopedHref('/qa-coverage?tab=stories', pid)}
+              tone="warn"
+            />
+          )
         }
       />
     )
@@ -145,13 +196,16 @@ export function QaCoverageStatusBanner({
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.stories ?? 'View stories'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.stories ?? 'View stories'} to={stats.topPriorityTo} tone="ok" />
         ) : null
       }
     />

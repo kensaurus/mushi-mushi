@@ -33,6 +33,13 @@ import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
 import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
+import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { ReportsTriageGuide } from '../components/reports/ReportsTriageGuide'
+import {
+  EMPTY_REPORTS_STATS,
+  type ReportsStats,
+} from '../components/reports/ReportsStatsTypes'
+import { isReportsBannerVisible } from '../lib/reportsExplainer'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
@@ -112,6 +119,19 @@ export function ReportsPage() {
     activeProjectId ? `/v1/admin/reports?${queryString}` : null,
     { deps: [queryString, activeProjectId] },
   )
+
+  const {
+    data: reportsStatsData,
+    loading: reportsStatsLoading,
+    reload: reloadReportsStats,
+    isValidating: reportsStatsValidating,
+  } = usePageData<ReportsStats>('/v1/admin/reports/stats')
+  const reportsStats = reportsStatsData ?? EMPTY_REPORTS_STATS
+
+  const reloadAll = useCallback(() => {
+    reload()
+    reloadReportsStats()
+  }, [reload, reloadReportsStats])
 
   const reports = data?.reports ?? []
   const total = data?.total ?? 0
@@ -671,6 +691,16 @@ export function ReportsPage() {
           </button>
         </Tooltip>
       </PageHeaderBar>
+
+      {!reportsStatsLoading && isReportsBannerVisible(reportsStats) && (
+        <ReportsStatusBanner
+          stats={reportsStats}
+          onRefresh={reloadAll}
+          refreshing={reportsStatsValidating || isValidating}
+        />
+      )}
+
+      <ReportsTriageGuide topPriority={reportsStats.topPriority} />
 
       <DogfoodNarrativeBanner />
 

@@ -1,10 +1,35 @@
 [
   {
-    "majorMinor": "1.16",
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "inventory-schema",
+        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
+      },
+      {
+        "title": "cli",
+        "description": "bump `commander` to **v15** (ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
+      },
+      {
+        "title": "mcp-ci",
+        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
+      },
+      {
+        "title": "react-native",
+        "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
+      }
+    ],
+    "packages": []
+  },
+  {
+    "majorMinor": "1.17",
     "headline": null,
     "pending": false,
     "versions": [
-      "1.16.0"
+      "1.17.0"
     ],
     "highlights": [
       {
@@ -43,11 +68,11 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.16.0"
+        "version": "1.17.0"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.16.0"
+        "version": "1.17.0"
       }
     ]
   },
@@ -738,11 +763,64 @@
       "0.18.1",
       "0.18.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "inventory-schema",
+        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
+      },
+      {
+        "title": "cli",
+        "description": "bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
+      },
+      {
+        "title": "mcp-ci",
+        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
+      },
+      {
+        "title": "react-native",
+        "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
+      },
+      {
+        "title": "Reporter identity (fixes anonymous-token reporter):",
+        "description": "`submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`."
+      },
+      {
+        "title": "Sentry-level payload:",
+        "description": "every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin \"Repro timeline\" renders instead of nudging \"Upgrade the SDK\"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb."
+      },
+      {
+        "title": "Screenshots:",
+        "description": "new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens."
+      },
+      {
+        "title": "Design parity:",
+        "description": "`MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer \"Your reports\" / \"Community\" tabs."
+      },
+      {
+        "title": "inventory-schema",
+        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
+      },
+      {
+        "title": "cli",
+        "description": "bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
+      },
+      {
+        "title": "mcp-ci",
+        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
+      },
+      {
+        "title": "react-native",
+        "description": "build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
         "version": "0.18.1"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.18.0"
       }
     ]
   },
@@ -779,32 +857,12 @@
       {
         "title": "Hardening:",
         "description": "oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture."
-      },
-      {
-        "title": "Reporter identity (fixes anonymous-token reporter):",
-        "description": "`submitReport` now emits nested `metadata.user = { id, email, name, provider }` — the shape the server's `resolveEndUser()` reads — while keeping the flat `userId/userEmail/userName` keys for back-compat. Adds a `setUser()` alias next to `identify()`."
-      },
-      {
-        "title": "Sentry-level payload:",
-        "description": "every report now carries a per-launch `sessionId`, `sdkPackage`/`sdkVersion`/`appVersion`, a device `fingerprintHash`, and a 50-entry breadcrumb ring buffer that is also sent as a derived repro `timeline` (so the admin \"Repro timeline\" renders instead of nudging \"Upgrade the SDK\"). New `addBreadcrumb()` method; `setScreen()` auto-adds a navigation breadcrumb."
-      },
-      {
-        "title": "Screenshots:",
-        "description": "new `capture.screenshot` config flag (default on) gating the optional `react-native-view-shot` capture; documented masking guidance for sensitive screens."
-      },
-      {
-        "title": "Design parity:",
-        "description": "`MushiBottomSheet` restyled to mirror the web widget — neon-lime (`#0FFF50`) branded header and accent, dark-ink text on accent surfaces, and clearer \"Your reports\" / \"Community\" tabs."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
         "version": "0.17.2"
-      },
-      {
-        "name": "@mushi-mushi/react-native",
-        "version": "0.17.0"
       }
     ]
   },
@@ -1549,6 +1607,18 @@
       {
         "title": "MCP",
         "description": "— `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources."
+      },
+      {
+        "title": "inventory-schema",
+        "description": "migrate to **Zod 4** (`zod@^4.4.3`), aligning with `@mushi-mushi/mcp` and `@mushi-mushi/agents`, which were already on v4. The public API is unchanged; the validation-issue path formatter now handles Zod 4's widened `PropertyKey[]` issue paths."
+      },
+      {
+        "title": "cli",
+        "description": "bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers)."
+      },
+      {
+        "title": "mcp-ci",
+        "description": "bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup)."
       }
     ],
     "packages": [
@@ -1566,7 +1636,7 @@
       },
       {
         "name": "@mushi-mushi/mcp-ci",
-        "version": "0.6.0"
+        "version": "0.6.1"
       },
       {
         "name": "@mushi-mushi/node",
@@ -1895,6 +1965,10 @@
       {
         "name": "@mushi-mushi/core",
         "version": "0.3.1"
+      },
+      {
+        "name": "@mushi-mushi/inventory-schema",
+        "version": "0.3.0"
       },
       {
         "name": "@mushi-mushi/mcp",

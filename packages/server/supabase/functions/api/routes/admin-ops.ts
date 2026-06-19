@@ -510,6 +510,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       evidenceNeverGenerated: true,
       currentRegion: currentRegion(),
       activeProjectRegion: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'upgrade_required'
+        | 'failing_controls'
+        | 'dsar_overdue'
+        | 'no_evidence'
+        | 'at_risk'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -591,11 +601,42 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const policies = policyRows ?? [];
     const legalHoldCount = policies.filter((p) => p.legal_hold).length;
 
+    const projectName = project.name as string;
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = '/compliance';
+
+    if (!soc2Entitlement) {
+      topPriority = 'upgrade_required';
+      topPriorityLabel = `${plan?.display_name ?? 'Hobby'} on ${projectName} does not include the compliance pack — upgrade for evidence vault and DSAR tooling.`;
+      topPriorityTo = '/billing?tab=plans';
+    } else if (controlsFail > 0) {
+      topPriority = 'failing_controls';
+      topPriorityLabel = `${controlsFail} control${controlsFail === 1 ? '' : 's'} failing evidence — remediate before your next audit.`;
+      topPriorityTo = '/compliance?tab=evidence';
+    } else if (overdueDsars > 0) {
+      topPriority = 'dsar_overdue';
+      topPriorityLabel = `${overdueDsars} DSAR${overdueDsars === 1 ? '' : 's'} past the 30-day SLA — assign owners on the DSARs tab.`;
+      topPriorityTo = '/compliance?tab=dsars';
+    } else if (latestByControl.size === 0) {
+      topPriority = 'no_evidence';
+      topPriorityLabel = 'No SOC 2 evidence generated yet — click Refresh evidence to run the nightly sweep.';
+      topPriorityTo = '/compliance?tab=evidence';
+    } else if (controlsWarn > 0 || atRiskDsars > 0) {
+      topPriority = 'at_risk';
+      topPriorityLabel = `${controlsWarn} control warning${controlsWarn === 1 ? '' : 's'}${atRiskDsars > 0 ? ` · ${atRiskDsars} DSAR${atRiskDsars === 1 ? '' : 's'} approaching SLA` : ''}.`;
+      topPriorityTo = controlsWarn > 0 ? '/compliance?tab=evidence' : '/compliance?tab=dsars';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${controlsPass}/${latestByControl.size} controls passing · ${openDsars} open DSAR${openDsars === 1 ? '' : 's'} on ${projectName}.`;
+      topPriorityTo = '/compliance?tab=overview';
+    }
+
     return c.json({
       ok: true,
       data: {
         projectId: project.id,
-        projectName: project.name,
+        projectName,
         soc2Entitlement,
         planId: plan?.id ?? 'hobby',
         planDisplayName: plan?.display_name ?? 'Hobby',
@@ -613,6 +654,9 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         evidenceNeverGenerated: latestByControl.size === 0,
         currentRegion: currentRegion(),
         activeProjectRegion: (residencyRow?.data_residency_region as string | null) ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });

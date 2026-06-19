@@ -4,6 +4,13 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { reportMessage } from '../../_shared/sentry.ts';
 import { compareSemver, resolveSdkFreshnessStatus } from '../../_shared/sdk-version-compare.ts';
+import {
+  fetchLatestReportTimestamps,
+  fetchLatestStampedSdkReports,
+  fetchProjectSdkObservations,
+  resolveProjectSdkIdentity,
+} from '../../_shared/sdk-observation.ts';
+import { ensureRepoDeclaredSdkObservation } from '../../_shared/sdk-repo-scan.ts';
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
@@ -100,7 +107,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       reportCounts,
       allKeys,
       members,
-      latestReports,
+      latestReportTimestamps,
+      stampedSdkReports,
+      sdkObservations,
       planBacklogs,
       doFlights,
       checkPending,
@@ -130,31 +139,9 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
         db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
-        Promise.all(
-          projectIds.map((pid) =>
-            db
-              .from('reports')
-              // Pull the SDK identity columns alongside `created_at` so the FE
-              // can compare the project's most-recently-observed SDK version
-              // against the latest published version (joined below) and
-              // surface "outdated" / "deprecated" badges per row. Without
-              // this the ProjectsPage SDK install card had no way to tell
-              // a project was running 0.7 against a 0.9 catalog except by
-              // making the operator open the report and read the metadata
-              // by hand.
-              .select('created_at, sdk_package, sdk_version')
-              .eq('project_id', pid)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-              .then((r) => ({
-                project_id: pid,
-                created_at: r.data?.created_at ?? null,
-                sdk_package: (r.data as { sdk_package?: string | null } | null)?.sdk_package ?? null,
-                sdk_version: (r.data as { sdk_version?: string | null } | null)?.sdk_version ?? null,
-              })),
-          ),
-        ),
+        fetchLatestReportTimestamps(db, projectIds),
+        fetchLatestStampedSdkReports(db, projectIds),
+        fetchProjectSdkObservations(db, projectIds),
         db
           .from('reports')
           .select('project_id')
@@ -163,7 +150,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
           .lt('created_at', oneHourAgo),
         db
           .from('fix_attempts')
-          .select('project_id, status')
+          .select('id, project_id, status, report_id, error, finished_at')
           .in('project_id', projectIds)
           .in('status', ['pending', 'running', 'pr_open', 'failed']),
         db
@@ -258,18 +245,18 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     }
 
     const lastReportMap: Record<string, string> = {};
-    // Per-project most-recently-observed SDK identity, drawn from the same
-    // single-row `latestReports` query as `lastReportMap`. We keep these as
-    // sibling maps (instead of nesting them on a single tuple) because the
-    // FE consumes them independently — `last_report_at` is a freshness
-    // signal, while `(sdk_package, sdk_version)` drives the outdated-SDK
-    // badge below.
-    const lastSdkPackageMap: Record<string, string | null> = {};
-    const lastSdkVersionMap: Record<string, string | null> = {};
-    for (const r of latestReports) {
+    for (const r of latestReportTimestamps) {
       if (r.created_at) lastReportMap[r.project_id] = r.created_at;
-      if (r.sdk_package) lastSdkPackageMap[r.project_id] = r.sdk_package;
-      if (r.sdk_version) lastSdkVersionMap[r.project_id] = r.sdk_version;
+    }
+
+    const observationByProject = new Map(sdkObservations.map((o) => [o.project_id, o]));
+    const stampedByProject = new Map(stampedSdkReports.map((r) => [r.project_id, r]));
+    const resolvedSdkByProject: Record<string, ReturnType<typeof resolveProjectSdkIdentity>> = {};
+    for (const pid of projectIds) {
+      resolvedSdkByProject[pid] = resolveProjectSdkIdentity(
+        observationByProject.get(pid),
+        stampedByProject.get(pid),
+      );
     }
 
     // Latest published version per @mushi-mushi/* package. Sourced from the
@@ -318,11 +305,59 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
 
     const fixInflightMap: Record<string, number> = {};
     const fixFailedMap: Record<string, number> = {};
+    interface FailedFixPreviewRow {
+      id: string;
+      report_id: string;
+      error_head: string | null;
+      finished_at: string | null;
+    }
+    const failedFixPreviewByProject: Record<string, FailedFixPreviewRow[]> = {};
     for (const f of doFlights.data ?? []) {
       if (f.status === 'failed') {
         fixFailedMap[f.project_id] = (fixFailedMap[f.project_id] ?? 0) + 1;
+        const err = (f as { error?: string | null }).error ?? null;
+        const row: FailedFixPreviewRow = {
+          id: (f as { id: string }).id,
+          report_id: (f as { report_id: string }).report_id,
+          error_head: err ? err.split('\n')[0].slice(0, 160) : null,
+          finished_at: (f as { finished_at?: string | null }).finished_at ?? null,
+        };
+        if (!failedFixPreviewByProject[f.project_id]) {
+          failedFixPreviewByProject[f.project_id] = [];
+        }
+        failedFixPreviewByProject[f.project_id].push(row);
       } else {
         fixInflightMap[f.project_id] = (fixInflightMap[f.project_id] ?? 0) + 1;
+      }
+    }
+    for (const pid of Object.keys(failedFixPreviewByProject)) {
+      failedFixPreviewByProject[pid].sort((a, b) => {
+        const ta = a.finished_at ? new Date(a.finished_at).getTime() : 0;
+        const tb = b.finished_at ? new Date(b.finished_at).getTime() : 0;
+        return tb - ta;
+      });
+      failedFixPreviewByProject[pid] = failedFixPreviewByProject[pid].slice(0, 3);
+    }
+
+    const failedReportIds = [
+      ...new Set(
+        Object.values(failedFixPreviewByProject)
+          .flat()
+          .map((r) => r.report_id),
+      ),
+    ];
+    const reportTitleById: Record<string, string | null> = {};
+    if (failedReportIds.length > 0) {
+      const { data: titleRows } = await db
+        .from('reports')
+        .select('id, summary, description')
+        .in('id', failedReportIds);
+      for (const r of titleRows ?? []) {
+        const summary = (r as { summary?: string | null }).summary?.trim();
+        const desc = (r as { description?: string | null }).description?.trim();
+        reportTitleById[r.id] =
+          summary ||
+          (desc ? desc.slice(0, 80) + (desc.length > 80 ? '…' : '') : null);
       }
     }
 
@@ -356,6 +391,40 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
     for (const r of (repos.data ?? []) as RepoRow[]) {
       if (!reposByProject[r.project_id]) reposByProject[r.project_id] = [];
       reposByProject[r.project_id].push(r);
+    }
+
+    // Repo-scan fallback: dogfood monorepos (workspace:*) and projects that
+    // heartbeat without stamped reports never land in project_sdk_observations
+    // via the report/heartbeat writers alone.
+    const repoScanTargets = projectIds.filter((pid) => {
+      if (resolvedSdkByProject[pid]?.sdk_version) return false;
+      const primary = reposByProject[pid]?.[0];
+      return Boolean(primary?.repo_url || settingsGithubByProject[pid]);
+    });
+    // Run in the BACKGROUND, concurrency-capped. Each scan issues ~15 sequential
+    // GitHub Contents API calls; awaiting them inline blocked the whole list
+    // response and risked the edge-function timeout + GitHub rate limit as the
+    // project count grew. Results land in project_sdk_observations and surface
+    // on the next list load (same fire-and-forget pattern as the report/heartbeat
+    // observation writers).
+    if (repoScanTargets.length > 0) {
+      const runScans = async () => {
+        const CONCURRENCY = 3;
+        for (let i = 0; i < repoScanTargets.length; i += CONCURRENCY) {
+          const batch = repoScanTargets.slice(i, i + CONCURRENCY);
+          await Promise.all(
+            batch.map(async (pid) => {
+              const primary = reposByProject[pid]?.[0];
+              const repoUrl = primary?.repo_url ?? settingsGithubByProject[pid] ?? null;
+              await ensureRepoDeclaredSdkObservation(db, pid, repoUrl).catch(() => {});
+            }),
+          );
+        }
+      };
+      const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+        .EdgeRuntime;
+      if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(runScans());
+      else void runScans();
     }
 
     const codebaseFileCount: Record<string, number> = {};
@@ -415,20 +484,26 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       // but scoped per-project.
       let bottleneckStage: 'plan' | 'do' | 'check' | 'act' | null = null;
       let bottleneckLabel: string | null = null;
+      let bottleneckCount: number | null = null;
       if (doFailed > 0) {
         bottleneckStage = 'do';
+        bottleneckCount = doFailed;
         bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'fix needs' : 'fixes need'} retry`;
       } else if (planCount > 5) {
         bottleneckStage = 'plan';
+        bottleneckCount = planCount;
         bottleneckLabel = `${planCount} reports waiting > 1h to triage`;
       } else if (disagreements > 3) {
         bottleneckStage = 'check';
+        bottleneckCount = disagreements;
         bottleneckLabel = `${disagreements} judge ${disagreements === 1 ? 'disagrees' : 'disagree'} with classifier`;
       } else if (doInflight > 0) {
         bottleneckStage = 'do';
+        bottleneckCount = doInflight;
         bottleneckLabel = `${doInflight} ${doInflight === 1 ? 'fix in flight' : 'fixes in flight'}`;
       } else if (planCount > 0) {
         bottleneckStage = 'plan';
+        bottleneckCount = planCount;
         bottleneckLabel = `${planCount} ${planCount === 1 ? 'report waiting' : 'reports waiting'} > 1h`;
       }
       // SDK freshness — only meaningful when at least one report has
@@ -436,8 +511,13 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       // treats `sdk_status: 'unknown'` as "no data yet, don't paint a
       // badge" so projects in their first 60 seconds don't blink red
       // before the first ingest arrives.
-      const sdkPackage = lastSdkPackageMap[p.id] ?? null;
-      const sdkVersion = lastSdkVersionMap[p.id] ?? null;
+      const resolvedSdk = resolvedSdkByProject[p.id] ?? {
+        sdk_package: null,
+        sdk_version: null,
+        sdk_observation_source: null,
+      };
+      const sdkPackage = resolvedSdk.sdk_package;
+      const sdkVersion = resolvedSdk.sdk_version;
       const latestForPackage = sdkPackage ? latestSdkVersions[sdkPackage] ?? null : null;
       const sdkStatus = resolveSdkFreshnessStatus({
         sdkPackage,
@@ -527,8 +607,16 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         last_report_at: lastReportMap[p.id] ?? null,
         pdca_bottleneck: bottleneckStage,
         pdca_bottleneck_label: bottleneckLabel,
+        pdca_bottleneck_count: bottleneckCount,
+        failed_fixes_preview: (failedFixPreviewByProject[p.id] ?? []).map((row) => ({
+          id: row.id,
+          report_id: row.report_id,
+          error_head: row.error_head,
+          report_title: reportTitleById[row.report_id] ?? null,
+        })),
         sdk_package: sdkPackage,
         sdk_version: sdkVersion,
+        sdk_observation_source: resolvedSdk.sdk_observation_source,
         sdk_latest_version: latestForPackage?.version ?? null,
         sdk_deprecation_message: latestForPackage?.deprecation_message ?? null,
         sdk_status: sdkStatus,

@@ -28,7 +28,7 @@ export function IntegrationSetupGuide({
       className={
         compact
           ? 'rounded-sm border border-brand/15 bg-brand/5 px-2.5 py-2'
-          : 'mt-2 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2.5 py-2'
+          : 'mt-2 rounded-sm border border-edge-subtle bg-surface-overlay px-2.5 py-2'
       }
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">

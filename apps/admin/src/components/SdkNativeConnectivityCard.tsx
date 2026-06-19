@@ -87,7 +87,11 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
     }
 
     void load()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      // Reset so re-mounts (StrictMode double-invoke, projectId changes) can re-fetch.
+      diagRef.current = false
+    }
   }, [projectId])
 
   // Re-fetch after a successful sync so the status updates.

@@ -5,7 +5,7 @@
  *          file list. The page composes these in a list.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, Badge, RelativeTime } from '../ui';
 import { formatTokens } from '../charts';
@@ -18,6 +18,7 @@ import { ciBadge, type FixAttempt } from './types';
 import { FixAttemptFlow } from './FixAttemptFlow';
 import { MergeFixPreflight } from './MergeFixPreflight';
 import { canMergeFix, getMergeBlockerReason, isFixMerged } from '../../lib/mergeFix';
+import { apiFetch } from '../../lib/supabase';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -37,6 +38,8 @@ interface Props {
   onToggle: () => void;
   onRetry: () => Promise<void>;
   onMerged?: () => void;
+  /** Called after a successful refresh-ci so the parent can reload the fix list. */
+  onRefreshed?: () => void;
   inventoryAction?: InventoryActionSummary | null;
   /** When true, a selection checkbox is rendered for bulk actions. */
   selectable?: boolean;
@@ -46,7 +49,7 @@ interface Props {
   onSelectChange?: (next: boolean) => void;
 }
 
-export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, onMerged, inventoryAction, selectable = false, selected = false, onSelectChange }: Props) {
+export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, onMerged, onRefreshed, inventoryAction, selectable = false, selected = false, onSelectChange }: Props) {
   const ci = ciBadge(fix);
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0);
   // Spec-traceability soft warnings (e.g. "diff didn't touch the contract's
@@ -89,6 +92,20 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
     toneFor: flashToneFor,
   });
 
+  const [ciRefreshing, setCiRefreshing] = useState(false);
+  const handleRefreshCi = useCallback(async () => {
+    if (ciRefreshing) return;
+    setCiRefreshing(true);
+    try {
+      await apiFetch(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' });
+      onRefreshed?.();
+    } catch {
+      // best-effort — UI will reflect stale data until next realtime event
+    } finally {
+      setCiRefreshing(false);
+    }
+  }, [fix.id, ciRefreshing, onRefreshed]);
+
   return (
     <div
       className={`rounded-md ${flash.className}`}
@@ -120,7 +137,19 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
                 {fix.llm_model}
               </span>
             )}
-            {ci && <Badge className={ci.className}>{ci.label}</Badge>}
+            {ci && (
+              <>
+                <Badge className={ci.className}>{ci.label}</Badge>
+                {fix.check_run_updated_at && (
+                  <span
+                    className="text-2xs text-fg-faint tabular-nums"
+                    title={`CI last updated: ${new Date(fix.check_run_updated_at).toLocaleString()}`}
+                  >
+                    CI <RelativeTime value={fix.check_run_updated_at} />
+                  </span>
+                )}
+              </>
+            )}
             {shipped && fix.status !== 'merged' && (
               <Badge
                 className="bg-ok-muted text-ok"
@@ -210,6 +239,17 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
             >
               View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
             </a>
+          )}
+          {fix.pr_url && (
+            <button
+              type="button"
+              onClick={() => void handleRefreshCi()}
+              disabled={ciRefreshing}
+              className="text-fg-muted hover:text-fg underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-wait"
+              title="Fetch latest CI / merge status from GitHub"
+            >
+              {ciRefreshing ? 'Refreshing…' : 'Refresh CI'}
+            </button>
           )}
           {shipped && (
             <span className="text-2xs text-ok" title={mergeBlocker ?? 'Already merged on GitHub'}>

@@ -3,10 +3,10 @@
  * PURPOSE: Auto-fix pipeline posture — failed, inflight, no index, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
+import { fixesFailedAction, fixesFailedHint, scopedHref } from '../../lib/humanPageHints'
 import type { FixesStats, FixesTabId } from './FixesStatsTypes'
 
 interface Props {
@@ -22,27 +22,20 @@ export function FixesStatusBanner({
   onTab,
   onRefresh,
   refreshing,
-  plainBanner = false,
+  plainBanner: _plainBanner = false,
 }: Props) {
   const copy = usePageCopy('/fixes')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (!stats.hasAnyProject) {
     return (
       <StatusBannerShell
         tone="info"
-        title={plainBanner ? 'Create a project first' : 'No projects — fix pipeline idle'}
-        subtitle={
-          plainBanner
-            ? 'Connect GitHub after setup so auto-fix can open draft PRs.'
-            : 'Create a project and connect GitHub before dispatching fixes.'
-        }
-        action={
-          <Link to="/onboarding">
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
-        }
+        title="Create a project first"
+        subtitle="Connect GitHub after setup so auto-fix can open draft PRs."
+        action={<StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />}
       />
     )
   }
@@ -51,14 +44,17 @@ export function FixesStatusBanner({
     return (
       <StatusBannerShell
         tone="brand"
-        title={plainBanner ? 'Connect GitHub to open PRs' : `GitHub not connected on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel ?? 'Auto-fix needs a repo to branch from and open draft PRs.'}
+        title={`Connect GitHub on ${projectLabel}`}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Auto-fix needs a connected repo to branch from and open draft pull requests.'
+        }
         action={
-          stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.github ?? 'Connect repo'}</Btn>
-            </Link>
-          ) : null
+          <StatusBannerAction
+            label={actions.github ?? 'Connect GitHub'}
+            to={stats.topPriorityTo ?? scopedHref('/integrations/config', pid)}
+            tone="brand"
+          />
         }
       />
     )
@@ -68,14 +64,17 @@ export function FixesStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={plainBanner ? 'Index your codebase first' : 'Codebase not indexed — stub PR risk'}
-        subtitle={stats.topPriorityLabel ?? 'Enable codebase indexing so the agent reads real files before patching.'}
+        title="Index your codebase first"
+        subtitle={
+          stats.topPriorityLabel ??
+          'Enable codebase indexing so the agent reads real files before proposing patches.'
+        }
         action={
-          stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.index ?? 'Enable indexing'}</Btn>
-            </Link>
-          ) : null
+          <StatusBannerAction
+            label={actions.index ?? 'Enable indexing'}
+            to={stats.topPriorityTo ?? scopedHref('/integrations/config', pid)}
+            tone="warn"
+          />
         }
       />
     )
@@ -85,22 +84,14 @@ export function FixesStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={
-          plainBanner
-            ? `${stats.failed} fix${stats.failed === 1 ? '' : 'es'} need attention`
-            : `${stats.failed} failed fix${stats.failed === 1 ? '' : 'es'} on ${projectLabel}`
-        }
-        subtitle={stats.topPriorityLabel ?? 'Review failure categories and retry or hand off to Cursor.'}
+        title={`${stats.failed} auto-fix${stats.failed === 1 ? '' : 'es'} failed`}
+        subtitle={stats.topPriorityLabel ?? fixesFailedHint(stats.failed)}
         action={
-          stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.failed ?? 'Review failed'}</Btn>
-            </Link>
-          ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('attempts')}>
-              {actions.failed ?? 'Review failed'}
-            </Btn>
-          ) : null
+          <StatusBannerAction
+            label={actions.failed ?? fixesFailedAction(stats.failed)}
+            to={stats.topPriorityTo ?? scopedHref('/fixes?status=failed', pid)}
+            tone="danger"
+          />
         }
       />
     )
@@ -111,18 +102,21 @@ export function FixesStatusBanner({
       <StatusBannerShell
         tone="info"
         pulseDot
-        title={plainBanner ? 'Fixes running now' : 'Fixes in flight'}
-        subtitle={stats.topPriorityLabel ?? 'Agents are drafting branches and opening PRs — timeline updates live.'}
+        title={`${stats.inProgress} fix${stats.inProgress === 1 ? '' : 'es'} running now`}
+        subtitle={
+          stats.topPriorityLabel ??
+          'Agents are drafting branches and opening PRs — check the pipeline tab for live progress.'
+        }
         action={
-          stats.topPriorityTo ? (
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">{actions.pipeline ?? 'Open pipeline'}</Btn>
-            </Link>
-          ) : onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('pipeline')}>
-              {actions.pipeline ?? 'Open pipeline'}
-            </Btn>
-          ) : null
+          onTab ? (
+            <StatusBannerAction label={actions.pipeline ?? 'Open pipeline'} onClick={() => onTab('pipeline')} tone="info" />
+          ) : (
+            <StatusBannerAction
+              label={actions.pipeline ?? 'Open pipeline'}
+              to={stats.topPriorityTo ?? scopedHref('/fixes?status=running', pid)}
+              tone="info"
+            />
+          )
         }
       />
     )
@@ -133,27 +127,15 @@ export function FixesStatusBanner({
     return (
       <StatusBannerShell
         tone="brand"
-        title={
-          hasAttempts
-            ? plainBanner
-              ? `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} on record`
-              : `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} — none in flight`
-            : 'No fix attempts yet'
-        }
+        title={hasAttempts ? `${stats.totalAttempts} fix attempts on record` : 'No fix attempts yet'}
         subtitle={
           stats.topPriorityLabel ??
           (hasAttempts
-            ? plainBanner
-              ? 'Open Attempts to review history or dispatch another fix from Reports.'
-              : 'Nothing is running right now — review past attempts or send a new report to the pipeline.'
-            : plainBanner
-              ? 'Send a bug from Reports to draft your first pull request.'
-              : 'Dispatch a classified report to start the auto-fix loop.')
+            ? 'Nothing is running right now — review past attempts or send a new report to the pipeline.'
+            : 'Send a classified bug from Reports to draft your first pull request.')
         }
         action={
-          <Link to="/reports">
-            <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
-          </Link>
+          <StatusBannerAction label={actions.reports ?? 'Open Reports'} to={scopedHref('/reports', pid)} tone="brand" />
         }
       />
     )
@@ -162,22 +144,25 @@ export function FixesStatusBanner({
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'Fix pipeline looks healthy' : `Pipeline healthy on ${projectLabel}`}
+      title={`Fix pipeline healthy on ${projectLabel}`}
       subtitle={stats.topPriorityLabel ?? 'Recent attempts completed or are waiting on your merge review.'}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
-        ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.attempts ?? 'View attempts'}</Btn>
-          </Link>
-        ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('attempts')}>
-            {actions.attempts ?? 'View attempts'}
-          </Btn>
-        ) : null
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
+        ) : (
+          <StatusBannerAction
+            label={actions.attempts ?? 'View attempts'}
+            to={stats.topPriorityTo ?? scopedHref('/fixes', pid)}
+            tone="ok"
+          />
+        )
       }
     />
   )

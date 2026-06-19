@@ -422,9 +422,10 @@ export function validateInventory(value: unknown): ParseResult {
   return { ok: true, inventory: result.data, issues: [] }
 }
 
-function formatSegment(seg: string | number, idx: number): string {
+function formatSegment(seg: PropertyKey, idx: number): string {
   if (typeof seg === 'number') return `[${seg}]`
-  return idx === 0 ? seg : `.${seg}`
+  const key = typeof seg === 'symbol' ? seg.toString() : seg
+  return idx === 0 ? key : `.${key}`
 }
 
 /**

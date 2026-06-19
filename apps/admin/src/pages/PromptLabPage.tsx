@@ -21,6 +21,7 @@ import { KpiRow, KpiTile, formatPct } from '../components/charts'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
@@ -32,6 +33,7 @@ import { FineTuningJobsCard } from '../components/prompt-lab/FineTuningJobsCard'
 import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsCard'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PromptLabStatusBanner } from '../components/prompt-lab/PromptLabStatusBanner'
+import { PromptLabGuide } from '../components/prompt-lab/PromptLabGuide'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
 import {
   ActionPill,
@@ -44,6 +46,7 @@ import {
 export function PromptLabPage() {
   const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
   const { data: statsData } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
+  usePublishPageHeroStats('/prompt-lab', statsData)
   const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)
@@ -257,6 +260,8 @@ export function PromptLabPage() {
       </PageHeaderBar>
 
       <PromptLabStatusBanner stats={promptLabStats} />
+
+      <PromptLabGuide topPriority={promptLabStats.topPriority} />
 
       {promptLabStats.topPriority &&
         promptLabStats.topPriority !== 'healthy' &&

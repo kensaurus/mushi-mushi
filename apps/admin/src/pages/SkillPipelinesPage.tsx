@@ -32,6 +32,7 @@ import { ReactFlow, Background, Controls, useNodesState, useEdgesState } from '@
 import '@xyflow/react/dist/style.css'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { Card, SurfacePanel, HelpBanner } from '../components/ui'
@@ -47,6 +48,15 @@ import {
 } from '../components/skill-pipeline/pipelineFlow.data'
 import type { PipelineStep, SkillInfo } from '../components/skill-pipeline/pipelineFlow.data'
 import { getSkillCategoryMeta } from '../components/skill-pipeline/skillCategoryMeta'
+import {
+  SkillsStatusBanner,
+  isSkillsBannerVisible,
+} from '../components/skills/SkillsStatusBanner'
+import { SkillsPipelineGuide } from '../components/skills/SkillsPipelineGuide'
+import {
+  EMPTY_SKILLS_STATS,
+  type SkillsStats,
+} from '../components/skills/SkillsStatsTypes'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -138,6 +148,11 @@ export function SkillPipelinesPage() {
 
   const skillSlug = searchParams.get('skill')
 
+  const statsPath = projectId ? `/v1/admin/skills/stats?project_id=${projectId}` : null
+  const { data: skillsStatsData } = usePageData<SkillsStats>(statsPath, { deps: [projectId] })
+  usePublishPageHeroStats('/skills', skillsStatsData)
+  const skillsStats = skillsStatsData ?? EMPTY_SKILLS_STATS
+
   usePublishPageContext({
     route: '/skills',
     title: TAB_META[tab].label,
@@ -196,6 +211,12 @@ export function SkillPipelinesPage() {
           ]}
           helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
         />
+
+        {isSkillsBannerVisible(skillsStats) && (
+          <SkillsStatusBanner stats={skillsStats} onTab={setTab} />
+        )}
+
+        <SkillsPipelineGuide topPriority={skillsStats.topPriority} />
 
         {/* Tabs */}
         <div className="flex gap-0 border-b border-border mt-3 -mx-6 px-6" role="tablist" aria-label="Skill pipelines sections">
@@ -502,25 +523,38 @@ function CatalogTab({
           )}
 
           <div className="border-t border-border pt-3 flex flex-col gap-2">
-            <p className="text-2xs font-semibold text-fg">Start Pipeline</p>
-            <input
-              type="text"
-              placeholder="Report ID — attach bug context (optional)"
-              value={reportId}
-              onChange={(e) => setReportId(e.target.value)}
-              className="input text-xs"
-            />
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
-              className="input text-xs"
-              aria-label="Pipeline mode"
-            >
-              <option value="handoff">Handoff — copy packet into your local Cursor agent</option>
-              <option value="cloud" disabled={!cloudReadiness?.cloudReady}>
-                Cloud — auto-dispatch each step via Cursor Cloud
-              </option>
-            </select>
+            <div className="flex items-center justify-between">
+              <p className="text-2xs font-semibold text-fg">Apply to a report</p>
+              <Link to="/reports" className="text-2xs text-brand hover:underline">Browse reports →</Link>
+            </div>
+            <div className="space-y-1">
+              <label className="text-2xs text-fg-muted" htmlFor="skill-report-id">
+                Report ID <span className="text-fg-faint">(optional — gives the agent exact bug context)</span>
+              </label>
+              <input
+                id="skill-report-id"
+                type="text"
+                placeholder="Paste report ID from a report URL, e.g. abc123de"
+                value={reportId}
+                onChange={(e) => setReportId(e.target.value)}
+                className="input text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-2xs text-fg-muted" htmlFor="skill-mode">Mode</label>
+              <select
+                id="skill-mode"
+                value={mode}
+                onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
+                className="input text-xs"
+                aria-label="Pipeline mode"
+              >
+                <option value="handoff">Handoff — copy context packet into your local Cursor agent</option>
+                <option value="cloud" disabled={!cloudReadiness?.cloudReady}>
+                  Cloud — auto-dispatch each step via Cursor Cloud
+                </option>
+              </select>
+            </div>
             {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady && (
               <HelpBanner tone="neutral" className="rounded-lg">
                 Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
@@ -546,8 +580,14 @@ function CatalogTab({
               }
               className="btn btn-primary text-xs"
             >
-              {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline'}
+              {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline →'}
             </button>
+            {!reportId && (
+              <p className="text-2xs text-fg-faint">
+                Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
+                <Link to="/reports" className="text-brand hover:underline">Reports</Link>.
+              </p>
+            )}
           </div>
         </SurfacePanel>
         )
@@ -674,14 +714,23 @@ function PipelinesTab({
           </p>
         )}
         {runs.length === 0 ? (
-          <div className="text-sm text-fg-muted py-12 text-center flex flex-col items-center gap-3">
-            <p>You haven&apos;t started a pipeline yet.</p>
-            <p className="text-xs max-w-sm text-fg-muted">
-              Pick a skill, start a pipeline, then copy the context packet into Cursor. A design-system audit is a great first run.
-            </p>
-            <button type="button" onClick={onGoToCatalog} className="btn btn-primary text-xs">
-              Browse audit-uiux-design-system
-            </button>
+          <div className="py-10 text-center flex flex-col items-center gap-4 max-w-md mx-auto">
+            <p className="text-sm font-medium text-fg">No pipeline runs yet</p>
+            <div className="text-xs text-fg-muted text-left w-full rounded-md border border-edge-subtle bg-surface-overlay px-4 py-3 space-y-2">
+              <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
+              <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
+                <li>Open a report and copy its ID from the URL</li>
+                <li>Go to <button type="button" onClick={onGoToCatalog} className="text-brand hover:underline">Catalog</button> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
+                <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
+                <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
+              </ol>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={onGoToCatalog} className="btn btn-primary text-xs">
+                Browse Catalog →
+              </button>
+              <Link to="/reports" className="btn btn-ghost text-xs">Open Reports</Link>
+            </div>
           </div>
         ) : (
           runs.map((run) => (
@@ -1017,7 +1066,8 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
           />
           <input
             type="text"
-            placeholder="ref"
+            placeholder="main"
+            title="Git branch or tag (default: main)"
             value={ref}
             onChange={(e) => setRef(e.target.value)}
             className="input w-24 text-sm"

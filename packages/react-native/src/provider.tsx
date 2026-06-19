@@ -291,6 +291,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       apiKey: config.apiKey,
       apiEndpoint,
       getUserToken: () => userTokenRef.current,
+      sdkPackage: MUSHI_SDK_PACKAGE,
+      sdkVersion: MUSHI_SDK_VERSION,
     })
     queueRef.current = new AsyncStorageQueue({
       maxSize: config.storage?.maxQueueSize,

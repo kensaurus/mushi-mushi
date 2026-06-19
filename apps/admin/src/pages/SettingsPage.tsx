@@ -10,6 +10,11 @@ import { useSearchParams } from 'react-router-dom'
 import { PageScopeHint,SnapshotSectionHint,Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
+import { SettingsTabIntro } from '../components/settings/SettingsTabIntro'
+import {
+  SETTINGS_TAB_DESCRIPTIONS,
+  SETTINGS_TAB_LABELS,
+} from '../lib/settingsTabExplainer'
 import { ByokPanel } from '../components/settings/ByokPanel'
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
 import { BrowserbasePanel } from '../components/settings/BrowserbasePanel'
@@ -34,6 +39,7 @@ import { usePageCopy } from '../lib/copy'
 import { useSettingsUx, resolveQuickSettingsTab } from '../lib/settingsModeUx'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import {
   byokDetail,
   byokTooltip,
@@ -49,21 +55,21 @@ import { useRealtimeReload } from '../lib/realtime'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
 const TABS: Array<{ id: SettingsTabId; label: string; description: string }> = [
-  { id: 'general', label: 'General', description: 'Slack webhooks, Sentry DSN, LLM model, dedup threshold.' },
-  { id: 'byok', label: 'LLM keys', description: 'Anthropic + OpenAI-compatible BYOK — save, test, rotate.' },
-  { id: 'firecrawl', label: 'Firecrawl', description: 'Optional web research provider for triage.' },
-  { id: 'browserbase', label: 'Browserbase', description: 'BYOK Browserbase API key for cloud Chromium QA runs.' },
-  { id: 'health', label: 'Health', description: 'Connection status, SDK reference, pipeline smoke test.' },
-  { id: 'dev', label: 'Dev tools', description: 'SDK widget toggles and local-only debug flags.' },
+  { id: 'general', label: SETTINGS_TAB_LABELS.general, description: SETTINGS_TAB_DESCRIPTIONS.general },
+  { id: 'byok', label: SETTINGS_TAB_LABELS.byok, description: SETTINGS_TAB_DESCRIPTIONS.byok },
+  { id: 'firecrawl', label: SETTINGS_TAB_LABELS.firecrawl, description: SETTINGS_TAB_DESCRIPTIONS.firecrawl },
+  { id: 'browserbase', label: SETTINGS_TAB_LABELS.browserbase, description: SETTINGS_TAB_DESCRIPTIONS.browserbase },
+  { id: 'health', label: SETTINGS_TAB_LABELS.health, description: SETTINGS_TAB_DESCRIPTIONS.health },
+  { id: 'dev', label: SETTINGS_TAB_LABELS.dev, description: SETTINGS_TAB_DESCRIPTIONS.dev },
 ]
 
 const TAB_TITLES: Record<SettingsTabId, string> = {
-  general: 'General',
-  byok: 'BYOK',
-  firecrawl: 'Firecrawl',
-  browserbase: 'Browserbase',
-  health: 'Health',
-  dev: 'Dev tools',
+  general: SETTINGS_TAB_LABELS.general,
+  byok: SETTINGS_TAB_LABELS.byok,
+  firecrawl: SETTINGS_TAB_LABELS.firecrawl,
+  browserbase: SETTINGS_TAB_LABELS.browserbase,
+  health: SETTINGS_TAB_LABELS.health,
+  dev: SETTINGS_TAB_LABELS.dev,
 }
 
 function isTabId(value: string | null): value is SettingsTabId {
@@ -92,6 +98,7 @@ export function SettingsPage() {
     lastFetchedAt,
     isValidating,
   } = usePageData<SettingsStats>(statsPath)
+  usePublishPageHeroStats('/settings', statsData)
   const stats = { ...EMPTY_SETTINGS_STATS, ...statsData }
 
   const reloadAll = useCallback(() => {
@@ -132,10 +139,10 @@ export function SettingsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'general' as const, label: copy?.tabLabels?.general ?? 'General' },
+      { id: 'general' as const, label: copy?.tabLabels?.general ?? SETTINGS_TAB_LABELS.general },
       {
         id: 'byok' as const,
-        label: copy?.tabLabels?.byok ?? 'LLM keys',
+        label: copy?.tabLabels?.byok ?? SETTINGS_TAB_LABELS.byok,
         count:
           stats.byokKeysFailing > 0
             ? stats.byokKeysFailing
@@ -143,10 +150,10 @@ export function SettingsPage() {
               ? stats.byokKeysUntested
               : undefined,
       },
-      { id: 'firecrawl' as const, label: copy?.tabLabels?.firecrawl ?? 'Firecrawl' },
-      { id: 'browserbase' as const, label: copy?.tabLabels?.browserbase ?? 'Browserbase' },
-      { id: 'health' as const, label: copy?.tabLabels?.health ?? 'Health' },
-      { id: 'dev' as const, label: copy?.tabLabels?.dev ?? 'Dev' },
+      { id: 'firecrawl' as const, label: copy?.tabLabels?.firecrawl ?? SETTINGS_TAB_LABELS.firecrawl },
+      { id: 'browserbase' as const, label: copy?.tabLabels?.browserbase ?? SETTINGS_TAB_LABELS.browserbase },
+      { id: 'health' as const, label: copy?.tabLabels?.health ?? SETTINGS_TAB_LABELS.health },
+      { id: 'dev' as const, label: copy?.tabLabels?.dev ?? SETTINGS_TAB_LABELS.dev },
     ],
     [stats.byokKeysFailing, stats.byokKeysUntested, copy?.tabLabels],
   )
@@ -179,13 +186,13 @@ export function SettingsPage() {
         projectScope={projectName ?? stats.projectName}
         description={copy?.description ?? 'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'}
         helpTitle={copy?.help?.title ?? 'About Settings'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project-level configuration scoped to the header project: BYOK LLM keys, classifier model, dedup threshold, SDK widget, and developer toggles.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project-level knobs that change how bugs arrive, how the AI triages them, and where notifications go. Each field has a clickable (i) icon with full details.'}
         helpUseCases={copy?.help?.useCases ?? [
-          'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
-          'Run Health → Send test report before wiring production SDK traffic',
-          'Tune Stage-2 model and dedup threshold after you see false positives in triage',
+          'Wire Slack so new bugs post to your triage channel with action buttons',
+          'Connect Sentry so production errors become Mushi reports automatically',
+          'Add your own AI keys if your company requires usage on your Anthropic/OpenAI account',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'General saves Slack/Sentry + classifier fields. LLM keys tab tests BYOK. Health runs a pipeline smoke test. Changes write to project_settings immediately on Save.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Start on General for Slack and triage behavior. Use AI keys only if you need BYOK. Click the (i) next to any field for what it does and when to change it.'}
       />
 
       <SettingsStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
@@ -199,12 +206,14 @@ export function SettingsPage() {
       />
       )}
 
+      <SettingsTabIntro tab={active} />
+
       {!ux.hideSettingsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
         <SnapshotSectionHint text={activeMeta.description} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label={copy?.statLabels?.byok ?? 'BYOK keys'}
+            label={copy?.statLabels?.byok ?? 'AI keys'}
             value={stats.byokKeysConfigured}
             accent={
               stats.byokKeysFailing > 0

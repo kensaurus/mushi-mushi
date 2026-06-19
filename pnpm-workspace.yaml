@@ -42,6 +42,20 @@ minimumReleaseAgeExclude:
   # GHSA-75px-5xx7-5xc7 / GHSA-685m-2w69-288q (4 HIGH CVEs). Exempt from
   # 7-day cooldown — same compensating controls as devalue above.
   - "protobufjs"
+  # form-data 4.0.6 fixes GHSA-fjxv-7rqg-78g4 (HIGH: CRLF injection via
+  # unescaped field names). Pulled in transitively via node-fetch in the dev
+  # SDKs. Published 2026-06-13; exempt from the 7-day cooldown because the
+  # vuln is in every <4.0.6 release and CI runs npm audit + provenance as
+  # compensating controls. Enforced tree-wide via pnpm.overrides.
+  - "form-data"
+  # undici 7.28.0 / 8.5.0 fix GHSA-pr7r-676h-xcf6 (HIGH: TLS certificate
+  # validation bypass) + the WebSocket-client DoS advisory. Dev/test-only in
+  # this tree (pulled via jsdom for the admin vitest DOM env). Patches shipped
+  # 2026-06-15; exempt from the 7-day cooldown so the pnpm.overrides above can
+  # resolve the patched versions, keeping the `npm audit --audit-level=high`
+  # CI gate green. undici is maintained by the Node.js core team (low
+  # supply-chain risk) and provenance/audit-signatures run as compensating controls.
+  - "undici"
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies

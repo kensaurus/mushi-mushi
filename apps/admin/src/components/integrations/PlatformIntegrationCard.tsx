@@ -13,12 +13,12 @@ import { resolveValidator } from '../../lib/validators'
 import { isStale } from '../../lib/staleness'
 import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
-import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle } from '../icons'
+import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle, IconDots } from '../icons'
 import { ServiceFavicon } from './ServiceFavicon'
 import { InlineProof } from '../report-detail/ReportSurface'
 import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
-import { PLATFORM_STATUS_MAP, type HealthRow, type PlatformDef } from './types'
+import { PLATFORM_STATUS_MAP, type FieldSource, type HealthRow, type PlatformDef } from './types'
 
 /**
  * Triggers a one-shot success-pulse signal when the latest probe transitions
@@ -77,6 +77,8 @@ function statusBorderClass(status: HealthRow['status'], requiredOk: boolean): st
 interface Props {
   def: PlatformDef
   config: Record<string, unknown>
+  /** Per-field source from the effective-settings resolver: 'project' | 'org' | 'env' | null */
+  sourceByField?: Record<string, FieldSource>
   latestProbe: HealthRow | undefined
   sparkline: HealthRow[]
   isEditing: boolean
@@ -101,11 +103,16 @@ interface Props {
   dependencyLabel?: string
   /** Scroll-target ID to jump to the dependency card on the same page. */
   dependencyAnchorId?: string
+  /** When provided, the overflow menu shows "Apply to all projects in org". */
+  onApplyToAll?: () => void
+  /** Whether the apply-to-all is in progress. */
+  applyingToAll?: boolean
 }
 
 export function PlatformIntegrationCard({
   def,
   config,
+  sourceByField,
   latestProbe,
   sparkline,
   isEditing,
@@ -121,14 +128,31 @@ export function PlatformIntegrationCard({
   dependencyOk = true,
   dependencyLabel,
   dependencyAnchorId,
+  onApplyToAll,
+  applyingToAll,
 }: Props) {
-  const requiredOk = def.fields.filter((f) => f.required).every((f) => config[f.name] != null)
+  const [overflowOpen, setOverflowOpen] = useState(false)
+
+  // A required field is "ok" if config has a non-null value OR the resolver
+  // filled it from org defaults or an environment variable.
+  const requiredOk = def.fields.filter((f) => f.required).every((f) => {
+    if (config[f.name] != null) return true
+    const src = sourceByField?.[f.name]
+    return src === 'org' || src === 'env'
+  })
+
   const status: HealthRow['status'] = !requiredOk ? 'unknown' : (latestProbe?.status ?? 'unknown')
   const pulseClass = useSuccessPulse(latestProbe)
   const isDown = requiredOk && (latestProbe?.status === 'down')
   const isDegraded = requiredOk && (latestProbe?.status === 'degraded')
   // A fix-agent card (Cursor Cloud, Claude Code) depends on GitHub being connected first.
   const hasDependencyBlock = def.dependsOn != null && !dependencyOk
+
+  // Summarise inheritance sources for badge display
+  const orgFields = def.fields.filter((f) => sourceByField?.[f.name] === 'org').length
+  const envFields = def.fields.filter((f) => sourceByField?.[f.name] === 'env').length
+  const projectFields = def.fields.filter((f) => sourceByField?.[f.name] === 'project').length
+  const hasInheritance = orgFields > 0 || envFields > 0
 
   return (
     <Card className={`p-0 overflow-hidden ${pulseClass} ${statusBorderClass(status, requiredOk)}`}>
@@ -174,6 +198,28 @@ export function PlatformIntegrationCard({
               {requiredOk && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
                 <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
                   <Badge className="bg-warn-muted/50 text-warning-foreground border border-warn/30">Stale</Badge>
+                </Tooltip>
+              )}
+              {/* Inheritance source badges */}
+              {orgFields > 0 && (
+                <Tooltip content={`${orgFields} field${orgFields > 1 ? 's' : ''} inherited from org defaults — project-level values take precedence when set.`}>
+                  <Badge className="bg-brand/10 text-brand border border-brand/30 cursor-default">
+                    Inherited from org
+                  </Badge>
+                </Tooltip>
+              )}
+              {envFields > 0 && projectFields === 0 && orgFields === 0 && (
+                <Tooltip content={`${envFields} field${envFields > 1 ? 's' : ''} available via server environment variable — set project credentials to override.`}>
+                  <Badge className="bg-fg-faint/20 text-fg-muted border border-edge cursor-default">
+                    Via environment
+                  </Badge>
+                </Tooltip>
+              )}
+              {hasInheritance && projectFields > 0 && (
+                <Tooltip content="Some fields use project-level credentials; others fall back to org defaults or environment variables.">
+                  <Badge className="bg-ok/10 text-ok border border-ok/30 cursor-default">
+                    Overridden here
+                  </Badge>
                 </Tooltip>
               )}
             </div>
@@ -270,6 +316,41 @@ export function PlatformIntegrationCard({
               <Btn variant="cancel" onClick={onCancelEdit}>
                 Cancel
               </Btn>
+            )}
+            {/* Overflow menu — "Apply to all projects" */}
+            {onApplyToAll && requiredOk && !isEditing && (
+              <div className="relative">
+                <Tooltip content="More actions">
+                  <Btn
+                    variant="ghost"
+                    aria-label="More actions"
+                    className="px-1.5"
+                    onClick={() => setOverflowOpen((o) => !o)}
+                  >
+                    <IconDots size={14} />
+                  </Btn>
+                </Tooltip>
+                {overflowOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-20 min-w-[200px] rounded-md border border-edge bg-surface shadow-lg py-1">
+                    <button
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-fg hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => {
+                        setOverflowOpen(false)
+                        onApplyToAll()
+                      }}
+                      disabled={applyingToAll}
+                    >
+                      {applyingToAll ? (
+                        <span className="text-fg-muted">Applying…</span>
+                      ) : (
+                        <>
+                          <span>Apply to all projects in org</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

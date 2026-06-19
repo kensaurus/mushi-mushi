@@ -13,7 +13,18 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from './supabase'
 import { useRealtimeReload } from './realtime'
 import { getActiveProjectIdSnapshot, useActiveProjectSignal } from './activeProject'
+import { getActiveOrgIdSnapshot, useActiveOrgSignal } from './activeOrg'
 import type { DashboardData } from '../components/dashboard/types'
+import type { ProjectsStats } from '../components/projects/types'
+import type { MembersStats } from '../components/members/types'
+import { projectsNeedingAttentionCount } from './workspaceNavMeta'
+import { EMPTY_NAV_STAT_SLICES, type NavStatSlices } from './extendedNavMeta'
+import { fetchNavSlicesFallback } from './fetchNavSlicesFallback'
+import {
+  normalizeNavSlices,
+  type WorkspaceNavMetaResponse,
+} from './workspaceNavMetaResponse'
+import { useEntitlements } from './useEntitlements'
 
 export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 
@@ -47,6 +58,24 @@ export interface NavCounts {
   feedbackWithReply: number
   /** Classifier vs judge disagreements (14d window) for Check-stage badges. */
   judgeDisagreements: number
+  /** Accessible projects in workspace — inventory sidebar count. */
+  projectCount: number
+  /** Derived setup issues (never ingested + stale keys signal). */
+  projectsNeedingAttention: number
+  neverIngestedCount: number
+  staleKeyCount: number
+  /** Team roster size; null when org context or members stats unavailable. */
+  memberCount: number | null
+  pendingInvites: number
+  /** Members inactive >30d or never seen — from org members stats. */
+  membersInactiveCount: number
+  membersAtSeatCap: boolean
+  membersExpiringInvites: number
+  /** Super-admin platform metrics; null when caller is not an operator. */
+  superAdminSignups7d: number | null
+  superAdminChurn30d: number | null
+  /** Page-level stat slices for extended sidebar badges. */
+  slices: NavStatSlices
   /** Whether the hook has loaded once; consumers can skip rendering
    *  dots in the undefined state. */
   ready: boolean
@@ -65,6 +94,18 @@ const INITIAL: NavCounts = {
   flaggedDevices: 0,
   feedbackWithReply: 0,
   judgeDisagreements: 0,
+  projectCount: 0,
+  projectsNeedingAttention: 0,
+  neverIngestedCount: 0,
+  staleKeyCount: 0,
+  memberCount: null,
+  pendingInvites: 0,
+  membersInactiveCount: 0,
+  membersAtSeatCap: false,
+  membersExpiringInvites: 0,
+  superAdminSignups7d: null,
+  superAdminChurn30d: null,
+  slices: EMPTY_NAV_STAT_SLICES,
   ready: false,
 }
 
@@ -102,6 +143,11 @@ interface JudgeStatsResp {
   disagreementCount?: number
 }
 
+interface SuperAdminMetricsResp {
+  signups_last_7d?: number
+  churn_last_30d?: number
+}
+
 interface InboxStatsResp {
   openActions?: number
 }
@@ -111,8 +157,6 @@ function countHealthIssues(dashboard: DashboardData | undefined): number {
   if (!Array.isArray(integrations)) return 0
   return integrations.reduce((acc, row) => {
     const status = (row?.lastStatus ?? '').toLowerCase()
-    // Anything not explicitly healthy counts as an issue worth surfacing —
-    // includes `red`, `amber`, `down`, `error`, `degraded`, plus null/empty.
     if (status === 'ok' || status === 'green' || status === 'healthy') return acc
     return acc + 1
   }, 0)
@@ -120,10 +164,13 @@ function countHealthIssues(dashboard: DashboardData | undefined): number {
 
 export function useNavCounts(): NavCounts {
   const [counts, setCounts] = useState<NavCounts>(INITIAL)
+  const { isSuperAdmin } = useEntitlements()
   const activeProjectSignal = useActiveProjectSignal()
+  const activeOrgSignal = useActiveOrgSignal()
 
   const load = useCallback(async () => {
     const projectId = getActiveProjectIdSnapshot()
+    const orgId = getActiveOrgIdSnapshot()
     const [
       summaryRes,
       reportsRes,
@@ -135,6 +182,8 @@ export function useNavCounts(): NavCounts {
       feedbackRes,
       judgeRes,
       inboxStatsRes,
+      navMetaRes,
+      superAdminMetricsRes,
     ] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
@@ -144,14 +193,16 @@ export function useNavCounts(): NavCounts {
       apiFetch<DashboardData>('/v1/admin/dashboard'),
       apiFetch<NotificationCountResp>('/v1/admin/notifications?unread=1&count_only=1'),
       apiFetch<QueueSummaryResp>('/v1/admin/queue/summary'),
-      // Flagged-device count powers the /anti-gaming sidebar dot. Uses
-      // the cheap count-only mode so we don't pull 200 device rows on
-      // every page navigation just to render a 1-character badge.
       apiFetch<DeviceCountResp>('/v1/admin/anti-gaming/devices?flagged=true&count_only=1'),
       apiFetch<FeedbackSummaryResp>('/v1/admin/support/tickets/summary'),
       apiFetch<JudgeStatsResp>('/v1/admin/judge/stats'),
       apiFetch<InboxStatsResp>('/v1/admin/inbox/stats'),
+      apiFetch<WorkspaceNavMetaResponse>('/v1/admin/workspace/nav-meta'),
+      isSuperAdmin
+        ? apiFetch<SuperAdminMetricsResp>('/v1/super-admin/metrics')
+        : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
     ])
+
     const summary = summaryRes.ok ? summaryRes.data : null
     const reports = reportsRes.ok ? reportsRes.data : null
     let regressed = 0
@@ -168,6 +219,58 @@ export function useNavCounts(): NavCounts {
     const inboxOpenActions = inboxStatsRes.ok
       ? (inboxStatsRes.data?.openActions ?? 0)
       : 0
+    const superAdminSignups7d = superAdminMetricsRes.ok
+      ? (superAdminMetricsRes.data?.signups_last_7d ?? null)
+      : null
+    const superAdminChurn30d = superAdminMetricsRes.ok
+      ? (superAdminMetricsRes.data?.churn_last_30d ?? null)
+      : null
+
+    let slices: NavStatSlices = EMPTY_NAV_STAT_SLICES
+    let projectCount = 0
+    let neverIngestedCount = 0
+    let staleKeyCount = 0
+    let memberCount: number | null = null
+    let pendingInvites = 0
+    let membersInactiveCount = 0
+    let membersAtSeatCap = false
+    let membersExpiringInvites = 0
+
+    if (navMetaRes.ok && navMetaRes.data) {
+      slices = normalizeNavSlices(navMetaRes.data.slices)
+      if (navMetaRes.data.projects) {
+        projectCount = navMetaRes.data.projects.projectCount
+        neverIngestedCount = navMetaRes.data.projects.neverIngestedCount
+        staleKeyCount = navMetaRes.data.projects.staleKeyCount
+      }
+      if (navMetaRes.data.members) {
+        memberCount = navMetaRes.data.members.memberCount
+        pendingInvites = navMetaRes.data.members.pendingInvites
+        membersInactiveCount = navMetaRes.data.members.inactiveCount ?? 0
+        membersAtSeatCap = navMetaRes.data.members.atSeatCap ?? false
+        membersExpiringInvites = navMetaRes.data.members.expiringSoonInvites ?? 0
+      }
+    } else {
+      const [fallbackSlices, projectsStatsRes, membersStatsRes] = await Promise.all([
+        fetchNavSlicesFallback(projectId),
+        apiFetch<ProjectsStats>('/v1/admin/projects/stats'),
+        orgId
+          ? apiFetch<MembersStats>(`/v1/org/${orgId}/members/stats`)
+          : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
+      ])
+      slices = fallbackSlices
+      const projectsStats = projectsStatsRes.ok ? projectsStatsRes.data : null
+      const membersStats = membersStatsRes.ok ? membersStatsRes.data : null
+      projectCount = projectsStats?.projectCount ?? 0
+      neverIngestedCount = projectsStats?.neverIngestedCount ?? 0
+      staleKeyCount = projectsStats?.staleKeyCount ?? 0
+      memberCount = membersStats?.memberCount ?? null
+      pendingInvites = membersStats?.pendingInvites ?? 0
+      membersInactiveCount = membersStats?.inactiveCount ?? 0
+      membersAtSeatCap = membersStats?.atSeatCap ?? false
+      membersExpiringInvites = membersStats?.expiringSoonInvites ?? 0
+    }
+
     setCounts({
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
@@ -181,9 +284,24 @@ export function useNavCounts(): NavCounts {
       flaggedDevices,
       feedbackWithReply,
       judgeDisagreements,
+      projectCount,
+      projectsNeedingAttention: projectsNeedingAttentionCount({
+        neverIngestedCount,
+        staleKeyCount,
+      }),
+      neverIngestedCount,
+      staleKeyCount,
+      memberCount,
+      pendingInvites,
+      membersInactiveCount,
+      membersAtSeatCap,
+      membersExpiringInvites,
+      superAdminSignups7d,
+      superAdminChurn30d,
+      slices,
       ready: true,
     })
-  }, [activeProjectSignal])
+  }, [activeProjectSignal, activeOrgSignal, isSuperAdmin])
 
   useEffect(() => {
     void load()
@@ -199,12 +317,35 @@ export function useNavCounts(): NavCounts {
       'inventories',
       'reporter_notifications',
       'processing_queue',
-      // Flagged-device flips drive the /anti-gaming sidebar dot — keep
-      // it live so an operator who flags a device on /anti-gaming sees
-      // the rail update without a manual reload.
       'reporter_devices',
       'support_tickets',
       'classification_evaluations',
+      'projects',
+      'project_api_keys',
+      'organization_members',
+      'invitations',
+      'qa_stories',
+      'qa_story_runs',
+      'pdca_runs',
+      'gate_findings',
+      'gate_runs',
+      'content_quality_issues',
+      'experiments',
+      'intelligence_reports',
+      'intelligence_generation_jobs',
+      'releases',
+      'project_codebase_files',
+      'end_user_activity',
+      'audit_logs',
+      'usage_events',
+      'billing_subscriptions',
+      'skill_pipeline_runs',
+      'skill_pipeline_step_runs',
+      'feature_request_votes',
+      'project_plugins',
+      'enterprise_sso_configs',
+      'project_storage_settings',
+      'nl_query_history',
     ],
     () => { void load() },
     { debounceMs: 1500 },
@@ -230,17 +371,6 @@ export function toneForInFlight(n: number): HealthTone {
   return 'ok'
 }
 
-/**
- * Generic open-action escalator. Stays warn (amber) until the queue
- * crosses `dangerAt`, then switches to danger (red) so the sidebar
- * fires a visceral "this is getting away from you" signal.
- *
- * Used by the inbox + notifications dots, both of which previously
- * sat on a flat `warn` tone regardless of magnitude. Keeps the visual
- * language symmetric with `toneForFailed` (which steps ok → warn →
- * danger at 0/2) and `toneForBacklog` (0/5) — every sidebar tone now
- * obeys the same shape, just with domain-tuned thresholds.
- */
 export function toneForOpen(n: number, dangerAt: number): HealthTone {
   if (n === 0) return 'ok'
   if (n >= dangerAt) return 'danger'

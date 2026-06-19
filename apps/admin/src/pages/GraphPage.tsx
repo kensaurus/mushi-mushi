@@ -9,6 +9,7 @@ import '@xyflow/react/dist/style.css'
 
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -138,6 +139,7 @@ export function GraphPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<GraphStats>('/v1/admin/graph/stats')
+  usePublishPageHeroStats('/graph', statsData)
   const stats = statsData ?? EMPTY_GRAPH_STATS
 
   const setActiveTab = useCallback(

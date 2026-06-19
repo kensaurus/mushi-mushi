@@ -180,6 +180,111 @@ export async function createPrFromFiles(
   }
 }
 
+const ghHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  'Content-Type': 'application/json',
+  'User-Agent': 'mushi-mushi/1.0',
+})
+
+export interface OpenPrRef {
+  number: number
+  url: string
+  headRef: string
+}
+
+/**
+ * Find the newest OPEN pull request whose head branch starts with `headPrefix`
+ * AND was authored by a machine account (GitHub App bot).
+ *
+ * Used to dedupe machine-generated PRs (e.g. SDK upgrades) so repeat runs reuse
+ * the existing PR instead of stacking duplicates. The result is later persisted
+ * as the job's `pr_url` and is the target of the console one-click merge-to-main.
+ *
+ * SECURITY — provenance check (`user.type === 'Bot'`): branch names are not a
+ * trust boundary. A repo collaborator could push `mushi/sdk-upgrade-evil` and
+ * open a PR with arbitrary changes; without this filter Mushi would adopt that
+ * PR as "the SDK upgrade" and an operator's one-click merge would land attacker
+ * code on the default branch (confused-deputy). Mushi opens upgrade PRs with the
+ * GitHub App installation token, so they are always bot-authored; a
+ * human-authored PR on the same branch family is therefore never reused/merged.
+ *
+ * GitHub returns pulls newest-first by default, so the first match is the most
+ * recent open machine PR for that branch family.
+ */
+export async function findOpenPrByHeadPrefix(
+  token: string,
+  owner: string,
+  repo: string,
+  headPrefix: string,
+): Promise<OpenPrRef | null> {
+  const res = await ghFetchOptional(
+    `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=100&sort=created&direction=desc`,
+    { headers: ghHeaders(token) },
+  )
+  if (!Array.isArray(res)) return null
+  for (const pr of res as Array<{
+    number: number
+    html_url: string
+    head?: { ref?: string }
+    user?: { type?: string } | null
+  }>) {
+    const ref = pr.head?.ref ?? ''
+    if (!ref.startsWith(headPrefix)) continue
+    // Only trust machine-authored PRs (see SECURITY note above).
+    if (pr.user?.type !== 'Bot') continue
+    return { number: pr.number, url: pr.html_url, headRef: ref }
+  }
+  return null
+}
+
+/**
+ * Commit (create-or-update) a set of files onto an EXISTING branch. Mirrors the
+ * per-file PUT loop in {@link createPrFromFiles} but skips branch + PR creation —
+ * used to refresh an already-open PR's branch in place.
+ *
+ * Returns the last commit SHA.
+ */
+export async function commitFilesToBranch(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  files: FileChange[],
+  log: SimpleLogger = noopLog,
+): Promise<string> {
+  const baseHeaders = ghHeaders(token)
+  let lastCommitSha = ''
+  for (const file of files) {
+    const existing = await ghFetchOptional(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`,
+      { headers: baseHeaders },
+    )
+    const existingSha =
+      existing && typeof (existing as Record<string, unknown>).sha === 'string'
+        ? (existing as { sha: string }).sha
+        : undefined
+
+    const putRes = (await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}`,
+      {
+        method: 'PUT',
+        headers: baseHeaders,
+        body: JSON.stringify({
+          message: `mushi: ${file.reason}`,
+          content: btoa(unescape(encodeURIComponent(file.contents))),
+          branch,
+          ...(existingSha ? { sha: existingSha } : {}),
+        }),
+      },
+    )) as { commit: { sha: string } }
+    lastCommitSha = putRes.commit.sha
+  }
+  log.info('github-pr: refreshed files on existing branch', { branch, files: files.length })
+  return lastCommitSha
+}
+
 /**
  * Generate a branch name for a fix-worker PR from a template or fall back to
  * the legacy `mushi/fix-{shortId}-{ts36}` scheme.

@@ -169,38 +169,41 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
     const pendingRuns = pendingRes.count ?? 0;
     const lastRunAt = lastRunRes.data?.started_at ?? null;
 
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`;
+
     let topPriority: 'no_stories' | 'failing' | 'pending' | 'no_runs' | 'disabled_all' | 'healthy' = 'healthy';
     let topPriorityLabel: string | null = null;
     let topPriorityTo: string | null = null;
 
     if (stories.length === 0) {
       topPriority = 'no_stories';
-      topPriorityLabel = 'No QA stories yet — create one to start scheduled user-flow checks.';
-      topPriorityTo = '/qa-coverage?tab=overview';
+      topPriorityLabel = 'No automated tests yet — write a user-flow check that runs on a schedule.';
+      topPriorityTo = scoped('/qa-coverage?tab=overview');
     } else if (failingStories > 0) {
       topPriority = 'failing';
-      topPriorityLabel = `${failingStories} stor${failingStories === 1 ? 'y' : 'ies'} below 80% pass rate in the last 24h${topFailing ? ` — worst: ${topFailing.name} (${topFailing.rate}%)` : ''}.`;
+      topPriorityLabel = `${failingStories} test${failingStories === 1 ? '' : 's'} below 80% pass rate in the last 24h${topFailing ? ` — worst: ${topFailing.name} (${topFailing.rate}%)` : ''}.`;
       topPriorityTo = topFailing
-        ? `/qa-coverage?tab=failing&highlight=${topFailing.id}`
-        : '/qa-coverage?tab=failing';
+        ? scoped(`/qa-coverage?tab=failing&highlight=${topFailing.id}`)
+        : scoped('/qa-coverage?tab=failing');
     } else if (pendingRuns > 0) {
       topPriority = 'pending';
-      topPriorityLabel = `${pendingRuns} run${pendingRuns === 1 ? '' : 's'} queued or in progress — results appear in run history.`;
-      topPriorityTo = '/qa-coverage?tab=stories';
+      topPriorityLabel = `${pendingRuns} run${pendingRuns === 1 ? '' : 's'} in progress — open a story to watch screenshots and logs.`;
+      topPriorityTo = scoped('/qa-coverage?tab=stories');
     } else if (enabledStories === 0) {
       // Check disabled_all BEFORE no_runs: if all stories are disabled, "Run now"
       // is impossible — surfacing no_runs would give an unactionable instruction.
       topPriority = 'disabled_all';
-      topPriorityLabel = 'All stories are disabled — enable at least one to resume scheduled checks.';
-      topPriorityTo = '/qa-coverage?tab=stories';
+      topPriorityLabel = 'All tests are turned off — re-enable at least one story to resume scheduled checks.';
+      topPriorityTo = scoped('/qa-coverage?tab=stories');
     } else if (totalRuns24h === 0) {
       topPriority = 'no_runs';
-      topPriorityLabel = `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} configured but no runs in 24h — click Run now on a story.`;
-      topPriorityTo = '/qa-coverage?tab=stories';
+      topPriorityLabel = `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} configured but nothing ran in 24h — click Run now on a story.`;
+      topPriorityTo = scoped('/qa-coverage?tab=stories');
     } else {
       topPriority = 'healthy';
       topPriorityLabel = `${passingStories}/${stories.length} stories passing · ${totalRuns24h} runs in 24h · avg ${avgPassRatePct ?? 100}% pass rate.`;
-      topPriorityTo = '/qa-coverage?tab=stories';
+      topPriorityTo = scoped('/qa-coverage?tab=stories');
     }
 
     return c.json({

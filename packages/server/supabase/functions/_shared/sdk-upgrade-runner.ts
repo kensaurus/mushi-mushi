@@ -7,12 +7,20 @@
 import { getServiceClient } from './db.ts'
 import { log as rootLog } from './logger.ts'
 import { resolveProjectGithubToken, parseGithubRepoUrl } from './github.ts'
-import { createPrFromFiles, ghFetchOptional } from './github-pr.ts'
+import {
+  createPrFromFiles,
+  ghFetchOptional,
+  findOpenPrByHeadPrefix,
+  commitFilesToBranch,
+  type FileChange,
+} from './github-pr.ts'
 import {
   computeBumpPlan,
   fetchAllLatestVersions,
   type BumpEntry,
 } from './sdk-upgrade-plan.ts'
+import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
+import { UPGRADE_BRANCH_PREFIX } from './sdk-upgrade-gates.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
 
@@ -25,6 +33,11 @@ const PKG_PATH_CANDIDATES = [
 ]
 
 const MAX_PKG_FILES = 5
+
+interface ScanResult {
+  allBumps: BumpEntry[]
+  filesToCommit: FileChange[]
+}
 
 export type SdkUpgradeRunResult =
   | { ok: true; status: 'completed' | 'completed_no_pr'; prUrl?: string }
@@ -65,10 +78,22 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       error?: string
     } = {},
   ) => {
+    const finishedAt = new Date().toISOString()
     await db
       .from('sdk_upgrade_jobs')
-      .update({ status, finished_at: new Date().toISOString(), ...extra })
+      .update({ status, finished_at: finishedAt, ...extra })
       .eq('id', jobId)
+
+    if (status === 'completed' && extra.plan?.length) {
+      const primaryBump = extra.plan[0]
+      upsertProjectSdkObservationAsync(db, {
+        projectId: job.project_id,
+        sdkPackage: primaryBump.package,
+        sdkVersion: primaryBump.to,
+        source: 'upgrade_verify',
+        observedAt: finishedAt,
+      })
+    }
   }
 
   try {
@@ -109,45 +134,53 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
         : 'main'
 
     const latestVersions = await fetchAllLatestVersions()
-    const allBumps: BumpEntry[] = []
-    const filesToCommit: Array<{ path: string; contents: string; reason: string }> = []
 
-    for (const pkgPath of PKG_PATH_CANDIDATES.slice(0, MAX_PKG_FILES)) {
-      const fileRes = await ghFetchOptional(
-        `https://api.github.com/repos/${owner}/${repo}/contents/${pkgPath}?ref=${encodeURIComponent(defaultBranch)}`,
-        { headers: baseHeaders },
-      )
-      if (!fileRes) continue
+    // Scan every candidate package.json on a given ref and compute the bumps
+    // needed to reach the latest npm versions. Reused for both the default
+    // branch (the canonical plan) and an existing upgrade branch (to decide
+    // whether that branch needs refreshing).
+    const scanForBumps = async (ref: string): Promise<ScanResult> => {
+      const allBumps: BumpEntry[] = []
+      const filesToCommit: FileChange[] = []
+      for (const pkgPath of PKG_PATH_CANDIDATES.slice(0, MAX_PKG_FILES)) {
+        const fileRes = await ghFetchOptional(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${pkgPath}?ref=${encodeURIComponent(ref)}`,
+          { headers: baseHeaders },
+        )
+        if (!fileRes) continue
 
-      const fileObj = fileRes as Record<string, unknown>
-      const encoded = fileObj.content as string | undefined
-      if (!encoded) continue
+        const fileObj = fileRes as Record<string, unknown>
+        const encoded = fileObj.content as string | undefined
+        if (!encoded) continue
 
-      let pkgText: string
-      try {
-        pkgText = atob(encoded.replace(/\s/g, ''))
-      } catch {
-        continue
+        let pkgText: string
+        try {
+          pkgText = atob(encoded.replace(/\s/g, ''))
+        } catch {
+          continue
+        }
+
+        let pkg: Record<string, unknown>
+        try {
+          pkg = JSON.parse(pkgText)
+        } catch {
+          continue
+        }
+
+        const { bumps, updatedPkg } = computeBumpPlan(pkg, latestVersions)
+        if (bumps.length === 0) continue
+
+        filesToCommit.push({
+          path: pkgPath,
+          contents: JSON.stringify(updatedPkg, null, 2) + '\n',
+          reason: `bump ${bumps.map((b) => `${b.package} ${b.from} → ${b.to}`).join(', ')}`,
+        })
+        allBumps.push(...bumps)
       }
-
-      let pkg: Record<string, unknown>
-      try {
-        pkg = JSON.parse(pkgText)
-      } catch {
-        continue
-      }
-
-      const { bumps, updatedPkg } = computeBumpPlan(pkg, latestVersions)
-      if (bumps.length === 0) continue
-
-      const updatedText = JSON.stringify(updatedPkg, null, 2) + '\n'
-      filesToCommit.push({
-        path: pkgPath,
-        contents: updatedText,
-        reason: `bump ${bumps.map((b) => `${b.package} ${b.from} → ${b.to}`).join(', ')}`,
-      })
-      allBumps.push(...bumps)
+      return { allBumps, filesToCommit }
     }
+
+    const { allBumps, filesToCommit } = await scanForBumps(defaultBranch)
 
     if (filesToCommit.length === 0 || allBumps.length === 0) {
       log.info('sdk-upgrade-runner: all packages already up to date', { projectId: job.project_id })
@@ -158,7 +191,48 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       return { ok: true, status: 'completed_no_pr' }
     }
 
-    const branch = `mushi/sdk-upgrade-${Date.now().toString(36)}`
+    // Dedup guard: if an upgrade PR is already open, reuse it instead of
+    // stacking a duplicate. Refresh its branch only if newer versions have
+    // shipped since it was opened; otherwise reuse it as-is.
+    const existingPr = await findOpenPrByHeadPrefix(token, owner, repo, UPGRADE_BRANCH_PREFIX)
+    if (existingPr) {
+      const onBranch = await scanForBumps(existingPr.headRef)
+      if (onBranch.filesToCommit.length > 0) {
+        const commitSha = await commitFilesToBranch(
+          token,
+          owner,
+          repo,
+          existingPr.headRef,
+          onBranch.filesToCommit,
+          { info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>), warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>) },
+        )
+        log.info('sdk-upgrade-runner: refreshed existing upgrade PR', {
+          projectId: job.project_id,
+          prNumber: existingPr.number,
+        })
+        await finalize('completed', {
+          pr_url: existingPr.url,
+          pr_number: existingPr.number,
+          branch: existingPr.headRef,
+          commit_sha: commitSha,
+          plan: allBumps,
+        })
+      } else {
+        log.info('sdk-upgrade-runner: reusing already-current upgrade PR', {
+          projectId: job.project_id,
+          prNumber: existingPr.number,
+        })
+        await finalize('completed', {
+          pr_url: existingPr.url,
+          pr_number: existingPr.number,
+          branch: existingPr.headRef,
+          plan: allBumps,
+        })
+      }
+      return { ok: true, status: 'completed', prUrl: existingPr.url }
+    }
+
+    const branch = `${UPGRADE_BRANCH_PREFIX}-${Date.now().toString(36)}`
     const bumpTable = allBumps
       .map((b) => `| \`${b.package}\` | \`${b.from}\` | \`${b.to}\` |${b.migrateToWeb ? ' ⚠️ legacy → consider `@mushi-mushi/web`' : ''}`)
       .join('\n')

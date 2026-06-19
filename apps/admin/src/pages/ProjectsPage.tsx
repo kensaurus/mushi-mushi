@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
 import { useRealtimeReload } from '../lib/realtime'
@@ -29,8 +30,6 @@ import { SnapshotSectionHint,
   FreshnessPill,
   RecommendedAction, } from '../components/ui'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -42,7 +41,10 @@ import { useCreateProject } from '../lib/useCreateProject'
 import { useUpdateProject } from '../lib/useUpdateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useActiveOrgId, type OrganizationSummary } from '../components/OrgSwitcher'
+import { useAdminMode } from '../lib/mode'
+import { ProjectsPageHero } from '../components/projects/ProjectsPageHero'
 import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
+import { ProjectsHubGuide } from '../components/projects/ProjectsHubGuide'
 import { ProjectFolderTabRail } from '../components/projects/ProjectFolderTabRail'
 import {
   EMPTY_PROJECTS_STATS,
@@ -66,11 +68,13 @@ import { DangerConfirm } from '../components/DangerConfirm'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
 import { SdkUpgradeCTA } from '../components/SdkUpgradeCTA'
+import { BulkSdkUpgradePanel } from '../components/projects/BulkSdkUpgradePanel'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
 import { CodeInline } from '../components/CodePanel'
 import { ProjectFavicon } from '../components/ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../lib/resolveProjectDomain'
-import { PDCA_BOTTLENECK_TONE, bottleneckDeepLink } from '../lib/pdcaBottleneck'
+import { ProjectBottleneckCard } from '../components/projects/ProjectBottleneckCard'
+import { bottleneckDeepLink, bottleneckHumanHeadline } from '../lib/pdcaBottleneck'
 import {
   IconCheck,
   IconClose,
@@ -231,6 +235,13 @@ interface Project {
   last_report_at: string | null
   pdca_bottleneck: PdcaStageId | null
   pdca_bottleneck_label: string | null
+  pdca_bottleneck_count?: number | null
+  failed_fixes_preview?: Array<{
+    id: string
+    report_id: string
+    error_head: string | null
+    report_title: string | null
+  }>
   /** SDK identity columns and freshness verdict, plumbed by
    *  GET /v1/admin/projects (see billing-projects-queue-graph.ts). The
    *  backend joins `reports.sdk_package`/`reports.sdk_version` for the
@@ -359,6 +370,7 @@ export function ProjectsPage() {
   const copy = usePageCopy('/projects')
   const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
+  const { isAdvanced } = useAdminMode()
 
   const tabParam = searchParams.get('tab')
   const activeTab: ProjectsTabId = resolveProjectsTab(tabParam)
@@ -441,6 +453,7 @@ export function ProjectsPage() {
     '/v1/admin/projects/stats',
     { scope: 'enumeration' },
   )
+  usePublishPageHeroStats('/projects', statsData)
   const activeOrgId = useActiveOrgId()
   const { data: orgData } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
     scope: 'none',
@@ -932,6 +945,8 @@ export function ProjectsPage() {
         </Btn>
       </PageHeaderBar>
 
+      {isAdvanced && <ProjectsPageHero stats={stats} />}
+
       <ProjectsStatusBanner
         stats={stats}
         activeTeamName={activeTeamName}
@@ -940,6 +955,8 @@ export function ProjectsPage() {
         onRefresh={reloadAll}
         refreshing={validating}
       />
+
+      {activeTab === 'overview' && <ProjectsHubGuide topPriority={stats.topPriority} />}
 
       <SegmentedControl
         value={activeTab}
@@ -1003,115 +1020,29 @@ export function ProjectsPage() {
         </div>
       </Section>
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
-              ? 'border-warn/30'
-              : stats.topPriority === 'no_projects'
-                ? 'border-brand/30'
-                : 'border-info/30'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
-                ? 'warn'
-                : stats.topPriority === 'no_projects'
-                  ? 'brand'
-                  : 'info'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="info">
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
-
       {activeTab === 'overview' && (
         <div className="space-y-4">
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="All projects ingesting"
-              description={stats.topPriorityLabel ?? `${stats.projectCount} projects with recent reports.`}
+              description={`${stats.projectCount} project${stats.projectCount === 1 ? '' : 's'} with recent reports.`}
               cta={{ label: 'Open Reports', to: '/reports' }}
             />
           )}
-          {stats.topPriority === 'no_projects' && (
-            <RecommendedAction
-              tone="info"
-              title="Create your first project"
-              description={stats.topPriorityLabel ?? 'One project per app or environment.'}
-              cta={{ label: 'New project', to: '/projects?tab=create' }}
-            />
-          )}
-          {stats.topPriority === 'never_ingested' && (
-            <RecommendedAction
-              tone="urgent"
-              title="Send a test report"
-              description={stats.topPriorityLabel ?? 'Mint a key and use Test report on a project card.'}
-              cta={{ label: 'Open project list', to: '/projects?tab=list' }}
-            />
-          )}
-          {stats.topPriority === 'no_sdk_heartbeat' && (
-            <RecommendedAction
-              tone="urgent"
-              title="Debug SDK heartbeat"
-              description={stats.topPriorityLabel ?? 'Expand a project card and compare endpoint host vs this admin.'}
-              cta={{ label: 'View projects', to: '/projects?tab=list' }}
-            />
-          )}
-          {stats.topPriority === 'partial_ingest' && (
-            <RecommendedAction
-              tone="info"
-              title="Some projects never ingested"
-              description={stats.topPriorityLabel ?? `${stats.neverIngestedCount} projects waiting for first report.`}
-              cta={{ label: 'View projects', to: '/projects?tab=list' }}
-            />
-          )}
-          <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
-            <div className="grid grid-cols-1 gap-px bg-edge-subtle sm:grid-cols-3">
-              <div className="bg-surface-raised p-3">
-                <SignalChip tone="ok" className="uppercase tracking-wide">Ingest coverage</SignalChip>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-ok">
-                  {stats.projectCount > 0
-                    ? `${Math.round((stats.projectsWithReports / stats.projectCount) * 100)}%`
-                    : '—'}
-                </p>
-                <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
-                  {stats.projectsWithReports}/{stats.projectCount} projects with reports
-                </InlineProof>
-              </div>
-              <div className="bg-surface-raised p-3">
-                <SignalChip tone="info" className="uppercase tracking-wide">SDK heartbeats</SignalChip>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.sdkConnectedCount}</p>
-                <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
-                  {stats.staleKeyCount} active keys never seen
-                </InlineProof>
-              </div>
-              <div className="bg-surface-raised p-3">
-                <SignalChip tone="brand" className="uppercase tracking-wide">Active context</SignalChip>
-                <p className="mt-1 text-sm font-semibold text-fg-primary truncate">
-                  {stats.activeProjectName ?? 'None selected'}
-                </p>
-                <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
-                  {stats.activeProjectId
-                    ? stats.activeProjectHasReports
-                      ? 'Receiving reports'
-                      : 'No reports yet'
-                    : 'Switch on list tab'}
-                </InlineProof>
-              </div>
-            </div>
-          </div>
+          <BulkSdkUpgradePanel
+            projects={projects.map((p) => ({
+              id: p.id,
+              name: p.name,
+              slug: p.slug,
+              sdk_package: p.sdk_package,
+              sdk_version: p.sdk_version,
+              sdk_latest_version: p.sdk_latest_version,
+              sdk_status: p.sdk_status,
+              sdk_observation_source: (p as { sdk_observation_source?: string | null }).sdk_observation_source ?? null,
+              hasRepo: Boolean(p.primary_repo?.repo_url),
+            }))}
+          />
         </div>
       )}
 
@@ -1229,6 +1160,7 @@ export function ProjectsPage() {
                             project_name={project.name}
                             project_slug={project.slug}
                             sdk_origin={sdkOriginFromApiKeys(project.api_keys)}
+                            repo_url={project.primary_repo?.repo_url ?? null}
                             size={16}
                           />
                           <h3 className="truncate text-base font-semibold text-fg">{project.name}</h3>
@@ -1247,11 +1179,19 @@ export function ProjectsPage() {
                       </SignalChip>
                       {project.pdca_bottleneck && project.pdca_bottleneck_label && (
                         <Link
-                          to={bottleneckDeepLink(project.pdca_bottleneck, project.id)}
-                          className={`inline-flex max-w-full min-w-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-2xs font-medium hover:opacity-90 motion-safe:transition-opacity ${PDCA_BOTTLENECK_TONE[project.pdca_bottleneck]}`}
-                          title={`${project.pdca_bottleneck_label} — jump to this PDCA stage`}
+                          to={bottleneckDeepLink(
+                            project.pdca_bottleneck,
+                            project.id,
+                            project.pdca_bottleneck_label,
+                          )}
+                          className="inline-flex max-w-full min-w-0 items-center gap-1 truncate rounded-sm bg-warn-muted px-2 py-0.5 text-2xs font-medium text-warn hover:opacity-90 motion-safe:transition-opacity"
+                          title={`${project.pdca_bottleneck_label} — open to fix`}
                         >
-                          <span className="shrink-0 font-mono uppercase">{project.pdca_bottleneck}</span>
+                          {bottleneckHumanHeadline({
+                            stage: project.pdca_bottleneck,
+                            label: project.pdca_bottleneck_label,
+                            count: project.pdca_bottleneck_count,
+                          })}
                         </Link>
                       )}
                     </div>
@@ -1380,6 +1320,15 @@ export function ProjectsPage() {
                 <div className="space-y-3 px-3 py-3">
                   <ProjectMetricsRail project={project} />
                   <ProjectContextRail project={project} />
+                  {project.pdca_bottleneck && project.pdca_bottleneck_label && (
+                    <ProjectBottleneckCard
+                      projectId={project.id}
+                      stage={project.pdca_bottleneck}
+                      label={project.pdca_bottleneck_label}
+                      count={project.pdca_bottleneck_count}
+                      failedFixesPreview={project.failed_fixes_preview}
+                    />
+                  )}
                 </div>
 
                 {revealed && (

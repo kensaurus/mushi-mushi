@@ -85,30 +85,33 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
     let topPriority: typeof empty.topPriority = 'healthy'
     let topPriorityLabel: string | null = null
     let topPriorityTo: string | null = null
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`
 
     if (datasetTotal === 0) {
       topPriority = 'no_dataset'
-      topPriorityLabel = 'No evaluation dataset — run Judge to build scored examples.'
-      topPriorityTo = '/judge'
+      topPriorityLabel = 'No judge evaluations yet — run the Judge so you have scored examples to compare prompts.'
+      topPriorityTo = scoped('/judge?action=run')
     } else if (untestedAbCount > 0) {
       topPriority = 'untested_ab'
-      topPriorityLabel = `${untestedAbCount} candidate prompt${untestedAbCount === 1 ? '' : 's'} haven't been evaluated yet.`
-      topPriorityTo = '/prompt-lab?tab=prompts'
+      topPriorityLabel = `${untestedAbCount} candidate prompt${untestedAbCount === 1 ? '' : 's'} in A/B but not scored by the judge yet.`
+      topPriorityTo = scoped('/prompt-lab?tab=prompts')
     } else if (promoteReadyCount > 0) {
       topPriority = 'promote_ready'
-      topPriorityLabel = `${promoteReadyCount} candidate prompt${promoteReadyCount === 1 ? '' : 's'} ready to promote — score ≥ 80%.`
-      topPriorityTo = '/prompt-lab?tab=prompts'
+      topPriorityLabel = `${promoteReadyCount} candidate${promoteReadyCount === 1 ? '' : 's'} scored ≥ 80% — review and promote to production traffic.`
+      topPriorityTo = scoped('/prompt-lab?tab=prompts')
     } else if (abTestingCount > 0) {
       topPriority = 'ab_running'
-      topPriorityLabel = `${abTestingCount} prompt${abTestingCount === 1 ? '' : 's'} running A/B — awaiting evaluation data.`
-      topPriorityTo = '/prompt-lab?tab=prompts'
+      topPriorityLabel = `${abTestingCount} prompt${abTestingCount === 1 ? '' : 's'} in A/B — waiting for more judge evaluations.`
+      topPriorityTo = scoped('/prompt-lab?tab=prompts')
     } else if (candidatePrompts > 0) {
       topPriority = 'candidates_idle'
-      topPriorityLabel = `${candidatePrompts} candidate prompt${candidatePrompts === 1 ? '' : 's'} idle — start an A/B test to compare.`
-      topPriorityTo = '/prompt-lab?tab=prompts'
+      topPriorityLabel = `${candidatePrompts} candidate prompt${candidatePrompts === 1 ? '' : 's'} idle — set Traffic % to start an A/B test.`
+      topPriorityTo = scoped('/prompt-lab?tab=prompts')
     } else {
-      topPriorityLabel = `${activePrompts} active prompt${activePrompts === 1 ? '' : 's'} — add a candidate to start iterating.`
-      topPriorityTo = '/prompt-lab'
+      topPriority = 'healthy'
+      topPriorityLabel = `${activePrompts} active prompt${activePrompts === 1 ? '' : 's'} · clone a baseline to start iterating.`
+      topPriorityTo = scoped('/prompt-lab')
     }
 
     return c.json({

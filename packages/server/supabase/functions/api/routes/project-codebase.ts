@@ -391,34 +391,37 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
     let topPriority: typeof empty.topPriority = 'ready'
     let topPriorityLabel: string | null = null
     let topPriorityTo: string | null = null
+    const scoped = (path: string) =>
+      `${path}${path.includes('?') ? '&' : '?'}project=${encodeURIComponent(pid)}`
 
     if (!codebaseIndexEnabled && indexedFiles === 0) {
       topPriority = 'not_enabled'
-      topPriorityLabel = 'Codebase indexing is off — enable in Settings or run mushi index'
-      topPriorityTo = '/explore?tab=index'
+      topPriorityLabel =
+        'Code search is off — turn on codebase indexing in Settings or Connect your GitHub repo.'
+      topPriorityTo = scoped('/explore?tab=index')
     } else if (lastIndexError) {
       topPriority = 'error'
-      topPriorityLabel = `Last index error — ${lastIndexError.slice(0, 120)}${lastIndexError.length > 120 ? '…' : ''}`
-      topPriorityTo = '/explore?tab=index'
+      topPriorityLabel = `Indexer failed — ${lastIndexError.slice(0, 120)}${lastIndexError.length > 120 ? '…' : ''}`
+      topPriorityTo = scoped('/explore?tab=index')
     } else if (indexedFiles === 0 && lastIndexAttemptAt && !lastIndexedAt) {
       topPriority = 'indexing'
-      topPriorityLabel = 'Indexer is running — files should appear within ~90s'
-      topPriorityTo = '/explore?tab=index'
+      topPriorityLabel = 'Indexer is running — Ask and Search unlock when files appear (~90s).'
+      topPriorityTo = scoped('/explore?tab=index')
     } else if (indexedFiles === 0) {
       topPriority = 'empty'
-      topPriorityLabel = 'No files indexed yet — connect a repo or run mushi index'
-      topPriorityTo = '/settings'
+      topPriorityLabel = 'No source files indexed yet — connect GitHub on Connect or run mushi index.'
+      topPriorityTo = scoped('/connect')
     } else if (
       lastIndexedAt &&
       Date.now() - new Date(lastIndexedAt).getTime() > 7 * 24 * 60 * 60 * 1000
     ) {
       topPriority = 'stale'
-      topPriorityLabel = `${indexedFiles.toLocaleString()} files · index may be stale (>7d)`
-      topPriorityTo = '/explore?tab=graph'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files indexed but last sync was over 7 days ago — re-index before trusting answers.`
+      topPriorityTo = scoped('/explore?tab=index')
     } else {
       topPriority = 'ready'
-      topPriorityLabel = `${indexedFiles.toLocaleString()} files · ${withEmbeddings} embedded for search`
-      topPriorityTo = '/explore?tab=graph'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files ready · ${withEmbeddings.toLocaleString()} embedded for semantic search.`
+      topPriorityTo = scoped('/explore?tab=ask')
     }
 
     return c.json({

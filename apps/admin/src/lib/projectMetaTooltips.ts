@@ -98,6 +98,9 @@ export function buildBottleneckTooltip(
       },
       { kind: 'takeaway', label: 'Detail', body: label },
     ],
-    callout: { tone: 'info', text: 'Click the chip to jump straight to the page that clears this stage.' },
+    callout: {
+      tone: 'info',
+      text: 'Click to open the page that clears this — failed fixes go straight to the Failed tab.',
+    },
   }
 }

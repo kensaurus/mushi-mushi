@@ -283,3 +283,9 @@ verify_jwt = false
 
 [functions.console-knowledge-build]
 verify_jwt = false
+
+# sdk-release-sync polls active SDK upgrade jobs every 5 minutes to sync
+# PR state, CI check-run conclusions, and deployment status from GitHub into
+# sdk_upgrade_jobs. Auth is enforced inside via requireServiceRoleAuth.
+[functions.sdk-release-sync]
+verify_jwt = false

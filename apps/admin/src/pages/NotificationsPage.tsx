@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -122,6 +123,7 @@ export function NotificationsPage() {
   } = usePageData<NotificationStats>(statsPath, {
     deps: [activeProjectId],
   })
+  usePublishPageHeroStats('/notifications', statsData)
 
   const stats = { ...EMPTY_NOTIFICATIONS_STATS, ...statsData }
   const fetchedAt = statsFetchedAt ?? lastFetchedAt

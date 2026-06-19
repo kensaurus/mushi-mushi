@@ -7,12 +7,13 @@
  *          evolve independently and stay below the 30-line-function limit.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import type { ChartEvent } from '../lib/apiSchemas'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -39,6 +40,8 @@ import { SdkUpgradeBanner } from '../components/dashboard/SdkUpgradeBanner'
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
+import { useDashboardUx } from '../lib/dashboardModeUx'
+import { deriveDashboardInsight } from '../lib/dashboardExplainer'
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
   const activity = data.activity ?? []
@@ -66,6 +69,7 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const [showFullDashboard, setShowFullDashboard] = useState(false)
   const copy = usePageCopy('/dashboard')
+  const { isAdvanced, hideOverviewChrome } = useDashboardUx()
 
   // First-fix-merged celebration: when `merged_fix_count` flips 0 → 1 we
   // fire a confetti burst + a toast with a CTA to the merged PR. This is the
@@ -106,6 +110,20 @@ export function DashboardPage() {
   const dashProjectName = setup.activeProject?.project_name ?? null
   const dashCounts = data?.counts
   const dashFix = data?.fixSummary
+  const dashboardHeroStats = useMemo(() => {
+    if (!dashCounts || !dashFix) return null
+    const integrationIssues = (data?.integrations ?? []).filter(
+      (i) => i.lastStatus != null && i.lastStatus !== 'ok',
+    ).length
+    return {
+      openBacklog: dashCounts.openBacklog,
+      fixesInProgress: dashFix.inProgress,
+      fixesFailed: dashFix.failed,
+      openPrs: dashFix.openPrs ?? dashCounts.openPrs,
+      integrationIssues,
+    }
+  }, [dashCounts, dashFix, data?.integrations])
+  usePublishPageHeroStats('/dashboard', dashboardHeroStats)
   const dashSummary = loading
     ? 'Loading dashboard…'
     : !data || data.empty
@@ -159,6 +177,30 @@ export function DashboardPage() {
   // checklist + hero intro so the user has exactly one thing to do.
   const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
   const renderFullDashboard = !setupIncomplete || showFullDashboard
+  const hasPdcaStages = !!(data.pdcaStages && data.pdcaStages.length > 0)
+  const showPdcaFlow = isAdvanced && renderFullDashboard && hasPdcaStages && !showFirstReportHero
+  const showHeroIntro =
+    !hideOverviewChrome && !showFirstReportHero && hasPdcaStages && !showPdcaFlow
+
+  const pdcaFlowBlock = showPdcaFlow ? (
+    <>
+      <div className="hidden sm:block">
+        <PdcaFlow
+          variant="live"
+          stages={data.pdcaStages!}
+          focusStage={data.focusStage}
+          runningStage={inferRunningStage(data)}
+          activity={activity}
+          interactive
+          showActionPanel
+          ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
+        />
+      </div>
+      <div className="sm:hidden">
+        <PdcaCockpit stages={data.pdcaStages!} focusStage={data.focusStage} />
+      </div>
+    </>
+  ) : null
 
   return (
     <div className="space-y-3">
@@ -185,32 +227,40 @@ export function DashboardPage() {
         </Link>
       </PageHeaderBar>
 
-      {!showFirstReportHero && data.pdcaStages && data.pdcaStages.length > 0 && (
+      {/* Condensed plain-language insight strip — 1-2 sentence verdict */}
+      {renderFullDashboard && dashboardHeroStats && (() => {
+        const { tone, sentence } = deriveDashboardInsight({
+          openBacklog: dashboardHeroStats.openBacklog,
+          fixesInProgress: dashboardHeroStats.fixesInProgress,
+          fixesFailed: dashboardHeroStats.fixesFailed,
+          integrationIssues: dashboardHeroStats.integrationIssues,
+          reports14d: counts.openBacklog ?? 0,
+        })
+        const toneClasses: Record<string, string> = {
+          ok: 'border-ok/25 bg-ok-muted/40 text-ok',
+          warn: 'border-warn/30 bg-warn-muted/40 text-warn-fg',
+          danger: 'border-danger/30 bg-danger-muted/40 text-danger',
+        }
+        return (
+          <div
+            className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${toneClasses[tone] ?? toneClasses.ok}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="mt-px shrink-0 text-base leading-none">
+              {tone === 'danger' ? '🔴' : tone === 'warn' ? '🟡' : '🟢'}
+            </span>
+            <span>{sentence}</span>
+          </div>
+        )
+      })()}
+
+      {showHeroIntro && (
         <HeroIntro
-          stages={data.pdcaStages}
+          stages={data.pdcaStages!}
           focusStage={data.focusStage}
           projectName={projectName}
           lastReportAt={lastReportAt}
-        />
-      )}
-
-      <LivePdcaPipeline
-        projectId={setup.activeProject?.project_id}
-        pdcaStages={data.pdcaStages}
-        onDemoReportSent={() => {
-          setup.reload()
-          reload()
-        }}
-      />
-
-      {showFirstReportHero && setup.activeProject && (
-        <FirstReportHero
-          projectId={setup.activeProject.project_id}
-          projectName={setup.activeProject.project_name}
-          onReportSent={() => {
-            setup.reload()
-            reload()
-          }}
         />
       )}
 
@@ -238,38 +288,31 @@ export function DashboardPage() {
         </div>
       )}
 
+      {pdcaFlowBlock}
+
+      <LivePdcaPipeline
+        projectId={setup.activeProject?.project_id}
+        pdcaStages={data.pdcaStages}
+        onDemoReportSent={() => {
+          setup.reload()
+          reload()
+        }}
+      />
+
+      {showFirstReportHero && setup.activeProject && (
+        <FirstReportHero
+          projectId={setup.activeProject.project_id}
+          projectName={setup.activeProject.project_name}
+          onReportSent={() => {
+            setup.reload()
+            reload()
+          }}
+        />
+      )}
+
       {renderFullDashboard && (
         <>
           <QuotaBanner />
-
-          {data.pdcaStages && data.pdcaStages.length > 0 && (
-            <>
-              {/* Live React Flow canvas at sm+ breakpoints — pairs the four
-                  stages with live counts, bottlenecks, and an animated
-                  gradient edge out of the current focus stage so the eye
-                  lands on the bottleneck without reading text. */}
-              {/* PdcaFlow labels every stage directly — a heading above it
-                  would duplicate the same words already visible in the nodes. */}
-              <div className="hidden sm:block">
-                <PdcaFlow
-                  variant="live"
-                  stages={data.pdcaStages}
-                  focusStage={data.focusStage}
-                  runningStage={inferRunningStage(data)}
-                  activity={activity}
-                  interactive
-                  showActionPanel
-                  ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
-                />
-              </div>
-              {/* Stacked-cards fallback on narrow viewports where a React
-                  Flow canvas doesn't read well; the cockpit already has a
-                  mobile-optimised vertical layout so we keep it verbatim. */}
-              <div className="sm:hidden">
-                <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
-              </div>
-            </>
-          )}
 
           <KpiRow
             counts={counts}

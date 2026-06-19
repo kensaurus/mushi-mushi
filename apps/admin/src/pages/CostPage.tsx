@@ -27,6 +27,7 @@ import {
 } from '../lib/costStatTooltips'
 import { costLinks } from '../lib/statCardLinks'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -56,6 +57,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { CostRawLogTable } from '../components/cost/CostRawLogTable'
 import { CostStatusBanner } from '../components/cost/CostStatusBanner'
+import { CostStageGuide } from '../components/cost/CostStageGuide'
 import {
   EMPTY_COST_STATS,
   type CostStats,
@@ -118,6 +120,7 @@ export function CostPage() {
     lastFetchedAt,
     isValidating,
   } = usePageData<CostStats>(statsPath)
+  usePublishPageHeroStats('/cost', statsData)
   const stats = statsData ?? EMPTY_COST_STATS
 
   const summaryPath = activeProjectId
@@ -286,6 +289,8 @@ export function CostPage() {
       </PageHeaderBar>
 
       <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
+
+      <CostStageGuide topPriority={stats.topPriority} topOperation={stats.topOperation} />
 
       {!ux.hideTabs && (
       <SegmentedControl

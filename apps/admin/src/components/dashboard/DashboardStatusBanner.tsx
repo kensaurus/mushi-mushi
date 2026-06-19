@@ -3,10 +3,17 @@
  * PURPOSE: Workspace posture — setup, backlog, failures, integrations, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn, RelativeTime } from '../ui'
+import { RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
+import {
+  fixesFailedAction,
+  fixesFailedHint,
+  integrationIssuesHint,
+  scopedHref,
+  triageBacklogHint,
+} from '../../lib/humanPageHints'
 import type { DashboardStats, DashboardTabId } from './DashboardStatsTypes'
 
 interface Props {
@@ -27,6 +34,7 @@ export function DashboardStatusBanner({
   const copy = usePageCopy('/dashboard')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
+  const pid = stats.projectId
 
   if (stats.topPriority === 'no_project' || !stats.hasAnyProject) {
     return (
@@ -35,14 +43,14 @@ export function DashboardStatusBanner({
         title={plainBanner ? 'Create your first app to get started' : 'No projects yet'}
         subtitle={
           stats.topPriorityLabel ??
-          (plainBanner
-            ? 'Three quick steps: create a project, install the widget, send a test bug.'
-            : 'Create a project on Setup before the dashboard can show intake, fixes, or loop health.')
+          'Create a project, install the widget, and send a test bug — then the dashboard shows your loop health.'
         }
         action={
-          <Link to={stats.topPriorityTo ?? '/onboarding'}>
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.setup ?? 'Go to Setup'}
+            to={stats.topPriorityTo ?? '/onboarding'}
+            tone="info"
+          />
         }
       />
     )
@@ -52,21 +60,17 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={
-          plainBanner
-            ? `Setup ${stats.requiredComplete} of ${stats.requiredTotal} done on ${projectLabel}`
-            : `Setup incomplete on ${projectLabel} (${stats.requiredComplete}/${stats.requiredTotal} required)`
-        }
+        title={`Setup ${stats.requiredComplete} of ${stats.requiredTotal} on ${projectLabel}`}
         subtitle={
           stats.topPriorityLabel ??
-          (plainBanner
-            ? 'Finish the checklist below — charts stay empty until a test bug arrives.'
-            : 'Finish project, key, SDK, and first report — metrics stay gated until ingest is live.')
+          'Finish project, API key, SDK install, and first report — charts stay empty until ingest is live.'
         }
         action={
-          <Link to={stats.topPriorityTo ?? '/onboarding?tab=steps'}>
-            <Btn size="sm" variant="ghost">{actions.setup ?? 'Continue setup'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.setup ?? 'Continue setup'}
+            to={stats.topPriorityTo ?? scopedHref('/onboarding?tab=steps', pid)}
+            tone="warn"
+          />
         }
       />
     )
@@ -76,21 +80,14 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={
-          plainBanner
-            ? `${stats.openBacklog} bug${stats.openBacklog === 1 ? '' : 's'} waiting for you`
-            : `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting > 1h to triage`
-        }
-        subtitle={
-          stats.topPriorityLabel ??
-          (plainBanner
-            ? 'Open the oldest one first — send it to auto-fix when the proof looks right.'
-            : stats.bottleneck ?? 'Plan stage is the bottleneck — users are waiting on classification.')
-        }
+        title={`${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting to triage`}
+        subtitle={stats.topPriorityLabel ?? triageBacklogHint(stats.openBacklog)}
         action={
-          <Link to={stats.topPriorityTo ?? '/reports?tab=queue&status=new'}>
-            <Btn size="sm" variant="ghost">{actions.triage ?? 'Review bugs'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.triage ?? `Triage ${stats.openBacklog} reports`}
+            to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&status=new', pid)}
+            tone="danger"
+          />
         }
       />
     )
@@ -100,21 +97,14 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="danger"
-        title={
-          plainBanner
-            ? `${stats.fixesFailed} auto-fix${stats.fixesFailed === 1 ? '' : 'es'} need a retry`
-            : `${stats.fixesFailed} auto-fix${stats.fixesFailed === 1 ? '' : 'es'} failed in 14d`
-        }
-        subtitle={
-          stats.topPriorityLabel ??
-          (plainBanner
-            ? 'Open the failed fix, read the error, then retry or send to Cursor.'
-            : 'Do stage needs attention — retry dispatch or inspect agent logs before the queue stalls.')
-        }
+        title={`${stats.fixesFailed} auto-fix${stats.fixesFailed === 1 ? '' : 'es'} failed`}
+        subtitle={stats.topPriorityLabel ?? fixesFailedHint(stats.fixesFailed)}
         action={
-          <Link to={stats.topPriorityTo ?? '/fixes?status=failed'}>
-            <Btn size="sm" variant="ghost">{actions.failed ?? 'Retry fixes'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.failed ?? fixesFailedAction(stats.fixesFailed)}
+            to={stats.topPriorityTo ?? scopedHref('/fixes?status=failed', pid)}
+            tone="danger"
+          />
         }
       />
     )
@@ -124,26 +114,21 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={
-          plainBanner
-            ? `${stats.integrationIssues} connection${stats.integrationIssues === 1 ? '' : 's'} need attention`
-            : `${stats.integrationIssues} integration${stats.integrationIssues === 1 ? '' : 's'} failing probes`
-        }
-        subtitle={
-          stats.topPriorityLabel ??
-          (plainBanner
-            ? 'GitHub or webhooks may be misconfigured — fixes cannot land until this is green.'
-            : 'Act stage degraded — fixes may not reach GitHub, Sentry, or webhooks until health recovers.')
-        }
+        title={`${stats.integrationIssues} integration${stats.integrationIssues === 1 ? '' : 's'} need attention`}
+        subtitle={stats.topPriorityLabel ?? integrationIssuesHint(stats.integrationIssues)}
         action={
           onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('health')}>
-              {actions.health ?? 'Check connections'}
-            </Btn>
+            <StatusBannerAction
+              label={actions.health ?? 'Check connections'}
+              onClick={() => onTab('health')}
+              tone="warn"
+            />
           ) : (
-            <Link to={stats.topPriorityTo ?? '/integrations/config'}>
-              <Btn size="sm" variant="ghost">{actions.health ?? 'Open integrations'}</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.health ?? 'Open integrations'}
+              to={stats.topPriorityTo ?? scopedHref('/integrations/config', pid)}
+              tone="warn"
+            />
           )
         }
       />
@@ -154,17 +139,17 @@ export function DashboardStatusBanner({
     return (
       <StatusBannerShell
         tone="info"
-        title={plainBanner ? 'Ready for your first bug' : 'Pipeline wired — waiting for first report'}
+        title="Ready for your first bug report"
         subtitle={
           stats.topPriorityLabel ??
-          (plainBanner
-            ? 'Send a test bug from Setup — the dashboard fills in once ingest is live.'
-            : 'Send a test report from Setup or wait for a real user bug — charts populate after ingest.')
+          'Send a test report from Setup — the dashboard fills in once ingest is live.'
         }
         action={
-          <Link to={stats.topPriorityTo ?? '/onboarding?tab=verify'}>
-            <Btn size="sm" variant="ghost">{actions.verify ?? 'Send test bug'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.verify ?? 'Send test report'}
+            to={stats.topPriorityTo ?? scopedHref('/onboarding?tab=verify', pid)}
+            tone="info"
+          />
         }
       />
     )
@@ -174,11 +159,9 @@ export function DashboardStatusBanner({
     <StatusBannerShell
       tone="ok"
       title={
-        plainBanner
-          ? `${projectLabel} looks healthy`
-          : stats.projectCount > 1
-            ? `${stats.projectCount} projects · loop healthy`
-            : `${projectLabel} loop healthy`
+        stats.projectCount > 1
+          ? `${stats.projectCount} projects · loop healthy`
+          : `${projectLabel} looks healthy`
       }
       subtitle={
         stats.topPriorityLabel ?? (
@@ -196,17 +179,22 @@ export function DashboardStatusBanner({
       }
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            {actions.refresh ?? 'Refresh'}
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+            emphasis="ghost"
+          />
         ) : stats.topPriorityTo ? (
-          <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">{actions.healthy ?? 'View loop'}</Btn>
-          </Link>
+          <StatusBannerAction
+            label={actions.healthy ?? 'View loop'}
+            to={stats.topPriorityTo}
+            tone="ok"
+          />
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('loop')}>
-            {actions.healthy ?? 'View loop'}
-          </Btn>
+          <StatusBannerAction label={actions.healthy ?? 'View loop'} onClick={() => onTab('loop')} tone="ok" />
         ) : null
       }
     />

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
 import { formatLlmCost } from '../lib/format'
@@ -43,6 +44,10 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
+import { BillingSeatFaqCallout } from '../components/billing/BillingSeatFaqCallout'
+import { useActivePlan } from '../lib/useActivePlan'
+import { useActiveOrgId } from '../components/OrgSwitcher'
+import { EMPTY_MEMBERS_STATS, type MembersStats } from '../components/members/types'
 import { EMPTY_BILLING_STATS, type BillingStats, type BillingTabId } from '../components/billing/types'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { ResponsiveTable } from '../components/ResponsiveTable'
@@ -240,8 +245,15 @@ export function BillingPage() {
 
   const billingQuery = usePageData<BillingResponse>('/v1/admin/billing')
   const statsQuery = usePageData<BillingStats>('/v1/admin/billing/stats')
+  const activeOrgId = useActiveOrgId()
+  const membersStatsQuery = usePageData<MembersStats>(
+    activeOrgId ? `/v1/org/${activeOrgId}/members/stats` : null,
+  )
+  const { plan: activePlan } = useActivePlan()
+  const membersStats = membersStatsQuery.data ?? EMPTY_MEMBERS_STATS
   const billing = billingQuery.data
   const stats = statsQuery.data ?? EMPTY_BILLING_STATS
+  usePublishPageHeroStats('/billing', statsQuery.data)
   const projects = billing?.projects ?? []
   const activeProject = useMemo(
     () => projects.find(p => p.project_id === activeProjectId) ?? projects[0] ?? null,
@@ -257,7 +269,8 @@ export function BillingPage() {
   const reloadAll = useCallback(() => {
     billingQuery.reload()
     statsQuery.reload()
-  }, [billingQuery, statsQuery])
+    membersStatsQuery.reload()
+  }, [billingQuery, statsQuery, membersStatsQuery])
 
   useRealtimeReload(['usage_events', 'billing_subscriptions'], reloadAll)
 
@@ -417,6 +430,19 @@ export function BillingPage() {
         onTab={setActiveTab}
         plainBanner={ux.plainBanner}
       />
+
+      {(activeTab === 'overview' || activeTab === 'plans') && (
+        <BillingSeatFaqCallout
+          collapsible={activeTab === 'plans'}
+          planDisplayName={
+            membersStats.planDisplayName ?? activePlan?.displayName ?? stats.planDisplayName
+          }
+          planId={membersStats.planId ?? activePlan?.planId ?? stats.planId}
+          seatLimit={membersStats.seatLimit ?? activePlan?.seatLimit ?? null}
+          seatsUsed={membersStats.seatsUsed}
+          teamsEnabled={Boolean(activePlan?.featureFlags?.teams)}
+        />
+      )}
 
       {!ux.hideTabs && (
       <SegmentedControl

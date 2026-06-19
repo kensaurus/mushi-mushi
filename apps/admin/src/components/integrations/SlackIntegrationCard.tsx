@@ -33,6 +33,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
   const toast = useToast()
   const [channels, setChannels] = useState<SlackChannel[]>([])
   const [loadingChannels, setLoadingChannels] = useState(false)
+  const [channelLoadError, setChannelLoadError] = useState<string | null>(null)
   const [selectedChannel, setSelectedChannel] = useState('')
   const [testingSlack, setTestingSlack] = useState(false)
   const [savingChannel, setSavingChannel] = useState(false)
@@ -40,14 +41,42 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
 
   const probeStatus = latestProbe?.status
 
-  // Load channel list when connected
-  useEffect(() => {
+  const loadChannels = () => {
     if (!slackConfigured || !projectId) return
     setLoadingChannels(true)
+    setChannelLoadError(null)
     apiFetch<{ channels?: SlackChannel[] }>('/v1/admin/integrations/slack/channels')
-      .then((res) => setChannels(res.ok ? (res.data?.channels ?? []) : []))
-      .catch(() => { /* non-fatal */ })
+      .then((res) => {
+        if (res.ok) {
+          setChannels(res.data?.channels ?? [])
+        } else {
+          setChannels([])
+          // apiFetch includes the HTTP status in the message for gateway errors
+          // (e.g. "502: ..."). Check for 5xx prefix or code to surface a
+          // more user-friendly message than the raw proxy body.
+          const msg = res.error?.message ?? ''
+          const isGatewayError =
+            msg.startsWith('502') ||
+            msg.startsWith('503') ||
+            res.error?.code === 'HTTP_ERROR' && (msg.startsWith('5'))
+          setChannelLoadError(
+            isGatewayError
+              ? 'Slack gateway error — Slack API may be temporarily unavailable. Try again in a moment.'
+              : (msg || 'Failed to load channels. Check your Slack connection.'),
+          )
+        }
+      })
+      .catch(() => {
+        setChannelLoadError('Could not reach the Slack channels endpoint. Check your connection.')
+      })
       .finally(() => setLoadingChannels(false))
+  }
+
+  // Load channel list when connected
+  useEffect(() => {
+    loadChannels()
+    // loadChannels is intentionally omitted: only re-fetch when the connection
+    // state or project changes, not on every render-stable closure identity.
   }, [slackConfigured, projectId])
 
   const handleAddToSlack = () => {
@@ -159,6 +188,16 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             <label className="block text-xs font-medium text-fg-secondary mb-1.5">Notification channel</label>
             {loadingChannels ? (
               <div className="h-9 rounded-lg bg-surface-hover animate-pulse" />
+            ) : channelLoadError ? (
+              <div className="rounded-sm border border-danger/30 bg-danger/8 px-2.5 py-2 text-xs text-danger space-y-1.5">
+                <p className="leading-snug">{channelLoadError}</p>
+                <button
+                  className="inline-flex items-center gap-1 text-xs font-medium underline hover:no-underline"
+                  onClick={loadChannels}
+                >
+                  Retry
+                </button>
+              </div>
             ) : channels.length > 0 ? (
               <div className="flex gap-2">
                 <select
@@ -174,7 +213,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                   ))}
                 </select>
                 <button
-                  className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:bg-brand/90 disabled:opacity-50 transition-colors"
+                  className="rounded-lg bg-brand text-brand-fg px-4 py-2 text-sm font-medium hover:bg-brand-hover disabled:opacity-50 motion-safe:transition-colors"
                   disabled={!selectedChannel || savingChannel}
                   onClick={handleSaveChannel}
                 >

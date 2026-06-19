@@ -1527,29 +1527,52 @@ async function resolveGithubToken(
   ownerUserId: string | null,
   projectId: string,
 ): Promise<string | null> {
-  // Resolution order: project-level vault ref → raw value in same column →
-  // env fallback (self-host / founder dogfood). Never log the token.
+  // Resolution order: project-level vault ref → org-default vault ref →
+  // raw value in either column → env fallback (self-host / founder dogfood).
+  // Never log the token.
   void ownerUserId;
+
+  // Step 1: project-level setting.
   const { data, error } = await db
     .from('project_settings')
     .select('github_installation_token_ref')
     .eq('project_id', projectId)
     .maybeSingle();
 
-  if (!error && data?.github_installation_token_ref) {
-    const ref = String(data.github_installation_token_ref);
+  const resolveRef = async (ref: string): Promise<string | null> => {
     if (ref.startsWith('vault://')) {
       const id = ref.slice('vault://'.length);
       const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id });
-      if (!vaultErr && typeof secret === 'string' && secret.length > 0) {
-        return secret;
-      }
-    } else if (ref.length > 0) {
-      // Raw token persisted (dev / founder dogfood). Pipeline already warns
-      // once via byok.ts; we just return.
-      return ref;
+      return !vaultErr && typeof secret === 'string' && secret.length > 0 ? secret : null;
+    }
+    return ref.length > 0 ? ref : null;
+  };
+
+  if (!error && data?.github_installation_token_ref) {
+    const resolved = await resolveRef(String(data.github_installation_token_ref));
+    if (resolved) return resolved;
+  }
+
+  // Step 2: org-level default.
+  const { data: projectRow } = await db
+    .from('projects')
+    .select('organization_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  const orgId = (projectRow as { organization_id: string | null } | null)?.organization_id ?? null;
+  if (orgId) {
+    const { data: orgRow } = await db
+      .from('organization_integration_settings')
+      .select('github_installation_token_ref')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    if (orgRow?.github_installation_token_ref) {
+      const resolved = await resolveRef(String(orgRow.github_installation_token_ref));
+      if (resolved) return resolved;
     }
   }
+
+  // Step 3: env fallback (self-host / founder dogfood).
   return Deno.env.get('GITHUB_TOKEN') ?? null;
 }
 

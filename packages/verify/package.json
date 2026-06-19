@@ -13,16 +13,15 @@
     "build": "echo 'verify: no build step — runs via tsx'"
   },
   "dependencies": {
-    "@playwright/test": "^1.59.1",
-    "@supabase/supabase-js": "^2.105.1",
-    "pixelmatch": "^6.0.0",
+    "@playwright/test": "^1.60.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.19.17",
-    "@types/pixelmatch": "^5.2.6",
+    "@types/node": "^22.19.21",
     "@types/pngjs": "^6.0.5",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
   "author": "Kenji Sakuramoto",

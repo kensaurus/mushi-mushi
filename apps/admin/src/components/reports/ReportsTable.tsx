@@ -216,8 +216,8 @@ export function ReportsTable({
                 className={REPORTS_TABLE_COL.confidence}
               />
               <SortHeader
-                label="Next step"
-                fullLabel="Next step (sort by age)"
+                label="Action"
+                fullLabel="Action (sort by age)"
                 field="created_at"
                 current={sort}
                 dir={dir}

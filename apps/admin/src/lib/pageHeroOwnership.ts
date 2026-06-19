@@ -25,10 +25,13 @@ export const PAGE_ROUTES_WITH_OWN_HERO = new Set([
   '/anti-gaming',
   '/feature-board',
   '/queue',
+  '/projects',
 ])
 
-/** Dense worklists where KPI strip + table are the hero — no layout DAV strip. */
+/** Loop hubs and dense worklists — no layout Snapshot (page owns loop chrome). */
 export const PAGE_ROUTES_SKIP_LAYOUT_HERO = new Set([
+  '/dashboard',
+  '/inbox',
   '/reports',
   '/fixes',
 ])

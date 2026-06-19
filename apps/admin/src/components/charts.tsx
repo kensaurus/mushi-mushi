@@ -6,7 +6,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Card, Badge, Tooltip, PANEL_HEADER_SEPARATOR } from './ui'
 import { InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { useBrushSelection } from '../lib/useBrushSelection'
@@ -92,6 +92,13 @@ export interface KpiTileProps {
   seriesYAxisCaption?: string
   /** Hero emphasis — 2× value size, spans two columns in MetricStrip grids. */
   variant?: 'default' | 'primary'
+  /** Forwarded to the card root (the actual grid item). Lets a parent grid
+   *  (e.g. `MetricStrip` with `stagger`) inject entrance-animation classes
+   *  onto the tile itself. */
+  className?: string
+  /** Inline style forwarded to the card root — e.g. the `animationDelay` that
+   *  `MetricStrip`'s stagger injects via `cloneElement`. */
+  style?: CSSProperties
 }
 
 const TONE_SPARK_ACCENT: Record<Tone, string> = {
@@ -116,8 +123,18 @@ export function KpiTile({
   seriesAriaLabel,
   seriesDays,
   variant = 'default',
+  className,
+  style,
 }: KpiTileProps) {
   const isPrimary = variant === 'primary'
+  // The card root is the real grid item, so column-span + any parent-injected
+  // entrance class/style must live here — not on the inner padding wrapper
+  // (where `lg:col-span-2` is inert because it isn't a grid child).
+  const cardClassName = [isPrimary ? 'ring-1 ring-brand/25' : '', isPrimary ? 'lg:col-span-2' : '', className ?? '']
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+  const cardClassNameOrUndefined = cardClassName || undefined
   const hasSeries = Array.isArray(series) && series.length >= 2
   const showSparkAxes = hasSeries && Array.isArray(seriesDays) && seriesDays.length === series!.length
   const showSpark = hasSeries && (series!.some((v) => v > 0) || showSparkAxes)
@@ -125,7 +142,7 @@ export function KpiTile({
   const sparkAria = seriesAriaLabel ?? `${label} trend`
   const summaryRows = showSpark ? sparklineSummaryRows(seriesDays, series!) : []
   const inner = (
-    <div className={`px-3 ${isPrimary ? 'py-3.5' : 'py-2.5'} ${isPrimary ? 'lg:col-span-2' : ''}`}>
+    <div className={`px-3 ${isPrimary ? 'py-3.5' : 'py-2.5'}`}>
       <div className={`pb-1.5 ${PANEL_HEADER_SEPARATOR}`}>
         <div className="flex items-center gap-1 truncate">
           <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
@@ -164,11 +181,7 @@ export function KpiTile({
         </InlineProof>
       )}
       {showSpark && (
-        <div
-          className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible"
-          role="img"
-          aria-label={sparkAria}
-        >
+        <div className="-mx-1 mt-1.5 w-full min-w-0 overflow-visible">
           <LineSparkline
             values={series!}
             timestamps={showSparkAxes ? seriesDays : undefined}
@@ -195,7 +208,7 @@ export function KpiTile({
   )
   if (to) {
     return (
-      <Card elevated interactive className={isPrimary ? 'ring-1 ring-brand/25' : undefined}>
+      <Card elevated interactive className={cardClassNameOrUndefined} style={style}>
         <Link
           to={to}
           className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md"
@@ -207,7 +220,7 @@ export function KpiTile({
     )
   }
   return (
-    <Card elevated className={isPrimary ? 'ring-1 ring-brand/25' : undefined}>
+    <Card elevated className={cardClassNameOrUndefined} style={style}>
       {inner}
     </Card>
   )
@@ -532,10 +545,15 @@ export function BarSparkline({
   const axisXIso =
     timestamps?.map((t) => t.slice(0, 10)) ?? (xLabels ?? [])
   const axisXDisplay = axisXIso.map((iso) => formatChartDayLabel(iso))
+  /** Cap bar width when the series is sparse so 1–2 CI pushes don't render as full-width slabs. */
+  const sparseBars = values.length <= 8
+  const barMaxWidthPx = showAxes ? 40 : 16
+  const barGridStyle = { gridTemplateColumns: `repeat(${values.length}, minmax(0, 1fr))` }
 
   const bars = (
     <div
-      className={`relative flex h-full w-full items-end gap-px ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : showAxes ? 'cursor-crosshair' : ''}`}
+      className={`relative grid h-full w-full items-end gap-px ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : showAxes ? 'cursor-crosshair' : ''}`}
+      style={barGridStyle}
       role="img"
       aria-label={ariaLabel}
       onMouseMove={(e) => {
@@ -561,11 +579,15 @@ export function BarSparkline({
         const valueLabel = isIdle
           ? '0'
           : formatChartValue(v, valueFormat)
+        const barPx =
+          v > 0 && chartMax > 0
+            ? Math.max(4, Math.round((v / chartMax) * plotHeight))
+            : 0
         return (
           <div
             key={i}
             title={barTitles?.[i]}
-            className={`group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end ${isHovered ? 'z-10' : ''}`}
+            className={`group relative flex h-full min-w-0 flex-col items-start justify-end ${isHovered ? 'z-10' : ''}`}
           >
             {label && !isHovered && (
               <span
@@ -585,20 +607,23 @@ export function BarSparkline({
             />
             {isIdle && showIdleBaseline ? (
               <div
-                className={`h-1 w-full max-w-[6px] rounded-full bg-fg-faint/30 motion-safe:transition-colors group-hover:bg-fg-faint/50 ${
+                className={`h-1 rounded-full bg-fg-faint/30 motion-safe:transition-colors group-hover:bg-fg-faint/50 ${
+                  sparseBars ? 'w-[6px]' : 'w-full max-w-[6px]'
+                } ${
                   isToday ? 'ring-1 ring-edge-subtle ring-offset-1 ring-offset-transparent' : ''
                 } ${isHovered ? 'bg-fg-faint/60' : ''}`}
               />
             ) : (
               <div
-                className={`w-full min-w-[3px] max-w-none ${accent} rounded-t-sm motion-safe:transition-all ${
+                className={`${sparseBars ? '' : 'w-full'} min-w-[3px] ${accent} rounded-t-sm motion-safe:transition-all ${
                   isPeak || isHovered
                     ? 'opacity-100 shadow-sm shadow-brand/40'
                     : 'opacity-80 group-hover:opacity-100'
                 } ${isToday && v > 0 ? 'ring-1 ring-brand/40 ring-offset-1 ring-offset-transparent' : ''}`}
                 style={{
-                  height: `${(v / chartMax) * 100}%`,
+                  height: barPx > 0 ? `${barPx}px` : undefined,
                   minHeight: v > 0 ? '4px' : 0,
+                  ...(sparseBars ? { width: `${barMaxWidthPx}px`, maxWidth: '100%' } : undefined),
                 }}
               />
             )}
@@ -634,6 +659,7 @@ export function BarSparkline({
         height={plotHeight}
         yTickLabels={yTicks}
         xLabels={axisXIso.length > 0 ? axisXIso : undefined}
+        xBucketCount={axisXIso.length > 0 ? values.length : undefined}
         yAxisCaption={yAxisCaption}
         xAxisCaption={xAxisCaption}
       >

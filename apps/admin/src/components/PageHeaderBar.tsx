@@ -9,11 +9,9 @@
  *
  *   The optional description renders in a smaller line below.
  *
- *   When helpTitle/helpWhatIsIt are supplied a PageHelpBanner is embedded
- *   directly below the row. PageHelpBanner's own state machine handles
- *   collapsed/expanded; Advanced users see it collapsed by default (via the
- *   useAdminMode check in PageHelpBanner) while Beginners see it open until
- *   they dismiss it.
+ *   When helpTitle/helpWhatIsIt are supplied, props are registered with
+ *   Layout's `<RoutePageHelp />` so the banner renders full-width above the
+ *   page hero (same column width). Collapsed by default unless helpDefaultOpen.
  *
  * MIGRATION from PageHeader + PageHelp:
  *   Before:
@@ -34,11 +32,12 @@
  *   Remove the <PageHelp> call once migrated.
  */
 
-import type { ReactNode } from 'react'
+import { useLayoutEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
 import { isDevFacingHint } from '../lib/devHintCopy'
-import { PageHelpBanner, Tooltip } from './ui'
+import { usePageHelpRegister } from '../lib/pageHelpContext'
+import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
@@ -90,8 +89,7 @@ export interface PageHeaderBarProps {
   helpUseCases?: string[]
   helpHowToUse?: string
   helpFlowPath?: string
-  /** Force-override help panel open state. Leave undefined for the standard
-   *  logic: Advanced users start collapsed, Beginners open until dismissed. */
+  /** Force-override help panel open state. Leave undefined for collapsed by default. */
   helpDefaultOpen?: boolean
   /** When true, suppresses the subtitle line — use when the page renders its
    *  own PageHero DAV strip below to avoid double-chrome stacking. */
@@ -118,9 +116,35 @@ export function PageHeaderBar({
   withPageHero = false,
 }: PageHeaderBarProps) {
   const { pathname } = useLocation()
+  const registerPageHelp = usePageHelpRegister()
 
   const chipKey = contextChip === undefined ? chipForPath(pathname) : null
   const hasHelp = Boolean(helpTitle && helpWhatIsIt)
+
+  useLayoutEffect(() => {
+    if (!hasHelp || !helpTitle || !helpWhatIsIt) {
+      registerPageHelp(null)
+      return
+    }
+    registerPageHelp({
+      title: helpTitle,
+      whatIsIt: helpWhatIsIt,
+      useCases: helpUseCases,
+      howToUse: helpHowToUse,
+      flowPath: helpFlowPath,
+      defaultOpen: helpDefaultOpen,
+    })
+    return () => registerPageHelp(null)
+  }, [
+    hasHelp,
+    helpTitle,
+    helpWhatIsIt,
+    helpUseCases,
+    helpHowToUse,
+    helpFlowPath,
+    helpDefaultOpen,
+    registerPageHelp,
+  ])
 
   return (
     <div className="mb-4 w-full min-w-0">
@@ -162,20 +186,6 @@ export function PageHeaderBar({
         <p className="mt-0.5 max-w-none text-xs leading-relaxed text-fg-muted text-pretty">
           {description}
         </p>
-      )}
-
-      {/* ── Inline help panel ────────────────────────────────────────── */}
-      {hasHelp && helpTitle && helpWhatIsIt && (
-        <div className="mt-2">
-          <PageHelpBanner
-            title={helpTitle}
-            whatIsIt={helpWhatIsIt}
-            useCases={helpUseCases}
-            howToUse={helpHowToUse}
-            flowPath={helpFlowPath}
-            defaultOpen={helpDefaultOpen}
-          />
-        </div>
       )}
     </div>
   )

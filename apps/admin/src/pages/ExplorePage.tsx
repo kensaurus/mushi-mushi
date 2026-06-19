@@ -11,6 +11,7 @@ import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePageCopy } from '../lib/copy'
 import { useExploreUx, resolveBeginnerExploreTab, resolveQuickExploreTab } from '../lib/exploreModeUx'
 import {
@@ -60,6 +61,7 @@ import { ExploreUnderstandEmpty } from '../components/explore/ExploreUnderstandE
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
+import { ExploreAtlasGuide } from '../components/explore/ExploreAtlasGuide'
 import {
   ActionPill,
   ActionPillRow,
@@ -199,6 +201,7 @@ export function ExplorePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExploreStats>('/v1/admin/explore/stats')
+  usePublishPageHeroStats('/explore', statsData)
   const stats = { ...EMPTY_EXPLORE_STATS, ...statsData }
 
   const { resolved: theme } = useTheme()
@@ -598,6 +601,7 @@ export function ExplorePage() {
       <div className="space-y-4">
         <PageHeaderBar title={copy?.title ?? 'Explore'} />
         <ExploreStatusBanner stats={stats} onTab={setActiveTab} />
+        <ExploreAtlasGuide topPriority={stats.topPriority} />
         <EmptySectionMessage
           text="No project selected"
           hint="Select a project from the top bar to explore its codebase."
@@ -927,6 +931,8 @@ export function ExplorePage() {
         refreshing={statsValidating || loading}
         plainBanner={ux.plainBanner}
       />
+
+      <ExploreAtlasGuide topPriority={stats.topPriority} />
 
       {!ux.hideTabs && (
         <div className="space-y-2 min-w-0">

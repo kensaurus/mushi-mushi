@@ -34,12 +34,14 @@ import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
+import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
 import { EMPTY_FIXES_STATS, type FixesStats, type FixesTabId } from '../components/fixes/FixesStatsTypes'
 import { usePageCopy } from '../lib/copy'
 import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -122,6 +124,7 @@ export function FixesPage() {
   } = usePageData<FixesStats>(
     activeProjectId ? '/v1/admin/fixes/stats' : null,
   )
+  usePublishPageHeroStats('/fixes', statsData)
   const fixesStats = statsData ?? EMPTY_FIXES_STATS
 
   const setActiveTab = useCallback(
@@ -698,6 +701,13 @@ export function FixesPage() {
         plainBanner={ux.plainBanner}
       />
 
+      {activeTab === 'overview' && (
+        <FixesPipelineGuide
+          topPriority={fixesStats.topPriority}
+          stats={fixesStats}
+        />
+      )}
+
       {!ux.hideTabs && (
       <SegmentedControl<FixesTabId>
         ariaLabel="Fix sections"
@@ -751,6 +761,7 @@ export function FixesPage() {
           {!ux.hideFailureCategories && (
             <FixesFailedSummary
               fixes={fixes}
+              projectId={activeProjectId}
               onReviewCategory={() => setStatusBucket('failed')}
             />
           )}
@@ -829,6 +840,7 @@ export function FixesPage() {
                 inventoryActions={inventoryActions}
                 onToggle={(fixId) => setExpanded(expanded === fixId ? null : fixId)}
                 onRetry={retryOne}
+                onRefreshed={loadFixes}
                 compactTable={ux.compactTable}
                 hideTableChrome={ux.hideTableChrome}
               />

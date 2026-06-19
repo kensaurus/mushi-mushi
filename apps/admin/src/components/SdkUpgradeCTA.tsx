@@ -34,16 +34,28 @@ function UpgradePrButton({
   projectId: string
   compact: boolean
 }) {
-  const { state, createUpgradePr } = useSdkUpgrade(projectId)
+  const { state, createUpgradePr, refreshUpgradePr } = useSdkUpgrade(projectId)
 
   if (state.status === 'completed' && state.prUrl) {
     return (
-      <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
-        <Btn size="sm" variant="ghost" className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}>
-          <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
-          <span className={compact ? 'text-xs' : undefined}>View PR</span>
+      <span className="inline-flex items-center gap-1">
+        <a href={state.prUrl} target="_blank" rel="noopener noreferrer">
+          <Btn size="sm" variant="ghost" className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}>
+            <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
+            <span className={compact ? 'text-xs' : undefined}>View PR</span>
+          </Btn>
+        </a>
+        <Btn
+          size="sm"
+          variant="ghost"
+          className={compact ? 'h-8 gap-1.5' : 'gap-1.5'}
+          onClick={() => void refreshUpgradePr()}
+          aria-label="Refresh existing upgrade PR"
+        >
+          <IconBolt className="h-3.5 w-3.5" aria-hidden />
+          <span className={compact ? 'text-xs' : undefined}>Refresh</span>
         </Btn>
-      </a>
+      </span>
     )
   }
 

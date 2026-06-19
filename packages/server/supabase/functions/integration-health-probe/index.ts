@@ -112,14 +112,53 @@ async function handler(req: Request): Promise<Response> {
   const cron = await startCronRun(db, 'integration-health-probe', 'cron')
 
   try {
-    // ── 1. Load all project_settings rows ──────────────────────────────
-    const { data: settingsRows, error: settingsErr } = await db
-      .from('project_settings')
-      .select(
-        'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref',
-      )
+    // ── 1. Load all project_settings rows + org mappings + org settings ──
+    const [
+      { data: settingsRows, error: settingsErr },
+      { data: projectOrgRows },
+      { data: orgSettingsRows },
+    ] = await Promise.all([
+      db
+        .from('project_settings')
+        .select(
+          'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref',
+        ),
+      db.from('projects').select('id, organization_id'),
+      db.from('organization_integration_settings').select('organization_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref'),
+    ])
     if (settingsErr) throw new Error(`project_settings load failed: ${settingsErr.message}`)
     const allSettings = (settingsRows ?? []) as PlatformSettingsRow[]
+
+    // Build lookup maps for org-level defaults
+    const projectOrgMap = new Map<string, string>()
+    for (const p of (projectOrgRows ?? []) as Array<{ id: string; organization_id: string | null }>) {
+      if (p.organization_id) projectOrgMap.set(p.id, p.organization_id)
+    }
+    const orgSettingsMap = new Map<string, PlatformSettingsRow>()
+    for (const os of (orgSettingsRows ?? []) as Array<PlatformSettingsRow & { organization_id: string }>) {
+      orgSettingsMap.set((os as Record<string, string>).organization_id, os as PlatformSettingsRow)
+    }
+
+    /** Merge project settings with org defaults (project wins). */
+    function mergeWithOrg(s: PlatformSettingsRow): PlatformSettingsRow {
+      const orgId = projectOrgMap.get(s.project_id)
+      if (!orgId) return s
+      const orgSettings = orgSettingsMap.get(orgId)
+      if (!orgSettings) return s
+      const merged: PlatformSettingsRow = { ...s }
+      const fields: Array<keyof PlatformSettingsRow> = [
+        'sentry_org_slug', 'sentry_auth_token_ref',
+        'langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref',
+        'github_repo_url', 'github_installation_token_ref',
+        'claude_api_key_ref', 'cursor_api_key_ref',
+      ]
+      for (const f of fields) {
+        if (merged[f] == null || merged[f] === '') {
+          merged[f] = orgSettings[f] ?? null
+        }
+      }
+      return merged
+    }
 
     // ── 2. Load all active routing integrations ─────────────────────────
     const { data: routingRows, error: routingErr } = await db
@@ -140,7 +179,8 @@ async function handler(req: Request): Promise<Response> {
     // ── 3. Build probe task list ────────────────────────────────────────
     const tasks: ProbeTask[] = []
 
-    for (const s of allSettings) {
+    for (const rawS of allSettings) {
+      const s = mergeWithOrg(rawS)
       if (hasSentry(s)) tasks.push({ projectId: s.project_id, kind: 'sentry', settings: s, routingConfig: {} })
       if (hasLangfuse(s)) tasks.push({ projectId: s.project_id, kind: 'langfuse', settings: s, routingConfig: {} })
       if (hasGithub(s)) tasks.push({ projectId: s.project_id, kind: 'github', settings: s, routingConfig: {} })
