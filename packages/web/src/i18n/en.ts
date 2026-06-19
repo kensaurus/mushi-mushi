@@ -45,6 +45,8 @@ export const en: MushiLocale = {
     screenshotAttached: 'Screenshot attached ✓',
     screenshotCapturing: 'Taking screenshot…',
     screenshotFailed: "Couldn't capture — describe it instead",
+    screenshotPreviewAlt: 'Preview of the screenshot that will be sent',
+    screenshotSensitiveHint: 'Check the preview — remove it if any private info (balances, personal details) is visible.',
     elementButton: 'Select Element',
     elementSelected: 'Element selected ✓',
     elementCapturing: 'Click anything on the page…',

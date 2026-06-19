@@ -45,6 +45,8 @@ export const ja: MushiLocale = {
     screenshotAttached: 'スクリーンショット添付済み ✓',
     screenshotCapturing: 'スクリーンショット撮影中…',
     screenshotFailed: '取得できませんでした — 文字で教えてください',
+    screenshotPreviewAlt: '送信されるスクリーンショットのプレビュー',
+    screenshotSensitiveHint: 'プレビューを確認し、残高や個人情報などが写っていれば削除してください。',
     elementButton: '要素を選択',
     elementSelected: '要素選択済み ✓',
     elementCapturing: 'ページ上の要素をクリック…',

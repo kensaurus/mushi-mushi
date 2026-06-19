@@ -45,6 +45,8 @@ export const es: MushiLocale = {
     screenshotAttached: 'Captura adjunta ✓',
     screenshotCapturing: 'Tomando captura…',
     screenshotFailed: 'No se pudo capturar — descríbelo en su lugar',
+    screenshotPreviewAlt: 'Vista previa de la captura que se enviará',
+    screenshotSensitiveHint: 'Revisa la vista previa — quítala si se ve información privada (saldos, datos personales).',
     elementButton: 'Seleccionar elemento',
     elementSelected: 'Elemento seleccionado ✓',
     elementCapturing: 'Haz clic en cualquier elemento…',

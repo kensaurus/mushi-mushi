@@ -547,3 +547,130 @@ describe('MushiWidget banner body-nudge cleanup', () => {
     w.destroy();
   });
 });
+
+// ── progressive disclosure — reset on back to category ────────────────────────
+
+describe('MushiWidget progressive disclosure — back navigation', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+  const readStep = (w: MushiWidget): string => (w as unknown as { step: string }).step;
+  const readShowAll = (w: MushiWidget): boolean =>
+    (w as unknown as { showAllCategories: boolean }).showAllCategories;
+  const setShowAll = (w: MushiWidget, v: boolean): void => {
+    (w as unknown as { showAllCategories: boolean }).showAllCategories = v;
+  };
+
+  it('collapses an expanded category list when navigating back to the category step', () => {
+    // Regression (Sentry 14751132/1): expanding "More issue types", drilling
+    // into a sub-step, then pressing Back left the category list expanded.
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ category: 'bug' }); // → intent step, renders a Back control
+    setShowAll(w, true); // simulate the list having been expanded beforehand
+
+    const back = getShadow(w).querySelector('[data-action="back"]') as HTMLElement | null;
+    expect(back).not.toBeNull();
+    back!.click();
+
+    expect(readStep(w)).toBe('category');
+    expect(readShowAll(w)).toBe(false);
+    w.destroy();
+  });
+});
+
+// ── screenshot preview + sensitive-info hint ──────────────────────────────────
+
+describe('MushiWidget screenshot preview + sensitive-info hint', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot =>
+    (w as unknown as { shadow: ShadowRoot }).shadow;
+  // A 1x1 transparent PNG data URL — stands in for a captured screenshot.
+  const DATA_URL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+
+  it('renders the preview image and the default privacy hint when a screenshot is attached', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true }); // lands directly on the details step
+    w.setScreenshotAttached(true);
+    w.setScreenshotPreview(DATA_URL);
+
+    const img = getShadow(w).querySelector('.mushi-screenshot-preview img') as HTMLImageElement | null;
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe(DATA_URL);
+
+    const hint = getShadow(w).querySelector('.mushi-screenshot-hint');
+    expect(hint).not.toBeNull();
+    // Default English copy nudges the user to remove anything private.
+    expect(hint!.textContent).toContain('remove it');
+    w.destroy();
+  });
+
+  it('hides the hint caption when screenshotSensitiveHint is false (preview still shows)', () => {
+    const w = new MushiWidget({ screenshotSensitiveHint: false }, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+    w.setScreenshotAttached(true);
+    w.setScreenshotPreview(DATA_URL);
+
+    expect(getShadow(w).querySelector('.mushi-screenshot-preview img')).not.toBeNull();
+    expect(getShadow(w).querySelector('.mushi-screenshot-hint')).toBeNull();
+    w.destroy();
+  });
+
+  it('shows a custom hint string verbatim', () => {
+    const custom = 'Hide your account number before sending.';
+    const w = new MushiWidget({ screenshotSensitiveHint: custom }, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+    w.setScreenshotAttached(true);
+    w.setScreenshotPreview(DATA_URL);
+
+    expect(getShadow(w).querySelector('.mushi-screenshot-hint')?.textContent).toContain(custom);
+    w.destroy();
+  });
+
+  it('drops the preview when the screenshot is detached', () => {
+    const w = new MushiWidget({}, noopCallbacks);
+    w.mount();
+    w.open({ featureRequest: true });
+    w.setScreenshotAttached(true);
+    w.setScreenshotPreview(DATA_URL);
+    expect(getShadow(w).querySelector('.mushi-screenshot-preview')).not.toBeNull();
+
+    w.setScreenshotAttached(false); // also clears the preview internally
+    expect(getShadow(w).querySelector('.mushi-screenshot-preview')).toBeNull();
+    w.destroy();
+  });
+});

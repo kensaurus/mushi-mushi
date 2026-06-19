@@ -107,6 +107,7 @@ interface RemoteSdkConfig {
     bannerFeatureCta?: boolean
     bannerMessage?: string | null
     bannerLabel?: string | null
+    screenshotSensitiveHint?: boolean | string | null
   }
   capture?: SdkPreviewConfig['capture']
   native?: SdkPreviewConfig['native']
@@ -125,6 +126,9 @@ function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
     bannerLabel: remote.widget?.bannerLabel ?? DEFAULT_SDK_CONFIG.bannerLabel,
     bannerBugCta: remote.widget?.bannerBugCta ?? DEFAULT_SDK_CONFIG.bannerBugCta,
     bannerFeatureCta: remote.widget?.bannerFeatureCta ?? DEFAULT_SDK_CONFIG.bannerFeatureCta,
+    // `false` must survive (?? keeps it); `null`/undefined → default (show caption).
+    screenshotSensitiveHint:
+      remote.widget?.screenshotSensitiveHint ?? DEFAULT_SDK_CONFIG.screenshotSensitiveHint,
     capture: {
       console: remote.capture?.console ?? DEFAULT_SDK_CONFIG.capture.console,
       network: remote.capture?.network ?? DEFAULT_SDK_CONFIG.capture.network,
@@ -155,6 +159,10 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
       bannerLabel: config.bannerLabel.trim() || null,
       bannerBugCta: config.bannerBugCta.trim() || null,
       bannerFeatureCta: config.bannerFeatureCta,
+      screenshotSensitiveHint:
+        typeof config.screenshotSensitiveHint === 'string'
+          ? config.screenshotSensitiveHint.trim() || true
+          : config.screenshotSensitiveHint,
     },
     capture: config.capture,
     native: config.native,
@@ -308,6 +316,7 @@ export function SdkInstallCard({
     config.bannerLabel === DEFAULT_SDK_CONFIG.bannerLabel &&
     config.bannerBugCta === DEFAULT_SDK_CONFIG.bannerBugCta &&
     config.bannerFeatureCta === DEFAULT_SDK_CONFIG.bannerFeatureCta &&
+    config.screenshotSensitiveHint === DEFAULT_SDK_CONFIG.screenshotSensitiveHint &&
     config.capture.console === DEFAULT_SDK_CONFIG.capture.console &&
     config.capture.network === DEFAULT_SDK_CONFIG.capture.network &&
     config.capture.performance === DEFAULT_SDK_CONFIG.capture.performance &&
@@ -1102,6 +1111,41 @@ function ConfiguratorPanel({
             ))}
           </select>
         </label>
+        {config.capture.screenshot !== 'off' && (
+          <div className="mt-2 rounded-sm border border-edge-subtle bg-surface-raised/40 p-2">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={config.screenshotSensitiveHint !== false}
+                onChange={(e) =>
+                  update(
+                    'screenshotSensitiveHint',
+                    e.target.checked
+                      ? typeof config.screenshotSensitiveHint === 'string'
+                        ? config.screenshotSensitiveHint
+                        : true
+                      : false,
+                  )
+                }
+                className="accent-brand"
+              />
+              <span className="text-fg-muted inline-flex items-center gap-1">
+                Privacy caption on screenshot preview
+                <ConfigHelp helpId="sdk-install.screenshot_sensitive_hint" />
+              </span>
+            </label>
+            {config.screenshotSensitiveHint !== false && (
+              <input
+                type="text"
+                maxLength={200}
+                value={typeof config.screenshotSensitiveHint === 'string' ? config.screenshotSensitiveHint : ''}
+                placeholder="Default: warn not to share passwords or personal info"
+                onChange={(e) => update('screenshotSensitiveHint', e.target.value ? e.target.value : true)}
+                className="mt-1.5 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+            )}
+          </div>
+        )}
       </fieldset>
 
       <fieldset>

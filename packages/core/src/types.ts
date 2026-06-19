@@ -107,6 +107,20 @@ export interface MushiWidgetConfig {
   /** How the widget should surface SDK freshness warnings. Defaults to auto. */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
   /**
+   * Privacy nudge shown beside an attached screenshot preview, reminding the
+   * reporter to remove anything sensitive (balances, PII, tokens) before they
+   * submit. The widget always renders the captured image as a visible preview
+   * so the user can see exactly what will be sent and remove it if needed; this
+   * flag only controls the accompanying caption.
+   * - `true`  (default) — show the localized default caption.
+   * - string  — show this custom caption verbatim.
+   * - `false` — hide the caption (the preview + remove control still show).
+   *
+   * Settable per-host via the SDK config and remotely via the Mushi console
+   * runtime config (it travels in the `widget` block of `GET /v1/sdk/config`).
+   */
+  screenshotSensitiveHint?: boolean | string;
+  /**
    * Beta mode: injects discreet "early access" messaging into the widget panel.
    * Shows a beta strip on the category step and a contact footer on the success
    * step. Designed to reduce user frustration with in-progress apps while

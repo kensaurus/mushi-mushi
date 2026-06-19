@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_99 configuration knobs across 19 sections · last regenerated 2026-06-19._
+_100 configuration knobs across 19 sections · last regenerated 2026-06-19._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (4)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (12)
+- [SDK install card](#sdk-install-card) (13)
 - [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
@@ -1570,6 +1570,22 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Default** — `on-report`
 
 **When to change** — Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.
+
+### Screenshot privacy caption
+
+<a id="sdk-install-screenshot-sensitive-hint"></a>
+
+`sdk-install.screenshot_sensitive_hint`
+
+**Summary** — A short "don't share sensitive information" caption shown under the screenshot preview before a reporter submits.
+
+**How it works** — When on, the widget shows the preview the reporter is about to send plus a privacy caption so they can redact or drop it first. Leave the custom box empty to use the SDK's localized default copy, type your own to override it, or turn the caption off entirely. Surfaces as `widget.screenshotSensitiveHint` in GET /v1/sdk/config and is honored by both the web and React Native widgets.
+
+**Default** — `on (default caption)`
+
+**Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `public route (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
+
+**When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
 
 ### Framework tab
 

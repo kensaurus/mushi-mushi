@@ -168,6 +168,10 @@ function groupByRelease(allEntries) {
         packages: new Map(),
         headline: null,
         highlights: [],
+        // De-dupe ledger: a changeset that bumps several packages writes the
+        // same bullet into each package's CHANGELOG, so the same highlight is
+        // seen once per bumped package.
+        seen: new Set(),
       })
     }
     const release = releases.get(key)
@@ -185,6 +189,9 @@ function groupByRelease(allEntries) {
         }
         const highlights = extractHighlights(body)
         for (const h of highlights) {
+          const key = `${h.title}\u0000${h.description}`
+          if (release.seen.has(key)) continue
+          release.seen.add(key)
           if (release.highlights.length < 12) release.highlights.push(h)
         }
       }
@@ -288,7 +295,7 @@ async function loadPendingChangeset() {
     if (!rest) continue
 
     const tag = f.match(/v([0-9]+_[0-9]+_[0-9]+)/)?.[1]?.replace(/_/g, '.') ?? 'pending'
-    if (!perTag.has(tag)) perTag.set(tag, { headline: null, bullets: [] })
+    if (!perTag.has(tag)) perTag.set(tag, { headline: null, bullets: [], seen: new Set() })
     const slot = perTag.get(tag)
 
     if (!slot.headline) {
@@ -298,6 +305,9 @@ async function loadPendingChangeset() {
       }
     }
     for (const h of extractHighlights(rest)) {
+      const key = `${h.title}\u0000${h.description}`
+      if (slot.seen.has(key)) continue
+      slot.seen.add(key)
       if (slot.bullets.length < 18) slot.bullets.push(h)
     }
   }
