@@ -1,5 +1,29 @@
 # @mushi-mushi/cli
 
+## 0.19.0
+
+### Minor Changes
+
+- 08108e6: Setup UX overhaul: zero-paste `mushi login` browser device-auth, credential error visibility, and docs fixes.
+
+  - **CLI**: `mushi login` now implements RFC 8628 browser device-auth (zero copy-paste). Opens the console in the browser, user clicks Approve, CLI receives a session token automatically, then lists/creates a project and saves the API key. `--api-key` flag remains as the CI/non-interactive fallback.
+  - **Core SDK**: 401/403 responses now emit a one-time `console.error` with a clear credential-failure message and the console URL, instead of silently entering the offline retry queue.
+  - **React Native**: Same 401/403 credential-failure detection in `MushiProvider.submitReport` — skips enqueue and surfaces the error immediately.
+
+### Patch Changes
+
+- 08108e6: Fix broken console URLs in CLI — setup wizard now opens the correct admin path
+
+  The `npx mushi-mushi` setup wizard and `mushi login` were sending users to
+  `https://kensaur.us/mushi-mushi/projects` (missing the `/admin` segment), which
+  times out and does not resolve. All hardcoded console URLs in `cli-shared.ts`,
+  `commands/diagnostics.ts`, `commands/project.ts`, and `index.ts` now route
+  through the `consoleUrl()` / `resolveConsoleUrlSync()` helpers that include the
+  correct `/admin` base path. The published dist previously predated this fix.
+
+  Also corrects the `index.ts` help text: `MUSHI_API_KEY` is a `report:write`
+  ingest key (from Onboarding → Verify), not a Settings → API Keys BYOK key.
+
 ## 0.18.2
 
 ### Patch Changes
