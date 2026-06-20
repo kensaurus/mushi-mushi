@@ -6,7 +6,7 @@ export function registerSetupCommands(program: Command): void {
 // ─── setup ────────────────────────────────────────────────────────────────────
 program
   .command('setup')
-  .description('Wire Mushi into your IDE with one command')
+  .description('Wire Cursor MCP into your IDE (reads ~/.config/mushi/config.json — run `mushi login` first)')
   .option('--ide <ide>', 'Target IDE: cursor | claude | continue | zed', 'cursor')
   .option('--project-slug <slug>', 'Override the project slug in the server name (default: fetched from API or ID prefix)')
   .option('--all-projects', 'Write a separate mushi-<name> server entry for every accessible project')

@@ -40,6 +40,7 @@ import {
   escapeHtml,
   formatRelativeTime,
   pad2,
+  renderAppIconHtml,
   reporterStatusLabel,
   reporterStatusShort,
   reporterStatusTone,
@@ -102,6 +103,8 @@ export interface WidgetRenderCtx {
   assistantError: string | null;
   // ─── Progressive disclosure ──────────────────────────────────────
   showAllCategories: boolean;
+  /** Host page favicon — shown in header during report flow when available. */
+  pageFaviconHref: string | null;
 }
 
 export function renderStep(ctx: WidgetRenderCtx): string {
@@ -223,7 +226,9 @@ export function renderHeader(ctx: WidgetRenderCtx, opts: {
 
     return `
       <div class="mushi-header">
-        <div class="mushi-header-mark" aria-hidden="true">\u866B</div>
+        <div class="mushi-header-mark" aria-hidden="true">${ctx.pageFaviconHref
+          ? `<img class="mushi-header-host-icon" src="${escapeHtml(ctx.pageFaviconHref)}" alt="" referrerpolicy="no-referrer" width="20" height="20" />`
+          : '\u866B'}</div>
         <div class="mushi-header-titles">
           ${eyebrowHtml}
           <h3>${title}</h3>
@@ -605,16 +610,33 @@ export function renderAccountStep(ctx: WidgetRenderCtx): string {
   }
 export function renderCrossAppReportsStep(ctx: WidgetRenderCtx): string {
     const reports = ctx.crossAppReports ?? [];
-    const grouped = new Map<string, { name: string; reports: MushiCrossAppReport[] }>();
+    const grouped = new Map<string, { name: string; slug: string | null; domain: string | null; reports: MushiCrossAppReport[] }>();
     for (const r of reports) {
       const key = r.project_id ?? 'unknown';
-      if (!grouped.has(key)) grouped.set(key, { name: r.app_name ?? 'Unknown App', reports: [] });
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          name: r.app_name ?? 'Unknown App',
+          slug: r.app_slug ?? null,
+          domain: r.app_domain ?? null,
+          reports: [],
+        });
+      }
       grouped.get(key)!.reports.push(r);
     }
 
-    const rows = [...grouped.entries()].map(([, group]) => `
+    const rows = [...grouped.entries()].map(([projectId, group]) => {
+      const icon = renderAppIconHtml({
+        projectId,
+        appName: group.name,
+        appSlug: group.slug,
+        appDomain: group.domain,
+      });
+      return `
       <div class="mushi-xapp-group">
-        <h4 class="mushi-xapp-app-name">${escapeHtml(group.name)}</h4>
+        <div class="mushi-xapp-app-head">
+          ${icon}
+          <h4 class="mushi-xapp-app-name">${escapeHtml(group.name)}</h4>
+        </div>
         ${group.reports.map(r => {
           const tone = reporterStatusTone(r.status);
           return `
@@ -626,7 +648,8 @@ export function renderCrossAppReportsStep(ctx: WidgetRenderCtx): string {
           `;
         }).join('')}
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     return `
       ${renderHeader(ctx, { title: 'My reports', showBack: true, eyebrow: 'Mushi · All apps' })}

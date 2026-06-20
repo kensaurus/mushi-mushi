@@ -30,6 +30,12 @@ import type {
   MushiReporterComment,
   MushiReporterReport,
 } from '@mushi-mushi/core';
+import {
+  isLikelyGenericFavicon,
+  projectFaviconUrlCandidates,
+  projectInitials,
+  resolveProjectDomain,
+} from '@mushi-mushi/core';
 
 /** One rendered turn in the in-widget assistant thread. */
 export interface AssistantTurn {
@@ -278,4 +284,65 @@ export interface WidgetCallbacks {
   assistantSuggestions?: string[];
   /** Send one assistant turn; resolves with the structured reply. */
   onAssistantAsk?(message: string, threadId: string | null): Promise<MushiAssistantReply | null>;
+}
+
+/** HTML for a project/app icon chip with CDN fallback wired post-render. */
+export function renderAppIconHtml(opts: {
+  projectId: string;
+  appName: string;
+  appSlug?: string | null;
+  appDomain?: string | null;
+}): string {
+  const domain =
+    opts.appDomain ??
+    resolveProjectDomain({
+      project_id: opts.projectId,
+      project_name: opts.appName,
+      project_slug: opts.appSlug ?? '',
+    });
+  const initials = escapeHtml(projectInitials(opts.appName));
+  const candidates = projectFaviconUrlCandidates({
+    project_id: opts.projectId,
+    project_name: opts.appName,
+    project_slug: opts.appSlug ?? '',
+    sdk_origin: opts.appDomain ? `https://${opts.appDomain}` : null,
+  });
+  if (!candidates.length) {
+    return `<span class="mushi-app-icon mushi-app-icon-initials-only" aria-hidden="true">${initials}</span>`;
+  }
+  const encoded = escapeHtml(JSON.stringify(candidates));
+  return `<span class="mushi-app-icon" data-mushi-favicon data-candidates="${encoded}" data-initials="${initials}" aria-hidden="true" title="${escapeHtml(domain ?? opts.appName)}">
+    <img class="mushi-app-icon-img" src="${escapeHtml(candidates[0]!)}" alt="" referrerpolicy="no-referrer" width="16" height="16" />
+    <span class="mushi-app-icon-initials" hidden>${initials}</span>
+  </span>`;
+}
+
+/** Wire favicon fallback chain for icons rendered by {@link renderAppIconHtml}. */
+export function bindFaviconFallbacks(root: ParentNode): void {
+  root.querySelectorAll<HTMLElement>('[data-mushi-favicon]').forEach((wrap) => {
+    const img = wrap.querySelector<HTMLImageElement>('.mushi-app-icon-img');
+    const fallback = wrap.querySelector<HTMLElement>('.mushi-app-icon-initials');
+    if (!img || !fallback) return;
+    let candidates: string[] = [];
+    try {
+      candidates = JSON.parse(wrap.dataset.candidates ?? '[]') as string[];
+    } catch {
+      candidates = [];
+    }
+    let index = 0;
+    const tryNext = () => {
+      index += 1;
+      if (index < candidates.length) {
+        img.src = candidates[index]!;
+      } else {
+        img.remove();
+        fallback.hidden = false;
+        wrap.classList.add('mushi-app-icon-initials-only');
+      }
+    };
+    img.onerror = tryNext;
+    img.onload = () => {
+      if (isLikelyGenericFavicon(img)) tryNext();
+    };
+  });
 }

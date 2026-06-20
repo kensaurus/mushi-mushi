@@ -27,6 +27,18 @@ export function useSettingsUx(): SettingsUxFlags {
   }
 }
 
+/** Beginner: hide full snapshot when status banner already carries the headline. */
+export function shouldHideSettingsSnapshot(
+  ux: Pick<SettingsUxFlags, 'hideSettingsSnapshot' | 'isBeginner'>,
+  stats: Pick<SettingsStats, 'topPriority'>,
+): boolean {
+  if (ux.hideSettingsSnapshot) return true
+  if (ux.isBeginner && stats.topPriority !== 'healthy' && stats.topPriority !== 'routing_optional') {
+    return true
+  }
+  return false
+}
+
 /** Quick mode: land on the tab that matches settings posture. */
 export function resolveQuickSettingsTab(stats: SettingsStats): SettingsTabId {
   if (

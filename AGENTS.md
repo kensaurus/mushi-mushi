@@ -640,6 +640,42 @@ write; every turn is logged. Full doc: [`docs/SDK_ASSISTANT.md`](docs/SDK_ASSIST
 
 ---
 
+## Screenshot preview & consent caption (Jun 19 2026)
+
+Finance and health hosts often disabled screenshot capture because reporters
+could not see what would be sent. **v1.19.0** adds a visible preview on the
+details step plus a configurable privacy caption — so capture can stay on with
+an explicit review-and-remove gate.
+
+```
+Reporter opens widget (capture.screenshot on-report/auto)
+  → SDK captures screen → data URL
+  → Web: <img> preview on step 3  |  RN: thumbnail in bottom sheet
+  → Optional caption from widget.screenshotSensitiveHint
+  → Reporter Remove / Mark up (web) / Submit
+  → POST ingest with or without screenshot blob
+```
+
+| Object | Role |
+|--------|------|
+| `MushiWidgetConfig.screenshotSensitiveHint` | `true` = localized default, `string` = custom, `false` = hide caption |
+| `project_settings.sdk_screenshot_sensitive_hint` | Console/runtime store: `NULL` = default, `''` = hidden, string = custom (≤ 200 chars) — migration `20260619100000` |
+| `GET /v1/sdk/config` | Emits `widget.screenshotSensitiveHint` for runtime merge |
+| `PUT /v1/admin/projects/:id/sdk-config` | Persists via `coerceSdkConfigUpdate()` in `api/helpers.ts` |
+
+**Frontend surfaces:**
+
+| Surface | Location | What it adds |
+|---------|----------|-------------|
+| SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
+| ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
+
+**Published:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0**,
+`@mushi-mushi/react-native` **0.19.0**. Full doc:
+[`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
+
+---
+
 ## ExecPlans
 
 Detailed, phase-by-phase implementation plans live in

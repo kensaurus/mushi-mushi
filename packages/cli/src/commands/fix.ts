@@ -221,6 +221,8 @@ program
   .requiredOption('--project-id <id>', 'Project UUID')
   .requiredOption('--endpoint <url>', 'Supabase edge function URL')
   .option('--cwd <path>', 'Target repo')
+  .option('--write-env', 'Write SDK env vars to .env.local (default: enabled)')
+  .option('--wire-ide', 'Wire Cursor MCP into .cursor/mcp.json (default: enabled)')
   .option('--no-env', 'Skip writing .env.local')
   .option('--no-ide', 'Skip writing .cursor/mcp.json')
   .option('--wait', 'Poll ingest-setup until SDK heartbeat lands')

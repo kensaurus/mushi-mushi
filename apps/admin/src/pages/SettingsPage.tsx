@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageScopeHint,SnapshotSectionHint,Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { SettingsCompactSnapshot } from '../components/settings/SettingsCompactSnapshot'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
 import { SettingsTabIntro } from '../components/settings/SettingsTabIntro'
 import {
@@ -36,7 +38,7 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
-import { useSettingsUx, resolveQuickSettingsTab } from '../lib/settingsModeUx'
+import { useSettingsUx, resolveQuickSettingsTab, shouldHideSettingsSnapshot } from '../lib/settingsModeUx'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -195,7 +197,79 @@ export function SettingsPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Start on General for Slack and triage behavior. Use AI keys only if you need BYOK. Click the (i) next to any field for what it does and when to change it.'}
       />
 
-      <SettingsStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <SettingsStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !shouldHideSettingsSnapshot(ux, stats),
+            children: (
+              <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
+                <SnapshotSectionHint text={activeMeta.description} />
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <StatCard
+                    label={copy?.statLabels?.byok ?? 'AI keys'}
+                    value={stats.byokKeysConfigured}
+                    accent={
+                      stats.byokKeysFailing > 0
+                        ? 'text-danger'
+                        : stats.byokKeysPassing > 0
+                          ? 'text-ok'
+                          : undefined
+                    }
+                    tooltip={byokTooltip(stats)}
+                    detail={byokDetail(stats)}
+                    to={settingsLinks.byok}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.sdk ?? 'SDK widget'}
+                    value={stats.sdkConfigEnabled ? 'On' : 'Off'}
+                    accent={stats.sdkConfigEnabled ? 'text-ok' : 'text-warn'}
+                    tooltip={sdkTooltip(stats)}
+                    detail={sdkDetail(stats)}
+                    to={settingsLinks.sdk}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.routing ?? 'Routing'}
+                    value={[stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
+                      .filter(Boolean)
+                      .join(' · ') || 'None'}
+                    accent={stats.slackConfigured || stats.sentryConfigured ? 'text-brand' : undefined}
+                    tooltip={routingTooltip(stats)}
+                    detail={routingDetail()}
+                    to={settingsLinks.routing}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.classifier ?? 'Classifier'}
+                    value={stats.stage2Model?.replace('claude-', '') ?? 'default'}
+                    tooltip={classifierTooltip(stats)}
+                    detail={classifierDetail(stats)}
+                    to={settingsLinks.classifier}
+                  />
+                </div>
+              </Section>
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: shouldHideSettingsSnapshot(ux, stats) && ux.isBeginner,
+            children: (
+              <SettingsCompactSnapshot
+                stats={stats}
+                statsFetchedAt={lastFetchedAt}
+                statsValidating={isValidating}
+                description={activeMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
+      />
 
       {!ux.hideTabs && (
       <SegmentedControl
@@ -207,53 +281,6 @@ export function SettingsPage() {
       )}
 
       <SettingsTabIntro tab={active} />
-
-      {!ux.hideSettingsSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label={copy?.statLabels?.byok ?? 'AI keys'}
-            value={stats.byokKeysConfigured}
-            accent={
-              stats.byokKeysFailing > 0
-                ? 'text-danger'
-                : stats.byokKeysPassing > 0
-                  ? 'text-ok'
-                  : undefined
-            }
-            tooltip={byokTooltip(stats)}
-            detail={byokDetail(stats)}
-            to={settingsLinks.byok}
-          />
-          <StatCard
-            label={copy?.statLabels?.sdk ?? 'SDK widget'}
-            value={stats.sdkConfigEnabled ? 'On' : 'Off'}
-            accent={stats.sdkConfigEnabled ? 'text-ok' : 'text-warn'}
-            tooltip={sdkTooltip(stats)}
-            detail={sdkDetail(stats)}
-            to={settingsLinks.sdk}
-          />
-          <StatCard
-            label={copy?.statLabels?.routing ?? 'Routing'}
-            value={[stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
-              .filter(Boolean)
-              .join(' · ') || 'None'}
-            accent={stats.slackConfigured || stats.sentryConfigured ? 'text-brand' : undefined}
-            tooltip={routingTooltip(stats)}
-            detail={routingDetail()}
-            to={settingsLinks.routing}
-          />
-          <StatCard
-            label={copy?.statLabels?.classifier ?? 'Classifier'}
-            value={stats.stage2Model?.replace('claude-', '') ?? 'default'}
-            tooltip={classifierTooltip(stats)}
-            detail={classifierDetail(stats)}
-            to={settingsLinks.classifier}
-          />
-        </div>
-      </Section>
-      )}
 
       {stats.topPriority &&
         stats.topPriority !== 'healthy' &&

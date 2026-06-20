@@ -84,6 +84,7 @@ const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m 
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
 const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
+const CliAuthPage = lazy(() => import('./pages/CliAuthPage').then(m => ({ default: m.CliAuthPage })))
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
 // the first-paint bundle isn't inflated for users who don't open it.
 const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m.InboxPage })))
@@ -354,6 +355,14 @@ export function App() {
                   <Route path="/mcp" element={<McpPage />} />
                   <Route path="/connect" element={<ConnectPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route
+                    path="/cli-auth"
+                    element={
+                      <Suspense fallback={<Loading text="Loading..." />}>
+                        <CliAuthPage />
+                      </Suspense>
+                    }
+                  />
                   <Route path="/setup-copilot" element={<SetupCopilotPage />} />
                   <Route path="/feedback" element={<FeedbackPage />} />
                   <Route path="/feature-board" element={<FeatureBoardPage />} />

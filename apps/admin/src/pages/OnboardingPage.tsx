@@ -10,7 +10,7 @@
  *          admin sees.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -53,6 +53,12 @@ import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { OnboardingActivationLanes } from '../components/onboarding/OnboardingActivationLanes'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
+import {
+  ProjectCreatedSuccessPanel,
+  type CreatedProjectInfo,
+} from '../components/ProjectCreatedSuccessPanel'
+import { CliSetupGuide } from '../components/CliSetupGuide'
+import { isCliSetupMode, shouldFocusCreateForm, shouldShowOnboardingCreateForm } from '../lib/onboardingCliSetup'
 import { clearStoredInstanceConfig } from '../lib/env'
 import { IconChat } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
@@ -114,6 +120,7 @@ export function OnboardingPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
+  const setupCliMode = isCliSetupMode(searchParams)
   const activeTab: OnboardingTabId = isOnboardingTab(tabParam) ? tabParam : 'overview'
 
   const {
@@ -175,6 +182,18 @@ export function OnboardingPage() {
   // error channel via `useCreateProject` below so its surface is
   // intentionally separate (the recovery affordances differ per code).
   const [error, setError] = useState('')
+  const [createdProject, setCreatedProject] = useState<CreatedProjectInfo | null>(null)
+  const createFormRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!setupCliMode) return
+    if (tabParam !== 'steps') setActiveTab('steps')
+  }, [setupCliMode, tabParam, setActiveTab])
+
+  useEffect(() => {
+    if (!shouldFocusCreateForm(searchParams)) return
+    requestAnimationFrame(() => createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  }, [setupCliMode, searchParams, effectiveTab])
 
   // Must be called unconditionally on every render — the skeleton/error
   // early-returns below would otherwise produce a different hook count
@@ -185,11 +204,14 @@ export function OnboardingPage() {
     error: createError,
     clearError: clearCreateError,
   } = useCreateProject({
-    onCreated: () => {
+    onCreated: (project) => {
       setProjectName('')
+      setCreatedProject(project)
       setup.reload()
-      // In Quickstart linear flow: project created → advance to Verify so the
-      // user can immediately mint an API key without an extra click.
+      if (setupCliMode) {
+        setActiveTab('steps')
+        return
+      }
       if (ux.hideOverviewTab) setActiveTab('verify')
     },
   })
@@ -560,6 +582,10 @@ export function OnboardingPage() {
       </div>
       ) : null}
 
+      {!stats.hasAnyProject ? (
+        <CliSetupGuide projectId={stats.projectId} className="mb-4" />
+      ) : null}
+
       {!ux.hideOverviewChrome ? (
       <PageHero
         scope="onboarding"
@@ -707,6 +733,25 @@ export function OnboardingPage() {
 
       {effectiveTab === 'steps' && (
         <>
+      {setupCliMode && (
+        <HelpBanner tone="info" title="Setting up from the CLI?" data-testid="onboarding-cli-setup-banner">
+          <p className="text-xs text-fg-muted">
+            {setup.hasAnyProject
+              ? 'Create a new project below, then copy the Project ID and CLI commands from the success panel.'
+              : 'Name your app below, then copy the Project ID and CLI commands from the success panel.'}{' '}
+            Return to your terminal to paste credentials into <span className="font-mono">npx mushi-mushi</span>.
+          </p>
+        </HelpBanner>
+      )}
+
+      {createdProject && (
+        <ProjectCreatedSuccessPanel
+          project={createdProject}
+          fromCliSetup={setupCliMode}
+          onDismiss={() => setCreatedProject(null)}
+        />
+      )}
+
       {project && (
         <SetupChecklist
           project={project}
@@ -715,10 +760,17 @@ export function OnboardingPage() {
         />
       )}
 
-      {!setup.hasAnyProject && (
+      {shouldShowOnboardingCreateForm(setupCliMode, setup.hasAnyProject, Boolean(createdProject)) && (
+        <div id="onboarding-create-form" ref={createFormRef}>
         <Card className="p-5 space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-fg">Create your first project</h3>
+            <h3 className="text-sm font-semibold text-fg">
+              {setupCliMode && setup.hasAnyProject
+                ? 'Create a new project'
+                : setupCliMode
+                  ? 'Create your project'
+                  : 'Create your first project'}
+            </h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
                 A project groups all bug reports from one application. Name it after your app.
@@ -762,6 +814,7 @@ export function OnboardingPage() {
             </div>
           )}
         </Card>
+        </div>
       )}
         </>
       )}

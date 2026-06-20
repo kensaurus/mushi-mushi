@@ -644,13 +644,13 @@ function enrichByPath(pathname: string, counts: NavCounts): {
             ? {
                 tone: 'do',
                 title: `Fix ${webhooks} failing webhook${webhooks === 1 ? '' : 's'}`,
-                primary: { kind: 'link', to: '/rewards?tab=webhooks', label: 'Open webhooks' },
+                primary: { kind: 'link', to: '/rewards?tab=settings', label: 'Open webhooks' },
               }
             : disputes > 0
               ? {
                   tone: 'check',
                   title: `Review ${disputes} dispute${disputes === 1 ? '' : 's'}`,
-                  primary: { kind: 'link', to: '/rewards?tab=disputes', label: 'Open disputes' },
+                  primary: { kind: 'link', to: '/rewards?tab=settings', label: 'Open disputes' },
                 }
               : null,
         actIdle: idle('Economy stable', 'Points award on submit + triage automatically.', `${r?.activeContributors30d ?? 0} active`),

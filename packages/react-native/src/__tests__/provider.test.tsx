@@ -137,6 +137,7 @@ describe('AsyncStorageQueue fallback', () => {
       maxSize: 50,
       apiEndpoint: 'https://test.api',
       apiKey: 'key_test',
+      projectId: 'proj_test',
     })
 
     const report = { projectId: 'proj_test', description: 'offline bug', category: 'bug' }

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@mushi-mushi/brand": "workspace:*",
+    "@mushi-mushi/core": "workspace:*",
     "@mushi-mushi/marketing-ui": "workspace:*",
     "@mushi-mushi/mcp": "workspace:*",
     "@mushi-mushi/web": "workspace:*",

@@ -66,6 +66,8 @@ import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { markJudgeBatchSeen } from '../lib/judgeFreshness'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 
 interface LlmRecent {
   function_name: string
@@ -542,17 +544,92 @@ export function HealthPage() {
         </Btn>
       </PageHeaderBar>
 
-      {isHealthStatusBannerCritical(stats) && (
-        <HealthStatusBanner
-          stats={stats}
-          onTab={setActiveTab}
-          onRefresh={reloadAll}
-          refreshing={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
-          plainBanner={ux.plainBanner}
-        />
-      )}
-
-      {activeTab === 'overview' && <HealthProbesGuide topPriority={stats.topPriority} />}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: isHealthStatusBannerCritical(stats),
+            children: (
+              <HealthStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideHealthSnapshot,
+            children: (
+              <Section title={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+                <SnapshotSectionHint text={activeTabMeta.description} />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                  <StatCard
+                    label={copy?.statLabels?.calls ?? 'LLM calls'}
+                    value={stats.totalCalls}
+                    accent={stats.totalCalls > 0 ? 'text-brand' : undefined}
+                    tooltip={totalCallsTooltip(stats)}
+                    detail={totalCallsDetail(stats)}
+                    to={healthLinks.totalCalls}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.errors ?? 'Error rate'}
+                    value={`${stats.errorRatePct}%`}
+                    accent={stats.errorRatePct > 5 ? 'text-danger' : stats.errorRatePct > 0 ? 'text-warn' : 'text-ok'}
+                    tooltip={errorRateTooltip(stats)}
+                    detail={errorRateDetail()}
+                    to={healthLinks.errorRate}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.fallbacks ?? 'Fallback rate'}
+                    value={`${stats.fallbackRatePct}%`}
+                    accent={stats.fallbackRatePct > 10 ? 'text-danger' : stats.fallbackRatePct > 0 ? 'text-warn' : 'text-ok'}
+                    tooltip={fallbackRateTooltip(stats)}
+                    detail={fallbackRateDetail()}
+                    to={healthLinks.fallbackRate}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.latency ?? 'Latency p50 / p95'}
+                    value={`${stats.avgLatencyMs} / ${stats.p95LatencyMs}ms`}
+                    tooltip={latencyTooltip(stats)}
+                    detail={latencyDetail()}
+                    to={healthLinks.latency}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.cron ?? 'Cron OK'}
+                    value={`${stats.cronHealthyCount}/${stats.cronJobCount}`}
+                    accent={stats.cronErrorCount > 0 ? 'text-danger' : stats.cronStaleCount > 0 ? 'text-warn' : 'text-ok'}
+                    tooltip={cronTooltip(stats)}
+                    detail={cronDetail(stats)}
+                    to={healthLinks.cron}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.lastCall ?? 'Last LLM call'}
+                    value={stats.lastLlmCallAt ? 'Recent' : '—'}
+                    accent={stats.lastLlmCallAt ? 'text-ok' : stats.hasAnyProject ? 'text-brand' : undefined}
+                    tooltip={lastCallTooltip(stats)}
+                    detail={lastCallDetail(stats)}
+                    to={healthLinks.lastCall}
+                  />
+                </div>
+              </Section>
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show:
+              activeTab === 'overview' &&
+              !shouldHideGuideWhenBannerActive(
+                isHealthStatusBannerCritical(stats),
+                ['healthy', 'idle'],
+                stats.topPriority,
+              ),
+            children: <HealthProbesGuide topPriority={stats.topPriority} />,
+          },
+        ]}
+      />
 
       {!ux.hideTabs && (
       <SegmentedControl<HealthTabId>
@@ -627,61 +704,6 @@ export function HealthPage() {
           />
 
         </>
-      )}
-
-      {!ux.hideHealthSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label={copy?.statLabels?.calls ?? 'LLM calls'}
-            value={stats.totalCalls}
-            accent={stats.totalCalls > 0 ? 'text-brand' : undefined}
-            tooltip={totalCallsTooltip(stats)}
-            detail={totalCallsDetail(stats)}
-            to={healthLinks.totalCalls}
-          />
-          <StatCard
-            label={copy?.statLabels?.errors ?? 'Error rate'}
-            value={`${stats.errorRatePct}%`}
-            accent={stats.errorRatePct > 5 ? 'text-danger' : stats.errorRatePct > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={errorRateTooltip(stats)}
-            detail={errorRateDetail()}
-            to={healthLinks.errorRate}
-          />
-          <StatCard
-            label={copy?.statLabels?.fallbacks ?? 'Fallback rate'}
-            value={`${stats.fallbackRatePct}%`}
-            accent={stats.fallbackRatePct > 10 ? 'text-danger' : stats.fallbackRatePct > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={fallbackRateTooltip(stats)}
-            detail={fallbackRateDetail()}
-            to={healthLinks.fallbackRate}
-          />
-          <StatCard
-            label={copy?.statLabels?.latency ?? 'Latency p50 / p95'}
-            value={`${stats.avgLatencyMs} / ${stats.p95LatencyMs}ms`}
-            tooltip={latencyTooltip(stats)}
-            detail={latencyDetail()}
-            to={healthLinks.latency}
-          />
-          <StatCard
-            label={copy?.statLabels?.cron ?? 'Cron OK'}
-            value={`${stats.cronHealthyCount}/${stats.cronJobCount}`}
-            accent={stats.cronErrorCount > 0 ? 'text-danger' : stats.cronStaleCount > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={cronTooltip(stats)}
-            detail={cronDetail(stats)}
-            to={healthLinks.cron}
-          />
-          <StatCard
-            label={copy?.statLabels?.lastCall ?? 'Last LLM call'}
-            value={stats.lastLlmCallAt ? 'Recent' : '—'}
-            accent={stats.lastLlmCallAt ? 'text-ok' : stats.hasAnyProject ? 'text-brand' : undefined}
-            tooltip={lastCallTooltip(stats)}
-            detail={lastCallDetail(stats)}
-            to={healthLinks.lastCall}
-          />
-        </div>
-      </Section>
       )}
 
       {activeTab === 'llm' && (

@@ -62,7 +62,7 @@ final class OfflineQueue {
             }
             lines.removeFirst(count)
             let rebuilt = lines.flatMap { Array($0) + [UInt8(0x0A)] }
-            try? Data(rebuilt).write(to: fileURL, options: .atomic)
+            try? Data(rebuilt).write(to: fileURL, options: [.atomic, .completeFileProtection])
         }
     }
 
@@ -82,6 +82,6 @@ final class OfflineQueue {
               let nl = existing.firstIndex(of: 0x0A) {
             existing.removeSubrange(0...nl)
         }
-        try? existing.write(to: fileURL, options: .atomic)
+        try? existing.write(to: fileURL, options: [.atomic, .completeFileProtection])
     }
 }

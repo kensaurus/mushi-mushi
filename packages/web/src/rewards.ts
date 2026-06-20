@@ -81,7 +81,9 @@ function setConsentGranted(projectId: string, granted: boolean): void {
       localStorage.removeItem(getConsentKey(projectId));
     }
     optedIn = granted;
-    apiClient?.submitActivity(currentUserId ?? '', [], { optedIn: granted }).catch(() => {});
+    // Consent is persisted locally; the next non-empty activity flush carries
+    // `opted_in`. Never POST an empty events[] batch — /v1/sdk/activity
+    // requires events.min(1) and returns 422 INVALID_ACTIVITY_BATCH.
   } catch { /* private browsing */ }
 }
 

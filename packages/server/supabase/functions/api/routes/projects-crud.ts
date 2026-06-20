@@ -987,7 +987,48 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         { onConflict: 'project_id,user_id' },
       );
 
-    return c.json({ ok: true, data: { id: data.id, slug } }, 201);
+    // Auto-mint a report:write SDK ingest key so the user gets everything
+    // they need on one screen — no need to navigate to Settings → API Keys.
+    // The raw key is returned exactly once and never stored in plain text.
+    let autoKey: string | null = null;
+    let autoKeyPrefix: string | null = null;
+    try {
+      const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
+      const prefix = rawKey.slice(0, 12);
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey));
+      const keyHash = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const keyId = crypto.randomUUID();
+      const { error: keyInsertErr } = await db.from('project_api_keys').insert({
+        id: keyId,
+        project_id: data.id,
+        key_hash: keyHash,
+        key_prefix: prefix,
+        label: 'sdk-ingest',
+        scopes: ['report:write'],
+        is_active: true,
+      });
+      if (!keyInsertErr) {
+        autoKey = rawKey;
+        autoKeyPrefix = prefix;
+        void logAudit(
+          db,
+          data.id,
+          userId,
+          'api_key.created',
+          'project_api_key',
+          keyId,
+          { source: 'project_create_automint', scopes: ['report:write'], key_prefix: prefix },
+          { actorType: 'user', ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined, userAgent: c.req.header('user-agent') ?? undefined },
+        );
+      }
+    } catch {
+      // Non-fatal: key mint failure should not block project creation.
+    }
+
+    return c.json({ ok: true, data: { id: data.id, slug, apiKey: autoKey, keyPrefix: autoKeyPrefix } }, 201);
   });
 
   // Rename a project. Owner and admin in the project's org can change the

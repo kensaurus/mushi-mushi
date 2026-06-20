@@ -22,7 +22,7 @@ export function RewardsEconomyGuide({ topPriority }: Props) {
       summary={REWARDS_EXPLAINER_SUMMARY}
       defaultOpen={isRewardsGuideExpanded(topPriority)}
     >
-      <div className="space-y-1">
+      <div className="grid gap-1 sm:grid-cols-2">
         {REWARDS_ECONOMY_CONCEPTS.map((concept) => (
           <WorkflowStageRow
             key={concept.id}

@@ -25,7 +25,15 @@ import { ResponsiveTable } from '../components/ResponsiveTable'
 import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
+import { buildMushiConnectCommand, buildMushiInitCommand } from '../lib/cliSetupCommands'
+import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 import { ConnectHubGuide } from '../components/connect/ConnectHubGuide'
+import { CliSetupGuide } from '../components/CliSetupGuide'
+import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
+import { useConnectUx } from '../lib/connectModeUx'
+import { resolveMcpConnectUx } from '../lib/mcpConnectUx'
 import { McpInstallButtons } from '../components/McpInstallButtons'
 import { SdkVersionBadge } from '../components/SdkVersionBadge'
 import { useSdkUpgrade, type BumpEntry } from '../lib/useSdkUpgrade'
@@ -588,6 +596,13 @@ export function ConnectPage() {
   const [searchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
   const projectsFeed = usePageData<ProjectsPayload>('/v1/admin/projects')
+  const {
+    data: mcpStatsData,
+    lastFetchedAt: mcpStatsFetchedAt,
+    isValidating: mcpStatsValidating,
+  } = usePageData<McpStats>('/v1/admin/mcp/stats')
+  const mcpStats = mcpStatsData ?? EMPTY_MCP_STATS
+  const connectUx = useConnectUx()
   const preflight = useDispatchPreflight(activeProjectId)
 
   // Deep links like /connect?project=<uuid> should hydrate storage before
@@ -609,15 +624,21 @@ export function ConnectPage() {
   const feedError = projectsFeed.error
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
-  const githubConnected = Boolean(project?.primary_repo?.github_app_connected)
+  const githubCheck = preflight.checks.find((c) => c.key === 'github')
+  const githubRepoUrl = preflight.repoUrl ?? fallbackGithubRepoUrl
+  const githubConnected = Boolean(githubRepoUrl) && (githubCheck?.ready ?? Boolean(githubRepoUrl))
   const sdkConnected = Boolean(
     project?.api_keys?.some((k) => k.is_active && k.last_seen_at),
   )
+  const mcpUx = resolveMcpConnectUx(mcpStats)
 
   const CLI_INSTALL = 'npm install -g @mushi-mushi/cli@latest'
   // Prefill the active project's id (a non-secret UUID) so the dev only has to
   // paste/confirm the API key during `mushi init`, not hunt for the project id.
-  const CLI_INIT = project ? `mushi init --project-id ${project.id}` : 'mushi init'
+  const CLI_INIT = project ? buildMushiInitCommand(project.id) : 'mushi init'
+  const CLI_CONNECT = project
+    ? buildMushiConnectCommand(project.id, RESOLVED_EXTERNAL_API_URL)
+    : `MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint ${RESOLVED_EXTERNAL_API_URL} --write-env --wire-ide --wait`
 
   return (
     <div className="space-y-6">
@@ -645,24 +666,67 @@ export function ConnectPage() {
         }
       />
 
-      <ConnectStatusStrip
-        projectSelected={Boolean(project)}
-        githubConnected={githubConnected}
-        sdkConnected={sdkConnected}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ConnectStatusStrip
+                projectSelected={Boolean(project)}
+                githubConnected={githubConnected}
+                sdkConnected={sdkConnected}
+                mcpConnected={mcpUx.ideConnected}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: Boolean(project) && !connectUx.hideConnectSnapshot,
+            children: (
+              <ConnectSnapshotStrip
+                githubConnected={githubConnected}
+                githubRepoUrl={githubRepoUrl}
+                sdkConnected={sdkConnected}
+                sdkLastSeenAt={
+                  project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
+                }
+                sdkVersion={project?.sdk_version ?? null}
+                sdkLatestVersion={project?.sdk_latest_version ?? null}
+                sdkStatus={project?.sdk_status ?? null}
+                mcpStats={mcpStats}
+                statsFetchedAt={mcpStatsFetchedAt}
+                statsValidating={mcpStatsValidating}
+                description={copy?.description}
+                sectionTitle={copy?.sections?.snapshot ?? 'CONNECT SNAPSHOT'}
+                statLabels={copy?.statLabels}
+                hideLinks={connectUx.hideSnapshotLinks}
+                compact={connectUx.compactSnapshot}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: (
+              <ConnectHubGuide
+                githubConnected={githubConnected}
+                sdkConnected={sdkConnected}
+                nativeCiNeedsAttention={Boolean(project && isExpoReporterNeverConnected(project))}
+                upgradeComplete={
+                  Boolean(
+                    project &&
+                      (project.sdk_status === 'up-to-date' ||
+                        (!project.sdk_status && sdkConnected)),
+                  )
+                }
+              />
+            ),
+          },
+        ]}
       />
 
-      <ConnectHubGuide
-        githubConnected={githubConnected}
-        sdkConnected={sdkConnected}
-        nativeCiNeedsAttention={Boolean(project && isExpoReporterNeverConnected(project))}
-        upgradeComplete={
-          Boolean(
-            project &&
-              (project.sdk_status === 'up-to-date' ||
-                (!project.sdk_status && sdkConnected)),
-          )
-        }
-      />
+      {!sdkConnected && !feedError ? (
+        <CliSetupGuide projectId={project?.id ?? activeProjectId} />
+      ) : null}
 
       {feedError && (
         <HelpBanner
@@ -820,7 +884,17 @@ export function ConnectPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-fg-muted mb-1">Connect to your project:</p>
+                  <p className="text-xs text-fg-muted mb-1">Connect SDK + MCP (recommended):</p>
+                  <div className="flex items-center gap-2">
+                    <CodeInline className="text-xs flex-1 min-w-0 truncate">{CLI_CONNECT}</CodeInline>
+                    <CopyButton value={CLI_CONNECT} label="Copy connect command" copiedLabel="Copied" size="sm" />
+                  </div>
+                  <p className="mt-1 text-2xs text-fg-faint">
+                    Run <span className="font-mono">mushi login</span> first if you need to paste an API key interactively.
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-fg-muted mb-1">SDK-only init:</p>
                   <div className="flex items-center gap-2">
                     <CodeInline className="text-xs flex-1 min-w-0 truncate">{CLI_INIT}</CodeInline>
                     <CopyButton value={CLI_INIT} label="Copy init command" copiedLabel="Copied" size="sm" />

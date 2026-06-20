@@ -30,3 +30,6 @@ export const PAGE_SHELL_CLASS: Record<PageLayoutWidth, string> = {
 
 /** Full-width page body stack — matches shell padding, no extra horizontal inset. */
 export const PAGE_CONTENT_STACK = 'flex w-full min-w-0 flex-col gap-4'
+
+/** Chrome posture slot stack — alias used by PagePosture above primary work UI. */
+export const PAGE_STACK = PAGE_CONTENT_STACK

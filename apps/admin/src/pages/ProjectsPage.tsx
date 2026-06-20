@@ -43,6 +43,11 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useActiveOrgId, type OrganizationSummary } from '../components/OrgSwitcher'
 import { useAdminMode } from '../lib/mode'
 import { ProjectsPageHero } from '../components/projects/ProjectsPageHero'
+import {
+  ProjectCreatedSuccessPanel,
+  type CreatedProjectInfo,
+} from '../components/ProjectCreatedSuccessPanel'
+import { CliSetupGuide } from '../components/CliSetupGuide'
 import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
 import { ProjectsHubGuide } from '../components/projects/ProjectsHubGuide'
 import { ProjectFolderTabRail } from '../components/projects/ProjectFolderTabRail'
@@ -455,12 +460,16 @@ export function ProjectsPage() {
   )
   usePublishPageHeroStats('/projects', statsData)
   const activeOrgId = useActiveOrgId()
-  const { data: orgData } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
+  const { data: orgData, loading: orgLoading } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org', {
     scope: 'none',
   })
   const activeOrg = orgData?.organizations?.find((o) => o.id === activeOrgId) ?? null
   const activeTeamName = activeOrg?.name ?? null
   const activeOrgRole = activeOrg?.role ?? null
+  // True only after the org request has completed — used to distinguish
+  // "data not yet arrived" (null role = maybe owner) from "data arrived,
+  // no writable role" (definitely blocked).
+  const orgDataLoaded = !orgLoading && orgData !== undefined
   const stats = { ...EMPTY_PROJECTS_STATS, ...statsData }
   const fetchedAt = statsFetchedAt ?? lastFetchedAt
   const validating = isValidating || statsValidating
@@ -509,21 +518,23 @@ export function ProjectsPage() {
     () => [
       { id: 'overview' as const, label: 'Overview' },
       { id: 'list' as const, label: 'Your projects', count: stats.projectCount || undefined },
-      ...(canManageProjects ? [{ id: 'create' as const, label: 'New project' }] : []),
+      // Always show the tab — hiding it when org data hasn't loaded yet
+      // causes a silent "click does nothing" race during the first render.
+      // Role-based access is enforced at the button level with a clear hint.
+      { id: 'create' as const, label: 'New project' },
     ],
-    [stats.projectCount, canManageProjects],
+    [stats.projectCount],
   )
 
-  const {
-    create: createProjectRaw,
-    creating,
-    error: createError,
-    clearError: clearCreateError,
-  } = useCreateProject({
-    onCreated: () => {
+  const [createdProject, setCreatedProject] = useState<CreatedProjectInfo | null>(null)
+
+  const { create: createProjectRaw, creating, error: createError, clearError: clearCreateError } =
+    useCreateProject({
+    onCreated: (project) => {
       setNewName('')
+      setCreatedProject(project)
       reloadAll()
-      setTab('list')
+      setTab('create')
     },
   })
 
@@ -815,17 +826,24 @@ export function ProjectsPage() {
               setNewName(e.target.value)
               if (createError) clearCreateError()
             }}
-            onKeyDown={(e) => e.key === 'Enter' && createProject()}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              // Mirror the button's gate: only submit when actually allowed.
+              if (!creating && newName.trim() && (!orgDataLoaded || canManageProjects)) {
+                void createProject()
+              }
+            }}
             aria-invalid={createError ? true : undefined}
             aria-describedby={createError ? 'projects-create-error' : undefined}
           />
         </div>
         <Btn
           onClick={createProject}
-          disabled={creating || !newName.trim() || !canManageProjects}
+          disabled={creating || !newName.trim() || (orgDataLoaded && !canManageProjects)}
+          loading={!orgDataLoaded && !creating}
           title={
-            !canManageProjects
-              ? (roleHint ?? 'You cannot create projects in this team')
+            orgDataLoaded && !canManageProjects
+              ? (roleHint ?? 'Only owners or admins can create projects — ask your team admin')
               : !newName.trim()
                 ? 'Enter a project name to continue'
                 : undefined
@@ -1022,6 +1040,9 @@ export function ProjectsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          {stats.projectCount === 0 ? (
+            <CliSetupGuide projectId={activeProjectId} />
+          ) : null}
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -1048,12 +1069,45 @@ export function ProjectsPage() {
 
       {activeTab === 'create' ? (
         <Section title="Create a project">
+          {createdProject ? (
+            <ProjectCreatedSuccessPanel
+              project={createdProject}
+              onDismiss={() => {
+                setCreatedProject(null)
+                setTab('list')
+              }}
+            />
+          ) : (
+            <>
           <ContainedBlock tone="muted" className="mb-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
-              One project per app or environment — you&apos;ll get API keys and a scoped inbox on the next screen.
+              One project per app or environment — your API key and setup command appear on the next screen.
             </p>
           </ContainedBlock>
+          {orgDataLoaded && !canManageProjects && (
+            <ContainedBlock tone="warn" className="mb-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-[var(--color-warning-foreground)]">
+                    {activeOrgRole === 'member' || activeOrgRole === 'viewer'
+                      ? 'Owner or admin access required'
+                      : 'No team found'}
+                  </p>
+                  <p className="mt-0.5 text-2xs text-fg-muted">
+                    {activeOrgRole === 'member' || activeOrgRole === 'viewer'
+                      ? 'Ask your team owner or admin to create projects, or create your own team.'
+                      : 'You need to be part of a team to create projects. Create a personal workspace first.'}
+                  </p>
+                </div>
+                <Btn size="sm" variant="ghost" onClick={() => navigate('/organization/members')}>
+                  {activeOrgRole ? 'Team settings' : 'Create team'}
+                </Btn>
+              </div>
+            </ContainedBlock>
+          )}
           {createForm}
+            </>
+          )}
         </Section>
       ) : activeTab === 'list' ? (
         <Section title="Your projects">
