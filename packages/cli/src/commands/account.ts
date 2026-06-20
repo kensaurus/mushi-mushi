@@ -196,10 +196,14 @@ Examples:
       if (outcome.status === 'error') {
         // Terminal 4xx (already claimed / invalid_grant) can't recover by polling
         // again — bail immediately instead of spinning out the retry budget.
-        if (outcome.retryable && consecutiveErrors + 1 < MAX_CONSECUTIVE_ERRORS) {
+        // Retryable errors increment first, then compare with `>=` (matching
+        // waitForCliToken) so the counter isn't off by one.
+        if (outcome.retryable) {
           consecutiveErrors += 1
-          process.stdout.write('·') // transient — keep waiting
-          continue
+          if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+            process.stdout.write('·') // transient — keep waiting
+            continue
+          }
         }
         console.log('')
         process.stderr.write(`\nerror: ${outcome.message}\n`)
