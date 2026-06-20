@@ -10,6 +10,12 @@ import { useAdminMode, type AdminMode } from '../lib/mode'
 import { PAGE_STACK } from '../lib/pageLayout'
 
 export interface PagePostureSlot {
+  /**
+   * Stable identity for React's key. Prefer this when two slots could share a
+   * priority. Falls back to `priority` (unique per page in practice) so React
+   * never reuses the wrong child when slots appear/disappear or reorder.
+   */
+  id?: string
   /** Lower number = higher priority (rendered first). */
   priority: number
   /** When false, slot is omitted. Defaults to true. */
@@ -59,8 +65,8 @@ export function PagePosture({ slots, maxRows, className }: PagePostureProps) {
 
   return (
     <div className={className ?? PAGE_STACK} data-page-posture="">
-      {visible.map((slot, index) => (
-        <div key={index}>{slot.children}</div>
+      {visible.map((slot) => (
+        <div key={slot.id ?? slot.priority}>{slot.children}</div>
       ))}
     </div>
   )
