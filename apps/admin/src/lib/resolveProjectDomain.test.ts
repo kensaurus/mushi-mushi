@@ -1,64 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import {
+  faviconSourceFromProject,
   formatHeartbeatOrigin,
   heartbeatTone,
-  projectInitials,
-  resolveProjectDomain,
   sdkOriginFromSetupProject,
   summarizeProjectHeartbeat,
 } from './resolveProjectDomain'
 import type { SetupProject } from './useSetupStatus'
 
-describe('resolveProjectDomain', () => {
-  it('prefers live SDK origin over slug hints', () => {
-    expect(
-      resolveProjectDomain({
-        project_id: '1',
+describe('faviconSourceFromProject', () => {
+  it('merges setup sdk origin with snapshot repo url', () => {
+    const source = faviconSourceFromProject(
+      {
+        project_id: 'p1',
         project_name: 'glot.it',
         project_slug: 'glot-it',
-        sdk_origin: 'https://kensaur.us/glot-it/',
-      }),
-    ).toBe('kensaur.us')
+        steps: [
+          {
+            id: 'sdk_installed',
+            diagnostic: { last_sdk_origin: 'https://kensaur.us/glot-it/' },
+          },
+        ],
+      } as unknown as SetupProject,
+      {
+        primary_repo: { repo_url: 'https://github.com/kensaurus/glot.it' },
+        api_keys: [],
+      },
+    )
+    expect(source.sdk_origin).toBe('https://kensaur.us/glot-it/')
+    expect(source.repo_url).toBe('https://github.com/kensaurus/glot.it')
   })
 
-  it('falls back to slug hints when origin is localhost', () => {
-    expect(
-      resolveProjectDomain({
-        project_id: '2',
-        project_name: 'glot.it',
-        project_slug: 'glot-it',
-        sdk_origin: 'http://localhost:3000',
-      }),
-    ).toBe('kensaur.us')
-  })
-
-  it('falls back to slug hints for yen-yen when origin is absent', () => {
-    expect(
-      resolveProjectDomain({
-        project_id: '3',
-        project_name: 'yen-yen',
-        project_slug: 'yen-yen',
-        sdk_origin: null,
-      }),
-    ).toBe('kensaur.us')
-  })
-
-  it('derives domain from repo slug when it looks like a TLD', () => {
-    expect(
-      resolveProjectDomain({
-        project_id: '4',
-        project_name: 'glot.it',
-        project_slug: 'glot-it',
-        sdk_origin: null,
-        repo_url: 'https://github.com/kensaurus/glot.it',
-      }),
-    ).toBe('glot.it')
-  })
-})
-
-describe('projectInitials', () => {
-  it('uses first letters of two word names', () => {
-    expect(projectInitials('solo boss')).toBe('SB')
+  it('falls back to api key origin when setup diagnostic is absent', () => {
+    const source = faviconSourceFromProject(
+      {
+        project_id: 'p2',
+        project_name: 'solo boss',
+        project_slug: 'solo-boss-cloud',
+        steps: [],
+      } as unknown as SetupProject,
+      {
+        api_keys: [{ is_active: true, last_seen_origin: 'https://soloboss.cloud' }],
+      },
+    )
+    expect(source.sdk_origin).toBe('https://soloboss.cloud')
   })
 })
 

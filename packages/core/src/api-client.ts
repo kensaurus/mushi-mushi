@@ -16,11 +16,38 @@ import type {
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
 
+// One-time credential-failure warning gate — emitted at most once per JS
+// process so it's visible without flooding the console on every queued retry.
+let _credWarningEmitted = false;
+
 /** Header carrying the signed end-user identity token (verified server-side). */
 export const MUSHI_USER_TOKEN_HEADER = 'X-Mushi-User-Token';
+/** Project scope header — paired with the API key on every SDK request. */
+export const MUSHI_PROJECT_HEADER = 'X-Mushi-Project';
 /** Build-time SDK package identity — recorded on every authenticated heartbeat. */
 export const MUSHI_SDK_PACKAGE_HEADER = 'X-Mushi-SDK-Package';
 export const MUSHI_SDK_VERSION_HEADER = 'X-Mushi-SDK-Version';
+
+/** Build the standard authenticated SDK ingest headers (shared by api-client + offline flush). */
+export function buildSdkIngestHeaders(opts: {
+  apiKey: string;
+  projectId: string;
+  sdkPackage?: string;
+  sdkVersion?: string;
+  userToken?: string | null;
+  internalKind?: MushiInternalRequestKind;
+}): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Mushi-Api-Key': opts.apiKey,
+    [MUSHI_PROJECT_HEADER]: opts.projectId,
+  };
+  if (opts.sdkPackage) headers[MUSHI_SDK_PACKAGE_HEADER] = opts.sdkPackage;
+  if (opts.sdkVersion) headers[MUSHI_SDK_VERSION_HEADER] = opts.sdkVersion;
+  if (opts.userToken) headers[MUSHI_USER_TOKEN_HEADER] = opts.userToken;
+  if (opts.internalKind) headers[MUSHI_INTERNAL_HEADER] = opts.internalKind;
+  return headers;
+}
 
 export interface ApiClientOptions {
   projectId: string;
@@ -85,13 +112,14 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       const response = await fetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
-          'X-Mushi-Api-Key': apiKey,
-          'X-Mushi-Project': projectId,
-          ...(sdkPackage ? { [MUSHI_SDK_PACKAGE_HEADER]: sdkPackage } : {}),
-          ...(sdkVersion ? { [MUSHI_SDK_VERSION_HEADER]: sdkVersion } : {}),
-          ...(userToken ? { [MUSHI_USER_TOKEN_HEADER]: userToken } : {}),
-          ...(internalKind ? { [MUSHI_INTERNAL_HEADER]: internalKind } : {}),
+          ...buildSdkIngestHeaders({
+            apiKey,
+            projectId,
+            sdkPackage,
+            sdkVersion,
+            userToken,
+            internalKind,
+          }),
           ...extraHeaders,
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -117,6 +145,19 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
+
+        // Surface credential failures immediately — they'll never succeed on
+        // retry and silently queuing them offline misleads the developer.
+        if ((response.status === 401 || response.status === 403) && !_credWarningEmitted) {
+          _credWarningEmitted = true;
+          // eslint-disable-next-line no-console
+          console.error(
+            `[Mushi] Credentials rejected (HTTP ${response.status}). ` +
+            `Check your Project ID and API key scope (must be "report:write"). ` +
+            `Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects`,
+          );
+        }
+
         if (response.status >= 500 && retries > 0) {
           await sleep(getBackoffDelay(maxRetries - retries));
           return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);

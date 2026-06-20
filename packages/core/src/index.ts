@@ -65,9 +65,14 @@ export type {
 
 export {
   createApiClient,
+  buildSdkIngestHeaders,
   DEFAULT_API_ENDPOINT,
   MUSHI_INTERNAL_HEADER,
   MUSHI_INTERNAL_INIT_MARKER,
+  MUSHI_PROJECT_HEADER,
+  MUSHI_USER_TOKEN_HEADER,
+  MUSHI_SDK_PACKAGE_HEADER,
+  MUSHI_SDK_VERSION_HEADER,
   type ApiClientOptions,
   type MushiInternalRequestKind,
 } from './api-client';
@@ -130,3 +135,17 @@ export {
   MUSHI_IDENTITY_TOKEN_PREFIX,
   type MushiIdentityClaims,
 } from './identity';
+export {
+  faviconUrlCandidates,
+  originToDomain,
+  githubRepoDomainHint,
+  resolveProjectDomain,
+  resolveProjectFaviconDomains,
+  projectFaviconUrlCandidates,
+  isLikelyGenericFavicon,
+  isUntrustedFaviconUrl,
+  projectInitials,
+  projectInitialsThemeIndex,
+  readPageFaviconHref,
+  type ProjectFaviconSource,
+} from './favicon';

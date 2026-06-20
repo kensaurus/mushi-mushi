@@ -394,7 +394,7 @@ const PROJECTS: ConfigDoc[] = [
     label: 'Project name',
     summary: 'Names a new project — the bucket every report, key, and integration is scoped to.',
     howItWorks:
-      'Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs.',
+      'Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs. After you click Create, the success panel shows the Project UUID to paste into the CLI (`MUSHI_PROJECT_ID`).',
     default: { value: 'unset (you must pick a name)' },
     backend: {
       table: 'projects',
@@ -404,6 +404,24 @@ const PROJECTS: ConfigDoc[] = [
     },
     whenToChange:
       "Set when adding a new app, environment, or customer. Rename later via the API if your team rebrands — slugs persist, names don't affect routing.",
+  },
+  {
+    id: 'projects.project_id_copy',
+    label: 'Project ID (UUID)',
+    summary: 'The UUID your SDK and CLI use as MUSHI_PROJECT_ID — copy from the chip or the post-create success panel.',
+    howItWorks:
+      'Every ingest and MCP call scopes to this id. The CLI wizard accepts UUID or proj_* slug form; the console always displays the UUID. Click the chip on Projects to copy — paste into `mushi init`, `mushi connect`, or `.env.local`.',
+    default: { value: 'auto-generated on create' },
+    whenToChange: 'Rarely — create a new project instead of reusing IDs across unrelated apps.',
+  },
+  {
+    id: 'onboarding.cli_setup',
+    label: 'CLI setup mode',
+    summary: 'Deep link opened by `npx mushi-mushi` when you need to create a project first.',
+    howItWorks:
+      'URL flag `?setup=cli` on Setup → Steps shows CLI-oriented copy and keeps the success panel visible until you copy the Project ID and CLI commands. Pair with `mushi login` or paste credentials back into the wizard.',
+    default: { value: '/onboarding?tab=steps&setup=cli' },
+    whenToChange: 'Follow this path whenever the terminal asks for a Project ID you do not have yet.',
   },
   {
     id: 'projects.api_key_scope',
@@ -1637,6 +1655,10 @@ const SDK_INSTALL: ConfigDoc[] = [
     },
     whenToChange:
       'Keep on for any app that captures screenshots — it is the reporter\'s chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.',
+    learnMore: {
+      label: 'Screenshot preview docs',
+      href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md',
+    },
   },
   {
     id: 'sdk-install.framework',

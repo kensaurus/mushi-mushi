@@ -1783,7 +1783,13 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-account-info strong{font:700 14px/1.3 inherit;color:${ink}}
     .mushi-account-rank,.mushi-xapp-app-name,.mushi-label{font-size:12px;color:${inkDim};font-family:${fontMono}}
     .mushi-account-rank{display:block}
-    .mushi-xapp-app-name{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px}
+    .mushi-xapp-app-head{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+    .mushi-xapp-app-name{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:0}
+    .mushi-app-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'};background:#fff;overflow:hidden;flex-shrink:0}
+    .mushi-app-icon-img{display:block;width:16px;height:16px;object-fit:contain}
+    .mushi-app-icon-initials{font-size:9px;font-weight:700;color:${inkDim};line-height:1}
+    .mushi-app-icon-initials-only{background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}}
+    .mushi-header-host-icon{display:block;width:20px;height:20px;border-radius:4px;object-fit:contain}
     .mushi-xapp-group{margin-bottom:14px}
     .mushi-label{display:block;font-weight:600;margin-bottom:6px}
 

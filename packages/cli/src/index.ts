@@ -73,8 +73,8 @@ const program = new Command()
   .version(MUSHI_CLI_VERSION)
   .addHelpText('after', `
 Environment variables:
-  MUSHI_API_KEY        Project API key (from Settings → API Keys in the console)
-  MUSHI_PROJECT_ID     Project UUID    (from the Projects page in the console)
+  MUSHI_API_KEY        SDK ingest key (report:write scope — from Onboarding → Verify in the console)
+  MUSHI_PROJECT_ID     Project UUID   (from the Projects page in the console)
   MUSHI_API_ENDPOINT   Supabase edge function URL
                        e.g. https://<ref>.supabase.co/functions/v1/api
 
@@ -84,7 +84,7 @@ Exit codes:
   2  configuration error (missing credentials or endpoint)
   3  not found (resource does not exist)
 
-Console: https://kensaur.us/mushi-mushi/
+Console: https://kensaur.us/mushi-mushi/admin
 Docs:    https://github.com/kensaurus/mushi-mushi`)
 
 // Register every command group, in the original declaration order so the

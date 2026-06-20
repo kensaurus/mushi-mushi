@@ -16,6 +16,7 @@
     "@react-native-community/netinfo": ">=11",
     "@react-navigation/native": ">=6",
     "expo-sensors": ">=13",
+    "expo-secure-store": ">=13",
     "react": ">=18",
     "react-native": ">=0.72",
     "react-native-view-shot": ">=3.8"
@@ -28,6 +29,9 @@
       "optional": true
     },
     "expo-sensors": {
+      "optional": true
+    },
+    "expo-secure-store": {
       "optional": true
     },
     "@react-native-community/netinfo": {

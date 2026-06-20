@@ -29,10 +29,23 @@ a green tick; the current step glows.
 Enter a project name and click **Create**. A project is created immediately and becomes
 the active project.
 
+After create, a **success panel** appears with:
+
+- Your **Project ID** (UUID) in a one-click copy chip
+- Prefilled **`mushi init --project-id …`** and **`mushi connect …`** commands
+- A shortcut to **Generate API key** on the Verify tab
+
+This panel closes the gap between "I created something" and "I can paste credentials into
+the CLI."
+
 ### Generate an API key
-Click **Generate API key** to create an SDK-scoped key. The key is shown in plaintext
-exactly once — copy it immediately. It is stored as a prefix-only hash after you
-navigate away.
+Click **Generate API key** on the **Verify** tab to create an SDK-scoped key
+(`report:write`). The key is shown in plaintext exactly once — copy it immediately.
+
+<Callout type="warning">
+  **Not Settings → BYOK.** Settings is for your own Anthropic/Firecrawl keys. SDK ingest
+  keys are minted here on Verify (or from the Projects page key picker).
+</Callout>
 
 ### Test the connection
 Click **Submit test report** to send a synthetic report through the full ingest pipeline.
@@ -52,10 +65,44 @@ The **SDK install configurator** shows framework-specific install snippets (Reac
 Next.js, React Native, Flutter, etc.) pre-filled with your API key and project ID.
 Copy and paste into your codebase.
 
+Or run the CLI wizard from your app repo — see [CLI ↔ console loop](/quickstart/cli-console-loop).
+
 ### Go to dashboard
 Once all steps are complete, a **Go to Dashboard** button appears. The setup checklist
 banner on the dashboard will clear.
 </Steps>
+
+---
+
+## CLI setup mode (`?setup=cli`)
+
+When you run `npx mushi-mushi` without saved credentials, the wizard can open the console
+at:
+
+```
+/onboarding?tab=steps&setup=cli
+```
+
+| Behavior | Normal onboarding | `setup=cli` |
+| --- | --- | --- |
+| Create form | Hidden if you already have projects | **Always shown** — add another project |
+| Banner copy | Generic checklist | "CLI setup — name your app below" |
+| Success panel | Same UUID + CLI commands | Same — optimized for paste-back into terminal |
+
+Use this path when the terminal wizard sent you here, or when you need a **second project**
+without leaving the onboarding UX.
+
+---
+
+## CliSetupGuide strip
+
+Several surfaces reuse the same **1-2-3 CLI setup** strip (`CliSetupGuide`):
+
+- **Connect hub** when no SDK heartbeat has landed yet
+- **Projects → New project** empty state
+
+Steps match the [CLI ↔ console loop](/quickstart/cli-console-loop): create → mint key →
+`mushi init` or `mushi connect`.
 
 ---
 
@@ -117,6 +164,8 @@ GET  /v1/admin/onboarding/time-to-first-diagnosis   → { keyMintedAt, firstDiag
 
 ## Related pages
 
+- [CLI ↔ console loop](/quickstart/cli-console-loop) — terminal wizard + deep link
 - [Projects](/admin/projects) — manage multiple projects and keys
+- [Connect & Update](/admin/connect) — SDK heartbeat + copy-ready CLI commands
 - [Settings](/admin/settings) — BYOK keys and SDK config after initial setup
 - [Dashboard](/admin/dashboard) — where you land after completing onboarding

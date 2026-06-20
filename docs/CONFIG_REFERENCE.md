@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_100 configuration knobs across 19 sections · last regenerated 2026-06-19._
+_102 configuration knobs across 19 sections · last regenerated 2026-06-20._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -13,7 +13,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Settings → BYOK (LLM keys)](#settings-byok-llm-keys-) (3)
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
-- [Projects](#projects) (6)
+- [Projects](#projects) (8)
 - [Integrations](#integrations) (20)
 - [Storage (BYO)](#storage-byo-) (9)
 - [Compliance](#compliance) (7)
@@ -317,13 +317,41 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Names a new project — the bucket every report, key, and integration is scoped to.
 
-**How it works** — Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs.
+**How it works** — Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs. After you click Create, the success panel shows the Project UUID to paste into the CLI (`MUSHI_PROJECT_ID`).
 
 **Default** — `unset (you must pick a name)`
 
 **Where it lives** — table `projects.name` · endpoint `POST /v1/admin/projects` · read by `ProjectSwitcher`, `every admin endpoint that scopes by project`
 
 **When to change** — Set when adding a new app, environment, or customer. Rename later via the API if your team rebrands — slugs persist, names don't affect routing.
+
+### Project ID (UUID)
+
+<a id="projects-project-id-copy"></a>
+
+`projects.project_id_copy`
+
+**Summary** — The UUID your SDK and CLI use as MUSHI_PROJECT_ID — copy from the chip or the post-create success panel.
+
+**How it works** — Every ingest and MCP call scopes to this id. The CLI wizard accepts UUID or proj_* slug form; the console always displays the UUID. Click the chip on Projects to copy — paste into `mushi init`, `mushi connect`, or `.env.local`.
+
+**Default** — `auto-generated on create`
+
+**When to change** — Rarely — create a new project instead of reusing IDs across unrelated apps.
+
+### CLI setup mode
+
+<a id="onboarding-cli-setup"></a>
+
+`onboarding.cli_setup`
+
+**Summary** — Deep link opened by `npx mushi-mushi` when you need to create a project first.
+
+**How it works** — URL flag `?setup=cli` on Setup → Steps shows CLI-oriented copy and keeps the success panel visible until you copy the Project ID and CLI commands. Pair with `mushi login` or paste credentials back into the wizard.
+
+**Default** — `/onboarding?tab=steps&setup=cli`
+
+**When to change** — Follow this path whenever the terminal asks for a Project ID you do not have yet.
 
 ### API key scope preset
 
@@ -1586,6 +1614,8 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `public route (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
 
 **When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
+
+**Learn more** — [Screenshot preview docs](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
 
 ### Framework tab
 

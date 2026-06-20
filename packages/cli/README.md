@@ -3,7 +3,35 @@
 > **Your AI wrote it. Mushi tells you why it broke.**
 > Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
 
-CLI for Mushi Mushi — set up the SDK in one command, then triage reports and monitor the pipeline from your terminal.
+CLI for Mushi Mushi — set up the SDK in one command, wire Cursor MCP, then triage reports and monitor the pipeline from your terminal.
+
+## Console ↔ CLI loop
+
+Before pasting credentials, create a project in the admin console:
+
+| Environment | Console base | Override |
+| --- | --- | --- |
+| Hosted | `https://kensaur.us/mushi-mushi/admin` | — |
+| Local monorepo | `http://localhost:6464` (after `pnpm dev`) | auto-probed |
+| Custom | Set `MUSHI_CONSOLE_URL` | wins over heuristics |
+
+**Where to find credentials:**
+
+- **Project ID** — UUID from the success panel after **Create**, or Projects → UUID chip
+- **API key** — **Setup → Verify → Generate API key** (`report:write`). Not Settings → BYOK
+
+The wizard opens `/onboarding?tab=steps&setup=cli` when you choose "No — open the console to create one."
+
+Full walkthrough: [CLI ↔ console loop](https://github.com/kensaurus/mushi-mushi/blob/master/apps/docs/content/quickstart/cli-console-loop.mdx) on the docs site.
+
+## Command cheat sheet
+
+| Command | Purpose |
+| --- | --- |
+| `mushi init` / `npx mushi-mushi` | SDK wizard: framework detect, install, `.env.local`, optional test report |
+| `mushi connect` | Non-interactive: config + env + Cursor MCP + optional `--wait` heartbeat |
+| `mushi login` | Save credentials to `~/.config/mushi/config.json` |
+| `mushi setup` | Wire Cursor/Claude MCP only (reads saved config — run `login` first) |
 
 ## One-command setup
 
@@ -15,33 +43,41 @@ npx mushi-mushi
 
 The wizard:
 
-1. Detects your framework (Next.js, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, or vanilla JS) from `package.json` and config files.
-2. Picks the right SDK package (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) plus `@mushi-mushi/web` when the framework SDK is API-only.
-3. Detects your package manager (npm / pnpm / yarn / bun) from your lockfile and installs with that — `shell: false`, with Windows `.cmd` shim resolution.
-4. Writes `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` (with the right framework prefix — `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`) to `.env.local` (or `.env`).
-5. Warns you if `.env.local` isn't in `.gitignore` (covers `.env*.local`, `*.local`, etc.).
-6. Prints the framework-specific provider snippet to copy-paste.
-7. Offers to **send a real test report** so you see your first classified bug in the console immediately. Opt out via `--skip-test-report`.
+1. **Prerequisite step** (unless flags/config already present): open console to create a project, paste existing credentials, or exit to run `mushi login` first.
+2. Detects your framework (Next.js, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, or vanilla JS) from `package.json` and config files.
+3. Calls **`GET /v1/sync/whoami`** to verify Project ID + API key before installing anything.
+4. Picks the right SDK package (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) plus `@mushi-mushi/web` when the framework SDK is API-only.
+5. Detects your package manager (npm / pnpm / yarn / bun) from your lockfile and installs with that — `shell: false`, with Windows `.cmd` shim resolution.
+6. Writes `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` (with the right framework prefix — `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`) to `.env.local` (or `.env`).
+7. Warns you if `.env.local` isn't in `.gitignore` (covers `.env*.local`, `*.local`, etc.).
+8. Prints the framework-specific provider snippet to copy-paste.
+9. Offers to **send a real test report** so you see your first classified bug in the console immediately. Opt out via `--skip-test-report`.
+10. Optionally runs **`mushi connect --write-env --wire-ide --wait`** for Cursor MCP + heartbeat proof.
 
-It never silently overwrites existing env vars or modifies application code. Pasted credentials are sanitized (stripped of quotes / CR / LF / NUL) and validated against `^proj_[A-Za-z0-9_-]{10,}$` / `^mushi_[A-Za-z0-9_-]{10,}$` before anything is written to disk.
+It never silently overwrites existing env vars or modifies application code. Pasted credentials are sanitized (stripped of quotes / CR / LF / NUL) and validated before anything is written to disk:
+
+- Project ID: UUID (`xxxxxxxx-xxxx-…`) or future `proj_` + 10+ alphanumeric chars
+- API key: `mushi_` or `mush_pk_` + 10+ alphanumeric chars
 
 ### Flags
 
 ```bash
-mushi init --framework next                             # skip framework detection
-mushi init --project-id proj_xxx --api-key mushi_xxx    # skip credential prompts
-mushi init --skip-install                               # print the install command instead
-mushi init --skip-test-report                           # don't offer to send a test report
-mushi init --cwd apps/web                               # run in a sub-package of a monorepo
-mushi init --endpoint https://mushi.your-company.com    # self-hosted Mushi API
-mushi init -y                                           # accept the detected framework
+mushi init --framework next                                              # skip framework detection
+mushi init --project-id bdafa28d-b153-482f-bd4f-42981f3fd3a4 --api-key mushi_xxx  # skip prompts
+mushi init --skip-install                                                # print the install command instead
+mushi init --skip-test-report                                            # don't offer to send a test report
+mushi init --cwd apps/web                                                # run in a sub-package of a monorepo
+mushi init --endpoint https://mushi.your-company.com                     # self-hosted Mushi API
+mushi init -y                                                            # accept the detected framework
 ```
 
-Non-interactive use (CI): pass `--yes --project-id proj_xxx --api-key mushi_xxx` or the wizard exits with a clear error instead of hanging on a prompt.
+Non-interactive use (CI): pass `--yes --project-id <uuid> --api-key mushi_xxx` or the wizard exits with a clear error instead of hanging on a prompt.
 
 Stale-version hint: the wizard checks the npm registry (2s timeout) and prints a one-line upgrade nudge if a newer stable is published. Opt out with `MUSHI_NO_UPDATE_CHECK=1`.
 
 Monorepo awareness: if you run the wizard at a workspace root with no framework dep, it scans `apps/*`, `packages/*`, `examples/*` and tells you which sub-package you probably meant (`mushi init --cwd apps/web`).
+
+Console URL resolution: `MUSHI_CONSOLE_URL` → saved `consoleUrl` in config → localhost `:6464` probe → mushi-mushi monorepo heuristic → hosted default. Saved on successful `mushi login`.
 
 ## Install globally
 
@@ -55,8 +91,9 @@ mushi --version
 
 ```bash
 mushi login --api-key mushi_xxx     # store credentials in ~/.config/mushi/config.json (mode 0o600)
-mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --wait
-                                     # one-shot wiring: ~/.config/mushi/config.json + .env.local + .cursor/mcp.json + heartbeat wait
+mushi setup                         # wire Cursor MCP from saved config (not SDK install)
+mushi connect --project-id <uuid> --endpoint <url> --write-env --wire-ide --wait
+                                     # one-shot wiring: config + .env.local + .cursor/mcp.json + heartbeat wait
 mushi upgrade                        # bump installed @mushi-mushi/* packages to latest stable
 mushi status                         # project overview
 mushi reports list                   # recent reports
@@ -73,15 +110,14 @@ mushi sourcemaps upload --release <ver> --dir <dist>   # upload .js.map / .css.m
 
 ### `mushi connect`
 
-Non-interactive equivalent of `mushi init` for agents and scripts — wires a
-repo to an existing project in one shot:
+Non-interactive wiring for agents and scripts — connects a repo to an existing project:
 
 1. Saves credentials to `~/.config/mushi/config.json` (mode `0o600`).
 2. Merges `MUSHI_*` / framework-prefixed env vars into `.env.local` —
-   existing keys are never overwritten (skip with `--no-env`).
+   existing keys are never overwritten (skip with `--no-env`; explicit with `--write-env`).
 3. Writes the `@mushi-mushi/mcp` server block into `.cursor/mcp.json` and
    ensures that file is gitignored, since it embeds the API key (skip with
-   `--no-ide`).
+   `--no-ide`; explicit with `--wire-ide`).
 4. With `--wait`, polls `GET /v1/sync/ingest-setup` every 3 s until the SDK
    heartbeat (or first report) lands, up to `--wait-timeout <sec>`
    (default 120). Rejected credentials (401/403/404) fail fast instead of
@@ -90,12 +126,24 @@ repo to an existing project in one shot:
 ```bash
 # Recommended: pass the key via env so it stays out of shell history
 MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> \
-  --endpoint https://<ref>.supabase.co/functions/v1/api --wait
+  --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
+  --write-env --wire-ide --wait
 mushi connect --api-key mushi_xxx --project-id <uuid> --endpoint <url> --no-ide --json
 ```
 
 Exits non-zero when `--wait` times out or credentials are rejected, so it
 composes in setup scripts and CI.
+
+### `mushi setup`
+
+Writes IDE MCP config from `~/.config/mushi/config.json` — run `mushi login` first.
+Does **not** install SDK packages or write app env vars (use `mushi init` for that).
+
+```bash
+mushi setup                         # wire Cursor (default)
+mushi setup --ide claude            # Claude Code / Desktop
+mushi setup --all-projects          # one MCP server entry per accessible project
+```
 
 ### `mushi upgrade`
 
@@ -301,6 +349,19 @@ MUSHI_BYOK_KEY=sk-ant-... mushi keys add --provider anthropic --label "Backup"
 mushi slack status
 mushi slack test
 ```
+
+## Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `MUSHI_API_KEY` | Admin or ingest API key (prefer env over `--api-key` flag) |
+| `MUSHI_API_ENDPOINT` | API base URL (defaults to Mushi Cloud when unset) |
+| `MUSHI_PROJECT_ID` | Project UUID |
+| `MUSHI_CONSOLE_URL` | Admin console base for hints + browser opens |
+| `MUSHI_BYOK_KEY` | BYOK key for `mushi keys add` (keeps key out of shell history) |
+| `MUSHI_NO_UPDATE_CHECK=1` | Skip npm registry version nudge in `mushi init` |
+
+Config file: `~/.config/mushi/config.json` (Unix mode `0o600`; legacy `~/.mushirc` auto-migrates).
 
 ## Security notes
 

@@ -1,87 +1,55 @@
 /**
  * FILE: apps/admin/src/lib/resolveProjectDomain.ts
- * PURPOSE: Resolve a hostname for fetching a project's app favicon.
- *          Priority: live SDK origin (canonical "where is this app?") →
- *          slug hints for known dogfood projects → null (caller shows initials).
+ * PURPOSE: Admin-specific favicon source merging + heartbeat helpers.
+ *          Domain resolution lives in @mushi-mushi/core/favicon.
  */
 
 import type { SetupProject, SetupStepDiagnostic } from './useSetupStatus'
+import type { ProjectSnapshot } from './projectSnapshotTypes'
+import {
+  githubRepoDomainHint,
+  originToDomain,
+  projectInitials,
+  projectInitialsThemeIndex,
+  resolveProjectDomain,
+  type ProjectFaviconSource,
+} from '@mushi-mushi/core'
 
-export interface ProjectFaviconSource {
-  project_id: string
-  project_name: string
-  project_slug: string
-  /** e.g. https://kensaur.us — from SDK heartbeat or API key last_seen_origin */
-  sdk_origin?: string | null
-  /** Connected GitHub/GitLab repo — used when SDK has not heartbeated yet. */
-  repo_url?: string | null
+export type { ProjectFaviconSource }
+export {
+  githubRepoDomainHint,
+  originToDomain,
+  projectInitials,
+  resolveProjectDomain,
 }
 
-/**
- * Slug → production domain hints for projects whose SDK hasn't heartbeated
- * yet (fresh project, localhost-only dev, etc.). Keep this tiny and
- * high-confidence — wrong hints are worse than initials fallback.
- */
-const SLUG_DOMAIN_HINTS: Record<string, string> = {
-  'glot-it': 'kensaur.us',
-  'glotit': 'kensaur.us',
-  'yen-yen': 'kensaur.us',
-  'yenyen': 'kensaur.us',
-  'solo-boss-cloud': 'soloboss.cloud',
-  'mushi-mushi': 'mushimushi.dev',
+const INITIALS_CHIP_THEMES = [
+  'bg-info/15 text-info border-info/35',
+  'bg-brand/15 text-brand border-brand/35',
+  'bg-warn-muted/50 text-warning-foreground border-warn/35',
+  'bg-ok/15 text-ok border-ok/35',
+  'bg-accent-muted/55 text-accent-foreground border-accent/35',
+] as const
+
+/** Stable accent so the same project always gets the same initials colour. */
+export function projectInitialsChipClass(projectId: string): string {
+  return INITIALS_CHIP_THEMES[projectInitialsThemeIndex(projectId)]!
 }
 
-function originToDomain(origin: string): string | null {
-  const trimmed = origin.trim()
-  if (!trimmed) return null
-  try {
-    const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`)
-    const host = url.hostname.toLowerCase()
-    // Google's favicon CDN can't resolve localhost — fall back to initials.
-    if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) {
-      return null
-    }
-    return host
-  } catch {
-    return null
+/** Merge setup checklist + projects snapshot into a favicon source. */
+export function faviconSourceFromProject(
+  setup: Pick<SetupProject, 'project_id' | 'project_name' | 'project_slug' | 'steps'>,
+  snapshot?: Pick<ProjectSnapshot, 'primary_repo' | 'api_keys'> | null,
+): ProjectFaviconSource {
+  const sdkFromSetup = sdkOriginFromSetupProject(setup as SetupProject)
+  const sdkFromKeys = sdkOriginFromApiKeys(snapshot?.api_keys)
+  return {
+    project_id: setup.project_id,
+    project_name: setup.project_name,
+    project_slug: setup.project_slug,
+    sdk_origin: sdkFromSetup ?? sdkFromKeys,
+    repo_url: snapshot?.primary_repo?.repo_url ?? null,
   }
-}
-
-/** Derive a production hostname from a connected repo URL when possible. */
-export function githubRepoDomainHint(repoUrl: string | null | undefined): string | null {
-  if (!repoUrl?.trim()) return null
-  try {
-    const u = new URL(repoUrl.trim())
-    const host = u.hostname.toLowerCase()
-    const parts = u.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
-    if (parts.length < 2) return null
-    const repo = parts[1]!.replace(/\.git$/i, '').toLowerCase()
-
-    // Repo slug is a domain (e.g. kensaurus/glot.it → glot.it favicon).
-    if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(repo)) return repo
-
-    // GitHub Pages user site: owner.github.io
-    if (host === 'github.com' && repo.endsWith('.github.io')) return repo
-
-    // Non-GitHub remotes — favicon from host (GitLab self-hosted, etc.)
-    if (host !== 'github.com' && host !== 'www.github.com') return host
-
-    return null
-  } catch {
-    return null
-  }
-}
-
-export function resolveProjectDomain(source: ProjectFaviconSource): string | null {
-  if (source.sdk_origin) {
-    const fromOrigin = originToDomain(source.sdk_origin)
-    if (fromOrigin) return fromOrigin
-  }
-  const fromRepo = githubRepoDomainHint(source.repo_url)
-  if (fromRepo) return fromRepo
-  const hinted = SLUG_DOMAIN_HINTS[source.project_slug.toLowerCase()]
-  if (hinted) return hinted
-  return null
 }
 
 /** Pull the SDK heartbeat origin off the setup checklist payload. */
@@ -203,31 +171,4 @@ export function sdkOriginFromApiKeys(
   if (live?.last_seen_origin) return live.last_seen_origin
   const any = keys.find((k) => k.last_seen_origin)
   return any?.last_seen_origin ?? null
-}
-
-/** Two-letter initials for favicon fallback chips. */
-export function projectInitials(name: string): string {
-  const parts = name.trim().split(/[\s._-]+/).filter(Boolean)
-  if (parts.length >= 2) {
-    return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase()
-  }
-  const compact = name.replace(/[^a-zA-Z0-9]/g, '')
-  return (compact.slice(0, 2) || name.slice(0, 2) || '?').toUpperCase()
-}
-
-const INITIALS_CHIP_THEMES = [
-  'bg-info/15 text-info border-info/35',
-  'bg-brand/15 text-brand border-brand/35',
-  'bg-warn-muted/50 text-warning-foreground border-warn/35',
-  'bg-ok/15 text-ok border-ok/35',
-  'bg-accent-muted/55 text-accent-foreground border-accent/35',
-] as const
-
-/** Stable accent so the same project always gets the same initials colour. */
-export function projectInitialsChipClass(projectId: string): string {
-  let hash = 0
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash + projectId.charCodeAt(i)) % INITIALS_CHIP_THEMES.length
-  }
-  return INITIALS_CHIP_THEMES[hash]!
 }

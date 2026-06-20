@@ -1,3 +1,5 @@
+import { scrubPii } from '@mushi-mushi/core'
+
 export interface ConsoleEntry {
   level: 'log' | 'warn' | 'error'
   message: string
@@ -15,7 +17,7 @@ export function setupConsoleCapture(maxEntries = 100) {
     console[method] = (...args: unknown[]) => {
       entries.push({
         level: method,
-        message: args.map(String).join(' ').slice(0, 500),
+        message: scrubPii(args.map(String).join(' ').slice(0, 500)),
         timestamp: Date.now(),
       })
       if (entries.length > maxEntries) entries.shift()

@@ -19,9 +19,9 @@ pnpm add @mushi-mushi/web
 ## 2. Initialize
 
 ```ts filename="src/mushi.ts"
-import { initMushi } from '@mushi-mushi/web'
+import { Mushi } from '@mushi-mushi/web'
 
-const mushi = initMushi({
+const mushi = Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
   apiKey: import.meta.env.VITE_MUSHI_API_KEY,
 })
