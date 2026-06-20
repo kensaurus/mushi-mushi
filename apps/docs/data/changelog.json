@@ -1,34 +1,14 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.19",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.19.2",
+      "1.19.1",
+      "1.19.0"
+    ],
     "highlights": [
-      {
-        "title": "Resilient device-auth polling",
-        "description": "`waitForCliToken` (and the `mushi login` poll loop) now tolerate up to 5 consecutive transient poll errors (network blips / 5xx), resetting on any successful poll, instead of aborting a sign-in the moment one request drops. Denial and expiry remain terminal."
-      },
-      {
-        "title": "`mushi init --yes` keeps browser sign-in",
-        "description": "`--yes` no longer forces the legacy manual Project ID + API key paste; it goes straight to the (default) browser sign-in and only falls back to manual entry if that fails."
-      },
-      {
-        "title": "`mushi project create` honors a saved endpoint",
-        "description": "it now resolves the endpoint as `--endpoint` → `MUSHI_API_ENDPOINT` → saved `mushi config endpoint` → Cloud default, so self-hosted users aren't silently redirected to Mushi Cloud."
-      },
-      {
-        "title": "Safer browser open",
-        "description": "`openInBrowser` validates the URL is http(s) and launches via `spawn` with an argument array instead of building a shell command string, removing the command-injection surface (CodeQL)."
-      },
-      {
-        "title": "Linear trailing-slash trim",
-        "description": "`normalizeConsoleBase` no longer uses a backtracking `/\\/+$/` regex (ReDoS / CodeQL polynomial-regex alert)."
-      },
-      {
-        "title": "`mushi connect` flag clarity",
-        "description": "`--write-env` / `--wire-ide` now actually force their action on (overriding a prior `--no-env` / `--no-ide`) instead of being silent no-ops."
-      },
       {
         "title": "Favicon trust boundary",
         "description": "(`@mushi-mushi/core`): `readPageFaviconHref` now returns only http(s) URLs, so a host page can't get a `data:` / `blob:` / `javascript:` favicon rendered into the widget's `<img src>`; anything else falls back to the default mark."
@@ -41,34 +21,6 @@
         "title": "Offline-queue data loss",
         "description": "(`@mushi-mushi/react-native`): `decryptQueueBlob` now decrypts any blob carrying the encrypted prefix regardless of the current `secureStorage` flag. Previously, toggling `secureStorage` from `true` to `false` returned the still-encrypted string, which failed `JSON.parse` and silently cleared the offline report queue."
       },
-      {
-        "title": "`mushi init` wizard",
-        "description": "new `acquireCredentials` step. Precedence: explicit `--project-id`/`--api-key` flags (CI) → saved credentials from a prior login (offer to reuse) → **browser sign-in (default)** → manual paste fallback. Any browser-path failure falls back to manual entry; the wizard never hard-fails."
-      },
-      {
-        "title": "`mushi project create`",
-        "description": "rewritten on the shared device-auth flow. Fixes three bugs: it no longer points at a dead hardcoded endpoint, no longer links to a 404 `/sign-up` console URL, and no longer tells you to copy a BYOK-type key (it mints the correct `report:write` SDK ingest key server-side). `--no-browser` prints the URL for headless/SSH; `--name` skips the prompt."
-      },
-      {
-        "title": "`mushi login`",
-        "description": "refactored onto the same shared `device-auth` primitives (DRY) while keeping its terminal UX (a dot per pending poll, precise per-state error messages)."
-      },
-      {
-        "title": "New `device-auth.ts` module",
-        "description": "the RFC 8628 client (`startDeviceAuth`, `pollDeviceToken`, `waitForCliToken`, `listProjects`, `createProject`, `mintProjectKey`) is now implemented once and shared across `init`, `login`, and `project create`. Every request carries a 15s timeout so a hung network never wedges setup. Covered by new unit tests."
-      }
-    ],
-    "packages": []
-  },
-  {
-    "majorMinor": "1.19",
-    "headline": null,
-    "pending": false,
-    "versions": [
-      "1.19.1",
-      "1.19.0"
-    ],
-    "highlights": [
       {
         "title": "CLI",
         "description": "`mushi login` now implements RFC 8628 browser device-auth (zero copy-paste). Opens the console in the browser, user clicks Approve, CLI receives a session token automatically, then lists/creates a project and saves the API key. `--api-key` flag remains as the CI/non-interactive fallback."
@@ -109,11 +61,11 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.19.1"
+        "version": "1.19.2"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.19.0"
+        "version": "1.19.2"
       }
     ]
   },
@@ -753,10 +705,67 @@
     ]
   },
   {
+    "majorMinor": "0.20",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.20.0"
+    ],
+    "highlights": [
+      {
+        "title": "`mushi init` wizard",
+        "description": "new `acquireCredentials` step. Precedence: explicit `--project-id`/`--api-key` flags (CI) → saved credentials from a prior login (offer to reuse) → **browser sign-in (default)** → manual paste fallback. Any browser-path failure falls back to manual entry; the wizard never hard-fails."
+      },
+      {
+        "title": "`mushi project create`",
+        "description": "rewritten on the shared device-auth flow. Fixes three bugs: it no longer points at a dead hardcoded endpoint, no longer links to a 404 `/sign-up` console URL, and no longer tells you to copy a BYOK-type key (it mints the correct `report:write` SDK ingest key server-side). `--no-browser` prints the URL for headless/SSH; `--name` skips the prompt."
+      },
+      {
+        "title": "`mushi login`",
+        "description": "refactored onto the same shared `device-auth` primitives (DRY) while keeping its terminal UX (a dot per pending poll, precise per-state error messages)."
+      },
+      {
+        "title": "New `device-auth.ts` module",
+        "description": "the RFC 8628 client (`startDeviceAuth`, `pollDeviceToken`, `waitForCliToken`, `listProjects`, `createProject`, `mintProjectKey`) is now implemented once and shared across `init`, `login`, and `project create`. Every request carries a 15s timeout so a hung network never wedges setup. Covered by new unit tests."
+      },
+      {
+        "title": "Resilient device-auth polling",
+        "description": "`waitForCliToken` (and the `mushi login` poll loop) now tolerate up to 5 consecutive transient poll errors (network blips / 5xx), resetting on any successful poll, instead of aborting a sign-in the moment one request drops. Denial and expiry remain terminal."
+      },
+      {
+        "title": "`mushi init --yes` keeps browser sign-in",
+        "description": "`--yes` no longer forces the legacy manual Project ID + API key paste; it goes straight to the (default) browser sign-in and only falls back to manual entry if that fails."
+      },
+      {
+        "title": "`mushi project create` honors a saved endpoint",
+        "description": "it now resolves the endpoint as `--endpoint` → `MUSHI_API_ENDPOINT` → saved `mushi config endpoint` → Cloud default, so self-hosted users aren't silently redirected to Mushi Cloud."
+      },
+      {
+        "title": "Safer browser open",
+        "description": "`openInBrowser` validates the URL is http(s) and launches via `spawn` with an argument array instead of building a shell command string, removing the command-injection surface (CodeQL)."
+      },
+      {
+        "title": "Linear trailing-slash trim",
+        "description": "`normalizeConsoleBase` no longer uses a backtracking `/\\/+$/` regex (ReDoS / CodeQL polynomial-regex alert)."
+      },
+      {
+        "title": "`mushi connect` flag clarity",
+        "description": "`--write-env` / `--wire-ide` now actually force their action on (overriding a prior `--no-env` / `--no-ide`) instead of being silent no-ops."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.20.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.19",
     "headline": null,
     "pending": false,
     "versions": [
+      "0.19.2",
       "0.19.1",
       "0.19.0"
     ],
@@ -772,6 +781,18 @@
       {
         "title": "React Native",
         "description": "Same 401/403 credential-failure detection in `MushiProvider.submitReport` — skips enqueue and surfaces the error immediately."
+      },
+      {
+        "title": "Favicon trust boundary",
+        "description": "(`@mushi-mushi/core`): `readPageFaviconHref` now returns only http(s) URLs, so a host page can't get a `data:` / `blob:` / `javascript:` favicon rendered into the widget's `<img src>`; anything else falls back to the default mark."
+      },
+      {
+        "title": "Self-hosted credential message",
+        "description": "(`@mushi-mushi/core`, `@mushi-mushi/react-native`): the one-time 401/403 \"credentials rejected\" warning only links to the hosted console when the client is actually using the Cloud endpoint; self-hosted deployments get a console-agnostic message instead of a wrong domain."
+      },
+      {
+        "title": "Offline-queue data loss",
+        "description": "(`@mushi-mushi/react-native`): `decryptQueueBlob` now decrypts any blob carrying the encrypted prefix regardless of the current `secureStorage` flag. Previously, toggling `secureStorage` from `true` to `false` returned the still-encrypted string, which failed `JSON.parse` and silently cleared the offline report queue."
       },
       {
         "title": "core/types",
@@ -793,7 +814,7 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.19.1"
+        "version": "0.19.2"
       }
     ]
   },
@@ -1450,6 +1471,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.12",
       "0.7.11",
       "0.7.10",
       "0.7.9",
@@ -1560,7 +1582,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.11"
+        "version": "0.7.12"
       }
     ]
   },
@@ -1662,6 +1684,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.17",
       "0.5.16",
       "0.5.15",
       "0.5.14",
@@ -1773,7 +1796,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.16"
+        "version": "0.5.17"
       },
       {
         "name": "mushi-mushi",
