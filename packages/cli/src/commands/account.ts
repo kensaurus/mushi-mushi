@@ -1,9 +1,36 @@
+/**
+ * FILE: packages/cli/src/commands/account.ts
+ * PURPOSE: CLI account management commands: init, login, whoami, ping, status, config, migrate.
+ *
+ * OVERVIEW:
+ *   - `mushi init`   — guided SDK setup wizard
+ *   - `mushi login`  — RFC 8628 browser device-auth (zero copy-paste) or --api-key CI path
+ *   - `mushi whoami` — verify key and show project info
+ *   - `mushi ping`   — health-check connectivity
+ *   - `mushi status` — show project report stats
+ *   - `mushi config` — view/update CLI config
+ *   - `mushi migrate`— suggest migration guide
+ *
+ * DEPENDENCIES:
+ *   - config.ts (loadConfig / saveConfig)
+ *   - init.ts (runInit)
+ *   - console-url.ts (resolveConsoleUrl, openInBrowser, apiKeyHint, cliSetupDeepLink, etc.)
+ *   - cli-shared.ts (apiCall, die, requireConfig, pad)
+ *   - endpoint.ts (CLOUD_API_ENDPOINT, resolveCloudEndpoint)
+ */
+
 import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
 import { runInit } from '../init.js';
 import { runMigrate } from '../migrate.js';
 import type { FrameworkId } from '../detect.js';
 import { assertEndpoint } from '../endpoint.js';
+import {
+  apiKeyHint,
+  cliSetupDeepLink,
+  openInBrowser,
+  resolveConsoleUrl,
+} from '../console-url.js';
 import { apiCall, die, requireConfig, pad, API_TIMEOUT_MS } from '../cli-shared.js';
 import type { WhoamiData, StatsData } from '../cli-types.js';
 
@@ -56,102 +83,277 @@ program
 // ─── login ───────────────────────────────────────────────────────────────────
 program
   .command('login')
-  .description('Authenticate the CLI — opens browser to get your API key, or pass --api-key to skip')
-  .option('--api-key <key>', 'Mushi API key (mushi_...) — skip the browser flow')
-  .option('--endpoint <url>', 'Supabase edge function URL (defaults to Mushi Cloud)')
-  .option('--project-id <id>', 'Project UUID — skip the whoami project-list prompt')
-  .option('--no-browser', 'Skip opening the browser (print sign-in URL instead)')
+  .description('Authenticate the CLI via browser (zero copy-paste), or pass --api-key to skip')
+  .option('--api-key <key>', 'API key (mushi_...) — non-interactive / CI path')
+  .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
+  .option('--project-id <id>', 'Project UUID — skip the project picker')
+  .option('--no-browser', 'Print the verification URL instead of opening the browser')
   .addHelpText('after', `
 Examples:
-  mushi login                         # browser-guided: open console → paste key
-  mushi login --api-key mushi_xxx     # non-interactive: save key directly
+  mushi login                              # browser-guided (recommended)
+  mushi login --api-key mushi_xxx         # non-interactive / CI
   mushi login --api-key mushi_xxx --project-id <uuid>`)
   .action(async (opts: { apiKey?: string; endpoint?: string; projectId?: string; browser?: boolean }) => {
     const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('../endpoint.js')
-    const { apiCall } = await import('../cli-shared.js')
     const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
-    const consoleUrl = 'https://kensaur.us/mushi-mushi/projects'
+    const consoleBase = await resolveConsoleUrl()
 
     let apiKey = opts.apiKey
     let projectId = opts.projectId
 
-    if (!apiKey) {
-      // Browser-guided flow: open the console, then prompt for the key
-      const signInUrl = 'https://kensaur.us/mushi-mushi/sign-in'
+    // ── Non-interactive / CI path ──────────────────────────────────────────
+    if (apiKey) {
+      const config = loadConfig()
+      config.apiKey = apiKey
+      config.endpoint = endpoint
+      if (projectId) config.projectId = projectId
+      config.consoleUrl = consoleBase
+      saveConfig(config)
+
       console.log('')
-      console.log('  Mushi login — browser-guided')
-      console.log('  ─────────────────────────────')
-      if (opts.browser !== false) {
-        console.log('  Opening the Mushi console in your browser…')
-        try {
-          const { exec } = await import('node:child_process')
-          const openCmd = process.platform === 'win32'
-            ? `start "" "${signInUrl}"`
-            : process.platform === 'darwin'
-              ? `open "${signInUrl}"`
-              : `xdg-open "${signInUrl}"`
-          exec(openCmd)
-        } catch { /* best-effort */ }
-      } else {
-        console.log(`  Sign in at: ${signInUrl}`)
+      console.log('  ✓ Credentials saved.')
+
+      const verifyResult = await apiCall<{ project_name: string; project_id: string; stats: Record<string, unknown> }>(
+        '/v1/sync/whoami',
+        { apiKey, endpoint, projectId },
+      )
+      if (!verifyResult.ok) {
+        console.warn(`  ⚠  Key saved, but verification failed: ${verifyResult.error?.message ?? 'unknown error'}`)
+        console.warn(`     Check your key at: ${cliSetupDeepLink(consoleBase)}`)
+        return
       }
+      const d = verifyResult.data
+      if (d.project_name) {
+        if (!projectId && d.project_id) {
+          config.projectId = d.project_id
+          saveConfig(config)
+        }
+        console.log(`  ✓ Project: ${d.project_name} (${d.project_id})`)
+      }
+      console.log(`  ✓ Endpoint: ${endpoint}`)
       console.log('')
-      console.log('  After signing in, go to Projects → API Keys → New key')
-      console.log('  then paste the key below.')
-      console.log('')
-
-      const { createInterface } = await import('node:readline')
-      const rl = createInterface({ input: process.stdin, output: process.stdout })
-      const ask = (q: string): Promise<string> =>
-        new Promise(resolve => rl.question(q, (a) => resolve(a.trim())))
-
-      apiKey = await ask('  API key (mushi_...): ')
-      if (!projectId) {
-        projectId = await ask(`  Project ID (uuid, or leave blank to list projects): `)
-        if (!projectId) projectId = undefined
-      }
-      rl.close()
-
-      if (!apiKey) {
-        process.stderr.write('\nerror: API key is required.\n')
-        process.exit(2)
-      }
-    }
-
-    // Save credentials
-    const config = loadConfig()
-    config.apiKey = apiKey
-    config.endpoint = endpoint
-    if (projectId) config.projectId = projectId
-    saveConfig(config)
-
-    console.log('')
-    console.log('  ✓ Credentials saved to ~/.config/mushi/config.json')
-
-    // Verify + list projects if project ID not set
-    const verifyResult = await apiCall<{ project_name: string; project_id: string; stats: Record<string, unknown> }>(
-      '/v1/sync/whoami',
-      { apiKey, endpoint, projectId },
-    )
-    if (!verifyResult.ok) {
-      console.warn(`  ⚠  Key saved, but verification failed: ${verifyResult.error?.message ?? 'unknown error'}`)
-      console.warn(`     Check your key at: ${consoleUrl}`)
+      console.log("  Run 'mushi whoami' to verify · 'mushi init' to set up the SDK")
       return
     }
 
-    const d = verifyResult.data
-    if (!projectId && d.project_id) {
-      // Whoami returned a project — save it
-      config.projectId = d.project_id
-      saveConfig(config)
-      console.log(`  ✓ Project: ${d.project_name} (${d.project_id})`)
-    } else if (d.project_name) {
-      console.log(`  ✓ Project: ${d.project_name} (${d.project_id})`)
+    // ── Browser device-auth path (RFC 8628) ────────────────────────────────
+    console.log('')
+    console.log('  Mushi login')
+    console.log('  ───────────')
+
+    // Step 1: start device-auth session
+    type DeviceData = {
+      device_code: string
+      user_code: string
+      verification_uri: string
+      expires_in: number
+      interval: number
+    }
+    let deviceData: DeviceData
+    try {
+      const res = await fetch(`${endpoint}/v1/cli/auth/device/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const json = await res.json() as { ok: boolean; data?: DeviceData; error?: { message: string } }
+      if (!res.ok || !json.ok || !json.data) {
+        throw new Error(json.error?.message ?? `HTTP ${res.status}`)
+      }
+      deviceData = json.data
+    } catch (err) {
+      process.stderr.write(`\nerror: Could not start login session: ${err instanceof Error ? err.message : String(err)}\n`)
+      process.stderr.write(`  Fallback: mushi login --api-key <key> --project-id <uuid>\n`)
+      process.exit(1)
     }
 
-    console.log(`  ✓ Endpoint: ${endpoint}`)
+    // Step 2: show code and open browser
+    const verifyUrl = deviceData.verification_uri
     console.log('')
-    console.log("  Run 'mushi whoami' to verify · 'mushi init' to set up the SDK")
+    console.log(`  Your confirmation code: ${deviceData.user_code}`)
+    console.log('')
+    if (opts.browser !== false) {
+      console.log('  Opening the Mushi console in your browser…')
+      try { await openInBrowser(verifyUrl) } catch { /* best-effort */ }
+    }
+    console.log(`  If the browser didn't open: ${verifyUrl}`)
+    console.log('')
+    console.log('  Waiting for you to approve in the browser…  (Ctrl+C to cancel)')
+
+    // Step 3: poll for CLI token
+    let cliToken: string | null = null
+    const pollIntervalMs = (deviceData.interval ?? 5) * 1000
+    const deadline = Date.now() + (deviceData.expires_in ?? 600) * 1000
+
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, pollIntervalMs))
+      try {
+        const pollRes = await fetch(`${endpoint}/v1/cli/auth/device/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device_code: deviceData.device_code }),
+        })
+        const pollJson = await pollRes.json() as {
+          ok?: boolean
+          data?: { cli_token: string; user_id: string }
+          error?: string
+          error_description?: string
+        }
+
+        if (pollRes.ok && pollJson.ok && pollJson.data?.cli_token) {
+          cliToken = pollJson.data.cli_token
+          break
+        }
+        const errCode = pollJson.error ?? ''
+        if (errCode === 'authorization_pending') {
+          process.stdout.write('.')
+          continue
+        }
+        if (errCode === 'access_denied') {
+          console.log('')
+          process.stderr.write('\nerror: Login denied in the browser.\n')
+          process.exit(1)
+        }
+        if (errCode === 'expired_token') {
+          console.log('')
+          process.stderr.write('\nerror: Login code expired. Run mushi login again.\n')
+          process.exit(1)
+        }
+        throw new Error(pollJson.error_description ?? errCode ?? `HTTP ${pollRes.status}`)
+      } catch (err) {
+        console.log('')
+        process.stderr.write(`\nerror: Poll failed: ${err instanceof Error ? err.message : String(err)}\n`)
+        process.exit(1)
+      }
+    }
+
+    if (!cliToken) {
+      console.log('')
+      process.stderr.write('\nerror: Login timed out. Run mushi login again.\n')
+      process.exit(1)
+    }
+
+    console.log('')
+    console.log('  ✓ Approved!')
+
+    // Step 4: list projects (CLI token auth)
+    const cliHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${cliToken}`,
+    }
+
+    type ProjectSummary = { id: string; name: string; slug: string }
+    let projectsList: ProjectSummary[] = []
+    try {
+      const listRes = await fetch(`${endpoint}/v1/cli/projects`, { headers: cliHeaders })
+      const listJson = await listRes.json() as { ok: boolean; data?: { projects: ProjectSummary[] } }
+      if (listRes.ok && listJson.ok) projectsList = listJson.data?.projects ?? []
+    } catch { /* non-fatal */ }
+
+    // Step 5: pick or create a project
+    let chosenProjectId = projectId
+    let chosenProjectName: string | undefined
+
+    if (!chosenProjectId) {
+      const { createInterface } = await import('node:readline')
+      const rl = createInterface({ input: process.stdin, output: process.stdout })
+      const ask = (q: string): Promise<string> =>
+        new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())))
+
+      if (projectsList.length > 0) {
+        console.log('')
+        console.log('  Your projects:')
+        projectsList.forEach((p, i) => {
+          console.log(`    ${i + 1}. ${p.name} (${p.id})`)
+        })
+        console.log(`    ${projectsList.length + 1}. Create a new project`)
+        console.log('')
+
+        const choice = await ask(`  Pick a project [1-${projectsList.length + 1}]: `)
+        const num = parseInt(choice, 10)
+
+        if (num >= 1 && num <= projectsList.length) {
+          const picked = projectsList[num - 1]
+          chosenProjectId = picked.id
+          chosenProjectName = picked.name
+        }
+      }
+
+      if (!chosenProjectId) {
+        // Create a new project
+        console.log('')
+        const newName = await ask('  Project name: ')
+        rl.close()
+
+        if (!newName.trim()) {
+          process.stderr.write('\nerror: Project name is required.\n')
+          process.exit(2)
+        }
+
+        try {
+          const createRes = await fetch(`${endpoint}/v1/cli/projects`, {
+            method: 'POST',
+            headers: cliHeaders,
+            body: JSON.stringify({ name: newName.trim() }),
+          })
+          const createJson = await createRes.json() as {
+            ok: boolean
+            data?: { id: string; name: string; slug: string; apiKey: string | null }
+            error?: { message: string }
+          }
+          if (!createRes.ok || !createJson.ok || !createJson.data) {
+            throw new Error(createJson.error?.message ?? `HTTP ${createRes.status}`)
+          }
+          chosenProjectId = createJson.data.id
+          chosenProjectName = createJson.data.name
+          apiKey = createJson.data.apiKey ?? undefined
+          console.log(`  ✓ Created project "${chosenProjectName}"`)
+        } catch (err) {
+          process.stderr.write(`\nerror: Could not create project: ${err instanceof Error ? err.message : String(err)}\n`)
+          process.exit(1)
+        }
+      } else {
+        rl.close()
+      }
+    }
+
+    // Step 6: mint a report:write API key for the SDK (if not already minted by create).
+    // Uses the CLI-token-authed endpoint (the /v1/admin/* keys route is JWT-only
+    // and would reject the device-auth token).
+    if (!apiKey && chosenProjectId) {
+      try {
+        const keyRes = await fetch(`${endpoint}/v1/cli/projects/${chosenProjectId}/keys`, {
+          method: 'POST',
+          headers: cliHeaders,
+          body: JSON.stringify({}),
+        })
+        const keyJson = await keyRes.json() as {
+          ok: boolean
+          data?: { key?: string }
+          error?: { message: string }
+        }
+        if (keyRes.ok && keyJson.ok) {
+          apiKey = keyJson.data?.key ?? undefined
+        }
+      } catch { /* non-fatal — user can copy from console */ }
+    }
+
+    // Step 7: save config
+    const config = loadConfig()
+    config.endpoint = endpoint
+    config.consoleUrl = consoleBase
+    if (chosenProjectId) config.projectId = chosenProjectId
+    if (apiKey) config.apiKey = apiKey
+    saveConfig(config)
+
+    console.log('')
+    if (chosenProjectName) console.log(`  ✓ Project: ${chosenProjectName}`)
+    if (apiKey) {
+      console.log(`  ✓ SDK key saved (${apiKey.slice(0, 12)}…)`)
+    } else {
+      console.log(`  ℹ  Get an SDK key at: ${apiKeyHint(consoleBase)}`)
+    }
+    console.log('')
+    console.log("  Run 'mushi init' to set up the SDK in this project.")
   })
 
 // ─── whoami ──────────────────────────────────────────────────────────────────

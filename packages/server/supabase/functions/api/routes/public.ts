@@ -394,6 +394,24 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     try {
       const projectId = c.get('projectId') as string;
       const body = await c.req.json();
+
+      if (
+        typeof body?.projectId === 'string' &&
+        body.projectId.length > 0 &&
+        body.projectId !== projectId
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'PROJECT_MISMATCH',
+              message: 'Report projectId does not match the authenticated API key project.',
+            },
+          },
+          400,
+        );
+      }
+
       const db = getServiceClient();
       const ipAddress =
         c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');

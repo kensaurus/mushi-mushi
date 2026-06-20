@@ -35,6 +35,41 @@ See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 
 ---
 
+## Screenshot preview & consent (1.19+)
+
+When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
+`'auto'`), the details step shows a **visible preview** of the image that will
+be attached — not just a "Screenshot attached ✓" label. Reporters can **Remove**
+the screenshot before submit and optionally read a **privacy caption** beneath
+the preview.
+
+```typescript
+Mushi.init({
+  projectId: '00000000-0000-0000-0000-000000000000', // UUID from Projects page
+  apiKey: 'mushi_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',        // report:write key
+  widget: {
+    // true  → localized default caption (en/es/ja/th)
+    // string → your compliance copy verbatim
+    // false → hide caption (preview + Remove still show)
+    screenshotSensitiveHint: true,
+  },
+  capture: { screenshot: 'on-report' },
+})
+```
+
+Tune the caption from the admin console (**Projects → SDK install → Screenshot
+privacy caption**) without rebuilding — it travels in `GET /v1/sdk/config` under
+`widget.screenshotSensitiveHint`.
+
+The preview stays in sync if the reporter uses **Mark up** (blur/highlight).
+Keep `img-src data:` in your CSP when using screenshots on locked-down pages.
+See the [Next.js App Router + CSP recipe](/sdks/nextjs-app-router-csp).
+
+Maintainer deep-dive:
+[SDK_SCREENSHOT_PREVIEW.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+
+---
+
 ## Identifying users & the Rewards program
 
 Call `identify()` as soon as your auth state resolves. The SDK links all
@@ -61,11 +96,11 @@ for the previous session first.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
-import { init } from '@mushi-mushi/web'
+import { Mushi } from '@mushi-mushi/web'
 
-const mushi = init({
+const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
-  apiKey: 'YOUR_PUBLIC_API_KEY',
+  apiKey: 'YOUR_API_KEY',
   rewards: {
     enabled: true,
     trackActivity: true,        // auto-capture page_view, navigate, session_start

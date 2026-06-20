@@ -1636,6 +1636,8 @@ export interface MushiCrossAppReport {
   project_id: string | null;
   app_name: string | null;
   app_slug: string | null;
+  /** Hostname from latest SDK heartbeat — used for favicon in cross-app list. */
+  app_domain?: string | null;
 }
 
 /** A single entry in the global tester leaderboard. */

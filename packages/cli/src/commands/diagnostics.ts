@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { MUSHI_CLI_VERSION } from '../version.js';
 import { runSourcemapsUpload } from '../sourcemaps.js';
 import { apiCall, die, requireConfig } from '../cli-shared.js';
+import { reportsUrl, resolveConsoleUrlSync } from '../console-url.js';
 
 export function registerDiagnosticsCommands(program: Command): void {
 // ─── test ─────────────────────────────────────────────────────────────────────
@@ -39,7 +40,7 @@ program
       console.log(`✓ Test report submitted`)
       console.log(`  ID:     ${d.reportId}`)
       console.log(`  Status: ${d.status}`)
-      console.log(`  View:   https://kensaur.us/mushi-mushi/reports/${d.reportId}`)
+      console.log(`  View:   ${reportsUrl(resolveConsoleUrlSync(), d.reportId)}`)
     }
   })
 

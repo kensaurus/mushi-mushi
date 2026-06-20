@@ -11,7 +11,8 @@ import type {
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
-import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, isSubmitShortcut } from './widget-helpers';
+import { readPageFaviconHref } from '@mushi-mushi/core';
+import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, isSubmitShortcut } from './widget-helpers';
 import type {
   AssistantTurn,
   WidgetCallbacks,
@@ -1577,11 +1578,13 @@ export class MushiWidget {
       assistantSending: this.assistantSending,
       assistantError: this.assistantError,
       showAllCategories: this.showAllCategories,
+      pageFaviconHref: readPageFaviconHref(),
     };
   }
 
   private attachHandlers(panel: HTMLElement): void {
     const t = this.locale;
+    bindFaviconFallbacks(panel);
 
     panel.querySelector('[data-action="close"]')?.addEventListener('click', () => this.close());
     panel.querySelector('[data-action="back"]')?.addEventListener('click', () => {

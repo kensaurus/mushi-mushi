@@ -38,6 +38,7 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 | `MushiCaptureExceptionOptions` | 1.0+ — options for `Mushi.captureException(err, opts)`: `level`, `tags`, `extras`, `category`, `userIntent` overrides for the structured report. |
 | `NormalisedException`          | 1.0+ — return type of `normaliseThrown(err)` (`{ name, message, stack?, cause? }`); used internally by `captureException` and exposed for adapters that want to ship their own thin wrappers. |
 | `MushiBannerLink`              | 1.8+ — flat action on the rich banner layout: `{ label, href? }` opens an external URL in a new tab, `{ label, featureRequest: true }` opens the widget in feature-request mode. Consumed via `MushiBannerConfig.links`. |
+| `screenshotSensitiveHint` (on `MushiWidgetConfig`) | 1.19+ — privacy caption under the screenshot preview: `true` = localized default, `string` = custom copy, `false` = hide caption (preview + Remove remain). Console-configurable via `GET /v1/sdk/config`. See [`docs/SDK_SCREENSHOT_PREVIEW.md`](../../docs/SDK_SCREENSHOT_PREVIEW.md). |
 
 Constants: `MUSHI_INTERNAL_HEADER` (`'X-Mushi-Internal'`),
 `MUSHI_INTERNAL_INIT_MARKER`, and the `MushiInternalRequestKind` literal union

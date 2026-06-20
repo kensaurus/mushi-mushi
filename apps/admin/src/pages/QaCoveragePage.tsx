@@ -38,6 +38,7 @@ import {
 import { useActivationStatus, isActivationCockpitV2Enabled } from '../lib/useActivationStatus'
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import { useAdminMode } from '../lib/mode'
@@ -53,6 +54,8 @@ import {
   type QaCoverageStats,
 } from '../components/qa-coverage/QaCoverageStatsTypes'
 import { QaProviderGuideCard } from '../components/qa-coverage/QaProviderGuideCard'
+import { QaCoverageSnapshotStrip } from '../components/qa-coverage/QaCoverageSnapshotStrip'
+import { useQaCoverageUx } from '../lib/qaCoverageModeUx'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -905,12 +908,14 @@ export function QaCoveragePage() {
     loading: qaStatsLoading,
     reload: reloadQaStats,
     isValidating: qaStatsValidating,
+    lastFetchedAt: qaStatsFetchedAt,
   } = usePageData<QaCoverageStats>(
     projectId ? `/v1/admin/projects/${projectId}/qa-coverage/stats` : null,
     { deps: [projectId] },
   )
   usePublishPageHeroStats('/qa-coverage', qaStatsData)
   const qaStats = qaStatsData ?? EMPTY_QA_COVERAGE_STATS
+  const qaUx = useQaCoverageUx()
 
   const { data: pendingData, reload: reloadPending } = usePageData<{ stories: PendingReviewStory[] }>(
     `/v1/admin/inventory/${projectId}/stories/pending-review`,
@@ -1057,15 +1062,39 @@ export function QaCoveragePage() {
       </PageHeaderBar>
 
       {!qaStatsLoading && (
-        <QaCoverageStatusBanner
-          stats={qaStats}
-          onRefresh={reloadAll}
-          refreshing={qaStatsValidating || loading}
-          onCreateStory={() => setShowCreate(true)}
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.status,
+              children: (
+                <QaCoverageStatusBanner
+                  stats={qaStats}
+                  onRefresh={reloadAll}
+                  refreshing={qaStatsValidating || loading}
+                  onCreateStory={() => setShowCreate(true)}
+                />
+              ),
+            },
+            {
+              priority: POSTURE_PRIORITY.heroOrSnapshot,
+              show: !qaUx.hideQaSnapshot,
+              children: (
+                <QaCoverageSnapshotStrip
+                  stats={qaStats}
+                  statsFetchedAt={qaStatsFetchedAt}
+                  statsValidating={qaStatsValidating}
+                  hideLinks={qaUx.hideSnapshotLinks}
+                  compact={qaUx.compactSnapshot}
+                />
+              ),
+            },
+            {
+              priority: POSTURE_PRIORITY.guide,
+              children: <QaProviderGuideCard topPriority={qaStats.topPriority} />,
+            },
+          ]}
         />
       )}
-
-      <QaProviderGuideCard topPriority={qaStats.topPriority} />
 
       {isAdvanced ? (
         <PageHero

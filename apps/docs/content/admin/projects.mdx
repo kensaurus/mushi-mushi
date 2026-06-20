@@ -36,6 +36,22 @@ Each project gets a card showing:
 
 ---
 
+## Creating a project
+
+Use **Setup → Steps** or **Projects → New project**:
+
+1. Enter a name and click **Create**.
+2. A **success panel** appears immediately with your **Project ID** (UUID) and copy-ready CLI commands (`mushi init` / `mushi connect`).
+3. Click **Generate API key** to mint a `report:write` ingest key on the Verify tab — **not** Settings (Settings is for BYOK provider keys only).
+
+When the CLI wizard opens your browser, it lands on `?setup=cli` with the same success panel flow.
+
+<Callout type="info">
+Local dev console: `http://localhost:6464` after `pnpm dev`. Override with `MUSHI_CONSOLE_URL` in the CLI. See [CLI ↔ console loop](/quickstart/cli-console-loop).
+</Callout>
+
+---
+
 ## API keys
 
 Each project card lists its API keys:
@@ -89,11 +105,11 @@ closes — all reports, fix attempts, and QA stories for the project are removed
 ## Common tasks
 
 ### Connecting a new app (5 minutes)
-1. Click **Create** at the top, enter a project name.
-2. Select scope **SDK ingest** → click **Generate API key** → copy immediately.
-3. Paste the key into your app using the SDK snippet configurator (select your framework).
-4. Click **Send test report** — a `pass` status chip confirms the pipeline is live.
-5. Open [Reports](/admin/reports) — the test report appears within 10 seconds.
+1. Click **Create** (or **Name your app** on Setup), enter a project name.
+2. Copy the **Project ID** from the success panel.
+3. Go to **Setup → Verify** → **Generate API key** (`report:write`) → copy immediately.
+4. In your app repo run `mushi connect --write-env --wire-ide --wait` (or `mushi init --project-id <uuid>`).
+5. Click **Send test report** — a `pass` status chip confirms the pipeline is live.
 
 ### Sharing with a teammate who only needs read access via AI
 1. Select scope **MCP read** → **Generate API key**.

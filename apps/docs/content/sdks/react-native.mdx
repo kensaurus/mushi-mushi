@@ -103,10 +103,11 @@ See [Quickstart → React Native](/quickstart/react-native) for the end-to-end s
 
 ---
 
-## What gets captured (v0.17+)
+## What gets captured (v0.19+)
 
 Every report submitted through the bottom sheet or `submitReport()` carries
-Sentry-grade context when running SDK **≥ 0.17.0**:
+Sentry-grade context when running SDK **≥ 0.17.0** (screenshot preview caption
+added in **0.19.0**):
 
 | Field | Description |
 | ----- | ----------- |
@@ -147,9 +148,32 @@ npx expo install react-native-view-shot
 # v4.x works on Expo SDK 55; v5+ recommended for New Architecture (Fabric)
 ```
 
-The SDK captures **before** the bottom sheet overlays the screen. Users can
-remove the thumbnail before submit. On finance/health apps, keep
-`capture.screenshot: false` in config for screens that must never be photographed.
+The SDK captures **before** the bottom sheet overlays the screen. Users see a
+**thumbnail preview**, can **Remove** it before submit, and read an optional
+**privacy caption** under the image (1.19+).
+
+```tsx
+<MushiProvider
+  config={{
+    widget: {
+      screenshotSensitiveHint: true, // default caption
+      // screenshotSensitiveHint: 'Remove if account numbers are visible.',
+      // screenshotSensitiveHint: false, // hide caption; preview still shows
+    },
+    capture: { screenshot: true },
+  }}
+>
+```
+
+Console operators can override the caption via **Projects → SDK install →
+Screenshot privacy caption** (runtime config — no app rebuild).
+
+On finance/health apps, keeping capture on with a clear caption is often better
+than disabling screenshots entirely. For screens that must never be captured,
+use `capture.screenshot: false` while those routes are focused.
+
+Maintainer deep-dive:
+[SDK_SCREENSHOT_PREVIEW.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
 
 ### Manual breadcrumbs
 

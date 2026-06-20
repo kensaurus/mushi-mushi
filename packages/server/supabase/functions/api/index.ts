@@ -30,6 +30,7 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+import { registerCliAuthRoutes } from './routes/cli-auth.ts';
 // ---------------------------------------------------------------------------
 // Closed-loop evolution + experiment routes.
 // middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
@@ -530,6 +531,9 @@ registerInventoryRoutes(app);
 registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
+
+// RFC 8628 device-auth (CLI login) + CLI-authenticated project endpoints.
+registerCliAuthRoutes(app);
 
 // Closed-loop evolution + experiment routes.
 registerLessonsRoutes(app);

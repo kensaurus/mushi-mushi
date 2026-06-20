@@ -37,4 +37,11 @@ export interface ProjectSnapshot {
   sdk_status?: SdkStatus
   severity_breakdown_30d?: SeverityBreakdown30d
   trend_7d?: Trend7d
+  primary_repo?: { repo_url: string | null; default_branch?: string | null } | null
+  api_keys?: Array<{
+    is_active?: boolean
+    revoked?: boolean
+    last_seen_origin?: string | null
+    last_seen_at?: string | null
+  }>
 }

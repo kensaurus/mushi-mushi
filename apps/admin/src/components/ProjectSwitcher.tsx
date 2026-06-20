@@ -21,10 +21,11 @@ import {
 } from '../lib/activeProject'
 import { useCreateProject } from '../lib/useCreateProject'
 import { ProjectFavicon } from './ProjectFavicon'
+import { ErrorAlert } from './ui'
 import { ProjectHeartbeatStrip } from './ProjectHeartbeatStrip'
 import { ProjectSnapshotMeta } from './ProjectSnapshotMeta'
 import { ActiveProjectStatusChip } from './ActiveProjectStatusChip'
-import { sdkOriginFromSetupProject } from '../lib/resolveProjectDomain'
+import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { buildProjectSetupTooltip } from '../lib/projectMetaTooltips'
 import { headerDropdownPanelClass } from '../lib/appChrome'
@@ -41,11 +42,12 @@ export function ProjectSwitcher() {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const newNameInputRef = useRef<HTMLInputElement | null>(null)
-  const { create: createProject, creating: submitting } = useCreateProject({
+  const { create: createProject, creating: submitting, error: createError } = useCreateProject({
     onCreated: () => {
       setNewName('')
       setCreating(false)
       setOpen(false)
+      void setup.reload()
     },
   })
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -126,7 +128,7 @@ export function ProjectSwitcher() {
   if (setup.data.projects.length === 0) {
     return (
       <Link
-        to="/projects"
+        to="/projects?tab=create"
         className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
         title="No projects in this team yet"
       >
@@ -162,10 +164,7 @@ export function ProjectSwitcher() {
         className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
       >
         <ProjectFavicon
-          project_id={active.project_id}
-          project_name={active.project_name}
-          project_slug={active.project_slug}
-          sdk_origin={sdkOriginFromSetupProject(active)}
+          {...faviconSourceFromProject(active, snapshots.byId.get(active.project_id))}
           size={14}
         />
         <span className="text-2xs uppercase tracking-wider text-fg-muted hidden sm:inline">Project</span>
@@ -203,10 +202,7 @@ export function ProjectSwitcher() {
                   >
                     <div className="flex w-full items-start justify-between gap-2">
                       <ProjectFavicon
-                        project_id={p.project_id}
-                        project_name={p.project_name}
-                        project_slug={p.project_slug}
-                        sdk_origin={sdkOriginFromSetupProject(p)}
+                        {...faviconSourceFromProject(p, snapshots.byId.get(p.project_id))}
                         size={16}
                         className="mt-0.5"
                       />
@@ -298,6 +294,15 @@ export function ProjectSwitcher() {
                 <span>New project</span>
               </button>
             )}
+            {createError ? (
+              <div className="border-t border-edge-subtle p-2">
+                <ErrorAlert
+                  title="Couldn't create project"
+                  message={createError.message}
+                  code={createError.code}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       )}

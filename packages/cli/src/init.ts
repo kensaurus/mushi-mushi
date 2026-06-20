@@ -24,6 +24,17 @@ import {
   type PackageManager,
 } from './detect.js'
 import { loadConfig, saveConfig } from './config.js'
+import {
+  apiKeyHint,
+  cliSetupDeepLink,
+  consoleUrl,
+  openInBrowser,
+  projectIdHint,
+  reportsUrl,
+  resolveConsoleUrl,
+  resolveConsoleUrlSync,
+} from './console-url.js'
+import { apiCall } from './cli-shared.js'
 import { normalizeEndpoint, resolveCloudEndpoint, TEST_REPORT_FETCH_TIMEOUT_MS } from './endpoint.js'
 import { checkFreshness } from './freshness.js'
 import { detectWorkspaceHint, type WorkspaceHint } from './monorepo.js'
@@ -77,7 +88,11 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   const detected = detectFramework(cwd, pkg)
   const framework = await chooseFramework(detected, options)
 
-  const credentials = await collectCredentials(options)
+  const consoleBase = await resolveConsoleUrl({ cwd })
+  await maybeGuideConsoleSetup(options, consoleBase)
+
+  const credentials = await collectCredentials(options, consoleBase)
+  await verifyCredentials(credentials, options, consoleBase)
 
   const pm = detectPackageManager(cwd)
   const packagesToInstall = framework.needsWebPackage
@@ -96,9 +111,11 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   const enableRewards = await maybeEnableRewards(options)
 
-  printNextSteps(framework, credentials.apiKey, credentials.projectId, enableRewards)
+  printNextSteps(framework, consoleBase, enableRewards)
 
-  await maybeSendTestReport(credentials, { ...options, endpoint })
+  await maybeSendTestReport(credentials, { ...options, endpoint, consoleBase })
+
+  await maybeOfferConnect(credentials, options, consoleBase)
 
   p.outro('Setup complete. Happy bug squashing 🐛')
 }
@@ -158,8 +175,89 @@ async function chooseFramework(detected: Framework, options: InitOptions): Promi
   return FRAMEWORKS[confirmed]
 }
 
-async function collectCredentials(options: InitOptions): Promise<{ apiKey: string; projectId: string }> {
+async function maybeGuideConsoleSetup(options: InitOptions, consoleBase: string): Promise<void> {
+  if (options.yes) return
+  if (options.projectId && options.apiKey) return
+
   const existing = loadConfig()
+  if (existing.projectId && existing.apiKey) return
+
+  const choice = await p.select({
+    message: 'Do you already have a Mushi project?',
+    options: [
+      {
+        value: 'create',
+        label: 'No — open the console to create one',
+        hint: 'Recommended for first-time setup',
+      },
+      {
+        value: 'have',
+        label: 'Yes — I have Project ID + API key',
+        hint: 'Paste values from the admin console',
+      },
+      {
+        value: 'login',
+        label: 'Use mushi login first',
+        hint: 'Run `mushi login` in another terminal, then re-run this wizard',
+      },
+    ],
+  })
+
+  if (p.isCancel(choice)) {
+    p.cancel('Aborted.')
+    process.exit(0)
+  }
+
+  if (choice === 'login') {
+    p.log.info('Run `mushi login` to save credentials, then re-run `mushi init`.')
+    p.cancel('Aborted.')
+    process.exit(0)
+  }
+
+  if (choice !== 'create') return
+
+  const setupUrl = cliSetupDeepLink(consoleBase)
+  p.log.info(`Opening the Mushi console:\n  ${setupUrl}`)
+  await openInBrowser(setupUrl)
+  p.log.message('In the console:')
+  p.log.message('  1. Enter a project name and click Create')
+  p.log.message('  2. Copy the Project ID from the success panel')
+  p.log.message('  3. Generate an API key (Verify tab — report:write scope)')
+  p.log.message('  4. Return here and paste both values')
+
+  const ready = await p.confirm({
+    message: 'Created your project and ready to paste credentials?',
+    initialValue: false,
+  })
+  if (p.isCancel(ready) || !ready) {
+    p.log.warn(`Finish in the console first: ${setupUrl}`)
+  }
+}
+
+async function collectCredentials(
+  options: InitOptions,
+  consoleBase: string,
+): Promise<{ apiKey: string; projectId: string }> {
+  const existing = loadConfig()
+
+  if (!options.projectId && !options.apiKey && existing.projectId && existing.apiKey) {
+    const reuse = options.yes
+      ? true
+      : await p.confirm({
+          message: 'Use Project ID + API key from ~/.config/mushi/config.json?',
+          initialValue: true,
+        })
+    if (p.isCancel(reuse)) {
+      p.cancel('Aborted.')
+      process.exit(0)
+    }
+    if (reuse) {
+      return {
+        projectId: sanitizeSecret(existing.projectId),
+        apiKey: sanitizeSecret(existing.apiKey),
+      }
+    }
+  }
 
   const rawProjectId =
     options.projectId ??
@@ -167,11 +265,11 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
     (await promptText({
       message: 'Project ID',
       placeholder: 'e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4',
-      hint: 'Where to find it: https://kensaur.us/mushi-mushi/projects → click your project → copy the UUID below the project name.',
+      hint: projectIdHint(consoleBase),
       validate: (v) =>
         PROJECT_ID_PATTERN.test(v.trim())
           ? undefined
-          : 'Expected a UUID (e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4) — copy it from the Mushi admin console Projects page.',
+          : 'Expected a UUID — copy it from the Projects page or the panel right after you create a project.',
     }))
 
   const rawApiKey =
@@ -180,7 +278,7 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
     (await promptText({
       message: 'API key',
       placeholder: 'mushi_xxxxxxxxxxxx',
-      hint: 'Where to find it: https://kensaur.us/mushi-mushi/settings → API Keys tab. Treat it like a password — env file only, never commit it.',
+      hint: apiKeyHint(consoleBase),
       validate: (v) =>
         API_KEY_PATTERN.test(v)
           ? undefined
@@ -193,8 +291,8 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
   if (!PROJECT_ID_PATTERN.test(projectId)) {
     throw new Error(
       `Invalid project ID. Expected a UUID (e.g. bdafa28d-b153-482f-bd4f-42981f3fd3a4) ` +
-        `or the proj_* prefixed form. Got: ${redact(projectId)} — copy it from the ` +
-        `Projects page in the Mushi console at https://kensaur.us/mushi-mushi/projects`,
+        `or the proj_* prefixed form. Got: ${redact(projectId)} — copy it from ` +
+        `${projectIdHint(consoleBase)}`,
     )
   }
   if (!API_KEY_PATTERN.test(apiKey)) {
@@ -204,6 +302,30 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
   }
 
   return { projectId, apiKey }
+}
+
+async function verifyCredentials(
+  credentials: { apiKey: string; projectId: string },
+  options: InitOptions,
+  consoleBase: string,
+): Promise<void> {
+  const endpoint = resolveCloudEndpoint(options.endpoint)
+  const spinner = p.spinner()
+  spinner.start('Verifying credentials…')
+
+  const result = await apiCall<{ project_name: string; project_id: string }>(
+    '/v1/sync/whoami',
+    { apiKey: credentials.apiKey, projectId: credentials.projectId, endpoint },
+  )
+
+  if (!result.ok) {
+    spinner.stop('Credentials could not be verified.')
+    p.log.error(result.error?.message ?? 'Authentication failed.')
+    p.log.info(`Double-check values in the console:\n  ${cliSetupDeepLink(consoleBase)}`)
+    throw new Error('Credential verification failed — fix Project ID / API key and re-run.')
+  }
+
+  spinner.stop(`Connected to ${result.data.project_name}`)
 }
 
 /**
@@ -377,7 +499,7 @@ function persistCliConfig(apiKey: string, projectId: string, endpoint: string): 
   saveConfig({ ...existing, apiKey, projectId, endpoint })
 }
 
-function printNextSteps(framework: Framework, _apiKey: string, _projectId: string, enableRewards = false): void {
+function printNextSteps(framework: Framework, consoleBase: string, enableRewards = false): void {
   p.note(framework.snippet(), 'Add this to your app:')
 
   if (enableRewards) {
@@ -385,14 +507,53 @@ function printNextSteps(framework: Framework, _apiKey: string, _projectId: strin
       ? `// Add to your user menu or profile UI:\nimport { MushiRewardsBadge } from '@mushi-mushi/react';\n\n// Inside your component:\n<MushiRewardsBadge showPoints />`
       : `// Add to your user menu:\n// import { MushiRewardsBadge } from '@mushi-mushi/react';\n// <MushiRewardsBadge showPoints />`
     p.note(badgeSnippet, 'Rewards badge snippet:')
-    p.log.info('Enable rewards in your project settings at https://kensaur.us/mushi-mushi/rewards')
+    p.log.info(`Enable rewards in your project settings at ${consoleUrl(consoleBase, '/rewards')}`)
     p.log.info('Users will earn points for bug reports, screen navigation, and app activity.')
   }
 
   p.log.message('Verify the install:')
   p.log.message('  • Start your dev server')
   p.log.message('  • Look for the 🐛 button in the bottom-right corner (or shake on mobile)')
-  p.log.message('  • Submit a test report — it should appear at https://kensaur.us/mushi-mushi/reports')
+  p.log.message(`  • Submit a test report — it should appear at ${reportsUrl(consoleBase)}`)
+  p.log.info(
+    'Tip: `mushi connect --write-env --wire-ide --wait` also wires Cursor MCP and waits for SDK heartbeat.',
+  )
+}
+
+async function maybeOfferConnect(
+  credentials: { apiKey: string; projectId: string },
+  options: InitOptions,
+  _consoleBase: string,
+): Promise<void> {
+  if (options.yes) return
+
+  const answer = await p.confirm({
+    message:
+      'Run `mushi connect --write-env --wire-ide --wait` now? (SDK env + Cursor MCP + heartbeat check)',
+    initialValue: false,
+  })
+  if (p.isCancel(answer) || !answer) return
+
+  const endpoint = resolveCloudEndpoint(options.endpoint)
+  try {
+    const { runConnect } = await import('./connect.js')
+    await runConnect({
+      apiKey: credentials.apiKey,
+      projectId: credentials.projectId,
+      endpoint,
+      cwd: options.cwd,
+      writeEnv: true,
+      wireIde: true,
+      wait: true,
+    })
+  } catch (err) {
+    p.log.warn(
+      err instanceof Error ? err.message : String(err),
+    )
+    p.log.info(
+      'You can run manually: mushi connect --write-env --wire-ide --wait',
+    )
+  }
 }
 
 async function maybeEnableRewards(options: InitOptions): Promise<boolean> {
@@ -413,7 +574,7 @@ async function maybeEnableRewards(options: InitOptions): Promise<boolean> {
  */
 async function maybeSendTestReport(
   credentials: { apiKey: string; projectId: string },
-  options: InitOptions,
+  options: InitOptions & { endpoint?: string; consoleBase?: string },
 ): Promise<void> {
   if (options.sendTestReport === false) return
 
@@ -484,8 +645,8 @@ async function maybeSendTestReport(
     } catch {
       // non-fatal — fall back to the reports list
     }
-    const reportPath = reportId ? `/reports/${reportId}` : '/reports'
-    p.log.success(`View it at https://kensaur.us/mushi-mushi/admin${reportPath}`)
+    const consoleBase = options.consoleBase ?? resolveConsoleUrlSync(options.cwd)
+    p.log.success(`View it at ${reportsUrl(consoleBase, reportId)}`)
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError'
     spinner.stop(aborted ? 'Timed out reaching the Mushi API.' : 'Could not reach the Mushi API.')

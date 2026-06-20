@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
+import { resolveConsoleUrlSync, consoleUrl } from '../console-url.js';
 
 export function registerProjectCommands(program: Command): void {
 // ─── project ──────────────────────────────────────────────────────────────────
@@ -13,7 +14,7 @@ project
   .option('--no-browser', 'Skip opening the browser for the sign-up / magic-link step')
   .option('--endpoint <url>', 'Override API endpoint (self-hosted)')
   .addHelpText('after', `
-Creates a project on app.mushimushi.dev, mints an API key with mcp:read+write scope,
+Creates a project on the Mushi console, mints an API key with mcp:read+write scope,
 and writes the following to the current directory:
   .env.local            — MUSHI_API_KEY, MUSHI_PROJECT_ID, MUSHI_API_ENDPOINT
   .cursor/mcp.json      — pre-filled mcpServers.mushi block for Cursor
@@ -29,7 +30,8 @@ Typical first-time flow:
     const nodePath = await import('node:path')
 
     const endpoint = opts.endpoint ?? loadConfig().endpoint ?? 'https://api.mushimushi.dev'
-    const signUpUrl = 'https://kensaur.us/mushi-mushi/sign-up'
+    const consoleBase = resolveConsoleUrlSync()
+    const signUpUrl = consoleUrl(consoleBase, '/sign-up')
 
     console.log('')
     console.log('  Mushi project create')

@@ -1,5 +1,26 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "CLI",
+        "description": "`mushi login` now implements RFC 8628 browser device-auth (zero copy-paste). Opens the console in the browser, user clicks Approve, CLI receives a session token automatically, then lists/creates a project and saves the API key. `--api-key` flag remains as the CI/non-interactive fallback."
+      },
+      {
+        "title": "Core SDK",
+        "description": "401/403 responses now emit a one-time `console.error` with a clear credential-failure message and the console URL, instead of silently entering the offline retry queue."
+      },
+      {
+        "title": "React Native",
+        "description": "Same 401/403 credential-failure detection in `MushiProvider.submitReport` — skips enqueue and surfaces the error immediately."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.19",
     "headline": null,
     "pending": false,

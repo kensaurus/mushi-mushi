@@ -106,13 +106,27 @@ import { MushiBottomSheet, MushiFloatingButton } from '@mushi-mushi/react-native
 
 ## Screenshots
 
-When `react-native-view-shot` is installed, the SDK captures the current screen **before** the report sheet overlays it, and shows the user a thumbnail they can remove before submitting. Enabled by default; turn off with `capture: { screenshot: false }`.
+When `react-native-view-shot` is installed, the SDK captures the current screen **before** the report sheet overlays it, and shows the user a **thumbnail preview** they can remove before submitting. A configurable **privacy caption** (`widget.screenshotSensitiveHint`) appears under the preview — default copy reminds reporters to drop balances or PII. Enabled by default; turn off capture with `capture: { screenshot: false }`.
+
+```tsx
+<MushiProvider
+  config={{
+    widget: {
+      // true (default) | "Custom compliance copy" | false (hide caption only)
+      screenshotSensitiveHint: true,
+    },
+    capture: { screenshot: true },
+  }}
+>
+```
 
 ```bash
 npx expo install react-native-view-shot   # v4+ on Expo SDK 55; v5+ for Fabric / New Architecture
 ```
 
-> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen, which on a finance/health app can include balances or PII. The user always reviews and can remove the thumbnail before submit, but for screens that should never be captured, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Field-level masking is on the roadmap.
+> **Masking sensitive screens.** `captureScreen()` grabs whatever is on screen. The preview + Remove control is the reporter's consent gate — finance apps can keep screenshots on with a custom caption instead of disabling capture entirely. For screens that must never be photographed, set `capture: { screenshot: false }` while they're focused, or use `expo-screen-capture` to mark the view secure. Full doc: [`docs/SDK_SCREENSHOT_PREVIEW.md`](../../docs/SDK_SCREENSHOT_PREVIEW.md).
+
+> **Metro / Hermes hosts.** The published dist uses esbuild `__require()` for optional peers. Host apps may need a postinstall patch (see yen-yen `scripts/patch-mushi.mjs`) so Metro resolves `react-native-view-shot` and `@react-native-community/netinfo`.
 
 ## Identifying the reporter
 

@@ -33,6 +33,7 @@ import type { CliConfig } from './config.js'
 import { MUSHI_CLI_VERSION } from './version.js'
 import { getAbortSignal } from './signals.js'
 import { CLOUD_API_ENDPOINT } from './endpoint.js'
+import { resolveConsoleUrlSync, consoleUrl } from './console-url.js'
 
 // ─── API client ─────────────────────────────────────────────────────────────
 
@@ -196,7 +197,7 @@ export function requireConfig(opts: { needsProject?: boolean } = {}): Required<P
       'error: Project ID not configured.\n' +
       '  Run:  mushi login --project-id <uuid>\n' +
       '  Or:   export MUSHI_PROJECT_ID=<uuid>\n' +
-      '  Find your project ID: https://kensaur.us/mushi-mushi/projects\n',
+      '  Find your project ID: ' + consoleUrl(resolveConsoleUrlSync(), '/projects') + '\n',
     )
     process.exit(2)
   }

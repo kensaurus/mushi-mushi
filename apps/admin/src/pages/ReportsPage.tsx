@@ -23,6 +23,7 @@ import {
   FreshnessPill,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
 import { usePageCopy } from '../lib/copy'
@@ -40,6 +41,7 @@ import {
   type ReportsStats,
 } from '../components/reports/ReportsStatsTypes'
 import { isReportsBannerVisible } from '../lib/reportsExplainer'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
@@ -692,22 +694,41 @@ export function ReportsPage() {
         </Tooltip>
       </PageHeaderBar>
 
-      {!reportsStatsLoading && isReportsBannerVisible(reportsStats) && (
-        <ReportsStatusBanner
-          stats={reportsStats}
-          onRefresh={reloadAll}
-          refreshing={reportsStatsValidating || isValidating}
-        />
-      )}
-
-      <ReportsTriageGuide topPriority={reportsStats.topPriority} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: !reportsStatsLoading && isReportsBannerVisible(reportsStats),
+            children: (
+              <ReportsStatusBanner
+                stats={reportsStats}
+                onRefresh={reloadAll}
+                refreshing={reportsStatsValidating || isValidating}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <ReportsKpiStrip
+                activeSeverity={severity}
+                onFilter={(sev) => setFilter('severity', sev)}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: !shouldHideGuideWhenBannerActive(
+              isReportsBannerVisible(reportsStats),
+              [...COMMON_HEALTHY_PRIORITIES, 'clear'],
+              reportsStats.topPriority ?? 'clear',
+            ),
+            children: <ReportsTriageGuide topPriority={reportsStats.topPriority} />,
+          },
+        ]}
+      />
 
       <DogfoodNarrativeBanner />
-
-      <ReportsKpiStrip
-        activeSeverity={severity}
-        onFilter={(sev) => setFilter('severity', sev)}
-      />
 
       {recommendation && (
         <RecommendedAction
