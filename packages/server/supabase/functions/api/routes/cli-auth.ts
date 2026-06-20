@@ -324,8 +324,18 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       .not('cli_token_raw', 'is', null)
       .select('id')
 
-    if (claimError || !claimedRows || claimedRows.length === 0) {
-      // Lost the race — another concurrent poll already claimed this token.
+    if (claimError) {
+      // The UPDATE itself failed (DB hiccup, not a lost race). Signal 5xx so the
+      // CLI treats it as retryable and keeps polling instead of giving up as if
+      // the token were already gone.
+      return c.json(
+        { error: 'server_error', error_description: 'Could not claim the CLI token; please retry.' },
+        500,
+      )
+    }
+    if (!claimedRows || claimedRows.length === 0) {
+      // Lost the race — another concurrent poll already claimed this one-time
+      // token. Terminal (4xx): retrying won't bring it back.
       return c.json(
         { error: 'server_error', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
         400,

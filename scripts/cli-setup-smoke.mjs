@@ -77,7 +77,14 @@ async function main() {
   try {
     ;({ chromium } = await import('playwright'))
   } catch {
-    console.log('SKIP cli-setup-smoke (Playwright not installed — run: pnpm exec playwright install chromium)')
+    const msg = 'Playwright not installed — run: pnpm exec playwright install chromium'
+    if (STRICT) {
+      // In strict mode this is a CI gate: a missing dependency must fail, not
+      // silently pass, otherwise the smoke check provides false assurance.
+      console.error(`FAIL cli-setup-smoke (${msg})`)
+      process.exit(1)
+    }
+    console.log(`SKIP cli-setup-smoke (${msg})`)
     process.exit(0)
   }
 
