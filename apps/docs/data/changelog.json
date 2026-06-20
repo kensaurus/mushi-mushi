@@ -1,5 +1,30 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "`mushi init` wizard",
+        "description": "new `acquireCredentials` step. Precedence: explicit `--project-id`/`--api-key` flags (CI) → saved credentials from a prior login (offer to reuse) → **browser sign-in (default)** → manual paste fallback. Any browser-path failure falls back to manual entry; the wizard never hard-fails."
+      },
+      {
+        "title": "`mushi project create`",
+        "description": "rewritten on the shared device-auth flow. Fixes three bugs: it no longer points at a dead hardcoded endpoint, no longer links to a 404 `/sign-up` console URL, and no longer tells you to copy a BYOK-type key (it mints the correct `report:write` SDK ingest key server-side). `--no-browser` prints the URL for headless/SSH; `--name` skips the prompt."
+      },
+      {
+        "title": "`mushi login`",
+        "description": "refactored onto the same shared `device-auth` primitives (DRY) while keeping its terminal UX (a dot per pending poll, precise per-state error messages)."
+      },
+      {
+        "title": "New `device-auth.ts` module",
+        "description": "the RFC 8628 client (`startDeviceAuth`, `pollDeviceToken`, `waitForCliToken`, `listProjects`, `createProject`, `mintProjectKey`) is now implemented once and shared across `init`, `login`, and `project create`. Every request carries a 15s timeout so a hung network never wedges setup. Covered by new unit tests."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.19",
     "headline": null,
     "pending": false,

@@ -32,6 +32,13 @@ import {
   resolveConsoleUrl,
 } from '../console-url.js';
 import { apiCall, die, requireConfig, pad, API_TIMEOUT_MS } from '../cli-shared.js';
+import {
+  createProject,
+  listProjects,
+  mintProjectKey,
+  pollDeviceToken,
+  startDeviceAuth,
+} from '../device-auth.js';
 import type { WhoamiData, StatsData } from '../cli-types.js';
 
 export function registerAccountCommands(program: Command): void {
@@ -141,25 +148,10 @@ Examples:
     console.log('  Mushi login')
     console.log('  ───────────')
 
-    // Step 1: start device-auth session
-    type DeviceData = {
-      device_code: string
-      user_code: string
-      verification_uri: string
-      expires_in: number
-      interval: number
-    }
-    let deviceData: DeviceData
+    // Step 1: start device-auth session (RFC 8628 — shared with the init wizard)
+    let deviceData: Awaited<ReturnType<typeof startDeviceAuth>>
     try {
-      const res = await fetch(`${endpoint}/v1/cli/auth/device/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      const json = await res.json() as { ok: boolean; data?: DeviceData; error?: { message: string } }
-      if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? `HTTP ${res.status}`)
-      }
-      deviceData = json.data
+      deviceData = await startDeviceAuth(endpoint)
     } catch (err) {
       process.stderr.write(`\nerror: Could not start login session: ${err instanceof Error ? err.message : String(err)}\n`)
       process.stderr.write(`  Fallback: mushi login --api-key <key> --project-id <uuid>\n`)
@@ -179,51 +171,32 @@ Examples:
     console.log('')
     console.log('  Waiting for you to approve in the browser…  (Ctrl+C to cancel)')
 
-    // Step 3: poll for CLI token
+    // Step 3: poll for CLI token (shared poll classifier; keep login's UX —
+    // a dot per pending poll and a precise error message per terminal state).
     let cliToken: string | null = null
     const pollIntervalMs = (deviceData.interval ?? 5) * 1000
     const deadline = Date.now() + (deviceData.expires_in ?? 600) * 1000
 
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, pollIntervalMs))
-      try {
-        const pollRes = await fetch(`${endpoint}/v1/cli/auth/device/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device_code: deviceData.device_code }),
-        })
-        const pollJson = await pollRes.json() as {
-          ok?: boolean
-          data?: { cli_token: string; user_id: string }
-          error?: string
-          error_description?: string
-        }
-
-        if (pollRes.ok && pollJson.ok && pollJson.data?.cli_token) {
-          cliToken = pollJson.data.cli_token
-          break
-        }
-        const errCode = pollJson.error ?? ''
-        if (errCode === 'authorization_pending') {
-          process.stdout.write('.')
-          continue
-        }
-        if (errCode === 'access_denied') {
-          console.log('')
-          process.stderr.write('\nerror: Login denied in the browser.\n')
-          process.exit(1)
-        }
-        if (errCode === 'expired_token') {
-          console.log('')
-          process.stderr.write('\nerror: Login code expired. Run mushi login again.\n')
-          process.exit(1)
-        }
-        throw new Error(pollJson.error_description ?? errCode ?? `HTTP ${pollRes.status}`)
-      } catch (err) {
-        console.log('')
-        process.stderr.write(`\nerror: Poll failed: ${err instanceof Error ? err.message : String(err)}\n`)
-        process.exit(1)
+      const outcome = await pollDeviceToken(endpoint, deviceData.device_code)
+      if (outcome.status === 'approved') {
+        cliToken = outcome.cliToken
+        break
       }
+      if (outcome.status === 'pending') {
+        process.stdout.write('.')
+        continue
+      }
+      console.log('')
+      if (outcome.status === 'denied') {
+        process.stderr.write('\nerror: Login denied in the browser.\n')
+      } else if (outcome.status === 'expired') {
+        process.stderr.write('\nerror: Login code expired. Run mushi login again.\n')
+      } else {
+        process.stderr.write(`\nerror: Poll failed: ${outcome.message}\n`)
+      }
+      process.exit(1)
     }
 
     if (!cliToken) {
@@ -236,18 +209,7 @@ Examples:
     console.log('  ✓ Approved!')
 
     // Step 4: list projects (CLI token auth)
-    const cliHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cliToken}`,
-    }
-
-    type ProjectSummary = { id: string; name: string; slug: string }
-    let projectsList: ProjectSummary[] = []
-    try {
-      const listRes = await fetch(`${endpoint}/v1/cli/projects`, { headers: cliHeaders })
-      const listJson = await listRes.json() as { ok: boolean; data?: { projects: ProjectSummary[] } }
-      if (listRes.ok && listJson.ok) projectsList = listJson.data?.projects ?? []
-    } catch { /* non-fatal */ }
+    const projectsList = await listProjects(endpoint, cliToken)
 
     // Step 5: pick or create a project
     let chosenProjectId = projectId
@@ -290,22 +252,10 @@ Examples:
         }
 
         try {
-          const createRes = await fetch(`${endpoint}/v1/cli/projects`, {
-            method: 'POST',
-            headers: cliHeaders,
-            body: JSON.stringify({ name: newName.trim() }),
-          })
-          const createJson = await createRes.json() as {
-            ok: boolean
-            data?: { id: string; name: string; slug: string; apiKey: string | null }
-            error?: { message: string }
-          }
-          if (!createRes.ok || !createJson.ok || !createJson.data) {
-            throw new Error(createJson.error?.message ?? `HTTP ${createRes.status}`)
-          }
-          chosenProjectId = createJson.data.id
-          chosenProjectName = createJson.data.name
-          apiKey = createJson.data.apiKey ?? undefined
+          const created = await createProject(endpoint, cliToken, newName.trim())
+          chosenProjectId = created.id
+          chosenProjectName = created.name
+          apiKey = created.apiKey ?? undefined
           console.log(`  ✓ Created project "${chosenProjectName}"`)
         } catch (err) {
           process.stderr.write(`\nerror: Could not create project: ${err instanceof Error ? err.message : String(err)}\n`)
@@ -321,19 +271,7 @@ Examples:
     // and would reject the device-auth token).
     if (!apiKey && chosenProjectId) {
       try {
-        const keyRes = await fetch(`${endpoint}/v1/cli/projects/${chosenProjectId}/keys`, {
-          method: 'POST',
-          headers: cliHeaders,
-          body: JSON.stringify({}),
-        })
-        const keyJson = await keyRes.json() as {
-          ok: boolean
-          data?: { key?: string }
-          error?: { message: string }
-        }
-        if (keyRes.ok && keyJson.ok) {
-          apiKey = keyJson.data?.key ?? undefined
-        }
+        apiKey = (await mintProjectKey(endpoint, cliToken, chosenProjectId)) ?? undefined
       } catch { /* non-fatal — user can copy from console */ }
     }
 

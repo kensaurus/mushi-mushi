@@ -1,7 +1,40 @@
+/**
+ * FILE: packages/cli/src/commands/project.ts
+ * PURPOSE: `mushi project create` — zero-copy-paste project bootstrap. Signs in
+ *          via the browser (RFC 8628 device-auth), creates or selects a project,
+ *          mints a report:write SDK key, and writes .env.local + .cursor/mcp.json.
+ *
+ * OVERVIEW:
+ *   - Reuses the shared device-auth primitives so the auth + project + key flow
+ *     is identical to `mushi login` and the `mushi init` wizard.
+ *   - No UUID / API-key copy-paste: the console approval page hands the CLI a
+ *     scoped token, and the key is minted server-side.
+ *
+ * DEPENDENCIES:
+ *   - device-auth.ts (startDeviceAuth / waitForCliToken / listProjects / createProject / mintProjectKey)
+ *   - console-url.ts (resolveConsoleUrl, openInBrowser)
+ *   - endpoint.ts (resolveCloudEndpoint)
+ *   - config.ts (loadConfig / saveConfig)
+ *   - mcp-config.ts (buildMcpServerBlock / buildMcpServerName / writeMcpServerEntry)
+ *
+ * NOTES:
+ *   - `--no-browser` prints the verification URL instead of opening it
+ *     (headless / SSH). `--name` skips the project-name prompt.
+ */
+
 import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
-import { resolveConsoleUrlSync, consoleUrl } from '../console-url.js';
+import { resolveConsoleUrl, openInBrowser } from '../console-url.js';
+import { resolveCloudEndpoint } from '../endpoint.js';
+import {
+  createProject,
+  listProjects,
+  mintProjectKey,
+  startDeviceAuth,
+  waitForCliToken,
+  type DeviceProject,
+} from '../device-auth.js';
 
 export function registerProjectCommands(program: Command): void {
 // ─── project ──────────────────────────────────────────────────────────────────
@@ -9,19 +42,19 @@ const project = program.command('project').description('Project management')
 
 project
   .command('create')
-  .description('Create a new Mushi project, mint an API key, and write config files')
-  .option('--name <name>', 'Project name (skip the prompt)')
-  .option('--no-browser', 'Skip opening the browser for the sign-up / magic-link step')
+  .description('Create or select a Mushi project via browser sign-in, then write config files')
+  .option('--name <name>', 'Project name for a new project (skips the prompt)')
+  .option('--no-browser', 'Print the verification URL instead of opening the browser')
   .option('--endpoint <url>', 'Override API endpoint (self-hosted)')
   .addHelpText('after', `
-Creates a project on the Mushi console, mints an API key with mcp:read+write scope,
-and writes the following to the current directory:
+Signs you in through the browser (no copy-paste), creates or selects a project,
+mints a report:write SDK key, and writes the following to the current directory:
   .env.local            — MUSHI_API_KEY, MUSHI_PROJECT_ID, MUSHI_API_ENDPOINT
   .cursor/mcp.json      — pre-filled mcpServers.mushi block for Cursor
 
 Typical first-time flow:
   npx mushi-mushi project create
-  # Browser opens → sign up / magic-link → come back to terminal
+  # Browser opens → click Approve → pick or create a project
   # CLI writes .env.local and .cursor/mcp.json
   # mushi whoami to confirm`)
   .action(async (opts: { name?: string; browser?: boolean; endpoint?: string }) => {
@@ -29,60 +62,118 @@ Typical first-time flow:
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
 
-    const endpoint = opts.endpoint ?? loadConfig().endpoint ?? 'https://api.mushimushi.dev'
-    const consoleBase = resolveConsoleUrlSync()
-    const signUpUrl = consoleUrl(consoleBase, '/sign-up')
+    const endpoint = resolveCloudEndpoint(opts.endpoint)
+    const consoleBase = await resolveConsoleUrl()
 
     console.log('')
     console.log('  Mushi project create')
     console.log('  ─────────────────────')
     console.log('')
 
-    if (opts.browser !== false) {
-      console.log('  1. Opening the Mushi sign-up page in your browser...')
-      try {
-        const { exec } = await import('node:child_process')
-        const openCmd = process.platform === 'win32'
-          ? `start "" "${signUpUrl}"`
-          : process.platform === 'darwin'
-            ? `open "${signUpUrl}"`
-            : `xdg-open "${signUpUrl}"`
-        exec(openCmd)
-      } catch { /* ignore */ }
-    } else {
-      console.log(`  1. Sign up or log in at: ${signUpUrl}`)
+    // ── Step 1: browser device-auth ──────────────────────────────────────────
+    let session: Awaited<ReturnType<typeof startDeviceAuth>>
+    try {
+      session = await startDeviceAuth(endpoint)
+    } catch (err) {
+      process.stderr.write(`\nerror: Could not start browser sign-in: ${err instanceof Error ? err.message : String(err)}\n`)
+      process.stderr.write('  Fallback: mushi login --api-key <key> --project-id <uuid>\n')
+      process.exit(1)
     }
 
+    console.log(`  Confirmation code: ${session.user_code}`)
     console.log('')
-    console.log('  2. Create a project in the console, then paste your credentials below.')
-    console.log('     (Settings → API Keys → New key → Copy as .env.local)')
+    if (opts.browser !== false) {
+      console.log('  Opening the Mushi console in your browser…')
+      try { await openInBrowser(session.verification_uri) } catch { /* best-effort */ }
+    }
+    console.log(`  If the browser didn't open: ${session.verification_uri}`)
     console.log('')
+    console.log('  Waiting for you to approve in the browser…  (Ctrl+C to cancel)')
 
-    // Interactive prompts for credentials
+    let cliToken: string
+    try {
+      cliToken = await waitForCliToken(endpoint, session, {
+        onPending: () => process.stdout.write('.'),
+      })
+    } catch (err) {
+      console.log('')
+      process.stderr.write(`\nerror: ${err instanceof Error ? err.message : String(err)}\n`)
+      process.exit(1)
+    }
+    console.log('')
+    console.log('  ✓ Approved!')
+
+    // ── Step 2: pick or create a project ─────────────────────────────────────
+    const projectsList = await listProjects(endpoint, cliToken)
+
     const { createInterface } = await import('node:readline')
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     const ask = (q: string): Promise<string> =>
-      new Promise(resolve => rl.question(q, (a) => resolve(a.trim())))
+      new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())))
 
-    const projectId = await ask('  Project ID (uuid): ')
-    const apiKey = await ask('  API key (mushi_...): ')
-    rl.close()
+    let chosen: DeviceProject | undefined
+    let projectId: string | undefined
+    let projectName: string | undefined
+    let apiKey: string | undefined
 
-    if (!projectId || !apiKey) {
-      process.stderr.write('\nerror: Project ID and API key are required.\n')
-      process.exit(2)
+    if (!opts.name && projectsList.length > 0) {
+      console.log('')
+      console.log('  Your projects:')
+      projectsList.forEach((pr, i) => {
+        console.log(`    ${i + 1}. ${pr.name} (${pr.id})`)
+      })
+      console.log(`    ${projectsList.length + 1}. Create a new project`)
+      console.log('')
+      const choice = await ask(`  Pick a project [1-${projectsList.length + 1}]: `)
+      const num = parseInt(choice, 10)
+      if (num >= 1 && num <= projectsList.length) {
+        chosen = projectsList[num - 1]
+        projectId = chosen.id
+        projectName = chosen.name
+      }
     }
 
-    // Save to config (~/.config/mushi/config.json, migrated from ~/.mushirc)
+    if (!projectId) {
+      const newName = opts.name?.trim() || (await ask('  Project name: '))
+      if (!newName) {
+        rl.close()
+        process.stderr.write('\nerror: Project name is required.\n')
+        process.exit(2)
+      }
+      try {
+        const created = await createProject(endpoint, cliToken, newName)
+        projectId = created.id
+        projectName = created.name
+        apiKey = created.apiKey ?? undefined
+        console.log(`  ✓ Created project "${projectName}"`)
+      } catch (err) {
+        rl.close()
+        process.stderr.write(`\nerror: Could not create project: ${err instanceof Error ? err.message : String(err)}\n`)
+        process.exit(1)
+      }
+    }
+    rl.close()
+
+    // ── Step 3: mint a report:write key if we selected an existing project ────
+    if (projectId && !apiKey) {
+      apiKey = (await mintProjectKey(endpoint, cliToken, projectId)) ?? undefined
+    }
+
+    if (!projectId || !apiKey) {
+      process.stderr.write('\nerror: Could not obtain an SDK key for the project. Run `mushi login` and try again.\n')
+      process.exit(1)
+    }
+
+    // ── Step 4: persist config + write project files ─────────────────────────
     const config = loadConfig()
     config.apiKey = apiKey
     config.endpoint = endpoint
     config.projectId = projectId
+    config.consoleUrl = consoleBase
     saveConfig(config)
 
     const cwd = process.cwd()
 
-    // Write .env.local
     const envPath = nodePath.join(cwd, '.env.local')
     const envLines = [
       '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
@@ -95,7 +186,6 @@ Typical first-time flow:
     await writeFile(envPath, envLines.join('\n'), 'utf8')
     console.log(`\n  ✓ ${envExisting ? 'Updated' : 'Created'} .env.local`)
 
-    // Write .cursor/mcp.json (use legacy server name 'mushi' for project use back-compat)
     const mcpPath = nodePath.join(cwd, '.cursor', 'mcp.json')
     const serverName = buildMcpServerName({ legacy: true })
     const serverBlock = buildMcpServerBlock({ endpoint, projectId, apiKey })
