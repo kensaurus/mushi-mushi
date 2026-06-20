@@ -16,6 +16,7 @@ import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
@@ -693,20 +694,48 @@ export function FixesPage() {
         )}
       </PageHeaderBar>
 
-      <FixesStatusBanner
-        stats={fixesStats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={isValidating || statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <FixesStatusBanner
+                stats={fixesStats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={isValidating || statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideFixesSnapshot,
+            children: (
+              <FixesSnapshotStrip
+                stats={fixesStats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                description={activeTabMeta.description}
+                sectionTitle={copy?.sections?.snapshot ?? 'FIXES SNAPSHOT'}
+                statLabels={copy?.statLabels}
+                hideLinks={ux.hideSnapshotLinks}
+                compact={ux.isQuickstart}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: activeTab === 'overview',
+            children: (
+              <FixesPipelineGuide
+                topPriority={fixesStats.topPriority}
+                stats={fixesStats}
+              />
+            ),
+          },
+        ]}
       />
-
-      {activeTab === 'overview' && (
-        <FixesPipelineGuide
-          topPriority={fixesStats.topPriority}
-          stats={fixesStats}
-        />
-      )}
 
       {!ux.hideTabs && (
       <SegmentedControl<FixesTabId>
@@ -715,19 +744,6 @@ export function FixesPage() {
         options={tabOptions}
         onChange={setActiveTab}
         size="sm"
-      />
-      )}
-
-      {!ux.hideFixesSnapshot && (
-      <FixesSnapshotStrip
-        stats={fixesStats}
-        statsFetchedAt={statsFetchedAt}
-        statsValidating={statsValidating}
-        description={activeTabMeta.description}
-        sectionTitle={copy?.sections?.snapshot ?? 'FIXES SNAPSHOT'}
-        statLabels={copy?.statLabels}
-        hideLinks={ux.hideSnapshotLinks}
-        compact={ux.isQuickstart}
       />
       )}
 

@@ -39,11 +39,11 @@ export function OnboardingStatusBanner({
         action={
           stats.nextStepTo ? (
             <Link to={stats.nextStepTo}>
-              <Btn size="sm" variant="ghost">{plainLanguage ? 'Create app' : 'Create project'}</Btn>
+              <Btn size="sm" variant="ghost">{plainLanguage ? 'Name your app' : 'Open create form'}</Btn>
             </Link>
           ) : onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('steps')}>
-              {plainLanguage ? 'Create app' : 'Create project'}
+              {plainLanguage ? 'Name your app' : 'Open create form'}
             </Btn>
           ) : null
         }

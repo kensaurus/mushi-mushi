@@ -61,6 +61,9 @@ importers:
       '@mushi-mushi/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@mushi-mushi/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@mushi-mushi/marketing-ui':
         specifier: workspace:*
         version: link:../../packages/marketing-ui
@@ -1178,6 +1181,9 @@ importers:
       '@react-navigation/native':
         specifier: '>=6'
         version: 7.3.1(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
+      expo-secure-store:
+        specifier: '>=13'
+        version: 56.0.4(expo@55.0.15)
       expo-sensors:
         specifier: '>=13'
         version: 56.0.6(expo@55.0.15)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))
@@ -5591,6 +5597,11 @@ packages:
     peerDependenciesMeta:
       react-native-worklets:
         optional: true
+
+  expo-secure-store@56.0.4:
+    resolution: {integrity: sha512-hjEi/gmpdFFJ9lYbdp3k3p/WchV7Gi0Qt8jt/m/0WJadqQrskafHAlDxbZkII1cN3Yd7zp9Lvkeq3UfGhSwirQ==}
+    peerDependencies:
+      expo: '*'
 
   expo-sensors@56.0.6:
     resolution: {integrity: sha512-06a3m+OLA6W0P58KROIqd3NdfamDcKNXcipLV2WAFJcZdtJh67RAkT9TW/vgw0HjYNY3d7Cb05YNp9dNELDH9A==}
@@ -13482,6 +13493,10 @@ snapshots:
       invariant: 2.2.4
       react: 19.2.7
       react-native: 0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7)
+
+  expo-secure-store@56.0.4(expo@55.0.15):
+    dependencies:
+      expo: 55.0.15(@babel/core@7.29.7)(@expo/dom-webview@55.0.5)(react-dom@19.2.7(react@19.2.7))(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
 
   expo-sensors@56.0.6(expo@55.0.15)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7)):
     dependencies:

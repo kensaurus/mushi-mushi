@@ -54,6 +54,7 @@
     "check:mcp-publish-readiness": "node scripts/check-mcp-publish-readiness.mjs",
     "smoke:admin-health": "node scripts/admin-console-health.mjs",
     "smoke:activation-journey": "node scripts/activation-journey.mjs",
+    "smoke:cli-setup": "node scripts/cli-setup-smoke.mjs",
     "check:activation-contract": "node scripts/check-activation-contract.mjs",
     "check:migration-catalog": "node scripts/check-migration-catalog-sync.mjs",
     "gen:config-docs": "node scripts/generate-config-reference.mjs",

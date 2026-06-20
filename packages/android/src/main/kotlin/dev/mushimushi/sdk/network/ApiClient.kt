@@ -58,6 +58,9 @@ class ApiClient(
             .post(body)
             .header("Content-Type", "application/json")
             .header("X-Mushi-Api-Key", config.apiKey)
+            .header("X-Mushi-Project", config.projectId)
+            .header("X-Mushi-SDK-Package", MushiInfo.SDK_NAME)
+            .header("X-Mushi-SDK-Version", MushiInfo.SDK_VERSION)
             .build()
 
         client.newCall(request).enqueue(object : Callback {
@@ -105,6 +108,9 @@ class ApiClient(
             .post(body.toRequestBody(mediaJson))
             .header("Content-Type", "application/json")
             .header("X-Mushi-Api-Key", config.apiKey)
+            .header("X-Mushi-Project", config.projectId)
+            .header("X-Mushi-SDK-Package", MushiInfo.SDK_NAME)
+            .header("X-Mushi-SDK-Version", MushiInfo.SDK_VERSION)
             .build()
         val response = try {
             client.newCall(req).execute()

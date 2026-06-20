@@ -48,6 +48,9 @@ final class ApiClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(config.apiKey, forHTTPHeaderField: "X-Mushi-Api-Key")
+        request.setValue(config.projectId, forHTTPHeaderField: "X-Mushi-Project")
+        request.setValue("@mushi-mushi/ios", forHTTPHeaderField: "X-Mushi-SDK-Package")
+        request.setValue(MushiInfo.sdkVersion, forHTTPHeaderField: "X-Mushi-SDK-Version")
 
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
             queue.enqueue(payload)

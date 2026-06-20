@@ -14,20 +14,34 @@ pnpm add @mushi-mushi/core
 
 ## API
 
-### `initMushi(config)`
+### `Mushi.init(config)` (web) / `MushiProvider` (React Native)
 
 ```ts
 interface MushiConfig {
-  projectId: string
-  apiKey: string                  // public API key
-  region?: 'us' | 'eu' | 'jp'     // optional pin; defaults to auto
-  apiUrl?: string                 // override (self-hosted)
-  enableOfflineQueue?: boolean    // default true
-  rateLimit?: { perMinute?: number }
-  scrubPii?: boolean              // default true
-  logger?: MushiLogger
+  projectId: string   // UUID from the console Projects page
+  apiKey: string      // report:write key — shown once at project creation
+  apiEndpoint?: string // override for self-hosted deployments
 }
 ```
+
+Get both values in one step by running `mushi login` or by creating a project in
+the [Mushi console](https://kensaur.us/mushi-mushi/admin/projects) — the ID and
+key are shown together on the success screen after project creation.
+
+### `MushiWidgetConfig` (selected keys)
+
+```ts
+interface MushiWidgetConfig {
+  position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+  theme?: 'light' | 'dark' | 'auto'
+  trigger?: 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+  /** 1.19+ — privacy caption under screenshot preview */
+  screenshotSensitiveHint?: boolean | string
+}
+```
+
+See [`docs/SDK_SCREENSHOT_PREVIEW.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
+for the full preview + consent flow.
 
 ### `submitReport(input)`
 

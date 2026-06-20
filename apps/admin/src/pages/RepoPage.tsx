@@ -18,6 +18,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   ErrorAlert,
   EmptyState,
@@ -588,12 +589,36 @@ export function RepoPage() {
         </Btn>
       </PageHeaderBar>
 
-      <RepoStatusBanner
-        stats={repoStats}
-        onTab={setActiveTab}
-        onRefresh={reload}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <RepoStatusBanner
+                stats={repoStats}
+                onTab={setActiveTab}
+                onRefresh={reload}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideRepoSnapshot,
+            children: (
+              <RepoSnapshotStrip
+                stats={repoStats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                description={activeTabMeta.description}
+                sectionTitle={copy?.sections?.snapshot ?? 'REPO SNAPSHOT'}
+                statLabels={copy?.statLabels}
+                compact={ux.isQuickstart}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
@@ -603,18 +628,6 @@ export function RepoPage() {
         options={tabOptions}
         onChange={setActiveTab}
         size="sm"
-      />
-      )}
-
-      {!ux.hideRepoSnapshot && (
-      <RepoSnapshotStrip
-        stats={repoStats}
-        statsFetchedAt={statsFetchedAt}
-        statsValidating={statsValidating}
-        description={activeTabMeta.description}
-        sectionTitle={copy?.sections?.snapshot ?? 'REPO SNAPSHOT'}
-        statLabels={copy?.statLabels}
-        compact={ux.isQuickstart}
       />
       )}
 

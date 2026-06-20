@@ -27,11 +27,23 @@ pnpm build
 
 ```bash
 pnpm dev          # Start all dev servers (admin on :6464)
+```
+
+| Surface | URL |
+| --- | --- |
+| Admin console | http://localhost:6464 |
+| Docs site | http://localhost:3000 |
+| CLI console override | `MUSHI_CONSOLE_URL=http://localhost:6464` |
+
+```bash
 pnpm test         # Run Vitest across all packages
 pnpm typecheck    # TypeScript checks
 pnpm lint         # ESLint
 pnpm format       # Prettier
+pnpm smoke:cli-setup   # Playwright: onboarding ?setup=cli + success panel (skips headless if unsigned)
 ```
+
+Set `CLI_SETUP_SMOKE_STRICT=1` to fail the smoke script when Playwright is not signed in (CI gate).
 
 Ad-hoc screenshots captured during UI reviews can live temporarily at the repo
 root, but root-level `*.png` files are intentionally ignored. Canonical

@@ -43,6 +43,7 @@ import {
   DEFAULT_API_ENDPOINT,
   newUuid,
   parseIdentityToken,
+  scrubPii,
   type MushiReport,
   type MushiApiClient,
   type MushiBreadcrumb,
@@ -61,6 +62,7 @@ import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
 import { getDeviceFingerprintHash } from './capture/fingerprint'
 import { AsyncStorageQueue } from './storage/async-storage-queue'
+import { loadReporterToken, saveReporterToken } from './storage/secure-storage'
 import { MushiBottomSheet } from './components/MushiBottomSheet'
 import { MushiFloatingButton } from './components/MushiFloatingButton'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
@@ -117,6 +119,8 @@ export interface MushiRNConfig {
   storage?: {
     maxQueueSize?: number
     retryIntervalMs?: number
+    /** Encrypt offline queue + store reporter token in SecureStore when available. Default true. */
+    secureStorage?: boolean
   }
   rewards?: MushiRewardsConfig
 }
@@ -323,6 +327,11 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       maxSize: config.storage?.maxQueueSize,
       apiEndpoint,
       apiKey: config.apiKey,
+      projectId: config.projectId,
+      sdkPackage: MUSHI_SDK_PACKAGE,
+      sdkVersion: MUSHI_SDK_VERSION,
+      getUserToken: () => userTokenRef.current,
+      secureStorage: config.storage?.secureStorage,
       // `onReportSynced` fires here — when a previously-queued report actually
       // drains to the server — not on the direct-submit path (where it would be
       // indistinguishable from `onReportSubmitted` and thus meaningless).
@@ -338,23 +347,21 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       data: { sdk: MUSHI_SDK_PACKAGE, version: MUSHI_SDK_VERSION },
     })
 
-    // Load or create a stable per-install reporter token from AsyncStorage so
-    // listMyReports() scopes results to this device's reports correctly.
+    // Load or create a stable per-install reporter token (SecureStore when available).
     ;(async () => {
-      const TOKEN_KEY = '@mushi:reporter_token'
       try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default
-        const existing = await AsyncStorage.getItem(TOKEN_KEY)
+        const secureStorage = config.storage?.secureStorage !== false
+        const existing = await loadReporterToken(secureStorage)
         if (existing && existing.startsWith('mushi_')) {
           reporterTokenRef.current = existing
         } else {
           const fresh = `mushi_${newUuid()}`
           reporterTokenRef.current = fresh
-          await AsyncStorage.setItem(TOKEN_KEY, fresh)
+          await saveReporterToken(fresh, secureStorage)
         }
         resolveReporterTokenReady()
       } catch {
-        // AsyncStorage unavailable — per-session token is fine for fallback
+        // Storage unavailable — per-session token is fine for fallback
         if (reporterTokenRef.current === `rn-${config.projectId}-anon`) {
           reporterTokenRef.current = `mushi_${newUuid()}`
         }
@@ -513,7 +520,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       // Snapshot the breadcrumb ring and derive a chronological repro timeline
       // so the admin console's "Repro timeline" renders instead of nudging
       // "Upgrade the SDK". One buffer is the single source of truth for both.
-      const breadcrumbs = breadcrumbsRef.current.getAll()
+      const breadcrumbs = breadcrumbsRef.current.getAll().map((c) => ({
+        ...c,
+        message: scrubPii(c.message),
+      }))
       const timeline: MushiTimelineEntry[] = breadcrumbs.map((c) => ({
         ts: c.timestamp,
         kind: breadcrumbToTimelineKind(c.category),
@@ -526,7 +536,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         id: newUuid(),
         projectId: config.projectId,
         category: data.category as MushiReport['category'],
-        description: data.description,
+        description: scrubPii(data.description),
         environment: {
           userAgent: deviceInfo.systemName ?? 'ReactNative',
           platform: deviceInfo.platform ?? 'mobile',
@@ -537,7 +547,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           timestamp: new Date().toISOString(),
           timezone: deviceInfo.timezone ?? 'UTC',
         },
-        consoleLogs: consoleRef.current?.getEntries() ?? [],
+        consoleLogs: (consoleRef.current?.getEntries() ?? []).map((entry) => ({
+          ...entry,
+          message: scrubPii(entry.message),
+        })),
         networkLogs:
           networkRef.current?.getEntries().map((entry) => ({
             ...entry,
@@ -560,6 +573,19 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
 
       const result = await client.submitReport(report)
       if (!result.ok) {
+        // Credential failures (401/403) will never succeed on retry — skip the
+        // offline queue and surface a clear error so the developer can fix their
+        // Project ID / API key before reports are silently dropped.
+        const isCredentialError =
+          result.error?.code === 'HTTP_401' || result.error?.code === 'HTTP_403' ||
+          result.error?.code?.includes('UNAUTHORIZED') || result.error?.code?.includes('FORBIDDEN')
+        if (isCredentialError) {
+          console.error(
+            '[Mushi] Credentials rejected. Check your projectId and apiKey (must have "report:write" scope). ' +
+            'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects',
+          )
+          return
+        }
         // Fire `onReportQueued` only after the report is actually persisted —
         // `enqueue` can no-op (AsyncStorage unavailable) or evict under cap.
         await queueRef.current?.enqueue(report)

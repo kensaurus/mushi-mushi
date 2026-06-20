@@ -110,6 +110,9 @@ export function loadConfig(path = CONFIG_PATH): CliConfig {
     ...(process.env['MUSHI_API_KEY'] ? { apiKey: process.env['MUSHI_API_KEY'] } : {}),
     ...(process.env['MUSHI_PROJECT_ID'] ? { projectId: process.env['MUSHI_PROJECT_ID'] } : {}),
     ...(endpointFromEnv ? { endpoint: endpointFromEnv } : {}),
+    ...(process.env['MUSHI_CONSOLE_URL']
+      ? { consoleUrl: process.env['MUSHI_CONSOLE_URL'].trim() }
+      : {}),
   }
   return { ...file, ...fromEnv }
 }

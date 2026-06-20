@@ -24,9 +24,14 @@ import { apiFetch } from './supabase'
 import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from './activeProject'
 import { useToast } from './toast'
 
-interface CreatedProject {
+export interface CreatedProject {
   id: string
   slug: string
+  name: string
+  /** Raw SDK ingest key (report:write scope) — returned exactly once at project creation. */
+  apiKey: string | null
+  /** 12-char key prefix for display (e.g. mushi_a1b2c3). */
+  keyPrefix: string | null
 }
 
 /**
@@ -104,8 +109,9 @@ export function useCreateProject({ onCreated, autoSelect = true }: Options = {})
           next.set(ACTIVE_PROJECT_QUERY_PARAM, res.data.id)
           setSearchParams(next, { replace: true })
         }
-        onCreated?.(res.data)
-        return res.data
+        const created: CreatedProject = { ...res.data, name }
+        onCreated?.(created)
+        return created
       } catch (err) {
         // Network / fetch-level failure (offline, CORS, DNS, etc).
         // Surface it as a transport error code so callers can branch

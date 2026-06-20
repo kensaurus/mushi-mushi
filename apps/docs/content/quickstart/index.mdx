@@ -33,8 +33,36 @@ import { Cards } from 'nextra/components'
   <Cards.Card title="Capacitor" href="/quickstart/capacitor" arrow />
 </Cards>
 
-## Need a project ID?
+## Where do I get my Project ID and API key?
 
-Sign up at [app.mushimushi.dev](https://app.mushimushi.dev) (or
-[self-host](/self-hosting)) and create a project. Copy env vars from
-[`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example).
+**Option A — zero copy-paste (recommended):**
+
+```bash
+npx mushi-mushi login   # or: mushi login
+```
+
+The wizard opens your browser, you click **Approve**, then picks or creates a project
+and saves the key automatically. Run `mushi init` afterwards to wire the SDK.
+
+**Option B — console:**
+
+Open the [admin console](https://kensaur.us/mushi-mushi/admin) → **Projects** → **New project**.
+After creation, the success screen shows both the **Project ID** (UUID) and the **API key**
+together with a pre-filled `mushi init` command. The key is shown **once** — copy it now.
+
+**Option C — CI / non-interactive:**
+
+```bash
+mushi login --api-key mushi_xxx --project-id 00000000-0000-0000-0000-000000000000
+```
+
+The values you need:
+
+| Value | Where to find it |
+|---|---|
+| `projectId` | UUID on the Projects page — `kensaur.us/mushi-mushi/admin/projects` |
+| `apiKey` | Shown once at project creation, or **Projects → Keys → Create key** (scope: `report:write`) |
+
+<Cards>
+  <Cards.Card title="CLI ↔ console loop" href="/quickstart/cli-console-loop" arrow />
+</Cards>

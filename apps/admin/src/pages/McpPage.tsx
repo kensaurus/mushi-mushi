@@ -52,6 +52,7 @@ import {
 } from '../lib/mcpCatalog'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   activeKeysDetail,
   activeKeysTooltip,
@@ -863,15 +864,72 @@ export function McpPage() {
         </Btn>
       </PageHeaderBar>
 
-      <McpStatusBanner
-        stats={stats}
-        onTab={setTab}
-        onRefresh={reloadAll}
-        refreshing={isValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <McpStatusBanner
+                stats={stats}
+                onTab={setTab}
+                onRefresh={reloadAll}
+                refreshing={isValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideMcpSnapshot,
+            children: (
+              <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
+                <SnapshotSectionHint text={activeMeta.description} />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                  <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} tooltip={activeKeysTooltip(stats)} detail={activeKeysDetail()} to={mcpLinks.activeKeys} />
+                  <StatCard
+                    label={copy?.statLabels?.mcpRead ?? 'mcp:read'}
+                    value={stats.mcpReadKeyCount}
+                    accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
+                    tooltip={mcpReadTooltip(stats)}
+                    detail={mcpReadDetail(stats)}
+                    to={mcpLinks.mcpRead}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.connected ?? 'Connected'}
+                    value={stats.connectedKeyCount}
+                    accent={stats.connectedKeyCount > 0 ? 'text-ok' : stats.mcpReadKeyCount > 0 ? 'text-warn' : undefined}
+                    tooltip={connectedTooltip(stats)}
+                    detail={connectedDetail(stats)}
+                    to={mcpLinks.connected}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.sdkOnly ?? 'SDK-only keys'}
+                    value={stats.reportOnlyKeyCount}
+                    accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
+                    tooltip={sdkOnlyTooltip(stats)}
+                    detail={sdkOnlyDetail()}
+                    to={mcpLinks.sdkOnly}
+                  />
+                  <StatCard label={copy?.statLabels?.tools ?? 'Tools'} value={stats.toolCount} accent="text-info" tooltip={toolsTooltip(stats)} detail={toolsDetail(stats)} to={mcpLinks.tools} />
+                  <StatCard
+                    label={copy?.statLabels?.endpoint ?? 'Endpoint'}
+                    value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
+                    accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
+                    tooltip={endpointTooltip(stats)}
+                    detail={endpointDetail(stats)}
+                    to={mcpLinks.endpoint}
+                  />
+                </div>
+              </Section>
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: stats.topPriority === 'healthy',
+            children: <McpConnectGuide topPriority={stats.topPriority} toolCount={stats.toolCount} />,
+          },
+        ]}
       />
-
-      <McpConnectGuide topPriority={stats.topPriority} toolCount={stats.toolCount} />
 
       {!ux.hideTabs && (
       <SegmentedControl
@@ -882,70 +940,6 @@ export function McpPage() {
         size="sm"
       />
       )}
-
-      {!ux.hideMcpSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} tooltip={activeKeysTooltip(stats)} detail={activeKeysDetail()} to={mcpLinks.activeKeys} />
-          <StatCard
-            label={copy?.statLabels?.mcpRead ?? 'mcp:read'}
-            value={stats.mcpReadKeyCount}
-            accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
-            tooltip={mcpReadTooltip(stats)}
-            detail={mcpReadDetail(stats)}
-            to={mcpLinks.mcpRead}
-          />
-          <StatCard
-            label={copy?.statLabels?.connected ?? 'Connected'}
-            value={stats.connectedKeyCount}
-            accent={stats.connectedKeyCount > 0 ? 'text-ok' : stats.mcpReadKeyCount > 0 ? 'text-warn' : undefined}
-            tooltip={connectedTooltip(stats)}
-            detail={connectedDetail(stats)}
-            to={mcpLinks.connected}
-          />
-          <StatCard
-            label={copy?.statLabels?.sdkOnly ?? 'SDK-only keys'}
-            value={stats.reportOnlyKeyCount}
-            accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
-            tooltip={sdkOnlyTooltip(stats)}
-            detail={sdkOnlyDetail()}
-            to={mcpLinks.sdkOnly}
-          />
-          <StatCard label={copy?.statLabels?.tools ?? 'Tools'} value={stats.toolCount} accent="text-info" tooltip={toolsTooltip(stats)} detail={toolsDetail(stats)} to={mcpLinks.tools} />
-          <StatCard
-            label={copy?.statLabels?.endpoint ?? 'Endpoint'}
-            value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
-            accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
-            tooltip={endpointTooltip(stats)}
-            detail={endpointDetail(stats)}
-            to={mcpLinks.endpoint}
-          />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
-              ? 'border-warn/30 bg-warn/5'
-              : 'border-edge-subtle bg-chrome'
-          }`}
-        >
-          <SignalChip tone={stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected' ? 'warn' : 'brand'}>
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="info">
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
@@ -1103,9 +1097,11 @@ export function McpPage() {
 
       {activeTab !== 'overview' && (
       <Section title={activeTab === 'setup' ? 'Agent setup' : activeTab === 'catalog' ? 'Tool catalog' : 'Agent examples'}>
+        {ux.hideMcpSnapshot && (
         <ContainedBlock tone="muted" className="mb-4">
           <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
         </ContainedBlock>
+        )}
 
         {activeTab === 'setup' && (
           <div className="space-y-4" data-dav-anchor="mcp:decide">
