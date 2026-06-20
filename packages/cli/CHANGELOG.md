@@ -1,5 +1,32 @@
 # @mushi-mushi/cli
 
+## 0.20.0
+
+### Minor Changes
+
+- 8a58313: Setup is now a zero-copy-paste browser sign-in. `mushi init` (and `npx mushi-mushi` / `npm create mushi-mushi`, which delegate to it) lead with **"Sign in with your browser"** — the RFC 8628 device-auth flow already used by `mushi login`. The console approval page hands the CLI a scoped token, then the wizard lets you pick or create a project and mints the SDK key for you. No more hunting for a Project ID UUID or an API key in the console.
+
+  ### Why
+
+  Users reported the old wizard was confusing: it asked for a Project ID and API key up front with no easy way to know what to paste (the screenshot pain point). The browser path removes both prompts for the common case and mirrors `gh auth login`, `vercel login`, and `stripe login`.
+
+  ### What changed
+  - **`mushi init` wizard**: new `acquireCredentials` step. Precedence: explicit `--project-id`/`--api-key` flags (CI) → saved credentials from a prior login (offer to reuse) → **browser sign-in (default)** → manual paste fallback. Any browser-path failure falls back to manual entry; the wizard never hard-fails.
+  - **`mushi project create`**: rewritten on the shared device-auth flow. Fixes three bugs: it no longer points at a dead hardcoded endpoint, no longer links to a 404 `/sign-up` console URL, and no longer tells you to copy a BYOK-type key (it mints the correct `report:write` SDK ingest key server-side). `--no-browser` prints the URL for headless/SSH; `--name` skips the prompt.
+  - **`mushi login`**: refactored onto the same shared `device-auth` primitives (DRY) while keeping its terminal UX (a dot per pending poll, precise per-state error messages).
+  - **New `device-auth.ts` module**: the RFC 8628 client (`startDeviceAuth`, `pollDeviceToken`, `waitForCliToken`, `listProjects`, `createProject`, `mintProjectKey`) is now implemented once and shared across `init`, `login`, and `project create`. Every request carries a 15s timeout so a hung network never wedges setup. Covered by new unit tests.
+
+### Patch Changes
+
+- 7b44c97: Harden the browser sign-in setup path with fixes from automated code review.
+
+  - **Resilient device-auth polling**: `waitForCliToken` (and the `mushi login` poll loop) now tolerate up to 5 consecutive transient poll errors (network blips / 5xx), resetting on any successful poll, instead of aborting a sign-in the moment one request drops. Denial and expiry remain terminal.
+  - **`mushi init --yes` keeps browser sign-in**: `--yes` no longer forces the legacy manual Project ID + API key paste; it goes straight to the (default) browser sign-in and only falls back to manual entry if that fails.
+  - **`mushi project create` honors a saved endpoint**: it now resolves the endpoint as `--endpoint` → `MUSHI_API_ENDPOINT` → saved `mushi config endpoint` → Cloud default, so self-hosted users aren't silently redirected to Mushi Cloud.
+  - **Safer browser open**: `openInBrowser` validates the URL is http(s) and launches via `spawn` with an argument array instead of building a shell command string, removing the command-injection surface (CodeQL).
+  - **Linear trailing-slash trim**: `normalizeConsoleBase` no longer uses a backtracking `/\/+$/` regex (ReDoS / CodeQL polynomial-regex alert).
+  - **`mushi connect` flag clarity**: `--write-env` / `--wire-ide` now actually force their action on (overriding a prior `--no-env` / `--no-ide`) instead of being silent no-ops.
+
 ## 0.19.0
 
 ### Minor Changes
