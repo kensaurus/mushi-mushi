@@ -146,18 +146,33 @@ export async function pollDeviceToken(endpoint: string, deviceCode: string): Pro
 export interface WaitForTokenOptions {
   /** Invoked on every `pending` poll (e.g. to print a progress dot). */
   onPending?: () => void
+  /**
+   * Invoked when a transient poll error is tolerated (network blip / 5xx).
+   * `attempt` is the current consecutive-error count.
+   */
+  onTransientError?: (message: string, attempt: number) => void
   /** Test seam — defaults to setTimeout-based sleep. */
   sleep?: (ms: number) => Promise<void>
   /** Test seam — defaults to Date.now. */
   now?: () => number
+  /**
+   * How many *consecutive* transient errors to tolerate before giving up.
+   * Resets to 0 on any successful poll (pending or approved). Defaults to 5.
+   */
+  maxConsecutiveErrors?: number
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
  * Poll the token endpoint until approval, then resolve the one-time CLI token.
- * Throws a labeled Error on denial, expiry, hard error, or overall timeout so
- * the caller can fall back to manual entry.
+ *
+ * Denial and expiry are terminal (the user acted, or the code is dead) so they
+ * throw immediately. A transient poll error — a network blip or a 5xx — is NOT
+ * terminal: a single dropped request must not abort a sign-in the user is about
+ * to approve. We tolerate up to `maxConsecutiveErrors` (default 5) in a row,
+ * resetting the counter whenever a poll succeeds, and only then surface the last
+ * error so the caller can fall back to manual entry.
  */
 export async function waitForCliToken(
   endpoint: string,
@@ -168,6 +183,8 @@ export async function waitForCliToken(
   const now = opts.now ?? Date.now
   const intervalMs = (session.interval || 5) * 1000
   const deadline = now() + (session.expires_in || 600) * 1000
+  const maxConsecutiveErrors = opts.maxConsecutiveErrors ?? 5
+  let consecutiveErrors = 0
 
   while (now() < deadline) {
     await sleep(intervalMs)
@@ -176,6 +193,7 @@ export async function waitForCliToken(
       case 'approved':
         return outcome.cliToken
       case 'pending':
+        consecutiveErrors = 0
         opts.onPending?.()
         continue
       case 'denied':
@@ -183,7 +201,12 @@ export async function waitForCliToken(
       case 'expired':
         throw new Error('The login code expired. Run sign-in again.')
       case 'error':
-        throw new Error(outcome.message)
+        consecutiveErrors += 1
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error(outcome.message)
+        }
+        opts.onTransientError?.(outcome.message, consecutiveErrors)
+        continue
     }
   }
   throw new Error('Login timed out before approval. Run sign-in again.')

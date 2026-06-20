@@ -150,11 +150,18 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         // retry and silently queuing them offline misleads the developer.
         if ((response.status === 401 || response.status === 403) && !_credWarningEmitted) {
           _credWarningEmitted = true;
+          // Only point to the hosted console when this client is actually using
+          // the hosted Cloud endpoint — self-hosted deployments (custom
+          // apiEndpoint) have their own console at an address we don't know.
+          const where =
+            apiEndpoint === DEFAULT_API_ENDPOINT
+              ? 'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects'
+              : "Get the correct values from your Mushi console's Projects page.";
           // eslint-disable-next-line no-console
           console.error(
             `[Mushi] Credentials rejected (HTTP ${response.status}). ` +
             `Check your Project ID and API key scope (must be "report:write"). ` +
-            `Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects`,
+            where,
           );
         }
 

@@ -304,18 +304,33 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     const cliToken = (row as Record<string, unknown>).cli_token_raw as string | null
 
     if (!cliToken) {
-      // Already retrieved — token was nulled after first poll.
+      // Already retrieved — token was nulled by an earlier poll.
       return c.json(
         { error: 'server_error', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
         400,
       )
     }
 
-    // Null out the raw token so it can only be retrieved once (one-time secret).
-    await db
+    // Atomically claim the one-time token. The `cli_token_raw IS NOT NULL` guard
+    // makes the UPDATE itself the lock: under concurrent polls only ONE request
+    // flips the column from non-null to null and gets a matched row back; every
+    // other concurrent poll re-evaluates the predicate after the row lock clears,
+    // sees null, and matches zero rows. This closes the SELECT→UPDATE race where
+    // two pollers could both read the same single-use token before it was nulled.
+    const { data: claimedRows, error: claimError } = await db
       .from('cli_auth_requests')
       .update({ cli_token_raw: null } as never)
       .eq('id', row.id)
+      .not('cli_token_raw', 'is', null)
+      .select('id')
+
+    if (claimError || !claimedRows || claimedRows.length === 0) {
+      // Lost the race — another concurrent poll already claimed this token.
+      return c.json(
+        { error: 'server_error', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
+        400,
+      )
+    }
 
     return c.json({
       ok: true,

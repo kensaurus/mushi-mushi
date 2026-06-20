@@ -176,6 +176,10 @@ Examples:
     let cliToken: string | null = null
     const pollIntervalMs = (deviceData.interval ?? 5) * 1000
     const deadline = Date.now() + (deviceData.expires_in ?? 600) * 1000
+    // A transient poll error (network blip / 5xx) must not abort a sign-in the
+    // user is about to approve. Tolerate a few in a row, resetting on success.
+    const MAX_CONSECUTIVE_ERRORS = 5
+    let consecutiveErrors = 0
 
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, pollIntervalMs))
@@ -185,16 +189,25 @@ Examples:
         break
       }
       if (outcome.status === 'pending') {
+        consecutiveErrors = 0
         process.stdout.write('.')
         continue
+      }
+      if (outcome.status === 'error') {
+        consecutiveErrors += 1
+        if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+          process.stdout.write('·') // transient — keep waiting
+          continue
+        }
+        console.log('')
+        process.stderr.write(`\nerror: Poll failed repeatedly: ${outcome.message}\n`)
+        process.exit(1)
       }
       console.log('')
       if (outcome.status === 'denied') {
         process.stderr.write('\nerror: Login denied in the browser.\n')
       } else if (outcome.status === 'expired') {
         process.stderr.write('\nerror: Login code expired. Run mushi login again.\n')
-      } else {
-        process.stderr.write(`\nerror: Poll failed: ${outcome.message}\n`)
       }
       process.exit(1)
     }

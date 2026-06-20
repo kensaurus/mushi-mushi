@@ -142,6 +142,36 @@ describe('waitForCliToken', () => {
     ).rejects.toThrow(/denied/i)
   })
 
+  it('tolerates a transient poll error and resolves after recovery', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new Error('ECONNRESET')) // transient — should not abort
+      .mockResolvedValueOnce(jsonResponse({ error: 'authorization_pending' }, { ok: false, status: 400 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { cli_token: 'tok' } }))
+
+    const onTransientError = vi.fn()
+    const token = await waitForCliToken(ENDPOINT, session, {
+      sleep: async () => {},
+      now: () => 0,
+      onTransientError,
+    })
+
+    expect(token).toBe('tok')
+    expect(onTransientError).toHaveBeenCalledTimes(1)
+    expect(onTransientError).toHaveBeenCalledWith(expect.stringMatching(/ECONNRESET/), 1)
+  })
+
+  it('gives up after too many consecutive transient errors', async () => {
+    fetchMock.mockRejectedValue(new Error('offline'))
+    await expect(
+      waitForCliToken(ENDPOINT, session, {
+        sleep: async () => {},
+        now: () => 0,
+        maxConsecutiveErrors: 3,
+      }),
+    ).rejects.toThrow(/offline/i)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
   it('throws a timeout error once the deadline passes', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ error: 'authorization_pending' }, { ok: false, status: 400 }))
     // now(): deadline calc (0), first while-check (0), post-poll while-check (past deadline).
