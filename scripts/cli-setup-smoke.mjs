@@ -10,17 +10,27 @@
  * Usage:
  *   ADMIN_URL=http://localhost:6464 node scripts/cli-setup-smoke.mjs
  *
- * Auth: uses Playwright persistent profile if available. Without a signed-in
- * session, checks exit 0 with SKIP (set CLI_SETUP_SMOKE_STRICT=1 to fail).
+ * Auth: launches a *persistent* Chromium profile (default
+ * `.playwright-mcp/cli-setup-profile`, override with CLI_SETUP_SMOKE_PROFILE) so
+ * you can sign in once in a headed run and every later headless run reuses that
+ * session. Without a signed-in session, checks exit 0 with SKIP (set
+ * CLI_SETUP_SMOKE_STRICT=1 to fail).
+ *
+ * Playwright is an optional dev dependency — it's imported dynamically so this
+ * script SKIPs cleanly (exit 0) on machines where it isn't installed instead of
+ * crashing at module load.
  */
 
-import { chromium } from 'playwright'
+import { join } from 'node:path'
 
 const BASE = process.argv.includes('--base')
   ? process.argv[process.argv.indexOf('--base') + 1]
   : process.env.ADMIN_URL ?? 'http://localhost:6464'
 
 const STRICT = process.env.CLI_SETUP_SMOKE_STRICT === '1'
+const PROFILE_DIR =
+  process.env.CLI_SETUP_SMOKE_PROFILE ?? join('.playwright-mcp', 'cli-setup-profile')
+const HEADED = process.argv.includes('--headed') || process.env.CLI_SETUP_SMOKE_HEADED === '1'
 
 async function isSignedIn(page) {
   const url = page.url()
@@ -61,17 +71,41 @@ const CHECKS = [
 ]
 
 async function main() {
-  let chromiumMod
+  // Dynamic import: if Playwright isn't installed, skip cleanly (exit 0) rather
+  // than throwing at module load before this guard can run.
+  let chromium
   try {
-    chromiumMod = chromium
+    ;({ chromium } = await import('playwright'))
   } catch {
-    console.error('Playwright not installed — skip or run: pnpm exec playwright install chromium')
+    const msg = 'Playwright not installed — run: pnpm exec playwright install chromium'
+    if (STRICT) {
+      // In strict mode this is a CI gate: a missing dependency must fail, not
+      // silently pass, otherwise the smoke check provides false assurance.
+      console.error(`FAIL cli-setup-smoke (${msg})`)
+      process.exit(1)
+    }
+    console.log(`SKIP cli-setup-smoke (${msg})`)
     process.exit(0)
   }
 
-  const browser = await chromium.launch({ headless: true })
-  const context = await browser.newContext()
-  const page = await context.newPage()
+  // Persistent context so a one-time headed sign-in is reused by later headless
+  // runs (a fresh newContext() would always land on the login page and SKIP).
+  // launchPersistentContext throws if the Chromium binary isn't installed (pkg
+  // present but `playwright install chromium` never run); treat that like the
+  // missing-dependency case — FAIL under strict, SKIP otherwise.
+  let context
+  try {
+    context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: !HEADED })
+  } catch (err) {
+    const msg = `Could not launch Chromium (${err instanceof Error ? err.message : err}) — run: pnpm exec playwright install chromium`
+    if (STRICT) {
+      console.error(`FAIL cli-setup-smoke (${msg})`)
+      process.exit(1)
+    }
+    console.log(`SKIP cli-setup-smoke (${msg})`)
+    process.exit(0)
+  }
+  const page = context.pages()[0] ?? (await context.newPage())
   let failed = 0
   let skipped = 0
 
@@ -94,7 +128,7 @@ async function main() {
     }
   }
 
-  await browser.close()
+  await context.close()
 
   if (failed > 0) process.exit(1)
   if (skipped > 0 && STRICT) {

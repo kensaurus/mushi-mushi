@@ -6,6 +6,42 @@
     "versions": [],
     "highlights": [
       {
+        "title": "Resilient device-auth polling",
+        "description": "`waitForCliToken` (and the `mushi login` poll loop) now tolerate up to 5 consecutive transient poll errors (network blips / 5xx), resetting on any successful poll, instead of aborting a sign-in the moment one request drops. Denial and expiry remain terminal."
+      },
+      {
+        "title": "`mushi init --yes` keeps browser sign-in",
+        "description": "`--yes` no longer forces the legacy manual Project ID + API key paste; it goes straight to the (default) browser sign-in and only falls back to manual entry if that fails."
+      },
+      {
+        "title": "`mushi project create` honors a saved endpoint",
+        "description": "it now resolves the endpoint as `--endpoint` → `MUSHI_API_ENDPOINT` → saved `mushi config endpoint` → Cloud default, so self-hosted users aren't silently redirected to Mushi Cloud."
+      },
+      {
+        "title": "Safer browser open",
+        "description": "`openInBrowser` validates the URL is http(s) and launches via `spawn` with an argument array instead of building a shell command string, removing the command-injection surface (CodeQL)."
+      },
+      {
+        "title": "Linear trailing-slash trim",
+        "description": "`normalizeConsoleBase` no longer uses a backtracking `/\\/+$/` regex (ReDoS / CodeQL polynomial-regex alert)."
+      },
+      {
+        "title": "`mushi connect` flag clarity",
+        "description": "`--write-env` / `--wire-ide` now actually force their action on (overriding a prior `--no-env` / `--no-ide`) instead of being silent no-ops."
+      },
+      {
+        "title": "Favicon trust boundary",
+        "description": "(`@mushi-mushi/core`): `readPageFaviconHref` now returns only http(s) URLs, so a host page can't get a `data:` / `blob:` / `javascript:` favicon rendered into the widget's `<img src>`; anything else falls back to the default mark."
+      },
+      {
+        "title": "Self-hosted credential message",
+        "description": "(`@mushi-mushi/core`, `@mushi-mushi/react-native`): the one-time 401/403 \"credentials rejected\" warning only links to the hosted console when the client is actually using the Cloud endpoint; self-hosted deployments get a console-agnostic message instead of a wrong domain."
+      },
+      {
+        "title": "Offline-queue data loss",
+        "description": "(`@mushi-mushi/react-native`): `decryptQueueBlob` now decrypts any blob carrying the encrypted prefix regardless of the current `secureStorage` flag. Previously, toggling `secureStorage` from `true` to `false` returned the still-encrypted string, which failed `JSON.parse` and silently cleared the offline report queue."
+      },
+      {
         "title": "`mushi init` wizard",
         "description": "new `acquireCredentials` step. Precedence: explicit `--project-id`/`--api-key` flags (CI) → saved credentials from a prior login (offer to reuse) → **browser sign-in (default)** → manual paste fallback. Any browser-path failure falls back to manual entry; the wizard never hard-fails."
       },

@@ -60,7 +60,17 @@ export type PollOutcome =
   | { status: 'pending' }
   | { status: 'denied' }
   | { status: 'expired' }
-  | { status: 'error'; message: string }
+  | {
+      status: 'error'
+      message: string
+      /**
+       * Whether retrying could plausibly succeed. `true` for network failures and
+       * 5xx (the request may go through on a later poll); `false` for terminal 4xx
+       * such as an already-claimed token or `invalid_grant`, where polling again
+       * just wastes the user's time.
+       */
+      retryable: boolean
+    }
 
 function trimTrailingSlash(endpoint: string): string {
   let end = endpoint.length
@@ -136,28 +146,48 @@ export async function pollDeviceToken(endpoint: string, deviceCode: string): Pro
         return {
           status: 'error',
           message: json.error_description ?? json.error ?? `HTTP ${res.status}`,
+          // 5xx is a server hiccup the next poll may clear; a 4xx is a definitive
+          // rejection (already claimed / invalid_grant) that won't fix itself.
+          retryable: res.status >= 500,
         }
     }
   } catch (err) {
-    return { status: 'error', message: err instanceof Error ? err.message : String(err) }
+    // Network failure / timeout — never reached the server, so a retry can work.
+    return { status: 'error', message: err instanceof Error ? err.message : String(err), retryable: true }
   }
 }
 
 export interface WaitForTokenOptions {
   /** Invoked on every `pending` poll (e.g. to print a progress dot). */
   onPending?: () => void
+  /**
+   * Invoked when a transient poll error is tolerated (network blip / 5xx).
+   * `attempt` is the current consecutive-error count.
+   */
+  onTransientError?: (message: string, attempt: number) => void
   /** Test seam — defaults to setTimeout-based sleep. */
   sleep?: (ms: number) => Promise<void>
   /** Test seam — defaults to Date.now. */
   now?: () => number
+  /**
+   * How many *consecutive* transient errors to tolerate before giving up.
+   * Resets to 0 on any successful poll (pending or approved). Defaults to 5.
+   */
+  maxConsecutiveErrors?: number
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
  * Poll the token endpoint until approval, then resolve the one-time CLI token.
- * Throws a labeled Error on denial, expiry, hard error, or overall timeout so
- * the caller can fall back to manual entry.
+ *
+ * Denial, expiry, and terminal (4xx) errors throw immediately — the user acted,
+ * the code is dead, or the server gave a definitive rejection that polling can't
+ * fix. Only a *retryable* poll error — a network blip or a 5xx — is tolerated: a
+ * single dropped request must not abort a sign-in the user is about to approve.
+ * We tolerate up to `maxConsecutiveErrors` (default 5) retryable errors in a row,
+ * resetting the counter whenever a poll succeeds, and only then surface the last
+ * error so the caller can fall back to manual entry.
  */
 export async function waitForCliToken(
   endpoint: string,
@@ -168,6 +198,8 @@ export async function waitForCliToken(
   const now = opts.now ?? Date.now
   const intervalMs = (session.interval || 5) * 1000
   const deadline = now() + (session.expires_in || 600) * 1000
+  const maxConsecutiveErrors = opts.maxConsecutiveErrors ?? 5
+  let consecutiveErrors = 0
 
   while (now() < deadline) {
     await sleep(intervalMs)
@@ -176,6 +208,7 @@ export async function waitForCliToken(
       case 'approved':
         return outcome.cliToken
       case 'pending':
+        consecutiveErrors = 0
         opts.onPending?.()
         continue
       case 'denied':
@@ -183,7 +216,17 @@ export async function waitForCliToken(
       case 'expired':
         throw new Error('The login code expired. Run sign-in again.')
       case 'error':
-        throw new Error(outcome.message)
+        // A terminal error (4xx) won't recover by polling again — surface it now
+        // instead of burning the whole retry budget on a foregone conclusion.
+        if (!outcome.retryable) {
+          throw new Error(outcome.message)
+        }
+        consecutiveErrors += 1
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error(outcome.message)
+        }
+        opts.onTransientError?.(outcome.message, consecutiveErrors)
+        continue
     }
   }
   throw new Error('Login timed out before approval. Run sign-in again.')

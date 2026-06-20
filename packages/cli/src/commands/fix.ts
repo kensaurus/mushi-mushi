@@ -221,8 +221,8 @@ program
   .requiredOption('--project-id <id>', 'Project UUID')
   .requiredOption('--endpoint <url>', 'Supabase edge function URL')
   .option('--cwd <path>', 'Target repo')
-  .option('--write-env', 'Write SDK env vars to .env.local (default: enabled)')
-  .option('--wire-ide', 'Wire Cursor MCP into .cursor/mcp.json (default: enabled)')
+  .option('--write-env', 'Force-write SDK env vars to .env.local (default; overrides --no-env)')
+  .option('--wire-ide', 'Force-wire Cursor MCP into .cursor/mcp.json (default; overrides --no-ide)')
   .option('--no-env', 'Skip writing .env.local')
   .option('--no-ide', 'Skip writing .cursor/mcp.json')
   .option('--wait', 'Poll ingest-setup until SDK heartbeat lands')
@@ -239,6 +239,8 @@ Examples:
     cwd?: string
     env?: boolean
     ide?: boolean
+    writeEnv?: boolean
+    wireIde?: boolean
     wait?: boolean
     waitTimeout: string
     json?: boolean
@@ -254,8 +256,10 @@ Examples:
       projectId: opts.projectId,
       endpoint: opts.endpoint,
       cwd: opts.cwd,
-      writeEnv: opts.env !== false,
-      wireIde: opts.ide !== false,
+      // Explicit --write-env / --wire-ide force the action on even if --no-env /
+      // --no-ide was also passed; otherwise writing is the default.
+      writeEnv: opts.writeEnv === true ? true : opts.env !== false,
+      wireIde: opts.wireIde === true ? true : opts.ide !== false,
       wait: opts.wait,
       waitTimeoutSec: parseInt(opts.waitTimeout, 10) || 120,
       json: opts.json,

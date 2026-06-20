@@ -30,7 +30,13 @@ const LOCAL_ADMIN_URL = 'http://localhost:6464'
 const LOCAL_PROBE_MS = 800
 
 export function normalizeConsoleBase(url: string): string {
-  return url.trim().replace(/\/+$/, '')
+  // Char-by-char trailing-slash trim (not `/\/+$/`) to avoid a ReDoS surface on
+  // attacker-controlled console URLs and the CodeQL polynomial-regex alert that
+  // flags `+` on a repeatable character. Linear time, no backtracking.
+  const trimmed = url.trim()
+  let end = trimmed.length
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47 /* '/' */) end--
+  return trimmed.slice(0, end)
 }
 
 export function consoleUrl(base: string, route: string): string {
@@ -145,15 +151,47 @@ export function reportsUrl(base: string, reportId?: string): string {
     : consoleUrl(base, '/reports')
 }
 
+/**
+ * Open a URL in the user's default browser.
+ *
+ * Security: only http(s) URLs are launched, and the URL is passed as a discrete
+ * argument via `spawn` (never interpolated into a shell command string). This
+ * removes the shell-injection surface CodeQL flags for `exec(\`open "${url}"\`)`
+ * — even a URL containing shell metacharacters can't break out of the argv slot.
+ */
 export async function openInBrowser(url: string): Promise<void> {
-  const { exec } = await import('node:child_process')
-  const openCmd =
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return // not a URL — nothing safe to open
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return // refuse file:, data:, javascript:, etc.
+  }
+  const safeUrl = parsed.toString()
+
+  const { spawn } = await import('node:child_process')
+  const [command, args] =
     process.platform === 'win32'
-      ? `start "" "${url}"`
+      ? // Open via rundll32's FileProtocolHandler rather than `cmd /c start`.
+        // `start` is a cmd builtin, so the URL would be re-parsed by cmd.exe and
+        // characters like `&` / `|` / `^` could still break out — exactly the
+        // injection surface CodeQL flags. rundll32 never invokes a shell: the URL
+        // is handed to the default browser as one opaque argument.
+        (['rundll32', ['url.dll,FileProtocolHandler', safeUrl]] as const)
       : process.platform === 'darwin'
-        ? `open "${url}"`
-        : `xdg-open "${url}"`
+        ? (['open', [safeUrl]] as const)
+        : (['xdg-open', [safeUrl]] as const)
+
   await new Promise<void>((resolve) => {
-    exec(openCmd, () => resolve())
+    try {
+      const child = spawn(command, [...args], { stdio: 'ignore', shell: false })
+      child.on('error', () => resolve())
+      child.on('exit', () => resolve())
+      child.unref()
+    } catch {
+      resolve()
+    }
   })
 }
