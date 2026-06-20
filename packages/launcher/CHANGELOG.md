@@ -1,5 +1,13 @@
 # mushi-mushi
 
+## 0.7.12
+
+### Patch Changes
+
+- Updated dependencies [7b44c97]
+- Updated dependencies [8a58313]
+  - @mushi-mushi/cli@0.20.0
+
 ## 0.7.11
 
 ### Patch Changes

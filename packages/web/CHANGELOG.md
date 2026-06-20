@@ -1,5 +1,16 @@
 # @mushi-mushi/web
 
+## 1.19.2
+
+### Patch Changes
+
+- 8a58313: Render the project's app icon in the widget using a favicon-candidate fallback chain (`renderAppIconHtml` + `bindFaviconFallbacks`), and show the host page's favicon in the report-flow header when available. Generic/placeholder favicons are detected and skipped in favor of clean initials, so the widget never shows a broken or default browser icon.
+
+  This ships the app-icon rendering that already landed in source but was never published (the web package was not version-bumped in the previous release).
+
+- Updated dependencies [7b44c97]
+  - @mushi-mushi/core@1.19.2
+
 ## 1.19.0
 
 ### Minor Changes
