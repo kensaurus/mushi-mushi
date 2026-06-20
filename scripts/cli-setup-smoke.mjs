@@ -90,7 +90,21 @@ async function main() {
 
   // Persistent context so a one-time headed sign-in is reused by later headless
   // runs (a fresh newContext() would always land on the login page and SKIP).
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: !HEADED })
+  // launchPersistentContext throws if the Chromium binary isn't installed (pkg
+  // present but `playwright install chromium` never run); treat that like the
+  // missing-dependency case — FAIL under strict, SKIP otherwise.
+  let context
+  try {
+    context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: !HEADED })
+  } catch (err) {
+    const msg = `Could not launch Chromium (${err instanceof Error ? err.message : err}) — run: pnpm exec playwright install chromium`
+    if (STRICT) {
+      console.error(`FAIL cli-setup-smoke (${msg})`)
+      process.exit(1)
+    }
+    console.log(`SKIP cli-setup-smoke (${msg})`)
+    process.exit(0)
+  }
   const page = context.pages()[0] ?? (await context.newPage())
   let failed = 0
   let skipped = 0

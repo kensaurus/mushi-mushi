@@ -304,9 +304,11 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     const cliToken = (row as Record<string, unknown>).cli_token_raw as string | null
 
     if (!cliToken) {
-      // Already retrieved — token was nulled by an earlier poll.
+      // Already retrieved — token was nulled by an earlier poll. `invalid_grant`
+      // is the RFC 8628 terminal code for a device_code that's no longer usable
+      // (4xx so the CLI fails fast rather than retrying).
       return c.json(
-        { error: 'server_error', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
+        { error: 'invalid_grant', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
         400,
       )
     }
@@ -335,9 +337,9 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     }
     if (!claimedRows || claimedRows.length === 0) {
       // Lost the race — another concurrent poll already claimed this one-time
-      // token. Terminal (4xx): retrying won't bring it back.
+      // token. Terminal (4xx, RFC 8628 invalid_grant): retrying won't bring it back.
       return c.json(
-        { error: 'server_error', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
+        { error: 'invalid_grant', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
         400,
       )
     }
