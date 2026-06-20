@@ -153,8 +153,10 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           // Only point to the hosted console when this client is actually using
           // the hosted Cloud endpoint — self-hosted deployments (custom
           // apiEndpoint) have their own console at an address we don't know.
+          // Compare the slash-normalized `baseUrl`, not the raw `apiEndpoint`, so
+          // a copy-pasted Cloud URL with a trailing slash still counts as Cloud.
           const where =
-            apiEndpoint === DEFAULT_API_ENDPOINT
+            baseUrl === DEFAULT_API_ENDPOINT
               ? 'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects'
               : "Get the correct values from your Mushi console's Projects page.";
           // eslint-disable-next-line no-console

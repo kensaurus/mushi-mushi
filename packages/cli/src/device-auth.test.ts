@@ -97,21 +97,34 @@ describe('pollDeviceToken', () => {
     await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({ status: 'expired' })
   })
 
-  it('maps an unknown error to status error with a message', async () => {
+  it('maps an unknown 4xx error to a terminal (non-retryable) error', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ error: 'server_error', error_description: 'boom' }, { ok: false, status: 400 }),
     )
     await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
       status: 'error',
       message: 'boom',
+      retryable: false,
     })
   })
 
-  it('never throws on a network failure — surfaces it as an error outcome', async () => {
+  it('maps a 5xx error to a retryable error', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ error: 'server_error', error_description: 'upstream down' }, { ok: false, status: 503 }),
+    )
+    await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
+      status: 'error',
+      message: 'upstream down',
+      retryable: true,
+    })
+  })
+
+  it('never throws on a network failure — surfaces it as a retryable error', async () => {
     fetchMock.mockRejectedValueOnce(new Error('ECONNRESET'))
     await expect(pollDeviceToken(ENDPOINT, 'dc')).resolves.toEqual({
       status: 'error',
       message: 'ECONNRESET',
+      retryable: true,
     })
   })
 })
@@ -170,6 +183,25 @@ describe('waitForCliToken', () => {
       }),
     ).rejects.toThrow(/offline/i)
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('fails fast on a terminal 4xx error without spending the retry budget', async () => {
+    // A 4xx (e.g. already-claimed token) is non-retryable — should throw on the
+    // first poll, not after maxConsecutiveErrors attempts.
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: 'server_error', error_description: 'already retrieved' }, { ok: false, status: 400 }),
+    )
+    const onTransientError = vi.fn()
+    await expect(
+      waitForCliToken(ENDPOINT, session, {
+        sleep: async () => {},
+        now: () => 0,
+        maxConsecutiveErrors: 5,
+        onTransientError,
+      }),
+    ).rejects.toThrow(/already retrieved/i)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(onTransientError).not.toHaveBeenCalled()
   })
 
   it('throws a timeout error once the deadline passes', async () => {

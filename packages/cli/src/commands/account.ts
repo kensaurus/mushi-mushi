@@ -194,13 +194,15 @@ Examples:
         continue
       }
       if (outcome.status === 'error') {
-        consecutiveErrors += 1
-        if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+        // Terminal 4xx (already claimed / invalid_grant) can't recover by polling
+        // again — bail immediately instead of spinning out the retry budget.
+        if (outcome.retryable && consecutiveErrors + 1 < MAX_CONSECUTIVE_ERRORS) {
+          consecutiveErrors += 1
           process.stdout.write('·') // transient — keep waiting
           continue
         }
         console.log('')
-        process.stderr.write(`\nerror: Poll failed repeatedly: ${outcome.message}\n`)
+        process.stderr.write(`\nerror: ${outcome.message}\n`)
         process.exit(1)
       }
       console.log('')

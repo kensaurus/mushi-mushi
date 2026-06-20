@@ -60,7 +60,17 @@ export type PollOutcome =
   | { status: 'pending' }
   | { status: 'denied' }
   | { status: 'expired' }
-  | { status: 'error'; message: string }
+  | {
+      status: 'error'
+      message: string
+      /**
+       * Whether retrying could plausibly succeed. `true` for network failures and
+       * 5xx (the request may go through on a later poll); `false` for terminal 4xx
+       * such as an already-claimed token or `invalid_grant`, where polling again
+       * just wastes the user's time.
+       */
+      retryable: boolean
+    }
 
 function trimTrailingSlash(endpoint: string): string {
   let end = endpoint.length
@@ -136,10 +146,14 @@ export async function pollDeviceToken(endpoint: string, deviceCode: string): Pro
         return {
           status: 'error',
           message: json.error_description ?? json.error ?? `HTTP ${res.status}`,
+          // 5xx is a server hiccup the next poll may clear; a 4xx is a definitive
+          // rejection (already claimed / invalid_grant) that won't fix itself.
+          retryable: res.status >= 500,
         }
     }
   } catch (err) {
-    return { status: 'error', message: err instanceof Error ? err.message : String(err) }
+    // Network failure / timeout — never reached the server, so a retry can work.
+    return { status: 'error', message: err instanceof Error ? err.message : String(err), retryable: true }
   }
 }
 
@@ -167,10 +181,11 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 /**
  * Poll the token endpoint until approval, then resolve the one-time CLI token.
  *
- * Denial and expiry are terminal (the user acted, or the code is dead) so they
- * throw immediately. A transient poll error — a network blip or a 5xx — is NOT
- * terminal: a single dropped request must not abort a sign-in the user is about
- * to approve. We tolerate up to `maxConsecutiveErrors` (default 5) in a row,
+ * Denial, expiry, and terminal (4xx) errors throw immediately — the user acted,
+ * the code is dead, or the server gave a definitive rejection that polling can't
+ * fix. Only a *retryable* poll error — a network blip or a 5xx — is tolerated: a
+ * single dropped request must not abort a sign-in the user is about to approve.
+ * We tolerate up to `maxConsecutiveErrors` (default 5) retryable errors in a row,
  * resetting the counter whenever a poll succeeds, and only then surface the last
  * error so the caller can fall back to manual entry.
  */
@@ -201,6 +216,11 @@ export async function waitForCliToken(
       case 'expired':
         throw new Error('The login code expired. Run sign-in again.')
       case 'error':
+        // A terminal error (4xx) won't recover by polling again — surface it now
+        // instead of burning the whole retry budget on a foregone conclusion.
+        if (!outcome.retryable) {
+          throw new Error(outcome.message)
+        }
         consecutiveErrors += 1
         if (consecutiveErrors >= maxConsecutiveErrors) {
           throw new Error(outcome.message)

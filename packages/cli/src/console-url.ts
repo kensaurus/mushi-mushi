@@ -174,9 +174,12 @@ export async function openInBrowser(url: string): Promise<void> {
   const { spawn } = await import('node:child_process')
   const [command, args] =
     process.platform === 'win32'
-      ? // `start` is a cmd builtin; `''` is the (empty) window-title arg so a
-        // quoted URL isn't swallowed as the title. No shell string is built.
-        (['cmd.exe', ['/c', 'start', '', safeUrl]] as const)
+      ? // Open via rundll32's FileProtocolHandler rather than `cmd /c start`.
+        // `start` is a cmd builtin, so the URL would be re-parsed by cmd.exe and
+        // characters like `&` / `|` / `^` could still break out — exactly the
+        // injection surface CodeQL flags. rundll32 never invokes a shell: the URL
+        // is handed to the default browser as one opaque argument.
+        (['rundll32', ['url.dll,FileProtocolHandler', safeUrl]] as const)
       : process.platform === 'darwin'
         ? (['open', [safeUrl]] as const)
         : (['xdg-open', [safeUrl]] as const)

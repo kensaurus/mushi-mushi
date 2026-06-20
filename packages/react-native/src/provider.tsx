@@ -582,8 +582,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         if (isCredentialError) {
           // Only link to the hosted console when running against Cloud; a
           // self-hosted app (custom apiEndpoint) has its own console address.
+          // Strip a trailing slash first so a copy-pasted Cloud URL ending in
+          // "/" still matches (DEFAULT_API_ENDPOINT has none).
           const where =
-            apiEndpoint === DEFAULT_API_ENDPOINT
+            apiEndpoint.replace(/\/$/, '') === DEFAULT_API_ENDPOINT
               ? 'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects'
               : "Get the correct values from your Mushi console's Projects page."
           console.error(
