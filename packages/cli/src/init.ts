@@ -35,6 +35,14 @@ import {
   resolveConsoleUrlSync,
 } from './console-url.js'
 import { apiCall } from './cli-shared.js'
+import {
+  createProject,
+  listProjects,
+  mintProjectKey,
+  startDeviceAuth,
+  waitForCliToken,
+  type DeviceProject,
+} from './device-auth.js'
 import { normalizeEndpoint, resolveCloudEndpoint, TEST_REPORT_FETCH_TIMEOUT_MS } from './endpoint.js'
 import { checkFreshness } from './freshness.js'
 import { detectWorkspaceHint, type WorkspaceHint } from './monorepo.js'
@@ -89,9 +97,9 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   const framework = await chooseFramework(detected, options)
 
   const consoleBase = await resolveConsoleUrl({ cwd })
-  await maybeGuideConsoleSetup(options, consoleBase)
+  const endpoint = resolveCloudEndpoint(options.endpoint)
 
-  const credentials = await collectCredentials(options, consoleBase)
+  const credentials = await acquireCredentials(options, consoleBase, endpoint)
   await verifyCredentials(credentials, options, consoleBase)
 
   const pm = detectPackageManager(cwd)
@@ -105,7 +113,6 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     p.log.info(`Skipped install. Run \`${installCommand(pm, packagesToInstall)}\` yourself.`)
   }
 
-  const endpoint = resolveCloudEndpoint(options.endpoint)
   writeEnvFile(cwd, credentials.apiKey, credentials.projectId, framework)
   persistCliConfig(credentials.apiKey, credentials.projectId, endpoint)
 
@@ -175,76 +182,37 @@ async function chooseFramework(detected: Framework, options: InitOptions): Promi
   return FRAMEWORKS[confirmed]
 }
 
-async function maybeGuideConsoleSetup(options: InitOptions, consoleBase: string): Promise<void> {
-  if (options.yes) return
-  if (options.projectId && options.apiKey) return
-
-  const existing = loadConfig()
-  if (existing.projectId && existing.apiKey) return
-
-  const choice = await p.select({
-    message: 'Do you already have a Mushi project?',
-    options: [
-      {
-        value: 'create',
-        label: 'No — open the console to create one',
-        hint: 'Recommended for first-time setup',
-      },
-      {
-        value: 'have',
-        label: 'Yes — I have Project ID + API key',
-        hint: 'Paste values from the admin console',
-      },
-      {
-        value: 'login',
-        label: 'Use mushi login first',
-        hint: 'Run `mushi login` in another terminal, then re-run this wizard',
-      },
-    ],
-  })
-
-  if (p.isCancel(choice)) {
-    p.cancel('Aborted.')
-    process.exit(0)
-  }
-
-  if (choice === 'login') {
-    p.log.info('Run `mushi login` to save credentials, then re-run `mushi init`.')
-    p.cancel('Aborted.')
-    process.exit(0)
-  }
-
-  if (choice !== 'create') return
-
-  const setupUrl = cliSetupDeepLink(consoleBase)
-  p.log.info(`Opening the Mushi console:\n  ${setupUrl}`)
-  await openInBrowser(setupUrl)
-  p.log.message('In the console:')
-  p.log.message('  1. Enter a project name and click Create')
-  p.log.message('  2. Copy the Project ID from the success panel')
-  p.log.message('  3. Generate an API key (Verify tab — report:write scope)')
-  p.log.message('  4. Return here and paste both values')
-
-  const ready = await p.confirm({
-    message: 'Created your project and ready to paste credentials?',
-    initialValue: false,
-  })
-  if (p.isCancel(ready) || !ready) {
-    p.log.warn(`Finish in the console first: ${setupUrl}`)
-  }
-}
-
-async function collectCredentials(
+/**
+ * Acquire SDK credentials with the least friction possible. Precedence:
+ *   1. Explicit --project-id + --api-key flags (CI / scripted).
+ *   2. Saved credentials from a previous `mushi login` (offer to reuse).
+ *   3. Browser sign-in (RFC 8628 device-auth) — recommended, zero copy-paste.
+ *   4. Manual Project ID + API key paste (fallback / self-hosted).
+ *
+ * Browser sign-in is the default because it removes the #1 setup pain point:
+ * users no longer have to hunt for a UUID and a key in the console. This
+ * mirrors `gh auth login`, `vercel login`, and `stripe login`.
+ */
+async function acquireCredentials(
   options: InitOptions,
   consoleBase: string,
+  endpoint: string,
 ): Promise<{ apiKey: string; projectId: string }> {
-  const existing = loadConfig()
+  // 1. Explicit flags win (CI / non-interactive).
+  if (options.projectId && options.apiKey) {
+    return {
+      projectId: sanitizeSecret(options.projectId),
+      apiKey: sanitizeSecret(options.apiKey),
+    }
+  }
 
+  // 2. Reuse saved credentials from a prior login.
+  const existing = loadConfig()
   if (!options.projectId && !options.apiKey && existing.projectId && existing.apiKey) {
     const reuse = options.yes
       ? true
       : await p.confirm({
-          message: 'Use Project ID + API key from ~/.config/mushi/config.json?',
+          message: 'Use the Mushi credentials saved from your last sign-in?',
           initialValue: true,
         })
     if (p.isCancel(reuse)) {
@@ -259,6 +227,150 @@ async function collectCredentials(
     }
   }
 
+  // 3. Interactive: offer browser sign-in first (recommended), manual second.
+  if (!options.yes) {
+    const method = await p.select({
+      message: 'Connect this app to Mushi',
+      initialValue: 'browser',
+      options: [
+        {
+          value: 'browser',
+          label: 'Sign in with your browser',
+          hint: 'Recommended — no copy-paste, creates the project + key for you',
+        },
+        {
+          value: 'manual',
+          label: 'Paste a Project ID + API key',
+          hint: 'Self-hosted or expert setup',
+        },
+      ],
+    })
+    if (p.isCancel(method)) {
+      p.cancel('Aborted.')
+      process.exit(0)
+    }
+    if (method === 'browser') {
+      const creds = await runBrowserSignIn(options, endpoint)
+      if (creds) return creds
+      p.log.warn("Browser sign-in didn't complete — switching to manual entry.")
+    }
+  }
+
+  // 4. Manual paste fallback.
+  return collectCredentialsManually(options, consoleBase)
+}
+
+/**
+ * Zero-copy-paste browser sign-in: opens the console approval page, waits for
+ * the user to click Approve, then lets them pick or create a project and mints
+ * the SDK key automatically. Returns null on any failure so the caller can
+ * fall back to manual entry (never hard-fails the wizard).
+ */
+async function runBrowserSignIn(
+  options: InitOptions,
+  endpoint: string,
+): Promise<{ apiKey: string; projectId: string } | null> {
+  const startSpin = p.spinner()
+  startSpin.start('Starting secure browser sign-in…')
+  let session
+  try {
+    session = await startDeviceAuth(endpoint)
+  } catch (err) {
+    startSpin.stop('Could not start browser sign-in.')
+    p.log.warn(err instanceof Error ? err.message : String(err))
+    return null
+  }
+  startSpin.stop('Browser sign-in ready.')
+
+  p.log.step(`Confirmation code: ${session.user_code}`)
+  p.log.info(`Opening ${session.verification_uri}`)
+  try {
+    await openInBrowser(session.verification_uri)
+  } catch {
+    /* best-effort — the URL is printed above */
+  }
+  p.log.message('Approve the request in your browser to continue. (Ctrl+C to cancel)')
+
+  const waitSpin = p.spinner()
+  waitSpin.start('Waiting for you to approve in the browser…')
+  let cliToken: string
+  try {
+    cliToken = await waitForCliToken(endpoint, session)
+  } catch (err) {
+    waitSpin.stop("Browser sign-in didn't complete.")
+    p.log.warn(err instanceof Error ? err.message : String(err))
+    return null
+  }
+  waitSpin.stop('Approved.')
+
+  // Pick or create a project.
+  let projectId = options.projectId ? sanitizeSecret(options.projectId) : undefined
+  let apiKey: string | undefined
+
+  if (!projectId) {
+    let projects: DeviceProject[] = []
+    try {
+      projects = await listProjects(endpoint, cliToken)
+    } catch {
+      /* non-fatal — user can still create one */
+    }
+
+    const NEW = '__new__'
+    const choice = await p.select<string>({
+      message: 'Choose a project',
+      initialValue: projects[0]?.id ?? NEW,
+      options: [
+        ...projects.map((pr) => ({ value: pr.id, label: pr.name, hint: pr.id.slice(0, 8) })),
+        { value: NEW, label: 'Create a new project', hint: 'mints an SDK key automatically' },
+      ],
+    })
+    if (p.isCancel(choice)) {
+      p.cancel('Aborted.')
+      process.exit(0)
+    }
+
+    if (choice === NEW) {
+      const name = await p.text({
+        message: 'Project name',
+        placeholder: 'My app',
+        validate: (v) => (v && v.trim().length > 0 ? undefined : 'Required'),
+      })
+      if (p.isCancel(name)) {
+        p.cancel('Aborted.')
+        process.exit(0)
+      }
+      const createSpin = p.spinner()
+      createSpin.start(`Creating "${name.trim()}"…`)
+      try {
+        const created = await createProject(endpoint, cliToken, name.trim())
+        projectId = created.id
+        apiKey = created.apiKey ?? undefined
+        createSpin.stop(`Created project "${created.name}".`)
+      } catch (err) {
+        createSpin.stop('Could not create the project.')
+        p.log.warn(err instanceof Error ? err.message : String(err))
+        return null
+      }
+    } else {
+      projectId = choice
+    }
+  }
+
+  // Selecting an existing project (or a create that didn't return a key) mints
+  // a fresh report:write key — raw keys can never be recovered after creation.
+  if (projectId && !apiKey) {
+    apiKey = (await mintProjectKey(endpoint, cliToken, projectId)) ?? undefined
+  }
+
+  if (!projectId || !apiKey) return null
+  return { apiKey, projectId }
+}
+
+async function collectCredentialsManually(
+  options: InitOptions,
+  consoleBase: string,
+): Promise<{ apiKey: string; projectId: string }> {
+  const existing = loadConfig()
   const rawProjectId =
     options.projectId ??
     existing.projectId ??
