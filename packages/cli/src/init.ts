@@ -227,8 +227,15 @@ async function acquireCredentials(
     }
   }
 
-  // 3. Interactive: offer browser sign-in first (recommended), manual second.
-  if (!options.yes) {
+  // 3. Browser sign-in is the default credential path. Under `--yes` we skip
+  //    the method chooser and go straight to it (it's lower-friction than
+  //    pasting a UUID + key); otherwise we offer it as the recommended option.
+  //    Any failure falls through to manual entry — the wizard never hard-fails.
+  if (options.yes) {
+    const creds = await runBrowserSignIn(options, endpoint)
+    if (creds) return creds
+    p.log.warn("Browser sign-in didn't complete — switching to manual entry.")
+  } else {
     const method = await p.select({
       message: 'Connect this app to Mushi',
       initialValue: 'browser',

@@ -580,9 +580,17 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           result.error?.code === 'HTTP_401' || result.error?.code === 'HTTP_403' ||
           result.error?.code?.includes('UNAUTHORIZED') || result.error?.code?.includes('FORBIDDEN')
         if (isCredentialError) {
+          // Only link to the hosted console when running against Cloud; a
+          // self-hosted app (custom apiEndpoint) has its own console address.
+          // Strip a trailing slash first so a copy-pasted Cloud URL ending in
+          // "/" still matches (DEFAULT_API_ENDPOINT has none).
+          const where =
+            apiEndpoint.replace(/\/$/, '') === DEFAULT_API_ENDPOINT
+              ? 'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects'
+              : "Get the correct values from your Mushi console's Projects page."
           console.error(
             '[Mushi] Credentials rejected. Check your projectId and apiKey (must have "report:write" scope). ' +
-            'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects',
+            where,
           )
           return
         }

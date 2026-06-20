@@ -62,7 +62,16 @@ Typical first-time flow:
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
 
-    const endpoint = resolveCloudEndpoint(opts.endpoint)
+    // Honor a previously-saved self-hosted endpoint (`mushi config endpoint …`)
+    // so existing users aren't silently redirected to Mushi Cloud. Precedence:
+    // --endpoint flag → MUSHI_API_ENDPOINT env → saved config → cloud default.
+    // The env var is resolved here (ahead of the saved value) rather than left to
+    // resolveCloudEndpoint, otherwise passing saved config as "explicit" would
+    // let it outrank MUSHI_API_ENDPOINT and invert the documented precedence.
+    const savedConfig = loadConfig()
+    const endpoint = resolveCloudEndpoint(
+      opts.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim() ?? savedConfig.endpoint,
+    )
     const consoleBase = await resolveConsoleUrl()
 
     console.log('')
@@ -94,6 +103,7 @@ Typical first-time flow:
     try {
       cliToken = await waitForCliToken(endpoint, session, {
         onPending: () => process.stdout.write('.'),
+        onTransientError: () => process.stdout.write('·'),
       })
     } catch (err) {
       console.log('')

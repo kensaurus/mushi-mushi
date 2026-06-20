@@ -223,7 +223,15 @@ export function projectInitialsThemeIndex(projectId: string): number {
   return hash;
 }
 
-/** Read the host page favicon href (web SDK only). */
+/**
+ * Read the host page favicon href (web SDK only).
+ *
+ * Security: the host page declares this value, so it could be a `data:`,
+ * `blob:`, or `javascript:` URL. Since the result is rendered into an
+ * `<img src>` inside the widget, only same-trust http(s) (and protocol-relative)
+ * URLs are returned; anything else falls back to `null` so the widget renders
+ * its default mark instead of an unvalidated, host-controlled resource.
+ */
 export function readPageFaviconHref(): string | null {
   if (typeof document === 'undefined') return null;
   const selectors = [
@@ -233,7 +241,21 @@ export function readPageFaviconHref(): string | null {
   ];
   for (const sel of selectors) {
     const link = document.querySelector<HTMLLinkElement>(sel);
-    if (link?.href) return link.href;
+    const href = link?.href;
+    if (href && isSafeFaviconHref(href)) return href;
   }
   return null;
+}
+
+/** Allow only http(s) favicon URLs — reject data:/blob:/javascript: etc. */
+function isSafeFaviconHref(href: string): boolean {
+  try {
+    // `link.href` is already resolved to an absolute URL by the DOM; parse with a
+    // base for safety in case a raw attribute value is ever passed in.
+    const base = typeof location !== 'undefined' ? location.href : undefined;
+    const protocol = new URL(href, base).protocol;
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

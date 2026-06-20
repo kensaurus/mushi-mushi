@@ -104,3 +104,9 @@ COMMENT ON COLUMN public.cli_auth_requests.device_code     IS 'Secret UUID polle
 COMMENT ON COLUMN public.cli_auth_requests.user_code       IS '8-char code shown in both terminal and browser for user to confirm';
 COMMENT ON COLUMN public.cli_auth_requests.cli_token_hash  IS 'SHA-256 of the minted CLI session token; raw token returned once at approval';
 COMMENT ON COLUMN public.cli_auth_requests.ip_hint         IS 'Originating IP for display in the approval screen (trust signal only)';
+
+-- Flush the PostgREST schema/config cache so the new table, indexes, and RLS
+-- policy are visible to the API immediately after deploy (standard for any
+-- migration that adds PostgREST-exposed objects).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

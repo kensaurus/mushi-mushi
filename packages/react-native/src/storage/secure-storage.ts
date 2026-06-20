@@ -97,9 +97,13 @@ export async function encryptQueueBlob(plaintext: string, secureStorage: boolean
   return ENCRYPTED_PREFIX + bytesToBase64(combined)
 }
 
-export async function decryptQueueBlob(stored: string, secureStorage: boolean): Promise<string> {
+export async function decryptQueueBlob(stored: string, _secureStorage: boolean): Promise<string> {
+  // The ENCRYPTED_PREFIX is the source of truth: if a blob was written
+  // encrypted, it MUST be decrypted here even if the caller has since toggled
+  // `secureStorage` off. Gating on the current flag returned the still-encrypted
+  // string, which then failed JSON.parse upstream and silently wiped the offline
+  // queue (data loss). Plaintext blobs (no prefix) pass straight through.
   if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored
-  if (!secureStorage) return stored
   const secure = await loadSecureStore()
   if (!secure || !hasWebCrypto()) return stored
   const key = await getOrCreateQueueKey(secure)
