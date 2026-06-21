@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 export { MushiNodeClient } from './client'
 export type { NodeClientOptions, NodeReportPayload } from './client'
 export { attachUnhandledHook } from './unhandled'

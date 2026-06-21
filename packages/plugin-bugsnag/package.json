@@ -58,5 +58,13 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "author": "Kenji Sakuramoto",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

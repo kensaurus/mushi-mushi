@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * @mushi-mushi/inventory-auth-runner — Mushi v2.1 §5 (whitepaper §6 hybrid mode).
  *

@@ -33,7 +33,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/angular"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/angular#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/angular#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -86,5 +86,9 @@
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

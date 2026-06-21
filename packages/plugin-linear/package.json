@@ -65,5 +65,12 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

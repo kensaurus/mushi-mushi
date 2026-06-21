@@ -74,7 +74,7 @@
     "directory": "packages/mcp"
   },
   "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/mcp#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/mcp#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -108,5 +108,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

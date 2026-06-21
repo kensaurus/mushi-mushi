@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/create-mushi-mushi/src/index.ts
  * PURPOSE: `npm create mushi-mushi` shim — npm passes whatever args follow,

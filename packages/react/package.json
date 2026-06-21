@@ -32,7 +32,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/react"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/react#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/react#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -113,5 +113,9 @@
   "author": "Kenji Sakuramoto",
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

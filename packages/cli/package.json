@@ -30,7 +30,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/cli#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/cli#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
