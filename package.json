@@ -43,7 +43,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "changeset": "changeset",
-    "version-packages": "changeset version && pnpm install --lockfile-only",
+    "version-packages": "changeset version && pnpm gen:sdk-version-matrix && pnpm install --lockfile-only",
     "check:export-types-order": "node scripts/fix-export-types-order.mjs --check",
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
