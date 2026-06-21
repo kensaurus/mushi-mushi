@@ -58,6 +58,7 @@ import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
 import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerBootstrapRoutes } from './routes/bootstrap.ts';
+import { registerIdentitySecretRoutes } from './routes/identity-secret.ts';
 
 ensureSentry('api');
 
@@ -559,6 +560,7 @@ registerWorkspaceNavMetaRoutes(app);
 registerSkillsRoutes(app);
 registerSdkUpgradeRoutes(app);
 registerBootstrapRoutes(app);
+registerIdentitySecretRoutes(app);
 
 registerA2ATaskRoutes(app);
 
