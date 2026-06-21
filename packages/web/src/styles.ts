@@ -895,6 +895,16 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       line-height: 1.4;
       letter-spacing: 0.02em;
     }
+    .mushi-identified-user {
+      margin: 8px 0 0;
+      font-size: 11.5px;
+      color: ${inkMuted};
+      line-height: 1.4;
+    }
+    .mushi-identified-user strong {
+      color: ${ink};
+      font-weight: 600;
+    }
     .mushi-annotate-toolbar {
       display: flex;
       flex-wrap: wrap;

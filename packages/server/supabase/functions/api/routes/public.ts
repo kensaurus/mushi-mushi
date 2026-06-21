@@ -416,6 +416,9 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
       const ipAddress =
         c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip');
       const userAgent = c.req.header('user-agent');
+      // X-Mushi-User-Token: signed identity JWT forwarded by the SDK when
+      // identifyWithToken() is used. Passed to ingestReport for verified linkage.
+      const userToken = c.req.header('x-mushi-user-token') ?? undefined;
 
       // Per-project burst rate limit: default 120 reports/minute.
       // Reads the configurable cap from project_settings.report_ingest_max_per_minute
@@ -467,7 +470,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
         );
       }
 
-      const result = await ingestReport(db, projectId, body, { ipAddress, userAgent });
+      const result = await ingestReport(db, projectId, body, { ipAddress, userAgent, userToken });
       if (!result.ok) {
         return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400);
       }

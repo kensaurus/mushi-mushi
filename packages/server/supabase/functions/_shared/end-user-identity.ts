@@ -77,7 +77,9 @@ async function loadIdentitySecret(db: SupabaseClient, projectId: string): Promis
     .maybeSingle()
   const ref = (settings as { assistant_identity_secret_ref?: string } | null)?.assistant_identity_secret_ref
   if (!ref) return null
-  const { data, error } = await db.rpc('vault_get_secret', { secret_id: ref })
+  // Strip the vault:// prefix to get the secret name for vault_get_secret.
+  const secretId = ref.startsWith('vault://') ? ref.slice('vault://'.length) : ref
+  const { data, error } = await db.rpc('vault_get_secret', { secret_id: secretId })
   if (error || !data) {
     log.warn('identity_secret_load_failed', { projectId, error: error?.message })
     return null
