@@ -1,0 +1,1 @@
+- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - Bug translation for vibe coders: pull a plain-English diagnosis and a paste-ready fix prompt for any user-felt bug, with evidence, blast radius, and fix dispatch — from your AI coding agent. No second LLM key.
