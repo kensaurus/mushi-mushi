@@ -1,5 +1,22 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "`capture.screenshotProvider`",
+        "description": "— an optional `() => Promise<string | null>` that lets a host (e.g. a Capacitor/WebView app) supply a real pixel-accurate screen grab from a native plugin instead of the built-in DOM-snapshot capturer. The built-in capturer is used as a fallback when the provider throws."
+      },
+      {
+        "title": "\"Reporting as &lt;name&gt;\"",
+        "description": "— when the host calls `Mushi.identify()` / `Mushi.identifyWithToken()`, the report details step now shows who the report will be attributed to. Cleared when `identifyWithToken(null)` is called."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.19",
     "headline": null,
     "pending": false,

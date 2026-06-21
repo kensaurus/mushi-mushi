@@ -116,6 +116,13 @@ export class MushiWidget {
   private fabPos: { x: number; y: number } | null = null;
   /** Cleanup fn for visualViewport keyboard listener. */
   private vvCleanup: (() => void) | null = null;
+  /**
+   * Host-app user identity forwarded via `Mushi.identify()` or
+   * `Mushi.identifyWithToken()`. Used to show "Reporting as <name>"
+   * in the details step so logged-in users know their report is linked.
+   * Independent of the Mushi tester magic-link session below.
+   */
+  private identifiedUser: { name?: string; email?: string } | null = null;
   /** Mushi tester session JWT — set after in-widget sign-in or by mushi.ts. */
   private testerJwt: string | null = null;
   /** Tester identity (public_handle, display_name). */
@@ -632,6 +639,11 @@ export class MushiWidget {
   }
 
   // ── Community public setters (called by mushi.ts after API calls) ──────────
+
+  setIdentifiedUser(user: { name?: string; email?: string } | null): void {
+    this.identifiedUser = user;
+    if (this.isOpen) this.render();
+  }
 
   setTesterSession(jwt: string | null, info: { id: string; public_handle: string | null; display_name: string | null } | null): void {
     this.testerJwt = jwt;
@@ -1534,6 +1546,7 @@ export class MushiWidget {
       lastReportId: this.lastReportId,
       reporterLoading: this.reporterLoading,
       locale: this.locale,
+      identifiedUser: this.identifiedUser,
       testerReputation: this.testerReputation,
       testerInfo: this.testerInfo,
       screenshotCapturing: this.screenshotCapturing,

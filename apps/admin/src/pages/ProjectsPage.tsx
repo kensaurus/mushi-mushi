@@ -66,6 +66,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { AssistantConfigCard } from '../components/AssistantConfigCard'
+import { IdentitySecretCard } from '../components/IdentitySecretCard'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -1566,6 +1567,9 @@ export function ProjectsPage() {
                     <SdkInstallCard projectId={project.id} projectSlug={project.slug} apiKey={revealed?.key} compact />
                     <div className="mt-4 border-t border-edge-subtle pt-4">
                       <AssistantConfigCard projectId={project.id} />
+                    </div>
+                    <div className="mt-4 border-t border-edge-subtle pt-4">
+                      <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
                     </div>
                   </div>
                 </details>

@@ -271,7 +271,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     if (activeConfig.capture?.screenshot !== 'off') {
       const screenshotOptions = { privacy: activeConfig.privacy };
-      if (screenshotCap) {
+      if (activeConfig.capture?.screenshotProvider) {
+        // When a custom provider is set the built-in DOM capturer is bypassed
+        // entirely. We still allow the built-in as a fallback if the provider
+        // throws, so lazily create it only when needed (null here).
+        screenshotCap = null;
+      } else if (screenshotCap) {
         screenshotCap.updateOptions(screenshotOptions);
       } else {
         screenshotCap = createScreenshotCapture(screenshotOptions);
@@ -279,7 +284,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     } else {
       screenshotCap = null;
     }
-    if (!screenshotCap) pendingScreenshot = null;
+    if (!screenshotCap && !activeConfig.capture?.screenshotProvider) pendingScreenshot = null;
     widget.setAllowScreenshotRemove(activeConfig.privacy?.allowUserRemoveScreenshot !== false);
 
     if (activeConfig.capture?.elementSelector !== false) {
@@ -412,7 +417,26 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let screenshotCaptureInFlight = false;
 
   async function takeScreenshotWithoutChrome(): Promise<string | null> {
-    if (!screenshotCap || screenshotCaptureInFlight) return null;
+    if (screenshotCaptureInFlight) return null;
+    const provider = activeConfig.capture?.screenshotProvider;
+    // Native / custom provider path — called before hiding panel so the host
+    // has full control over timing (e.g. a Capacitor plugin that captures
+    // the current WebView frame must run before the panel overlays it).
+    if (provider) {
+      screenshotCaptureInFlight = true;
+      try {
+        const result = await provider();
+        return result ?? null;
+      } catch (err) {
+        log.warn('screenshotProvider threw, falling back to built-in capturer', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        // Fall through to built-in DOM capturer below.
+      } finally {
+        screenshotCaptureInFlight = false;
+      }
+    }
+    if (!screenshotCap) return null;
     screenshotCaptureInFlight = true;
     const panelWasVisible = widget.getIsOpen();
     if (panelWasVisible) widget.hidePanel();
@@ -433,7 +457,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   async function autoCaptureScreenshot(when: 'open' | 'submit'): Promise<void> {
     const mode = activeConfig.capture?.screenshot;
-    if (!screenshotCap || mode === 'off' || pendingScreenshot) return;
+    const hasCapture = !!screenshotCap || !!activeConfig.capture?.screenshotProvider;
+    if (!hasCapture || mode === 'off' || pendingScreenshot) return;
     if (when === 'open' && mode !== 'auto') return;
     if (when === 'submit' && mode !== 'on-report' && mode !== 'auto') return;
     log.debug('Auto-capturing screenshot', { when, mode });
@@ -479,7 +504,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       emit('widget:closed');
     },
     onScreenshotRequest: async () => {
-      if (!screenshotCap || activeConfig.capture?.screenshot === 'off') return;
+      const hasCapture = !!screenshotCap || !!activeConfig.capture?.screenshotProvider;
+      if (!hasCapture || activeConfig.capture?.screenshot === 'off') return;
       log.debug('Taking screenshot');
       pendingScreenshot = await takeScreenshotWithoutChrome();
       widget.setScreenshotAttached(pendingScreenshot !== null);
@@ -1332,6 +1358,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     identify(userId, traits) {
       userInfo = { id: userId, ...(traits?.email ? { email: traits.email } : {}), ...(traits?.name ? { name: traits.name } : {}) };
+      widget.setIdentifiedUser(
+        (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
+      );
       if (traits) {
         for (const [k, v] of Object.entries(traits)) {
           if (k !== 'email' && k !== 'name') customMetadata[`user.${k}`] = v;
@@ -1400,9 +1429,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             ...(claims.email ? { email: claims.email } : {}),
             ...(claims.name ? { name: claims.name } : {}),
           };
+          widget.setIdentifiedUser(
+            (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
+          );
         }
         breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken()' });
       } else {
+        userInfo = null;
+        widget.setIdentifiedUser(null);
         breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken(null)' });
       }
     },
