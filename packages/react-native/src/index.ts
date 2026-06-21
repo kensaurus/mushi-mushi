@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 export { MushiProvider } from './provider'
 export type { MushiRNConfig, MushiRNInstance } from './provider'
 

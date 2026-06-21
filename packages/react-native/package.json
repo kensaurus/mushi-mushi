@@ -58,7 +58,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/react-native"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/react-native#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/react-native#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -113,5 +113,9 @@
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

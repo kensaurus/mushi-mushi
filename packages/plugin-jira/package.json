@@ -47,7 +47,7 @@
     "directory": "packages/plugin-jira"
   },
   "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/plugin-jira#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/plugin-jira#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -67,5 +67,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/cli/src/index.ts
  * PURPOSE: @mushi-mushi/cli entry point — wires the shared Commander program,

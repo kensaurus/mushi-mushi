@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/svelte/src/index.ts
  * PURPOSE: Svelte / SvelteKit SDK for Mushi Mushi — delegates entirely

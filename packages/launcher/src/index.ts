@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/launcher/src/index.ts
  * PURPOSE: Unscoped `mushi-mushi` bin — thin shim that delegates to
