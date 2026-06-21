@@ -1,9 +1,11 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.20",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.20.0"
+    ],
     "highlights": [
       {
         "title": "`capture.screenshotProvider`",
@@ -14,7 +16,16 @@
         "description": "— when the host calls `Mushi.identify()` / `Mushi.identifyWithToken()`, the report details step now shows who the report will be attributed to. Cleared when `identifyWithToken(null)` is called."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.20.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.20.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.19",
