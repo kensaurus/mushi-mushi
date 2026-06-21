@@ -72,6 +72,7 @@
     "check:publish": "node scripts/check-workspace-protocol.mjs && node scripts/check-packed-tarballs.mjs",
     "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
     "check:license-headers": "node scripts/check-license-headers.mjs",
+    "check:spdx-headers": "node scripts/check-spdx-headers.mjs",
     "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
     "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",

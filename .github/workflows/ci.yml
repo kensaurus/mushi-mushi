@@ -122,6 +122,9 @@ jobs:
       - name: Check license headers
         run: node scripts/check-license-headers.mjs
 
+      - name: Check SPDX source headers
+        run: node scripts/check-spdx-headers.mjs
+
       - name: Check dead buttons
         # Regression guard for the 2026-04-22 audit: every CTA in the
         # admin console must resolve to a real navigate() / onClick /

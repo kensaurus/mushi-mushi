@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "1.19.2",
+  "version": "1.20.0",
   "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
   "license": "MIT",
   "type": "module",
@@ -32,7 +32,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/web"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/web#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/web#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -109,5 +109,9 @@
   "author": "Kenji Sakuramoto",
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }
