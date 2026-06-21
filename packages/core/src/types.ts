@@ -329,6 +329,27 @@ export interface MushiCaptureConfig {
   ignoreUrls?: MushiUrlMatcher[];
   performance?: boolean;
   screenshot?: 'on-report' | 'auto' | 'off';
+  /**
+   * Custom screenshot capture function. When provided, the SDK calls this
+   * instead of its built-in DOM-snapshot capturer. Return a JPEG/PNG data URI
+   * on success, or `null` to skip attachment. If the function throws the SDK
+   * falls back to the built-in capturer.
+   *
+   * Primary use-case: Capacitor / WebView hosts that route through a native
+   * plugin (e.g. `@capawesome/capacitor-screenshot`) to obtain a real pixel-
+   * accurate screen grab instead of the SVG-foreignObject DOM reconstruction.
+   *
+   * @example
+   * capture: {
+   *   screenshot: 'auto',
+   *   screenshotProvider: async () => {
+   *     const { Screenshot } = await import('@capawesome/capacitor-screenshot');
+   *     const { uri } = await Screenshot.take();
+   *     return uri; // data URI on web, file:// on native (SDK handles both)
+   *   },
+   * }
+   */
+  screenshotProvider?: () => Promise<string | null>;
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
   /**

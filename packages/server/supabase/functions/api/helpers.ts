@@ -10,6 +10,7 @@ import { checkAntiGaming } from '../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../_shared/telemetry.ts';
 import { awardPoints, awardPointsForEndUser } from '../_shared/reputation.ts';
 import { resolveEndUser } from '../_shared/end-user-resolver.ts';
+import { verifyEndUserToken } from '../_shared/end-user-identity.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { dbError } from './shared.ts';
@@ -345,6 +346,14 @@ export async function ingestReport(
     /** Mushi Bounties: link the ingested report back to the tester and submission row. */
     testerId?: string
     testerSubmissionId?: string
+    /**
+     * Signed identity JWT from the SDK's X-Mushi-User-Token header.
+     * When present and the project has an identity secret configured the JWT is
+     * verified and the report is linked to a verified end_user row
+     * (jwt_verified_at set). Fail-open: a missing secret or invalid token
+     * falls back to unsigned resolveEndUser without blocking ingest.
+     */
+    userToken?: string
   },
 ): Promise<{ ok: boolean; reportId?: string; error?: string; deduplicated?: boolean }> {
   const normalizedBody = { ...body };
@@ -717,60 +726,98 @@ export async function ingestReport(
     });
   }
 
-  // Link the report to an end_user if the SDK sent identify() data.
-  // Fire-and-forget: linkage must never block ingest. On success the
-  // report row is back-patched with the end_user_id so the rewards
-  // pipeline and admin Contributors tab can attribute points correctly.
-  // Uses the normalised identity so flattened-shape SDKs (RN <= 0.16) link too.
-  const reporterUserId = reporterIdentity.id ? reporterIdentity : undefined;
-  if (reporterUserId?.id) {
-    void (async () => {
-      try {
-        const { data: proj } = await db
-          .from('projects')
-          .select('organization_id')
-          .eq('id', projectId)
-          .single();
-        const organizationId = proj?.organization_id;
-        if (!organizationId) return;
-        const endUser = await resolveEndUser(db, {
-          organizationId,
-          externalUserId: reporterUserId.id!,
-          traits: {
-            email: reporterUserId.email ?? null,
-            name: reporterUserId.name ?? null,
-            provider: reporterUserId.provider ?? null,
+  // Link the report to an end_user. Two paths:
+  //
+  // 1. Verified path (preferred): when the SDK forwards X-Mushi-User-Token and
+  //    the project has an identity secret, verifyEndUserToken() authenticates the
+  //    JWT and upserts an end_users row with jwt_verified_at set. The verified
+  //    external_user_id / display_name / email_hash take precedence over the
+  //    unsigned identify() metadata.
+  //
+  // 2. Unsigned path (fallback): unsigned identify() metadata from the report
+  //    payload is resolved via resolveEndUser as before. jwt_verified_at stays
+  //    null. Used when no token is present or verification fails.
+  //
+  // Both paths are fire-and-forget — linkage must never block ingest.
+  void (async () => {
+    try {
+      // Attempt verified path first.
+      if (options?.userToken) {
+        const verified = await verifyEndUserToken(db, projectId, options.userToken).catch(
+          (err: unknown) => {
+            log.warn('verifyEndUserToken threw (fail-open)', { reportId, err: String(err) });
+            return null;
           },
-          reporterTokenHash: tokenHash,
-        });
-        if (endUser?.id) {
+        );
+        if (verified?.endUserId) {
           await db
             .from('reports')
-            .update({ end_user_id: endUser.id })
+            .update({ end_user_id: verified.endUserId, reporter_user_id: verified.externalUserId })
             .eq('id', reportId);
-          log.info('Report linked to end_user', { reportId, endUserId: endUser.id });
-
-          // D1: award report.submitted points. awardPointsForEndUser enforces
-          // the reward_rules velocity caps, propagates to the tier-evaluator,
-          // and fires the points_awarded notification. Fire-and-forget — a
-          // rewards failure must never affect ingest.
+          log.info('Report linked to verified end_user', {
+            reportId,
+            endUserId: verified.endUserId,
+            externalUserId: verified.externalUserId,
+          });
           await awardPointsForEndUser(db, {
             projectId,
-            organizationId,
-            endUserId: endUser.id,
+            organizationId: verified.organizationId,
+            endUserId: verified.endUserId,
             action: 'report.submitted',
             reporterTokenHash: tokenHash,
             reportId,
-            metadata: { source: 'sdk_report' },
+            metadata: { source: 'sdk_report_verified' },
           }).catch((err: unknown) =>
-            log.warn('report.submitted award failed', { reportId, err: String(err) }),
+            log.warn('report.submitted award failed (verified)', { reportId, err: String(err) }),
           );
+          return; // Verified path done — skip unsigned fallback.
         }
-      } catch (err) {
-        log.warn('end_user linkage failed', { reportId, err: String(err) });
       }
-    })();
-  }
+
+      // Unsigned fallback: use identity from the report payload's metadata.
+      const reporterUserId = reporterIdentity.id ? reporterIdentity : undefined;
+      if (!reporterUserId?.id) return;
+      const { data: proj } = await db
+        .from('projects')
+        .select('organization_id')
+        .eq('id', projectId)
+        .single();
+      const organizationId = proj?.organization_id;
+      if (!organizationId) return;
+      const endUser = await resolveEndUser(db, {
+        organizationId,
+        externalUserId: reporterUserId.id!,
+        traits: {
+          email: reporterUserId.email ?? null,
+          name: reporterUserId.name ?? null,
+          provider: reporterUserId.provider ?? null,
+        },
+        reporterTokenHash: tokenHash,
+      });
+      if (endUser?.id) {
+        await db
+          .from('reports')
+          .update({ end_user_id: endUser.id })
+          .eq('id', reportId);
+        log.info('Report linked to end_user (unsigned)', { reportId, endUserId: endUser.id });
+
+        // D1: award report.submitted points.
+        await awardPointsForEndUser(db, {
+          projectId,
+          organizationId,
+          endUserId: endUser.id,
+          action: 'report.submitted',
+          reporterTokenHash: tokenHash,
+          reportId,
+          metadata: { source: 'sdk_report' },
+        }).catch((err: unknown) =>
+          log.warn('report.submitted award failed', { reportId, err: String(err) }),
+        );
+      }
+    } catch (err) {
+      log.warn('end_user linkage failed', { reportId, err: String(err) });
+    }
+  })();
 
   // Insert into processing queue. Uses upsert with ignoreDuplicates so
   // a retry (after a crash between the reports insert and this line) doesn't

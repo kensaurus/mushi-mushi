@@ -55,6 +55,12 @@ export interface WidgetRenderCtx {
   lastReportId: string | null;
   reporterLoading: boolean;
   locale: MushiLocale;
+  /**
+   * Host-app user identity from `Mushi.identify()` or `identifyWithToken()`.
+   * Shown as "Reporting as <name>" in the details step when present.
+   * Distinct from the Mushi tester magic-link session.
+   */
+  identifiedUser: { name?: string; email?: string } | null;
   testerReputation: MushiTesterReputation | null;
   testerInfo: { id: string; public_handle: string | null; display_name: string | null } | null;
   screenshotCapturing: boolean;
@@ -814,6 +820,9 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
             </figure>`
           : ''}
         <div class="mushi-error" style="display:none" role="alert"></div>
+        ${ctx.identifiedUser
+          ? `<p class="mushi-identified-user" aria-label="Reporting as ${escapeHtml(ctx.identifiedUser.name ?? ctx.identifiedUser.email ?? '')}">\uD83D\uDC64 Reporting as <strong>${escapeHtml(ctx.identifiedUser.name ?? ctx.identifiedUser.email ?? 'you')}</strong></p>`
+          : ''}
       </div>
       <div class="mushi-footer">
         <span class="mushi-footer-hint" aria-hidden="true">\u2318 + ENTER \u2192 send</span>
