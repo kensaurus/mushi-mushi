@@ -70,5 +70,9 @@
   "author": "Kenji Sakuramoto",
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

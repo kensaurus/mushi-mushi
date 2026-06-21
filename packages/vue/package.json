@@ -34,7 +34,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/vue"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/vue#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/vue#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -89,5 +89,9 @@
   "type": "module",
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

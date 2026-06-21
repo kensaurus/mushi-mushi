@@ -81,6 +81,18 @@ tooling/
   tsconfig/      Shared TypeScript configs
 ```
 
+## What we don't accept
+
+Knowing this upfront saves everyone time.
+
+- **Automated / bulk / AI-slop PRs** — any PR that was opened by a script, an LLM agent acting without meaningful human review, or as part of a parallel bounty-farming sweep is closed on sight. The commit history, branch name, or helper scripts included in the PR make this obvious.
+- **PRs that target the wrong base** — all PRs must branch from and target `master`. PRs targeting `main` or any other branch are closed (and will show an inflated diff that is not your work).
+- **One PR per issue, one issue per PR** — splitting or duplicating work just to collect acknowledgements isn't welcome.
+- **Good-first-issues without claiming first** — comment on the issue to claim it before starting. If two people open PRs for the same issue, the one that commented first is prioritised.
+- **Documentation-only PRs that merely duplicate existing content** — if the information already exists (e.g. in another file in this repo), adding a redundant copy adds noise without value.
+
+If a PR violates these policies it will be closed with a brief explanation. No hard feelings — a genuine contribution on the same issue is always welcome.
+
 ## Making Changes
 
 1. Create a feature branch from `master`

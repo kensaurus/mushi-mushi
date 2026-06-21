@@ -102,7 +102,7 @@
     "directory": "packages/adapters"
   },
   "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/adapters#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/adapters#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -129,5 +129,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
   }
 }

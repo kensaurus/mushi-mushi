@@ -1,3 +1,11 @@
+<!--
+  BEFORE YOU OPEN THIS PR
+  • Branch from master and target master — PRs to any other base are closed automatically.
+  • Claim the issue first by commenting on it, so two people don't duplicate work.
+  • No automated / AI-generated / bulk submissions. One PR per issue, one issue per PR.
+  See CONTRIBUTING.md §"What we don't accept" for the full policy.
+-->
+
 ## What
 
 Brief description of the change.
@@ -12,6 +20,9 @@ Implementation approach (if non-obvious).
 
 ## Checklist
 
+- [ ] **I am a human.** This PR was not generated or submitted by an automated script or bulk tool.
+- [ ] **I read the linked issue** and my PR addresses what it actually asks for.
+- [ ] **This PR targets `master`** (not `main` or any other branch).
 - [ ] TypeScript compiles (`pnpm typecheck`)
 - [ ] Tests pass (`pnpm test`)
 - [ ] Lint passes (`pnpm lint`)
