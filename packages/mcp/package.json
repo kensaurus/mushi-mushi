@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/mcp",
   "mcpName": "io.github.kensaurus/mushi-mushi",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "license": "MIT",
   "description": "MCP server for Mushi Mushi — triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs, all from your AI coding agent",
   "type": "module",
