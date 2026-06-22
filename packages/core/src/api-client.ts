@@ -160,7 +160,6 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
             baseUrl === DEFAULT_API_ENDPOINT
               ? 'Get the correct values at: https://kensaur.us/mushi-mushi/admin/projects'
               : "Get the correct values from your Mushi console's Projects page.";
-          // eslint-disable-next-line no-console
           console.error(
             `[Mushi] Credentials rejected (HTTP ${response.status}). ` +
             `Check your Project ID and API key scope (must be "report:write"). ` +

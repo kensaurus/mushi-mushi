@@ -3,7 +3,7 @@
  * PURPOSE: Verify sha256Hex and hmacSha256Hex produce correct, consistent output.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { sha256Hex, hmacSha256Hex } from './digest';
 
 describe('sha256Hex', () => {
