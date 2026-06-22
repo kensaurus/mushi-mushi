@@ -15,12 +15,17 @@ OVERVIEW:
   onboarding counts (operator-only data). Verified live on prod
   (dxptnwrhwsqckaftyymj): anon + authenticated both had EXECUTE on both.
 
-  This migration revokes EXECUTE from PUBLIC/anon/authenticated and (re-)grants
-  it to service_role only — mirroring the lockdown already applied to
-  public.get_user_emails_by_ids in 20260621120000. service_role retains EXECUTE
-  (confirmed on prod for get_user_emails_by_ids after an identical REVOKE), so
-  the edge-function callers (cli-auth / sync / heartbeat routes and the operator
-  funnel panel) are unaffected.
+  This migration revokes EXECUTE from PUBLIC/anon/authenticated, following the
+  same intent as the lockdown applied to public.get_user_emails_by_ids in
+  20260621120000. Note that 20260621120000 only REVOKEs (no explicit GRANT) and
+  relies on service_role keeping EXECUTE via Supabase's default privileges
+  (`ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO service_role`,
+  which is independent of the PUBLIC grant being revoked). This migration is
+  deliberately more explicit: it ALSO issues `GRANT EXECUTE ... TO service_role`
+  so the edge-function callers (cli-auth / sync / heartbeat routes and the
+  operator funnel panel) never depend on implicit default-privilege behaviour.
+  Verified on prod: after the REVOKE/GRANT, EXECUTE is held only by postgres
+  (owner) + service_role; anon/authenticated have none.
 
 DEPENDENCIES:
   - Functions defined in 20260622100000_setup_funnel_events.sql.
