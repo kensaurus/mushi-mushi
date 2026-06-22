@@ -300,7 +300,7 @@ Or skip the CLI entirely and drive it from your AI agent via [`@mushi-mushi/mcp`
 
 ## License
 
-MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mushi-mushi/server`, `agents`, `verify`) are [BSL 1.1](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) — converts to Apache 2.0 on April 15, 2029.
+MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mushi-mushi/server`, `agents`, `verify`) are [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) — copyleft; modified SaaS publishes changes or takes a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
 
 
 <!-- mushi-readme-stats-footer -->

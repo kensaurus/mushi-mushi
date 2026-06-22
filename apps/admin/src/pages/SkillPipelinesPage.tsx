@@ -35,8 +35,10 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
@@ -53,6 +55,8 @@ import {
   isSkillsBannerVisible,
 } from '../components/skills/SkillsStatusBanner'
 import { SkillsPipelineGuide } from '../components/skills/SkillsPipelineGuide'
+import { SkillsSnapshotStrip } from '../components/skills/SkillsSnapshotStrip'
+import { SkillsReadout } from '../components/skills/SkillsReadout'
 import {
   EMPTY_SKILLS_STATS,
   type SkillsStats,
@@ -149,7 +153,8 @@ export function SkillPipelinesPage() {
   const skillSlug = searchParams.get('skill')
 
   const statsPath = projectId ? `/v1/admin/skills/stats?project_id=${projectId}` : null
-  const { data: skillsStatsData } = usePageData<SkillsStats>(statsPath, { deps: [projectId] })
+  const { data: skillsStatsData, lastFetchedAt: statsFetchedAt, isValidating: statsValidating } =
+    usePageData<SkillsStats>(statsPath, { deps: [projectId] })
   usePublishPageHeroStats('/skills', skillsStatsData)
   const skillsStats = skillsStatsData ?? EMPTY_SKILLS_STATS
 
@@ -212,35 +217,49 @@ export function SkillPipelinesPage() {
           helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
         />
 
-        {isSkillsBannerVisible(skillsStats) && (
-          <SkillsStatusBanner stats={skillsStats} onTab={setTab} />
-        )}
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.status,
+              show: isSkillsBannerVisible(skillsStats),
+              children: <SkillsStatusBanner stats={skillsStats} onTab={setTab} />,
+            },
+            {
+              priority: POSTURE_PRIORITY.heroOrSnapshot,
+              show: Boolean(projectId),
+              children: (
+                <SkillsSnapshotStrip
+                  stats={skillsStats}
+                  statsFetchedAt={statsFetchedAt}
+                  statsValidating={statsValidating}
+                  hint="Catalog size, active pipeline runs, and sync posture for cursor-kenji skills."
+                />
+              ),
+            },
+            {
+              priority: POSTURE_PRIORITY.guide,
+              show: !shouldHideGuideWhenBannerActive(
+                isSkillsBannerVisible(skillsStats),
+                COMMON_HEALTHY_PRIORITIES,
+                skillsStats.topPriority,
+              ),
+              children: <SkillsPipelineGuide topPriority={skillsStats.topPriority} />,
+            },
+          ]}
+        />
 
-        <SkillsPipelineGuide topPriority={skillsStats.topPriority} />
-
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-border mt-3 -mx-6 px-6" role="tablist" aria-label="Skill pipelines sections">
-          {(['catalog', 'pipelines', 'sources'] as Tab[]).map((t) => {
-            const meta = TAB_META[t]
-            return (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={tab === t}
-                onClick={() => setTab(t)}
-                className={[
-                  'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-                  tab === t
-                    ? 'border-brand text-brand'
-                    : 'border-transparent text-fg-muted hover:text-fg',
-                ].join(' ')}
-              >
-                <meta.Icon size={14} aria-hidden />
-                {meta.label}
-              </button>
-            )
-          })}
-        </div>
+        <SegmentedControl<Tab>
+          size="sm"
+          scrollable
+          ariaLabel="Skill pipelines sections"
+          value={tab}
+          onChange={(t) => setTab(t)}
+          options={(['catalog', 'pipelines', 'sources'] as Tab[]).map((t) => ({
+            id: t,
+            label: TAB_META[t].label,
+          }))}
+          className="mt-3"
+        />
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-4">
@@ -257,6 +276,13 @@ export function SkillPipelinesPage() {
           </Card>
         ) : (
           <>
+            {tab === 'catalog' && projectId ? (
+              <SkillsReadout
+                stats={skillsStats}
+                fetchedAt={statsFetchedAt}
+                isValidating={statsValidating}
+              />
+            ) : null}
             {tab === 'catalog' && (
               <CatalogTab
                 projectId={projectId}

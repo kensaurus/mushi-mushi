@@ -35,14 +35,14 @@ Getting included is a permanent trickle of qualified stars.
 
 > - [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) — User-friction
 >   intelligence layer that complements Sentry. Shake-to-report widget (14 KB),
->   LLM-native classifier, optional auto-fix PRs. MIT SDK / BSL 1.1 server.
+>   LLM-native classifier, optional auto-fix PRs. MIT SDK / AGPLv3 server (open-core).
 
 ### Target list, with order and notes
 
 | Order | List | Category to target | Why |
 | --- | --- | --- | --- |
 | 1 | [awesome-observability](https://github.com/adriannovegil/awesome-observability) | Feedback / user-experience | Largest fit; observability readers are the primary ICP. |
-| 2 | [awesome-self-hosted](https://github.com/awesome-selfhosted/awesome-selfhosted) | Analytics / Error-tracking | Self-host story is strong; BSL server fits their `non-free` tag. |
+| 2 | [awesome-self-hosted](https://github.com/awesome-selfhosted/awesome-selfhosted) | Analytics / Error-tracking | Self-host story is strong; AGPLv3 server qualifies for the main (free/OSS) list, no `non-free` tag needed. |
 | 3 | [awesome-devtools](https://github.com/Alan-FGR/awesome-devtools) | Monitoring / Debugging | Clear fit. |
 | 4 | [awesome-react](https://github.com/enaqx/awesome-react) | Performance / Debugging tools | Our React SDK is the polished flagship. |
 | 5 | [awesome-vue](https://github.com/vuejs/awesome-vue) | Dev-tools | We have `@mushi-mushi/vue` + composable support. |

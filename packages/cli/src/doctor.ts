@@ -13,6 +13,12 @@ import { apiKeyHeaders, sanitizeCliCredentials, sanitizeEndpoint } from './sanit
 export interface DoctorCheck {
   name: string
   ok: boolean
+  /**
+   * When true the check is shown with ⚠ instead of ✗ and does not count
+   * against `ready`. Use for informational gaps that don't block functionality
+   * (e.g. "SDK not installed in cwd" when heartbeats prove it's working).
+   */
+  warn?: boolean
   detail: string
 }
 
@@ -58,6 +64,18 @@ export interface DoctorOptions {
    * to confirm the key can reach at least one project.
    */
   mcp?: boolean
+  /**
+   * When true, run a focused onboarding-mode check: TTY hints, config, env vars,
+   * ingest steps, and pending browser auth. Prints the single next blocking action
+   * with a console deep link instead of a full check table.
+   */
+  onboarding?: boolean
+  /**
+   * When true, run ALL checks (server, ingest, host-app, mcp, qa-stories) in one
+   * shot. Overrides individual flags. Prints a structured grouped table with
+   * pass/fail counts per category. Good for first-run diagnostics.
+   */
+  full?: boolean
   /**
    * Override the fetch implementation (for testing). Defaults to globalThis.fetch.
    */
@@ -193,6 +211,28 @@ export async function checkServerPreflight(
         ok: sc.ready,
         detail: sc.ready ? '' : sc.hint,
       }))
+    }
+
+    if (res.status === 403) {
+      // Wizard-minted keys now include mcp:read, but older ingest-only keys cannot
+      // call the preflight endpoint. Treat as a skipped (non-fatal) check with a
+      // clear upgrade hint rather than a hard failure.
+      let errCode: string | undefined
+      try {
+        const body = await res.json() as { error?: { code?: string } }
+        errCode = body?.error?.code
+      } catch { /* ignore */ }
+      if (errCode === 'INSUFFICIENT_SCOPE') {
+        return [
+          {
+            name: 'Server preflight',
+            ok: true,
+            detail:
+              'Skipped — your key has report:write scope only (pre-Jun 2026 key). ' +
+              'Run `mushi login --upgrade-scope` to get mcp:read and unlock admin checks.',
+          },
+        ]
+      }
     }
 
     const text = await res.text().catch(() => '')
@@ -461,6 +501,9 @@ export async function checkMcpConfig(
   // 1. Find the mcp.json — check project-local first, then global ~/.cursor.
   // Read directly and let a missing file throw (caught below) rather than an
   // access()+readFile() pre-check, which is a TOCTOU race and an extra syscall.
+  // Skip a candidate if it exists but has an empty mcpServers object (e.g. a
+  // project-local stub that redirects users to the global config). This prevents
+  // the doctor from stopping at an empty file and missing the real global entry.
   const candidates = [
     join(root, '.cursor', 'mcp.json'),
     join(homedir(), '.cursor', 'mcp.json'),
@@ -469,7 +512,17 @@ export async function checkMcpConfig(
   let mcpRaw: string | null = null
   for (const candidate of candidates) {
     try {
-      mcpRaw = await readFile(candidate, 'utf8')
+      const raw = await readFile(candidate, 'utf8')
+      // Peek at mcpServers: if this file is a stub with no entries, try the next
+      // candidate rather than stopping here with a false-negative failure.
+      let parsed: { mcpServers?: Record<string, unknown> } = {}
+      try { parsed = JSON.parse(raw) as typeof parsed } catch { /* malformed — still use this file */ }
+      const hasEntries = Object.keys(parsed.mcpServers ?? {}).length > 0
+      if (!hasEntries && candidates.indexOf(candidate) < candidates.length - 1) {
+        // This file is empty/stub — continue to the next candidate.
+        continue
+      }
+      mcpRaw = raw
       mcpPath = candidate
       break
     } catch { /* try next */ }
@@ -557,10 +610,20 @@ export async function checkMcpConfig(
           detail: `Key is valid; ${projectCount} accessible project${projectCount === 1 ? '' : 's'}`,
         })
       } else {
+        // Try to extract a structured error code from the body for better hints.
+        let detail = `GET /v1/admin/mcp/account-overview → HTTP ${res.status}. Verify the API key is active.`
+        try {
+          const errBody = await res.json() as Record<string, unknown>
+          const nested = errBody['error'] as Record<string, unknown> | undefined
+          const errCode = (nested?.['code'] as string) ?? (errBody['code'] as string) ?? ''
+          if (errCode === 'INSUFFICIENT_SCOPE') {
+            detail = `Key has report:write scope only — run \`mushi login --upgrade-scope\` then \`mushi setup\` to get mcp:read.`
+          }
+        } catch { /* ignore parse errors */ }
         checks.push({
           name: '[mcp] account-overview reachable',
           ok: false,
-          detail: `GET /v1/admin/mcp/account-overview → HTTP ${res.status}. Verify the API key is active.`,
+          detail,
         })
       }
     } catch (err) {
@@ -596,6 +659,111 @@ function fixHintForCheck(name: string): string | undefined {
   return undefined
 }
 
+// ── Onboarding mode: single-next-action ─────────────────────────────────────
+
+export interface OnboardingStatus {
+  /** A one-liner describing what the developer should do right now. */
+  nextAction: string
+  /** Console deep-link for the next action (absolute path, e.g. /onboarding?tab=sdk). */
+  ctaPath: string
+  /** True when all 4 required setup steps are complete. */
+  done: boolean
+}
+
+export async function checkOnboardingStatus(
+  config: DoctorCliConfig,
+  _consoleBase: string,
+  cwd: string,
+  doFetch: typeof globalThis.fetch = globalThis.fetch,
+): Promise<OnboardingStatus> {
+
+  // Step 1: API key + project must be configured before anything else
+  if (!config.apiKey || !config.projectId || !config.endpoint) {
+    // Check whether there is a pending CLI auth request the user may have missed
+    if (config.apiKey && config.endpoint) {
+      // Key exists but no project — might just need project selection
+      return {
+        nextAction: 'Select or create a project: run `mushi project create` or pick one with `mushi project list`',
+        ctaPath: '/onboarding?tab=steps&setup=cli',
+        done: false,
+      }
+    }
+    return {
+      nextAction: 'Sign in to Mushi: run `npx mushi-mushi` (browser opens automatically — do NOT type the code in the terminal)',
+      ctaPath: '/onboarding?tab=steps&setup=cli',
+      done: false,
+    }
+  }
+
+  // Step 2: Check env vars in the app directory
+  try {
+    const { readFile } = await import('node:fs/promises')
+    const { join, resolve } = await import('node:path')
+    const root = resolve(cwd)
+    let envContent = ''
+    for (const f of ['.env.local', '.env']) {
+      try { envContent = await readFile(join(root, f), 'utf8'); break } catch { /* try next */ }
+    }
+    const hasEnvVars = /(?:VITE_|NEXT_PUBLIC_|EXPO_PUBLIC_|NUXT_PUBLIC_)?MUSHI_PROJECT_ID=/.test(envContent)
+    if (!hasEnvVars) {
+      return {
+        nextAction: 'Write env vars to your app: run `npx mushi-mushi` or `mushi connect --write-env`',
+        ctaPath: '/onboarding?tab=sdk',
+        done: false,
+      }
+    }
+  } catch { /* Not a JS repo — skip env check */ }
+
+  // Step 3: SDK install check
+  try {
+    const sdkCheck = await checkSdkInstall(cwd)
+    if (sdkCheck && !sdkCheck.ok) {
+      return {
+        nextAction: `Install the Mushi SDK: ${sdkCheck.detail}`,
+        ctaPath: '/onboarding?tab=sdk',
+        done: false,
+      }
+    }
+  } catch { /* skip */ }
+
+  // Step 4: Ingest setup — find the first incomplete required step
+  try {
+    const data = await fetchIngestSetup(
+      { endpoint: config.endpoint, apiKey: config.apiKey, projectId: config.projectId },
+      doFetch,
+    )
+    if (data) {
+      const steps = data.steps ?? []
+      const incomplete = steps.find((s) => s.required && !s.complete)
+      if (incomplete) {
+        const tabMap: Record<string, string> = {
+          project_created: '/onboarding?tab=steps&setup=cli',
+          api_key_generated: '/onboarding?tab=verify',
+          sdk_installed: '/onboarding?tab=sdk',
+          first_report_received: '/onboarding?tab=verify',
+        }
+        const tab = tabMap[incomplete.id] ?? '/onboarding?tab=verify'
+        return {
+          nextAction: incomplete.hint ?? `Complete setup step: ${incomplete.label}`,
+          ctaPath: tab,
+          done: false,
+        }
+      }
+      return {
+        nextAction: 'All 4 required setup steps are complete! Open the console to explore.',
+        ctaPath: '/reports',
+        done: true,
+      }
+    }
+  } catch { /* network error — fall through */ }
+
+  return {
+    nextAction: 'Open the onboarding wizard in the console to check your setup status.',
+    ctaPath: '/onboarding',
+    done: false,
+  }
+}
+
 // ── Main doctor runner ───────────────────────────────────────────────────────
 
 export async function runDoctor(
@@ -604,8 +772,11 @@ export async function runDoctor(
 ): Promise<DoctorResult> {
   const doFetch = options.fetch ?? globalThis.fetch
   const checks: DoctorCheck[] = []
-  const runServer = options.server !== false
-  const runIngest = options.ingest !== false
+
+  // --full activates every check category in one shot.
+  const isFull = options.full === true
+  const runServer = isFull || options.server !== false
+  const runIngest = isFull || options.ingest !== false
 
   // 1. CLI config
   checks.push(...checkCliConfig(config))
@@ -619,7 +790,7 @@ export async function runDoctor(
   const sdkCheck = await checkSdkInstall(options.cwd ?? process.cwd())
   if (sdkCheck) checks.push(sdkCheck)
 
-  // 4. Server preflight (on by default)
+  // 4. Server preflight (on by default, gracefully skipped for ingest-only keys)
   if (runServer) {
     const serverChecks = await checkServerPreflight(config, doFetch)
     checks.push(...serverChecks)
@@ -631,24 +802,44 @@ export async function runDoctor(
     checks.push(...ingestChecks)
   }
 
-  // 6. QA story health (opt-in)
-  if (options.qaStories) {
+  // 6. QA story health (opt-in, or --full)
+  if (isFull || options.qaStories) {
     const qaChecks = await checkQaStoriesHealth(config, doFetch)
     checks.push(...qaChecks)
   }
 
-  // 7. Host app wiring (opt-in)
-  if (options.hostApp) {
+  // 7. Host app wiring (opt-in, or --full)
+  if (isFull || options.hostApp) {
     const hostChecks = await checkHostAppWiring(options.cwd ?? process.cwd())
     checks.push(...hostChecks)
   }
 
-  // 8. MCP config health (opt-in)
-  if (options.mcp) {
+  // 8. MCP config health (opt-in, or --full)
+  if (isFull || options.mcp) {
     const mcpChecks = await checkMcpConfig(config, options.cwd ?? process.cwd(), doFetch)
     checks.push(...mcpChecks)
   }
 
+  // Post-process: if the SDK is confirmed working via a live heartbeat, downgrade
+  // the "SDK installed in this repo" failure to an advisory warning (⚠). Users
+  // routinely run `mushi doctor` from a backend repo or the Mushi product root;
+  // the local package.json check is a false positive when ingest proves the SDK
+  // is already installed and sending data somewhere.
+  const heartbeatPassed = checks.some((c) => c.name === '[ingest] Last SDK heartbeat' && c.ok)
+  if (heartbeatPassed) {
+    const idx = checks.findIndex((c) => c.name === 'SDK installed in this repo' && !c.ok)
+    if (idx >= 0) {
+      checks[idx] = {
+        ...checks[idx],
+        ok: true,
+        warn: true,
+        detail:
+          'No @mushi-mushi/* found in cwd package.json — but live heartbeats confirm the SDK is active. Run from your app repo or install with `mushi init`.',
+      }
+    }
+  }
+
+  // `ready` excludes advisory warnings (warn items have ok:true so every() works correctly).
   return { checks, ready: checks.every((c) => c.ok) }
 }
 
@@ -656,11 +847,13 @@ export async function runDoctor(
 
 export function formatDoctorResult(result: DoctorResult): string {
   const PASS = '✓'
+  const WARN = '⚠'
   const FAIL = '✗'
   const lines: string[] = []
 
   for (const c of result.checks) {
-    lines.push(`${c.ok ? PASS : FAIL} ${c.name}`)
+    const icon = !c.ok ? FAIL : c.warn ? WARN : PASS
+    lines.push(`${icon} ${c.name}`)
     if (c.detail) lines.push(`  ${c.detail}`)
     if (!c.ok) {
       const hint = fixHintForCheck(c.name)
@@ -669,8 +862,13 @@ export function formatDoctorResult(result: DoctorResult): string {
   }
 
   const failed = result.checks.filter((c) => !c.ok)
+  const warned = result.checks.filter((c) => c.ok && c.warn)
   if (failed.length === 0) {
-    lines.push('\nAll checks passed. The CLI is ready.')
+    if (warned.length > 0) {
+      lines.push(`\nAll checks passed with ${warned.length} advisory warning${warned.length === 1 ? '' : 's'}. The CLI is ready.`)
+    } else {
+      lines.push('\nAll checks passed. The CLI is ready.')
+    }
   } else {
     lines.push(`\n${failed.length} check${failed.length === 1 ? '' : 's'} failed.`)
     lines.push('Fix the items above and re-run `mushi doctor`.')

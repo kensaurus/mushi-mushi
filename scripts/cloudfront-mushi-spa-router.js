@@ -5,8 +5,17 @@
  *
  *            /mushi-mushi/admin/*  -> S3 (apps/admin SPA, React Router fallback)
  *            /mushi-mushi/docs/*   -> S3 (apps/docs Next.js static export)
- *            /mushi-mushi/         -> 302 to /mushi-mushi/admin/ (canonical landing
- *                                    is the admin SPA's PublicHomePage today)
+ *            /mushi-mushi/         -> INTERNAL REWRITE to the docs static export's
+ *                                    home (/mushi-mushi/docs/index.html). That page
+ *                                    is the prerendered, indexable marketing landing
+ *                                    (apps/docs/content/index.mdx). We serve it in
+ *                                    place (no redirect) so the canonical product URL
+ *                                    stays /mushi-mushi/ AND it's crawlable — the old
+ *                                    302 to the noindex admin SPA hid the homepage
+ *                                    from search entirely. Asset/link URLs inside that
+ *                                    HTML are absolute (/mushi-mushi/docs/_next/…), so
+ *                                    serving the same bytes at the bare root resolves
+ *                                    correctly against S3.
  *            /mushi-mushi/<other>  -> 302 to /mushi-mushi/admin/<other> so the
  *                                    admin React Router can take it from there
  *
@@ -75,14 +84,23 @@ function handler(event) {
     return request;
   }
 
-  // 4. Bare /mushi-mushi/ or anything else under /mushi-mushi/* -> 302 to the
-  //    admin SPA. The admin's PublicHomePage at `/mushi-mushi/admin/` is the
-  //    canonical marketing landing today; once a dedicated cloud surface ships
-  //    we'll replace this branch with a behavior pointing at it.
-  //
-  //    We forward whatever path suffix the user typed so deep links survive
-  //    (e.g. /mushi-mushi/login -> /mushi-mushi/admin/login, which the admin
-  //    React Router knows how to handle).
+  // 4. Bare product root -> serve the docs static export's home page in place.
+  //    This is the indexable marketing landing (apps/docs/content/index.mdx).
+  //    We REWRITE (not redirect) so the canonical homepage URL stays
+  //    /mushi-mushi/ while the bytes come from the already-deployed
+  //    /mushi-mushi/docs/index.html. The HTML's asset + nav URLs are absolute
+  //    (/mushi-mushi/docs/_next/…), so they resolve against S3 unchanged. Both
+  //    the no-trailing-slash and trailing-slash forms are handled so a typed
+  //    `kensaur.us/mushi-mushi` and a linked `/mushi-mushi/` both land here.
+  if (uri === '/mushi-mushi' || uri === '/mushi-mushi/') {
+    request.uri = '/mushi-mushi/docs/index.html';
+    return request;
+  }
+
+  // 5. Anything else under /mushi-mushi/* -> 302 to the admin SPA. We forward
+  //    whatever path suffix the user typed so deep links survive (e.g.
+  //    /mushi-mushi/login -> /mushi-mushi/admin/login, which the admin React
+  //    Router knows how to handle).
   var suffix = uri.replace(/^\/mushi-mushi\/?/, '');
   var location = '/mushi-mushi/admin/' + suffix;
 

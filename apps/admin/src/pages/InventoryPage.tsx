@@ -15,6 +15,7 @@ import {
   Loading,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageHero } from '../components/PageHero'
 import { ActionPill, ActionPillRow } from '../components/report-detail/ReportSurface'
 import { SetupNudge } from '../components/SetupNudge'
@@ -29,10 +30,29 @@ import { CrawlerSettingsCard } from '../components/inventory/CrawlerSettingsCard
 import { DiscoveryTab } from '../components/inventory/DiscoveryTab'
 import { SyntheticTimeline } from '../components/inventory/SyntheticTimeline'
 import { DriftDiffPanel } from '../components/inventory/DriftDiffPanel'
+import { InventoryWorkspaceReadout } from '../components/inventory/InventoryWorkspaceReadout'
 import { INVENTORY_HELP } from '../components/inventory/inventoryCopy'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 'yaml'
+type InventoryTabGroup = 'primary' | 'advanced'
+
+const PRIMARY_TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'stories', label: 'User stories' },
+  { id: 'tree', label: 'Tree' },
+  { id: 'gates', label: 'Gates' },
+]
+
+const ADVANCED_TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'synthetic', label: 'Synthetic' },
+  { id: 'drift', label: 'Drift' },
+  { id: 'discovery', label: 'Discovery' },
+  { id: 'yaml', label: 'Yaml' },
+]
+
+function isPrimaryTab(tab: Tab): tab is (typeof PRIMARY_TABS)[number]['id'] {
+  return PRIMARY_TABS.some((t) => t.id === tab)
+}
 
 interface Summary {
   total?: number
@@ -144,6 +164,11 @@ export function InventoryPage() {
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
   const [tab, setTab] = useState<Tab>('stories')
+  const tabGroup: InventoryTabGroup = isPrimaryTab(tab) ? 'primary' : 'advanced'
+
+  const setTabGroup = useCallback((group: InventoryTabGroup) => {
+    setTab(group === 'primary' ? 'stories' : 'synthetic')
+  }, [])
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
     id: string
@@ -374,23 +399,59 @@ export function InventoryPage() {
         helpWhatIsIt={INVENTORY_HELP.whatIsIt}
         helpUseCases={INVENTORY_HELP.useCases}
         helpHowToUse={INVENTORY_HELP.howToUse}
-      >
-        <SegmentedControl<Tab>
+      />
+
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: Boolean(projectId),
+            children: (
+              <InventoryWorkspaceReadout
+                projectId={projectId!}
+                storyCount={total}
+                nodeCount={total}
+              />
+            ),
+          },
+        ]}
+      />
+
+      <div className="space-y-2 min-w-0">
+        <SegmentedControl<InventoryTabGroup>
           size="sm"
-          ariaLabel="Inventory section"
-          value={tab}
-          onChange={setTab}
+          scrollable
+          ariaLabel="Inventory section group"
+          value={tabGroup}
+          onChange={setTabGroup}
           options={[
-            { id: 'stories', label: 'User stories' },
-            { id: 'tree', label: 'Tree' },
-            { id: 'gates', label: 'Gates' },
-            { id: 'synthetic', label: 'Synthetic' },
-            { id: 'drift', label: 'Drift' },
-            { id: 'discovery', label: 'Discovery' },
-            { id: 'yaml', label: 'Yaml' },
+            { id: 'primary', label: 'Primary' },
+            { id: 'advanced', label: 'Advanced' },
           ]}
+          className="w-full sm:w-auto"
         />
-      </PageHeaderBar>
+        {tabGroup === 'primary' ? (
+          <SegmentedControl<Tab>
+            size="sm"
+            scrollable
+            ariaLabel="Inventory primary sections"
+            value={tab}
+            onChange={setTab}
+            options={PRIMARY_TABS}
+            className="w-full sm:w-auto"
+          />
+        ) : (
+          <SegmentedControl<Tab>
+            size="sm"
+            scrollable
+            ariaLabel="Inventory advanced sections"
+            value={tab}
+            onChange={setTab}
+            options={ADVANCED_TABS}
+            className="w-full sm:w-auto"
+          />
+        )}
+      </div>
 
       {isAdvanced ? (
       <PageHero

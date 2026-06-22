@@ -7,6 +7,7 @@ import { useToast } from '../lib/toast'
 import {
   Section,
   Field,
+  IdField,
   RecommendedAction,
   EmptyState,
   ErrorAlert,
@@ -400,6 +401,22 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       />
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
+
+      <Section title="Identifiers" className="mb-3">
+        <IdField label="Report ID" value={report.id} full tone="id" />
+        <IdField label="Project ID" value={report.project_id} full tone="id" />
+        {report.session_id ? (
+          <IdField label="Session ID" value={report.session_id} full />
+        ) : null}
+        {report.reporter_token_hash ? (
+          <IdField
+            label="Reporter token hash"
+            value={report.reporter_token_hash}
+            full
+            tooltip="Opaque hash linking this report to a reporter identity — not PII."
+          />
+        ) : null}
+      </Section>
 
       <RegressionChain report={report} className="mb-3" />
 

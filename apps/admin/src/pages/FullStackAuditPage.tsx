@@ -13,9 +13,10 @@
  * which returns a pre-computed scorecard within ~10 s.
  */
 
-import { useState, useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
   Card,
@@ -26,6 +27,12 @@ import {
 } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
+import { FullStackAuditReadout } from '../components/fullstack-audit/FullStackAuditReadout'
+import {
+  EMPTY_FULLSTACK_AUDIT_STATS,
+  type FullstackAuditStats,
+} from '../components/fullstack-audit/FullstackAuditStatsTypes'
 
 // ─── Local type definitions (mirrors fullstack-audit.ts response shapes) ─────
 
@@ -143,7 +150,7 @@ function FindingsList({ findings }: { findings: AuditFinding[] }) {
       {findings.map((f, i) => (
         <div
           key={i}
-          className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/40 px-3 py-2.5"
+          className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5"
         >
           <SeverityBadge severity={f.severity} />
           <div className="min-w-0 flex-1">
@@ -223,6 +230,13 @@ function GateRunsTable({ runs }: { runs: AuditGateRun[] }) {
 
 export function FullStackAuditPage() {
   const projectId = useActiveProjectId()
+  const statsPath = projectId ? `/v1/admin/fullstack-audit/stats?project_id=${projectId}` : null
+  const {
+    data: auditStatsData,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<FullstackAuditStats>(statsPath, { deps: [projectId] })
+  const auditStats = auditStatsData ?? EMPTY_FULLSTACK_AUDIT_STATS
   const [result, setResult] = useState<AuditResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -273,6 +287,23 @@ export function FullStackAuditPage() {
           {loading ? 'Running audit…' : 'Run audit'}
         </Btn>
       </PageHeaderBar>
+
+      {projectId ? (
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.guide,
+              children: (
+                <FullStackAuditReadout
+                  stats={auditStats}
+                  fetchedAt={statsFetchedAt}
+                  isValidating={statsValidating}
+                />
+              ),
+            },
+          ]}
+        />
+      ) : null}
 
       {!projectId && (
         <Card>

@@ -226,6 +226,12 @@ verify_jwt = false
 [functions.usage-aggregator]
 verify_jwt = false
 
+# usage-alerts runs hourly via pg_cron at the top of each hour. It checks
+# current-month diagnosis usage per project and fires 80% / 100% email alerts
+# to project owners. Auth (requireServiceRoleAuth) is enforced inside the handler.
+[functions.usage-alerts]
+verify_jwt = false
+
 # intelligence-report runs weekly via pg_cron. It writes a narrative LLM summary
 # of KPI trends into `intelligence_reports`. Auth is enforced inside the handler.
 [functions.intelligence-report]

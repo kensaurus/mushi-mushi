@@ -34,6 +34,8 @@ import noMockLeak from './rules/no-mock-leak.js'
 import noRawPaletteColor from './rules/no-raw-palette-color.js'
 import noText3xsOnInteractive from './rules/no-text-3xs-on-interactive.js'
 import noHandRolledDialog from './rules/no-hand-rolled-dialog.js'
+import noHandRolledTablist from './rules/no-hand-rolled-tablist.js'
+import noMissingPagePosture from './rules/no-missing-page-posture.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
@@ -43,6 +45,8 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-raw-palette-color': noRawPaletteColor,
   'no-text-3xs-on-interactive': noText3xsOnInteractive,
   'no-hand-rolled-dialog': noHandRolledDialog,
+  'no-hand-rolled-tablist': noHandRolledTablist,
+  'no-missing-page-posture': noMissingPagePosture,
 }
 
 const recommendedRules: Linter.RulesRecord = {
@@ -51,6 +55,7 @@ const recommendedRules: Linter.RulesRecord = {
   [`${PLUGIN_NAME}/no-raw-palette-color`]: 'warn',
   [`${PLUGIN_NAME}/no-text-3xs-on-interactive`]: 'warn',
   [`${PLUGIN_NAME}/no-hand-rolled-dialog`]: 'error',
+  [`${PLUGIN_NAME}/no-hand-rolled-tablist`]: 'warn',
 }
 
 /**

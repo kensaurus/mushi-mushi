@@ -2,6 +2,7 @@ import type { Context, Next } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
 import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 import { mergeLogContext, type LogContext } from './log-context.ts'
+import { emitFunnelEvent } from './setup-funnel.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -207,13 +208,27 @@ function recordSdkHeartbeat(opts: {
     })
     .eq('key_hash', keyHash)
     .or(`last_seen_at.is.null,last_seen_at.lt.${cutoffIso}`)
-    .then(() => {
+    .select('id, owner_user_id, last_seen_at')
+    .then((result) => {
       if (projectId && sdkPackage && sdkVersion) {
         upsertProjectSdkObservationAsync(db, {
           projectId,
           sdkPackage,
           sdkVersion,
           source: 'heartbeat',
+        })
+      }
+      // Emit sdk_first_heartbeat once per project — the UNIQUE constraint in
+      // setup_funnel_events absorbs any concurrent or duplicate emits.
+      const row = result.data?.[0]
+      if (projectId && row) {
+        void emitFunnelEvent(db, {
+          userId: row.owner_user_id ?? null,
+          projectId,
+          eventName: 'sdk_first_heartbeat',
+          dedupKey: projectId, // once per project, not per key
+          source: 'api',
+          metadata: { key_id: row.id, origin, sdk_package: sdkPackage, sdk_version: sdkVersion },
         })
       }
     }, () => {
@@ -288,8 +303,7 @@ function recordOrgMemberActivity(opts: {
   if (!UUID_RE.test(orgId) || !UUID_RE.test(userId)) return
 
   void db
-    .schema('private')
-    .rpc('touch_org_member_activity', { p_org_id: orgId, p_user_id: userId })
+    .rpc('touch_org_member_activity', { p_org_id: orgId, p_user_id: userId }, { count: 'exact' })
     .then(() => {
       // Coalesced UPDATE — no return value needed.
     }, () => {

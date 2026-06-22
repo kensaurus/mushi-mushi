@@ -3,6 +3,6 @@ export default {
     title: 'Blog',
     theme: { toc: false },
   },
-  'agplv3-relicense': 'Mushi goes AGPLv3',
+  'agplv3-relicense': 'The open source story',
   'launch-week-1': 'Launch Week 1',
 }

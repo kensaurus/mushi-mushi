@@ -17,11 +17,14 @@ import {
   Card,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { usePageData } from '../lib/usePageData'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueStatusBanner } from '../components/dlq/QueueStatusBanner'
+import { QueueSnapshotStrip } from '../components/dlq/QueueSnapshotStrip'
+import { QueueReadout } from '../components/dlq/QueueReadout'
 import { EMPTY_QUEUE_STATS, type QueueStats } from '../components/dlq/QueueStatsTypes'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
 import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
@@ -64,6 +67,8 @@ export function DLQPage() {
   const {
     data: queueStats,
     reload: reloadQueueStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
   } = usePageData<QueueStats>('/v1/admin/queue/stats')
   const stats = queueStats ?? EMPTY_QUEUE_STATS
 
@@ -255,20 +260,46 @@ export function DLQPage() {
         </Btn>
       </PageHeaderBar>
 
-      <QueueStatusBanner
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <QueueStatusBanner
+                stats={stats}
+                onRefresh={() => void loadAll()}
+                refreshing={loading}
+                onRecover={recoverStranded}
+                onFlush={flushCircuitBreakerQueue}
+                recovering={flushing}
+                flushing={flushingQueued}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <QueueSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating || loading}
+                hint="Pipeline lanes — pending through dead-letter for the active project."
+              />
+            ),
+          },
+        ]}
+      />
+
+      <QueueReadout
         stats={stats}
-        onRefresh={() => void loadAll()}
-        refreshing={loading}
-        onRecover={recoverStranded}
-        onFlush={flushCircuitBreakerQueue}
-        recovering={flushing}
-        flushing={flushingQueued}
+        fetchedAt={statsFetchedAt}
+        isValidating={statsValidating || loading}
       />
 
       {(deadLetter > 0 || failedCount > 0) && (
         <Card
-          className={`space-y-3 p-4 ${
-            deadLetter > 0 ? 'border-danger/30 bg-danger/5' : 'border-warn/30 bg-warn/5'
+          className={`space-y-3 border p-4 bg-surface-raised ${
+            deadLetter > 0 ? 'border-danger/40' : 'border-warn/40'
           }`}
         >
           <SignalChip tone={deadLetter > 0 ? 'danger' : 'warn'}>

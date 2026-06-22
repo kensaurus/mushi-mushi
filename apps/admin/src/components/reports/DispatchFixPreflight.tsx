@@ -147,7 +147,7 @@ export function DispatchFixPreflight({
       ? 'Sending…'
       : 'Dispatching…'
     : isTable
-      ? 'Dispatch →'
+      ? 'Fix →'
       : 'Dispatch fix →'
 
   return (
@@ -165,9 +165,9 @@ export function DispatchFixPreflight({
         }}
         disabled={busy}
         className={[
-          'inline-flex items-center justify-center gap-1 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
+          'inline-flex items-center justify-center gap-0.5 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
           isTable
-            ? 'min-w-0 shrink-0 truncate px-2 py-1 text-2xs bg-brand/10 text-brand border-brand/30 hover:bg-brand/20'
+            ? 'h-5 min-h-0 shrink-0 truncate px-1.5 text-3xs leading-none bg-brand/10 text-brand border-brand/30 hover:bg-brand/20'
             : 'px-2 py-1 text-2xs bg-brand/10 text-brand border-brand/30 hover:bg-brand/20',
         ].join(' ')}
       >

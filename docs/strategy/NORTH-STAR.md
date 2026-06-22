@@ -1,28 +1,49 @@
-# North star — bug translation for vibe coders
+# North star — the comprehension layer for AI-built apps
 
-Internal canon (Jun 2026). Public surfaces import copy from `@mushi-mushi/brand`
-and [`docs/marketing/VOICE.md`](../marketing/VOICE.md).
+> **Canonical source of truth:** [`/VISION.md`](../../VISION.md) (the constitution).
+> This file is the internal working notes layer: it carries the *shipped vs.
+> target* honesty table and the Phase-1 GTM metric. When this file and
+> `VISION.md` disagree on identity, **`VISION.md` wins** — update this file, not
+> the other way around.
+
+Public surfaces import copy from `@mushi-mushi/brand` and
+[`docs/marketing/VOICE.md`](../marketing/VOICE.md). Those, in turn, compress the
+north-star sentence below.
 
 ## One line
 
-> **It's the thing that tells you why your AI-built app broke — in your editor, in plain English, with the fix ready to paste — so a bug costs you five minutes instead of your whole afternoon.**
+> **Your AI shipped it. Mushi tells you why it broke — in plain English, in your
+> editor, with the fix ready to go — so a bug costs you five minutes instead of
+> your whole afternoon.**
 
 ## Category
 
-**Bug translation** — the layer between *an error happened* and *here's the prompt that fixes it.*
+**The comprehension layer for AI-built apps** — the layer that makes a bug
+*understandable*: between *an error happened* and *here's the fix ready to paste*.
 
-Not error monitoring. Not observability. Those signal ops burden to the vibe-coder buyer.
+Not error monitoring. Not observability. Not a "synthesis layer / integration
+hub." Those signal ops burden to the vibe-coder buyer, or assume they already
+run a monitoring stack. The word is **understandable**.
+
+## Primary buyer
+
+The solo / indie **vibe coder** who builds fast with AI and loses whole
+afternoons when something breaks. Small teams/agencies are secondary. The
+enterprise SRE is explicitly *not* who we lead with. See `VISION.md` §1.4.
 
 ## Primary surface
 
-**MCP-first** inside Cursor / Claude Code. Standalone SDK capture is the front door for reports; MCP is the front door for comprehension.
+**MCP-first** inside Cursor / Claude Code. Standalone SDK capture is the front
+door for reports; MCP is the front door for comprehension. Standalone-first —
+Sentry enrichment is the upgrade reveal, never the hero.
 
 ## What we are / are not
 
 - Plain-English diagnosis + paste-ready fix prompt
 - MCP-native: agent pulls the answer, human never context-switches
-- Works with existing trackers (Sentry enrichment = upgrade reveal, not hero)
+- Works standalone with no Sentry required (enrichment = upgrade reveal)
 - Not a full observability platform
+- Not an enterprise integration hub
 - Not a testing-discipline lecture
 
 ## Shipped vs target (docs honesty)
@@ -39,4 +60,5 @@ Not error monitoring. Not observability. Those signal ops burden to the vibe-cod
 
 ## Phase-1 GTM metric
 
-**Time-to-first-diagnosis after install** — target under ~2 minutes before scaling reach.
+**Time-to-first-diagnosis after install** — target under ~2 minutes before
+scaling reach.

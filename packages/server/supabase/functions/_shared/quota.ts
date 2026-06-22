@@ -2,14 +2,16 @@
  * Plan-aware report ingest quota gate.
  *
  * Behavior:
- *  - Free tier (no subscription / canceled): `pricing_plans.hobby.included_reports_per_month`.
+ *  - Free tier (no subscription / canceled): `pricing_plans.free_cloud.included_diagnoses_per_month`.
  *  - Subscribed (`status='active'|'trialing'|'past_due'`): the plan's
- *    `included_reports_per_month`. NULL = unlimited.
+ *    `included_diagnoses_per_month`. NULL = unlimited.
  *  - When usage exceeds the included quota AND the plan has an overage
  *    price → `allowed=true`, `overage=true` (caller logs to usage_events,
  *    aggregator pushes to Stripe Meter).
- *  - When over included quota AND plan has NO overage (hobby, enterprise
+ *  - When over included quota AND plan has NO overage (free_cloud, enterprise
  *    without overage SKU) → `allowed=false`, HTTP 402.
+ *  - Hard spend cap: when the project's total overage spend this period
+ *    exceeds the cap (plan default or per-sub override), `allowed=false`.
  *
  * The check is hot-pathed on every `POST /v1/reports`, so we cache the
  * verdict per project for `CACHE_TTL_MS` to avoid an N+1 against
@@ -253,4 +255,230 @@ function finalize(projectId: string, verdict: QuotaVerdict): QuotaVerdict {
 /** Test-only helper to force the next checkIngestQuota to refetch the plan. */
 export async function _testGetPlan(planId: string): Promise<PricingPlan> {
   return getPlan(planId)
+}
+
+/**
+ * Pure decision: given a resolved plan + current diagnosis usage, what's the verdict?
+ *
+ * Extracted so the diagnosis quota gate can be unit-tested without Supabase.
+ * Side-effecty inputs (DB reads) are gathered by `checkDiagnosisQuota`.
+ */
+export function decideDiagnosisQuota(input: {
+  plan: PricingPlan
+  used: number
+  hasSubscription: boolean
+  spendCapUsd: number | null
+  periodResetsAt: string
+}): DiagnosisQuotaVerdict {
+  const { plan, used, hasSubscription, spendCapUsd, periodResetsAt } = input
+
+  if (plan.included_diagnoses_per_month === null) {
+    return {
+      allowed: true,
+      overage: false,
+      used: 0,
+      limit: null,
+      spendCapUsd,
+      plan: planRef(plan),
+      periodResetsAt,
+    }
+  }
+
+  if (used < plan.included_diagnoses_per_month) {
+    return {
+      allowed: true,
+      overage: false,
+      used,
+      limit: plan.included_diagnoses_per_month,
+      spendCapUsd,
+      plan: planRef(plan),
+      periodResetsAt,
+    }
+  }
+
+  if (!plan.overage_unit_amount_decimal_diagnoses) {
+    return {
+      allowed: false,
+      overage: false,
+      reason: hasSubscription ? 'OVER_INCLUDED_NO_OVERAGE' : 'NO_SUBSCRIPTION_OVER_FREE',
+      used,
+      limit: plan.included_diagnoses_per_month,
+      spendCapUsd,
+      plan: planRef(plan),
+      periodResetsAt,
+    }
+  }
+
+  if (spendCapUsd !== null) {
+    const overageCount = Math.max(0, used - plan.included_diagnoses_per_month)
+    const overageSpend = overageCount * plan.overage_unit_amount_decimal_diagnoses
+    if (overageSpend >= spendCapUsd) {
+      return {
+        allowed: false,
+        overage: true,
+        reason: 'SPEND_CAP_REACHED',
+        used,
+        limit: plan.included_diagnoses_per_month,
+        spendCapUsd,
+        plan: planRef(plan),
+        periodResetsAt,
+      }
+    }
+  }
+
+  return {
+    allowed: true,
+    overage: true,
+    used,
+    limit: plan.included_diagnoses_per_month,
+    spendCapUsd,
+    plan: planRef(plan),
+    periodResetsAt,
+  }
+}
+
+// ── Diagnosis quota gate ────────────────────────────────────────────────────
+//
+// Called by classify-report BEFORE the Stage-2 Sonnet invocation.
+// Determines whether the project may consume a diagnosis this period.
+// Hard spend caps are enforced here so classify-report never calls the LLM
+// when the project is over cap.
+
+export interface DiagnosisQuotaVerdict {
+  allowed: boolean
+  overage: boolean
+  reason?:
+    | 'OVER_INCLUDED_NO_OVERAGE'
+    | 'NO_SUBSCRIPTION_OVER_FREE'
+    | 'SPEND_CAP_REACHED'
+    /**
+     * Transient: the usage count could not be read (DB error). The caller MUST
+     * treat this as retryable — never as a billing quota_exceeded — and MUST NOT
+     * invoke the LLM. Deliberately fails closed so a transient error can never
+     * become uncapped spend.
+     */
+    | 'QUOTA_CHECK_UNAVAILABLE'
+  used: number
+  /** Included diagnoses quota for the resolved plan. NULL = unlimited. */
+  limit: number | null
+  /** Active hard spend cap in USD. NULL = uncapped. */
+  spendCapUsd: number | null
+  plan: { id: string; display_name: string }
+  periodResetsAt: string
+}
+
+const diagnosisCache = new Map<string, { verdict: DiagnosisQuotaVerdict; expiresAt: number }>()
+
+export function invalidateDiagnosisCache(projectId?: string): void {
+  if (projectId) diagnosisCache.delete(projectId)
+  else diagnosisCache.clear()
+}
+
+/**
+ * Check whether a project may produce a new diagnosis this billing period.
+ *
+ * This is the classify-level gate — it counts completed `diagnoses` events
+ * (excluding Phase-1 shadow rows) and enforces:
+ *  1. Included-quota limits (diagnosis count < plan.included_diagnoses_per_month).
+ *  2. Overage-allowed flag (plan.overage_unit_amount_decimal_diagnoses is set).
+ *  3. Hard spend cap (plan default or per-sub override).
+ */
+export async function checkDiagnosisQuota(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<DiagnosisQuotaVerdict> {
+  const cached = diagnosisCache.get(projectId)
+  if (cached && cached.expiresAt > Date.now()) return cached.verdict
+
+  const { start, end } = periodWindow()
+  const periodResetsAt = end.toISOString()
+
+  const [{ data: sub }, { data: projectRow }, { count: diagCount, error: diagErr }] =
+    await Promise.all([
+      db
+        .from('billing_subscriptions')
+        .select('status, plan_id, current_period_end, monthly_spend_cap_usd_override')
+        .eq('project_id', projectId)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .order('current_period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('projects')
+        .select('organization_id, organizations(billing_mode, plan_id)')
+        .eq('id', projectId)
+        .maybeSingle(),
+      // Count real diagnoses only (exclude Phase-1 shadow rows).
+      // The shadow flag is stored in metadata->>'shadow'. We use a filter
+      // expression that treats absent key as non-shadow.
+      db
+        .from('usage_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('event_name', 'diagnoses')
+        .not('metadata->>shadow', 'eq', 'true')
+        .gte('occurred_at', start.toISOString())
+        .lt('occurred_at', end.toISOString()),
+    ])
+
+  let plan = await resolvePlanFromSubscription(sub)
+  const orgRow =
+    (projectRow as { organizations?: { billing_mode: string | null; plan_id: string | null } | null } | null)
+      ?.organizations ?? null
+  if (orgRow && (!sub || plan.id === 'free_cloud' || plan.id === 'hobby') && orgRow.billing_mode === 'complimentary') {
+    plan = await getPlan(orgRow.plan_id)
+  }
+
+  const periodResetsActual =
+    (sub as { current_period_end?: string | null } | null)?.current_period_end ?? periodResetsAt
+
+  // Resolve effective spend cap: per-sub override wins, then plan default.
+  const subCapOverride =
+    (sub as { monthly_spend_cap_usd_override?: number | null } | null)
+      ?.monthly_spend_cap_usd_override ?? null
+  const spendCapUsd = subCapOverride ?? plan.monthly_spend_cap_usd ?? null
+
+  if (diagErr) {
+    // Spend-safety: a transient count error must NOT fail open. Failing open
+    // here would let unbounded LLM diagnoses through with the spend cap
+    // un-enforced — a single DB blip becomes uncapped spend. Instead we fail
+    // CLOSED for this one call and deliberately DO NOT cache the verdict, so the
+    // next attempt re-reads the count. The caller treats QUOTA_CHECK_UNAVAILABLE
+    // as retryable (never as billing quota_exceeded), so a brief blip neither
+    // locks the project out nor bypasses the cap.
+    log.error('Diagnosis quota count failed; failing closed (retryable)', {
+      projectId,
+      err: diagErr.message,
+    })
+    return {
+      allowed: false,
+      overage: false,
+      reason: 'QUOTA_CHECK_UNAVAILABLE',
+      used: 0,
+      limit: plan.included_diagnoses_per_month,
+      spendCapUsd,
+      plan: planRef(plan),
+      periodResetsAt: periodResetsActual,
+    }
+  }
+
+  const used = diagCount ?? 0
+  return finalizeDiagnosis(
+    projectId,
+    decideDiagnosisQuota({
+      plan,
+      used,
+      hasSubscription: !!sub,
+      spendCapUsd,
+      periodResetsAt: periodResetsActual,
+    }),
+  )
+}
+
+function finalizeDiagnosis(
+  projectId: string,
+  verdict: DiagnosisQuotaVerdict,
+): DiagnosisQuotaVerdict {
+  diagnosisCache.set(projectId, { verdict, expiresAt: Date.now() + CACHE_TTL_MS })
+  return verdict
 }

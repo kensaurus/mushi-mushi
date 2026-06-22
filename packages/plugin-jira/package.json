@@ -46,8 +46,8 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-jira"
   },
-  "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/plugin-jira#readme",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

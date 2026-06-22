@@ -24,7 +24,7 @@ describe('guideLiveOverlay', () => {
       sdkConnected: true,
       mcpConnected: false,
     })
-    expect(overlay.metric).toBe('Not set up')
+    expect(overlay.metric).toBe('Not in IDE')
     expect(overlay.posture).toBe('open')
   })
 

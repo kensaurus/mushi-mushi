@@ -1,9 +1,10 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Bug translation for vibe coders — plain-English diagnosis + fix prompts via MCP. Open source.",
+  "description": "Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.",
   "license": "MIT",
-  "homepage": "https://github.com/kensaurus/mushi-mushi",
+  "homepage": "https://kensaur.us/mushi-mushi",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git"
@@ -61,7 +62,7 @@
     "check:config-docs": "node scripts/check-config-docs.mjs",
     "check:community-files": "node scripts/sync-community-files.mjs --check",
     "sync:community-files": "node scripts/sync-community-files.mjs",
-    "release": "pnpm sync:community-files && turbo run build && pnpm check:publish && pnpm check:migration-catalog && changeset publish",
+    "release": "pnpm sync:community-files && pnpm check:narrative && turbo run build && pnpm check:publish && pnpm check:migration-catalog && changeset publish",
     "changelog:aggregate": "node scripts/aggregate-changelogs.mjs",
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",
     "roadmap:bootstrap": "node scripts/bootstrap-roadmap.mjs",
@@ -78,6 +79,11 @@
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
     "docs-stats": "node scripts/docs-stats.mjs --print-markdown",
     "check:docs-stats": "node scripts/docs-stats.mjs --check",
+    "check:tagline": "node scripts/check-tagline-consistency.mjs",
+    "check:positioning": "node scripts/check-positioning-consistency.mjs",
+    "check:pkg-meta": "node scripts/normalize-package-metadata.mjs",
+    "check:narrative": "pnpm check:tagline && pnpm check:positioning && pnpm check:license && pnpm check:pkg-meta",
+    "check:license": "node scripts/check-license-consistency.mjs",
     "gen:sdk-version-matrix": "node scripts/gen-sdk-version-matrix.mjs",
     "check:sdk-version-matrix": "node scripts/gen-sdk-version-matrix.mjs --check",
     "check:internal-doc-links": "node scripts/check-internal-doc-links.mjs",

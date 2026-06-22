@@ -12,6 +12,8 @@ program
   .option('--all-projects', 'Write a separate mushi-<name> server entry for every accessible project')
   .option('--with-rules', 'Also write the .cursorrules / .claude/rules/mushi.md lesson-library hook')
   .option('--dry-run', 'Print what would be written without making changes')
+  .option('--verify', 'Probe the MCP key after writing to confirm it has mcp:read scope (default: on)')
+  .option('--no-verify', 'Skip the post-write key probe')
   .addHelpText('after', `
 Examples:
   mushi setup                         # wire Cursor (default)
@@ -26,7 +28,7 @@ Supported IDEs:
   zed       — writes ~/.config/zed/settings.json mcpServers block
 
 The command reads credentials from ~/.config/mushi/config.json (run \`mushi login\` first).`)
-  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean }) => {
+  .action(async (opts: { ide: string; projectSlug?: string; allProjects?: boolean; withRules?: boolean; dryRun?: boolean; verify?: boolean }) => {
     const { writeFile, mkdir, readFile } = await import('node:fs/promises')
     const { existsSync } = await import('node:fs')
     const nodePath = await import('node:path')
@@ -243,6 +245,59 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
     }
 
     if (!opts.dryRun) {
+      // ── Key scope validation (default-on, suppressed with --no-verify) ───────
+      // Probes /v1/admin/mcp/account-overview — the canonical lightweight
+      // mcp:read endpoint — to confirm the configured key can actually drive the
+      // MCP server. Fails gracefully so a network hiccup never blocks the user.
+      const shouldVerify = opts.verify !== false
+      if (shouldVerify && config.endpoint && config.apiKey && config.projectId) {
+        try {
+          const probeRes = await fetch(
+            `${config.endpoint.replace(/\/$/, '')}/v1/admin/mcp/account-overview`,
+            {
+              headers: {
+                'X-Mushi-Api-Key': config.apiKey,
+                'X-Mushi-Project': config.projectId,
+              },
+              signal: AbortSignal.timeout(6000),
+            },
+          )
+          if (probeRes.ok) {
+            console.log('✓ MCP key valid — restart Cursor (or your IDE) to activate')
+            // Fire-and-forget: signal mcp_setup_done to the backend for funnel tracking.
+            void fetch(
+              `${config.endpoint.replace(/\/$/, '')}/v1/cli/funnel`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Mushi-Api-Key': config.apiKey,
+                  'X-Mushi-Project': config.projectId,
+                },
+                body: JSON.stringify({ event: 'mcp_setup_done', source: 'cli' }),
+                signal: AbortSignal.timeout(4000),
+              },
+            ).catch(() => { /* best-effort */ })
+          } else if (probeRes.status === 403) {
+            let errCode: string | undefined
+            try {
+              const b = await probeRes.json() as { error?: { code?: string } }
+              errCode = b?.error?.code
+            } catch { /* ignore */ }
+            if (errCode === 'INSUFFICIENT_SCOPE') {
+              console.log('\n⚠  Your key has report:write scope only — MCP admin tools will not work.')
+              console.log('   New keys minted by the wizard include both scopes automatically.')
+              console.log('   To upgrade an existing key, run:\n')
+              console.log('     mushi login --upgrade-scope\n')
+            } else {
+              console.log(`⚠  Key probe returned HTTP ${probeRes.status} — check your credentials.`)
+            }
+          }
+        } catch {
+          // Network failure or timeout: don't block the user.
+        }
+      }
+
       console.log('')
       console.log(`Done! Restart ${opts.ide === 'cursor' ? 'Cursor' : opts.ide === 'claude' ? 'Claude Code' : opts.ide} and ask: "list mushi tools"`)
       if (!opts.withRules) {

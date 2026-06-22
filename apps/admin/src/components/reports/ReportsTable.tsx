@@ -137,8 +137,8 @@ export function ReportsTable({
   )
 
   return (
-    <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle bg-surface-raised/50">
+    <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
         <span className="text-2xs text-fg-muted min-w-0 truncate">
           {total} report{total === 1 ? '' : 's'} — click a row to triage; scroll for status & actions
         </span>

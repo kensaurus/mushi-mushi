@@ -16,6 +16,7 @@ export const FEATURE_GROUPS = [
   'admin',
   'audit',
   'docs',
+  'usage',
   /** Deprecated aliases kept for one release — hidden unless `legacy` or `all`. */
   'legacy',
 ] as const
@@ -100,6 +101,9 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   project_settings: 'admin',
   privacy_status: 'admin',
   evolution_history: 'admin',
+
+  // usage / billing
+  get_usage: 'usage',
 
   // qa / tdd
   map_user_stories: 'qa',

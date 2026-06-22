@@ -122,38 +122,39 @@ export function connectLaneOverlay(
 ): WorkflowStageOverlay {
   if (laneId === 'github') {
     return flags.githubConnected
-      ? { posture: 'clear', metric: 'Connected' }
-      : { posture: 'open', metric: 'Not connected', actionLine: 'Connect GitHub first.' }
+      ? { posture: 'clear', metric: 'Linked' }
+      : { posture: 'open', metric: 'Not linked', actionLine: 'Connect your GitHub repo to continue.' }
   }
   if (laneId === 'sdk') {
     return flags.sdkConnected
-      ? { posture: 'clear', metric: 'Installed' }
+      ? { posture: 'clear', metric: 'Live' }
       : {
           posture: flags.githubConnected ? 'open' : 'info',
-          metric: 'Missing',
-          actionLine: flags.githubConnected ? 'Install the SDK in your repo.' : 'Connect GitHub first.',
+          metric: 'Not installed',
+          actionLine: flags.githubConnected
+            ? 'Copy the SDK snippet into your app.'
+            : 'Link GitHub first, then add the SDK.',
         }
   }
   if (laneId === 'mcp') {
     if (flags.mcpConnected) {
-      return { posture: 'clear', metric: 'Configured' }
+      return { posture: 'clear', metric: 'In IDE' }
     }
     return {
       posture: flags.sdkConnected ? 'open' : 'info',
-      metric: flags.sdkConnected ? 'Not set up' : 'After SDK',
+      metric: flags.sdkConnected ? 'Not in IDE' : 'After SDK',
       actionLine: flags.sdkConnected
-        ? 'Add MCP to your editor after SDK install.'
-        : 'Connect GitHub and install the SDK first.',
+        ? 'Add MCP to Cursor or VS Code.'
+        : 'Finish GitHub and SDK first.',
     }
   }
   if (laneId === 'cli') {
     if (flags.cliConnected) {
-      return { posture: 'clear', metric: 'Available' }
+      return { posture: 'clear', metric: 'Installed' }
     }
     return {
       posture: flags.sdkConnected ? 'info' : 'clear',
       metric: 'Optional',
-      actionLine: flags.sdkConnected ? 'Install the CLI for terminal workflows.' : undefined,
     }
   }
   if (laneId === 'upgrade') {
@@ -162,9 +163,9 @@ export function connectLaneOverlay(
     }
     return {
       posture: flags.sdkConnected && flags.githubConnected ? 'warn' : 'info',
-      metric: flags.sdkConnected ? 'Versions drift' : 'After SDK',
-      actionLine: flags.sdkConnected
-        ? 'Bump @mushi-mushi/* when npm publishes new SDKs.'
+      metric: flags.sdkConnected ? 'Update available' : 'After SDK',
+      actionLine: flags.sdkConnected && flags.githubConnected
+        ? 'Create an upgrade PR when npm publishes a newer SDK.'
         : undefined,
     }
   }
@@ -172,8 +173,8 @@ export function connectLaneOverlay(
     if (flags.nativeCiNeedsAttention) {
       return {
         posture: 'warn',
-        metric: 'Needs secrets',
-        actionLine: 'Native builds need CI env vars baked at compile time.',
+        metric: 'Needs setup',
+        actionLine: 'Sync MUSHI_* secrets into GitHub Actions for native builds.',
       }
     }
     return flags.sdkConnected

@@ -17,6 +17,7 @@
 import { useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   Badge,
   Section,
@@ -36,6 +37,7 @@ import {
   type CodeHealthStats,
 } from '../components/code-health/CodeHealthStatsTypes'
 import { CodeHealthStatusBanner } from '../components/code-health/CodeHealthStatusBanner'
+import { CodeHealthReadout } from '../components/code-health/CodeHealthReadout'
 import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
@@ -359,6 +361,7 @@ export function CodeHealthPage() {
     data: statsData,
     reload: reloadStats,
     isValidating: statsValidating,
+    lastFetchedAt: statsFetchedAt,
   } = usePageData<CodeHealthStats>('/v1/admin/code-health/stats')
   usePublishPageHeroStats('/code-health', statsData)
   const stats = statsData ?? EMPTY_CODE_HEALTH_STATS
@@ -450,8 +453,26 @@ export function CodeHealthPage() {
         </Btn>
       </PageHeaderBar>
 
-      <CodeHealthStatusBanner stats={stats} onRefresh={handleReload} refreshing={statsValidating} />
-      <CodeHealthGuide topPriority={stats.topPriority} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <CodeHealthStatusBanner stats={stats} onRefresh={handleReload} refreshing={statsValidating} />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: <CodeHealthGuide topPriority={stats.topPriority} />,
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <CodeHealthReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
+            ),
+          },
+        ]}
+      />
 
       <div className="flex w-full min-w-0 flex-col gap-6">
         {error && <ErrorAlert message={error} />}

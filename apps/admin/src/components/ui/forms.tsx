@@ -42,6 +42,8 @@ interface SegmentedControlProps<T extends string> {
   size?: 'sm' | 'md'
   /** Allow segments to wrap on narrow viewports instead of overflowing. */
   wrap?: boolean
+  /** Horizontal scroll strip for many tabs — keeps one row on narrow viewports. */
+  scrollable?: boolean
   className?: string
 }
 
@@ -58,13 +60,14 @@ export function SegmentedControl<T extends string>({
   ariaLabel,
   size = 'md',
   wrap = false,
+  scrollable = false,
   className = '',
 }: SegmentedControlProps<T>) {
   const track = (
     <div
       role="radiogroup"
       aria-label={ariaLabel ?? label}
-      className={`${wrap ? 'flex flex-wrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised/50 p-0.5 ${className}`}
+      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value
@@ -93,10 +96,19 @@ export function SegmentedControl<T extends string>({
     </div>
   )
 
-  if (!label) return track
+  if (!label) {
+    if (scrollable) {
+      return (
+        <div className="max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+          {track}
+        </div>
+      )
+    }
+    return track
+  }
   return (
-    <div className="inline-flex items-center gap-1.5">
-      <span className="text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
+    <div className={`inline-flex max-w-full items-center gap-1.5 ${scrollable ? 'overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]' : ''}`}>
+      <span className="shrink-0 text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
       {track}
     </div>
   )

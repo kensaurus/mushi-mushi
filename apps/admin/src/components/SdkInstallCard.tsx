@@ -32,8 +32,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ConnectionStatus } from './ConnectionStatus'
 import { RevealedKeyCard } from './RevealedKeyCard'
-import { Card, Btn } from './ui'
-import { CodePanel } from './CodePanel'
+import { Card, Btn, Tooltip, CopyButton } from './ui'
+import { CodePanel, CodeInline } from './CodePanel'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
@@ -351,17 +351,28 @@ export function SdkInstallCard({
       )}
 
       {!apiKey && activePrefixes.length > 0 && (
-        <div className="rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2 text-2xs text-fg-secondary flex flex-wrap items-center gap-2">
-          <span>
-            Active API key{activePrefixes.length > 1 ? 's' : ''}:{' '}
+        <div className="rounded-md border border-edge-subtle bg-surface-raised/60 px-3 py-2.5 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-2xs font-medium text-fg-secondary">
+              Active API key{activePrefixes.length > 1 ? 's' : ''}
+            </span>
+            <Btn size="sm" variant="ghost" disabled={rotating} onClick={() => void rotateKey()}>
+              {rotating ? 'Rotating…' : 'Rotate key'}
+            </Btn>
+          </div>
+          <ul className="space-y-1.5" aria-label="Active API key prefixes">
             {activePrefixes.map((p) => (
-              <code key={p} className="mx-0.5 px-1 py-0.5 rounded bg-surface-overlay font-mono">{p}…</code>
+              <li key={p}>
+                <div className="flex items-start justify-between gap-2 rounded-sm border border-edge-subtle/80 bg-surface-root/50 px-2 py-1.5">
+                  <Tooltip content={`Prefix ${p} — full secret shown once at mint or rotate`} side="top">
+                    <CodeInline className="min-w-0 flex-1 break-all">{p}…</CodeInline>
+                  </Tooltip>
+                  <CopyButton value={p} label="Copy prefix" copiedLabel="Copied" size="sm" />
+                </div>
+              </li>
             ))}
-            . Full secret shown once at mint/rotate.
-          </span>
-          <Btn size="sm" variant="ghost" disabled={rotating} onClick={() => void rotateKey()}>
-            {rotating ? 'Rotating…' : 'Rotate key'}
-          </Btn>
+          </ul>
+          <p className="text-3xs text-fg-muted">Full secret shown once at mint or rotate.</p>
         </div>
       )}
 

@@ -144,6 +144,7 @@ export const OnboardingStatsSchema = z
     fixCount: z.number().int().nonnegative(),
     mergedFixCount: z.number().int().nonnegative(),
     nextStepTo: z.string().nullable().optional(),
+    funnelCounts: z.record(z.string(), z.number()).nullable().optional(),
   })
   .passthrough()
 

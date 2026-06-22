@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
@@ -16,19 +16,20 @@ import { usePageCopy } from '../lib/copy'
 import { useAnomaliesUx, resolveQuickAnomaliesTab } from '../lib/anomaliesModeUx'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
+import {
   Card,
-  Section,
   Badge,
   Btn,
   Input,
   EmptyState,
   ErrorAlert,
   RelativeTime,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -39,6 +40,8 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { AnomaliesStatusBanner } from '../components/anomalies/AnomaliesStatusBanner'
 import { AnomaliesDetectionGuide } from '../components/anomalies/AnomaliesDetectionGuide'
+import { AnomaliesSnapshotStrip } from '../components/anomalies/AnomaliesSnapshotStrip'
+import { AnomaliesReadout } from '../components/anomalies/AnomaliesReadout'
 import {
   EMPTY_ANOMALIES_STATS,
   type AnomaliesStats,
@@ -47,21 +50,6 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { BarSparkline } from '../components/charts'
-import {
-  autoReportedDetail,
-  autoReportedTooltip,
-  dismissedAnomaliesDetail,
-  dismissedAnomaliesTooltip,
-  highScoreDetail,
-  highScoreTooltip,
-  metricPointsDetail,
-  metricPointsTooltip,
-  openAnomaliesDetail,
-  openAnomaliesTooltip,
-  releaseRegressionDetail,
-  releaseRegressionTooltip,
-} from '../lib/statTooltips/anomalies'
-import { anomaliesLinks } from '../lib/statCardLinks'
 
 interface AnomalyDetection {
   id: string
@@ -238,7 +226,7 @@ export function AnomaliesPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -312,19 +300,48 @@ export function AnomaliesPage() {
         )}
       </PageHeaderBar>
 
-      <AnomaliesStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <AnomaliesStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideAnomaliesSnapshot,
+            children: (
+              <AnomaliesSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show:
+              activeTab === 'overview' &&
+              !shouldHideGuideWhenBannerActive(true, COMMON_HEALTHY_PRIORITIES, stats.topPriority),
+            children: <AnomaliesDetectionGuide topPriority={stats.topPriority} />,
+          },
+        ]}
       />
-
-      {activeTab === 'overview' && <AnomaliesDetectionGuide topPriority={stats.topPriority} />}
 
       {!ux.hideTabs && (
       <SegmentedControl<AnomaliesTabId>
         size="sm"
+        scrollable
         ariaLabel="Anomalies sections"
         value={activeTab}
         options={tabOptions}
@@ -332,48 +349,13 @@ export function AnomaliesPage() {
       />
       )}
 
-      {!ux.hideAnomaliesSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.open ?? 'Open'} value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} tooltip={openAnomaliesTooltip(stats)} detail={openAnomaliesDetail(stats)} to={anomaliesLinks.open} />
-          <StatCard label={copy?.statLabels?.releaseRegressions ?? 'Release regressions'} value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} tooltip={releaseRegressionTooltip(stats)} detail={releaseRegressionDetail()} to={anomaliesLinks.releaseRegressions} />
-          <StatCard label={copy?.statLabels?.highScore ?? 'High score'} value={stats.highScoreOpen} accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined} tooltip={highScoreTooltip(stats)} detail={highScoreDetail()} to={anomaliesLinks.highScore} />
-          <StatCard label={copy?.statLabels?.autoReported ?? 'Auto-reported'} value={stats.autoReported} accent={stats.autoReported > 0 ? 'text-brand' : undefined} tooltip={autoReportedTooltip(stats)} detail={autoReportedDetail()} to={anomaliesLinks.autoReported} />
-          <StatCard label={copy?.statLabels?.metricPoints ?? 'Metric points'} value={stats.metricPointCount} accent={stats.metricPointCount > 0 ? 'text-brand' : undefined} tooltip={metricPointsTooltip(stats)} detail={metricPointsDetail(stats)} to={anomaliesLinks.metricPoints} />
-          <StatCard label={copy?.statLabels?.dismissed ?? 'Dismissed'} value={stats.dismissedAnomalies} accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined} tooltip={dismissedAnomaliesTooltip(stats)} detail={dismissedAnomaliesDetail()} to={anomaliesLinks.dismissed} />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`p-4 ${
-            stats.topPriority === 'open_critical'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'no_metrics'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-warn/30 bg-warn/5'
-          }`}
-        >
-          <ContainedBlock tone={stats.topPriority === 'open_critical' ? 'warn' : stats.topPriority === 'no_metrics' ? 'info' : 'warn'}>
-            <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs font-medium">
-              {stats.topPriorityLabel}
-            </InlineProof>
-          </ContainedBlock>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
-        </Card>
-      ) : null}
-
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          <AnomaliesReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt}
+            isValidating={statsValidating}
+          />
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"

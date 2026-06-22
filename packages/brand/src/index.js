@@ -63,17 +63,33 @@ export const MUSHI_TAGLINE_LEGACY = {
 }
 
 /**
- * Primary tagline ladder (v2) — bug translation for vibe coders.
+ * Primary tagline ladder (v2) — the comprehension layer for AI-built apps.
  * Import and use these on README headers, landing H1, docs landing, npm.
- * See docs/marketing/VOICE.md.
+ * The canonical identity lives in /VISION.md (the constitution); this ladder
+ * is the compressed propagation of its north-star sentence. See
+ * docs/marketing/VOICE.md.
  */
 export const MUSHI_TAGLINE_V2 = {
+  /**
+   * North star — the full sentence (VISION.md §1.3). Every other field below is
+   * a compression of this. Use on the about/concept pages where there's room.
+   */
+  northStar:
+    'Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.',
+  /**
+   * One-liner — the compressed north-star for fixed-width fields: GitHub repo
+   * description, npm `description`, og:description fallback. Keep these byte-for-
+   * byte identical across surfaces (the consistency check enforces it).
+   */
+  oneLiner:
+    'Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.',
   /** Hero — README headers, landing H1, docs landing. */
   hero: 'Your AI wrote it. Mushi tells you why it broke.',
   /** Lead paragraph directly under hero. */
-  subHero: 'Plain-English diagnosis + a paste-ready fix, right inside Cursor.',
-  /** Eyebrow, npm category line, llms.txt. */
-  category: 'Bug translation for vibe coders',
+  subHero:
+    'Plain-English diagnosis + a ready-to-apply fix, right inside Cursor and Claude Code — so a bug costs you five minutes, not your whole afternoon.',
+  /** Eyebrow, npm category line, llms.txt. The category we own (VISION.md §1.5). */
+  category: 'The comprehension layer for AI-built apps',
   /** og:description, slide headers. */
   micro: 'Know why. Fix fast.',
   mark: '虫虫',
@@ -89,6 +105,8 @@ export const MUSHI_TAGLINE_V2 = {
  * bio so a rename propagates everywhere at once.
  */
 export const MUSHI_TAGLINE = {
+  northStar: MUSHI_TAGLINE_V2.northStar,
+  oneLiner: MUSHI_TAGLINE_V2.oneLiner,
   full: MUSHI_TAGLINE_V2.hero,
   short: MUSHI_TAGLINE_V2.micro,
   micro: MUSHI_TAGLINE_V2.micro,
@@ -101,7 +119,7 @@ export const MUSHI_TAGLINE = {
 /**
  * Open-source positioning ladder — the "powerhouse" proof points.
  *
- * Mushi competes for trust the way Langfuse and Supabase do: a permissive,
+ * Mushi competes for trust the way Supabase and Grafana do: a genuinely open,
  * self-hostable core with no lock-in, dogfooded on real apps. Import these on
  * the README badge row, landing trust strip, docs open-source page, and any
  * surface that needs to say "this is genuinely open." Keep the claims true —
@@ -110,8 +128,8 @@ export const MUSHI_TAGLINE = {
 export const MUSHI_OSS = {
   /** Trust strip — one line, README/landing/docs. */
   trustStrip: 'MIT-licensed SDKs · self-hostable · no second LLM key',
-  /** License split, stated plainly. */
-  license: 'JS/SDK packages MIT · server (Supabase functions + admin) AGPLv3',
+  /** License split, stated plainly. Open-core: AGPL core + commercial EE. */
+  license: 'SDKs MIT · server AGPLv3 · enterprise edition commercial',
   /** Self-host promise (Langfuse-style). */
   selfHost: 'Self-host the whole stack with one command.',
   /** No-lock-in promise (Supabase-style). */

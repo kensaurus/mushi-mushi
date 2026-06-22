@@ -101,8 +101,8 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/adapters"
   },
-  "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/adapters#readme",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

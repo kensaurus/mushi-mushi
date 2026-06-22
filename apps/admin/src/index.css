@@ -86,6 +86,9 @@
   --color-info: oklch(0.68 0.16 240);
   --color-info-fg: oklch(0.16 0.04 240);
   --color-info-muted: oklch(0.28 0.05 240);
+  /* On tinted semantic surfaces (banners, chips, toasts), use *-foreground
+     tokens for copy — never raw text-ok / text-warn / text-danger / text-accent
+     on matching bg-*-muted tints (fails WCAG AA). See semanticBannerTone(). */
   /* Rose — pink-leaning destructive shade reserved for the sidebar
      sign-out icon. Distinct from `--color-danger` (red/orange, used
      by failed-fix banners) so a user scanning the sidebar doesn't
@@ -2503,6 +2506,49 @@ select, input, textarea {
   overflow: visible;
 }
 
+/* Connect hub stepper — tight canvas, no ghost pane / attribution chrome. */
+.connect-step-flow {
+  isolation: isolate;
+  max-width: 100%;
+}
+.connect-step-flow__scroll {
+  scrollbar-gutter: stable;
+}
+.connect-step-flow .react-flow,
+.connect-step-flow__graph {
+  background: transparent !important;
+}
+.connect-step-flow .react-flow__viewport,
+.connect-step-flow .react-flow__renderer {
+  overflow: visible !important;
+}
+.connect-step-flow .react-flow__pane {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+.connect-step-flow .react-flow__node {
+  pointer-events: all !important;
+}
+.connect-step-flow .react-flow__panel,
+.connect-step-flow .react-flow__attribution,
+.connect-step-flow .react-flow__controls {
+  display: none !important;
+}
+
+/* Hidden Mushi dogfood launcher — suppress empty bottom-right shell. */
+[data-mushi-widget-root][data-mushi-trigger='hidden'],
+[data-mushi-widget-root][data-mushi-trigger='hidden']:empty {
+  pointer-events: none !important;
+}
+[data-mushi-widget-root][data-mushi-trigger='hidden']:not(:has([data-mushi-launcher]:not([hidden]))) {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+[data-mushi-launcher][hidden] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 /* ---------------------------------------------------------------------------
    RESPONSIVE TABLE
    Chrome for `ResponsiveTable`: density-driven row padding, edge fade masks
@@ -2659,22 +2705,37 @@ select, input, textarea {
   align-items: center;
   justify-content: center;
 }
+.reports-triage-table tbody td.reports-action-cell .reports-action-stack {
+  position: absolute;
+  top: var(--row-py);
+  right: 0.25rem;
+  bottom: var(--row-py);
+  left: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.125rem;
+  min-width: 0;
+  pointer-events: none;
+}
+.reports-triage-table tbody td.reports-action-cell .reports-action-stack > * {
+  pointer-events: auto;
+}
 .reports-triage-table tbody td.reports-action-cell .reports-action-top {
   position: relative;
   z-index: 1;
-  padding-top: var(--row-py);
-  padding-right: 0.25rem;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.125rem;
+  flex-shrink: 0;
 }
 .reports-triage-table tbody td.reports-action-cell .reports-action-age {
-  position: absolute;
-  right: 0.25rem;
-  bottom: var(--row-py);
-  width: calc(100% - 0.5rem);
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
   max-width: 9.75rem;
+  margin-left: auto;
   pointer-events: none;
 }
 .reports-triage-table tbody td.reports-action-cell .reports-action-age > * {

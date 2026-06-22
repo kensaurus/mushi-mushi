@@ -46,6 +46,8 @@ import { SnapshotSectionHint,
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
@@ -56,6 +58,7 @@ import { ExploreTourPanel } from '../components/explore/ExploreTourPanel'
 import { ExploreDomainsPanel } from '../components/explore/ExploreDomainsPanel'
 import { ExploreKnowledgePanel } from '../components/explore/ExploreKnowledgePanel'
 import { ExploreIndexScopePanel } from '../components/explore/ExploreIndexScopePanel'
+import { ExploreWorkspaceReadout } from '../components/explore/ExploreWorkspaceReadout'
 import { ExploreImpactControl } from '../components/explore/ExploreImpactControl'
 import { ExploreUnderstandEmpty } from '../components/explore/ExploreUnderstandEmpty'
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
@@ -585,7 +588,7 @@ export function ExplorePage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -600,8 +603,23 @@ export function ExplorePage() {
     return (
       <div className="space-y-4">
         <PageHeaderBar title={copy?.title ?? 'Explore'} />
-        <ExploreStatusBanner stats={stats} onTab={setActiveTab} />
-        <ExploreAtlasGuide topPriority={stats.topPriority} />
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.status,
+              children: <ExploreStatusBanner stats={stats} onTab={setActiveTab} />,
+            },
+            {
+              priority: POSTURE_PRIORITY.guide,
+              show: !shouldHideGuideWhenBannerActive(
+                true,
+                COMMON_HEALTHY_PRIORITIES,
+                stats.topPriority,
+              ),
+              children: <ExploreAtlasGuide topPriority={stats.topPriority} />,
+            },
+          ]}
+        />
         <EmptySectionMessage
           text="No project selected"
           hint="Select a project from the top bar to explore its codebase."
@@ -924,21 +942,37 @@ export function ExplorePage() {
         />
       ) : null}
 
-      <ExploreStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating || loading}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ExploreStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating || loading}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: !shouldHideGuideWhenBannerActive(
+              true,
+              COMMON_HEALTHY_PRIORITIES,
+              stats.topPriority,
+            ),
+            children: <ExploreAtlasGuide topPriority={stats.topPriority} />,
+          },
+        ]}
       />
-
-      <ExploreAtlasGuide topPriority={stats.topPriority} />
 
       {!ux.hideTabs && (
         <div className="space-y-2 min-w-0">
           <SegmentedControl<ExplorePrimaryTabId>
             size="sm"
-            wrap
+            scrollable
             ariaLabel="Explore sections"
             value={primaryTab}
             options={primaryTabOptions}
@@ -948,7 +982,7 @@ export function ExplorePage() {
           {primaryTab === 'understand' && isUnderstandView(activeTab) && (
             <SegmentedControl<ExploreUnderstandView>
               size="sm"
-              wrap
+              scrollable
               ariaLabel="Understand views"
               value={activeTab}
               options={understandViewOptions}
@@ -959,7 +993,7 @@ export function ExplorePage() {
           {primaryTab === 'map' && isMapView(activeTab) && (
             <SegmentedControl<ExploreMapView>
               size="sm"
-              wrap
+              scrollable
               ariaLabel="Map views"
               value={activeTab}
               options={mapViewOptions}
@@ -1022,10 +1056,10 @@ export function ExplorePage() {
             <Card
               className={`p-4 ${
                 stats.topPriority === 'error'
-                  ? 'border-danger/30 bg-danger/5'
+                  ? 'border-danger/40 bg-surface-raised'
                   : stats.topPriority === 'empty' || stats.topPriority === 'stale'
-                    ? 'border-warn/30 bg-warn/5'
-                    : 'border-brand/30 bg-brand/5'
+                    ? 'border-warn/40 bg-surface-raised'
+                    : 'border-brand/40 bg-surface-raised'
               }`}
             >
               <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
@@ -1141,6 +1175,7 @@ export function ExplorePage() {
 
       {activeTab === 'index' && (
         <div className="space-y-4">
+          <ExploreWorkspaceReadout projectId={projectId} />
           <ExploreIndexScopePanel projectId={projectId} />
           <Card className="p-4 space-y-3">
             <p className="text-sm font-medium text-fg">Indexer debug</p>

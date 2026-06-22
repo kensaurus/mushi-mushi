@@ -5,7 +5,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { usePublishPageContext } from '../lib/pageContext'
-import { SnapshotSectionHint,ErrorAlert,
+import { ErrorAlert,
   EmptyState,
   Btn,
   Badge,
@@ -15,10 +15,11 @@ import { SnapshotSectionHint,ErrorAlert,
   ResultChip,
   type ResultChipTone,
   FreshnessPill,
-  SegmentedControl,
-  StatCard, } from '../components/ui'
+  SegmentedControl, } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { JudgeStatusBanner, isJudgeStatusBannerCritical } from '../components/judge/JudgeStatusBanner'
+import { JudgeSnapshotStrip } from '../components/judge/JudgeSnapshotStrip'
 import { JudgePipelineGuide } from '../components/judge/JudgePipelineGuide'
 import {
   ActionPill,
@@ -48,21 +49,6 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useJudgeUx, resolveQuickJudgeTab } from '../lib/judgeModeUx'
-import {
-  classifiedDetail,
-  classifiedTooltip,
-  disagreeDetail,
-  disagreeTooltip,
-  driftDetail,
-  driftTooltip,
-  promptsDetail,
-  promptsTooltip,
-  totalDetail,
-  totalTooltip,
-  weekDetail,
-  weekTooltip,
-} from '../lib/statTooltips/judge'
-import { judgeLinks } from '../lib/statCardLinks'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
@@ -488,7 +474,7 @@ export function JudgePage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -749,19 +735,58 @@ export function JudgePage() {
         )}
       </PageHeaderBar>
 
-      {isJudgeStatusBannerCritical(stats) && (
-        <JudgeStatusBanner
-          stats={stats}
-          onTab={setActiveTab}
-          onRefresh={loadAll}
-          refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
-          onRunJudge={runNow}
-          running={running}
-          plainBanner={ux.plainBanner}
+      {isJudgeStatusBannerCritical(stats) ? (
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.status,
+              children: (
+                <JudgeStatusBanner
+                  stats={stats}
+                  onTab={setActiveTab}
+                  onRefresh={loadAll}
+                  refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
+                  onRunJudge={runNow}
+                  running={running}
+                  plainBanner={ux.plainBanner}
+                />
+              ),
+            },
+            {
+              priority: POSTURE_PRIORITY.guide,
+              children: <JudgePipelineGuide topPriority={stats.topPriority} />,
+            },
+            {
+              priority: POSTURE_PRIORITY.heroOrSnapshot,
+              show: !ux.hideJudgeSnapshot,
+              children: (
+                <JudgeSnapshotStrip
+                  stats={stats}
+                  statsFetchedAt={statsFetchedAt}
+                  statsValidating={statsValidating}
+                  sectionTitle={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'}
+                  hint={activeTabMeta.description}
+                  statLabels={copy?.statLabels}
+                />
+              ),
+            },
+          ]}
         />
+      ) : (
+        <>
+          <JudgePipelineGuide topPriority={stats.topPriority} />
+          {!ux.hideJudgeSnapshot && (
+            <JudgeSnapshotStrip
+              stats={stats}
+              statsFetchedAt={statsFetchedAt}
+              statsValidating={statsValidating}
+              sectionTitle={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'}
+              hint={activeTabMeta.description}
+              statLabels={copy?.statLabels}
+            />
+          )}
+        </>
       )}
-
-      <JudgePipelineGuide topPriority={stats.topPriority} />
 
       {!ux.hideTabs && (
       <SegmentedControl<JudgeTabId>
@@ -824,75 +849,7 @@ export function JudgePage() {
         </>
       )}
 
-      {!ux.hideJudgeSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label={copy?.statLabels?.week ?? 'This week'}
-            value={stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—'}
-            accent={
-              stats.latestWeekScore != null && stats.latestWeekScore >= 0.8
-                ? 'text-ok'
-                : stats.latestWeekScore != null && stats.latestWeekScore >= 0.6
-                  ? 'text-warn'
-                  : stats.latestWeekScore != null
-                    ? 'text-danger'
-                    : undefined
-            }
-            tooltip={weekTooltip(stats)}
-            detail={weekDetail(stats)}
-            to={judgeLinks.week}
-          />
-          <StatCard
-            label={copy?.statLabels?.total ?? 'Total evals'}
-            value={stats.totalEvaluations}
-            accent={stats.totalEvaluations > 0 ? 'text-brand' : undefined}
-            tooltip={totalTooltip(stats)}
-            detail={totalDetail()}
-            to={judgeLinks.total}
-          />
-          <StatCard
-            label={copy?.statLabels?.disagree ?? 'Disagreements'}
-            value={stats.disagreementCount}
-            accent={stats.disagreementCount > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={disagreeTooltip(stats)}
-            detail={disagreeDetail(stats)}
-            to={judgeLinks.disagree}
-          />
-          <StatCard
-            label={copy?.statLabels?.drift ?? 'WoW drift'}
-            value={stats.weekOverWeekDriftPct != null ? `${stats.weekOverWeekDriftPct}%` : '—'}
-            accent={
-              stats.weekOverWeekDriftPct != null && stats.weekOverWeekDriftPct >= 5
-                ? 'text-danger'
-                : undefined
-            }
-            tooltip={driftTooltip(stats)}
-            detail={driftDetail()}
-            to={judgeLinks.drift}
-          />
-          <StatCard
-            label={copy?.statLabels?.classified ?? 'Classified'}
-            value={stats.classifiedReports}
-            accent={stats.classifiedReports > 0 && stats.totalEvaluations === 0 ? 'text-brand' : undefined}
-            tooltip={classifiedTooltip(stats)}
-            detail={classifiedDetail()}
-            to={judgeLinks.classified}
-          />
-          <StatCard
-            label={copy?.statLabels?.prompts ?? 'Prompts'}
-            value={stats.promptVersionCount}
-            accent={stats.activePromptCount > 0 ? 'text-ok' : undefined}
-            tooltip={promptsTooltip(stats)}
-            detail={promptsDetail(stats)}
-            to={judgeLinks.prompts}
-          />
-        </div>
-      </Section>
-      )}
-
-      {activeTab === 'overview' && !ux.hideOverviewChrome && heroCollapsed && (
+      {activeTab === 'overview' && !ux.hideOverviewChrome && heroCollapsed && ux.hideJudgeSnapshot && (
         <>
       <div data-dav-anchor="judge:decide">
       <KpiRow cols={4}>

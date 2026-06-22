@@ -33,3 +33,6 @@ packages/node, packages/cli, packages/mcp, packages/plugin-*, packages/adapters,
 packages/marketing-ui, packages/brand, packages/inventory-schema) remain MIT.
 
 See the root LICENSE file for the MIT text covering the SDK packages.
+
+For a commercial license that removes copyleft obligations when offering Mushi
+as a hosted service to third parties, see COMMERCIAL-LICENSE.md at the repo root.

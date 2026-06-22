@@ -14,26 +14,22 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { AuditStatusBanner, isAuditStatusBannerCritical } from '../components/audit/AuditStatusBanner'
 import { AuditGuide } from '../components/audit/AuditGuide'
+import { AuditSnapshotStrip } from '../components/audit/AuditSnapshotStrip'
+import { AuditReadout } from '../components/audit/AuditReadout'
 import { EMPTY_AUDIT_STATS, type AuditStats, type AuditTabId } from '../components/audit/types'
 import {
-  actorMixDetail,
-  actorMixTooltip,
   agentActorsDetail,
   agentActorsTooltip,
-  events24hDetail,
-  events24hTooltip,
-  failCount24hDetail,
-  failCount24hTooltip,
   humanActorsDetail,
   humanActorsTooltip,
   systemActorsDetail,
   systemActorsTooltip,
-  totalEventsDetail,
-  totalEventsTooltip,
 } from '../lib/statTooltips/audit'
 import { auditLinks } from '../lib/statCardLinks'
 import { useToast } from '../lib/toast'
-import { SnapshotSectionHint,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { PageHeaderBar } from '../components/PageHeaderBar'
+import {
   Card,
   Badge,
   Btn,
@@ -44,9 +40,9 @@ import { SnapshotSectionHint,
   EmptyState,
   LogBlock,
   CodeValue,
-  Section,
   StatCard,
-  SegmentedControl, } from '../components/ui'
+  SegmentedControl,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -59,7 +55,6 @@ import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFilter
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
-import { PageHeaderBar } from '../components/PageHeaderBar'
 
 interface AuditEntry {
   id: string
@@ -701,16 +696,39 @@ export function AuditPage() {
         </Btn>
       </PageHeaderBar>
 
-      {isAuditStatusBannerCritical(stats) && (
-        <AuditStatusBanner
-          stats={stats}
-          onTab={setActiveTab}
-          onFilterFailures={() => applyPreset({ tab: 'log', action: 'fix.failed', since: '24h' })}
-          onFilterWarns={() => applyPreset({ tab: 'log', action: 'api_key.revoked', since: '24h' })}
-        />
-      )}
-
-      <AuditGuide failCount24h={stats.failCount24h} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: isAuditStatusBannerCritical(stats),
+            children: (
+              <AuditStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onFilterFailures={() => applyPreset({ tab: 'log', action: 'fix.failed', since: '24h' })}
+                onFilterWarns={() => applyPreset({ tab: 'log', action: 'api_key.revoked', since: '24h' })}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <AuditSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt ?? lastFetchedAt}
+                statsValidating={statsValidating || isValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'Audit snapshot'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: <AuditGuide failCount24h={stats.failCount24h} />,
+          },
+        ]}
+      />
 
       <SegmentedControl
         value={activeTab}
@@ -720,49 +738,13 @@ export function AuditPage() {
         size="sm"
       />
 
-      <Section
-        title="Audit snapshot"
-        freshness={{ at: statsFetchedAt ?? lastFetchedAt, isValidating: statsValidating || isValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="24h events"
-            value={stats.events24h}
-            accent={stats.events24h > 0 ? 'text-brand' : undefined}
-            tooltip={events24hTooltip(stats)}
-            detail={events24hDetail(stats)}
-            to={auditLinks.events24h}
-          />
-          <StatCard
-            label="Failures"
-            value={stats.failCount24h}
-            accent={stats.failCount24h > 0 ? 'text-danger' : 'text-ok'}
-            tooltip={failCount24hTooltip(stats)}
-            detail={failCount24hDetail()}
-            to={auditLinks.failures}
-          />
-          <StatCard
-            label="Actor mix"
-            value={`${stats.humanCount24h}/${stats.agentCount24h}/${stats.systemCount24h}`}
-            accent={stats.agentCount24h > 0 ? 'text-info' : undefined}
-            tooltip={actorMixTooltip(stats)}
-            detail={actorMixDetail()}
-            to={auditLinks.actorMix}
-          />
-          <StatCard
-            label="All-time"
-            value={stats.totalEvents.toLocaleString()}
-            accent="text-brand"
-            tooltip={totalEventsTooltip(stats)}
-            detail={totalEventsDetail(stats)}
-            to={auditLinks.allTime}
-          />
-        </div>
-      </Section>
-
       {activeTab === 'overview' && (
         <>
+          <AuditReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt ?? lastFetchedAt}
+            isValidating={statsValidating || isValidating}
+          />
           {filterPanel}
           {logTable}
         </>

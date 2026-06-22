@@ -376,7 +376,17 @@ export function installCommand(pm: PackageManager, packages: string[]): string {
 
 const SERVER_FRAMEWORK_IDS: ReadonlySet<FrameworkId> = new Set(['express', 'fastify', 'hono'])
 
-export function envVarsToWrite(apiKey: string, projectId: string, framework: Framework): string {
+export function envVarsToWrite(
+  apiKey: string,
+  projectId: string,
+  framework: Framework,
+  endpoint?: string,
+): string {
+  const CLOUD_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+  const endpointLine = endpoint && endpoint !== CLOUD_ENDPOINT
+    ? `MUSHI_API_ENDPOINT=${endpoint}`
+    : null
+
   // Server frameworks don't bundle env at build time — use bare names with
   // no VITE_ / NEXT_PUBLIC_ prefix so they work in dotenv or cloud secret
   // managers directly.
@@ -384,27 +394,31 @@ export function envVarsToWrite(apiKey: string, projectId: string, framework: Fra
     return [
       `MUSHI_PROJECT_ID=${projectId}`,
       `MUSHI_API_KEY=${apiKey}`,
-    ].join('\n')
+      endpointLine,
+    ].filter(Boolean).join('\n')
   }
   // React Native bare workflow: bare MUSHI_* names, read via dotenv/babel plugin
   if (framework.id === 'react-native') {
     return [
       `MUSHI_PROJECT_ID=${projectId}`,
       `MUSHI_API_KEY=${apiKey}`,
-    ].join('\n')
+      endpointLine,
+    ].filter(Boolean).join('\n')
   }
   // Expo managed workflow: EXPO_PUBLIC_ prefix is required for JS access
   if (framework.id === 'expo') {
     return [
       `EXPO_PUBLIC_MUSHI_PROJECT_ID=${projectId}`,
       `EXPO_PUBLIC_MUSHI_API_KEY=${apiKey}`,
-    ].join('\n')
+      endpointLine ? `EXPO_PUBLIC_${endpointLine}` : null,
+    ].filter(Boolean).join('\n')
   }
   const prefix = framework.id === 'next' ? 'NEXT_PUBLIC_' : framework.id === 'nuxt' ? 'NUXT_PUBLIC_' : 'VITE_'
   return [
     `${prefix}MUSHI_PROJECT_ID=${projectId}`,
     `${prefix}MUSHI_API_KEY=${apiKey}`,
-  ].join('\n')
+    endpointLine ? `${prefix}${endpointLine}` : null,
+  ].filter(Boolean).join('\n')
 }
 
 function collectDeps(pkg: PackageJson | null): Set<string> {

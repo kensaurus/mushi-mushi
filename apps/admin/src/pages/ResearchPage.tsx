@@ -16,15 +16,13 @@ import { usePageCopy } from '../lib/copy'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint, Card,
-  Section,
-  Btn,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { Btn,
   Badge,
   Input,
   SegmentedControl,
   ErrorAlert,
   EmptyState,
-  StatCard,
   RelativeTime,
   FreshnessPill,
   RecommendedAction, } from '../components/ui'
@@ -33,11 +31,12 @@ import {
   ActionPillRow,
   ContainedBlock,
   InlineProof,
-  SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { ResearchStatusBanner } from '../components/research/ResearchStatusBanner'
+import { ResearchSnapshotStrip } from '../components/research/ResearchSnapshotStrip'
+import { ResearchReadout } from '../components/research/ResearchReadout'
 import {
   EMPTY_RESEARCH_STATS,
   type ResearchStats,
@@ -46,21 +45,6 @@ import {
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
 import type { SearchResponse, SessionRow } from '../components/research/types'
-import {
-  attachedDetail,
-  attachedTooltip,
-  domainsDetail,
-  domainsTooltip,
-  firecrawlDetail,
-  firecrawlTooltip,
-  sessionsDetail,
-  sessionsTooltip,
-  snippetsDetail,
-  snippetsTooltip,
-  unattachedSnippetsDetail,
-  unattachedSnippetsTooltip,
-} from '../lib/statTooltips/research'
-import { researchLinks } from '../lib/statCardLinks'
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -277,7 +261,7 @@ export function ResearchPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -367,86 +351,47 @@ export function ResearchPage() {
         )}
       </PageHeaderBar>
 
-      <ResearchStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ResearchStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideResearchSnapshot,
+            children: (
+              <ResearchSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
       <SegmentedControl<ResearchTabId>
         size="sm"
+        scrollable
         ariaLabel="Research sections"
         value={activeTab}
         options={tabOptions}
         onChange={setActiveTab}
       />
       )}
-
-      {!ux.hideResearchSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'RESEARCH SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.sessions ?? 'Sessions'} value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} tooltip={sessionsTooltip(stats)} detail={sessionsDetail()} to={researchLinks.sessions} />
-          <StatCard label={copy?.statLabels?.snippets ?? 'Snippets'} value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} tooltip={snippetsTooltip(stats)} detail={snippetsDetail()} to={researchLinks.snippets} />
-          <StatCard label={copy?.statLabels?.attached ?? 'Attached'} value={stats.attached} accent={stats.attached > 0 ? 'text-ok' : undefined} tooltip={attachedTooltip(stats)} detail={attachedDetail()} to={researchLinks.attached} />
-          <StatCard label={copy?.statLabels?.unattached ?? 'Unattached'} value={stats.unattachedSnippets} accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined} tooltip={unattachedSnippetsTooltip(stats)} detail={unattachedSnippetsDetail()} to={researchLinks.unattached} />
-          <StatCard
-            label={copy?.statLabels?.firecrawl ?? 'Firecrawl'}
-            value={stats.firecrawlReady ? 'Ready' : stats.firecrawlConfigured ? 'Test' : 'Setup'}
-            accent={stats.firecrawlReady ? 'text-ok' : stats.firecrawlConfigured ? 'text-warn' : undefined}
-            tooltip={firecrawlTooltip(stats)}
-            detail={firecrawlDetail(stats)}
-            to={researchLinks.firecrawl}
-          />
-          <StatCard
-            label={copy?.statLabels?.domains ?? 'Domains'}
-            value={stats.allowedDomainsCount}
-            accent={stats.allowedDomainsCount > 0 ? 'text-info' : undefined}
-            tooltip={domainsTooltip(stats)}
-            detail={domainsDetail(stats)}
-            to={researchLinks.domains}
-          />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'unattached_snippets'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
-                ? 'danger'
-                : stats.topPriority === 'unattached_snippets'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
 
       {!activeProjectId ? (
         <SetupNudge
@@ -458,6 +403,11 @@ export function ResearchPage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
+              <ResearchReadout
+                stats={stats}
+                fetchedAt={statsFetchedAt}
+                isValidating={statsValidating}
+              />
               {stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"

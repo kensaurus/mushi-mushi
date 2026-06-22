@@ -1419,8 +1419,10 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const body = (await c.req.json().catch(() => null)) as {
       project_id?: string;
       email?: string;
-      /** 'starter' | 'pro' — defaults to 'starter' so legacy clients still work. */
+      /** 'indie' | 'pro' — defaults to 'indie'. */
       plan_id?: string;
+      /** 'monthly' | 'annual' — defaults to 'monthly'. Annual uses flat-rate price; no overage. */
+      billing_interval?: 'monthly' | 'annual';
     } | null;
     if (!body?.project_id || !body?.email) {
       return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400);
@@ -1466,15 +1468,15 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED' } }, 503);
     }
 
-    const planId = body.plan_id ?? 'starter';
+    const planId = body.plan_id ?? 'indie';
     const plan = await getPlan(planId);
-    if (plan.id === 'hobby') {
+    if (plan.id === 'hobby' || plan.id === 'free_cloud') {
       return c.json(
         {
           ok: false,
           error: {
             code: 'PLAN_NOT_PURCHASABLE',
-            message: 'Hobby is the default free tier — no checkout needed.',
+            message: 'Free plan — no checkout needed.',
           },
         },
         400,
@@ -1508,14 +1510,37 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     // Resolve Stripe price IDs from env (set by stripe-bootstrap.mjs). We don't
     // hit Stripe's /prices/search on every request — env is faster and means
     // we fail closed if bootstrap hasn't been run.
+    //
+    // Env var naming (output by stripe-bootstrap.mjs):
+    //   indie base:    STRIPE_PRICE_INDIE_BASE
+    //   indie overage: STRIPE_PRICE_INDIE_DIAGNOSES_OVERAGE
+    //   indie annual:  STRIPE_PRICE_INDIE_ANNUAL
+    //   pro   base:    STRIPE_PRICE_PRO_BASE_V2  (v1 fallback: STRIPE_PRICE_PRO_BASE)
+    //   pro   overage: STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE
+    //   pro   annual:  STRIPE_PRICE_PRO_ANNUAL
+    const isAnnual = (body as Record<string, unknown>).billing_interval === 'annual';
     const priceMap: Record<string, { base?: string; overage?: string }> = {
+      indie: {
+        base: isAnnual
+          ? Deno.env.get('STRIPE_PRICE_INDIE_ANNUAL')
+          : Deno.env.get('STRIPE_PRICE_INDIE_BASE'),
+        // Annual plans are flat-rate; no metered overage line item.
+        overage: isAnnual ? undefined : Deno.env.get('STRIPE_PRICE_INDIE_DIAGNOSES_OVERAGE'),
+      },
+      pro: {
+        // PRO v2 uses the v2 price ID; fall back to v1 for legacy deployments
+        // that ran stripe-bootstrap.mjs before the v2 rename.
+        base: isAnnual
+          ? Deno.env.get('STRIPE_PRICE_PRO_ANNUAL')
+          : (Deno.env.get('STRIPE_PRICE_PRO_BASE_V2') ?? Deno.env.get('STRIPE_PRICE_PRO_BASE')),
+        overage: isAnnual
+          ? undefined
+          : (Deno.env.get('STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE') ?? Deno.env.get('STRIPE_PRICE_PRO_OVERAGE')),
+      },
+      // Legacy plan kept for existing subscribers migrating off starter.
       starter: {
         base: Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? cfg.defaultPriceId,
         overage: Deno.env.get('STRIPE_PRICE_STARTER_OVERAGE'),
-      },
-      pro: {
-        base: Deno.env.get('STRIPE_PRICE_PRO_BASE'),
-        overage: Deno.env.get('STRIPE_PRICE_PRO_OVERAGE'),
       },
     };
     const prices = priceMap[plan.id] ?? {};

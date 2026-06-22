@@ -182,6 +182,30 @@ describe('envVarsToWrite', () => {
     const env = envVarsToWrite('mushi_xxx', 'proj_xxx', FRAMEWORKS.react)
     expect(env).toContain('VITE_MUSHI_PROJECT_ID=proj_xxx')
   })
+
+  it('omits MUSHI_API_ENDPOINT when endpoint is the default cloud URL', () => {
+    const cloudEndpoint = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+    const env = envVarsToWrite('mushi_xxx', 'proj_xxx', FRAMEWORKS.next, cloudEndpoint)
+    expect(env).not.toContain('MUSHI_API_ENDPOINT')
+  })
+
+  it('includes MUSHI_API_ENDPOINT with framework prefix when a custom endpoint is given', () => {
+    const selfHosted = 'https://my-instance.example.com/functions/v1/api'
+    const env = envVarsToWrite('mushi_xxx', 'proj_xxx', FRAMEWORKS.next, selfHosted)
+    expect(env).toContain(`NEXT_PUBLIC_MUSHI_API_ENDPOINT=${selfHosted}`)
+  })
+
+  it('includes bare MUSHI_API_ENDPOINT for server frameworks with a custom endpoint', () => {
+    const selfHosted = 'https://my-instance.example.com/functions/v1/api'
+    const env = envVarsToWrite('mushi_xxx', 'proj_xxx', FRAMEWORKS.express, selfHosted)
+    expect(env).toContain(`MUSHI_API_ENDPOINT=${selfHosted}`)
+    expect(env).not.toContain('VITE_MUSHI_API_ENDPOINT')
+  })
+
+  it('omits endpoint line when no endpoint is provided', () => {
+    const env = envVarsToWrite('mushi_xxx', 'proj_xxx', FRAMEWORKS.react)
+    expect(env).not.toContain('MUSHI_API_ENDPOINT')
+  })
 })
 
 describe('FRAMEWORKS', () => {

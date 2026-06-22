@@ -1,7 +1,7 @@
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
-import { jwtAuth } from '../../_shared/auth.ts';
+import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { callerProjectIds } from '../shared.ts';
 
@@ -9,8 +9,10 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
   // =================================================================================
   // GET /v1/admin/billing/stats
   // Workspace health summary for billing banner + KPI strip (active project focus).
+  // Accepts both JWT (admin console) and API key (mcp:read) so MCP get_usage
+  // and `mushi usage` CLI work without a browser session.
   // =================================================================================
-  app.get('/v1/admin/billing/stats', jwtAuth, async (c) => {
+  app.get('/v1/admin/billing/stats', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIdHint =
@@ -91,7 +93,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     ] = await Promise.all([
       db
         .from('billing_subscriptions')
-        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end')
+        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end, monthly_spend_cap_usd_override')
         .in('project_id', projectIds),
       db
         .from('billing_customers')
@@ -121,7 +123,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
 
     let pastDueProjects = 0;
     let unpaidProjects = 0;
-    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean }>();
+    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean; monthly_spend_cap_usd_override?: number | null }>();
     for (const s of subs ?? []) {
       subByProject.set(s.project_id, s);
       if (s.status === 'past_due') pastDueProjects += 1;
@@ -130,12 +132,19 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const customerByProject = new Map<string, { stripe_customer_id?: string; default_payment_ok?: boolean }>();
     for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
 
-    const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number }>();
+    const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number; diagnoses: number }>();
+
     for (const u of usage ?? []) {
-      const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0 };
+      const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0, diagnoses: 0 };
       if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity);
       else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity);
       else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity);
+      else if (u.event_name === 'diagnoses') {
+        // Shadow events (Phase 1 validation) excluded from quota counts.
+        // Real events have no metadata or metadata.shadow != 'true'.
+        const meta = (u as unknown as { metadata?: Record<string, unknown> }).metadata;
+        if (!meta || meta['shadow'] !== 'true') cur.diagnoses += Number(u.quantity);
+      }
       usageByProject.set(u.project_id, cur);
     }
 
@@ -150,43 +159,58 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     llmCostUsdMonth = Math.round(llmCostUsdMonth * 10000) / 10000;
 
     const hobby = plans.find((pl) => pl.id === 'hobby');
+    const freeCloud = plans.find((pl) => pl.id === 'free_cloud');
     const freeLimitReports =
       hobby?.included_reports_per_month ??
       Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
+    const freeLimitDiagnoses = freeCloud?.included_diagnoses_per_month ?? 50;
 
     if (!activeProject) {
       return c.json({
         ok: true,
-        data: { ...empty, projectCount: projectRows.length, freeLimitReports, pastDueProjects, unpaidProjects },
+        data: { ...empty, projectCount: projectRows.length, freeLimitReports, freeLimitDiagnoses, pastDueProjects, unpaidProjects },
       });
     }
 
     const sub = subByProject.get(activeProject.id) ?? null;
     const cust = customerByProject.get(activeProject.id) ?? null;
-    const u = usageByProject.get(activeProject.id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0 };
+    const u = usageByProject.get(activeProject.id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0, diagnoses: 0 };
     const orgInfo = activeProject.organization_id ? orgById.get(activeProject.organization_id) ?? null : null;
     const isComplimentary = orgInfo?.billing_mode === 'complimentary';
     const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
     const planId = subPlanActive
-      ? (sub!.plan_id ?? 'hobby')
+      ? (sub!.plan_id ?? 'free_cloud')
       : isComplimentary
         ? orgInfo!.plan_id
-        : 'hobby';
+        : 'free_cloud';
     const plan = await getPlan(planId);
     const limit = plan.included_reports_per_month;
+    const diagnosesLimit = plan.included_diagnoses_per_month ?? null;
     const usagePct = limit ? Math.round((u.reports / limit) * 100) : null;
+    const diagnosesUsagePct = diagnosesLimit ? Math.round((u.diagnoses / diagnosesLimit) * 100) : null;
     const overQuota =
       !isComplimentary &&
       limit !== null &&
       u.reports >= limit &&
       !plan.overage_price_lookup_key;
     const approachingQuota = usagePct != null && usagePct >= 80 && !overQuota;
+    const overDiagnosisQuota =
+      !isComplimentary &&
+      diagnosesLimit !== null &&
+      u.diagnoses >= diagnosesLimit &&
+      !plan.overage_unit_amount_decimal_diagnoses;
+    const approachingDiagnosisQuota = diagnosesUsagePct != null && diagnosesUsagePct >= 80 && !overDiagnosisQuota;
+    // Effective spend cap: subscription override takes priority, then plan default.
+    const monthlySpendCapUsd =
+      (sub as unknown as { monthly_spend_cap_usd_override?: number | null } | null)?.monthly_spend_cap_usd_override ??
+      plan.monthly_spend_cap_usd ??
+      null;
 
     const subscriptionStatus = subPlanActive
       ? sub!.status
-      : isComplimentary && plan.id !== 'hobby'
+      : isComplimentary && plan.id !== 'free_cloud' && plan.id !== 'hobby'
         ? 'active'
-        : plan.id === 'hobby'
+        : plan.id === 'free_cloud' || plan.id === 'hobby'
           ? 'free'
           : sub?.status ?? null;
 
@@ -213,19 +237,28 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         usagePct,
         overQuota,
         approachingQuota,
+        // Phase 2 — diagnoses metering fields.
+        diagnosesUsed: u.diagnoses,
+        diagnosesLimit,
+        diagnosesUsagePct,
+        overDiagnosisQuota,
+        approachingDiagnosisQuota,
+        monthlySpendCapUsd,
+        overageRateDiagnoses: plan.overage_unit_amount_decimal_diagnoses ?? null,
         fixesAttempted: u.fixes,
         fixesSucceeded: u.fixesSucceeded,
         llmCostUsdMonth,
         periodEnd: periodEndIso,
         projectCount: projectRows.length,
         freeLimitReports,
+        freeLimitDiagnoses,
         pastDueProjects,
         unpaidProjects,
       },
     });
   });
 
-  app.get('/v1/admin/billing', jwtAuth, async (c) => {
+  app.get('/v1/admin/billing', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
@@ -273,11 +306,12 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
       { data: usageSeries },
       { data: llmCosts },
       { data: orgs },
+      { data: projectSettings },
     ] = await Promise.all([
       db
         .from('billing_subscriptions')
         .select(
-          'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
+          'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id, monthly_spend_cap_usd_override',
         )
         .in('project_id', projectIds),
       db
@@ -323,6 +357,10 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
             .select('id, plan_id, billing_mode')
             .in('id', orgIds)
         : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
+      db
+        .from('project_settings')
+        .select('project_id, alert_email')
+        .in('project_id', projectIds),
     ]);
 
     // Pick the most recent active sub per project (a project may have a
@@ -342,9 +380,14 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const orgById = new Map<string, { plan_id: string; billing_mode: string }>();
     for (const o of orgs ?? []) orgById.set(o.id, { plan_id: o.plan_id, billing_mode: o.billing_mode });
 
+    const settingsByProject = new Map<string, { alert_email: string | null }>();
+    for (const s of projectSettings ?? []) {
+      settingsByProject.set(s.project_id, { alert_email: s.alert_email ?? null });
+    }
+
     const usageByProject = new Map<
       string,
-      { reports: number; fixes: number; fixesSucceeded: number; tokens: number }
+      { reports: number; fixes: number; fixesSucceeded: number; tokens: number; diagnoses: number }
     >();
     for (const u of usage ?? []) {
       const cur = usageByProject.get(u.project_id) ?? {
@@ -352,11 +395,16 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         fixes: 0,
         fixesSucceeded: 0,
         tokens: 0,
+        diagnoses: 0,
       };
       if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity);
       else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity);
       else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity);
       else if (u.event_name === 'classifier_tokens') cur.tokens += Number(u.quantity);
+      else if (u.event_name === 'diagnoses') {
+        const meta = (u as unknown as { metadata?: Record<string, unknown> }).metadata;
+        if (!meta || meta['shadow'] !== 'true') cur.diagnoses += Number(u.quantity);
+      }
       usageByProject.set(u.project_id, cur);
     }
 
@@ -421,6 +469,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
           fixes: 0,
           fixesSucceeded: 0,
           tokens: 0,
+          diagnoses: 0,
         };
         const orgInfo = p.organization_id ? orgById.get(p.organization_id) ?? null : null;
         const isComplimentary = orgInfo?.billing_mode === 'complimentary';
@@ -428,15 +477,23 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         // Resolution order:
         //   1. real Stripe subscription (active/trialing/past_due)
         //   2. complimentary org → org.plan_id wins (no Stripe needed)
-        //   3. fallback hobby
+        //   3. fallback free_cloud
         const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
         const planId = subPlanActive
           ? sub.plan_id
           : isComplimentary
             ? orgInfo!.plan_id
-            : 'hobby';
+            : 'free_cloud';
         const plan = await getPlan(planId);
         const limit = plan.included_reports_per_month;
+        const diagnosesLimit = plan.included_diagnoses_per_month ?? null;
+
+        // Effective spend cap: sub override > plan default > null.
+        const spendCapUsd =
+          (sub as unknown as { monthly_spend_cap_usd_override?: number | null } | null)
+            ?.monthly_spend_cap_usd_override ??
+          plan.monthly_spend_cap_usd ??
+          null;
 
         // For complimentary orgs without a real Stripe subscription, synthesize
         // a subscription view so the FE shows "Pro · active" (or whichever
@@ -445,7 +502,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         // it and skip Stripe API calls.
         const effectiveSub = subPlanActive
           ? sub
-          : isComplimentary && plan.id !== 'hobby'
+          : isComplimentary && plan.id !== 'free_cloud' && plan.id !== 'hobby'
             ? {
                 project_id: p.id,
                 organization_id: p.organization_id ?? null,
@@ -466,13 +523,17 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
           organization_id: p.organization_id ?? null,
           project_name: p.name,
           // Both kept for FE backwards-compat: legacy `plan: 'free' | <price-id>` and the new tier object.
-          plan: plan.id === 'hobby' ? 'free' : (sub?.stripe_price_id ?? plan.id),
+          plan: (plan.id === 'free_cloud' || plan.id === 'hobby') ? 'free' : (sub?.stripe_price_id ?? plan.id),
           tier: {
             id: plan.id,
             display_name: plan.display_name,
             monthly_price_usd: plan.monthly_price_usd,
             included_reports_per_month: plan.included_reports_per_month,
             overage_unit_amount_decimal: plan.overage_unit_amount_decimal,
+            // Phase 2 — diagnoses metering fields.
+            included_diagnoses_per_month: diagnosesLimit,
+            overage_unit_amount_decimal_diagnoses: plan.overage_unit_amount_decimal_diagnoses ?? null,
+            monthly_spend_cap_usd: spendCapUsd,
             retention_days: plan.retention_days,
             feature_flags: plan.feature_flags,
           },
@@ -510,21 +571,147 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
             !plan.overage_price_lookup_key,
           // Used by the QuotaBanner to render at >=80% / >=100%.
           usage_pct: limit ? Math.round((u.reports / limit) * 100) : null,
+          // Phase 2 — diagnoses metering fields.
+          diagnoses_used: u.diagnoses,
+          limit_diagnoses: diagnosesLimit,
+          diagnoses_usage_pct: diagnosesLimit ? Math.round((u.diagnoses / diagnosesLimit) * 100) : null,
+          over_diagnosis_quota:
+            !isComplimentary &&
+            diagnosesLimit !== null &&
+            u.diagnoses >= diagnosesLimit &&
+            !plan.overage_unit_amount_decimal_diagnoses,
+          spend_cap_usd: spendCapUsd,
+          alert_email: settingsByProject.get(p.id)?.alert_email ?? null,
         };
       }),
     );
 
-    // Hobby quota for the legacy `free_limit_reports_per_month` key still used
-    // by older FE builds. Pick the catalog value, fall back to env.
-    const hobby = plans.find((pl) => pl.id === 'hobby');
+    // Free Cloud quota for the legacy `free_limit_reports_per_month` key still
+    // used by older FE builds. Pick the catalog value, fall back to env.
+    const hobbyOrFreeCloud = plans.find((pl) => pl.id === 'free_cloud') ?? plans.find((pl) => pl.id === 'hobby');
     const freeLimit =
-      hobby?.included_reports_per_month ??
+      hobbyOrFreeCloud?.included_reports_per_month ??
       Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
+    const freeLimitDiagnoses = plans.find((pl) => pl.id === 'free_cloud')?.included_diagnoses_per_month ?? 50;
 
     return c.json({
       ok: true,
-      data: { projects: items, plans, free_limit_reports_per_month: freeLimit },
+      data: { projects: items, plans, free_limit_reports_per_month: freeLimit, free_limit_diagnoses_per_month: freeLimitDiagnoses },
     });
+  });
+
+  // =================================================================================
+  // PUT /v1/admin/billing/spend-cap
+  // Set or clear the per-subscription monthly spend cap (USD). The cap stored here
+  // overrides the plan-level default in classify-report's diagnosis quota gate.
+  // Accepts JWT and API keys with mcp:write scope so CLI `mushi billing cap` works.
+  // =================================================================================
+  app.put('/v1/admin/billing/spend-cap', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const body = await c.req.json().catch(() => null);
+
+    if (!body || typeof body !== 'object') {
+      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+    }
+    const projectId = (body as Record<string, unknown>).project_id;
+    const capRaw = (body as Record<string, unknown>).spend_cap_usd;
+
+    if (typeof projectId !== 'string') {
+      return c.json({ ok: false, error: 'project_id required' }, 400);
+    }
+    if (capRaw !== null && (typeof capRaw !== 'number' || capRaw < 0 || capRaw > 100000)) {
+      return c.json({ ok: false, error: 'spend_cap_usd must be a number 0–100000 or null to clear' }, 400);
+    }
+
+    // Verify caller owns this project.
+    const projectIdsForUser = await callerProjectIds(c, db, userId);
+    if (!projectIdsForUser.includes(projectId)) {
+      return c.json({ ok: false, error: 'Not found' }, 404);
+    }
+
+    const { error } = await db
+      .from('billing_subscriptions')
+      .update({ monthly_spend_cap_usd_override: capRaw ?? null })
+      .eq('project_id', projectId);
+
+    if (error) {
+      return c.json({ ok: false, error: error.message }, 500);
+    }
+
+    // Detect silent no-op: if no subscription row exists (free-tier project),
+    // the UPDATE touches 0 rows. Return a clear error instead of silently
+    // claiming success while the override never persisted.
+    const { count } = await db
+      .from('billing_subscriptions')
+      .select('project_id', { count: 'exact', head: true })
+      .eq('project_id', projectId);
+
+    if ((count ?? 0) === 0) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NO_SUBSCRIPTION',
+            message:
+              'This project has no paid subscription. The spend cap applies to metered ' +
+              'billing on paid plans (Indie / Pro). Upgrade first, then set a cap.',
+          },
+        },
+        409,
+      );
+    }
+
+    return c.json({ ok: true, spend_cap_usd: capRaw ?? null });
+  });
+
+  // =================================================================================
+  // PUT /v1/admin/billing/alert-email
+  // Override the email address that receives 50% / 80% / 100% diagnosis alerts.
+  // Accepts JWT and API keys with mcp:write scope.
+  // =================================================================================
+  app.put('/v1/admin/billing/alert-email', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const body = await c.req.json().catch(() => null);
+
+    if (!body || typeof body !== 'object') {
+      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+    }
+    const projectId = (body as Record<string, unknown>).project_id;
+    const emailRaw = (body as Record<string, unknown>).alert_email;
+
+    if (typeof projectId !== 'string') {
+      return c.json({ ok: false, error: 'project_id required' }, 400);
+    }
+    if (emailRaw !== null && typeof emailRaw !== 'string') {
+      return c.json({ ok: false, error: 'alert_email must be a string or null' }, 400);
+    }
+    const trimmed = typeof emailRaw === 'string' ? emailRaw.trim() : '';
+    if (trimmed.length > 320) {
+      return c.json({ ok: false, error: 'alert_email too long' }, 400);
+    }
+    if (trimmed.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return c.json({ ok: false, error: 'Invalid email address' }, 400);
+    }
+
+    const projectIdsForUser = await callerProjectIds(c, db, userId);
+    if (!projectIdsForUser.includes(projectId)) {
+      return c.json({ ok: false, error: 'Not found' }, 404);
+    }
+
+    const { error } = await db
+      .from('project_settings')
+      .upsert(
+        { project_id: projectId, alert_email: trimmed.length > 0 ? trimmed : null },
+        { onConflict: 'project_id' },
+      );
+
+    if (error) {
+      return c.json({ ok: false, error: error.message }, 500);
+    }
+
+    return c.json({ ok: true, alert_email: trimmed.length > 0 ? trimmed : null });
   });
 
 }

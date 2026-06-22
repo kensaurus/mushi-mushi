@@ -127,26 +127,32 @@ titles under-perform by roughly 40% on dev.to (source: dev.to growth report).
   7. Example: paste the full report JSON for a single shake-to-report.
   8. CTA + star.
 
-## Post 6 — "Why I BSL'd the server and MIT'd the SDKs"
+## Post 6 — "Why I went AGPLv3 open-core (and MIT'd the SDKs)"
 
 - **Angle:** license philosophy. **Always** triggers HN discussion and brings
   a different (older, more senior) crowd.
 - **Publish:** dev.to + HN direct-submit. Do this one **after** you have real
   user traction, because the license debate benefits from "here's a real tool
   it applies to".
-- **Core show:** the actual decision tree, the 2029 Apache-2.0 conversion
-  date, who this is designed to exclude (managed-OSS providers), who it's
-  designed to include (everyone else).
+- **Core show:** the open-core decision — a genuinely open AGPLv3 core, a
+  commercial license for SaaS modifiers, a narrow source-available enterprise
+  edition as the only paid boundary, and the honest journey there (BSL →
+  AGPLv3 open-core + commercial).
 - **Outline:**
   1. Hook: "I didn't want a license lawyer to be the first thing between you
-     and a widget in your app. I also didn't want AWS to take my server
-     next quarter."
+     and a widget in your app — and I didn't want copyleft to scare off
+     self-hosters either."
   2. The MIT surface: everything a user installs.
-  3. The BSL 1.1 surface: the server + agents + verify.
-  4. The 4-year Apache-2.0 sunset (April 15, 2029).
-  5. Who can compete against me under BSL today: anyone. Under BSL *with* the
-     "competing service" clause: managed-hosted-Mushi-as-a-service is blocked.
-  6. What I got wrong (the initial draft had a 10-year conversion — too long).
+  3. The AGPLv3 surface: the server + agents + verify — copyleft; self-host
+     and fork freely, modified SaaS publishes changes or takes a commercial license.
+  4. The one commercial boundary: a small source-available enterprise edition
+     (`packages/server/ee/` — SSO/SCIM, audit export, region pinning) that a
+     solo builder never needs.
+  5. The model: Grafana / Supabase open-core. A genuinely open AGPL core earns
+     trust; a narrow paid boundary funds the maintainer.
+  6. What I got wrong on the way here (started at BSL "source-available", briefly
+     considered Apache, landed on AGPLv3 + commercial — and why the final stop is
+     the honest one).
   7. CTA + star.
 
 ## Post 7 — "A tiny cron job that keeps the whole pipeline honest"

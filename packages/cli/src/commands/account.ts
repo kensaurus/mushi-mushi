@@ -39,6 +39,7 @@ import {
   pollDeviceToken,
   startDeviceAuth,
 } from '../device-auth.js';
+import { printAuthBanner, printAuthApproved, printAuthFailed } from '../auth-ui.js';
 import type { WhoamiData, StatsData } from '../cli-types.js';
 
 export function registerAccountCommands(program: Command): void {
@@ -95,12 +96,18 @@ program
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
   .option('--project-id <id>', 'Project UUID — skip the project picker')
   .option('--no-browser', 'Print the verification URL instead of opening the browser')
+  .option(
+    '--upgrade-scope',
+    'Re-authenticate and mint a new key with both report:write and mcp:read scopes. ' +
+    'Use this to upgrade an existing ingest-only key so MCP and admin commands work.',
+  )
   .addHelpText('after', `
 Examples:
   mushi login                              # browser-guided (recommended)
   mushi login --api-key mushi_xxx         # non-interactive / CI
-  mushi login --api-key mushi_xxx --project-id <uuid>`)
-  .action(async (opts: { apiKey?: string; endpoint?: string; projectId?: string; browser?: boolean }) => {
+  mushi login --api-key mushi_xxx --project-id <uuid>
+  mushi login --upgrade-scope             # re-auth to get mcp:read added to your key`)
+  .action(async (opts: { apiKey?: string; endpoint?: string; projectId?: string; browser?: boolean; upgradeScope?: boolean }) => {
     const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('../endpoint.js')
     const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
     const consoleBase = await resolveConsoleUrl()
@@ -145,8 +152,16 @@ Examples:
 
     // ── Browser device-auth path (RFC 8628) ────────────────────────────────
     console.log('')
-    console.log('  Mushi login')
-    console.log('  ───────────')
+    if (opts.upgradeScope) {
+      console.log('  Mushi login — scope upgrade')
+      console.log('  ───────────────────────────')
+      console.log('  Re-authenticating to mint a new key with report:write + mcp:read scopes.')
+      console.log('  This lets the CLI admin commands and MCP server both work with a single key.')
+      console.log('')
+    } else {
+      console.log('  Mushi login')
+      console.log('  ───────────')
+    }
 
     // Step 1: start device-auth session (RFC 8628 — shared with the init wizard)
     let deviceData: Awaited<ReturnType<typeof startDeviceAuth>>
@@ -158,31 +173,29 @@ Examples:
       process.exit(1)
     }
 
-    // Step 2: show code and open browser
+    // Step 2: show anti-paste banner and open browser
     const verifyUrl = deviceData.verification_uri
-    console.log('')
-    console.log(`  Your confirmation code: ${deviceData.user_code}`)
-    console.log('')
     if (opts.browser !== false) {
-      console.log('  Opening the Mushi console in your browser…')
-      try { await openInBrowser(verifyUrl) } catch { /* best-effort */ }
+      try { await openInBrowser(verifyUrl) } catch { /* best-effort — URL is shown in banner */ }
     }
-    console.log(`  If the browser didn't open: ${verifyUrl}`)
-    console.log('')
-    console.log('  Waiting for you to approve in the browser…  (Ctrl+C to cancel)')
+    printAuthBanner(deviceData.user_code, verifyUrl)
 
     // Step 3: poll for CLI token (shared poll classifier; keep login's UX —
     // a dot per pending poll and a precise error message per terminal state).
     let cliToken: string | null = null
     const pollIntervalMs = (deviceData.interval ?? 5) * 1000
     const deadline = Date.now() + (deviceData.expires_in ?? 600) * 1000
-    // A transient poll error (network blip / 5xx) must not abort a sign-in the
-    // user is about to approve. Tolerate a few in a row, resetting on success.
+    // Poll immediately once, then sleep. A user who approves quickly shouldn't
+    // wait a full 5-second interval before the wizard resumes.
     const MAX_CONSECUTIVE_ERRORS = 5
     let consecutiveErrors = 0
+    let firstPoll = true
 
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, pollIntervalMs))
+      if (!firstPoll) {
+        await new Promise((r) => setTimeout(r, pollIntervalMs))
+      }
+      firstPoll = false
       const outcome = await pollDeviceToken(endpoint, deviceData.device_code)
       if (outcome.status === 'approved') {
         cliToken = outcome.cliToken
@@ -190,42 +203,32 @@ Examples:
       }
       if (outcome.status === 'pending') {
         consecutiveErrors = 0
-        process.stdout.write('.')
         continue
       }
       if (outcome.status === 'error') {
-        // Terminal 4xx (already claimed / invalid_grant) can't recover by polling
-        // again — bail immediately instead of spinning out the retry budget.
-        // Retryable errors increment first, then compare with `>=` (matching
-        // waitForCliToken) so the counter isn't off by one.
         if (outcome.retryable) {
           consecutiveErrors += 1
-          if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
-            process.stdout.write('·') // transient — keep waiting
-            continue
-          }
+          if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) continue
         }
-        console.log('')
-        process.stderr.write(`\nerror: ${outcome.message}\n`)
+        printAuthFailed('error', outcome.message)
         process.exit(1)
       }
-      console.log('')
       if (outcome.status === 'denied') {
-        process.stderr.write('\nerror: Login denied in the browser.\n')
-      } else if (outcome.status === 'expired') {
-        process.stderr.write('\nerror: Login code expired. Run mushi login again.\n')
+        printAuthFailed('denied')
+        process.exit(1)
       }
-      process.exit(1)
+      if (outcome.status === 'expired') {
+        printAuthFailed('timeout')
+        process.exit(1)
+      }
     }
 
     if (!cliToken) {
-      console.log('')
-      process.stderr.write('\nerror: Login timed out. Run mushi login again.\n')
+      printAuthFailed('timeout')
       process.exit(1)
     }
 
-    console.log('')
-    console.log('  ✓ Approved!')
+    printAuthApproved()
 
     // Step 4: list projects (CLI token auth)
     const projectsList = await listProjects(endpoint, cliToken)
@@ -305,12 +308,17 @@ Examples:
     console.log('')
     if (chosenProjectName) console.log(`  ✓ Project: ${chosenProjectName}`)
     if (apiKey) {
-      console.log(`  ✓ SDK key saved (${apiKey.slice(0, 12)}…)`)
+      console.log(`  ✓ Dual-scope key saved (${apiKey.slice(0, 12)}…)`)
+      console.log(`    Scopes: report:write · mcp:read — SDK + MCP + admin CLI all work with this key`)
     } else {
       console.log(`  ℹ  Get an SDK key at: ${apiKeyHint(consoleBase)}`)
     }
     console.log('')
-    console.log("  Run 'mushi init' to set up the SDK in this project.")
+    if (opts.upgradeScope) {
+      console.log("  Key upgraded! Re-run 'mushi setup' to update your .cursor/mcp.json, then restart Cursor.")
+    } else {
+      console.log("  Run 'mushi init' to set up the SDK in this project.")
+    }
   })
 
 // ─── whoami ──────────────────────────────────────────────────────────────────

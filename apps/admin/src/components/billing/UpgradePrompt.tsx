@@ -15,15 +15,17 @@
  *             `mushi:entitlement-blocked` event that apiFetch dispatches
  *             on a 402. Catches the case where the FE accidentally
  *             reached a gated mutation (e.g. from a stale cached UI
- *             that hasn't refreshed entitlements yet). Renders a
- *             one-shot toast + "View plans" link so the user is never
+ *             that hasn't refreshed entitlements yet). Dispatches a
+ *             warn toast via `ToastProvider` so the user is never
  *             dropped on a silent error.
  *
  *          Visual language is Mushi-Admin (amber/violet/sumi), not the
  *          editorial cloud surface — this is the operator console.
  */
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { BILLING_CTA_LINK_CLASS_MD } from '../../lib/tokens'
+import { useToast } from '../../lib/toast'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
 
 const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullets: string[] }> = {
@@ -162,7 +164,7 @@ export function UpgradePrompt({ flag, currentPlan, upgradeTo }: InlineProps) {
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <Link
           to="/billing"
-          className="inline-flex items-center gap-1.5 rounded-full bg-fg px-4 py-2 text-sm font-semibold text-bg shadow-sm hover:opacity-90 transition-opacity"
+          className={BILLING_CTA_LINK_CLASS_MD}
         >
           {upgradeTo
             ? `Upgrade to ${upgradeTo.display_name} — $${upgradeTo.monthly_price_usd}/mo`
@@ -187,69 +189,32 @@ interface BlockedDetail {
 }
 
 /**
- * Root-mounted toast host. Listens for `mushi:entitlement-blocked`
- * events emitted by `apiFetch` on a 402 and shows a single dismissible
- * banner. Self-dismisses after 12s so it can never wedge.
+ * Root-mounted listener. On `mushi:entitlement-blocked` (402 from apiFetch)
+ * pushes a warn toast with a "View plans" action — same stack as every
+ * other mutation feedback, no duplicate fixed panel in the corner.
  */
 export function UpgradePromptHost() {
-  const [blocked, setBlocked] = useState<BlockedDetail | null>(null)
-
-  const dismiss = useCallback(() => setBlocked(null), [])
+  const toast = useToast()
+  const navigate = useNavigate()
 
   useEffect(() => {
     function handler(ev: Event) {
       const detail = (ev as CustomEvent<BlockedDetail>).detail
       if (!detail?.flag) return
-      setBlocked(detail)
+      const copy = FEATURE_COPY[detail.flag]
+      toast.push({
+        tone: 'warn',
+        title: `${copy?.title ?? detail.flag} requires a plan upgrade`,
+        description: detail.upgradeTo
+          ? `${detail.upgradeTo.display_name} ($${detail.upgradeTo.monthly_price_usd}/mo) unlocks this.`
+          : 'Pick a plan that includes this feature.',
+        duration: 12_000,
+        action: { label: 'View plans', onClick: () => navigate('/billing') },
+      })
     }
     window.addEventListener('mushi:entitlement-blocked', handler)
     return () => window.removeEventListener('mushi:entitlement-blocked', handler)
-  }, [])
+  }, [toast, navigate])
 
-  useEffect(() => {
-    if (!blocked) return
-    const t = window.setTimeout(() => setBlocked(null), 12_000)
-    return () => window.clearTimeout(t)
-  }, [blocked])
-
-  if (!blocked) return null
-
-  const copy = FEATURE_COPY[blocked.flag]
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border border-brand/30 bg-surface p-4 shadow-lg"
-    >
-      <div className="flex items-start gap-3">
-        <span aria-hidden className="mt-1 inline-block h-2 w-2 rounded-full bg-brand" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-fg">
-            {copy?.title ?? blocked.flag} requires a plan upgrade
-          </p>
-          <p className="mt-1 text-xs text-fg-muted">
-            {blocked.upgradeTo
-              ? `${blocked.upgradeTo.display_name} ($${blocked.upgradeTo.monthly_price_usd}/mo) unlocks this.`
-              : 'Pick a plan that includes this feature.'}
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <Link
-              to="/billing"
-              onClick={dismiss}
-              className="rounded-full bg-fg px-3 py-1 text-xs font-semibold text-bg hover:opacity-90"
-            >
-              View plans
-            </Link>
-            <button
-              type="button"
-              onClick={dismiss}
-              className="rounded-sm border border-danger/40 bg-danger-muted/40 px-2 py-0.5 text-xs font-medium text-danger hover:bg-danger-muted hover:border-danger/50 motion-safe:transition-colors"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  return null
 }
