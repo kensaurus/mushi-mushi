@@ -11,6 +11,7 @@
     "build": "next build --webpack && pagefind --site out --output-subdir _pagefind",
     "start": "next start -p 3001",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "eslint .",
     "clean": "rm -rf .next .turbo"
   },
@@ -33,6 +34,7 @@
     "pagefind": "^1.5.2",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   }
 }

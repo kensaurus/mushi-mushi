@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_102 configuration knobs across 19 sections · last regenerated 2026-06-21._
+_104 configuration knobs across 19 sections · last regenerated 2026-06-22._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -23,7 +23,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Anti-gaming](#anti-gaming) (3)
 - [Notifications](#notifications) (2)
 - [Intelligence](#intelligence) (1)
-- [Billing](#billing) (4)
+- [Billing](#billing) (6)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
 - [SDK install card](#sdk-install-card) (13)
@@ -1332,6 +1332,38 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `subscriptions.plan_id` · endpoint `(via Stripe webhook → /v1/billing/webhook)` · read by `feature-gate middleware`, `usage caps`
 
 **When to change** — Upgrade when you're consistently hitting the cap on the dashboard. Downgrade only after one full month under the next-tier-down's cap.
+
+### Monthly spend cap
+
+<a id="billing-spend-cap"></a>
+
+`billing.spend_cap`
+
+**Summary** — Hard USD ceiling on overage charges. When projected spend hits the cap, new diagnoses pause gracefully — no surprise invoice.
+
+**How it works** — Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Indie $50, Pro $200). Clear the field to revert to the plan default.
+
+**Default** — `plan default`
+
+**Where it lives** — table `billing_subscriptions.monthly_spend_cap_usd_override` · endpoint `PUT /v1/admin/billing/spend-cap` · read by `classify-report quota gate`, `usage-alerts email copy`
+
+**When to change** — Set before a launch or marketing spike. Lower the cap if you want a hard stop; raise it only when you have budget headroom.
+
+### Usage alert email
+
+<a id="billing-alert-email"></a>
+
+`billing.alert_email`
+
+**Summary** — Inbox that receives 50%, 80%, and 100% diagnosis quota alerts for this project.
+
+**How it works** — Stored on project_settings.alert_email. The usage-alerts cron sends at most one email per threshold per billing month. Leave blank to use the project owner email.
+
+**Default** — `project owner email`
+
+**Where it lives** — table `project_settings.alert_email` · endpoint `PUT /v1/admin/billing/alert-email` · read by `usage-alerts edge function`
+
+**When to change** — Point at a shared ops inbox (e.g. billing@yourco.com) when the owner email is a personal Gmail.
 
 ### Support subject
 

@@ -137,3 +137,28 @@ export function mcpToolsDetail(input: ConnectSnapshotStats): string {
   const { mcpStats: stats } = input
   return `${stats.resourceCount} resources · ${stats.promptCount} prompts`
 }
+
+export function mcpEndpointDetail(input: ConnectSnapshotStats): string {
+  const { mcpStats: stats } = input
+  if (stats.endpointMismatch && stats.lastSeenEndpointHost) {
+    return `IDE → ${stats.lastSeenEndpointHost}`
+  }
+  if (stats.expectedEndpointHost) return stats.expectedEndpointHost
+  return '—'
+}
+
+export function mcpEndpointTooltip(input: ConnectSnapshotStats): MetricTooltipData {
+  const { mcpStats: stats } = input
+  return metricTip(
+    'Host your MCP client last connected from vs what this console expects.',
+    'From GET /v1/admin/mcp/stats — lastSeenEndpointHost vs expectedEndpointHost.',
+    stats.endpointMismatch
+      ? `Mismatch: IDE uses ${stats.lastSeenEndpointHost}; admin expects ${stats.expectedEndpointHost}. Update MCP snippet endpoint.`
+      : stats.lastSeenEndpointHost
+        ? `Last MCP handshake from ${stats.lastSeenEndpointHost}.`
+        : 'No MCP IDE handshake recorded yet.',
+    stats.endpointMismatch
+      ? { tone: 'warn', text: 'Fix endpoint in MCP setup before debugging tool errors.' }
+      : undefined,
+  )
+}

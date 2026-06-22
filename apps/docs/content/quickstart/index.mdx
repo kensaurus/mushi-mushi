@@ -2,9 +2,9 @@
 
 **Start here if you vibe-code:** the [incident loop](/quickstart/incident-loop) gets you from broken prod to a paste-ready fix prompt in Cursor — usually under a few minutes.
 
-Or run the wizard: `npx mushi-mushi` (detects your framework, writes env vars, optional test report).
+Or run the wizard: `npx mushi-mushi` (detects your framework, signs in via browser, writes env vars, optional test report).
 
-import { Cards } from 'nextra/components'
+import { Cards, Callout } from 'nextra/components'
 
 ## MCP-first (recommended)
 
@@ -33,35 +33,69 @@ import { Cards } from 'nextra/components'
   <Cards.Card title="Capacitor" href="/quickstart/capacitor" arrow />
 </Cards>
 
-## Where do I get my Project ID and API key?
+## How do I install the SDK?
 
 **Option A — zero copy-paste (recommended):**
 
 ```bash
-npx mushi-mushi login   # or: mushi login
+npx mushi-mushi
 ```
 
-The wizard opens your browser, you click **Approve**, then picks or creates a project
-and saves the key automatically. Run `mushi init` afterwards to wire the SDK.
+The wizard opens your browser, you click **Approve**, picks or creates a project,
+installs the SDK, and writes `.env.local` — all automatically.
 
-**Option B — console:**
+<Callout type="info">
+  **One key, all surfaces.** The wizard now mints a single API key with
+  `report:write + mcp:read` scopes. This means the same key works for the SDK
+  (sending reports), the CLI admin commands (`mushi doctor`, `mushi billing`, etc.),
+  and the MCP server in Cursor — no second key needed.
+</Callout>
 
-Open the [admin console](https://kensaur.us/mushi-mushi/admin) → **Projects** → **New project**.
-After creation, the success screen shows both the **Project ID** (UUID) and the **API key**
-together with a pre-filled `mushi init` command. The key is shown **once** — copy it now.
+<Callout type="info">
+  If your terminal shows a verification code like `TGKX-PBXP`, **approve it in the
+  browser tab that opens — do not type or paste the code into your terminal.**
+  The terminal waits for your browser approval automatically.
+</Callout>
+
+**After the wizard — wire MCP (30 seconds):**
+
+```bash
+mushi setup             # writes .cursor/mcp.json with your key
+mushi setup --verify    # confirms the key has mcp:read scope + probes the server
+mushi doctor --full     # runs all checks — should be 100% green
+```
+
+**Option B — console first, then CLI:**
+
+Open the [admin console](https://kensaur.us/mushi-mushi/admin) → **Connect & Update**
+→ create a project → generate an API key (`report:write + mcp:read` scope), then:
+
+```bash
+mushi init --project-id <uuid> --api-key mushi_xxx
+```
 
 **Option C — CI / non-interactive:**
 
 ```bash
-mushi login --api-key mushi_xxx --project-id 00000000-0000-0000-0000-000000000000
+npx mushi-mushi --yes --project-id <uuid> --api-key mushi_xxx
 ```
-
-The values you need:
 
 | Value | Where to find it |
 |---|---|
-| `projectId` | UUID on the Projects page — `kensaur.us/mushi-mushi/admin/projects` |
-| `apiKey` | Shown once at project creation, or **Projects → Keys → Create key** (scope: `report:write`) |
+| `projectId` | UUID on [Connect & Update](https://kensaur.us/mushi-mushi/admin/connect) → project switcher |
+| `apiKey` | **Connect → API Keys** → Generate key (ensure `mcp:read` scope is checked) |
+
+<Callout type="warning">
+  **Existing key without `mcp:read`?** Pre-Jun 2026 keys only have `report:write` scope.
+  If `mushi doctor` shows MCP errors or `mushi billing` returns a 403, upgrade your key:
+
+  ```bash
+  mushi login --upgrade-scope
+  mushi setup --verify
+  ```
+
+  This re-authenticates via browser and mints a new dual-scope key automatically.
+</Callout>
 
 <Cards>
   <Cards.Card title="CLI ↔ console loop" href="/quickstart/cli-console-loop" arrow />

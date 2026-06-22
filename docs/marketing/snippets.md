@@ -135,15 +135,16 @@ Stack: React 19 + Tailwind 4 + Vite 8 (admin), Supabase Edge Functions + Postgre
 fix verification. MCP JSON-RPC server so Cursor / Claude Code / Codex can read
 reports and dispatch fixes from inside the agent.
 
-SDKs under MIT, server under BSL 1.1 (→ Apache 2.0 in 2029). BYOK, BYO storage,
+SDKs under MIT, server under AGPLv3 (open-core — copyleft, commercial license for SaaS modifiers;
+a small enterprise edition is the only commercial boundary). BYOK, BYO storage,
 region-pinned (US / EU / JP), SOC 2 evidence pack on the hosted tier.
 
 Live demo with seeded bugs: https://kensaur.us/mushi-mushi/
 Quick start: `npx mushi-mushi`
 Repo: https://github.com/kensaurus/mushi-mushi
 
-Happy to answer anything and take the inevitable hate for picking BSL on the
-server. 🐛
+Happy to answer anything about the open-core split (AGPLv3 core,
+narrow commercial enterprise edition). 🐛
 ```
 
 ### Responding in comments
@@ -218,7 +219,7 @@ It catches the bugs your crash tracker can't — dead buttons, confusing flows,
 slow pages that never error. 2-stage LLM pipeline classifies and dedupes them.
 Optionally opens fix PRs on your GitHub via a sandboxed agent.
 
-MIT SDKs, BSL 1.1 server (→ Apache 2.0 in 2029). Sentry + Langfuse + GitHub
+MIT SDKs, AGPLv3 server (open-core). Sentry + Langfuse + GitHub
 integration health probe is on by default.
 
 Repo: github.com/kensaurus/mushi-mushi
@@ -228,15 +229,17 @@ Anyone else running something like this self-hosted? Curious how you handle
 LLM cost over volume.
 ```
 
-### r/opensource — "the BSL 1.1 rationale"
+### r/opensource — "the open-core rationale"
 
 ```
-Title: I MIT'd the SDKs and BSL'd the server — here's why
+Title: I MIT'd the SDKs and AGPLv3'd the server (open-core) — here's why
 
 TL;DR: people shouldn't need a license lawyer to embed my widget in their app,
-but I also don't want AWS to turn my classification pipeline into a managed
-product next quarter. MIT on everything a user installs, BSL 1.1 with a 4-year
-Apache-2.0 conversion on the server. Happy to get told I'm wrong.
+and self-hosters shouldn't fear copyleft or a future bait-and-switch. So it's
+MIT on everything a user installs, AGPLv3 (copyleft; commercial license available) on the
+server — fork it and ship products on it. The only commercial boundary is a small
+source-available enterprise edition (SSO/SCIM, audit export, region pinning) that
+a solo builder never needs. The Langfuse / Supabase model. Happy to get told I'm wrong.
 
 The tool: github.com/kensaurus/mushi-mushi — user-felt bug reports (the ones
 Sentry can't see) with an LLM classifier and optional auto-fix PRs.
@@ -360,7 +363,7 @@ So: Mushi Mushi (虫虫). A 14 KB shake-to-report SDK, a 2-stage LLM pipeline
 an optional agentic auto-fix that opens draft GitHub PRs for review. Designed
 as a companion to Sentry, not a replacement.
 
-OSS, MIT on the SDKs, BSL 1.1 on the server (converts to Apache 2.0 in 2029).
+OSS, MIT on the SDKs, AGPLv3 on the server (open-core, with a small commercial enterprise edition).
 Live demo with seeded bugs — no signup, one click:
 
 https://kensaur.us/mushi-mushi
@@ -450,7 +453,7 @@ Capacitor, or vanilla JS). Users shake to report. A 2-stage LLM pipeline
 classifies, dedupes, and — if you opt in — opens a draft fix PR on your
 GitHub repo.
 
-• MIT-licensed SDKs, BSL 1.1 server (→ Apache 2.0 in 2029)
+• MIT-licensed SDKs, AGPLv3 server (open-core)
 • Self-host with one docker-compose, or use the hosted tier
 • Works alongside Sentry, Datadog, New Relic (not a replacement)
 • MCP server so Cursor / Claude Code / Codex can triage from the agent

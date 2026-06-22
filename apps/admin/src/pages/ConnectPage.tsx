@@ -26,10 +26,13 @@ import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
 import { buildMushiConnectCommand, buildMushiInitCommand } from '../lib/cliSetupCommands'
-import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
+import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
 import { ConnectHubGuide } from '../components/connect/ConnectHubGuide'
+import { ConnectActivationStrip } from '../components/connect/ConnectActivationStrip'
+import type { ConnectLaneContext } from '../lib/connectLaneMetadata'
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
+import { ConnectProvenanceBand } from '../components/connect/ConnectProvenanceBand'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { useConnectUx } from '../lib/connectModeUx'
@@ -39,6 +42,8 @@ import { SdkVersionBadge } from '../components/SdkVersionBadge'
 import { useSdkUpgrade, type BumpEntry } from '../lib/useSdkUpgrade'
 import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
 import { usePublishPageContext } from '../lib/pageContext'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { nextRequiredSetupStep } from '../lib/setupProgress'
 import {
   IconGit,
   IconCheck,
@@ -50,7 +55,6 @@ import {
   IconArrowRight,
   IconMcp,
   IconIntegrations,
-  IconInfo,
 } from '../components/icons'
 import { CodeInline } from '../components/CodePanel'
 import type { SdkStatus } from '../components/SdkVersionBadge'
@@ -87,94 +91,14 @@ interface ProjectsPayload {
   projects: ProjectRow[]
 }
 
-// ---------------------------------------------------------------------------
-// Connection status strip — compact one-line verdict + primary CTA
-// ---------------------------------------------------------------------------
-interface ConnectStatusStripProps {
-  projectSelected: boolean
-  githubConnected: boolean
-  sdkConnected: boolean
-  mcpConnected?: boolean
-}
-
-function ConnectStatusStrip({ projectSelected, githubConnected, sdkConnected, mcpConnected }: ConnectStatusStripProps) {
-  const steps = [
-    { done: githubConnected, label: 'GitHub', href: '/integrations/config' },
-    { done: sdkConnected,    label: 'SDK',    href: '#sdk-install' },
-    { done: mcpConnected,    label: 'MCP',    href: '#mcp-install' },
-  ]
-  const doneCount = steps.filter((s) => s.done).length
-  const allDone = doneCount === steps.length
-
-  if (!projectSelected) {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-edge-subtle bg-surface-raised/50 px-3 py-2 text-xs text-fg-muted">
-        <IconInfo className="h-3.5 w-3.5 shrink-0 text-fg-faint" aria-hidden />
-        Select a project above to see connection status and next steps.
-      </div>
-    )
-  }
-
-  if (allDone) {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-ok/30 bg-ok-muted/50 px-3 py-2 text-xs">
-        <IconCheck className="h-3.5 w-3.5 shrink-0 text-ok" aria-hidden />
-        <span className="font-medium text-ok">All connected</span>
-        <span className="text-fg-muted">— GitHub linked · SDK reporting · MCP in Cursor</span>
-      </div>
-    )
-  }
-
-  const firstIncomplete = steps.find((s) => !s.done)
-  const nextStepLabel = firstIncomplete?.label ?? 'Next step'
-  const nextStepHref = firstIncomplete?.href ?? '#'
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-brand/25 bg-brand-subtle/40 px-3 py-2 text-xs">
-      <span className="font-medium text-brand">
-        Step {doneCount + 1} of {steps.length}: {nextStepLabel}
-      </span>
-      <span className="text-fg-muted">
-        {doneCount === 0
-          ? 'Connect GitHub first — it unlocks SDK upgrade PRs and codebase indexing.'
-          : doneCount === 1
-            ? 'GitHub connected — drop the SDK into your app to start capturing reports.'
-            : 'SDK live — add MCP to Cursor or Claude for IDE-based triage and fix dispatch.'}
-      </span>
-      <div className="ml-auto flex items-center gap-3">
-        {/* Mini stepper pill */}
-        <span className="flex items-center gap-1">
-          {steps.map((s, i) => (
-            <span
-              key={s.label}
-              className={`flex items-center gap-px ${i > 0 ? 'ml-1' : ''}`}
-              aria-label={`${s.label}: ${s.done ? 'done' : 'pending'}`}
-            >
-              {i > 0 && <IconArrowRight className="h-2.5 w-2.5 text-fg-faint" aria-hidden />}
-              <span
-                className={`rounded-full px-1.5 py-px font-medium ${
-                  s.done
-                    ? 'bg-ok/20 text-ok'
-                    : i === doneCount
-                      ? 'bg-brand/20 text-brand'
-                      : 'bg-surface-overlay text-fg-faint'
-                }`}
-              >
-                {s.label}
-              </span>
-            </span>
-          ))}
-        </span>
-        <a
-          href={nextStepHref}
-          className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand hover:bg-brand/20 transition-colors focus-visible:ring-2 focus-visible:ring-focus"
-        >
-          Go to {nextStepLabel}
-          <IconArrowRight className="h-3 w-3" aria-hidden />
-        </a>
-      </div>
-    </div>
-  )
+function formatConnectRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  if (ms < 60_000) return 'just now'
+  const mins = Math.floor(ms / 60_000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 48) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +428,7 @@ function GithubConnectionCard({
           {loading ? (
             <p className="text-xs text-fg-muted" aria-busy="true">Checking connection…</p>
           ) : hasGithub && repoUrl ? (
-            <p className="text-xs text-fg-muted truncate font-mono">{repoUrl}</p>
+            <p className="text-xs text-fg-muted font-mono break-all">{repoUrl}</p>
           ) : (
             <p className="text-xs text-fg-muted">
               {githubCheck?.hint ??
@@ -631,6 +555,11 @@ export function ConnectPage() {
     project?.api_keys?.some((k) => k.is_active && k.last_seen_at),
   )
   const mcpUx = resolveMcpConnectUx(mcpStats)
+  const setupStatus = useSetupStatus(activeProjectId)
+  const nextSetupStep = nextRequiredSetupStep(
+    setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
+  )
+  const requiredSetupDone = setupStatus.selectors.done
 
   const CLI_INSTALL = 'npm install -g @mushi-mushi/cli@latest'
   // Prefill the active project's id (a non-secret UUID) so the dev only has to
@@ -640,8 +569,86 @@ export function ConnectPage() {
     ? buildMushiConnectCommand(project.id, RESOLVED_EXTERNAL_API_URL)
     : `MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint ${RESOLVED_EXTERNAL_API_URL} --write-env --wire-ide --wait`
 
+  const sdkInstalled = Boolean(
+    setupStatus.activeProject?.steps.find((s) => s.id === 'sdk_installed')?.complete,
+  )
+  const apiKeyActive = Boolean(project?.api_keys?.some((k) => k.is_active))
+  const firstReportReceived = Boolean(
+    setupStatus.activeProject?.steps.find((s) => s.id === 'first_report_received')?.complete,
+  )
+  const activationSteps = [
+    {
+      done: Boolean(project),
+      label: 'Project',
+      href: '/projects',
+      hint: 'Create a project to get a project ID and API key.',
+    },
+    {
+      done: sdkInstalled,
+      label: 'SDK',
+      href: '#sdk-install',
+      hint: 'Install the SDK in your app — copy the snippet below.',
+    },
+    {
+      done: apiKeyActive,
+      label: 'API key',
+      href: '#sdk-install',
+      hint: 'An active API key is required for the SDK and MCP.',
+    },
+    {
+      done: mcpUx.ideConnected,
+      label: 'MCP',
+      href: '#mcp-install',
+      hint: 'Add MCP to Cursor or Claude — takes 30 seconds via deeplink.',
+    },
+    {
+      done: firstReportReceived,
+      label: 'First report',
+      href: '/reports',
+      hint: 'Trigger a test report from your app to confirm the pipeline is live.',
+    },
+  ]
+  const laneFlags: ConnectLaneContext = {
+    githubConnected,
+    githubRepoUrl,
+    sdkConnected,
+    sdkVersion: project?.sdk_version ?? null,
+    sdkLatestVersion: project?.sdk_latest_version ?? null,
+    sdkStatus: project?.sdk_status ?? null,
+    sdkLastSeenAt:
+      project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null,
+    mcpStats,
+    mcpConnected: mcpUx.ideConnected,
+    nativeCiNeedsAttention: Boolean(project && isExpoReporterNeverConnected(project)),
+    upgradeComplete: Boolean(
+      project &&
+        project.sdk_status === 'up-to-date' &&
+        !(project.sdk_version && project.sdk_latest_version && project.sdk_version !== project.sdk_latest_version),
+    ),
+  }
+
   return (
     <div className="space-y-6">
+      {/* Gating banner — required setup steps must be done first */}
+      {!requiredSetupDone && nextSetupStep && (
+        <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/8 px-4 py-3">
+          <span className="mt-0.5 text-warning" aria-hidden="true">⚠</span>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-fg">Finish setup first</p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
+              wiring integrations here.
+            </p>
+          </div>
+          <Link
+            to={nextSetupStep.cta_to}
+            className="shrink-0 rounded-lg border border-warning/40 bg-surface px-3 py-1.5 text-xs font-medium text-fg hover:bg-surface-raised transition-colors"
+          >
+            {nextSetupStep.cta_label} →
+          </Link>
+        </div>
+      )}
+
       <PageHeaderBar
         title={copy?.title ?? 'Connect & Update'}
         description={
@@ -667,15 +674,15 @@ export function ConnectPage() {
       />
 
       <PagePosture
+        maxRows={3}
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
             children: (
-              <ConnectStatusStrip
+              <ConnectActivationStrip
                 projectSelected={Boolean(project)}
-                githubConnected={githubConnected}
-                sdkConnected={sdkConnected}
-                mcpConnected={mcpUx.ideConnected}
+                activationSteps={activationSteps}
+                laneFlags={laneFlags}
               />
             ),
           },
@@ -709,20 +716,52 @@ export function ConnectPage() {
             children: (
               <ConnectHubGuide
                 githubConnected={githubConnected}
+                githubRepoUrl={githubRepoUrl}
                 sdkConnected={sdkConnected}
-                nativeCiNeedsAttention={Boolean(project && isExpoReporterNeverConnected(project))}
-                upgradeComplete={
-                  Boolean(
-                    project &&
-                      (project.sdk_status === 'up-to-date' ||
-                        (!project.sdk_status && sdkConnected)),
-                  )
+                sdkVersion={project?.sdk_version ?? null}
+                sdkLatestVersion={project?.sdk_latest_version ?? null}
+                sdkStatus={project?.sdk_status ?? null}
+                sdkLastSeenAt={
+                  project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
                 }
+                mcpStats={mcpStats}
+                mcpConnected={mcpUx.ideConnected}
+                nativeCiNeedsAttention={laneFlags.nativeCiNeedsAttention}
+                upgradeComplete={laneFlags.upgradeComplete}
               />
             ),
           },
         ]}
       />
+
+      {project ? (
+        <ConnectProvenanceBand
+          mcpStats={mcpStats}
+          sdkLastSeenAt={
+            project.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
+          }
+          sdkConnected={sdkConnected}
+          projectId={project.id}
+          statsFetchedAt={mcpStatsFetchedAt}
+          statsValidating={mcpStatsValidating}
+        />
+      ) : null}
+
+      {mcpStats.endpointMismatch && mcpStats.topPriorityLabel ? (
+        <HelpBanner
+          tone="warn"
+          title="MCP endpoint mismatch"
+          icon={<IconAlertTriangle className="h-4 w-4 text-warning-foreground" />}
+          className="mb-3"
+        >
+          <p className="text-xs leading-relaxed">{mcpStats.topPriorityLabel}</p>
+          {mcpStats.topPriorityTo ? (
+            <Link to={mcpStats.topPriorityTo} className="mt-2 inline-block text-xs text-brand underline">
+              Open MCP setup →
+            </Link>
+          ) : null}
+        </HelpBanner>
+      ) : null}
 
       {!sdkConnected && !feedError ? (
         <CliSetupGuide projectId={project?.id ?? activeProjectId} />
@@ -807,23 +846,34 @@ export function ConnectPage() {
       </Section>
 
       {/* ---------------------------------------------------------------- */}
-      {/* 2b. Native CI secrets diagnostic                                   */}
+      {/* 2b. Native CI secrets diagnostic (only for native SDK projects)  */}
       {/* ---------------------------------------------------------------- */}
-      <Section title="Native app CI secrets">
-        <SectionDescription>
-          For Capacitor, Expo, and React Native builds, Mushi env vars must be baked in at
-          compile time — they cannot be injected at runtime. This panel detects missing CI secrets
-          and can write them to GitHub Actions automatically.
-        </SectionDescription>
-        {project ? (
-          <SdkNativeConnectivityCard
-            projectId={project.id}
-            projectSlug={project.slug}
-          />
-        ) : (
-          <ProjectFallbackNote card pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
-        )}
-      </Section>
+      {/* Render only when the project is using a native SDK package.      */}
+      {/* Web-only projects (the majority) don't need CI secret wiring.    */}
+      {(() => {
+        const nativePkgs = ['@mushi-mushi/react-native', '@mushi-mushi/capacitor']
+        const isNativeProject = Boolean(
+          project?.sdk_package && nativePkgs.some((p) => project.sdk_package?.includes(p)),
+        )
+        if (!isNativeProject && project) return null
+        return (
+          <Section title="Native app CI secrets">
+            <SectionDescription>
+              For Capacitor, Expo, and React Native builds, Mushi env vars must be baked in at
+              compile time — they cannot be injected at runtime. This panel detects missing CI
+              secrets and can write them to GitHub Actions automatically.
+            </SectionDescription>
+            {project ? (
+              <SdkNativeConnectivityCard
+                projectId={project.id}
+                projectSlug={project.slug}
+              />
+            ) : (
+              <ProjectFallbackNote card pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
+            )}
+          </Section>
+        )
+      })()}
 
       </div>
 
@@ -848,6 +898,30 @@ export function ConnectPage() {
                 </p>
               </div>
             </div>
+            <div className="rounded-md border border-edge-subtle bg-surface-raised/50 px-3 py-2">
+              <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">MCP server endpoint</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg-secondary">
+                  {RESOLVED_MCP_HTTP_URL}
+                </code>
+                <CopyButton
+                  value={RESOLVED_MCP_HTTP_URL}
+                  label="Copy MCP endpoint"
+                  copiedLabel="Copied"
+                  size="sm"
+                />
+              </div>
+              <p className="mt-1 text-3xs text-fg-muted">
+                {mcpStats.connectedKeyCount > 0
+                  ? `${mcpStats.connectedKeyCount} IDE key(s) connected`
+                  : mcpStats.mcpReadKeyCount > 0
+                    ? `${mcpStats.neverConnectedCount} unused MCP key(s) — add to IDE below`
+                    : 'Mint mcp:read on Projects, then use the buttons below'}
+                {mcpStats.lastSeenAt
+                  ? ` · last handshake ${formatConnectRelative(mcpStats.lastSeenAt)}`
+                  : ''}
+              </p>
+            </div>
             {project ? (
               <McpInstallButtons projectId={project.id} projectName={project.name} />
             ) : (
@@ -855,7 +929,7 @@ export function ConnectPage() {
             )}
             <p className="text-xs text-fg-muted">
               Prefer a manual snippet?{' '}
-              <Link to="/mcp?tab=setup" className="underline focus-visible:ring-2 focus-visible:ring-focus">
+              <Link to="/connect?section=mcp" className="underline focus-visible:ring-2 focus-visible:ring-focus">
                 Open MCP setup
               </Link>
             </p>
@@ -885,8 +959,8 @@ export function ConnectPage() {
                 </div>
                 <div>
                   <p className="text-xs text-fg-muted mb-1">Connect SDK + MCP (recommended):</p>
-                  <div className="flex items-center gap-2">
-                    <CodeInline className="text-xs flex-1 min-w-0 truncate">{CLI_CONNECT}</CodeInline>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CodeInline className="text-xs flex-1 min-w-0 break-all whitespace-normal">{CLI_CONNECT}</CodeInline>
                     <CopyButton value={CLI_CONNECT} label="Copy connect command" copiedLabel="Copied" size="sm" />
                   </div>
                   <p className="mt-1 text-2xs text-fg-faint">

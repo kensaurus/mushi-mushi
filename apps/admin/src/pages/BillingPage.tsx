@@ -17,7 +17,7 @@
  *          Stripe-hosted URLs we redirect to.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -25,17 +25,6 @@ import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
 import { formatLlmCost } from '../lib/format'
-import {
-  fixesPeriodDetail,
-  fixesPeriodTooltip,
-  llmCogsDetail,
-  llmCogsTooltip,
-  planDetail,
-  planTooltip,
-  reportsPeriodDetail,
-  reportsPeriodTooltip,
-} from '../lib/statTooltips/billing'
-import { billingLinks } from '../lib/statCardLinks'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
@@ -44,14 +33,17 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
+import { BillingSnapshotStrip } from '../components/billing/BillingSnapshotStrip'
 import { BillingSeatFaqCallout } from '../components/billing/BillingSeatFaqCallout'
 import { useActivePlan } from '../lib/useActivePlan'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { EMPTY_MEMBERS_STATS, type MembersStats } from '../components/members/types'
+import { BillingPlanReadout } from '../components/billing/BillingPlanReadout'
 import { EMPTY_BILLING_STATS, type BillingStats, type BillingTabId } from '../components/billing/types'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
-import { SnapshotSectionHint,
+import {
   Card,
   Btn,
   Badge,
@@ -63,9 +55,8 @@ import { SnapshotSectionHint,
   SelectField,
   Sparkline,
   DetailRows,
-  Section,
-  StatCard,
-  SegmentedControl, } from '../components/ui'
+  SegmentedControl,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -78,6 +69,13 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PlanComparisonTable } from '../components/billing/PlanComparisonTable'
 import { PlanBenefitsList } from '../components/billing/PlanBenefitsList'
+import { BillingPredictabilityControls } from '../components/billing/BillingPredictabilityControls'
+import {
+  buildUsageForecast,
+  daysUntilPeriodReset,
+  formatPeriodResetLabel,
+  type PeriodCostInputs,
+} from '../lib/billingUsageForecast'
 import { Modal } from '../components/Modal'
 
 interface PlanCatalog {
@@ -102,6 +100,9 @@ interface ProjectTier {
   monthly_price_usd: number
   included_reports_per_month: number | null
   overage_unit_amount_decimal: number | null
+  included_diagnoses_per_month?: number | null
+  overage_unit_amount_decimal_diagnoses?: number | null
+  monthly_spend_cap_usd?: number | null
   retention_days: number
   feature_flags: Record<string, unknown>
 }
@@ -149,6 +150,13 @@ interface BillingProject {
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
+  /** Phase 2 diagnoses metering — null for legacy plans without the new columns. */
+  diagnoses_used?: number | null
+  limit_diagnoses?: number | null
+  diagnoses_usage_pct?: number | null
+  over_diagnosis_quota?: boolean
+  spend_cap_usd?: number | null
+  alert_email?: string | null
   /**
    * Last 30 daily buckets of `reports_ingested` for this project, oldest →
    * newest. Always exactly 30 entries — days with no events come back as
@@ -323,7 +331,7 @@ export function BillingPage() {
   // Project ID whose plan picker is open. null = no picker open.
   const [pickerFor, setPickerFor] = useState<string | null>(null)
 
-  const startCheckout = useCallback(async (projectId: string, planId: string) => {
+  const startCheckout = useCallback(async (projectId: string, planId: string, billingInterval: 'monthly' | 'annual' = 'monthly') => {
     if (!user?.email) {
       toast.error('Email required', 'Sign in with an email-backed account before subscribing.')
       return
@@ -331,7 +339,7 @@ export function BillingPage() {
     setActioning(`checkout:${projectId}`)
     const res = await apiFetch<{ url: string }>('/v1/admin/billing/checkout', {
       method: 'POST',
-      body: JSON.stringify({ project_id: projectId, email: user.email, plan_id: planId }),
+      body: JSON.stringify({ project_id: projectId, email: user.email, plan_id: planId, billing_interval: billingInterval }),
     })
     setActioning(null)
     if (!res.ok || !res.data?.url) {
@@ -423,12 +431,35 @@ export function BillingPage() {
         )}
       </PageHeaderBar>
 
-      <BillingStatusBanner
-        stats={stats}
-        onManage={activeProject?.customer?.stripe_customer_id ? triggerManage : undefined}
-        onUpgrade={activeProject && activeProject.billing_mode !== 'complimentary' ? triggerUpgrade : undefined}
-        onTab={setActiveTab}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <BillingStatusBanner
+                stats={stats}
+                onManage={activeProject?.customer?.stripe_customer_id ? triggerManage : undefined}
+                onUpgrade={activeProject && activeProject.billing_mode !== 'complimentary' ? triggerUpgrade : undefined}
+                onTab={setActiveTab}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideBillingSnapshot,
+            children: (
+              <BillingSnapshotStrip
+                stats={stats}
+                fetchedAt={statsQuery.lastFetchedAt}
+                isValidating={statsQuery.isValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'Billing snapshot'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {(activeTab === 'overview' || activeTab === 'plans') && (
@@ -454,70 +485,45 @@ export function BillingPage() {
       />
       )}
 
-      {!ux.hideBillingSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'Billing snapshot'}
-        freshness={{ at: statsQuery.lastFetchedAt, isValidating: statsQuery.isValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label={copy?.statLabels?.plan ?? 'Plan'}
-            value={stats.planDisplayName}
-            accent={stats.isComplimentary ? 'text-brand' : stats.planId === 'hobby' ? undefined : 'text-ok'}
-            tooltip={planTooltip(stats)}
-            detail={planDetail(stats)}
-            to={billingLinks.plan}
-          />
-          <StatCard
-            label={copy?.statLabels?.reports ?? 'Reports · period'}
-            value={
-              stats.reportsLimit != null
-                ? `${stats.reportsUsed.toLocaleString()} / ${stats.reportsLimit.toLocaleString()}`
-                : stats.reportsUsed.toLocaleString()
-            }
-            accent={stats.overQuota ? 'text-danger' : stats.approachingQuota ? 'text-warn' : 'text-ok'}
-            tooltip={reportsPeriodTooltip(stats)}
-            detail={reportsPeriodDetail(stats)}
-            to={billingLinks.reportsPeriod}
-          />
-          <StatCard
-            label={copy?.statLabels?.fixes ?? 'Fixes · period'}
-            value={`${stats.fixesSucceeded}/${stats.fixesAttempted}`}
-            accent={stats.fixesAttempted > 0 ? 'text-info' : undefined}
-            tooltip={fixesPeriodTooltip(stats)}
-            detail={fixesPeriodDetail()}
-            to={billingLinks.fixesPeriod}
-          />
-          <StatCard
-            label={copy?.statLabels?.llmCogs ?? 'LLM COGS · month'}
-            value={stats.llmCostUsdMonth > 0 ? formatLlmCost(stats.llmCostUsdMonth) : '$0'}
-            accent={stats.llmCostUsdMonth > 0 ? 'text-brand' : undefined}
-            tooltip={llmCogsTooltip(stats)}
-            detail={llmCogsDetail(stats)}
-            to={billingLinks.llmCogs}
-          />
-        </div>
-      </Section>
-      )}
+      {activeTab === 'overview' && !ux.hideOverviewChrome ? (
+        <BillingPlanReadout
+          planName={stats.planDisplayName}
+          planSlug={stats.planId}
+          stripePortalUrl={null}
+          diagnosesUsed={
+            (stats as unknown as { diagnosesUsed?: number | null }).diagnosesUsed ?? null
+          }
+          diagnosesLimit={
+            (stats as unknown as { diagnosesLimit?: number | null }).diagnosesLimit ?? null
+          }
+          fetchedAt={statsQuery.lastFetchedAt}
+          isValidating={statsQuery.isValidating}
+        />
+      ) : null}
 
       {!ux.hideOverviewChrome &&
         (stats.overQuota ||
           stats.approachingQuota ||
+          (stats as unknown as { overDiagnosisQuota?: boolean }).overDiagnosisQuota ||
+          (stats as unknown as { approachingDiagnosisQuota?: boolean }).approachingDiagnosisQuota ||
           stats.pastDueProjects > 0 ||
           stats.unpaidProjects > 0 ||
           (stats.hasStripeCustomer && !stats.paymentOk) ||
           stats.cancelAtPeriodEnd) && (
         <Card
           className={`space-y-3 p-4 ${
-            stats.overQuota || stats.pastDueProjects > 0 || stats.unpaidProjects > 0 || !stats.paymentOk
-              ? 'border-danger/30 bg-danger/5'
-              : 'border-warn/30 bg-warn/5'
+            stats.overQuota ||
+            (stats as unknown as { overDiagnosisQuota?: boolean }).overDiagnosisQuota ||
+            stats.pastDueProjects > 0 || stats.unpaidProjects > 0 || !stats.paymentOk
+              ? 'border-danger/40 bg-surface-raised'
+              : 'border-warn/40 bg-surface-raised'
           }`}
         >
           <SignalChip
             tone={
-              stats.overQuota || stats.pastDueProjects > 0 || stats.unpaidProjects > 0
+              stats.overQuota ||
+              (stats as unknown as { overDiagnosisQuota?: boolean }).overDiagnosisQuota ||
+              stats.pastDueProjects > 0 || stats.unpaidProjects > 0
                 ? 'danger'
                 : 'warn'
             }
@@ -526,17 +532,24 @@ export function BillingPage() {
           </SignalChip>
           <ContainedBlock tone="warn">
             <p className="text-xs font-medium leading-snug text-fg">
-              {stats.overQuota
-                ? `Over quota — ${stats.reportsUsed.toLocaleString()} reports this period${stats.reportsLimit != null ? ` (limit ${stats.reportsLimit.toLocaleString()})` : ''}.`
-                : stats.pastDueProjects > 0
-                  ? `${stats.pastDueProjects} project${stats.pastDueProjects === 1 ? '' : 's'} past due — update payment method.`
-                  : stats.unpaidProjects > 0
-                    ? `${stats.unpaidProjects} unpaid invoice${stats.unpaidProjects === 1 ? '' : 's'} need settlement.`
-                    : stats.approachingQuota
-                      ? `Approaching quota — ${stats.usagePct ?? 0}% of monthly reports used.`
-                      : stats.cancelAtPeriodEnd
-                        ? 'Subscription cancels at period end — renew to keep Pro features.'
-                        : 'Payment method needs attention — open the billing portal.'}
+              {(stats as unknown as { overDiagnosisQuota?: boolean }).overDiagnosisQuota
+                ? (() => {
+                    const s = stats as unknown as { diagnosesUsed: number; diagnosesLimit: number | null }
+                    return `Diagnosis quota reached — ${s.diagnosesUsed.toLocaleString()} of ${s.diagnosesLimit?.toLocaleString() ?? '?'} diagnoses used. New bug reports are still captured; AI triage resumes next billing cycle or on upgrade.`
+                  })()
+                : stats.overQuota
+                  ? `Over quota — ${stats.reportsUsed.toLocaleString()} reports this period${stats.reportsLimit != null ? ` (limit ${stats.reportsLimit.toLocaleString()})` : ''}.`
+                  : stats.pastDueProjects > 0
+                    ? `${stats.pastDueProjects} project${stats.pastDueProjects === 1 ? '' : 's'} past due — update payment method.`
+                    : stats.unpaidProjects > 0
+                      ? `${stats.unpaidProjects} unpaid invoice${stats.unpaidProjects === 1 ? '' : 's'} need settlement.`
+                      : (stats as unknown as { approachingDiagnosisQuota?: boolean }).approachingDiagnosisQuota
+                        ? `Approaching quota — ${(stats as unknown as { diagnosesUsagePct: number }).diagnosesUsagePct ?? 0}% of monthly diagnoses used.`
+                        : stats.approachingQuota
+                          ? `Approaching quota — ${stats.usagePct ?? 0}% of monthly reports used.`
+                          : stats.cancelAtPeriodEnd
+                            ? 'Subscription cancels at period end — renew to keep Pro features.'
+                            : 'Payment method needs attention — open the billing portal.'}
             </p>
           </ContainedBlock>
           <ActionPillRow>
@@ -589,11 +602,12 @@ export function BillingPage() {
                     actioning={actioning}
                     pickerOpen={pickerFor === p.project_id}
                     onTogglePicker={() => setPickerFor(pickerFor === p.project_id ? null : p.project_id)}
-                    onPickPlan={(planId) => {
+                    onPickPlan={(planId, billingInterval) => {
                       setPickerFor(null)
-                      void startCheckout(p.project_id, planId)
+                      void startCheckout(p.project_id, planId, billingInterval)
                     }}
                     onManage={() => openPortal(p.project_id)}
+                    onReload={reloadAll}
                   />
                 ))}
               </div>
@@ -615,6 +629,24 @@ export function BillingPage() {
                   }}
                 />
               )}
+
+            {/* Sentry-enrichment upsell — shown when Sentry is not yet connected */}
+            {activeProject &&
+              !setup.getStep('sentry_connected')?.complete && (
+              <ContainedBlock tone="muted" className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-fg">Richer bug context with Sentry</p>
+                  <p className="mt-0.5 text-2xs leading-relaxed text-fg-muted">
+                    Connect Sentry to pull stack traces, breadcrumbs, and Seer AI summaries directly into each triage diagnosis — so Cursor gets more context without you copying anything.
+                  </p>
+                </div>
+                <Link to="/integrations" className="shrink-0">
+                  <span className="text-2xs font-medium text-brand underline underline-offset-2">
+                    Connect →
+                  </span>
+                </Link>
+              </ContainedBlock>
+            )}
           </>
         )}
 
@@ -652,8 +684,9 @@ interface CardProps {
   actioning: string | null
   pickerOpen: boolean
   onTogglePicker: () => void
-  onPickPlan: (planId: string) => void
+  onPickPlan: (planId: string, billingInterval: 'monthly' | 'annual') => void
   onManage: () => void
+  onReload?: () => void
 }
 
 function ProjectBillingCard({
@@ -664,6 +697,7 @@ function ProjectBillingCard({
   onTogglePicker,
   onPickPlan,
   onManage,
+  onReload,
 }: CardProps) {
   const subscribed = !!project.subscription && ['active', 'trialing', 'past_due'].includes(project.subscription.status ?? '')
   const tier = project.tier
@@ -679,7 +713,10 @@ function ProjectBillingCard({
   // Use the API-provided usage_pct when available; we DON'T clamp here so the
   // UsageBar can show the true overage % (e.g. "120% used") in the chip.
   // Bar fill clamping is the bar component's responsibility.
-  const apiPct = project.usage_pct ?? null
+  // Phase 2: prefer diagnoses_usage_pct when the plan has a diagnoses limit.
+  const apiPct = project.limit_diagnoses != null
+    ? (project.diagnoses_usage_pct ?? null)
+    : (project.usage_pct ?? null)
   const usagePct = apiPct != null
     ? apiPct
     : project.limit_reports
@@ -797,12 +834,29 @@ function ProjectBillingCard({
         limitReports={project.limit_reports}
         pct={usagePct}
         periodStart={project.period_start}
+        periodEnd={project.subscription?.current_period_end ?? null}
         llmCostUsd={project.llm_cost_usd_this_month}
-        overQuota={project.over_quota}
+        overQuota={project.over_diagnosis_quota ?? project.over_quota}
         overageRate={overageRate ?? null}
+        overageRateDiagnoses={tier?.overage_unit_amount_decimal_diagnoses ?? null}
+        basePriceUsd={tier?.monthly_price_usd ?? 0}
+        spendCapUsd={project.spend_cap_usd ?? tier?.monthly_spend_cap_usd ?? null}
         tierId={tierId}
         usageSeries={project.usage_series}
+        diagnosesUsed={project.diagnoses_used ?? null}
+        diagnosesLimit={project.limit_diagnoses ?? null}
       />
+
+      {!isComplimentary && (
+        <BillingPredictabilityControls
+          projectId={project.project_id}
+          isSubscribed={subscribed}
+          spendCapUsd={project.spend_cap_usd ?? null}
+          planDefaultCapUsd={tier?.monthly_spend_cap_usd ?? null}
+          alertEmail={project.alert_email ?? null}
+          onSaved={onReload}
+        />
+      )}
 
       {tier && (
         <PlanBenefitsList
@@ -827,56 +881,87 @@ interface PlanPickerProps {
   plans: PlanCatalog[]
   currentPlanId: string
   busy: boolean
-  onPick: (planId: string) => void
+  onPick: (planId: string, billingInterval: 'monthly' | 'annual') => void
 }
 
 function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
+  const [billingInterval, setBillingInterval] = React.useState<'monthly' | 'annual'>('monthly')
+  const annualDiscountPct = 17 // ~2 months free
+
   return (
     <ContainedBlock tone="muted" className="p-3 space-y-2">
       <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
         <SignalChip tone="neutral" className="uppercase tracking-wider">
-          {currentPlanId === 'hobby' ? 'Pick a plan' : 'Switch to'}
+          {currentPlanId === 'hobby' || currentPlanId === 'free_cloud' ? 'Pick a plan' : 'Switch to'}
         </SignalChip>
-        <InlineProof className="border-0 bg-transparent px-0 py-0">
-          Billed monthly · cancel any time
-        </InlineProof>
+        {/* Billing interval toggle */}
+        <div className="flex items-center gap-1 rounded-md border border-edge-subtle bg-surface p-0.5 text-2xs">
+          <button
+            type="button"
+            onClick={() => setBillingInterval('monthly')}
+            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'monthly' ? 'bg-brand text-white' : 'text-fg-muted hover:text-fg'}`}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillingInterval('annual')}
+            className={`px-2 py-0.5 rounded transition-colors ${billingInterval === 'annual' ? 'bg-brand text-white' : 'text-fg-muted hover:text-fg'}`}
+          >
+            Annual <span className="text-ok font-medium">−{annualDiscountPct}%</span>
+          </button>
+        </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {plans.map((p) => (
-          <article key={p.id} className="rounded-md border border-edge-subtle p-3 bg-surface">
-            <header className="flex items-baseline justify-between gap-2">
-              <h5 className="text-sm font-semibold text-fg">{p.display_name}</h5>
-              <span className="text-sm font-mono text-fg-secondary">
-                ${p.monthly_price_usd}/mo
-              </span>
-            </header>
-            <ContainedBlock tone="neutral" className="mt-1 space-y-1">
-              <InlineProof className="border-0 bg-transparent px-0 py-0">
-                {p.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo included
-                {p.overage_unit_amount_decimal != null && (
-                  <> · ${Number(p.overage_unit_amount_decimal).toFixed(4)}/report after</>
-                )}
-              </InlineProof>
-              <div className="flex flex-wrap gap-1">
-                <SignalChip tone="neutral">{p.retention_days}-day retention</SignalChip>
-                {p.feature_flags.sso ? <SignalChip tone="brand">SSO</SignalChip> : null}
-                {p.feature_flags.byok ? <SignalChip tone="brand">BYOK</SignalChip> : null}
-                {p.feature_flags.intelligence_reports ? (
-                  <SignalChip tone="brand">Intelligence</SignalChip>
-                ) : null}
-              </div>
-            </ContainedBlock>
-            <Btn
-              size="sm"
-              className="mt-2 w-full"
-              onClick={() => onPick(p.id)}
-              disabled={busy}
-              loading={busy}
-            >
-              {`Select ${p.display_name}`}
-            </Btn>
-          </article>
-        ))}
+        {plans.map((p) => {
+          const monthlyPrice = p.monthly_price_usd
+          const annualMonthlyPrice = billingInterval === 'annual'
+            ? Math.round(monthlyPrice * (1 - annualDiscountPct / 100))
+            : null
+
+          return (
+            <article key={p.id} className="rounded-md border border-edge-subtle p-3 bg-surface">
+              <header className="flex items-baseline justify-between gap-2">
+                <h5 className="text-sm font-semibold text-fg">{p.display_name}</h5>
+                <span className="text-sm font-mono text-fg-secondary">
+                  {billingInterval === 'annual' && annualMonthlyPrice != null
+                    ? <>${annualMonthlyPrice}/mo</>
+                    : <>${monthlyPrice}/mo</>}
+                </span>
+              </header>
+              {billingInterval === 'annual' && (
+                <p className="text-2xs text-fg-muted mt-0.5">
+                  Billed ${(annualMonthlyPrice ?? 0) * 12}/yr · {annualDiscountPct}% off
+                </p>
+              )}
+              <ContainedBlock tone="neutral" className="mt-1 space-y-1">
+                <InlineProof className="border-0 bg-transparent px-0 py-0">
+                  {p.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo included
+                  {billingInterval === 'monthly' && p.overage_unit_amount_decimal != null && (
+                    <> · ${Number(p.overage_unit_amount_decimal).toFixed(4)}/report after</>
+                  )}
+                </InlineProof>
+                <div className="flex flex-wrap gap-1">
+                  <SignalChip tone="neutral">{p.retention_days}-day retention</SignalChip>
+                  {p.feature_flags.sso ? <SignalChip tone="brand">SSO</SignalChip> : null}
+                  {p.feature_flags.byok ? <SignalChip tone="brand">BYOK</SignalChip> : null}
+                  {p.feature_flags.intelligence_reports ? (
+                    <SignalChip tone="brand">Intelligence</SignalChip>
+                  ) : null}
+                </div>
+              </ContainedBlock>
+              <Btn
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => onPick(p.id, billingInterval)}
+                disabled={busy}
+                loading={busy}
+              >
+                {`Select ${p.display_name}`}
+              </Btn>
+            </article>
+          )
+        })}
       </div>
       <InlineProof className="mt-2 border-0 bg-transparent px-0 py-0">
         Need an air-gapped install, custom DPA, or &gt; 500k reports/mo?{' '}
@@ -894,12 +979,16 @@ interface UsageBarProps {
   limitReports: number | null
   pct: number | null
   periodStart: string | null
+  periodEnd: string | null
   /** §3: real $ spent on LLM calls this billing month. */
   llmCostUsd?: number
   /** API-flagged: ingest is currently being rejected (Hobby) or overage-billed (paid). */
   overQuota: boolean
   /** USD per report once over included quota. `null` for plans without metered overage. */
   overageRate: number | null
+  overageRateDiagnoses?: number | null
+  basePriceUsd?: number
+  spendCapUsd?: number | null
   /** `'hobby' | 'starter' | 'pro' | 'enterprise'` — drives whether overage is billed or rejected. */
   tierId: string
   /**
@@ -909,42 +998,9 @@ interface UsageBarProps {
    * shape of their ingest. Omit on legacy API responses → section hides.
    */
   usageSeries?: BillingProject['usage_series']
-}
-
-interface UsageForecast {
-  etaDays: number
-  etaDate: Date
-  tone: 'danger' | 'warn' | 'muted'
-  label: string
-}
-
-/**
- * Project the day the project will hit its quota at the current ingest rate.
- * Returns null when there's not enough signal — first 24h of the period, no
- * limit, already over-quota, or the project is on a totally idle day.
- */
-function buildUsageForecast(
-  used: number,
-  limit: number | null,
-  periodStart: string | null,
-): UsageForecast | null {
-  if (limit == null || used <= 0) return null
-  if (used >= limit) return null
-  if (!periodStart) return null
-  const startMs = new Date(periodStart).getTime()
-  if (Number.isNaN(startMs)) return null
-  const daysElapsed = (Date.now() - startMs) / 86_400_000
-  if (daysElapsed < 1) return null
-  const dailyRate = used / daysElapsed
-  if (dailyRate <= 0) return null
-  const etaDays = Math.max(0, Math.ceil((limit - used) / dailyRate))
-  const etaDate = new Date(Date.now() + etaDays * 86_400_000)
-  const tone: UsageForecast['tone'] = etaDays < 3 ? 'danger' : etaDays < 7 ? 'warn' : 'muted'
-  const dateStr = etaDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  const label = etaDays === 0
-    ? `At current rate, you'll hit your limit today`
-    : `At current rate, you'll hit your limit on ${dateStr} (${etaDays}d away)`
-  return { etaDays, etaDate, tone, label }
+  /** Phase 2: diagnoses-metered plans — when non-null, show diagnoses count/limit instead of reports. */
+  diagnosesUsed?: number | null
+  diagnosesLimit?: number | null
 }
 
 // Severity tone the whole UsageBar takes on — matches across chip, progress
@@ -1118,18 +1174,48 @@ function UsageBar({
   limitReports,
   pct,
   periodStart,
+  periodEnd,
   llmCostUsd,
   overQuota,
   overageRate,
+  overageRateDiagnoses,
+  basePriceUsd = 0,
+  spendCapUsd,
   tierId,
   usageSeries,
+  diagnosesUsed,
+  diagnosesLimit,
 }: UsageBarProps) {
-  const headline = buildUsageHeadline(usage.reports, limitReports, pct, overQuota, overageRate, tierId)
+  // Phase 2: prefer diagnoses metering when the plan has a diagnoses limit.
+  const usingDiagnoses = diagnosesLimit != null
+  const displayCount = usingDiagnoses ? (diagnosesUsed ?? 0) : usage.reports
+  const displayLimit = usingDiagnoses ? diagnosesLimit : limitReports
+  const displayLabel = usingDiagnoses ? 'diagnoses this period' : 'reports this period'
+
+  const headline = buildUsageHeadline(displayCount, displayLimit, pct, overQuota, overageRate, tierId)
   const barTone = USAGE_BAR_TONE[headline.tone]
   // Bar fill: clamp at 100% so the visual length stays sane, but the chip +
   // narrative still report the *real* overage above the bar.
   const barWidthPct = pct == null ? 0 : Math.min(100, Math.max(2, pct))
-  const forecast = buildUsageForecast(usage.reports, limitReports, periodStart)
+
+  const costInputs: PeriodCostInputs | null =
+    usingDiagnoses && overageRateDiagnoses != null && overageRateDiagnoses > 0
+      ? {
+          baseUsd: basePriceUsd,
+          included: diagnosesLimit ?? 0,
+          overageRate: overageRateDiagnoses,
+          spendCapUsd: spendCapUsd ?? null,
+        }
+      : null
+
+  const forecast = buildUsageForecast(
+    displayCount,
+    displayLimit,
+    periodStart,
+    periodEnd,
+    costInputs,
+  )
+  const resetLabel = formatPeriodResetLabel(daysUntilPeriodReset(periodEnd))
   const seriesSummary = summariseUsageSeries(usageSeries)
 
   return (
@@ -1144,17 +1230,17 @@ function UsageBar({
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className={`text-base font-semibold tabular-nums ${USAGE_NUMBER_TONE[headline.tone]}`}>
-              {usage.reports.toLocaleString()}
+              {displayCount.toLocaleString()}
             </span>
-            {limitReports != null ? (
+            {displayLimit != null ? (
               <span className="text-xs text-fg-muted tabular-nums">
-                / {limitReports.toLocaleString()}
+                / {displayLimit.toLocaleString()}
               </span>
             ) : (
               <span className="text-xs text-fg-faint">unlimited</span>
             )}
             <SignalChip tone="neutral" className="tabular-nums">
-              reports this period
+              {displayLabel}
             </SignalChip>
           </div>
         </div>
@@ -1171,7 +1257,7 @@ function UsageBar({
         </Badge>
       </div>
 
-      {limitReports != null && (
+      {displayLimit != null && (
         <div
           className="relative h-2.5 bg-surface-overlay rounded-sm overflow-hidden"
           role="progressbar"
@@ -1209,7 +1295,18 @@ function UsageBar({
               {forecast.label}
             </SignalChip>
           )}
+          {forecast?.projectedCostLabel && (
+            <SignalChip tone="neutral" className="font-mono">
+              {forecast.projectedCostLabel}
+            </SignalChip>
+          )}
         </ContainedBlock>
+      )}
+
+      {resetLabel && (
+        <InlineProof className="border-0 bg-transparent px-0 py-0 text-fg-muted tabular-nums">
+          {resetLabel}
+        </InlineProof>
       )}
 
       {/* 30-day reports trend — sits between the period headline and the
@@ -1598,7 +1695,7 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
   }, [projectId, subject, body, category, supportEmail, toast, onSubmitted])
 
   return (
-    <form onSubmit={handleSubmit} className="border border-edge-subtle rounded-md p-3 bg-surface-raised/30 space-y-2">
+    <form onSubmit={handleSubmit} className="border border-edge-subtle rounded-md p-3 bg-surface-raised space-y-2">
       <div className="grid gap-2 sm:grid-cols-2">
         <SelectField
           label="Project (optional)"
@@ -1862,7 +1959,7 @@ function TicketDetailModal({
                 </SignalChip>
               )}
             </div>
-            <ContainedBlock tone="info" className="text-fg leading-relaxed whitespace-pre-wrap break-words border-brand/30 bg-brand/5">
+            <ContainedBlock tone="info" className="text-fg leading-relaxed whitespace-pre-wrap break-words border-brand/40 bg-surface-raised">
               {ticket.admin_response}
             </ContainedBlock>
           </section>

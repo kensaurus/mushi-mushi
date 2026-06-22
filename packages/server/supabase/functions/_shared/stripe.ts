@@ -35,6 +35,8 @@ export interface StripeConfig {
   meterEventName: string
   /** Meter event name for successfully merged auto-fix PRs (value-based pricing). */
   fixesMeterEventName: string
+  /** Meter event name for completed Stage-2 diagnoses (new billing unit, Phase 2). */
+  diagnosesMeterEventName: string
   /** Legacy single-price alias — the Starter base price ID. Kept for the */
   /** pre-tier-rollout `/billing/checkout` callers that didn't pass a plan. */
   defaultPriceId: string
@@ -378,6 +380,7 @@ export const stripeFromEnv = (): StripeConfig => ({
     ?? Deno.env.get('STRIPE_METER_EVENT_NAME')
     ?? 'mushi_reports_ingested',
   fixesMeterEventName: Deno.env.get('STRIPE_METER_FIXES_EVENT_NAME') ?? 'mushi_fixes_succeeded',
+  diagnosesMeterEventName: Deno.env.get('STRIPE_METER_DIAGNOSES_EVENT_NAME') ?? 'mushi_diagnoses',
   defaultPriceId: Deno.env.get('STRIPE_DEFAULT_PRICE_ID') ?? Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? '',
   successUrl: Deno.env.get('STRIPE_SUCCESS_URL') ?? 'https://app.mushimushi.dev/billing/success',
   cancelUrl: Deno.env.get('STRIPE_CANCEL_URL') ?? 'https://app.mushimushi.dev/billing/cancel',

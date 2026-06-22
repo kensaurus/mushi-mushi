@@ -6,36 +6,38 @@ title: Mushi Cloud
 
 `mushimushi.dev` is the managed product. It runs the **same code as
 this repo** — there is no closed-source plus-tier. The cloud value
-prop is "we host it for you, you get a metered bill."
+prop is "we host it for you, you get a metered diagnosis bill."
 
 ## Plans
 
-| Plan        | Cost                              | Notes                                        |
-| ----------- | --------------------------------- | -------------------------------------------- |
-| **Free**    | $0 / 1,000 reports / month        | All SDKs, hosted admin, community Discord    |
-| **Cloud**   | $0.0025 per ingested report after | No seat tax, plugin marketplace, email support |
-| **Enterprise** | Talk to us                     | SOC 2 evidence pack, SAML SSO, BYOK / BYO storage / residency, optional self-host |
+| Plan | Cost | Diagnoses included | Notes |
+|---|---|---|---|
+| **Free Cloud** | $0 / mo | 50 / mo (hard stop) | All SDKs, hosted admin, community Discord, AI triage |
+| **Indie** | $15 / mo | 500 / mo | 80 % / 100 % email alerts, hard spend cap, plugin marketplace, email support — $0.03 / extra diagnosis |
+| **Pro** | $49 / mo | 2,000 / mo | Team seats (×5), shared issue views, Sentry / Linear / Jira integrations — $0.025 / extra diagnosis |
+| **Enterprise** | Contact us | Custom | SOC 2, SAML SSO, SCIM, BYOK, data residency, self-host SLA |
+
+A **diagnosis** = one completed Stage-2 classification (Sonnet finishes, plain-English root cause written). Reports filtered as noise or deduplicated to an existing group do **not** count.
 
 ## Sign-up flow
 
 1. `mushimushi.dev/signup` — Supabase Auth (email + password).
 2. Email confirmation → sign in → `/onboarding` wizard.
 3. Create your first project, mint an API key, run `npx mushi-mushi` to install the SDK.
-4. `mushimushi.dev/dashboard` shows usage and a single button:
+4. `mushimushi.dev/dashboard` shows diagnoses used / limit and a single button:
    **Add a card via Stripe**.
-4. Stripe Checkout → on success, the metered subscription becomes
-   `active`. Usage flows out via Stripe Meter Events from the hourly
-   `usage-aggregator` Edge Function.
+5. Stripe Checkout → on success, the hybrid subscription (base + metered overage) becomes `active`. Overage flows via Stripe Billing Meter Events from the hourly `usage-aggregator` Edge Function.
 
-## Why metered
+## Why metered on diagnoses
 
-Bug reports are bursty. A free tier of 1,000 reports/month covers most
-side projects and small teams; usage-based pricing means the bill
-tracks the value (every report = a triaged, classified, auto-fixable
-unit of customer friction).
+Bug signals are bursty. The free tier covers 50 diagnoses / month for side projects; usage-based overage means the bill tracks the value. Every diagnosis = a triaged, classified, auto-fixable unit of customer friction. Duplicate stack traces collapse — you pay once per root cause.
+
+## Spend controls
+
+Every paid plan supports a **hard monthly spend cap** — set it in the console under Billing → Spending Cap. When the cap is reached, Mushi pauses new diagnoses for the calendar month with a "upgrade to continue" prompt. You also receive email alerts at 80 % and 100 % of your included quota.
 
 ## Self-hosting
 
 If you'd rather run Mushi on your own Supabase project, see
 [Self-hosting](/self-hosting) — every feature on Cloud is in the OSS
-repo.
+repo. Self-hosting is free forever; you supply your own BYOK keys.

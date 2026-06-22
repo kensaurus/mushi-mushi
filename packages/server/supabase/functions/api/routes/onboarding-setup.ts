@@ -160,6 +160,17 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     const setupDone = requiredComplete === requiredSteps.length;
     const nextRequired = requiredSteps.find((s) => !s.complete) ?? null;
 
+    // Funnel dropoff stats for the operator panel (last 7 days, all users).
+    // Fire-and-forget alongside main data; returns null on any DB error.
+    const funnelCounts = await (async () => {
+      try {
+        const { data } = await db.rpc('get_setup_funnel_counts_7d')
+        return data as Record<string, number> | null
+      } catch {
+        return null
+      }
+    })()
+
     return c.json({
       ok: true,
       data: {
@@ -184,6 +195,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         reportCount,
         fixCount,
         mergedFixCount,
+        funnelCounts,
       },
     });
   });
@@ -482,8 +494,8 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'A project groups all bug reports from one application.',
           complete: true,
           required: true,
-          cta_to: '/projects',
-          cta_label: 'Manage projects',
+          cta_to: '/onboarding?tab=steps&setup=cli',
+          cta_label: 'Open setup wizard',
         },
         {
           id: 'api_key_generated',
@@ -491,8 +503,8 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'Your SDK uses this key to authenticate report submissions.',
           complete: hasKey,
           required: true,
-          cta_to: '/projects',
-          cta_label: 'Generate key',
+          cta_to: '/onboarding?tab=verify',
+          cta_label: 'Generate API key',
         },
         {
           id: 'sdk_installed',
@@ -500,8 +512,8 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'Drop the Mushi widget into your app so users can submit reports.',
           complete: hasSdk,
           required: true,
-          cta_to: '/onboarding',
-          cta_label: 'View setup guide',
+          cta_to: '/onboarding?tab=sdk',
+          cta_label: 'Install SDK',
           diagnostic: {
             last_sdk_seen_at: heartbeat?.last_seen_at ?? null,
             last_sdk_origin: heartbeat?.last_seen_origin ?? null,
@@ -515,7 +527,7 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
           description: 'Send a test report or wait for a real user submission.',
           complete: reportInfo.count > 0,
           required: true,
-          cta_to: '/onboarding',
+          cta_to: '/onboarding?tab=verify',
           cta_label: 'Send test report',
         },
         {

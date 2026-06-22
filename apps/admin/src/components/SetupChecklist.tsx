@@ -119,7 +119,7 @@ function BannerChecklist({
         onClick={() => setOpen(true)}
         className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-colors ${
           allDone || requiredDone
-            ? 'border-ok/30 bg-ok-muted/15 text-ok'
+            ? 'border-ok/30 bg-ok-muted/15 text-ok-foreground'
             : 'border-warn/30 bg-warn-muted/50 text-warning-foreground'
         } hover:brightness-110`}
         aria-label="Show setup checklist"
@@ -135,7 +135,7 @@ function BannerChecklist({
       <div className="flex items-center justify-between gap-3 border-b border-edge-subtle px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-semibold ${requiredDone ? 'text-ok' : 'text-warn'}`}>
+            <span className={`text-xs font-semibold ${requiredDone ? 'text-ok-foreground' : 'text-warning-foreground'}`}>
               {requiredDone ? 'Setup complete' : 'Finish setting up Mushi Mushi'}
             </span>
             <span className="text-3xs font-mono text-fg-muted">

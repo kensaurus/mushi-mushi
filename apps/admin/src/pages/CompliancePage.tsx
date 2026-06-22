@@ -7,7 +7,7 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint,
+import {
   Card,
   Btn,
   ErrorAlert,
@@ -16,10 +16,9 @@ import { SnapshotSectionHint,
   SelectField,
   FilterChip,
   Badge,
-  Section,
-  StatCard,
   SegmentedControl,
-  type FilterChipTone, } from '../components/ui'
+  type FilterChipTone,
+} from '../components/ui'
 import { ContainedBlock, SignalChip, InlineProof, ActionPill } from '../components/report-detail/ReportSurface'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -33,22 +32,14 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { ComplianceStatusBanner, isComplianceStatusBannerCritical } from '../components/compliance/ComplianceStatusBanner'
 import { ComplianceGuide } from '../components/compliance/ComplianceGuide'
+import { ComplianceSnapshotStrip } from '../components/compliance/ComplianceSnapshotStrip'
+import { ComplianceReadout } from '../components/compliance/ComplianceReadout'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   EMPTY_COMPLIANCE_STATS,
   type ComplianceStats,
   type ComplianceTabId,
 } from '../components/compliance/types'
-import {
-  clusterRegionDetail,
-  clusterRegionTooltip,
-  controlsDetail,
-  controlsTooltip,
-  legalHoldsDetail,
-  legalHoldsTooltip,
-  openDsarsDetail,
-  openDsarsTooltip,
-} from '../lib/statTooltips/compliance'
-import { complianceLinks } from '../lib/statCardLinks'
 
 interface RetentionPolicy {
   project_id: string
@@ -611,17 +602,40 @@ export function CompliancePage() {
         <TableDensityToggle />
       </PageHeaderBar>
 
-      {isComplianceStatusBannerCritical(stats) && (
-        <ComplianceStatusBanner
-          stats={stats}
-          onTab={setActiveTab}
-          onFilter={setFilterFromBanner}
-          onRefreshEvidence={refreshEvidence}
-          refreshing={refreshing}
-        />
-      )}
-
-      <ComplianceGuide topPriority={stats.topPriority} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: isComplianceStatusBannerCritical(stats),
+            children: (
+              <ComplianceStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onFilter={setFilterFromBanner}
+                onRefreshEvidence={refreshEvidence}
+                refreshing={refreshing}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <ComplianceSnapshotStrip
+                stats={stats}
+                statsFetchedAt={lastFetchedAt}
+                statsValidating={isValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'Compliance snapshot'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: <ComplianceGuide topPriority={stats.topPriority} />,
+          },
+        ]}
+      />
 
       <SegmentedControl
         value={activeTab}
@@ -631,46 +645,9 @@ export function CompliancePage() {
         size="sm"
       />
 
-      <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Controls"
-            value={`${stats.controlsPass}/${stats.controlsTotal}`}
-            accent={stats.controlsFail > 0 ? 'text-danger' : stats.controlsWarn > 0 ? 'text-warn' : stats.controlsTotal > 0 ? 'text-ok' : undefined}
-            tooltip={controlsTooltip(stats)}
-            detail={controlsDetail(stats)}
-            to={complianceLinks.controls}
-          />
-          <StatCard
-            label="Open DSARs"
-            value={stats.openDsars}
-            accent={stats.overdueDsars > 0 ? 'text-danger' : stats.atRiskDsars > 0 ? 'text-warn' : undefined}
-            tooltip={openDsarsTooltip(stats)}
-            detail={openDsarsDetail(stats)}
-            to={complianceLinks.openDsars}
-          />
-          <StatCard
-            label="Legal holds"
-            value={stats.legalHoldCount}
-            accent={stats.legalHoldCount > 0 ? 'text-info' : undefined}
-            tooltip={legalHoldsTooltip(stats)}
-            detail={legalHoldsDetail(stats)}
-            to={complianceLinks.legalHolds}
-          />
-          <StatCard
-            label="Cluster"
-            value={(stats.activeProjectRegion ?? stats.currentRegion).toUpperCase()}
-            accent="text-brand"
-            tooltip={clusterRegionTooltip(stats)}
-            detail={clusterRegionDetail(stats)}
-            to={complianceLinks.cluster}
-          />
-        </div>
-      </Section>
-
       {activeTab === 'overview' && (
       <>
+      <ComplianceReadout stats={stats} fetchedAt={lastFetchedAt} isValidating={isValidating} />
       {/* URL-driven status filter. Deep links from the Next-Best-Action
           (e.g. /compliance?status=open) drop the user straight onto the
           relevant view. */}

@@ -36,6 +36,7 @@
 
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { BILLING_CTA_LINK_CLASS } from '../../lib/tokens'
 import type { FeatureFlag, UpgradeTarget } from '../../lib/useEntitlements'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { Tooltip } from '../ui'
@@ -181,7 +182,7 @@ export function UpgradeBanner({
       </div>
       <Link
         to={billingHref(flag)}
-        className="inline-flex items-center justify-center rounded-full bg-fg px-3 py-1 text-2xs font-semibold text-bg shadow-sm hover:opacity-90 motion-safe:transition-opacity shrink-0"
+        className={BILLING_CTA_LINK_CLASS}
       >
         {ctaCopy(upgradeTo)}
       </Link>
@@ -312,7 +313,7 @@ export function UpgradeLockOverlay({
           <p className="text-2xs text-fg-muted">{tagline}</p>
           <Link
             to={billingHref(flag)}
-            className="mt-1 inline-flex items-center justify-center rounded-full bg-fg px-3 py-1 text-2xs font-semibold text-bg shadow-sm hover:opacity-90 motion-safe:transition-opacity"
+            className={`mt-1 ${BILLING_CTA_LINK_CLASS}`}
           >
             {ctaCopy(upgradeTo)}
           </Link>

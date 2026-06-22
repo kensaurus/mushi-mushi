@@ -44,6 +44,10 @@ export interface ActivePlanSummary {
   reportsUsed: number
   /** 0–100 or null when limit is unlimited. */
   usagePct: number | null
+  /** Phase 2 diagnoses metering fields — null when plan uses reports-only metering. */
+  diagnosesUsed?: number | null
+  diagnosesLimit?: number | null
+  diagnosesUsagePct?: number | null
   /** Stripe subscription status when applicable. */
   subscriptionStatus: string | null
   cancelAtPeriodEnd: boolean
@@ -84,6 +88,10 @@ interface BillingProject {
   over_quota: boolean
   usage_pct?: number | null
   billing_mode?: 'stripe' | 'complimentary'
+  /** Phase 2 diagnoses metering fields. */
+  diagnoses_used?: number | null
+  limit_diagnoses?: number | null
+  diagnoses_usage_pct?: number | null
 }
 
 interface BillingResponse {
@@ -124,7 +132,12 @@ export function useActivePlan(): UseActivePlanResult {
       seatLimit: tier.seat_limit ?? null,
       featureFlags: flags,
       reportsUsed: project.usage?.reports ?? 0,
-      usagePct: project.usage_pct ?? null,
+      usagePct: project.limit_diagnoses != null
+        ? (project.diagnoses_usage_pct ?? null)
+        : (project.usage_pct ?? null),
+      diagnosesUsed: project.diagnoses_used ?? null,
+      diagnosesLimit: project.limit_diagnoses ?? null,
+      diagnosesUsagePct: project.diagnoses_usage_pct ?? null,
       subscriptionStatus: project.subscription?.status ?? null,
       cancelAtPeriodEnd: Boolean(project.subscription?.cancel_at_period_end),
       // Complimentary orgs aren't paying customers even on `pro` — `isPaid`

@@ -28,13 +28,13 @@
     "vitest": "^4.1.8",
     "vue": "^3.5.38"
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/vue"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/vue#readme",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

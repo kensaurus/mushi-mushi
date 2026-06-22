@@ -6,13 +6,11 @@
 
 import { Link, useSearchParams } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SnapshotSectionHint,
-  Section,
+import { Section,
   Card,
   Badge,
   Btn,
   ErrorAlert,
-  StatCard,
   SegmentedControl,
   CopyButton,
   FreshnessPill,
@@ -34,6 +32,8 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { detectFromPackageJson } from '../lib/frameworkDetect'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
 import { McpConnectGuide } from '../components/mcp/McpConnectGuide'
+import { McpSnapshotStrip } from '../components/mcp/McpSnapshotStrip'
+import { McpEndpointReadout } from '../components/mcp/McpEndpointReadout'
 import {
   ActionPill,
   ActionPillRow,
@@ -53,21 +53,6 @@ import {
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import {
-  activeKeysDetail,
-  activeKeysTooltip,
-  connectedDetail,
-  connectedTooltip,
-  endpointDetail,
-  endpointTooltip,
-  mcpReadDetail,
-  mcpReadTooltip,
-  sdkOnlyDetail,
-  sdkOnlyTooltip,
-  toolsDetail,
-  toolsTooltip,
-} from '../lib/statTooltips/mcp'
-import { mcpLinks } from '../lib/statCardLinks'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
 import {
   buildCursorDeeplink,
@@ -428,7 +413,7 @@ function QuickstartStep({ n, title, body, tone }: QuickstartStepProps) {
 function ToolCard({ tool }: { tool: ToolSpec }) {
   const stripeTone = tool.scope === 'mcp:write' ? 'bg-warn' : 'bg-info'
   return (
-    <div className="relative rounded-md border border-edge-subtle bg-surface-raised/30 p-3 pl-4 motion-safe:transition-colors hover:border-edge">
+    <div className="relative rounded-md border border-edge-subtle bg-surface-raised p-3 pl-4 motion-safe:transition-colors hover:border-edge">
       <span className={`absolute left-0 top-2 bottom-2 w-0.5 rounded-sm ${stripeTone}`} aria-hidden="true" />
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="min-w-0">
@@ -882,45 +867,14 @@ export function McpPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             show: !ux.hideMcpSnapshot,
             children: (
-              <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-                <SnapshotSectionHint text={activeMeta.description} />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                  <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} tooltip={activeKeysTooltip(stats)} detail={activeKeysDetail()} to={mcpLinks.activeKeys} />
-                  <StatCard
-                    label={copy?.statLabels?.mcpRead ?? 'mcp:read'}
-                    value={stats.mcpReadKeyCount}
-                    accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
-                    tooltip={mcpReadTooltip(stats)}
-                    detail={mcpReadDetail(stats)}
-                    to={mcpLinks.mcpRead}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.connected ?? 'Connected'}
-                    value={stats.connectedKeyCount}
-                    accent={stats.connectedKeyCount > 0 ? 'text-ok' : stats.mcpReadKeyCount > 0 ? 'text-warn' : undefined}
-                    tooltip={connectedTooltip(stats)}
-                    detail={connectedDetail(stats)}
-                    to={mcpLinks.connected}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.sdkOnly ?? 'SDK-only keys'}
-                    value={stats.reportOnlyKeyCount}
-                    accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
-                    tooltip={sdkOnlyTooltip(stats)}
-                    detail={sdkOnlyDetail()}
-                    to={mcpLinks.sdkOnly}
-                  />
-                  <StatCard label={copy?.statLabels?.tools ?? 'Tools'} value={stats.toolCount} accent="text-info" tooltip={toolsTooltip(stats)} detail={toolsDetail(stats)} to={mcpLinks.tools} />
-                  <StatCard
-                    label={copy?.statLabels?.endpoint ?? 'Endpoint'}
-                    value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
-                    accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
-                    tooltip={endpointTooltip(stats)}
-                    detail={endpointDetail(stats)}
-                    to={mcpLinks.endpoint}
-                  />
-                </div>
-              </Section>
+              <McpSnapshotStrip
+                stats={stats}
+                statsFetchedAt={lastFetchedAt}
+                statsValidating={isValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'}
+                hint={activeMeta.description}
+                statLabels={copy?.statLabels}
+              />
             ),
           },
           {
@@ -943,8 +897,9 @@ export function McpPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          <McpEndpointReadout stats={stats} fetchedAt={lastFetchedAt} validating={isValidating} />
           {/* Capability framing strip — leads with what the user can DO, not connection metrics */}
-          <div className="rounded-md border border-edge-subtle bg-surface-raised/30 px-4 py-3">
+          <div className="rounded-md border border-edge-subtle bg-surface-raised px-4 py-3">
             <p className="text-xs font-semibold text-fg mb-2">What you can do with MCP connected</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {USE_CASES.slice(0, 4).map((uc) => (
@@ -977,38 +932,6 @@ export function McpPage() {
               title="Agent access live"
               description={stats.topPriorityLabel ?? `${stats.connectedKeyCount} MCP key(s) connected with heartbeat.`}
               cta={{ label: 'Browse catalog', to: '/mcp?tab=catalog' }}
-            />
-          )}
-          {stats.topPriority === 'report_only_keys' && (
-            <RecommendedAction
-              tone="info"
-              title="SDK keys exist — add MCP scope"
-              description={stats.topPriorityLabel ?? 'report:write keys capture bugs but cannot expose tools to agents.'}
-              cta={{ label: 'Mint MCP key', to: '/projects' }}
-            />
-          )}
-          {stats.topPriority === 'no_mcp_key' && (
-            <RecommendedAction
-              tone="info"
-              title="Generate your first MCP key"
-              description={stats.topPriorityLabel ?? 'Pick mcp:read to browse or mcp:write to dispatch fixes from agents.'}
-              cta={{ label: 'Go to /projects', to: '/projects' }}
-            />
-          )}
-          {stats.topPriority === 'never_connected' && (
-            <RecommendedAction
-              tone="info"
-              title="Complete the IDE handshake"
-              description={stats.topPriorityLabel ?? 'Paste .cursor/mcp.json, restart, then run "list mushi tools".'}
-              cta={{ label: 'Open Setup', to: '/mcp?tab=setup' }}
-            />
-          )}
-          {stats.topPriority === 'endpoint_mismatch' && (
-            <RecommendedAction
-              tone="urgent"
-              title="Fix MUSHI_API_ENDPOINT in snippet"
-              description={stats.topPriorityLabel ?? 'Agent is hitting a different backend than this console expects.'}
-              cta={{ label: 'Copy correct snippet', to: '/mcp?tab=setup' }}
             />
           )}
           {!ux.hideOverviewChrome && (
@@ -1246,7 +1169,7 @@ export function McpPage() {
                 </ContainedBlock>
               </div>
 
-              <div className="rounded-md border border-edge-subtle bg-surface-raised/40">
+              <div className="rounded-md border border-edge-subtle bg-surface-raised">
                 <button
                   type="button"
                   onClick={() => {
@@ -1422,7 +1345,7 @@ export function McpPage() {
                 </pre>
               </div>
 
-              <div className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 space-y-2" data-testid="mcp-json-helper">
+              <div className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2" data-testid="mcp-json-helper">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <h3 className="text-sm font-semibold text-fg">mcp.json syntax helper</h3>
@@ -1486,7 +1409,7 @@ export function McpPage() {
                       <div
                         key={p.id}
                         className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 ${
-                          isActive ? 'border-brand/30 bg-brand/5' : 'border-edge-subtle bg-surface-raised/20'
+                          isActive ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle bg-surface-raised/20'
                         }`}
                       >
                         <div className="min-w-0 flex-1">
@@ -1639,7 +1562,7 @@ export function McpPage() {
                     const groupTools = TOOL_CATALOG.filter((t) => group.tools.includes(t.name))
                     if (groupTools.length === 0) return null
                     return (
-                      <div key={group.label} className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3">
+                      <div key={group.label} className="rounded-md border border-edge-subtle bg-surface-raised p-3">
                         <p className="text-xs font-semibold text-fg mb-0.5">{group.label}</p>
                         <p className="text-2xs text-fg-muted mb-2">{group.description}</p>
                         <div className="flex flex-wrap gap-1">
@@ -1682,7 +1605,7 @@ export function McpPage() {
                 {RESOURCE_CATALOG.map((r) => (
                   <div
                     key={r.name}
-                    className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:transition-colors hover:border-edge"
+                    className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-colors hover:border-edge"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
                       <SignalChip tone="neutral" className="font-mono text-xs wrap-anywhere max-w-full">
@@ -1703,7 +1626,7 @@ export function McpPage() {
                 {PROMPT_CATALOG.map((p) => (
                   <div
                     key={p.name}
-                    className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:transition-colors hover:border-edge"
+                    className="rounded-md border border-edge-subtle bg-surface-raised p-3 motion-safe:transition-colors hover:border-edge"
                   >
                     <div className="text-sm font-semibold text-fg">{p.title}</div>
                     <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5 mb-1">
@@ -1724,7 +1647,7 @@ export function McpPage() {
             {USE_CASES.map((uc) => (
               <div
                 key={uc.title}
-                className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 space-y-2 motion-safe:transition-colors hover:border-edge"
+                className="rounded-md border border-edge-subtle bg-surface-raised p-3 space-y-2 motion-safe:transition-colors hover:border-edge"
               >
                 <div className="text-xs font-semibold text-fg">{uc.title}</div>
                 <div className="text-sm text-fg-secondary leading-snug">

@@ -21,6 +21,7 @@ import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
 import { Btn, ErrorAlert, FreshnessPill } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
@@ -36,12 +37,14 @@ import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
 import { PlatformHealthTile } from '../components/dashboard/PlatformHealthTile'
+import { DashboardLoopReadout } from '../components/dashboard/DashboardLoopReadout'
 import { SdkUpgradeBanner } from '../components/dashboard/SdkUpgradeBanner'
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
 import { useDashboardUx } from '../lib/dashboardModeUx'
 import { deriveDashboardInsight } from '../lib/dashboardExplainer'
+import { semanticBannerTone } from '../lib/tokens'
 
 function inferRunningStage(data: DashboardData): PdcaStageId | null {
   const activity = data.activity ?? []
@@ -69,7 +72,7 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const [showFullDashboard, setShowFullDashboard] = useState(false)
   const copy = usePageCopy('/dashboard')
-  const { isAdvanced, hideOverviewChrome } = useDashboardUx()
+  const { isAdvanced, hideOverviewChrome, hideLoopSnapshot } = useDashboardUx()
 
   // First-fix-merged celebration: when `merged_fix_count` flips 0 → 1 we
   // fire a confetti burst + a toast with a CTA to the merged PR. This is the
@@ -202,6 +205,23 @@ export function DashboardPage() {
     </>
   ) : null
 
+  const dashboardInsight =
+    renderFullDashboard && dashboardHeroStats
+      ? deriveDashboardInsight({
+          openBacklog: dashboardHeroStats.openBacklog,
+          fixesInProgress: dashboardHeroStats.fixesInProgress,
+          fixesFailed: dashboardHeroStats.fixesFailed,
+          integrationIssues: dashboardHeroStats.integrationIssues,
+          reports14d: counts.reports14d ?? 0,
+        })
+      : null
+
+  const insightToneClasses: Record<string, string> = {
+    ok: semanticBannerTone('ok'),
+    warn: semanticBannerTone('warn'),
+    danger: semanticBannerTone('danger'),
+  }
+
   return (
     <div className="space-y-3">
       <Confetti triggerKey={confettiKey} />
@@ -227,42 +247,51 @@ export function DashboardPage() {
         </Link>
       </PageHeaderBar>
 
-      {/* Condensed plain-language insight strip — 1-2 sentence verdict */}
-      {renderFullDashboard && dashboardHeroStats && (() => {
-        const { tone, sentence } = deriveDashboardInsight({
-          openBacklog: dashboardHeroStats.openBacklog,
-          fixesInProgress: dashboardHeroStats.fixesInProgress,
-          fixesFailed: dashboardHeroStats.fixesFailed,
-          integrationIssues: dashboardHeroStats.integrationIssues,
-          reports14d: counts.openBacklog ?? 0,
-        })
-        const toneClasses: Record<string, string> = {
-          ok: 'border-ok/25 bg-ok-muted/40 text-ok',
-          warn: 'border-warn/30 bg-warn-muted/40 text-warn-fg',
-          danger: 'border-danger/30 bg-danger-muted/40 text-danger',
-        }
-        return (
-          <div
-            className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${toneClasses[tone] ?? toneClasses.ok}`}
-            role="status"
-            aria-live="polite"
-          >
-            <span className="mt-px shrink-0 text-base leading-none">
-              {tone === 'danger' ? '🔴' : tone === 'warn' ? '🟡' : '🟢'}
-            </span>
-            <span>{sentence}</span>
-          </div>
-        )
-      })()}
-
-      {showHeroIntro && (
-        <HeroIntro
-          stages={data.pdcaStages!}
-          focusStage={data.focusStage}
-          projectName={projectName}
-          lastReportAt={lastReportAt}
-        />
-      )}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: Boolean(dashboardInsight),
+            children: dashboardInsight ? (
+              <div
+                className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${insightToneClasses[dashboardInsight.tone] ?? insightToneClasses.ok}`}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="mt-px shrink-0 text-base leading-none">
+                  {dashboardInsight.tone === 'danger' ? '🔴' : dashboardInsight.tone === 'warn' ? '🟡' : '🟢'}
+                </span>
+                <span>{dashboardInsight.sentence}</span>
+              </div>
+            ) : null,
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: renderFullDashboard && !hideLoopSnapshot,
+            children: (
+              <KpiRow
+                counts={counts}
+                fixSummary={fixSummary}
+                reportsByDay={reportsByDay}
+                llmByDay={llmByDay}
+                pdcaStages={data.pdcaStages}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: showHeroIntro,
+            children: (
+              <HeroIntro
+                stages={data.pdcaStages!}
+                focusStage={data.focusStage}
+                projectName={projectName}
+                lastReportAt={lastReportAt}
+              />
+            ),
+          },
+        ]}
+      />
 
       {setup.activeProject && (
         <SetupChecklist
@@ -278,7 +307,7 @@ export function DashboardPage() {
       )}
 
       {setupIncomplete && !showFullDashboard && (
-        <div className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+        <div className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5">
           <p className="text-xs text-fg-muted">
             Finish setup above to unlock the full dashboard. You can peek now if you like.
           </p>
@@ -312,15 +341,18 @@ export function DashboardPage() {
 
       {renderFullDashboard && (
         <>
-          <QuotaBanner />
-
-          <KpiRow
-            counts={counts}
-            fixSummary={fixSummary}
-            reportsByDay={reportsByDay}
-            llmByDay={llmByDay}
-            pdcaStages={data.pdcaStages}
+          <DashboardLoopReadout
+            projectId={setup.activeProject?.project_id ?? null}
+            projectName={projectName}
+            openBacklog={counts.openBacklog ?? 0}
+            fixesInProgress={fixSummary.inProgress}
+            fixesFailed={fixSummary.failed}
+            openPrs={fixSummary.openPrs ?? counts.openPrs ?? 0}
+            fetchedAt={lastFetchedAt}
+            isValidating={isValidating}
           />
+
+          <QuotaBanner />
 
           <ChartsRow
             reportsByDay={reportsByDay}

@@ -3,8 +3,8 @@
   "version": "1.1.0",
   "description": "Capacitor plugin for Mushi Mushi — shake-to-report, screenshot capture, offline queue, and bottom-sheet widget for iOS/Android Capacitor apps.",
   "license": "MIT",
-  "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/capacitor#readme",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

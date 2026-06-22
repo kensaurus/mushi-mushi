@@ -2219,6 +2219,35 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  // ── Usage / billing MCP tool ─────────────────────────────────────────────
+  server.registerTool(
+    'get_usage',
+    {
+      title: titleOf('get_usage'),
+      description: descOf('get_usage'),
+      annotations: annotationsFor('get_usage'),
+      inputSchema: {
+        project_id: z.string().optional().describe('Project ID. Defaults to the configured project.'),
+      },
+    },
+    async ({ project_id }) => {
+      const pid = project_id ?? config.projectId
+      const path = pid ? `/v1/admin/billing/stats?project_id=${pid}` : '/v1/admin/billing/stats'
+      const data = await apiCall<{
+        planId: string
+        diagnosesUsed: number
+        diagnosesLimit: number | null
+        diagnosesUsagePct: number | null
+        overDiagnosisQuota: boolean
+        approachingDiagnosisQuota: boolean
+        monthlySpendCapUsd: number | null
+        periodEnd: string | null
+        freeLimitDiagnoses: number
+      }>(path)
+      return jsonText(data)
+    },
+  )
+
   // ── Skill Pipeline MCP tools ──────────────────────────────────────────────
   server.registerTool(
     'list_skills',
@@ -2570,6 +2599,49 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         toolRegistry[spec.name]?.remove()
       }
     }
+  }
+
+  // ── One-time mcp_first_tool_call funnel signal ─────────────────────────────
+  // On the very first successful tool invocation for a project, emit a
+  // fire-and-forget funnel event so operators can see the MCP → first AI query
+  // conversion rate in the onboarding panel. The signal is deduplicated
+  // server-side (UNIQUE dedup_key), so re-connecting the MCP server never
+  // double-counts. We use a module-level flag to avoid redundant HTTP calls
+  // within a single process lifetime.
+  // Capture the native fetch at server-creation time so funnel pings are
+  // transparent to test stubs that replace the injected `doFetch`.
+  const _nativeFetch: typeof globalThis.fetch = globalThis.fetch
+  let _firstToolCallSignalled = false
+  const _signalFirstToolCall = (): void => {
+    if (_firstToolCallSignalled || !projectId) return
+    _firstToolCallSignalled = true
+    void _nativeFetch(`${apiEndpoint}/v1/cli/funnel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Mushi-Api-Key': apiKey,
+        'X-Mushi-Project': projectId,
+      },
+      body: JSON.stringify({ event: 'mcp_first_tool_call' }),
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => { /* best-effort — never block a tool call */ })
+  }
+
+  // Intercept the first successful tool call via the low-level request handler map.
+  // McpServer stores its CallToolRequest handler in `server.server._requestHandlers`
+  // (a Map<method, handler>). We read the installed handler and replace it with a thin
+  // wrapper that calls the original then fires the one-time funnel signal.
+  // Using _requestHandlers directly avoids re-triggering McpServer's validation wrapper
+  // (which would cause double-validation) while remaining type-safe via the cast below.
+  type LowLevelServer = { _requestHandlers: Map<string, (...a: unknown[]) => unknown> }
+  const llServer = (server as unknown as { server: LowLevelServer }).server
+  const existingToolsCallHandler = llServer?._requestHandlers?.get('tools/call')
+  if (typeof existingToolsCallHandler === 'function') {
+    llServer._requestHandlers.set('tools/call', async (...args: unknown[]) => {
+      const result = await existingToolsCallHandler(...args)
+      _signalFirstToolCall()
+      return result
+    })
   }
 
   return server

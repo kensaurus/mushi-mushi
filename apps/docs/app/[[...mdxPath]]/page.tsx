@@ -19,6 +19,46 @@ export const generateStaticParams = generateStaticParamsFor('mdxPath')
 export async function generateMetadata(props: { params: Promise<{ mdxPath?: string[] }> }) {
   const params = await props.params
   const { metadata } = await importPage(params.mdxPath)
+  // The home page (empty mdxPath) is also served in place at the bare product
+  // root kensaur.us/mushi-mushi/ via the CloudFront internal rewrite in
+  // scripts/cloudfront-mushi-spa-router.js. Pin its canonical to that product
+  // root so the three URLs that can resolve to the same landing — the root,
+  // /mushi-mushi/docs/, and the docs.mushimushi.dev home — consolidate to one
+  // indexable URL instead of competing as duplicate content.
+  if (!params.mdxPath || params.mdxPath.length === 0) {
+    return {
+      ...metadata,
+      title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+      description:
+        'Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.',
+      openGraph: {
+        title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+        description:
+          'Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.',
+        url: 'https://kensaur.us/mushi-mushi/',
+        siteName: 'Mushi Mushi',
+        type: 'website',
+        images: [
+          {
+            url: 'https://kensaur.us/mushi-mushi/docs/social-preview/og-card.png',
+            width: 1200,
+            height: 630,
+          },
+        ],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+        description:
+          'Plain-English diagnosis + a ready-to-apply fix, right in Cursor. Standalone, open source, Sentry optional.',
+      },
+      robots: { index: true, follow: true },
+      alternates: {
+        ...(metadata as { alternates?: Record<string, unknown> })?.alternates,
+        canonical: 'https://kensaur.us/mushi-mushi/',
+      },
+    }
+  }
   return metadata
 }
 

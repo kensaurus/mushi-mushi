@@ -1,4 +1,4 @@
-import { Badge, Breadcrumbs, CodeValue, RelativeTime } from '../ui'
+import { Badge, Breadcrumbs, RelativeTime } from '../ui'
 import { ContainedBlock, MetaChip } from './ReportSurface'
 import {
   STATUS,
@@ -17,7 +17,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const glow = severityGlowClass(report.severity)
   return (
     <div
-      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised/35 p-3 ${glow} ${glow ? 'motion-safe:transition-all' : ''}`}
+      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-all' : ''}`}
     >
       <Breadcrumbs
         items={[
@@ -84,9 +84,6 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
               <span className="font-mono">{report.session_id.slice(0, 8)}</span>
             </MetaChip>
           )}
-          <MetaChip label="Report ID" title={report.id}>
-            <CodeValue value={report.id} inline tone="id" className="max-w-[min(100%,20rem)]" />
-          </MetaChip>
         </div>
       </div>
       <PresenceBadges reportId={report.id} projectId={report.project_id} />

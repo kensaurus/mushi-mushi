@@ -15,6 +15,7 @@ import { MultiRepoFlowDiagram } from './components/MultiRepoFlow'
 import { DocScreenshot } from './components/DocScreenshot'
 import { AdminDocHero } from './components/AdminDocHero'
 import { DocsMediaShowcase } from './components/DocsMediaShowcase'
+import { OssTrustStrip } from './components/OssTrustStrip'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ...getDocsComponents(),
@@ -38,5 +39,6 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   DocScreenshot,
   AdminDocHero,
   DocsMediaShowcase,
+  OssTrustStrip,
   ...(components ?? {}),
 })

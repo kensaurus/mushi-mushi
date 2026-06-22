@@ -262,43 +262,46 @@ function ReportRowViewInner({
         </div>
       </td>
       <td className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
-        <div className={`reports-action-top ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
-          <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
-            <RowKebab row={row} onCopyLink={onCopyLink} onDismiss={onDismiss} />
-          </span>
-          {canDispatch ? (
-            <span
-              className="inline-flex shrink-0"
-              data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}
-            >
-              <DispatchFixPreflight
-                variant="table"
-                busy={dispatchBusy}
-                severity={row.severity}
-                blastRadius={blastRadius}
-                confidence={row.confidence}
-                onConfirm={onDispatchFix}
-                onOpenDetail={onOpen}
-                preflight={preflight}
-                repoUrl={preflight?.repoUrl ?? null}
-              />
+        <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
+          <div className="reports-action-top ml-auto w-full min-w-0">
+            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
+              <RowKebab row={row} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
-          ) : (
-            <Link
-              to={`/reports/${row.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex shrink-0 items-center justify-center truncate px-2 py-1 text-2xs font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
-            >
-              Triage →
-            </Link>
-          )}
-        </div>
-        <div className={`reports-action-age ${REPORTS_ACTION_STACK_MAX}`}>
-          <RecencyHeatLabel
-            createdAt={row.created_at}
-            label={formatRelative(row.created_at)}
-            wrapperClass="w-full"
-          />
+            {canDispatch ? (
+              <span
+                className="inline-flex shrink-0 min-w-0"
+                data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}
+              >
+                <DispatchFixPreflight
+                  variant="table"
+                  busy={dispatchBusy}
+                  severity={row.severity}
+                  blastRadius={blastRadius}
+                  confidence={row.confidence}
+                  onConfirm={onDispatchFix}
+                  onOpenDetail={onOpen}
+                  preflight={preflight}
+                  repoUrl={preflight?.repoUrl ?? null}
+                />
+              </span>
+            ) : (
+              <Link
+                to={`/reports/${row.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+              >
+                Triage →
+              </Link>
+            )}
+          </div>
+          <div className="reports-action-age">
+            <RecencyHeatLabel
+              createdAt={row.created_at}
+              label={formatRelative(row.created_at)}
+              compact
+              wrapperClass="w-full"
+            />
+          </div>
         </div>
       </td>
     </tr>

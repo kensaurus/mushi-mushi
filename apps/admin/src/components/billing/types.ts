@@ -21,9 +21,17 @@ export interface BillingStats {
   usagePct: number | null
   overQuota: boolean
   approachingQuota: boolean
+  /** Phase 2: diagnoses metering — null when the plan doesn't have a diagnoses limit. */
+  diagnosesUsed?: number | null
+  diagnosesLimit?: number | null
+  diagnosesUsagePct?: number | null
+  overDiagnosisQuota?: boolean
+  approachingDiagnosisQuota?: boolean
   fixesAttempted: number
   fixesSucceeded: number
   llmCostUsdMonth: number
+  /** Hard monthly spend cap in USD — when set, replaces LLM COGS tile in snapshot. */
+  monthlySpendCapUsd?: number | null
   periodEnd: string | null
   projectCount: number
   freeLimitReports: number

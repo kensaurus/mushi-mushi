@@ -12,7 +12,8 @@
  *   POST /v1/cli/auth/device/token    (public)      — CLI polls for token
  *   GET  /v1/cli/projects             (cliTokenAuth) — list user's projects
  *   POST /v1/cli/projects             (cliTokenAuth) — create a project + auto-mint key
- *   POST /v1/cli/projects/:id/keys    (cliTokenAuth) — mint a report:write key for an existing project
+ *   POST /v1/cli/projects/:id/keys    (cliTokenAuth) — mint a dual-scope key for an existing project
+ *   POST /v1/cli/funnel               (apiKeyAuth)   — emit a CLI funnel event (mcp_setup_done etc.)
  *
  * SECURITY:
  *   - device_code is a random UUID — 128-bit entropy, never shown to the user.
@@ -39,6 +40,7 @@ import { getServiceClient } from '../../_shared/db.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { log } from '../../_shared/logger.ts'
 import { userCanAccessProject } from '../shared.ts'
+import { emitFunnelEvent } from '../../_shared/setup-funnel.ts'
 
 /** Generate a 9-char user-friendly code in the format XXXX-XXXX (RFC 8628 §6.1). */
 function generateUserCode(): string {
@@ -142,6 +144,16 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       'https://kensaur.us'
     const verificationUri = `${adminOrigin}/mushi-mushi/admin/cli-auth?code=${userCode}`
 
+    // Fire-and-forget: record that a CLI auth attempt started. No user_id yet
+    // (public endpoint) so deduplicate on device_code alone.
+    void emitFunnelEvent(db, {
+      userId: null,
+      eventName: 'cli_auth_started',
+      dedupKey: data.device_code,
+      source: 'cli',
+      metadata: { user_code: userCode },
+    })
+
     return c.json({
       ok: true,
       data: {
@@ -212,10 +224,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
-    // No project scope exists at token-issuance time, and audit_logs.project_id
-    // is NOT NULL, so a project-scoped audit row can't be written here. Emit a
-    // structured log line for observability instead; the subsequent api_key
-    // mint (on project create/select) writes the project-scoped audit row.
+    // Structured log + funnel event — neither must block the approval response.
     try {
       log.info('cli_token.issued', {
         actor_id: userId,
@@ -225,6 +234,13 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     } catch {
       // Logging must never block approval.
     }
+
+    void emitFunnelEvent(db, {
+      userId,
+      eventName: 'cli_auth_approved',
+      dedupKey: row.id,
+      source: 'console',
+    })
 
     return c.json({ ok: true, data: { message: 'Approved — your CLI will connect in a moment.' } })
   })
@@ -245,14 +261,26 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
+    const userId = c.get('userId') as string
     const db = getServiceClient()
     // Only flip rows that are still pending — never overwrite an already
     // approved/rejected request (idempotent, no-op if nothing matches).
-    await db
+    const { data: rejectedRow } = await db
       .from('cli_auth_requests')
       .update({ status: 'rejected' })
       .eq('user_code', userCode)
       .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
+
+    if (rejectedRow?.id) {
+      void emitFunnelEvent(db, {
+        userId,
+        eventName: 'cli_auth_denied',
+        dedupKey: rejectedRow.id,
+        source: 'console',
+      })
+    }
 
     return c.json({ ok: true, data: { message: 'Request rejected.' } })
   })
@@ -342,6 +370,16 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
         { error: 'invalid_grant', error_description: 'CLI token was already retrieved. Run: mushi login to get a new one.' },
         400,
       )
+    }
+
+    // Emit token-claimed funnel event — user_id is from the approved row.
+    if (row.user_id) {
+      void emitFunnelEvent(db, {
+        userId: row.user_id,
+        eventName: 'cli_auth_token_claimed',
+        dedupKey: row.id,
+        source: 'cli',
+      })
     }
 
     return c.json({
@@ -440,7 +478,13 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       { onConflict: 'project_id,user_id' },
     )
 
-    // Auto-mint a report:write key (same pattern as POST /v1/admin/projects).
+    // Mint a full CLI key: report:write (SDK ingest) + mcp:read + mcp:write
+    // (CLI admin + MCP tools). mcp:write is required by owner-only admin commands
+    // such as `mushi billing cap`, `mushi billing alert-email`, `mushi pipeline
+    // start`, and `mushi fixes merge`. mcp:write implies mcp:read at the gate, but
+    // both are listed for explicit auditability. This endpoint is owner-gated, so
+    // the key never carries more than the authenticated owner already has.
+    const WIZARD_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))
@@ -456,7 +500,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       key_hash: keyHash,
       key_prefix: prefix,
       label: 'sdk-ingest',
-      scopes: ['report:write'],
+      scopes: WIZARD_SCOPES,
       is_active: true,
     })
     if (!keyErr) {
@@ -468,10 +512,27 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
         'api_key.created',
         'project_api_key',
         keyId,
-        { source: 'cli_create_automint', scopes: ['report:write'], key_prefix: prefix },
+        { source: 'cli_create_automint', scopes: WIZARD_SCOPES, key_prefix: prefix },
         { actorType: 'cli' },
       )
+      void emitFunnelEvent(db, {
+        userId,
+        projectId: data.id,
+        eventName: 'cli_key_minted',
+        dedupKey: keyId,
+        source: 'cli',
+        metadata: { key_prefix: prefix, scopes: WIZARD_SCOPES },
+      })
     }
+
+    void emitFunnelEvent(db, {
+      userId,
+      projectId: data.id,
+      eventName: 'cli_project_created',
+      dedupKey: data.id,
+      source: 'cli',
+      metadata: { project_name: name },
+    })
 
     return c.json({ ok: true, data: { id: data.id, slug, name, apiKey, keyPrefix: prefix } }, 201)
   })
@@ -507,6 +568,11 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
+    // Mint a full CLI key matching the project-create flow: report:write +
+    // mcp:read + mcp:write. mcp:write powers owner-only admin commands (billing
+    // cap / alert-email, pipeline start, fixes merge). Owner/admin-gated above,
+    // so the key never exceeds the caller's existing privileges.
+    const LOGIN_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))
@@ -521,7 +587,7 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       key_hash: keyHash,
       key_prefix: prefix,
       label: 'cli-login',
-      scopes: ['report:write'],
+      scopes: LOGIN_SCOPES,
       is_active: true,
     })
     if (keyErr) {
@@ -535,10 +601,79 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       'api_key.created',
       'project_api_key',
       keyId,
-      { source: 'cli_login_automint', scopes: ['report:write'], key_prefix: prefix },
+      { source: 'cli_login_automint', scopes: LOGIN_SCOPES, key_prefix: prefix },
       { actorType: 'cli' },
     )
 
-    return c.json({ ok: true, data: { key: rawKey, prefix, scopes: ['report:write'] } }, 201)
+    void emitFunnelEvent(db, {
+      userId,
+      projectId,
+      eventName: 'cli_key_minted',
+      dedupKey: keyId,
+      source: 'cli',
+      metadata: { key_prefix: prefix, scopes: LOGIN_SCOPES },
+    })
+
+    return c.json({ ok: true, data: { key: rawKey, prefix, scopes: LOGIN_SCOPES } }, 201)
+  })
+
+  // ─── CLI funnel signal (authenticated with API key) ───────────────────────
+  // POST /v1/cli/funnel  (apiKeyAuth via X-Mushi-Api-Key header)
+  // Lightweight fire-and-forget endpoint so the CLI can emit funnel events
+  // (e.g. mcp_setup_done) using its API key rather than requiring a browser
+  // session. Accepts any valid project API key (no specific scope required —
+  // the key proves project membership, and the event is the signal itself).
+  //
+  // Body: { event: FunnelEventName, source?: string, metadata?: object }
+  app.post('/v1/cli/funnel', async (c) => {
+    const apiKey = c.req.header('X-Mushi-Api-Key') ?? c.req.header('Authorization')?.replace(/^Bearer /, '')
+    const projectId = c.req.header('X-Mushi-Project') ?? ''
+
+    if (!apiKey) {
+      return c.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'API key required' } }, 401)
+    }
+
+    const db = getServiceClient()
+
+    // Resolve the key by its hash ONLY. NEVER match on key_prefix — the prefix
+    // is non-secret (it is rendered in dashboards, audit logs, and CLI output),
+    // so a prefix match would let any caller who knows the public 12-char prefix
+    // authenticate without the secret. Mirrors the canonical apiKeyAuth lookup.
+    const keyHash = await sha256hex(apiKey)
+    const { data: keyRow, error: keyErr } = await db
+      .from('project_api_keys')
+      .select('id, project_id, is_active')
+      .eq('key_hash', keyHash)
+      .maybeSingle()
+
+    if (keyErr || !keyRow || !keyRow.is_active) {
+      return c.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Invalid or inactive API key' } }, 401)
+    }
+    if (projectId && keyRow.project_id !== projectId) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Project mismatch' } }, 403)
+    }
+
+    let body: { event?: string; source?: string; metadata?: Record<string, unknown> } = {}
+    try { body = await c.req.json() } catch { /* ignore — body is optional */ }
+
+    const allowedEvents = ['mcp_setup_done', 'mcp_first_tool_call'] as const
+    type AllowedEvent = typeof allowedEvents[number]
+    const eventName = body.event as AllowedEvent | undefined
+
+    if (!eventName || !allowedEvents.includes(eventName)) {
+      return c.json({ ok: false, error: { code: 'INVALID_EVENT', message: `Event must be one of: ${allowedEvents.join(', ')}` } }, 400)
+    }
+
+    const dedupKey = `${keyRow.id}:${eventName}`
+    void emitFunnelEvent(db, {
+      userId: null,
+      projectId: keyRow.project_id,
+      eventName,
+      dedupKey,
+      source: 'cli',
+      metadata: body.metadata ?? {},
+    })
+
+    return c.json({ ok: true })
   })
 }

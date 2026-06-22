@@ -24,6 +24,7 @@ import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
 import { estimateCallCostUsd } from '../_shared/pricing.ts';
+import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
 import {
   findInventoryCandidates,
   formatCandidatesForPrompt,
@@ -191,6 +192,107 @@ Deno.serve(
         return new Response(JSON.stringify({ error: 'Report not found' }), { status: 404 });
       }
 
+      // ── Dedup short-circuit (signature cache) ──────────────────────────────
+      // If this report belongs to a report_group whose head is already
+      // classified, copy the head's classification and skip the Sonnet call.
+      // The group was built by the pgvector similarity pass in Stage 1 (same
+      // error signature → same group). Re-classifying identical root causes
+      // wastes LLM budget and inflates the diagnoses meter, which is why:
+      //   - no `diagnoses` usage_event is recorded for deduplicated reports.
+      //   - the Stage-2 classification is cloned verbatim (no new Sonnet call).
+      if (report.report_group_id && report.status !== 'classified') {
+        const { data: groupHead } = await db
+          .from('reports')
+          .select('id, stage2_analysis, category, severity, summary, component, reproduction_steps, confidence, stage2_model, stage2_prompt_version')
+          .eq('report_group_id', report.report_group_id)
+          .eq('status', 'classified')
+          .neq('id', reportId)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (groupHead?.stage2_analysis) {
+          log.info('Dedup short-circuit: cloning classification from group head', {
+            reportId,
+            groupHeadId: groupHead.id,
+            groupId: report.report_group_id,
+          });
+
+          const { error: cloneErr } = await db.from('reports').update({
+            stage2_analysis: groupHead.stage2_analysis,
+            stage2_model: groupHead.stage2_model ?? null,
+            stage2_prompt_version: groupHead.stage2_prompt_version ?? null,
+            stage2_latency_ms: 0,
+            stage2_partial: null,
+            category: groupHead.category,
+            severity: groupHead.severity,
+            summary: groupHead.summary,
+            component: groupHead.component,
+            reproduction_steps: groupHead.reproduction_steps,
+            confidence: groupHead.confidence,
+            status: 'classified',
+            processing_attempts: (report.processing_attempts ?? 0) + 1,
+          }).eq('id', reportId);
+
+          if (cloneErr) {
+            log.warn('Dedup clone writeback failed; falling through to full classification', {
+              reportId, err: cloneErr.message,
+            });
+          } else {
+            // No usage event — deduped reports do not count as diagnoses.
+            return new Response(JSON.stringify({ ok: true, deduped: true, groupHeadId: groupHead.id }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
+      }
+
+      // ── Diagnosis quota + spend cap gate ──────────────────────────────────
+      // Must run BEFORE the Sonnet call so we never spend LLM budget over cap.
+      // On deny we mark the report `quota_exceeded` (caller sees HTTP 402 from
+      // the API layer; the report is preserved and can be promoted on upgrade).
+      const diagnosisVerdict = await checkDiagnosisQuota(db, projectId);
+      if (!diagnosisVerdict.allowed) {
+        // Transient quota-check failure (DB count error) is NOT a billing quota
+        // breach: never mark the report quota_exceeded and never call the LLM.
+        // Throw so the report is preserved for retry via the catch (HTTP 500),
+        // keeping spend safely capped without permanently failing the report.
+        if (diagnosisVerdict.reason === 'QUOTA_CHECK_UNAVAILABLE') {
+          throw new Error(
+            'Diagnosis quota check unavailable (transient DB error) — deferring classification for retry',
+          );
+        }
+        log.warn('Diagnosis quota gate: denying Stage-2 classification', {
+          projectId,
+          reportId,
+          reason: diagnosisVerdict.reason,
+          used: diagnosisVerdict.used,
+          limit: diagnosisVerdict.limit,
+          spendCapUsd: diagnosisVerdict.spendCapUsd,
+        });
+        await db.from('reports').update({
+          status: 'quota_exceeded',
+          processing_attempts: (report.processing_attempts ?? 0) + 1,
+        }).eq('id', reportId);
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: diagnosisVerdict.reason ?? 'QUOTA_EXCEEDED',
+              message:
+                diagnosisVerdict.reason === 'SPEND_CAP_REACHED'
+                  ? 'Monthly spend cap reached — upgrade your cap in Billing to continue.'
+                  : 'Diagnosis quota reached — upgrade to continue.',
+              used: diagnosisVerdict.used,
+              limit: diagnosisVerdict.limit,
+              periodResetsAt: diagnosisVerdict.periodResetsAt,
+              plan: diagnosisVerdict.plan,
+            },
+          }),
+          { status: 402, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
       // Extract stored traceparent to propagate through classification span.
       const inboundTraceparent =
         typeof (report.metadata as Record<string, unknown> | null)?.traceparent === 'string'
@@ -329,7 +431,7 @@ Deno.serve(
 - Action: ${extraction?.action ?? 'unknown'}
 - Expected: ${extraction?.expected ?? 'unknown'}
 - Actual: ${extraction?.actual ?? 'unknown'}
-- Emotion: ${extraction?.emotion ?? 'not captured'}
+- Emotion: ${extraction?.emotion || 'not captured'}
 - Stage 1 Category: ${extraction?.category ?? scrubbedReport.user_category}
 - Stage 1 Severity: ${extraction?.severity ?? 'unknown'}
 - Stage 1 Confidence: ${extraction?.confidence ?? 'unknown'}
@@ -550,6 +652,33 @@ ${ontologyContext}${inventoryContext}`;
         // Sonnet call but sees status='new'. See dogfood-glotit-2026-04-17.md.
         throw new Error(`Stage 2 writeback failed: ${updateError.message}`);
       }
+
+      // METERED DIAGNOSIS (Phase 2 — charged unit): record one 'diagnoses'
+      // usage_events row for every fresh Stage-2 classification.
+      // Deduplicated reports (handled above) do NOT reach this path.
+      // Fire-and-forget — a ledger failure must never gate classification.
+      // Invalidate the diagnosis quota cache so the next classify-report call
+      // for this project sees the updated count.
+      void db
+        .from('usage_events')
+        .insert({
+          project_id: projectId,
+          event_name: 'diagnoses',
+          quantity: 1,
+          metadata: {
+            report_id: reportId,
+            model: usedModel,
+            latency_ms: latencyMs,
+            overage: diagnosisVerdict.overage,
+          },
+        })
+        .then(({ error: usageErr }) => {
+          if (usageErr) {
+            log.warn('Diagnosis usage event insert failed', { reportId, err: usageErr.message });
+          } else {
+            invalidateDiagnosisCache(projectId);
+          }
+        });
 
       log.info('Stage 2 analyzed', {
         category: classification.category,

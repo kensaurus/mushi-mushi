@@ -131,13 +131,15 @@ export async function apiCall<T = unknown>(
       !('ok' in body)
     ) {
       const b = body as Record<string, unknown>
+      // Backend may nest error under { error: { code, message } } — unwrap it
+      // so die() can see INSUFFICIENT_SCOPE and emit targeted hints.
+      const nested = b['error'] as Record<string, unknown> | undefined
+      const errCode = (nested?.['code'] as string) ?? (b['code'] as string) ?? `HTTP_${res.status}`
+      const errMsg  = (nested?.['message'] as string) ?? (b['message'] as string) ?? `Request failed (${res.status})`
       return {
         ok: false,
         httpStatus: res.status,
-        error: {
-          code: (b['code'] as string) ?? `HTTP_${res.status}`,
-          message: (b['message'] as string) ?? `Request failed (${res.status})`,
-        },
+        error: { code: errCode, message: errMsg },
       }
     }
 
@@ -165,11 +167,23 @@ export async function apiCall<T = unknown>(
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
-/** Print an API error and exit with the appropriate code. */
+/** Print an API error and exit with the appropriate code.
+ * Recognises INSUFFICIENT_SCOPE and prints a targeted fix hint so users are
+ * never left with a bare 403 and no guidance.
+ */
 export function die(result: ApiError, exitCode = 1): never {
   const { code, message } = result.error
   const status = result.httpStatus ? ` [${result.httpStatus}]` : ''
   process.stderr.write(`error${status}: ${code} — ${message}\n`)
+  if (code === 'INSUFFICIENT_SCOPE') {
+    process.stderr.write(
+      '\n  Your current API key does not have the required scope for this command.\n' +
+      '  New keys minted by the wizard already include both scopes. Existing keys\n' +
+      '  can be upgraded with:\n\n' +
+      '    mushi login --upgrade-scope\n\n' +
+      '  Or visit your console → Projects → API Keys to mint a new key.\n',
+    )
+  }
   process.exit(exitCode)
 }
 

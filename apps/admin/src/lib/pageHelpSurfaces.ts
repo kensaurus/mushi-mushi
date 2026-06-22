@@ -18,8 +18,8 @@ export const PAGE_HELP_SECTION_SHELL =
 
 /** Hover tooltip popover (`Tooltip` in ui/misc). */
 export const TOOLTIP_POPOVER_SHELL =
-  'border-ok/35 bg-ok-muted/30 text-fg shadow-lg'
+  'border-edge-subtle bg-surface-raised text-fg shadow-lg backdrop-blur-sm'
 
 /** Field-level config help popover (`ConfigHelp`). */
 export const CONFIG_HELP_POPOVER_SHELL =
-  'border-ok/35 bg-ok-muted/30 shadow-overlay'
+  'border-edge-subtle bg-surface-raised shadow-overlay backdrop-blur-sm'

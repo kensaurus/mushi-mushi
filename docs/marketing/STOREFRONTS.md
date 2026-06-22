@@ -134,3 +134,55 @@ PostHog's hedgehog is the direct precedent — *memorable weirdness compounds*.
 
 When every checkbox above is ticked, the storefronts are ready. Only then start
 [launch-week.md](./launch-week.md).
+
+---
+
+## 7. MCP registry + directory listings (diagnoses era)
+
+The new front door is `npx mushi-mushi setup --ide` (the MCP-first install wizard).
+These listings drive cold discovery for that path.
+
+### MCP registry
+
+- [ ] **[mcp.run](https://mcp.run)** — submit `mushi-mushi` as an MCP server.
+  Entry template: name = "Mushi Mushi", description = "Bug-translation AI for vibe coders. Read live diagnoses and paste-ready fix prompts into Cursor / Claude Code without leaving the editor.", homepage = "https://mushimushi.dev", install = `npx mushi-mushi setup --ide`, features = `triage · fixes · inventory · setup`.
+- [ ] **[smithery.ai](https://smithery.ai)** — same fields as mcp.run. Category: "Debugging / DevOps".
+- [ ] **[cursor.directory](https://cursor.directory)** — list under "Developer Tools".
+  1-liner: *"Mushi gives Cursor a `get_fix_context` tool — paste-ready root cause from user-reported bugs, no dashboard."*
+- [ ] **[awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)** — submit a PR adding
+  Mushi under the "Development Tools" section. Title: `mushi-mushi — Bug translation for AI-native teams`.
+
+### Open-source directories
+
+- [ ] **[Awesome-Self-Hosted](https://github.com/awesome-selfhosted/awesome-selfhosted)** — submit under "Bug Trackers" or "Project Management". Self-hosted is MIT core + Docker Compose one-liner.
+- [ ] **[OpenAlternative](https://openalternative.co)** — submit as alternative to Sentry. Comparison hook: "Sentry catches code errors. Mushi catches user-felt friction — then translates it into a paste-ready Cursor fix prompt."
+- [ ] **[Product Hunt](https://producthunt.com)** — coordinate with `launch-week.md`. Ship on a Tuesday or Wednesday.
+- [ ] **[Hacker News "Show HN"](https://news.ycombinator.com)** — title draft: *"Show HN: Mushi Mushi – open-source bug translator for AI-native teams (MCP-first)"*
+
+### Build-in-public cadence
+
+Post a "this week in Mushi" note every Friday on Bluesky / X. Template:
+
+```
+This week: [N] diagnoses processed across [M] projects.
+Top error class: [X]. Fix rate: [Y]%.
+What changed: [one shipped thing].
+[link to changelog entry]
+```
+
+The numbers come from `GET /v1/admin/stats` (service-role) or the daily snapshot in `docs/stats.snapshot.json` (auto-updated by `scripts/marketing/update-stats.mjs`).
+
+### MCP install deeplink format
+
+The lean default install deeplink (in README + docs) should always use:
+
+```
+vscode://ms-vscode.codeinterpreter/mcp/install?url=https://registry.npmjs.org/@mushi-mushi/mcp&features=triage,fixes,inventory,setup,docs
+```
+
+Cursor deeplink:
+```
+cursor://anysphere.cursor-mcp-installer/install?url=https://registry.npmjs.org/@mushi-mushi/mcp&features=triage,fixes,inventory,setup,docs
+```
+
+`DEFAULT_FEATURE_GROUPS` in `packages/mcp/src/feature-groups.ts` is the canonical lean set — verified as `['triage', 'fixes', 'inventory', 'setup', 'docs']`. Do not expand the default without measuring context-window cost.

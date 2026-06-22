@@ -10,7 +10,7 @@
 import * as p from '@clack/prompts'
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   detectFramework,
@@ -47,6 +47,7 @@ import { normalizeEndpoint, resolveCloudEndpoint, TEST_REPORT_FETCH_TIMEOUT_MS }
 import { checkFreshness } from './freshness.js'
 import { detectWorkspaceHint, type WorkspaceHint } from './monorepo.js'
 import { MUSHI_CLI_VERSION } from './version.js'
+import { printAuthBanner } from './auth-ui.js'
 
 export interface InitOptions {
   cwd?: string
@@ -113,7 +114,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     p.log.info(`Skipped install. Run \`${installCommand(pm, packagesToInstall)}\` yourself.`)
   }
 
-  writeEnvFile(cwd, credentials.apiKey, credentials.projectId, framework)
+  await writeEnvFile(cwd, credentials.apiKey, credentials.projectId, framework, endpoint, Boolean(options.yes))
   persistCliConfig(credentials.apiKey, credentials.projectId, endpoint)
 
   const enableRewards = await maybeEnableRewards(options)
@@ -232,7 +233,7 @@ async function acquireCredentials(
   //    pasting a UUID + key); otherwise we offer it as the recommended option.
   //    Any failure falls through to manual entry — the wizard never hard-fails.
   if (options.yes) {
-    const creds = await runBrowserSignIn(options, endpoint)
+    const creds = await runBrowserSignIn(options, endpoint, consoleBase)
     if (creds) return creds
     p.log.warn("Browser sign-in didn't complete — switching to manual entry.")
   } else {
@@ -248,7 +249,7 @@ async function acquireCredentials(
         {
           value: 'manual',
           label: 'Paste a Project ID + API key',
-          hint: 'Self-hosted or expert setup',
+          hint: 'Self-hosted or expert setup — run npx mushi-mushi (not mushi setup)',
         },
       ],
     })
@@ -257,7 +258,7 @@ async function acquireCredentials(
       process.exit(0)
     }
     if (method === 'browser') {
-      const creds = await runBrowserSignIn(options, endpoint)
+      const creds = await runBrowserSignIn(options, endpoint, consoleBase)
       if (creds) return creds
       p.log.warn("Browser sign-in didn't complete — switching to manual entry.")
     }
@@ -276,6 +277,7 @@ async function acquireCredentials(
 async function runBrowserSignIn(
   options: InitOptions,
   endpoint: string,
+  consoleBase: string,
 ): Promise<{ apiKey: string; projectId: string } | null> {
   const startSpin = p.spinner()
   startSpin.start('Starting secure browser sign-in…')
@@ -289,14 +291,12 @@ async function runBrowserSignIn(
   }
   startSpin.stop('Browser sign-in ready.')
 
-  p.log.step(`Confirmation code: ${session.user_code}`)
-  p.log.info(`Opening ${session.verification_uri}`)
   try {
     await openInBrowser(session.verification_uri)
   } catch {
-    /* best-effort — the URL is printed above */
+    /* best-effort — URL is shown in the banner below */
   }
-  p.log.message('Approve the request in your browser to continue. (Ctrl+C to cancel)')
+  printAuthBanner(session.user_code, session.verification_uri)
 
   const waitSpin = p.spinner()
   waitSpin.start('Waiting for you to approve in the browser…')
@@ -316,10 +316,14 @@ async function runBrowserSignIn(
 
   if (!projectId) {
     let projects: DeviceProject[] = []
+    const fetchSpin = p.spinner()
+    fetchSpin.start('Loading your projects…')
     try {
       projects = await listProjects(endpoint, cliToken)
-    } catch {
-      /* non-fatal — user can still create one */
+      fetchSpin.stop(projects.length > 0 ? `Found ${projects.length} project(s).` : 'No projects yet.')
+    } catch (err) {
+      fetchSpin.stop('Could not load projects — you can still create a new one.')
+      p.log.warn(err instanceof Error ? err.message : String(err))
     }
 
     const NEW = '__new__'
@@ -366,7 +370,25 @@ async function runBrowserSignIn(
   // Selecting an existing project (or a create that didn't return a key) mints
   // a fresh report:write key — raw keys can never be recovered after creation.
   if (projectId && !apiKey) {
-    apiKey = (await mintProjectKey(endpoint, cliToken, projectId)) ?? undefined
+    const keySpin = p.spinner()
+    keySpin.start('Minting SDK key…')
+    try {
+      const minted = await mintProjectKey(endpoint, cliToken, projectId)
+      apiKey = minted ?? undefined
+      if (!apiKey) {
+        keySpin.stop('Could not mint an API key.')
+        p.log.warn(
+          `Open the console Verify tab to generate a key manually: ` +
+          `${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
+        )
+        return null
+      }
+      keySpin.stop('SDK key ready.')
+    } catch (err) {
+      keySpin.stop('Could not mint an API key.')
+      p.log.warn(err instanceof Error ? err.message : String(err))
+      return null
+    }
   }
 
   if (!projectId || !apiKey) return null
@@ -532,14 +554,43 @@ function runCommand(pm: PackageManager, packages: string[], cwd: string): Promis
   })
 }
 
-function writeEnvFile(cwd: string, apiKey: string, projectId: string, framework: Framework): void {
+async function writeEnvFile(
+  cwd: string,
+  apiKey: string,
+  projectId: string,
+  framework: Framework,
+  endpoint: string,
+  overwrite: boolean,
+): Promise<void> {
   const target = ENV_FILES.find((f) => existsSync(join(cwd, f))) ?? ENV_FILES[0]
   const targetPath = join(cwd, target)
-  const newVars = envVarsToWrite(apiKey, projectId, framework)
+  const newVars = envVarsToWrite(apiKey, projectId, framework, endpoint)
 
   const existing = existsSync(targetPath) ? readFileSync(targetPath, 'utf-8') : ''
   if (existing.includes('MUSHI_PROJECT_ID')) {
-    p.log.warn(`Existing MUSHI_* vars found in ${target} — leaving them untouched.`)
+    let shouldOverwrite = overwrite
+    if (!shouldOverwrite) {
+      const answer = await p.confirm({
+        message: `Existing MUSHI_* vars found in ${target}. Update with new credentials?`,
+        initialValue: true,
+      })
+      if (p.isCancel(answer)) {
+        p.log.info(`Kept existing env vars in ${target}.`)
+        return
+      }
+      shouldOverwrite = Boolean(answer)
+    }
+    if (!shouldOverwrite) {
+      p.log.info(`Kept existing env vars in ${target}. Re-run and confirm to overwrite.`)
+      return
+    }
+    // Replace existing MUSHI_* lines (framework-prefixed and bare).
+    const MUSHI_LINE_RE = /^(NEXT_PUBLIC_|NUXT_PUBLIC_|VITE_|EXPO_PUBLIC_)?MUSHI_[A-Z_]+=.*/gm
+    const stripped = existing.replace(MUSHI_LINE_RE, '').replace(/\n{3,}/g, '\n\n').trimEnd()
+    const prefix = stripped.length > 0 ? '\n' : ''
+    writeFileSync(targetPath, `${stripped}${prefix}\n# Mushi Mushi\n${newVars}\n`)
+    p.log.success(`Updated MUSHI_* env vars in ${target}`)
+    warnIfMissingFromGitignore(cwd, target)
     return
   }
 
@@ -630,12 +681,14 @@ function printNextSteps(framework: Framework, consoleBase: string, enableRewards
     p.log.info('Users will earn points for bug reports, screen navigation, and app activity.')
   }
 
-  p.log.message('Verify the install:')
-  p.log.message('  • Start your dev server')
-  p.log.message('  • Look for the 🐛 button in the bottom-right corner (or shake on mobile)')
-  p.log.message(`  • Submit a test report — it should appear at ${reportsUrl(consoleBase)}`)
-  p.log.info(
-    'Tip: `mushi connect --write-env --wire-ide --wait` also wires Cursor MCP and waits for SDK heartbeat.',
+  p.note(
+    [
+      '  [ ] 1. Paste the init snippet above into your app entry file',
+      '  [ ] 2. Start your dev server',
+      '  [ ] 3. Run: mushi connect --write-env --wire-ide --wait',
+      `  [ ] 4. Open the Verify tab to send a test report: ${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
+    ].join('\n'),
+    'Next steps:',
   )
 }
 

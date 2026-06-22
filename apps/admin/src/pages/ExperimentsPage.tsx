@@ -16,27 +16,26 @@ import { usePageCopy } from '../lib/copy'
 import { useExperimentsUx, resolveQuickExperimentsTab } from '../lib/experimentsModeUx'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import {
   Card,
-  Section,
   Badge,
   Btn,
   Input,
   EmptyState,
   ErrorAlert,
   RelativeTime,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+} from '../components/ui'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
-  SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { ExperimentsStatusBanner } from '../components/experiments/ExperimentsStatusBanner'
+import { ExperimentsSnapshotStrip } from '../components/experiments/ExperimentsSnapshotStrip'
+import { ExperimentsReadout } from '../components/experiments/ExperimentsReadout'
 import {
   EMPTY_EXPERIMENTS_STATS,
   type ExperimentsStats,
@@ -44,21 +43,6 @@ import {
 } from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import {
-  conversionRateDetail,
-  conversionRateTooltip,
-  draftsReadyToLaunchDetail,
-  draftsReadyToLaunchTooltip,
-  runningCountDetail,
-  runningCountTooltip,
-  totalAssignmentsDetail,
-  totalAssignmentsTooltip,
-  totalExperimentsDetail,
-  totalExperimentsTooltip,
-  winnersFoundDetail,
-  winnersFoundTooltip,
-} from '../lib/statTooltips/experiments'
-import { experimentsLinks } from '../lib/statCardLinks'
 
 interface ExperimentVariant {
   id: string
@@ -243,7 +227,7 @@ export function ExperimentsPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -312,17 +296,41 @@ export function ExperimentsPage() {
         )}
       </PageHeaderBar>
 
-      <ExperimentsStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ExperimentsStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideExperimentsSnapshot,
+            children: (
+              <ExperimentsSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
       <SegmentedControl<ExperimentsTabId>
         size="sm"
+        scrollable
         ariaLabel="Experiments sections"
         value={activeTab}
         options={tabOptions}
@@ -330,57 +338,13 @@ export function ExperimentsPage() {
       />
       )}
 
-      {!ux.hideExperimentsSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'EXPERIMENTS SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.total ?? 'Total'} value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} tooltip={totalExperimentsTooltip(stats)} detail={totalExperimentsDetail(stats)} to={experimentsLinks.total} />
-          <StatCard label={copy?.statLabels?.running ?? 'Running'} value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} tooltip={runningCountTooltip(stats)} detail={runningCountDetail()} to={experimentsLinks.running} />
-          <StatCard label={copy?.statLabels?.readyToLaunch ?? 'Ready to launch'} value={stats.draftsReadyToLaunch} accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined} tooltip={draftsReadyToLaunchTooltip(stats)} detail={draftsReadyToLaunchDetail()} to={experimentsLinks.readyToLaunch} />
-          <StatCard label={copy?.statLabels?.winners ?? 'Winners'} value={stats.winnersFound} accent={stats.winnersFound > 0 ? 'text-ok' : undefined} tooltip={winnersFoundTooltip(stats)} detail={winnersFoundDetail()} to={experimentsLinks.winners} />
-          <StatCard label={copy?.statLabels?.assignments ?? 'Assignments'} value={stats.totalAssignments} accent={stats.totalAssignments > 0 ? 'text-brand' : undefined} tooltip={totalAssignmentsTooltip(stats)} detail={totalAssignmentsDetail(stats)} to={experimentsLinks.assignments} />
-          <StatCard label={copy?.statLabels?.conversion ?? 'Conversion'} value={`${stats.conversionRatePct}%`} accent={stats.conversionRatePct > 0 ? 'text-ok' : undefined} tooltip={conversionRateTooltip(stats)} detail={conversionRateDetail(stats)} to={experimentsLinks.conversion} />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'running'
-              ? 'border-warn/30 bg-warn/5'
-              : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-ok/30 bg-ok/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'running'
-                ? 'warn'
-                : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
-                  ? 'brand'
-                  : 'ok'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="info">
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
-
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          <ExperimentsReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt}
+            isValidating={statsValidating}
+          />
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -670,7 +634,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
           <div className="space-y-3">
             <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
 
-            <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/30 bg-danger/5'}`}>
+            <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/40 bg-surface-raised'}`}>
               <div className="font-medium text-fg-primary">{analysis.srm_ok ? 'SRM check passed' : 'SRM detected'}</div>
               <div className="text-xs mt-0.5 text-fg-muted">chi-square p = {analysis.srm_p.toFixed(4)}</div>
             </div>

@@ -143,6 +143,15 @@ jobs:
         # functions, npm packages, etc.) must match scripts/lib/docs-stats.mjs.
         run: pnpm check:docs-stats
 
+      - name: Check narrative & positioning consistency
+        # Anti-drift guard for the VISION.md constitution: the v2 hero must lead
+        # every primary README (no stale taglines), the north-star / category /
+        # buyer / "will not"s must stay aligned across VISION.md, AGENTS.md,
+        # README.md, and package.json, and every publishable package must keep
+        # its canonical homepage/repository cross-links. Canonical copy lives in
+        # packages/brand (MUSHI_TAGLINE_V2) and /VISION.md.
+        run: pnpm check:narrative
+
       - name: Check SDK version matrix
         run: pnpm check:sdk-version-matrix
 

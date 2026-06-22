@@ -16,9 +16,11 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SnapshotSectionHint,Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge, HelpBanner } from '../components/ui'
 import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
 import { OnboardingStepsGuide } from '../components/onboarding/OnboardingStepsGuide'
+import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
 import { OnboardingModeIntroCard } from '../components/onboarding/OnboardingModeIntroCard'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -449,56 +451,155 @@ export function OnboardingPage() {
       {/* Mode intro card — renders only on first visit; dismissed via localStorage */}
       <OnboardingModeIntroCard />
 
-      <OnboardingStatusBanner
+      <PagePosture
+        maxRows={3}
+        slots={[
+          {
+            id: 'onboarding-status',
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <OnboardingStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRunTest={project ? () => void submitTestReport() : undefined}
+                testing={testStatus === 'running'}
+                plainLanguage={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            id: 'onboarding-snapshot',
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <Section
+                title={copy?.sections?.snapshot ?? 'Setup snapshot'}
+                freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+              >
+                {!ux.hideOverviewTab ? (
+                  <SnapshotSectionHint text={activeTabMeta.description} />
+                ) : null}
+                <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
+                  <StatCard
+                    label={copy?.statLabels?.required ?? 'Required'}
+                    value={`${stats.requiredComplete}/${stats.requiredTotal}`}
+                    accent={stats.setupDone ? 'text-ok' : 'text-warn'}
+                    tooltip={requiredTooltip(stats)}
+                    detail={requiredDetail(stats)}
+                    to={onboardingLinks.required}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.sdk ?? 'SDK'}
+                    value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
+                    accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
+                    tooltip={sdkTooltip(stats)}
+                    detail={sdkDetail(stats)}
+                    to={onboardingLinks.sdk}
+                  />
+                  <StatCard
+                    label={copy?.statLabels?.reports ?? 'Reports'}
+                    value={stats.reportCount}
+                    accent={stats.reportCount > 0 ? 'text-brand' : undefined}
+                    tooltip={reportsTooltip(stats)}
+                    detail={reportsDetail(stats)}
+                    to={onboardingLinks.reports}
+                  />
+                  {!ux.hideOptionalStat ? (
+                    <StatCard
+                      label={copy?.statLabels?.optional ?? 'Optional'}
+                      value={`${stats.optionalComplete}/${stats.optionalTotal}`}
+                      accent="text-fg-secondary"
+                      tooltip={optionalTooltip(stats)}
+                      detail={optionalDetail(stats)}
+                      to={onboardingLinks.optional}
+                    />
+                  ) : null}
+                </div>
+              </Section>
+            ),
+          },
+          {
+            id: 'onboarding-guide',
+            priority: POSTURE_PRIORITY.guide,
+            children: (
+              <OnboardingStepsGuide
+                stats={{
+                  setupDone: stats.setupDone,
+                  hasAnyProject: stats.hasAnyProject,
+                  requiredComplete: stats.requiredComplete,
+                  requiredTotal: stats.requiredTotal,
+                }}
+              />
+            ),
+          },
+        ]}
+      />
+
+      <OnboardingSetupReadout
         stats={stats}
-        onTab={setActiveTab}
-        onRunTest={project ? () => void submitTestReport() : undefined}
-        testing={testStatus === 'running'}
-        plainLanguage={ux.plainBanner}
+        statsFetchedAt={statsFetchedAt}
+        statsValidating={statsValidating}
       />
 
-      <OnboardingStepsGuide
-        stats={{
-          setupDone: stats.setupDone,
-          hasAnyProject: stats.hasAnyProject,
-          requiredComplete: stats.requiredComplete,
-          requiredTotal: stats.requiredTotal,
-        }}
-      />
-
-      {ux.hideOverviewTab && (
-        <div className="flex items-center gap-1.5 text-2xs" aria-label="Setup progress">
-          {(['steps', 'verify', 'sdk'] as const).map((id, i) => {
-            const STEP_LABELS: Record<string, string> = {
-              steps: tabOptions.find((t) => t.id === 'steps')?.label ?? 'Create',
-              verify: tabOptions.find((t) => t.id === 'verify')?.label ?? 'Verify',
-              sdk: tabOptions.find((t) => t.id === 'sdk')?.label ?? 'Install',
-            }
-            const stepOrder = ['steps', 'verify', 'sdk']
-            const currentIdx = stepOrder.indexOf(effectiveTab)
-            const thisIdx = stepOrder.indexOf(id)
-            const isDone = thisIdx < currentIdx
-            const isActive = id === effectiveTab
+      {/* Linear step rail — always visible when there is at least one project */}
+      {stats.hasAnyProject && (
+        <nav aria-label="Setup steps" className="flex flex-wrap items-center gap-2">
+          {([
+            { tab: 'steps',  label: 'Create',       stepId: 'project_created' },
+            { tab: 'verify', label: 'API key',       stepId: 'api_key_generated' },
+            { tab: 'sdk',    label: 'Install SDK',   stepId: 'sdk_installed' },
+            { tab: 'verify', label: 'First report',  stepId: 'first_report_received' },
+          ] as const).map(({ tab, label, stepId }, i) => {
+            const isDone = setup.getStep(stepId)?.complete ?? false
+            const isActive = !isDone && effectiveTab === tab
             return (
-              <span key={id} className="flex items-center gap-1.5">
-                {i > 0 && (
-                  <span className="text-fg-faint" aria-hidden="true">›</span>
-                )}
-                <span
-                  className={`font-medium transition-colors ${
-                    isActive
-                      ? 'text-brand'
-                      : isDone
-                        ? 'text-ok'
-                        : 'text-fg-faint'
+              <span key={`${tab}-${stepId}`} className="flex items-center gap-2">
+                {i > 0 && <span className="text-fg-faint text-xs" aria-hidden="true">›</span>}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-2xs font-medium transition-colors ${
+                    isDone
+                      ? 'text-ok'
+                      : isActive
+                        ? 'bg-brand/10 text-brand ring-1 ring-inset ring-brand/20'
+                        : 'text-fg-muted hover:text-fg'
                   }`}
+                  aria-current={isActive ? 'step' : undefined}
                 >
-                  {isDone && <span className="mr-0.5" aria-hidden="true">✓</span>}
-                  {i + 1}. {STEP_LABELS[id]}
-                </span>
+                  {isDone
+                    ? <span aria-hidden="true">✓</span>
+                    : <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-3xs">{i + 1}</span>
+                  }
+                  {label}
+                </button>
               </span>
             )
           })}
+          {stats.setupDone && (
+            <span className="flex items-center gap-2">
+              <span className="text-fg-faint text-xs" aria-hidden="true">›</span>
+              <Link
+                to="/connect"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-brand hover:underline"
+              >
+                Continue to Connect hub →
+              </Link>
+            </span>
+          )}
+        </nav>
+      )}
+
+      {/* CLI-waiting callout when wizard was opened from the terminal */}
+      {setupCliMode && !stats.setupDone && (
+        <div className="flex items-start gap-3 rounded-lg border border-brand/40 bg-surface-raised px-4 py-3">
+          <span className="mt-0.5 text-brand text-sm" aria-hidden="true">⏳</span>
+          <div>
+            <p className="text-sm font-medium text-fg">Your terminal is waiting</p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              Complete the steps below, then switch back to your terminal — setup
+              continues automatically once you approve.
+            </p>
+          </div>
         </div>
       )}
 
@@ -511,51 +612,6 @@ export function OnboardingPage() {
           size="sm"
         />
       ) : null}
-
-      <Section
-        title={copy?.sections?.snapshot ?? 'Setup snapshot'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        {!ux.hideOverviewTab ? (
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        ) : null}
-        <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
-          <StatCard
-            label={copy?.statLabels?.required ?? 'Required'}
-            value={`${stats.requiredComplete}/${stats.requiredTotal}`}
-            accent={stats.setupDone ? 'text-ok' : 'text-warn'}
-            tooltip={requiredTooltip(stats)}
-            detail={requiredDetail(stats)}
-            to={onboardingLinks.required}
-          />
-          <StatCard
-            label={copy?.statLabels?.sdk ?? 'SDK'}
-            value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
-            accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
-            tooltip={sdkTooltip(stats)}
-            detail={sdkDetail(stats)}
-            to={onboardingLinks.sdk}
-          />
-          <StatCard
-            label={copy?.statLabels?.reports ?? 'Reports'}
-            value={stats.reportCount}
-            accent={stats.reportCount > 0 ? 'text-brand' : undefined}
-            tooltip={reportsTooltip(stats)}
-            detail={reportsDetail(stats)}
-            to={onboardingLinks.reports}
-          />
-          {!ux.hideOptionalStat ? (
-            <StatCard
-              label={copy?.statLabels?.optional ?? 'Optional'}
-              value={`${stats.optionalComplete}/${stats.optionalTotal}`}
-              accent="text-fg-secondary"
-              tooltip={optionalTooltip(stats)}
-              detail={optionalDetail(stats)}
-              to={onboardingLinks.optional}
-            />
-          ) : null}
-        </div>
-      </Section>
 
       {effectiveTab === 'overview' && (
         <>
@@ -686,9 +742,49 @@ export function OnboardingPage() {
           </span>
         </div>
         <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
+
+        {/* Setup funnel panel — 7-day operator view of onboarding event counts */}
+        {stats.funnelCounts && Object.keys(stats.funnelCounts).length > 0 && (
+          <details className="rounded-lg border border-edge-subtle bg-surface-raised">
+            <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold text-fg-muted hover:text-fg">
+              Setup funnel (last 7 days) ▸
+            </summary>
+            <div className="border-t border-edge-subtle px-4 py-3">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+                {([
+                  { key: 'cli_auth_started',        label: 'CLI auth started' },
+                  { key: 'cli_auth_approved',        label: 'Browser approved' },
+                  { key: 'cli_auth_token_claimed',   label: 'Token claimed' },
+                  { key: 'cli_project_created',      label: 'Project created' },
+                  { key: 'cli_key_minted',           label: 'Key minted' },
+                  { key: 'wizard_env_written',       label: 'Env written' },
+                  { key: 'sdk_first_heartbeat',      label: 'SDK heartbeat' },
+                  { key: 'mcp_setup_done',           label: 'MCP setup done' },
+                  { key: 'mcp_first_tool_call',      label: 'MCP first tool call' },
+                  { key: 'cli_auth_denied',          label: 'Auth denied' },
+                  { key: 'cli_auth_expired',         label: 'Auth expired' },
+                ] as const).map(({ key, label }) => {
+                  const count = (stats.funnelCounts as Record<string, number>)[key] ?? 0
+                  return (
+                    <div key={key} className="flex items-baseline justify-between py-0.5">
+                      <span className="text-2xs text-fg-muted">{label}</span>
+                      <span className={`font-mono text-xs font-medium ${count > 0 ? 'text-fg' : 'text-fg-faint'}`}>
+                        {count}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="mt-2 text-2xs text-fg-faint">
+                Counts distinct users per event. Key conversion: <strong>Key minted → SDK heartbeat → MCP setup done → MCP first tool call</strong>.
+                Powered by <code className="font-mono">setup_funnel_events</code>.
+              </p>
+            </div>
+          </details>
+        )}
         <section
           aria-label="Meet Ask Mushi"
-          className="flex flex-col gap-3 rounded-md border border-brand/25 bg-brand/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-md border border-brand/40 bg-surface-raised px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex min-w-0 items-start gap-3">
             <span

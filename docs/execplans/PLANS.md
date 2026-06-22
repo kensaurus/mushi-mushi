@@ -442,3 +442,68 @@ for the active project, with severity badges and refactor hints.
 - **God-file scan scope:** mobile-only first, or include `apps/web` from day one.
   Default: include both (the scanner is trivial and web has its own budget job).
 - [x] Mark `COMPLETE` and update `AGENTS.md` (note the new ingest surface) once shipped.
+
+---
+
+## Phase 3 — Quota Validation + Enterprise Gate + Sentry Upsell + Annual Billing
+
+**Plan ID:** `gtm-phase3`
+**Status:** In progress (Jun 2026)
+
+### Purpose
+
+Close the post-launch loop on the diagnoses-metered billing rollout from Phase 2:
+- Validate that the included-diagnoses quotas (50 / 500 / 2,000) are correctly sized for real dogfooding projects.
+- Enable the Enterprise tier gate on demand (SSO/audit/retention feature flags already exist).
+- Layer the Sentry-enrichment upsell into the billing page.
+- Add annual billing (≈2 months free) as optional Stripe prices.
+
+### Phase 3a — Quota sizing validation (owner: kensaurus)
+
+Run after at least 2 weeks of real usage with the shadow `diagnoses` ledger live.
+
+**Steps:**
+
+1. `mushi usage --json` on glot.it and yen-yen projects → record `diagnosesUsed` for the period.
+2. Query Supabase: `SELECT project_id, SUM(quantity) FROM usage_events WHERE event_name='diagnoses' AND shadow IS NULL GROUP BY project_id ORDER BY 2 DESC;`
+3. Compare against current tiers:
+   - Free (50): typical dogfood project < 30 diagnoses/mo? Keep. Increase to 100 if feedback shows frequent free-wall hits.
+   - Indie (500): typical individual developer project 100–300/mo? Keep.
+   - Pro (2,000): team project? Validate.
+4. If quotas are off by >2×, update `pricing_plans` rows via Supabase MCP and re-seed `stripe-bootstrap.mjs` with corrected `included_diagnoses_per_month` values.
+5. Mark this step complete once two full billing cycles confirm quotas are correct.
+
+### Phase 3b — Enterprise gate (on-demand)
+
+The enterprise feature flags (`sso`, `audit_log`, `teams`) already exist in `pricing_plans.feature_flags`. No code changes required to activate — just:
+
+1. A prospect asks for Enterprise → contact us form or email.
+2. Ops creates a `billing_subscriptions` row with `plan_id = 'enterprise'` (manual or via Supabase dashboard).
+3. The `entitlements.ts` gating already unlocks the SSO/audit routes when `plan.feature_flags.sso === true`.
+
+**Do NOT build a self-serve Enterprise checkout until there are at least 3 Enterprise customers.** It creates compliance overhead (SOC 2 evidence, SAML setup) that should be done per-customer, not automated.
+
+### Phase 3c — Sentry-enrichment upsell (shipped Jun 2026)
+
+Added a `ContainedBlock` upsell in `BillingPage.tsx` overview tab — shown when `setup.getStep('sentry_connected')?.done` is false. Deeplinks to `/integrations`. No backend changes required.
+
+### Phase 3d — Annual billing (shipped Jun 2026)
+
+`scripts/stripe-bootstrap.mjs` now provisions:
+- `mushi:indie:annual:v1` — $150/yr (≈$12.50/mo, 2 months free)
+- `mushi:pro:annual:v1` — $490/yr (≈$40.83/mo, 2 months free)
+
+Both `STRIPE_PRICE_INDIE_ANNUAL` and `STRIPE_PRICE_PRO_ANNUAL` are output in the env block.
+
+**To activate annual billing in Checkout Sessions:**
+1. Run `node scripts/stripe-bootstrap.mjs` to provision the prices.
+2. Add `STRIPE_PRICE_INDIE_ANNUAL` and `STRIPE_PRICE_PRO_ANNUAL` to Supabase secrets.
+3. In the billing route's `startCheckout` function, accept `billing_period: 'annual' | 'monthly'` and switch the price ID accordingly.
+4. Update `PlanComparisonTable` with a monthly/annual toggle (similar to Sentry's pricing page toggle).
+
+### Acceptance criteria
+
+- [ ] Quota validation: 2-cycle data shows free-cloud < 50% of limit (no wall noise), indie < 80% (room for projects to breathe).
+- [ ] Enterprise: one real customer onboarded via manual subscription row — confirms the gate works end-to-end.
+- [ ] Sentry upsell: visible on billing overview when Sentry is not connected; hidden when it is.
+- [ ] Annual billing: `stripe-bootstrap.mjs` creates prices without error; env lines printed.

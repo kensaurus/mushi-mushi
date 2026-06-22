@@ -1,0 +1,69 @@
+Mushi Mushi Enterprise Edition (EE) License
+Copyright (c) 2026 Kenji Sakuramoto / Kensaurus 合同会社
+
+================================================================================
+SUMMARY (non-binding — the terms below control)
+================================================================================
+
+The Mushi Mushi *core* server (everything under `packages/server`,
+`packages/agents`, and `packages/verify` that is NOT inside an `ee/` directory)
+is licensed under the GNU Affero General Public License v3 (AGPLv3) — use it,
+self-host it, fork it, and modify it for your own org. If you offer a *modified*
+server as a network service, publish your changes under AGPLv3 (§13) or obtain a
+commercial license (see /COMMERCIAL-LICENSE.md). The MIT SDK packages remain MIT.
+
+The code in THIS `ee/` directory is the **Enterprise Edition**. It is
+source-available so you can read, audit, modify, and test it, but **production
+use of EE features requires a valid commercial license key**
+(`MUSHI_EE_LICENSE_KEY`) issued by the licensor, or an active Mushi Mushi
+Enterprise subscription. Without a key, EE features are for development,
+evaluation, and contribution only.
+
+This is the open-core model used by projects like Grafana, GitLab, and
+Sentry: a genuinely open AGPL core, plus a small commercial boundary that
+funds the project.
+
+================================================================================
+TERMS
+================================================================================
+
+1. DEFINITIONS
+   "Software" means the contents of this `ee/` directory.
+   "Licensor" means Kenji Sakuramoto / Kensaurus 合同会社.
+   "Production Use" means any use of the Software other than development,
+   testing, evaluation, or contribution back to this repository — including,
+   without limitation, use to operate a service for third parties or internal
+   business operations.
+   "Valid License" means an active Mushi Mushi Enterprise subscription or a
+   commercial license key (`MUSHI_EE_LICENSE_KEY`) issued by the Licensor.
+
+2. GRANT FOR NON-PRODUCTION USE
+   The Licensor grants you a worldwide, royalty-free, non-exclusive license to
+   use, copy, modify, and create derivative works of the Software solely for
+   development, testing, evaluation, and contribution to this repository.
+
+3. PRODUCTION USE REQUIRES A VALID LICENSE
+   You may not make Production Use of the Software without a Valid License. The
+   Software performs a license-key check (`MUSHI_EE_LICENSE_KEY`); removing,
+   disabling, or circumventing that check to enable Production Use without a
+   Valid License is a breach of this license.
+
+4. NO TRADEMARK RIGHTS
+   This license grants no rights in the "Mushi Mushi", "Mushi", 虫, or logo
+   trademarks. See /TRADEMARK.md.
+
+5. REDISTRIBUTION
+   You may redistribute the Software only as part of this repository and only
+   under these same terms. You may not offer the Software, or a service whose
+   primary value is the Software, to third parties without a Valid License.
+
+6. TERMINATION
+   This license terminates automatically if you breach it. On termination you
+   must cease all Production Use and destroy your copies used in Production.
+
+7. DISCLAIMER
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+   OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.
+
+To obtain a commercial license, contact: kensaurus@gmail.com

@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/plugin-cursor-cloud",
   "version": "0.5.0",
   "license": "MIT",
-  "description": "Mushi Mushi plugin: dispatch a Cursor Cloud Agent when a critical bug is classified or a QA story fails â€” opens a signed draft PR automatically.",
+  "description": "Mushi Mushi plugin: dispatch a Cursor Cloud Agent when a critical bug is classified or a QA story fails — opens a signed draft PR automatically.",
   "type": "module",
   "exports": {
     ".": {
@@ -40,7 +40,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-cursor-cloud"
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "publishConfig": {
     "access": "public"
   },
@@ -64,5 +64,6 @@
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/kensaurus"
-  }
+  },
+  "homepage": "https://kensaur.us/mushi-mushi"
 }

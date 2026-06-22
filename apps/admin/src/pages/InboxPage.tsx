@@ -6,12 +6,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { SnapshotSectionHint, ErrorAlert,
+import { ErrorAlert,
   Btn,
   FreshnessPill,
   AgeChip,
-  Section,
-  StatCard,
   SegmentedControl,
   Badge,
   Card, } from '../components/ui'
@@ -23,23 +21,13 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
+import { InboxSnapshotStrip } from '../components/inbox/InboxSnapshotStrip'
 import { InboxPdcaGuide } from '../components/inbox/InboxPdcaGuide'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
-import {
-  backlogDetail,
-  backlogTooltip,
-  clearDetail,
-  clearTooltip,
-  criticalDetail,
-  criticalTooltip,
-  openDetail,
-  openTooltip,
-} from '../lib/statTooltips/inbox'
-import { inboxLinks, statLink } from '../lib/statCardLinks'
 import {
   ActionPill,
   ActionPillRow,
@@ -247,7 +235,7 @@ export function InboxPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -331,43 +319,14 @@ export function InboxPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             show: !ux.hideInboxSnapshot,
             children: (
-              <Section title={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-                <SnapshotSectionHint text={activeTabMeta.description} />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <StatCard
-                    label={copy?.statLabels?.open ?? 'Open'}
-                    value={stats.openActions}
-                    accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
-                    tooltip={openTooltip(stats)}
-                    detail={openDetail(stats)}
-                    to={statLink(inboxLinks.open, stats)}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.clear ?? 'Clear'}
-                    value={stats.clearStages}
-                    accent="text-ok"
-                    tooltip={clearTooltip(stats, ux.plainStageLabels)}
-                    detail={clearDetail(stats, ux.plainStageLabels)}
-                    to={inboxLinks.clear}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.backlog ?? 'Backlog'}
-                    value={stats.openBacklog}
-                    accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
-                    tooltip={backlogTooltip(stats)}
-                    detail={backlogDetail(stats)}
-                    to={inboxLinks.backlog}
-                  />
-                  <StatCard
-                    label={copy?.statLabels?.critical ?? 'Critical 14d'}
-                    value={stats.criticalReports14d}
-                    accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
-                    tooltip={criticalTooltip(stats)}
-                    detail={criticalDetail(stats)}
-                    to={inboxLinks.critical}
-                  />
-                </div>
-              </Section>
+              <InboxSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'}
+                hint={activeTabMeta.description}
+                plainStageLabels={ux.plainStageLabels}
+              />
             ),
           },
           {

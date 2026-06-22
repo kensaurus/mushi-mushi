@@ -106,7 +106,7 @@ What we treat as in-scope attacker capabilities, and what we don't.
 | Compromised Supabase service-role key | ❌ | Treated as a tier-0 incident; would require key rotation and audit-log forensics. Not defendable in software. |
 | Compromise of `kensaurus@gmail.com` | ❌ | Treated as a project-fork event; downstream consumers should pin to the last known-good version and follow the new release channel. |
 | Physical / OS-level attacker on an end-user device | ❌ | Out of scope. |
-| Malicious fork using the Mushi name to ship malware | ❌ (technical) ✅ (legal) | The MIT/BSL grant lets the fork exist; the trademark policy (`TRADEMARK.md`) makes shipping it under the Mushi name an infringement we will pursue. |
+| Malicious fork using the Mushi name to ship malware | ❌ (technical) ✅ (legal) | The MIT / AGPLv3 grant lets the fork exist; the trademark policy (`TRADEMARK.md`) makes shipping it under the Mushi name an infringement we will pursue. |
 
 ## Data handling and PII
 
