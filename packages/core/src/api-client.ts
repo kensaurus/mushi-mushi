@@ -15,6 +15,7 @@ import type {
   MushiTierResult,
 } from './types';
 import { checkReportPayloadSize } from './payload-guard';
+import { sha256Hex, hmacSha256Hex } from './digest';
 
 // One-time credential-failure warning gate — emitted at most once per JS
 // process so it's visible without flooding the console on every queued retry.
@@ -520,27 +521,6 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       );
     },
   };
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-async function hmacSha256Hex(secret: string, value: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const buffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 function sleep(ms: number): Promise<void> {

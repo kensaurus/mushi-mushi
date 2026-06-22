@@ -201,17 +201,27 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
   if (ownerUserIds.length > 0) {
     // Service role can call the get_user_emails_by_ids SECURITY DEFINER RPC
     // (migration 20260621120000) which queries auth.users in one round-trip.
-    const { data: authUsers } = await (db.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: { id: string; email: string }[] | null }>)(
-      'get_user_emails_by_ids',
-      { p_user_ids: ownerUserIds },
-    ).catch(() => ({ data: null }))
+    // db.rpc() returns a PostgrestFilterBuilder (thenable but no .catch method),
+    // so we use await + try/catch instead of chaining .catch() — MUSHI-MUSHI-SERVER-13.
+    let authUsers: { id: string; email: string }[] | null = null
+    try {
+      const { data, error } = await db.rpc('get_user_emails_by_ids', { p_user_ids: ownerUserIds })
+      if (error) throw error
+      authUsers = data as { id: string; email: string }[] | null
+    } catch (err) {
+      aLog.warn('get_user_emails_by_ids failed — falling back to admin API', { err: String(err) })
+    }
     if (authUsers) {
       emailByUserId = new Map(authUsers.map((u) => [u.id, u.email]))
     } else {
       // Fallback: per-user auth.admin call (max 50 to avoid runaway).
       for (const uid of ownerUserIds.slice(0, 50)) {
-        const { data } = await db.auth.admin.getUserById(uid).catch(() => ({ data: null }))
-        if (data?.user?.email) emailByUserId.set(uid, data.user.email)
+        try {
+          const { data } = await db.auth.admin.getUserById(uid)
+          if (data?.user?.email) emailByUserId.set(uid, data.user.email)
+        } catch {
+          // best-effort — skip this user if admin API fails
+        }
       }
     }
   }
