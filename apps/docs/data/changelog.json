@@ -1,5 +1,13 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
     "majorMinor": "1.20",
     "headline": null,
     "pending": false,
