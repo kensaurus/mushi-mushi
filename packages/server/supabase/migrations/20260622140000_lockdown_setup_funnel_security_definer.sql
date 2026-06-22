@@ -33,6 +33,12 @@ NOTES:
   - No data is touched. No behavior change for service_role / edge functions.
   - Keep this in lockstep with 20260622100000 so a fresh `db reset` reproduces
     the secured grant state.
+  - The trailing `NOTIFY pgrst` calls flush PostgREST's schema + privilege
+    caches. Without them, PostgREST can keep serving the pre-REVOKE privilege
+    cache (anon/authenticated still able to call these /rpc endpoints) for up to
+    several minutes after deploy — undermining the lockdown. Mirrors the pattern
+    in 20260527090000_copilot_followup_security_signatures_notify.sql. The same
+    NOTIFY was fired directly on prod after this migration's REVOKE/GRANT.
 */
 
 -- Write helper: only the edge functions (service role) may upsert funnel events.
@@ -46,3 +52,9 @@ REVOKE EXECUTE ON FUNCTION public.get_setup_funnel_counts_7d()
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_setup_funnel_counts_7d()
   TO service_role;
+
+-- Flush PostgREST's schema + privilege caches so the REVOKEs above take effect
+-- immediately on the exposed /rpc surface (otherwise the old grants can be
+-- served from cache for several minutes after deploy).
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

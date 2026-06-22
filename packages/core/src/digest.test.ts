@@ -75,16 +75,33 @@ describe('hmacSha256Hex', () => {
     }
   });
 
-  it('noble and native paths agree for same input', async () => {
-    const noblePath = async () => {
-      vi.stubGlobal('crypto', undefined);
-      try {
-        return await hmacSha256Hex('test-key', 'test-message');
-      } finally {
-        vi.unstubAllGlobals();
-      }
-    };
-    const nobleResult = await noblePath();
-    expect(nobleResult).toMatch(/^[0-9a-f]{64}$/);
+  it('noble fallback matches the RFC 4231 test-case-2 vector', async () => {
+    vi.stubGlobal('crypto', undefined);
+    try {
+      // RFC 4231 §4.3: key="Jefe", data="what do ya want for nothing?"
+      const result = await hmacSha256Hex('Jefe', 'what do ya want for nothing?');
+      expect(result).toBe('5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('noble and native paths produce byte-identical output', async () => {
+    // Native (Web Crypto) path — crypto.subtle is present in the test runtime.
+    const nativeResult = await hmacSha256Hex('test-key', 'test-message');
+    expect(nativeResult).toMatch(/^[0-9a-f]{64}$/);
+
+    // Noble fallback path — force native crypto absent so getSubtle() returns null.
+    vi.stubGlobal('crypto', undefined);
+    let nobleResult: string;
+    try {
+      nobleResult = await hmacSha256Hex('test-key', 'test-message');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    // The whole point of this module is cross-runtime consistency: the pure-JS
+    // fallback must agree byte-for-byte with the hardware-accelerated path.
+    expect(nobleResult).toBe(nativeResult);
   });
 });

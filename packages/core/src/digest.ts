@@ -5,8 +5,9 @@
  *
  * OVERVIEW:
  * Fast path: when `globalThis.crypto?.subtle` is available (browser, Deno,
- * Node ≥ 16, React Native with polyfill) we delegate to the native Web Crypto
- * API which is hardware-accelerated and produces identical output.
+ * Bun, Node ≥ 20 where Web Crypto is exposed globally, React Native with a
+ * crypto polyfill) we delegate to the native Web Crypto API which is
+ * hardware-accelerated and produces identical output.
  *
  * Fallback: `@noble/hashes` — pure-JS, audited, zero-dependency implementation
  * of SHA-256 and HMAC used when native crypto is absent (Hermes cold start

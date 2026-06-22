@@ -90,7 +90,7 @@
   },
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   },
   "funding": {
     "type": "github",
