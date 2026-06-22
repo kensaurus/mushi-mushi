@@ -68,6 +68,55 @@ const CHECKS = [
       }
     },
   },
+  {
+    // Verifies the CliAuthPage shows the anti-paste warning and 3-step guide.
+    name: 'cli-auth page — anti-paste warning present',
+    path: '/mushi-mushi/admin/cli-auth?code=SMOKE-TEST',
+    async assert(page) {
+      // Wait for the page to settle — the code lookup will 404 but the page
+      // shell (heading + steps) should still render.
+      await page.waitForLoadState('domcontentloaded')
+      const body = await page.locator('body').innerText()
+      // Must NOT contain instructions to type/paste the code in the terminal.
+      if (/type this code in(to)? your terminal/i.test(body)) {
+        throw new Error('Page still says to type code in terminal — anti-paste guard missing')
+      }
+      // Must contain the anti-paste warning
+      if (!/do not paste/i.test(body)) {
+        throw new Error('Anti-paste warning "Do not paste" not found on CliAuthPage')
+      }
+      // Must contain all 3 step labels
+      if (!['1.', '2.', '3.'].every((s) => body.includes(s))) {
+        throw new Error('3-step guide not found on CliAuthPage')
+      }
+    },
+  },
+  {
+    // Verifies the SDK install tab exists on the onboarding page.
+    name: 'onboarding SDK tab deep-link',
+    path: '/onboarding?tab=sdk',
+    async assert(page) {
+      await page.waitForLoadState('domcontentloaded')
+      const body = await page.locator('body').innerText()
+      // SDK tab should show install instructions — look for the package install command.
+      if (!/npm install|pnpm add|yarn add|@mushi-mushi/i.test(body)) {
+        throw new Error('SDK install content not found at /onboarding?tab=sdk')
+      }
+    },
+  },
+  {
+    // Verifies the verify tab deep-link shows the ingest/heartbeat UI.
+    name: 'onboarding Verify tab deep-link',
+    path: '/onboarding?tab=verify',
+    async assert(page) {
+      await page.waitForLoadState('domcontentloaded')
+      const body = await page.locator('body').innerText()
+      // Verify tab should mention API key or test report.
+      if (!/api key|test report|ingest|heartbeat/i.test(body)) {
+        throw new Error('Verify tab content not found at /onboarding?tab=verify')
+      }
+    },
+  },
 ]
 
 async function main() {

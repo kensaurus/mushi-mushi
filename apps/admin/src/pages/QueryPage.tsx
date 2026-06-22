@@ -8,26 +8,17 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
 import { QueryGuide } from '../components/query/QueryGuide'
+import { QuerySnapshotStrip } from '../components/query/QuerySnapshotStrip'
+import { QueryReadout } from '../components/query/QueryReadout'
 import { EMPTY_QUERY_STATS, type QueryStats, type QueryTabId } from '../components/query/types'
-import {
-  errors24hDetail,
-  errors24hTooltip,
-  latencyDetail,
-  latencyTooltip,
-  runs24hDetail,
-  runs24hTooltip,
-  savedCountDetail,
-  savedCountTooltip,
-} from '../lib/statTooltips/query'
-import { queryLinks } from '../lib/statCardLinks'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
-import { SnapshotSectionHint,
+import {
   Card,
   Btn,
   RelativeTime,
-  Section,
   Loading,
   Skeleton,
   ErrorAlert,
@@ -35,7 +26,8 @@ import { SnapshotSectionHint,
   Kbd,
   Tooltip,
   Badge,
-  StatCard, } from '../components/ui'
+  Section,
+} from '../components/ui'
 import {
   ContainedBlock,
   InlineProof,
@@ -612,7 +604,7 @@ function ResultsTable({ rows }: { rows: unknown[] }) {
           {table.data.slice(0, 50).map((row, i) => (
             <tr
               key={i}
-              className={`border-b border-edge-subtle/50 hover:bg-surface-raised/30 motion-safe:transition-colors ${
+              className={`border-b border-edge-subtle/50 hover:bg-surface-raised motion-safe:transition-colors ${
                 i % 2 === 1 ? 'bg-surface-root/30' : ''
               }`}
             >
@@ -1010,18 +1002,41 @@ export function QueryPage() {
         </Badge>
       </PageHeaderBar>
 
-      {(stats.schemaDegraded || stats.errors24h > 0) && (
-        <QueryStatusBanner
-          stats={stats}
-          onTab={setActiveTab}
-          onViewErrors={() => {
-            setActiveTab('history')
-            setSidebarTab('recent')
-          }}
-        />
-      )}
-
-      <QueryGuide errors24h={stats.errors24h} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: stats.schemaDegraded || stats.errors24h > 0,
+            children: (
+              <QueryStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onViewErrors={() => {
+                  setActiveTab('history')
+                  setSidebarTab('recent')
+                }}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <QuerySnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'Query snapshot'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: <QueryGuide errors24h={stats.errors24h} />,
+          },
+        ]}
+      />
 
       <SegmentedControl
         value={activeTab}
@@ -1031,43 +1046,13 @@ export function QueryPage() {
         size="sm"
       />
 
-      <Section title="Query snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Runs 24h"
-            value={stats.runs24h}
-            accent={stats.runs24h > 0 ? 'text-brand' : undefined}
-            tooltip={runs24hTooltip(stats)}
-            detail={runs24hDetail(stats)}
-            to={queryLinks.runs24h}
-          />
-          <StatCard
-            label="Errors 24h"
-            value={stats.errors24h}
-            accent={stats.errors24h > 0 ? 'text-danger' : 'text-ok'}
-            tooltip={errors24hTooltip(stats)}
-            detail={errors24hDetail(stats)}
-            to={queryLinks.errors24h}
-          />
-          <StatCard
-            label="Saved"
-            value={stats.savedCount}
-            accent={stats.savedCount > 0 ? 'text-ok' : 'text-warn'}
-            tooltip={savedCountTooltip(stats)}
-            detail={savedCountDetail(stats)}
-            to={queryLinks.saved}
-          />
-          <StatCard
-            label="Latency"
-            value={stats.avgLatencyMs != null ? `${stats.avgLatencyMs}ms` : '—'}
-            accent="text-info"
-            tooltip={latencyTooltip(stats)}
-            detail={latencyDetail(stats)}
-            to={queryLinks.latency}
-          />
-        </div>
-      </Section>
+      {activeTab === 'overview' && (
+        <QueryReadout
+          stats={stats}
+          fetchedAt={statsFetchedAt}
+          isValidating={statsValidating}
+        />
+      )}
 
       {activeTab === 'schema' && (
         <Card className="p-3">
@@ -1079,7 +1064,7 @@ export function QueryPage() {
           </ContainedBlock>
           <div className="divide-y divide-edge-subtle/30 rounded-sm border border-edge-subtle overflow-hidden">
             {SCHEMA_REFERENCE.map((t) => (
-              <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised/30">
+              <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised border-b border-edge-subtle/30 last:border-b-0">
                 <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
                 <span className="text-3xs text-fg-faint font-mono leading-relaxed">
                   {t.columns}
@@ -1346,7 +1331,7 @@ export function QueryPage() {
                         {rowCount > 0 && (
                           <div className="rounded-sm border border-edge-subtle overflow-hidden">
                             <ResultsTable rows={run.result.results} />
-                            <div className="flex items-center justify-between gap-2 border-t border-edge-subtle/50 bg-surface-raised/30 px-3 py-1.5">
+                            <div className="flex items-center justify-between gap-2 border-t border-edge-subtle/50 bg-surface-raised px-3 py-1.5">
                               <SignalChip tone="neutral">
                                 {rowCount} row{rowCount === 1 ? '' : 's'}
                               </SignalChip>

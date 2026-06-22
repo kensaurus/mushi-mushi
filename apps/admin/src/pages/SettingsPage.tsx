@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PageScopeHint,SnapshotSectionHint,Section, SegmentedControl, StatCard, ErrorAlert, Card } from '../components/ui'
+import { PageScopeHint,SnapshotSectionHint,Section, SegmentedControl, StatCard, ErrorAlert } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SettingsCompactSnapshot } from '../components/settings/SettingsCompactSnapshot'
@@ -22,13 +22,9 @@ import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
 import { BrowserbasePanel } from '../components/settings/BrowserbasePanel'
 import { HealthPanel } from '../components/settings/HealthPanel'
 import { DevToolsPanel } from '../components/settings/DevToolsPanel'
+import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout'
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import {
   EMPTY_SETTINGS_STATS,
   type SettingsStats,
@@ -282,42 +278,13 @@ export function SettingsPage() {
 
       <SettingsTabIntro tab={active} />
 
-      {stats.topPriority &&
-        stats.topPriority !== 'healthy' &&
-        stats.topPriority !== 'routing_optional' &&
-        stats.topPriorityTo && (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'byok_failing'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'no_anthropic' || stats.topPriority === 'sdk_off'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'byok_failing'
-                ? 'danger'
-                : stats.topPriority === 'no_anthropic' || stats.topPriority === 'sdk_off'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'byok_failing' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">
-              {stats.topPriorityLabel ?? 'Review project settings before production traffic.'}
-            </p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      )}
+      {stats.projectId ? (
+        <SettingsIntegrationsReadout
+          stats={stats}
+          fetchedAt={lastFetchedAt}
+          validating={isValidating}
+        />
+      ) : null}
 
       {ux.hideSettingsSnapshot && (
         <ContainedBlock tone="muted" className="mb-1">

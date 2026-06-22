@@ -348,7 +348,7 @@ function RunDetail({
 
       {/* Error message */}
       {run.error_message && (
-        <div className="rounded-sm border border-danger/25 bg-danger/5 px-3 py-2">
+        <div className="rounded-sm border border-danger/40 bg-surface-raised px-3 py-2">
           <div className="text-3xs font-semibold text-danger uppercase tracking-wider mb-1">Error</div>
           <pre className="text-2xs font-mono text-danger whitespace-pre-wrap break-all leading-relaxed max-h-32 overflow-y-auto">
             {run.error_message}
@@ -625,7 +625,7 @@ function StoryDrawer({
             </div>
 
             {isQueued && recentRuns.length === 0 && (
-              <div className="rounded-sm border border-brand/20 bg-brand/5 px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
+              <div className="rounded-sm border border-brand/30 bg-surface-raised px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
                 Run is <strong className="text-brand">queued</strong> in{' '}
                 <code className="text-3xs font-mono bg-surface-overlay px-1 rounded">qa_story_runs</code>.
                 The runner picks it up within seconds. Polling…
@@ -1026,7 +1026,7 @@ export function QaCoveragePage() {
   return (
     <div className="space-y-5">
       {activationEnabled && qaStep && !qaStep.complete ? (
-        <Card className="p-3 border-dashed border-brand/25 bg-brand/5">
+        <Card className="p-3 border-dashed border-brand/30 bg-surface-raised">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-xs font-medium text-fg">QA setup nudge</p>
@@ -1156,30 +1156,8 @@ export function QaCoveragePage() {
 
       {error && <ErrorAlert message={error} onRetry={reloadAll} />}
 
-      {/* Summary stats */}
-      {!loading && coverage.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-fg">{coverage.length}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">Total</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-ok">{passing}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">Passing</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-danger">{failing}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">Failing</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-fg-faint">{noData}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">No data</div>
-          </Card>
-        </div>
-      )}
-
       {/* Pending TDD review queue — always shown so users discover the feature */}
-      <Card className={`p-4 space-y-3 ring-1 ${pendingReview.length > 0 ? 'ring-warn/25 bg-warn/[0.03]' : 'ring-edge-subtle bg-surface-raised/40'}`}>
+      <Card className={`p-4 space-y-3 ring-1 ${pendingReview.length > 0 ? 'ring-warn/40 border-warn/30 bg-surface-raised' : 'ring-edge-subtle bg-surface-raised'}`}>
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-fg">🧪 TDD Tests Pending Review</span>
           {pendingReview.length > 0 && (

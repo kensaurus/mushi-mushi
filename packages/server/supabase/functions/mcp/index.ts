@@ -1022,6 +1022,40 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       }
     },
   },
+
+  // ── Usage / billing ─────────────────────────────────────────────────────────
+
+  get_usage: {
+    scope: 'mcp:read',
+    description:
+      'Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer "how many diagnoses do I have left?" or "am I close to my spend cap?".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project UUID (falls back to key-bound project).' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        planId: { type: 'string' },
+        diagnosesUsed: { type: 'number' },
+        diagnosesLimit: { type: ['number', 'null'] },
+        diagnosesUsagePct: { type: ['number', 'null'] },
+        overDiagnosisQuota: { type: 'boolean' },
+        approachingDiagnosisQuota: { type: 'boolean' },
+        monthlySpendCapUsd: { type: ['number', 'null'] },
+        periodEnd: { type: ['string', 'null'] },
+        freeLimitDiagnoses: { type: 'number' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    handler: async (args, ctx) => {
+      const pid = String(args.project_id ?? ctx.projectIdHint ?? '')
+      const path = pid ? `/v1/admin/billing/stats?project_id=${encodeURIComponent(pid)}` : '/v1/admin/billing/stats'
+      return apiCall(path, { headers: ctx.authHeaders })
+    },
+  },
 }
 
 /** Full catalog — base hand-authored tools + manifest-generated parity tools. */

@@ -25,7 +25,10 @@ const stage1Schema = z.object({
   action: z.string().describe('What the user was doing'),
   expected: z.string().describe('What the user expected'),
   actual: z.string().describe('What actually happened'),
-  emotion: z.string().nullable().describe('User emotion/frustration level, or null if not detectable'),
+  // .catch('') prevents AI_NoObjectGeneratedError when the model returns null for this field.
+  // Both Anthropic and OpenAI structured-output modes reject anyOf[string, null] schemas;
+  // an empty string is semantically equivalent and survives schema validation on all providers.
+  emotion: z.string().catch('').describe('User emotion/frustration level, or empty string if not detectable'),
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Issue category'),
   severity: z.enum(['critical', 'high', 'medium', 'low']).describe('Impact severity'),
   confidence: z.number().min(0).max(1).describe('Classification confidence'),

@@ -31,30 +31,18 @@ import {
   ErrorAlert,
   EmptyState,
   Loading,
-  StatCard,
   RelativeTime,
   IdField,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
 import { usePageCopy } from '../lib/copy'
 import { EditorialErrorState } from '../components/EditorialErrorState'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import {
-  churn30dDetail,
-  churn30dTooltip,
-  mrrDetail,
-  mrrTooltip,
-  paidUsersDetail,
-  paidUsersTooltip,
-  signups30dDetail,
-  signups30dTooltip,
-  signups7dDetail,
-  signups7dTooltip,
-  totalSignupsDetail,
-  totalSignupsTooltip,
-} from '../lib/statTooltips/users'
-import { usersLinks } from '../lib/statCardLinks'
+import { UsersReadout } from '../components/users/UsersReadout'
+import { UsersSnapshotStrip } from '../components/users/UsersSnapshotStrip'
+import { EMPTY_USERS_STATS } from '../components/users/UsersStatsTypes'
 interface SuperAdminUser {
   user_id: string
   email: string | null
@@ -163,7 +151,9 @@ export function UsersPage() {
     usePageData<UserListResponse>(usersPath, { deps: [queryString] })
 
   const metricsPath = isSuperAdmin ? '/v1/super-admin/metrics' : null
-  const { data: metrics } = usePageData<SuperAdminMetrics>(metricsPath)
+  const { data: metrics, lastFetchedAt: metricsFetchedAt, isValidating: metricsValidating } =
+    usePageData<SuperAdminMetrics>(metricsPath)
+  const usersStats = metrics ?? EMPTY_USERS_STATS
 
   if (entitlementsLoading) {
     return <Loading text="Checking access…" />
@@ -210,15 +200,30 @@ export function UsersPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Search by email or filter by plan. Click any row for the full user detail. This page is only visible to super-admins.'}
       />
 
-      {/* Top metrics row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Total signups" value={metrics?.total_users ?? '—'} tooltip={totalSignupsTooltip(metrics)} detail={totalSignupsDetail()} to={usersLinks.totalSignups} />
-        <StatCard label="Paid users" value={metrics?.paid_users ?? '—'} accent="text-brand" tooltip={paidUsersTooltip(metrics)} detail={paidUsersDetail(metrics)} to={usersLinks.paidUsers} />
-        <StatCard label="MRR (USD)" value={metrics ? `$${metrics.mrr_usd.toLocaleString()}` : '—'} accent="text-brand" tooltip={mrrTooltip(metrics)} detail={mrrDetail()} to={usersLinks.mrr} />
-        <StatCard label="Signups · 7d" value={metrics?.signups_last_7d ?? '—'} tooltip={signups7dTooltip(metrics)} detail={signups7dDetail()} to={usersLinks.signups7d} />
-        <StatCard label="Signups · 30d" value={metrics?.signups_last_30d ?? '—'} tooltip={signups30dTooltip(metrics)} detail={signups30dDetail(metrics)} to={usersLinks.signups30d} />
-        <StatCard label="Churn · 30d" value={metrics?.churn_last_30d ?? '—'} accent={metrics && metrics.churn_last_30d > 0 ? 'text-warn' : undefined} tooltip={churn30dTooltip(metrics)} detail={churn30dDetail()} to={usersLinks.churn30d} />
-      </div>
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <UsersSnapshotStrip
+                stats={usersStats}
+                fetchedAt={metricsFetchedAt}
+                isValidating={metricsValidating}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: (
+              <UsersReadout
+                stats={usersStats}
+                fetchedAt={metricsFetchedAt}
+                isValidating={metricsValidating}
+              />
+            ),
+          },
+        ]}
+      />
 
       <Section
         title="Directory"
@@ -279,7 +284,7 @@ export function UsersPage() {
                   return (
                     <tr
                       key={u.user_id}
-                      className="group border-b border-edge/40 hover:bg-surface-raised/40 cursor-pointer transition-colors"
+                      className="group border-b border-edge/40 hover:bg-surface-raised cursor-pointer transition-colors"
                       onClick={() => setSelectedUserId(u.user_id)}
                       aria-label={`View details for ${u.email ?? u.user_id}`}
                     >

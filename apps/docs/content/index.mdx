@@ -1,41 +1,52 @@
 ---
-title: Mushi Mushi — bug translation for vibe coders
+title: Mushi Mushi — know why your AI-built app broke, with the fix ready
+description: Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.
 ---
 
 import { Callout } from 'nextra/components'
-import { LoopComparison } from '../components/LoopComparison'
 
 {/* The EditorialHero IS the page H1 — do NOT add a markdown `# Mushi Mushi`
     above it or we ship two competing page titles (NN/g #4 + screen-reader
     bug). The `_meta.ts` for the index also opts out of the auto-rendered
-    breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack. */}
+    breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack.
+    This page is also served in place at kensaur.us/mushi-mushi/ via the
+    CloudFront internal rewrite (scripts/cloudfront-mushi-spa-router.js) —
+    it must stay indexable and carry north-star copy in the prerendered HTML. */}
 
 <EditorialHero
-  eyebrow="Mushi · bug translation for vibe coders"
+  eyebrow="The comprehension layer for AI-built apps"
   title={<>Your AI wrote it. Mushi tells you <em>why it broke.</em></>}
-  lead={<>Plain-English diagnosis + a paste-ready fix, right inside Cursor. Capture user friction, triage with AI, pull fix context via MCP — or optionally dispatch a draft PR when you are ready.</>}
+  lead={<>Plain-English diagnosis + a ready-to-apply fix, right inside Cursor and Claude Code — so a bug costs you five minutes, not your whole afternoon. Standalone. No Sentry required.</>}
 />
 
-## Know why it broke — then close the loop
+<OssTrustStrip />
 
-The vibe-coding era solved the *creation* bottleneck: AI ships in hours. The new bottleneck is **selection** — out of everything you could fix next, which change actually makes the app better for real users? Mushi turns each user-felt bug into a plain-English diagnosis and a paste-ready fix, then encodes every merged fix as a lesson so the next agent run starts smarter.
+## 60-second proof
 
-That is **selection with memory**: cumulative selection beats random search by orders of magnitude. The longer thesis (Dawkins, Taleb, the NTSB black box) lives in the docs. [Read the thesis &rarr;](/concepts/closed-loop) &middot; [The five-stage loop &rarr;](/concepts/evolution-loop)
+```bash
+npx mushi-mushi
+```
 
-<LoopComparison />
+The wizard auto-detects your framework, installs the right SDK, writes env vars, and prints the snippet. When something breaks: the bug lands in your queue, Mushi produces **the diagnosis** (plain-English root cause + fix), and you pull it into your editor over MCP.
 
-## Four properties selection requires
+```bash
+npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?"
+```
 
-Sentry sees what your code throws. Mushi sees what your users feel. The two
-are designed to compose: Mushi&rsquo;s classifier reads Sentry breadcrumbs,
-and Sentry User Feedback events forward into Mushi via webhook &mdash; so
-nothing about your existing setup has to change. But Mushi adds what selection
-needs and Sentry alone cannot provide:
+**No monitoring stack required.** Self-host in under five minutes, or use the free hosted tier — 50 diagnoses / month, no card.
 
-- **Variation capture**: every report is embedded and clustered. The same broken button collapses to one row, not 200 duplicate tickets.
-- **Selection pressure**: when a cluster reaches coherence &ge; 0.75 and size &ge; 3, it is promoted to a named lesson and synced to `.mushi/lessons.json` in your repo.
-- **Inheritance**: lessons are ranked by severity and packed to &le;&thinsp;3&thinsp;000 tokens before being injected into PR review context &mdash; so neither human reviewer nor AI agent can repeat the same class of mistake.
-- **Reward loop**: the user who found the mutation is credited in the changelog. The SDK shows them a toast: *&ldquo;v1.2.3 shipped &mdash; you helped fix this.&rdquo;* This closes the feedback loop that keeps beta testers reporting.
+<DocScreenshot
+  src="report-detail-dark.png"
+  alt="The diagnosis — plain-English root cause, confidence chip, and paste-ready Cursor fix prompt"
+  caption={<>↑ <strong>the diagnosis</strong> — error → plain-English root cause → paste-ready fix</>}
+  href="https://kensaur.us/mushi-mushi/admin/reports"
+/>
+
+## What this is (and is not)
+
+- **Built for the solo vibe coder** who ships fast with AI and loses afternoons when prod breaks in code they did not fully write.
+- **Editor-native.** The answer comes to Cursor / Claude Code over MCP — not another dashboard to go read.
+- **Not an enterprise monitoring stack.** Standalone first; Sentry enrichment is the upgrade reveal, never the front door.
 
 ## Try it — incident loop first
 
@@ -67,3 +78,9 @@ needs and Sentry alone cannot provide:
 
 See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
 sequence diagram and component-by-component spec.
+
+## Running this for a team?
+
+Operator-grade depth — adapters, plugins, inventory gates, SSO, audit — lives in
+**[docs/operators](https://github.com/kensaurus/mushi-mushi/tree/master/docs/operators)** on GitHub.
+The front door stays on the wedge; the platform story never leads.

@@ -74,10 +74,10 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null)
 
 const TONE_CLS: Record<ToastTone, string> = {
-  success: 'border-ok/30 bg-ok-muted/20 text-ok',
-  error: 'border-danger/30 bg-danger-muted/20 text-danger',
-  info: 'border-info/30 bg-info-muted/20 text-info',
-  warn: 'border-warn/30 bg-warn-muted/20 text-warn',
+  success: 'border-ok/40 text-ok',
+  error: 'border-danger/40 text-danger',
+  info: 'border-info/40 text-info',
+  warn: 'border-warn/40 text-warn',
 }
 
 const TONE_ICON: Record<ToastTone, string> = {
@@ -86,6 +86,17 @@ const TONE_ICON: Record<ToastTone, string> = {
   info: 'i',
   warn: '!',
 }
+
+/** Description copy on tinted toast surfaces — *-foreground tokens for AA contrast. */
+const TONE_DESC_CLS: Record<ToastTone, string> = {
+  success: 'text-ok-foreground',
+  error: 'text-danger-foreground',
+  info: 'text-info-foreground',
+  warn: 'text-warning-foreground',
+}
+
+const TOAST_ACTION_CLASS =
+  'mt-1.5 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-2xs font-medium text-brand-fg hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-colors'
 
 let counter = 0
 
@@ -204,6 +215,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
+      {toasts.length > 0 ? (
       <div
         className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2 w-[min(22rem,calc(100vw-2rem))]"
         role="region"
@@ -218,7 +230,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             onMouseLeave={() => resumeDismiss(t.id)}
             onFocusCapture={() => pauseDismiss(t.id)}
             onBlurCapture={() => resumeDismiss(t.id)}
-            className={`relative overflow-hidden pointer-events-auto rounded-md border ${TONE_CLS[t.tone]} bg-surface-raised shadow-raised p-3 flex items-start gap-2 ${t.closing ? 'motion-safe:animate-mushi-toast-out' : 'motion-safe:animate-mushi-toast-in'}`}
+            className={`relative overflow-hidden pointer-events-auto rounded-md border shadow-raised ring-1 ring-edge-subtle/80 ${TONE_CLS[t.tone]} bg-surface-raised p-3 flex items-start gap-2 ${t.closing ? 'motion-safe:animate-mushi-toast-out' : 'motion-safe:animate-mushi-toast-in'}`}
           >
             <span
               className={`shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${TONE_CLS[t.tone]}`}
@@ -229,7 +241,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div className="flex-1 min-w-0">
               <div className="text-xs font-medium text-fg leading-tight">{t.title}</div>
               {t.description && (
-                <div className="text-2xs text-fg-muted mt-0.5 break-words">
+                <div className={`text-2xs mt-0.5 break-words ${TONE_DESC_CLS[t.tone]}`}>
                   {t.description}
                 </div>
               )}
@@ -240,7 +252,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     t.action?.onClick()
                     dismiss(t.id)
                   }}
-                  className="mt-1.5 inline-flex items-center gap-1 text-2xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
+                  className={TOAST_ACTION_CLASS}
                 >
                   {t.action.label}
                   <span aria-hidden="true">→</span>
@@ -250,7 +262,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => dismiss(t.id)}
-              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-danger hover:text-danger hover:bg-danger-muted/50 text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
+              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-danger hover:text-danger hover:bg-danger-muted/50 text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50 focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised motion-safe:transition-colors"
               aria-label="Dismiss notification"
             >
               <span aria-hidden="true">✕</span>
@@ -265,6 +277,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           </div>
         ))}
       </div>
+      ) : null}
     </ToastContext.Provider>
   )
 }

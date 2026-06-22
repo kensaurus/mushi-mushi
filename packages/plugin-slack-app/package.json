@@ -47,8 +47,8 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-slack-app"
   },
-  "author": "Kenji Sakuramoto",
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/plugin-slack-app#readme",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

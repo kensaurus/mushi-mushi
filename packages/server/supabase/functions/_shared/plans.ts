@@ -12,7 +12,7 @@ import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 
 export interface PricingPlan {
-  id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
+  id: 'hobby' | 'starter' | 'free_cloud' | 'indie' | 'pro' | 'enterprise' | string
   display_name: string
   position: number
   monthly_price_usd: number
@@ -20,6 +20,12 @@ export interface PricingPlan {
   overage_price_lookup_key: string | null
   included_reports_per_month: number | null
   overage_unit_amount_decimal: number | null
+  /** Diagnoses quota included in the base monthly price. NULL = unlimited. */
+  included_diagnoses_per_month: number | null
+  /** USD per diagnosis above included_diagnoses_per_month. NULL = hard-stop. */
+  overage_unit_amount_decimal_diagnoses: number | null
+  /** Default hard spend cap for this plan (USD). NULL = no cap. */
+  monthly_spend_cap_usd: number | null
   retention_days: number
   seat_limit: number | null
   is_self_serve: boolean
@@ -33,6 +39,26 @@ let inflight: Promise<Map<string, PricingPlan>> | null = null
 const plog = log.child('plans')
 
 /** Hardcoded fallback if the DB read fails — keeps the gateway open. */
+const FREE_CLOUD_FALLBACK: PricingPlan = {
+  id: 'free_cloud',
+  display_name: 'Free Cloud',
+  position: 10,
+  monthly_price_usd: 0,
+  base_price_lookup_key: null,
+  overage_price_lookup_key: null,
+  included_reports_per_month: null,
+  overage_unit_amount_decimal: null,
+  included_diagnoses_per_month: 50,
+  overage_unit_amount_decimal_diagnoses: null,
+  monthly_spend_cap_usd: null,
+  retention_days: 7,
+  seat_limit: 1,
+  is_self_serve: true,
+  active: true,
+  feature_flags: { sso: false, byok: false, plugins: false, sla_hours: null, audit_log: false, teams: false },
+}
+
+/** Legacy fallback for hobby — kept so existing hobby subs never error. */
 const HOBBY_FALLBACK: PricingPlan = {
   id: 'hobby',
   display_name: 'Hobby',
@@ -42,6 +68,9 @@ const HOBBY_FALLBACK: PricingPlan = {
   overage_price_lookup_key: null,
   included_reports_per_month: 1000,
   overage_unit_amount_decimal: null,
+  included_diagnoses_per_month: 1000,
+  overage_unit_amount_decimal_diagnoses: null,
+  monthly_spend_cap_usd: null,
   retention_days: 7,
   seat_limit: 3,
   is_self_serve: true,
@@ -57,9 +86,8 @@ async function loadPlans(): Promise<Map<string, PricingPlan>> {
     const { data, error } = await db
       .from('pricing_plans')
       .select(
-        'id, display_name, position, monthly_price_usd, base_price_lookup_key, overage_price_lookup_key, included_reports_per_month, overage_unit_amount_decimal, retention_days, seat_limit, is_self_serve, active, feature_flags',
+        'id, display_name, position, monthly_price_usd, base_price_lookup_key, overage_price_lookup_key, included_reports_per_month, overage_unit_amount_decimal, included_diagnoses_per_month, overage_unit_amount_decimal_diagnoses, monthly_spend_cap_usd, retention_days, seat_limit, is_self_serve, active, feature_flags',
       )
-      .eq('active', true)
       .order('position', { ascending: true })
     if (error) {
       // Sentry MUSHI-MUSHI-SERVER-K (regressed 2026-04-23): the Supabase REST
@@ -96,12 +124,16 @@ async function loadPlans(): Promise<Map<string, PricingPlan>> {
       } else {
         plog.error('plans_load_failed', logFields)
       }
-      // Fail open with a hobby-only catalog so quota.ts still has a baseline.
-      const fallback = new Map<string, PricingPlan>([['hobby', HOBBY_FALLBACK]])
+      // Fail open with a free_cloud-only catalog so quota.ts still has a baseline.
+      const fallback = new Map<string, PricingPlan>([
+        ['free_cloud', FREE_CLOUD_FALLBACK],
+        ['hobby', HOBBY_FALLBACK],
+      ])
       inflight = null
       return fallback
     }
     cache = new Map((data ?? []).map((p) => [p.id, p as PricingPlan]))
+    if (!cache.has('free_cloud')) cache.set('free_cloud', FREE_CLOUD_FALLBACK)
     if (!cache.has('hobby')) cache.set('hobby', HOBBY_FALLBACK)
     inflight = null
     return cache
@@ -117,7 +149,7 @@ export async function listPlans(): Promise<PricingPlan[]> {
 export async function getPlan(id: string | null | undefined): Promise<PricingPlan> {
   const m = await loadPlans()
   if (id && m.has(id)) return m.get(id)!
-  return m.get('hobby') ?? HOBBY_FALLBACK
+  return m.get('free_cloud') ?? m.get('hobby') ?? FREE_CLOUD_FALLBACK
 }
 
 export async function getPlanByBaseLookupKey(
@@ -143,10 +175,10 @@ export async function resolvePlanFromSubscription(sub: {
   status?: string | null
   plan_id?: string | null
 } | null): Promise<PricingPlan> {
-  if (!sub) return getPlan('hobby')
+  if (!sub) return getPlan('free_cloud')
   const ACTIVE = new Set(['active', 'trialing', 'past_due'])
-  if (!sub.status || !ACTIVE.has(sub.status)) return getPlan('hobby')
-  return getPlan(sub.plan_id ?? 'hobby')
+  if (!sub.status || !ACTIVE.has(sub.status)) return getPlan('free_cloud')
+  return getPlan(sub.plan_id ?? 'free_cloud')
 }
 
 /** Test-only — production hot reload happens via fresh isolate cold-start. */

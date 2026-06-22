@@ -8,6 +8,30 @@ can execute without additional context.
 
 ---
 
+## Positioning — read this before you touch any user-facing surface
+
+> The canonical constitution is [`/VISION.md`](./VISION.md). This block is the
+> compressed copy so on-message behavior survives even when an agent only loads
+> `AGENTS.md`. If this and `VISION.md` ever disagree, `VISION.md` wins — fix it
+> here, don't fork it. Drift is enforced against by
+> [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
+
+**North star.** Your AI shipped it. Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
+
+**Category we own.** The comprehension layer for AI-built apps. (Not "error monitoring", not "observability", not "synthesis layer / integration hub" — those are the drift.)
+
+**Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
+
+**The three things we will not do** (drift tripwires):
+
+1. **We will not require a monitoring stack to get value.** Standalone-first, always — never assume the reader already runs Sentry + Datadog + Firebase.
+2. **We will not lead with the integration-hub / enterprise-plumbing story.** It can live in `docs/operators/`; it never leads.
+3. **We will not let the surfaces diverge.** The tagline, the north-star sentence, and the buyer stay identical across npm, repo, landing, and this file.
+
+The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
+
+---
+
 ## Agent Inventory
 
 <sub>19 pipeline agents · 49 edge functions · 273 SQL migrations — updated Jun 18 2026 (reporter incentives: automatic report.submitted/report.triaged point awards + one-click reward presets + vault-backed reward webhooks + `@mushi-mushi/node` receiver; page-aware in-SDK assistant: `POST /v1/sdk/assistant` BYOK + knowledge corpus + audit log).</sub>
@@ -232,6 +256,13 @@ mushi fix <reportId> --agent cursor_cloud --wait
 mushi fixes tail --report-id <reportId>
 mushi fixes refresh-ci <fixId>
 mushi fixes merge <fixId>              # squash-merge PR + mark report Fixed
+
+# ── Diagnoses usage + billing ─────────────────────────────────────────────
+mushi usage                            # diagnoses used / limit / cap for this period
+mushi billing status                   # full billing summary (plan, usage, cap, overage)
+mushi billing cap                      # show current spend cap
+mushi billing cap 100                  # set $100/mo hard spend cap
+mushi billing cap 0                    # clear spend cap
 ```
 
 ### MCP Tools
@@ -241,6 +272,8 @@ Full catalog: **71 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/c
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `get_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
 Notification tools (`mcp:write` scope): `test_notification_channel`
+
+Usage / billing tool (`mcp:read` scope): `get_usage` — diagnoses used / limit / spend cap for the current period.
 
 TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_story`, `improve_qa_story`,
 `run_qa_story`, `list_byok_keys`, `add_byok_key`, `list_pending_review_stories`, `approve_qa_story`

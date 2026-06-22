@@ -1406,6 +1406,40 @@ const BILLING: ConfigDoc[] = [
       "Upgrade when you're consistently hitting the cap on the dashboard. Downgrade only after one full month under the next-tier-down's cap.",
   },
   {
+    id: 'billing.spend_cap',
+    label: 'Monthly spend cap',
+    summary:
+      'Hard USD ceiling on overage charges. When projected spend hits the cap, new diagnoses pause gracefully — no surprise invoice.',
+    howItWorks:
+      'Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Indie $50, Pro $200). Clear the field to revert to the plan default.',
+    default: { value: 'plan default' },
+    backend: {
+      table: 'billing_subscriptions',
+      column: 'monthly_spend_cap_usd_override',
+      endpoint: 'PUT /v1/admin/billing/spend-cap',
+      readBy: ['classify-report quota gate', 'usage-alerts email copy'],
+    },
+    whenToChange:
+      'Set before a launch or marketing spike. Lower the cap if you want a hard stop; raise it only when you have budget headroom.',
+  },
+  {
+    id: 'billing.alert_email',
+    label: 'Usage alert email',
+    summary:
+      'Inbox that receives 50%, 80%, and 100% diagnosis quota alerts for this project.',
+    howItWorks:
+      'Stored on project_settings.alert_email. The usage-alerts cron sends at most one email per threshold per billing month. Leave blank to use the project owner email.',
+    default: { value: 'project owner email' },
+    backend: {
+      table: 'project_settings',
+      column: 'alert_email',
+      endpoint: 'PUT /v1/admin/billing/alert-email',
+      readBy: ['usage-alerts edge function'],
+    },
+    whenToChange:
+      'Point at a shared ops inbox (e.g. billing@yourco.com) when the owner email is a personal Gmail.',
+  },
+  {
     id: 'billing.support_subject',
     label: 'Support subject',
     summary: 'One-line summary of your support request — appears as the email subject line.',

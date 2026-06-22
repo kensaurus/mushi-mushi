@@ -6,6 +6,7 @@
 import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
+import { fmtBillingLimit } from '../../lib/billingUsageForecast'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { BillingStats, BillingTabId } from './types'
 
@@ -17,15 +18,31 @@ interface Props {
   plainBanner?: boolean
 }
 
-function fmtLimit(used: number, limit: number | null): string {
-  if (limit == null) return `${used.toLocaleString()} reports (unlimited)`
-  return `${used.toLocaleString()} / ${limit.toLocaleString()} reports`
+function usagePct(stats: BillingStats): number | null {
+  if (stats.diagnosesLimit != null) return stats.diagnosesUsagePct ?? null
+  return stats.usagePct
+}
+
+function isOverQuota(stats: BillingStats): boolean {
+  return stats.overDiagnosisQuota ?? stats.overQuota
+}
+
+function isApproachingQuota(stats: BillingStats): boolean {
+  return stats.approachingDiagnosisQuota ?? stats.approachingQuota
 }
 
 export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBanner = false }: Props) {
   const copy = usePageCopy('/billing')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
+  const pct = usagePct(stats)
+  const limitLine = fmtBillingLimit(
+    stats.reportsUsed,
+    stats.reportsLimit,
+    stats.diagnosesUsed,
+    stats.diagnosesLimit,
+    pct,
+  )
 
   if (stats.projectCount === 0) {
     return (
@@ -63,12 +80,20 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
     )
   }
 
-  if (stats.overQuota) {
+  if (isOverQuota(stats)) {
     return (
       <StatusBannerShell
         tone="danger"
-        title={plainBanner ? 'Over quota — upgrade to keep ingesting' : 'Over quota — new reports may be rejected'}
-        subtitle={`${fmtLimit(stats.reportsUsed, stats.reportsLimit)} this period on ${stats.planDisplayName}. Upgrade to keep ingesting.`}
+        title={
+          stats.overDiagnosisQuota
+            ? plainBanner
+              ? 'Diagnosis quota reached'
+              : 'Diagnosis quota reached — AI triage paused'
+            : plainBanner
+              ? 'Over quota — upgrade to keep ingesting'
+              : 'Over quota — new reports may be rejected'
+        }
+        subtitle={`${limitLine} this period on ${stats.planDisplayName}. Upgrade or wait for the next billing cycle.`}
         action={
           onUpgrade ? (
             <Btn size="sm" variant="ghost" onClick={onUpgrade}>
@@ -84,12 +109,12 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
     )
   }
 
-  if (stats.approachingQuota) {
+  if (isApproachingQuota(stats)) {
     return (
       <StatusBannerShell
         tone="warn"
-        title={`Approaching quota — ${stats.usagePct}% used`}
-        subtitle={`${fmtLimit(stats.reportsUsed, stats.reportsLimit)} on ${projectLabel}. Headroom is shrinking this period.`}
+        title={`Approaching quota — ${pct ?? '?'}% used`}
+        subtitle={`${limitLine} on ${projectLabel}. Headroom is shrinking this period.`}
         action={
           onTab ? (
             <Btn size="sm" variant="ghost" onClick={() => onTab('plans')}>
@@ -129,7 +154,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
       <StatusBannerShell
         tone="brand"
         title={plainBanner ? 'Admin account — no charges' : 'Admin account — complimentary billing'}
-        subtitle={`${stats.planDisplayName} entitlements for ${projectLabel} · no Stripe charges · ${fmtLimit(stats.reportsUsed, stats.reportsLimit)} this period`}
+        subtitle={`${stats.planDisplayName} entitlements for ${projectLabel} · no Stripe charges · ${limitLine} this period`}
         action={
           <Link to="/cost">
             <Btn size="sm" variant="ghost">{actions.cost ?? 'View LLM cost'}</Btn>
@@ -181,8 +206,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
       }
       subtitle={
         <>
-          {fmtLimit(stats.reportsUsed, stats.reportsLimit)} this period
-          {stats.usagePct != null ? ` · ${stats.usagePct}% of quota` : ''}
+          {limitLine} this period
           {stats.llmCostUsdMonth > 0 ? ` · $${stats.llmCostUsdMonth.toFixed(4)} LLM COGS` : ''}
         </>
       }

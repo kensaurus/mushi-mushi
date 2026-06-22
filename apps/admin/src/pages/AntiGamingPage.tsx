@@ -10,7 +10,14 @@ import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { AntiGamingStatusBanner } from '../components/anti-gaming/AntiGamingStatusBanner'
+import {
+  EMPTY_ANTI_GAMING_STATS,
+  type AntiGamingStats,
+} from '../components/anti-gaming/AntiGamingStatsTypes'
 import {
   Card,
   Section,
@@ -131,6 +138,16 @@ type DeviceGroupBy = 'flat' | 'ip' | 'date' | 'status'
 
 export function AntiGamingPage() {
   const toast = useToast()
+  const projectId = useActiveProjectId()
+  const {
+    data: shellStatsData,
+    reload: reloadShellStats,
+    isValidating: shellValidating,
+  } = usePageData<AntiGamingStats>(
+    projectId ? `/v1/admin/anti-gaming/stats?project_id=${projectId}` : null,
+    { deps: [projectId] },
+  )
+  const shellStats = shellStatsData ?? EMPTY_ANTI_GAMING_STATS
   const [filter, setFilter] = useState<'flagged' | 'all'>('flagged')
   const [eventFilter, setEventFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -183,7 +200,8 @@ export function AntiGamingPage() {
   const reloadAll = useCallback(() => {
     devicesQuery.reload()
     eventsQuery.reload()
-  }, [devicesQuery, eventsQuery])
+    reloadShellStats()
+  }, [devicesQuery, eventsQuery, reloadShellStats])
 
   // Mushi Bounties: fetch withheld tester redemptions for the 3rd KPI tile.
   const withheldRedemptionsQuery = usePageData<{ count: number; items: Array<{
@@ -377,10 +395,25 @@ export function AntiGamingPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeaderBar>
 
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <AntiGamingStatusBanner
+                stats={shellStats}
+                onRefresh={reloadAll}
+                refreshing={loading || shellValidating}
+              />
+            ),
+          },
+        ]}
+      />
+
       {(stats.crossAccount > 0 || stats.flagged > 0) && (
         <Card
-          className={`space-y-3 p-4 ${
-            stats.crossAccount > 0 ? 'border-danger/30 bg-danger/5' : 'border-warn/30 bg-warn/5'
+          className={`space-y-3 border p-4 bg-surface-raised ${
+            stats.crossAccount > 0 ? 'border-danger/40' : 'border-warn/40'
           }`}
         >
           <SignalChip tone={stats.crossAccount > 0 ? 'danger' : 'warn'}>
@@ -533,7 +566,7 @@ export function AntiGamingPage() {
                       onClick={() => toggleGroup(group.key)}
                       aria-expanded={!isCollapsed}
                       aria-controls={`group-body-${group.key}`}
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left bg-surface-raised/40 border border-edge-subtle/60 hover:bg-surface-raised motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left bg-surface-raised border border-edge-subtle/60 hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                     >
                       <span aria-hidden="true" className="text-fg-faint font-mono text-2xs leading-none w-3 inline-block">
                         {isCollapsed ? '▸' : '▾'}

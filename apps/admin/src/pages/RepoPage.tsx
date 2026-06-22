@@ -39,6 +39,7 @@ import { IconGit } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
 import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
+import { RepoProvenanceReadout } from '../components/repo/RepoProvenanceReadout'
 import {
   ActionPill,
   ActionPillRow,
@@ -633,6 +634,12 @@ export function RepoPage() {
 
       {activeTab === 'overview' && (
         <>
+          <RepoProvenanceReadout
+            stats={repoStats}
+            repoUrl={repo.repo_url}
+            fetchedAt={statsFetchedAt}
+            validating={statsValidating}
+          />
           {repoHeaderCard}
           {/* Multi-repo management: users can add/edit/remove project_repos rows
               directly from the overview tab without navigating to Integrations. */}

@@ -27,6 +27,6 @@
   },
   {
     "scheduled_for": "2026-04-30T15:00:00Z",
-    "text": "we picked BSL 1.1 for the backend because:\n\n→ self-hosting up to 10M reports/month: free, forever\n→ reselling Mushi as a managed product: paid\n→ your team's internal install: free, no asterisks\n\nif you've been bitten by a license bait-and-switch before, that's why.\n\nhttps://github.com/kensaurus/mushi-mushi"
+    "text": "the backend is AGPLv3 open-core because:\n\n→ self-hosting: free, forever\n→ fork it and modify it for your org: allowed\n→ your team's internal install: free, no asterisks\n\nthe only paid boundary is a tiny enterprise edition (SSO, audit export) a solo dev never needs.\n\nif you've been bitten by a license bait-and-switch before, that's why.\n\nhttps://github.com/kensaurus/mushi-mushi"
   }
 ]

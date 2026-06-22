@@ -21,17 +21,18 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { useLessonsUx, resolveQuickLessonsTab } from '../lib/lessonsModeUx'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint, Badge,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import {
+  Badge,
   Btn,
   EmptyState,
   ErrorAlert,
   RelativeTime,
   SegmentedControl,
-  Section,
-  StatCard,
   FreshnessPill,
   RecommendedAction,
-  Card, } from '../components/ui'
+  Card,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -39,6 +40,8 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
+import { LessonsSnapshotStrip } from '../components/lessons/LessonsSnapshotStrip'
+import { LessonsReadout } from '../components/lessons/LessonsReadout'
 import {
   EMPTY_LESSONS_STATS,
   type LessonsStats,
@@ -47,21 +50,6 @@ import {
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import {
-  activeLessonsDetail,
-  activeLessonsTooltip,
-  candidatesDetail,
-  candidatesTooltip,
-  criticalLessonsDetail,
-  criticalLessonsTooltip,
-  highCoherenceDetail,
-  highCoherenceTooltip,
-  promotedClustersDetail,
-  promotedClustersTooltip,
-  reportsClusteredDetail,
-  reportsClusteredTooltip,
-} from '../lib/statTooltips/lessons'
-import { lessonsLinks } from '../lib/statCardLinks'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -618,7 +606,7 @@ export function LessonsPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -690,12 +678,35 @@ export function LessonsPage() {
         )}
       </PageHeaderBar>
 
-      <LessonsStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadStats}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <LessonsStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadStats}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideLessonsSnapshot,
+            children: (
+              <LessonsSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
@@ -708,31 +719,14 @@ export function LessonsPage() {
       />
       )}
 
-      {!ux.hideLessonsSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'LESSONS SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.activeLessons ?? 'Active lessons'} value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} tooltip={activeLessonsTooltip(stats)} detail={activeLessonsDetail(stats)} to={lessonsLinks.activeLessons} />
-          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalLessonsTooltip(stats)} detail={criticalLessonsDetail()} to={lessonsLinks.critical} />
-          <StatCard label={copy?.statLabels?.candidates ?? 'Candidates'} value={stats.candidateClusters} accent={stats.candidateClusters > 0 ? 'text-warn' : undefined} tooltip={candidatesTooltip(stats)} detail={candidatesDetail(stats)} to={lessonsLinks.candidates} />
-          <StatCard label={copy?.statLabels?.promoted ?? 'Promoted clusters'} value={stats.promotedClusters} accent={stats.promotedClusters > 0 ? 'text-brand' : undefined} tooltip={promotedClustersTooltip(stats)} detail={promotedClustersDetail()} to={lessonsLinks.promoted} />
-          <StatCard label={copy?.statLabels?.reportsClustered ?? 'Reports clustered'} value={stats.totalClusterReports} accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined} tooltip={reportsClusteredTooltip(stats)} detail={reportsClusteredDetail()} to={lessonsLinks.reportsClustered} />
-          <StatCard label={copy?.statLabels?.highCoherence ?? 'High coherence'} value={stats.highCoherenceCandidates} accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined} tooltip={highCoherenceTooltip(stats)} detail={highCoherenceDetail()} to={lessonsLinks.highCoherence} />
-        </div>
-      </Section>
-      )}
-
       {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`space-y-3 p-4 ${
+          className={`space-y-3 border p-4 bg-surface-raised ${
             stats.topPriority === 'critical_lessons'
-              ? 'border-danger/30 bg-danger/5'
+              ? 'border-danger/40'
               : stats.topPriority === 'no_data'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-warn/30 bg-warn/5'
+                ? 'border-brand/40'
+                : 'border-warn/40'
           }`}
         >
           <SignalChip
@@ -759,6 +753,11 @@ export function LessonsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          <LessonsReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt}
+            isValidating={statsValidating}
+          />
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"

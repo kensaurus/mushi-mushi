@@ -17,26 +17,23 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useMarketplaceUx, resolveQuickMarketplaceTab } from '../lib/marketplaceModeUx'
-import { marketplaceLinks } from '../lib/statCardLinks'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
-import { SnapshotSectionHint,
+import {
   Btn,
   Badge,
   Card,
   ErrorAlert,
   EmptyState,
   Input,
-  Section,
   FilterSelect,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
-  RelativeTime, } from '../components/ui'
+  RelativeTime,
+  Section,
+} from '../components/ui'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -48,7 +45,10 @@ import { InstallForm } from '../components/marketplace/InstallForm'
 import { InstalledList } from '../components/marketplace/InstalledList'
 import { PluginCard } from '../components/marketplace/PluginCard'
 import { MarketplaceStatusBanner } from '../components/marketplace/MarketplaceStatusBanner'
+import { MarketplaceSnapshotStrip } from '../components/marketplace/MarketplaceSnapshotStrip'
+import { MarketplaceReadout } from '../components/marketplace/MarketplaceReadout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   EMPTY_MARKETPLACE_STATS,
   type DispatchEntry,
@@ -546,13 +546,36 @@ export function MarketplacePage() {
         )}
       </PageHeaderBar>
 
-      <MarketplaceStatusBanner
-        stats={stats}
-        pluginsUnlocked={pluginsUnlocked}
-        onTab={setTab}
-        onRefresh={reloadAll}
-        refreshing={isValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <MarketplaceStatusBanner
+                stats={stats}
+                pluginsUnlocked={pluginsUnlocked}
+                onTab={setTab}
+                onRefresh={reloadAll}
+                refreshing={isValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideMarketplaceSnapshot,
+            children: (
+              <MarketplaceSnapshotStrip
+                stats={stats}
+                statsFetchedAt={lastFetchedAt}
+                statsValidating={isValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'MARKETPLACE SNAPSHOT'}
+                hint={activeMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
@@ -562,93 +585,9 @@ export function MarketplacePage() {
         options={tabOptions}
         ariaLabel="Marketplace sections"
         size="sm"
+        scrollable
       />
       )}
-
-      {!ux.hideMarketplaceSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'MARKETPLACE SNAPSHOT'}
-        freshness={{ at: lastFetchedAt, isValidating }}
-      >
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label={copy?.statLabels?.catalog ?? 'Catalog'}
-            value={stats.catalogTotal}
-            accent={stats.catalogTotal > 0 ? 'text-brand' : undefined}
-            hint="Listed plugins"
-            to={marketplaceLinks.catalog}
-          />
-          <StatCard
-            label={copy?.statLabels?.installed ?? 'Installed'}
-            value={stats.installedTotal}
-            accent={stats.installedTotal > 0 ? 'text-ok' : undefined}
-            hint={`${stats.installedActive} active · ${stats.installedPaused} paused`}
-            to={marketplaceLinks.installed}
-          />
-          <StatCard
-            label={copy?.statLabels?.deliveries7d ?? 'Deliveries · 7d'}
-            value={stats.deliveries7d}
-            accent={stats.deliveries7d > 0 ? 'text-info' : undefined}
-            hint={`${stats.deliveriesOk} ok · ${stats.deliveriesFailed} failed`}
-            to={marketplaceLinks.deliveries7d}
-          />
-          <StatCard
-            label={copy?.statLabels?.successRate ?? 'Success rate'}
-            value={stats.deliveries7d > 0 ? `${stats.deliverySuccessRatePct}%` : '—'}
-            accent={stats.deliverySuccessRatePct >= 95 ? 'text-ok' : stats.deliveriesFailed > 0 ? 'text-danger' : undefined}
-            hint="Last 7 days"
-            to={marketplaceLinks.successRate}
-          />
-          <StatCard
-            label={copy?.statLabels?.failing ?? 'Failing'}
-            value={stats.failingPlugins}
-            accent={stats.failingPlugins > 0 ? 'text-danger' : undefined}
-            hint="Last delivery error/timeout"
-            to={marketplaceLinks.failing}
-          />
-          <StatCard
-            label={copy?.statLabels?.neverDelivered ?? 'Never delivered'}
-            value={stats.neverDeliveredPlugins}
-            accent={stats.neverDeliveredPlugins > 0 ? 'text-warn' : undefined}
-            hint="Active but no delivery yet"
-            to={marketplaceLinks.neverDelivered}
-          />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'delivery_failures'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'plugins_paused'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-edge-subtle bg-chrome'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'delivery_failures'
-                ? 'danger'
-                : stats.topPriority === 'plugins_paused'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'delivery_failures' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
 
       {!pluginsUnlocked && !entitlements.loading && (
         <UpgradePrompt flag="plugins" currentPlan={entitlements.planName} />
@@ -671,6 +610,7 @@ export function MarketplacePage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
+          <MarketplaceReadout stats={stats} fetchedAt={lastFetchedAt} isValidating={isValidating} />
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"

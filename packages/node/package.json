@@ -62,7 +62,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/node"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/node#readme",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
@@ -133,7 +133,7 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "engines": {
     "node": ">=20"
   },

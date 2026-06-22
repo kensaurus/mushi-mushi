@@ -83,7 +83,34 @@ export function StatusStepper({
 
   const activeLabel = STEP_LABELS[STATUS_STEPS[activeIdx]]
   const isTable = size === 'table'
-  const barHeight = size === 'full' ? 'h-2.5' : 'h-1.5'
+  const barHeight = size === 'full' ? 'h-2.5' : isTable ? 'h-2' : 'h-1.5'
+  const tableSummary = `${activeLabel} · stage ${activeIdx + 1} of 4`
+
+  const barRow = (
+    <div className={`flex items-center gap-px min-w-0 ${isTable ? 'flex-1' : 'w-full max-w-full'}`}>
+      {STATUS_STEPS.map((step, i) => {
+        const completed = i < activeIdx
+        const active = i === activeIdx
+        const tint = active
+          ? activeTone
+          : completed
+            ? 'bg-ok'
+            : 'bg-fg-faint/20'
+        const ts = timestamps?.[step]
+        const tooltipBase = STEP_LABELS[step]
+        const tooltip = ts ? `${tooltipBase} · ${new Date(ts).toLocaleString()}` : tooltipBase
+        const activeRing = active ? 'ring-1 ring-inset ring-fg/15' : ''
+        return (
+          <Tooltip key={step} portal content={tooltip}>
+            <span
+              aria-label={tooltipBase}
+              className={`${barHeight} flex-1 rounded-[1px] motion-safe:transition-colors ${tint} ${activeRing}`}
+            />
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
 
   return (
     <div
@@ -97,31 +124,18 @@ export function StatusStepper({
           <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
         </span>
       )}
-      <div className={`flex items-center gap-px min-w-0 ${isTable ? 'flex-1' : 'w-full max-w-full'}`}>
-        {STATUS_STEPS.map((step, i) => {
-          const completed = i < activeIdx
-          const active = i === activeIdx
-          const tint = active
-            ? activeTone
-            : completed
-              ? 'bg-ok'
-              : 'bg-fg-faint/20'
-          const ts = timestamps?.[step]
-          const tooltipBase = STEP_LABELS[step]
-          const tooltip = ts ? `${tooltipBase} · ${new Date(ts).toLocaleString()}` : tooltipBase
-          const activeRing = active ? 'ring-1 ring-inset ring-fg/15' : ''
-          return (
-            <Tooltip key={step} portal content={tooltip}>
-              <span
-                aria-label={tooltipBase}
-                className={`${barHeight} flex-1 rounded-[1px] motion-safe:transition-colors ${tint} ${activeRing}`}
-              />
-            </Tooltip>
-          )
-        })}
-      </div>
+      {isTable ? (
+        <Tooltip portal content={tableSummary}>
+          {barRow}
+        </Tooltip>
+      ) : (
+        barRow
+      )}
       {isTable && (
-        <span className="shrink-0 text-2xs text-fg-faint tabular-nums leading-none">
+        <span
+          className="shrink-0 text-2xs text-fg-muted tabular-nums leading-none font-medium"
+          title={tableSummary}
+        >
           {activeIdx + 1}/4
         </span>
       )}

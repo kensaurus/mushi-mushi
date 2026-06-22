@@ -10,12 +10,9 @@ import { Callout } from 'nextra/components'
 
 **Route:** `/billing`
 
-> **Scenario:** It's the 20th of the month. You get an email saying you're at 85% of
-> your report limit. You want to know when you'll hit the wall, whether it's worth
-> upgrading now, and what yesterday's invoice looks like — without logging into Stripe.
+> **Scenario:** It's the 20th of the month. You get an email at 50% of your diagnosis quota, then again at 80%. You want to know when you'll hit the wall, what your projected bill is, and how to cap spend — without logging into Stripe.
 
-Everything you need to manage your subscription is on this page: live usage with a
-forecast, plan comparison, invoices, and in-console support if something goes wrong.
+Everything you need to manage your subscription is on this page: live **diagnosis** usage with forecast and projected cost, plan comparison, invoices, predictability controls, and in-console support.
 
 ---
 
@@ -24,126 +21,91 @@ forecast, plan comparison, invoices, and in-console support if something goes wr
 Each project has a billing card. The key element is the **usage bar**:
 
 ```
-Reports used: ████████░░░░  85%  (8,500 / 10,000)
+Diagnoses used: ████████░░░░  85%  (425 / 500)
 ```
 
-Below the bar, the **forecast narrative** tells you what to expect:
-> *"At this rate, you'll reach your limit on Jun 14."*
+Below the bar you will see:
 
-This is calculated from your rolling 30-day average. If you're growing fast, the date
-moves sooner — upgrade before it hits to avoid queued (unprocessed) reports.
+| Element | What it tells you |
+|---|---|
+| **Forecast chip** | At current pace, the date you'll hit your included quota |
+| **Projected cost** | Estimated monthly bill at current pace (paid tiers with overage) |
+| **Quota resets in N days** | Days until your Stripe billing period ends |
 
-**What happens at 100%?** New reports are queued but not classified or fixed. They'll
-process once the new billing period starts (or you upgrade). No reports are lost.
+**What happens at 100%?**
+
+- **Free Cloud:** New reports are captured but **not diagnosed** until the period resets.
+- **Indie / Pro:** Overage continues until your **spend cap** pauses Stage-2 classification. No reports are lost.
 
 ### Usage breakdown
 
 | Metric | What it measures |
 |--------|-----------------|
+| **Diagnoses · period** | Completed Stage-2 classifications this billing cycle |
+| **Spend cap · month** | Hard USD ceiling on overage (editable below the bar) |
 | **Subscription status** | `active`, `past_due` (update card), `canceled` |
 | **Period end date** | When your current billing cycle resets |
 | **Fix count** | How many fix-worker runs this month |
 | **Classifier tokens** | LLM tokens used by the classifier pipeline |
-| **LLM cost** | Estimated AI spend billed from your BYOK keys |
+| **LLM cost** | Estimated AI spend from your BYOK keys |
 
-The **30-day sparkline** shows daily report volume — useful for spotting a recent spike
-that's about to push you over the limit.
+The **30-day sparkline** shows daily report volume — useful for spotting a spike that will push diagnoses over quota.
+
+---
+
+## Predictability controls
+
+On each paid project card, **Predictability controls** let you:
+
+1. **Monthly spend cap (USD)** — override the plan default ($50 Indie, $200 Pro). Diagnoses pause gracefully at the cap.
+2. **Usage alert email** — where 50% / 80% / 100% quota alerts are sent (defaults to project owner).
+
+Both settings save immediately via the Billing API. Leave the cap blank to revert to the plan default; leave the email blank to use the owner address.
+
+<Callout type="info">
+  Alerts are deduplicated — at most **one email per threshold per billing month**. The usage-alerts cron runs hourly.
+</Callout>
 
 ---
 
 ## Upgrading your plan
 
 1. Click **Upgrade** (or **Change plan**) on the project card.
-2. Browse the plan comparison table — it shows exactly which features each tier unlocks
-   (SSO, data residency, higher limits, etc.).
+2. Browse the plan comparison table — it shows exactly which features each tier unlocks.
 3. Click **Select** on the plan you want.
-4. You're redirected to **Stripe Checkout** — complete payment there.
-5. The new plan activates immediately when you return to Mushi.
+4. Complete payment in **Stripe Checkout**.
+5. The new plan activates when you return to Mushi.
 
-<Callout type="info">
-If you don't see a plan comparison table, click **Show plans**. The table is hidden by
-default once you're on a paid plan to reduce clutter.
-</Callout>
+Annual billing (~two months free) is available after subscribing — open **Manage** in Stripe or contact sales for Enterprise commits.
 
 ---
 
 ## Managing payment and invoices
 
-Click **Manage** to open the **Stripe Billing Portal** in a new tab. Use the portal for:
+Click **Manage** to open the **Stripe Billing Portal**. Use the portal for:
+
 - Updating your credit card
 - Viewing upcoming invoices
 - Cancelling a subscription
-- Downloading invoices as PDFs (also available directly from the Invoices table below)
+- Downloading invoice PDFs
 
-The **Invoices table** on this page shows the last few invoices:
-
-| Column | Description |
-|--------|-------------|
-| **Number** | Stripe invoice number |
-| **Period** | Billing period covered |
-| **Amount** | Charged (USD) |
-| **Status** | `paid`, `open` (unpaid), `void` |
-| **View** | Opens the hosted Stripe invoice page |
-| **PDF** | Direct PDF download |
+The **Invoices table** on this page shows recent hosted invoice links.
 
 ---
 
-## In-console support tickets
-
-<Callout type="info">
-Support tickets are available on **Starter** plan and above. Hobby plan users are
-directed to GitHub Discussions.
-</Callout>
-
-Click **Open ticket** to expand the support form. Don't leave Mushi to email support —
-submit here and the ticket is linked to your project automatically.
-
-**Filing a good support ticket:**
-1. Select the **project** the issue affects.
-2. Choose a **category** — "billing" for invoice questions, "bug" for product issues.
-3. Write a clear **subject** (e.g. *"Fix-worker failing with 401 since key rotation"*).
-4. Add detail in the **body** — include the run ID or report ID if relevant.
-5. Click **Send ticket**.
-
-The ticket appears in **Recent tickets** immediately. Click the row to open the detail
-modal, where you'll see any admin reply. Click **Cancel ticket** if the issue resolves
-itself before a reply arrives.
-
----
-
-## Common tasks
-
-### "I'm approaching my limit — should I upgrade now?"
-1. Read the forecast narrative on your usage bar.
-2. If it says you'll hit the limit before month-end: upgrade.
-3. If you're at 85% with 2 days left: the new billing period will reset first — wait.
-
-### "I was charged twice this month"
-1. Open the **Invoices** table — check the Period column for each invoice.
-2. If you see two invoices for the same period, click **Open ticket** → category: billing.
-
-### "I need to cancel"
-1. Click **Manage** → Stripe Billing Portal → Cancel subscription.
-2. Your project continues until the period end date shown on the billing card.
-3. Data is retained for 30 days after cancellation before automated deletion.
-
----
-
-## API
+## CLI parity
 
 ```bash
-GET  /v1/admin/billing
-GET  /v1/admin/billing/invoices?project_id=<pid>
-POST /v1/admin/billing/checkout    { project_id, plan_id }
-POST /v1/admin/billing/portal      { project_id }
-POST /v1/support/contact           { project_id, category, subject, body }
-GET  /v1/admin/support/tickets?limit=10
+mushi usage              # diagnoses used / limit this period
+mushi billing status     # plan, usage, cap, overage rate
+mushi billing cap        # show current spend cap
+mushi billing cap 100    # set $100/mo hard cap
+mushi billing cap 0      # clear override → plan default
 ```
 
 ---
 
-## Related pages
+## Related docs
 
-- [Projects](/admin/projects) — per-project API key and plan detail
-- [SSO](/admin/sso) — requires Pro or Enterprise plan
-- [Compliance](/admin/compliance) — data residency requires Pro or Enterprise
+- [Public pricing](/pricing) — plan table, estimator, example bills, FAQ
+- [Self-hosting](/self-hosting) — unlimited diagnoses with your own LLM key

@@ -243,4 +243,19 @@ describe('formatDoctorResult', () => {
     })
     expect(result).toContain('ECONNREFUSED')
   })
+
+  it('uses ⚠ for advisory warnings and does not count them as failures', () => {
+    const result = formatDoctorResult({
+      ready: true,
+      checks: [
+        { name: 'SDK installed in this repo', ok: true, warn: true, detail: 'Not in cwd but heartbeats active' },
+        { name: '[ingest] SDK heartbeat', ok: true, detail: '2026-06-22T02:55:34' },
+      ],
+    })
+    expect(result).toContain('⚠ SDK installed in this repo')
+    expect(result).toContain('✓ [ingest] SDK heartbeat')
+    expect(result).toContain('All checks passed')
+    expect(result).toContain('advisory warning')
+    expect(result).not.toContain('check failed')
+  })
 })

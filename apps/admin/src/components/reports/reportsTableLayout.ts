@@ -12,7 +12,8 @@ export const REPORTS_TABLE_COL = {
   stripe: 'w-1',
   checkbox: 'w-8',
   summary: 'w-[34rem]',
-  status: 'w-[4.25rem]',
+  /** Pipeline stepper (4 bars + stage fraction) — keep ≥5.75rem so bars stay legible. */
+  status: 'w-[5.75rem]',
   severity: 'w-[3.25rem]',
   confidence: 'w-[3.5rem]',
   action: 'w-[7rem]',
@@ -24,7 +25,7 @@ export const REPORTS_STICKY_LEAD = {
   col3Left: '2.25rem', /* w-1 + w-8 */
 } as const
 
-export const REPORTS_TABLE_MIN_W = 'min-w-[52rem]'
+export const REPORTS_TABLE_MIN_W = 'min-w-[53.5rem]'
 
 /** Reusable cell classes — numeric columns right-align header + body. */
 export const REPORTS_NUMERIC_CELL = TABLE_CELL.numeric

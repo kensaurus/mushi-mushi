@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageHero } from '../components/PageHero'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -18,6 +19,9 @@ import { ContainedBlock, InlineProof } from '../components/report-detail/ReportS
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { useAdminMode } from '../lib/mode'
+import { FeatureBoardReadout } from '../components/feature-board/FeatureBoardReadout'
+import { FeatureBoardSnapshotStrip } from '../components/feature-board/FeatureBoardSnapshotStrip'
+import { type FeatureBoardClientStats } from '../components/feature-board/FeatureBoardStatsTypes'
 import {
   Badge,
   Btn,
@@ -27,9 +31,7 @@ import {
   FreshnessPill,
   Loading,
   RelativeTime,
-  Section,
   SegmentedControl,
-  StatCard,
 } from '../components/ui'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -363,6 +365,18 @@ export function FeatureBoardPage() {
     return [...tickets].sort((a, b) => b.vote_count - a.vote_count)[0] ?? null
   }, [tickets])
 
+  const clientStats: FeatureBoardClientStats = useMemo(
+    () => ({
+      projectId,
+      openCount,
+      shippedCount,
+      totalVotes,
+      totalTickets: tickets.length,
+      topRequestSubject: topRequest?.subject ?? null,
+    }),
+    [projectId, openCount, shippedCount, totalVotes, tickets.length, topRequest?.subject],
+  )
+
   const filtered = useMemo(() => {
     let list = tickets
 
@@ -511,37 +525,30 @@ export function FeatureBoardPage() {
       />
       ) : null}
 
-      <Section
-        title="FEATURE BOARD SNAPSHOT"
-        freshness={{ at: lastFetchedAt, isValidating }}
-      >
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Requests"
-            value={tickets.length}
-            accent={tickets.length > 0 ? 'text-brand' : undefined}
-            detail={projectId ? 'All feature-category tickets' : 'Select a project'}
-          />
-          <StatCard
-            label="Open"
-            value={openCount}
-            accent={openCount > 0 ? 'text-warn' : undefined}
-            detail="Open or in progress"
-          />
-          <StatCard
-            label="Shipped"
-            value={shippedCount}
-            accent={shippedCount > 0 ? 'text-ok' : undefined}
-            detail="Linked to a release"
-          />
-          <StatCard
-            label="Total votes"
-            value={totalVotes}
-            accent={totalVotes > 0 ? 'text-info' : undefined}
-            detail="Across all requests"
-          />
-        </div>
-      </Section>
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <FeatureBoardSnapshotStrip
+                stats={clientStats}
+                fetchedAt={lastFetchedAt}
+                isValidating={isValidating}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: (
+              <FeatureBoardReadout
+                stats={clientStats}
+                fetchedAt={lastFetchedAt}
+                isValidating={isValidating}
+              />
+            ),
+          },
+        ]}
+      />
 
       {!projectId && (
         <EmptyState
@@ -574,6 +581,7 @@ export function FeatureBoardPage() {
               ]}
               ariaLabel="Filter by status"
               size="sm"
+              scrollable
             />
 
             <label className="inline-flex flex-col gap-0.5">

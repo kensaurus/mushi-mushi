@@ -235,6 +235,26 @@ export const FILTER_OPTIONS = {
   severities: ['', 'critical', 'high', 'medium', 'low'],
 } as const
 
+/** WCAG-safe copy on tinted semantic banner surfaces — use *-foreground, not raw hue tokens. */
+export type SemanticBannerTone = 'ok' | 'warn' | 'danger'
+
+export const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
+  ok: 'border-ok/25 bg-ok-muted/40 text-ok-foreground',
+  warn: 'border-warn/30 bg-warn-muted/40 text-warning-foreground',
+  danger: 'border-danger/30 bg-danger-muted/40 text-danger-foreground',
+}
+
+export function semanticBannerTone(tone: SemanticBannerTone): string {
+  return SEMANTIC_BANNER_TONE[tone]
+}
+
+/** Primary billing upgrade CTA — `bg-brand text-brand-fg` (never `bg-fg text-bg`). */
+export const BILLING_CTA_LINK_CLASS =
+  'inline-flex items-center justify-center rounded-full bg-brand px-3 py-1 text-2xs font-semibold text-brand-fg shadow-sm hover:bg-brand-hover motion-safe:transition-opacity shrink-0'
+
+export const BILLING_CTA_LINK_CLASS_MD =
+  'inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-fg shadow-sm hover:bg-brand-hover motion-safe:transition-opacity'
+
 export const NODE_COLORS: Record<string, string> = {
   report_group: 'oklch(0.65 0.22 25)',
   component:    'oklch(0.68 0.16 240)',

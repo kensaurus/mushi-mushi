@@ -16,13 +16,12 @@ import { usePageCopy } from '../lib/copy'
 import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint, Card,
-  Section,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { Card,
   Btn,
   Badge,
   ErrorAlert,
   EmptyState,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
@@ -36,9 +35,8 @@ import {
   RecentJobsList,
 } from '../components/intelligence/IntelligenceJobs'
 import { IntelligenceStatusBanner } from '../components/intelligence/IntelligenceStatusBanner'
+import { IntelligenceSnapshotStrip } from '../components/intelligence/IntelligenceSnapshotStrip'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -62,21 +60,6 @@ import type {
   IntelligenceReport,
   ModernizationFinding,
 } from '../components/intelligence/types'
-import {
-  activeJobsDetail,
-  activeJobsTooltip,
-  benchmarkingDetail,
-  benchmarkingTooltip,
-  digestsDetail,
-  digestsTooltip,
-  failedJobsDetail,
-  failedJobsTooltip,
-  findingsDetail,
-  findingsTooltip,
-  fixAttemptsDetail,
-  fixAttemptsTooltip,
-} from '../lib/statTooltips/intelligence'
-import { intelligenceLinks } from '../lib/statCardLinks'
 
 const TABS: Array<{ id: IntelligenceTabId; label: string; description: string }> = [
   {
@@ -364,7 +347,7 @@ export function IntelligencePage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -460,14 +443,37 @@ export function IntelligencePage() {
         )}
       </PageHeaderBar>
 
-      <IntelligenceStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        onGenerate={() => void generateNow()}
-        generating={generating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <IntelligenceStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                onGenerate={() => void generateNow()}
+                generating={generating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideIntelligenceSnapshot,
+            children: (
+              <IntelligenceSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!intelligenceUnlocked && !entitlements.loading && (
@@ -477,63 +483,13 @@ export function IntelligencePage() {
       {!ux.hideTabs && (
       <SegmentedControl<IntelligenceTabId>
         size="sm"
+        scrollable
         ariaLabel="Intelligence sections"
         value={activeTab}
         options={tabOptions}
         onChange={setActiveTab}
       />
       )}
-
-      {!ux.hideIntelligenceSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.digests ?? 'Digests'} value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} tooltip={digestsTooltip(stats)} detail={digestsDetail(stats)} to={intelligenceLinks.digests} />
-          <StatCard label={copy?.statLabels?.activeJobs ?? 'Active jobs'} value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} tooltip={activeJobsTooltip(stats)} detail={activeJobsDetail(stats)} to={intelligenceLinks.activeJobs} />
-          <StatCard label={copy?.statLabels?.failedJobs ?? 'Failed jobs'} value={stats.failedJobCount} accent={stats.failedJobCount > 0 ? 'text-danger' : undefined} tooltip={failedJobsTooltip(stats)} detail={failedJobsDetail(stats)} to={intelligenceLinks.failedJobs} />
-          <StatCard label={copy?.statLabels?.findings ?? 'Findings'} value={stats.pendingFindings} accent={stats.pendingFindings > 0 ? 'text-warn' : undefined} tooltip={findingsTooltip(stats)} detail={findingsDetail(stats)} to={intelligenceLinks.findings} />
-          <StatCard label={copy?.statLabels?.fixAttempts ?? 'Fix attempts'} value={stats.totalFixAttempts} accent={stats.totalFixAttempts > 0 ? 'text-brand' : undefined} tooltip={fixAttemptsTooltip(stats)} detail={fixAttemptsDetail(stats)} to={intelligenceLinks.fixAttempts} />
-          <StatCard label={copy?.statLabels?.benchmarking ?? 'Benchmarking'} value={stats.benchmarkOptIn ? 'On' : 'Off'} accent={stats.benchmarkOptIn ? 'text-ok' : undefined} tooltip={benchmarkingTooltip(stats)} detail={benchmarkingDetail(stats)} to={intelligenceLinks.benchmarking} />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'job_failed'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'pending_findings' || stats.topPriority === 'stale_digest'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'job_failed'
-                ? 'danger'
-                : stats.topPriority === 'pending_findings' || stats.topPriority === 'stale_digest'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'job_failed' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-            {stats.topPriority === 'job_failed' && (
-              <ActionPill to="/settings?tab=byok" tone="neutral">
-                Check LLM keys
-              </ActionPill>
-            )}
-          </ActionPillRow>
-        </Card>
-      ) : null}
 
       {!activeProjectId ? (
         <SetupNudge
@@ -698,7 +654,7 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
 
   if (!latest?.summary_md) {
     return (
-      <Card className="space-y-3 border-brand/20 bg-brand/5 p-4">
+      <Card className="space-y-3 border border-brand/30 bg-surface-raised p-4">
         <SignalChip tone="brand">
           {latest?.week_start ? `Week of ${latest.week_start}` : 'Latest digest'}
         </SignalChip>
@@ -708,7 +664,7 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
   }
 
   return (
-    <Card className="border-brand/20 bg-brand/5 p-4">
+    <Card className="border border-brand/30 bg-surface-raised p-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-brand">Week of {latest.week_start}</h3>
         {latest.llm_model && (

@@ -11,17 +11,19 @@ import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://docs.mushimushi.dev'),
+  metadataBase: new URL('https://kensaur.us/mushi-mushi'),
   title: {
-    default: 'Mushi Mushi — User-side bug intelligence',
-    template: '%s · Mushi Mushi Docs',
+    default: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+    template: '%s · Mushi Mushi',
   },
   description:
-    'Capture, classify, and fix bugs your users find — across web, mobile, and AI agents. Mushi Mushi is the open-source bug-report platform with an LLM triage pipeline, a knowledge graph, and an agentic fix orchestrator.',
+    'Know why your AI-built app broke — plain-English diagnosis + ready fix, in your editor. Open source. Sentry optional.',
   openGraph: {
-    siteName: 'Mushi Mushi Docs',
+    siteName: 'Mushi Mushi',
     type: 'website',
+    images: [{ url: '/mushi-mushi/docs/social-preview/og-card.png', width: 1200, height: 630 }],
   },
+  robots: { index: true, follow: true },
   twitter: {
     card: 'summary_large_image',
     site: '@mushimushi_dev',
@@ -70,8 +72,8 @@ const navbar = (
 
 const footer = (
   <Footer>
-    MIT (SDKs) / BSL (server) — © {new Date().getFullYear()} Mushi Mushi.
-    Built with Nextra.
+    MIT (SDKs) · AGPLv3 (server) · commercial (enterprise edition) — ©{' '}
+    {new Date().getFullYear()} Mushi Mushi. Built with Nextra.
   </Footer>
 )
 

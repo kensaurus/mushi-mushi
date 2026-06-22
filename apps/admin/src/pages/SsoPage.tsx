@@ -3,6 +3,8 @@ import { apiFetch } from '../lib/supabase';
 import { usePageData } from '../lib/usePageData';
 import { usePublishPageHeroStats } from '../lib/heroSnapshots';
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers';
 import {
   Card,
   Badge,
@@ -20,6 +22,8 @@ import { UpgradePrompt } from '../components/billing/UpgradePrompt';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SsoProtocolGuide } from '../components/sso/SsoProtocolGuide';
 import { SsoStatusBanner } from '../components/sso/SsoStatusBanner';
+import { SsoSnapshotStrip } from '../components/sso/SsoSnapshotStrip';
+import { SsoReadout } from '../components/sso/SsoReadout';
 import { EMPTY_SSO_STATS, type SsoStats } from '../components/sso/types';
 
 interface SsoConfig {
@@ -59,6 +63,7 @@ export function SsoPage() {
   const {
     data: statsData,
     reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<SsoStats>('/v1/admin/sso/stats');
   usePublishPageHeroStats('/sso', statsData);
@@ -172,17 +177,50 @@ export function SsoPage() {
         helpHowToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
 
-      <SsoStatusBanner
-        stats={stats}
-        ssoUnlocked={ssoUnlocked}
-        onRefresh={() => {
-          reloadStats();
-          reload();
-        }}
-        refreshing={statsValidating}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <SsoStatusBanner
+                stats={stats}
+                ssoUnlocked={ssoUnlocked}
+                onRefresh={() => {
+                  reloadStats();
+                  reload();
+                }}
+                refreshing={statsValidating}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <SsoSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                hint="Registered providers, pending setup, and plan entitlement for enterprise SSO."
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: !shouldHideGuideWhenBannerActive(
+              true,
+              COMMON_HEALTHY_PRIORITIES,
+              stats.topPriority,
+            ),
+            children: <SsoProtocolGuide topPriority={stats.topPriority} />,
+          },
+        ]}
       />
 
-      <SsoProtocolGuide topPriority={stats.topPriority} />
+      <SsoReadout
+        stats={stats}
+        fetchedAt={statsFetchedAt}
+        isValidating={statsValidating}
+      />
 
       {!ssoUnlocked && !entitlements.loading && (
         <UpgradePrompt flag="sso" currentPlan={entitlements.planName} />
