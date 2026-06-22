@@ -15,7 +15,7 @@
   "devDependencies": {
     "@mushi-mushi/core": "workspace:*",
     "@mushi-mushi/web": "workspace:*",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.61.0",
     "@supabase/supabase-js": "^2.108.1",
     "@types/node": "^25.9.3",
     "msw": "^2.14.6",
