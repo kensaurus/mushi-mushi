@@ -478,9 +478,13 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       { onConflict: 'project_id,user_id' },
     )
 
-    // Mint a dual-scope key: report:write (SDK ingest) + mcp:read (CLI admin + MCP tools).
-    // A single key covers both surfaces so users never need to manage two separate keys.
-    const WIZARD_SCOPES = ['report:write', 'mcp:read'] as const
+    // Mint a full CLI key: report:write (SDK ingest) + mcp:read + mcp:write
+    // (CLI admin + MCP tools). mcp:write is required by owner-only admin commands
+    // such as `mushi billing cap`, `mushi billing alert-email`, `mushi pipeline
+    // start`, and `mushi fixes merge`. mcp:write implies mcp:read at the gate, but
+    // both are listed for explicit auditability. This endpoint is owner-gated, so
+    // the key never carries more than the authenticated owner already has.
+    const WIZARD_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))
@@ -564,8 +568,11 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
       )
     }
 
-    // Mint a dual-scope key matching the project-create flow.
-    const LOGIN_SCOPES = ['report:write', 'mcp:read'] as const
+    // Mint a full CLI key matching the project-create flow: report:write +
+    // mcp:read + mcp:write. mcp:write powers owner-only admin commands (billing
+    // cap / alert-email, pipeline start, fixes merge). Owner/admin-gated above,
+    // so the key never exceeds the caller's existing privileges.
+    const LOGIN_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
     const prefix = rawKey.slice(0, 12)
     const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey))

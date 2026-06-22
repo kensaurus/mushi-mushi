@@ -201,7 +201,7 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
   if (ownerUserIds.length > 0) {
     // Service role can call the get_user_emails_by_ids SECURITY DEFINER RPC
     // (migration 20260621120000) which queries auth.users in one round-trip.
-    const { data: authUsers } = await (db.rpc as (fn: string, args: Record<string, unknown>) => Promise<{ data: { id: string; email: string }[] | null }>)(
+    const { data: authUsers } = await (db.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: { id: string; email: string }[] | null }>)(
       'get_user_emails_by_ids',
       { p_user_ids: ownerUserIds },
     ).catch(() => ({ data: null }))

@@ -431,7 +431,7 @@ Deno.serve(
 - Action: ${extraction?.action ?? 'unknown'}
 - Expected: ${extraction?.expected ?? 'unknown'}
 - Actual: ${extraction?.actual ?? 'unknown'}
-- Emotion: ${extraction?.emotion ?? 'not captured'}
+- Emotion: ${extraction?.emotion || 'not captured'}
 - Stage 1 Category: ${extraction?.category ?? scrubbedReport.user_category}
 - Stage 1 Severity: ${extraction?.severity ?? 'unknown'}
 - Stage 1 Confidence: ${extraction?.confidence ?? 'unknown'}

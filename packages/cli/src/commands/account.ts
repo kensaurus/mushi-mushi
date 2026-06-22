@@ -98,15 +98,16 @@ program
   .option('--no-browser', 'Print the verification URL instead of opening the browser')
   .option(
     '--upgrade-scope',
-    'Re-authenticate and mint a new key with both report:write and mcp:read scopes. ' +
-    'Use this to upgrade an existing ingest-only key so MCP and admin commands work.',
+    'Re-authenticate and mint a new key with report:write + mcp:read + mcp:write scopes. ' +
+    'Use this to upgrade an existing ingest-only key so MCP and admin commands ' +
+    '(including writes like `mushi billing cap`) work.',
   )
   .addHelpText('after', `
 Examples:
   mushi login                              # browser-guided (recommended)
   mushi login --api-key mushi_xxx         # non-interactive / CI
   mushi login --api-key mushi_xxx --project-id <uuid>
-  mushi login --upgrade-scope             # re-auth to get mcp:read added to your key`)
+  mushi login --upgrade-scope             # re-auth to add mcp:read + mcp:write to your key`)
   .action(async (opts: { apiKey?: string; endpoint?: string; projectId?: string; browser?: boolean; upgradeScope?: boolean }) => {
     const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('../endpoint.js')
     const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
@@ -155,8 +156,8 @@ Examples:
     if (opts.upgradeScope) {
       console.log('  Mushi login — scope upgrade')
       console.log('  ───────────────────────────')
-      console.log('  Re-authenticating to mint a new key with report:write + mcp:read scopes.')
-      console.log('  This lets the CLI admin commands and MCP server both work with a single key.')
+      console.log('  Re-authenticating to mint a new key with report:write + mcp:read + mcp:write scopes.')
+      console.log('  This lets the CLI admin commands (including writes) and MCP server both work with a single key.')
       console.log('')
     } else {
       console.log('  Mushi login')
@@ -308,8 +309,8 @@ Examples:
     console.log('')
     if (chosenProjectName) console.log(`  ✓ Project: ${chosenProjectName}`)
     if (apiKey) {
-      console.log(`  ✓ Dual-scope key saved (${apiKey.slice(0, 12)}…)`)
-      console.log(`    Scopes: report:write · mcp:read — SDK + MCP + admin CLI all work with this key`)
+      console.log(`  ✓ Full-scope CLI key saved (${apiKey.slice(0, 12)}…)`)
+      console.log(`    Scopes: report:write · mcp:read · mcp:write — SDK + MCP + admin CLI (incl. writes) all work with this key`)
     } else {
       console.log(`  ℹ  Get an SDK key at: ${apiKeyHint(consoleBase)}`)
     }
