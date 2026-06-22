@@ -184,20 +184,29 @@ export function RecencyHeatLabel({
   label,
   className = '',
   wrapperClass = '',
+  /** Table action column — text-only age to avoid overlapping the CTA row. */
+  compact = false,
 }: {
   createdAt: string
   label: string
   className?: string
-  /** Forwarded to the Tooltip anchor span — use `"w-full"` when the component sits inside
-   *  a flex-col container and the bar should fill the column width. Without it the Tooltip's
-   *  `inline-flex` anchor sizes itself to the label text (~37px) rather than the parent's
-   *  available width. */
   wrapperClass?: string
+  compact?: boolean
 }) {
   const hours = recencyHours(createdAt)
   const freshness = recencyFreshness(hours)
   const tone = recencyBarTone(hours)
   const full = new Date(createdAt).toLocaleString()
+
+  if (compact) {
+    return (
+      <Tooltip portal content={full} className={wrapperClass || undefined}>
+        <span className={`block w-full truncate text-right text-3xs font-mono text-fg-faint tabular-nums leading-none cursor-help ${className}`}>
+          {label}
+        </span>
+      </Tooltip>
+    )
+  }
 
   return (
     <Tooltip portal content={full} className={wrapperClass || undefined}>

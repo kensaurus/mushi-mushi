@@ -1,4 +1,5 @@
 import { RelativeTime } from '../ui'
+import { EndpointCodeRow } from '../readout'
 import { IconExternalLink } from '../icons'
 import { usePageData } from '../../lib/usePageData'
 import {
@@ -174,15 +175,17 @@ export function RunDetail({ run, projectId, storyId, isDirectFetch }: RunDetailP
         ))}
 
       {run.provider_session_url && (
-        <a
-          href={run.provider_session_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-2xs text-brand hover:underline font-medium"
-        >
-          <IconExternalLink className="h-3 w-3" />
-          Open session replay in {PROVIDER_LABEL[run.provider ?? ''] ?? run.provider}
-        </a>
+        <div className="space-y-1.5">
+          <a
+            href={run.provider_session_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-2xs text-brand hover:underline font-medium"
+          >
+            Open session replay in {PROVIDER_LABEL[run.provider ?? ''] ?? run.provider}
+          </a>
+          <EndpointCodeRow label="Provider session" url={run.provider_session_url} />
+        </div>
       )}
     </div>
   )

@@ -27,13 +27,13 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/svelte"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/svelte#readme",
+  "homepage": "https://kensaur.us/mushi-mushi",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

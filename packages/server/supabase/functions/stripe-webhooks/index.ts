@@ -64,11 +64,10 @@ async function recordIfNew(db: Db, event: StripeEvent): Promise<boolean> {
   throw new Error(`stripe_processed_events insert failed: ${error.message}`)
 }
 
-// Resolve the pricing_plans.id for a subscription. Priority order:
-//   1. `subscription.metadata.plan_id` (set by our Checkout Session)
-//   2. Lookup the FIRST line item's `price.lookup_key` against pricing_plans.base_price_lookup_key
-//   3. Default to 'hobby' (i.e. effectively a downgrade). The webhook callers
-//      will surface this in logs so a misconfigured price can be caught.
+  // Resolve the pricing_plans.id for a subscription. Priority order:
+  //   1. `subscription.metadata.plan_id` (set by our Checkout Session)
+  //   2. Lookup the FIRST line item's `price.lookup_key` against pricing_plans.base_price_lookup_key
+  //   3. Default to null (caller logs the miss; billing.ts defaults to free_cloud quota).
 async function resolvePlanId(
   db: Db,
   sub: StripeSubscription,

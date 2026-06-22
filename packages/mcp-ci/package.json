@@ -59,7 +59,7 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "engines": {
     "node": ">=20"
   },
@@ -69,5 +69,6 @@
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/kensaurus"
-  }
+  },
+  "homepage": "https://kensaur.us/mushi-mushi"
 }

@@ -4,8 +4,9 @@ https://github.com/kensaurus/mushi-mushi
 
 This product is composed of multiple packages distributed under different
 licenses. The license that applies to each package is identified at the
-root of that package; the table below is a non-authoritative summary kept
-in sync by `scripts/sync-community-files.mjs`.
+root of that package; the table below is a non-authoritative, hand-maintained
+summary. Mushi Mushi is open-core (the Supabase / Grafana model): an AGPLv3
+server core plus a narrow source-available commercial boundary.
 
 ================================================================================
 LICENSE SUMMARY
@@ -18,16 +19,21 @@ LICENSE SUMMARY
                                  Angular, React Native, iOS, Android,
                                  Flutter), brand tokens, marketing UI.
 
-  Business Source License 1.1    Server packages: @mushi-mushi/server,
-  (BSL 1.1)                      @mushi-mushi/agents, @mushi-mushi/verify.
-                                 Converts to Apache 2.0 on April 15, 2029.
-                                 See packages/server/LICENSE for the
-                                 Additional Use Grant. The short version:
-                                 self-host freely, do not resell as a
-                                 hosted service.
+  GNU Affero GPL v3 (AGPLv3)     Server packages: @mushi-mushi/server,
+                                 @mushi-mushi/agents, @mushi-mushi/verify
+                                 (everything NOT under an `ee/` directory).
+                                 True OSI open source. Self-host and modify
+                                 freely; network SaaS use of modified versions
+                                 requires publishing changes (§13) or a
+                                 commercial license — see packages/server/LICENSE
+                                 and COMMERCIAL-LICENSE.md.
 
-  Apache 2.0 (future)            Server packages on or after the Change Date
-                                 (April 15, 2029).
+  Commercial (Enterprise         The code under packages/server/ee/. Source-
+  Edition)                       available — read, audit, modify, and run for
+                                 development/evaluation — but Production Use
+                                 requires an Enterprise subscription or a valid
+                                 MUSHI_EE_LICENSE_KEY. See
+                                 packages/server/ee/LICENSE.
 
 ================================================================================
 TRADEMARKS

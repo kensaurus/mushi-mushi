@@ -13,11 +13,11 @@
 import { useMemo, useState } from 'react'
 import {
   ErrorAlert,
-  Card,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { KpiRow, KpiTile, formatPct } from '../components/charts'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -34,18 +34,18 @@ import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsC
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PromptLabStatusBanner } from '../components/prompt-lab/PromptLabStatusBanner'
 import { PromptLabGuide } from '../components/prompt-lab/PromptLabGuide'
+import { PromptLabSnapshotStrip } from '../components/prompt-lab/PromptLabSnapshotStrip'
+import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
 import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 
 export function PromptLabPage() {
   const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
-  const { data: statsData } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
+  const { data: statsData, lastFetchedAt: statsFetchedAt, isValidating: statsValidating } =
+    usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
   usePublishPageHeroStats('/prompt-lab', statsData)
   const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
   const [editing, setEditing] = useState<PromptVersion | null>(null)
@@ -230,9 +230,6 @@ export function PromptLabPage() {
   if (!data) return null
 
   const totalEvals = data.prompts.reduce((s, p) => s + p.total_evaluations, 0)
-  const bestPrompt = [...data.prompts]
-    .filter((p) => p.avg_judge_score != null)
-    .sort((a, b) => (b.avg_judge_score ?? 0) - (a.avg_judge_score ?? 0))[0]
   const candidates = data.prompts.filter((p) => p.is_candidate).length
   const parentForDiff = diffing
     ? data.prompts.find((p) => p.id === diffing.parent_version_id)
@@ -259,46 +256,40 @@ export function PromptLabPage() {
         </div>
       </PageHeaderBar>
 
-      <PromptLabStatusBanner stats={promptLabStats} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: <PromptLabStatusBanner stats={promptLabStats} />,
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <PromptLabSnapshotStrip
+                stats={promptLabStats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                hint="Active prompts, candidates, best judge score, and eval dataset coverage."
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: !shouldHideGuideWhenBannerActive(
+              true,
+              [...COMMON_HEALTHY_PRIORITIES, 'no_project'],
+              promptLabStats.topPriority,
+            ),
+            children: <PromptLabGuide topPriority={promptLabStats.topPriority} />,
+          },
+        ]}
+      />
 
-      <PromptLabGuide topPriority={promptLabStats.topPriority} />
-
-      {promptLabStats.topPriority &&
-        promptLabStats.topPriority !== 'healthy' &&
-        promptLabStats.topPriority !== 'no_project' &&
-        promptLabStats.topPriorityTo && (
-        <Card
-          className={`space-y-3 p-4 ${
-            promptLabStats.topPriority === 'promote_ready'
-              ? 'border-ok/30 bg-ok/5'
-              : promptLabStats.topPriority === 'no_dataset' || promptLabStats.topPriority === 'untested_ab'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              promptLabStats.topPriority === 'promote_ready'
-                ? 'ok'
-                : promptLabStats.topPriority === 'no_dataset' || promptLabStats.topPriority === 'untested_ab'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={promptLabStats.topPriority === 'promote_ready' ? 'info' : 'warn'}>
-            <p className="text-xs font-medium leading-snug text-fg">
-              {promptLabStats.topPriorityLabel ?? 'Review prompt candidates before promoting.'}
-            </p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={promptLabStats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      )}
+      <PromptLabReadout
+        stats={promptLabStats}
+        fetchedAt={statsFetchedAt}
+        isValidating={statsValidating}
+      />
 
       {/* Workflow strip.
           Pre-2026-05-07 the page jumped straight from the help block into a
@@ -316,42 +307,13 @@ export function PromptLabPage() {
         active={data.prompts.filter((p) => p.is_active).length}
       />
 
-      <KpiRow cols={4}>
-        <KpiTile
-          label="Active prompts"
-          value={data.prompts.filter((p) => p.is_active).length}
-          sublabel="serving production traffic"
-          meaning="Prompts currently classifying live reports. One active per stage; the rest are candidates or archived."
-        />
-        <KpiTile
-          label="Candidates"
-          value={candidates}
-          accent={candidates > 0 ? 'info' : 'muted'}
-          sublabel="awaiting eval"
-          meaning="Cloned prompts collecting evaluations before they can be promoted. Each one needs a few hundred scored reports for confidence."
-        />
-        <KpiTile
-          label="Best score"
-          value={bestPrompt?.avg_judge_score != null ? formatPct(bestPrompt.avg_judge_score) : '—'}
-          accent={'ok'}
-          sublabel={bestPrompt ? `${bestPrompt.stage}/${bestPrompt.version}` : 'no scored prompts yet'}
-          meaning="Highest mean judge score across all prompts (active + candidate). If a candidate beats the active one significantly, consider promoting it."
-        />
-        <KpiTile
-          label="Eval dataset"
-          value={data.dataset.labelled.toLocaleString()}
-          sublabel={`labelled / ${data.dataset.total.toLocaleString()} total reports`}
-          meaning="Reports that have a human-labelled ground truth. Bigger = stronger eval signal. Build it up by triaging reports yourself."
-        />
-      </KpiRow>
-
       {orderedStages.length > 0 && (
         // Stage tabs.
         // Earlier this was a transparent border-b strip with text-only
         // tabs — at 1024 px the active tab disappeared into the body
         // copy because both used `text-xs font-medium` and only a 2 px
         // border separated them. The new chrome (a) gives the strip a
-        // tonal recess (`bg-surface-raised/40`) so it reads as a
+        // tonal recess (`bg-surface-raised`) so it reads as a
         // discrete navigation primitive, and (b) lets the active tab
         // adopt a soft pill (`bg-surface-raised text-fg`) instead of a
         // hairline underline. Inactive tabs stay calm (`text-fg-muted`)
@@ -362,7 +324,7 @@ export function PromptLabPage() {
         // count chip switches to a brand tint when active so the
         // "what stage am I in?" answer is double-encoded (background
         // + chip), satisfying NN/g #1 (Visibility) at a squint.
-        <div className="flex flex-wrap items-center gap-1 rounded-md border border-edge-subtle bg-surface-raised/40 p-1">
+        <div className="flex flex-wrap items-center gap-1 rounded-md border border-edge-subtle bg-surface-raised p-1">
           <ConfigHelp helpId="prompt-lab.stage" />
           {orderedStages.map((stage) => {
             const count = grouped[stage]?.length ?? 0
@@ -532,7 +494,7 @@ function PromptLabWorkflow({ candidates, active }: PromptLabWorkflowProps) {
   }
   return (
     <div
-      className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 rounded-md border border-edge-subtle bg-surface-raised/40 p-3"
+      className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 rounded-md border border-edge-subtle bg-surface-raised p-3"
       aria-label="Prompt lab workflow"
     >
       {steps.map((step, i) => (

@@ -19,37 +19,20 @@ import { usePageCopy } from '../lib/copy'
 import { useReleasesUx, resolveQuickReleasesTab } from '../lib/releasesModeUx'
 import { pluralizeWithCount } from '../lib/format'
 import {
-  contributorsDetail,
-  contributorsTooltip,
-  draftsDetail,
-  draftsTooltip,
-  feedbackDetail,
-  feedbackTooltip,
-  fixedReportsDetail,
-  fixedReportsTooltip,
-  fixesLinkedDetail,
-  fixesLinkedTooltip,
-  publishedDetail,
-  publishedTooltip,
-} from '../lib/statTooltips/releases'
-import { releasesLinks } from '../lib/statCardLinks'
-import { SnapshotSectionHint,
   Card,
-  Section,
   Badge,
   Btn,
   Input,
   ErrorAlert,
   RelativeTime,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+} from '../components/ui'
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
+import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
+import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
 import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
@@ -62,6 +45,7 @@ import { IconReleases, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
 
@@ -403,7 +387,7 @@ function ReleasesList({
             {releases.map((r) => (
               <tr
                 key={r.id}
-                className="cursor-pointer border-b border-edge-subtle last:border-0 motion-safe:transition-colors hover:bg-surface-raised/40"
+                className="cursor-pointer border-b border-edge-subtle last:border-0 motion-safe:transition-colors hover:bg-surface-raised"
                 onClick={() => setSelected(r)}
               >
                 <td className="px-3 py-2.5 font-mono text-xs font-semibold tabular-nums">v{r.version}</td>
@@ -559,7 +543,7 @@ export function ReleasesPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -624,17 +608,41 @@ export function ReleasesPage() {
         </Btn>
       </PageHeaderBar>
 
-      <ReleasesStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ReleasesStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideReleasesSnapshot,
+            children: (
+              <ReleasesSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
       <SegmentedControl<ReleasesTabId>
         size="sm"
+        scrollable
         ariaLabel="Releases sections"
         value={activeTab}
         options={tabOptions}
@@ -642,40 +650,8 @@ export function ReleasesPage() {
       />
       )}
 
-      {!ux.hideReleasesSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.drafts ?? 'Drafts'} value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} tooltip={draftsTooltip(stats)} detail={draftsDetail()} to={releasesLinks.drafts} />
-          <StatCard label={copy?.statLabels?.published ?? 'Published'} value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} tooltip={publishedTooltip(stats)} detail={publishedDetail()} to={releasesLinks.published} />
-          <StatCard label={copy?.statLabels?.fixesLinked ?? 'Fixes linked'} value={stats.totalFixesLinked} accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined} tooltip={fixesLinkedTooltip(stats)} detail={fixesLinkedDetail()} to={releasesLinks.fixesLinked} />
-          <StatCard label={copy?.statLabels?.contributors ?? 'Contributors'} value={stats.totalContributors} accent={stats.totalContributors > 0 ? 'text-brand' : undefined} tooltip={contributorsTooltip(stats)} detail={contributorsDetail(stats)} to={releasesLinks.contributors} />
-          <StatCard label={copy?.statLabels?.fixedReports ?? 'Fixed reports'} value={stats.fixedReportsCount} accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined} tooltip={fixedReportsTooltip(stats)} detail={fixedReportsDetail()} to={releasesLinks.fixedReports} />
-          <StatCard label={copy?.statLabels?.feedback ?? 'Feedback shipped'} value={stats.fulfilledTicketsShipped} accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined} tooltip={feedbackTooltip(stats)} detail={feedbackDetail(stats)} to={releasesLinks.feedback} />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'drafts_pending'
-              ? 'border-warn/30 bg-warn/5'
-              : 'border-edge-subtle bg-chrome'
-          }`}
-        >
-          <SignalChip tone={stats.topPriority === 'drafts_pending' ? 'warn' : 'brand'}>
-            Top priority
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'drafts_pending' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg-primary">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
+      {activeTab === 'overview' && stats.projectId ? (
+        <ReleasesProvenanceReadout stats={stats} fetchedAt={statsFetchedAt} validating={statsValidating} />
       ) : null}
 
       {activeTab === 'overview' && (

@@ -9,23 +9,6 @@ import { Link } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 import { usePageCopy } from '../lib/copy'
 import { useCostUx, resolveQuickCostTab } from '../lib/costModeUx'
-import {
-  totalLoggedDetail,
-  totalLoggedTooltip,
-  spend24hDetail,
-  spend24hTooltip,
-  spendMonthDetail,
-  spendMonthTooltip,
-  topDriverDetail,
-  topDriverTooltip,
-  operationsDetail,
-  operationsTooltip,
-  modelsDetail,
-  modelsTooltip,
-  keySourceDetail,
-  keySourceTooltip,
-} from '../lib/costStatTooltips'
-import { costLinks } from '../lib/statCardLinks'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -33,15 +16,16 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
-import { SnapshotSectionHint,
+import {
   Card,
   Section,
-  StatCard,
   SegmentedControl,
   Badge,
   Btn,
-  ErrorAlert, } from '../components/ui'
+  ErrorAlert,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -58,6 +42,8 @@ import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { CostRawLogTable } from '../components/cost/CostRawLogTable'
 import { CostStatusBanner } from '../components/cost/CostStatusBanner'
 import { CostStageGuide } from '../components/cost/CostStageGuide'
+import { CostSnapshotStrip } from '../components/cost/CostSnapshotStrip'
+import { CostReadout } from '../components/cost/CostReadout'
 import {
   EMPTY_COST_STATS,
   type CostStats,
@@ -288,9 +274,32 @@ export function CostPage() {
         )}
       </PageHeaderBar>
 
-      <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
-
-      <CostStageGuide topPriority={stats.topPriority} topOperation={stats.topOperation} />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />,
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideCostSnapshot,
+            children: (
+              <CostSnapshotStrip
+                stats={stats}
+                fetchedAt={lastFetchedAt}
+                isValidating={isValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'Spend snapshot'}
+                hint={activeMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: <CostStageGuide topPriority={stats.topPriority} topOperation={stats.topOperation} />,
+          },
+        ]}
+      />
 
       {!ux.hideTabs && (
       <SegmentedControl
@@ -302,72 +311,6 @@ export function CostPage() {
       />
       )}
 
-      {!ux.hideCostSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'Spend snapshot'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatCard
-              label={copy?.statLabels?.total ?? 'Total logged'}
-              value={fmtSpend(stats.totalSpendUsd)}
-              accent={stats.totalSpendUsd > 0 ? 'text-brand' : undefined}
-              tooltip={totalLoggedTooltip(stats)}
-              detail={totalLoggedDetail(stats)}
-              to={costLinks.totalLogged}
-            />
-            <StatCard
-              label={copy?.statLabels?.day24h ?? '24h spend'}
-              value={fmtSpend(stats.spend24hUsd)}
-              accent={stats.spendSpike24h ? 'text-warn' : stats.spend24hUsd > 0 ? 'text-ok' : undefined}
-              tooltip={spend24hTooltip(stats)}
-              detail={spend24hDetail(stats)}
-              to={costLinks.spend24h}
-            />
-            <StatCard
-              label={copy?.statLabels?.month ?? 'This month'}
-              value={fmtSpend(stats.spendMonthUsd)}
-              accent="text-brand"
-              tooltip={spendMonthTooltip(stats)}
-              detail={spendMonthDetail(stats)}
-              to={costLinks.spendMonth}
-            />
-            <StatCard
-              label={copy?.statLabels?.topDriver ?? 'Top driver'}
-              value={stats.topOperation ? stats.topOperation.split(':')[0] : '—'}
-              accent={stats.topOperation ? 'text-info' : undefined}
-              tooltip={topDriverTooltip(stats)}
-              detail={topDriverDetail(stats)}
-              to={costLinks.topDriver}
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <StatCard
-              label={copy?.statLabels?.operations ?? 'Operations'}
-              value={stats.operationsCount}
-              tooltip={operationsTooltip(stats)}
-              detail={operationsDetail()}
-              to={costLinks.operations}
-            />
-            <StatCard
-              label={copy?.statLabels?.models ?? 'Models'}
-              value={stats.modelsCount}
-              tooltip={modelsTooltip(stats)}
-              detail={modelsDetail(stats)}
-              to={costLinks.models}
-            />
-            <StatCard
-              label={copy?.statLabels?.keySource ?? 'Key source · 24h'}
-              value={stats.byokCalls24h > 0 ? `${stats.byokCalls24h} BYOK` : `${stats.platformKeyCalls24h} platform`}
-              accent={stats.byokAnthropicConfigured ? 'text-ok' : 'text-warn'}
-              tooltip={keySourceTooltip(stats)}
-              detail={keySourceDetail(stats)}
-              to={costLinks.keySource}
-            />
-          </div>
-        </div>
-      </Section>
-      )}
-
       <div
         role="tabpanel"
         id={`cost-panel-${active}`}
@@ -375,6 +318,12 @@ export function CostPage() {
       >
         {active === 'overview' && (
           <div className="space-y-4">
+            <CostReadout
+              stats={stats}
+              projectId={activeProjectId}
+              fetchedAt={lastFetchedAt}
+              isValidating={isValidating}
+            />
             {dailySeries.activeDays > 0 ? (
               <Card className="p-4">
                 <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">

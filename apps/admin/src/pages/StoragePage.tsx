@@ -19,20 +19,12 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { StorageStatusBanner, isStorageStatusBannerCritical } from '../components/storage/StorageStatusBanner'
+import { StorageSnapshotStrip } from '../components/storage/StorageSnapshotStrip'
+import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
-import {
-  healthyCountDetail,
-  healthyCountTooltip,
-  providerDetail,
-  providerTooltip,
-  screenshotsDetail,
-  screenshotsTooltip,
-  unconfiguredCountDetail,
-  unconfiguredCountTooltip,
-} from '../lib/statTooltips/storage'
-import { storageLinks } from '../lib/statCardLinks'
-import { SnapshotSectionHint, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
+import { Card, Btn, Badge, ErrorAlert, Input, SelectField, SegmentedControl } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   ContainedBlock,
   InlineProof,
@@ -359,7 +351,7 @@ export function StoragePage() {
                 return (
                   <tr
                     key={p.id}
-                    className={`border-b border-edge-subtle/40 ${isActive ? 'bg-brand/5' : ''}`}
+                    className={`border-b border-edge-subtle/40 ${isActive ? 'bg-surface-overlay' : ''}`}
                   >
                     <td className="py-1.5">
                       {p.name}
@@ -686,14 +678,35 @@ export function StoragePage() {
         </Badge>
       </PageHeaderBar>
 
-      {isStorageStatusBannerCritical(stats) && (
-        <StorageStatusBanner
-          stats={stats}
-          onTab={setActiveTab}
-          onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
-          checking={checkingId === activeProjectId}
-        />
-      )}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: isStorageStatusBannerCritical(stats),
+            children: (
+              <StorageStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
+                checking={checkingId === activeProjectId}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <StorageSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'Storage snapshot'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
+      />
 
       <SegmentedControl
         value={activeTab}
@@ -701,48 +714,16 @@ export function StoragePage() {
         options={tabOptions}
         ariaLabel="Storage sections"
         size="sm"
+        scrollable
       />
-
-      <Section title="Storage snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Healthy"
-            value={`${stats.healthyCount}/${stats.configuredCount}`}
-            accent={stats.failingCount > 0 ? 'text-danger' : stats.healthyCount > 0 ? 'text-ok' : undefined}
-            tooltip={healthyCountTooltip(stats)}
-            detail={healthyCountDetail(stats)}
-            to={storageLinks.healthy}
-          />
-          <StatCard
-            label="Screenshots"
-            value={stats.activeProjectObjects.toLocaleString()}
-            accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
-            tooltip={screenshotsTooltip(stats)}
-            detail={screenshotsDetail(stats)}
-            to={storageLinks.screenshots}
-          />
-          <StatCard
-            label="Provider"
-            value={stats.activeProjectProvider}
-            accent="text-info"
-            tooltip={providerTooltip(stats)}
-            detail={providerDetail(stats)}
-            to={storageLinks.provider}
-          />
-          <StatCard
-            label="Unconfigured"
-            value={stats.unconfiguredCount}
-            accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={unconfiguredCountTooltip(stats)}
-            detail={unconfiguredCountDetail(stats)}
-            to={storageLinks.unconfigured}
-          />
-        </div>
-      </Section>
 
       {activeTab === 'overview' && (
         <>
+          <StorageReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt}
+            isValidating={statsValidating}
+          />
           {usageTable}
           {activeCard ? (
             <div data-dav-anchor="storage:decide">{renderProjectCard(activeCard)}</div>

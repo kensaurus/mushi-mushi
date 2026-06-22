@@ -16,7 +16,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { usePageCopy } from '../lib/copy'
 import { useRealtimeReload } from '../lib/realtime'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { SnapshotSectionHint,
+import {
   Section,
   Card,
   Btn,
@@ -25,10 +25,10 @@ import { SnapshotSectionHint,
   EmptyState,
   Badge,
   Tooltip,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+} from '../components/ui'
 import {
   ContainedBlock,
   InlineProof,
@@ -50,6 +50,8 @@ import {
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
 import { ProjectsHubGuide } from '../components/projects/ProjectsHubGuide'
+import { ProjectsSetupReadout } from '../components/projects/ProjectsSetupReadout'
+import { ProjectsSnapshotStrip } from '../components/projects/ProjectsSnapshotStrip'
 import { ProjectFolderTabRail } from '../components/projects/ProjectFolderTabRail'
 import {
   EMPTY_PROJECTS_STATS,
@@ -63,6 +65,8 @@ import {
 } from '../lib/activeProject'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { AssistantConfigCard } from '../components/AssistantConfigCard'
@@ -966,16 +970,42 @@ export function ProjectsPage() {
 
       {isAdvanced && <ProjectsPageHero stats={stats} />}
 
-      <ProjectsStatusBanner
-        stats={stats}
-        activeTeamName={activeTeamName}
-        roleHint={roleHint}
-        onTab={setTab}
-        onRefresh={reloadAll}
-        refreshing={validating}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <ProjectsStatusBanner
+                stats={stats}
+                activeTeamName={activeTeamName}
+                roleHint={roleHint}
+                onTab={setTab}
+                onRefresh={reloadAll}
+                refreshing={validating}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <ProjectsSnapshotStrip
+                stats={stats}
+                fetchedAt={fetchedAt}
+                isValidating={validating}
+                sectionTitle="PROJECTS SNAPSHOT"
+                hint={activeMeta.description}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show:
+              activeTab === 'overview' &&
+              !shouldHideGuideWhenBannerActive(true, ['healthy'], stats.topPriority),
+            children: <ProjectsHubGuide topPriority={stats.topPriority} />,
+          },
+        ]}
       />
-
-      {activeTab === 'overview' && <ProjectsHubGuide topPriority={stats.topPriority} />}
 
       <SegmentedControl
         value={activeTab}
@@ -985,59 +1015,22 @@ export function ProjectsPage() {
         size="sm"
       />
 
-      <Section title="PROJECTS SNAPSHOT" freshness={{ at: fetchedAt, isValidating: validating }}>
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label="Projects"
-            value={stats.projectCount}
-            accent={stats.projectCount > 0 ? 'text-brand' : undefined}
-            hint="Apps or environments tracked"
-          />
-          <StatCard
-            label="Ingesting"
-            value={stats.projectsWithReports}
-            accent={stats.projectsWithReports > 0 ? 'text-ok' : 'text-warn'}
-            hint={`${stats.neverIngestedCount} never received a report`}
-          />
-          <StatCard
-            label="SDK connected"
-            value={stats.sdkConnectedCount}
-            accent={
-              stats.sdkConnectedCount > 0
-                ? 'text-ok'
-                : stats.projectsWithReports > 0
-                  ? 'text-warn'
-                  : undefined
-            }
-            hint="Projects with key heartbeat"
-          />
-          <StatCard
-            label="Active keys"
-            value={stats.activeKeyCount}
-            accent={stats.activeKeyCount > 0 ? 'text-info' : undefined}
-            hint={`${stats.staleKeyCount} never seen`}
-          />
-          <StatCard
-            label="Reports · 24h"
-            value={stats.reportsLast24h}
-            accent={stats.reportsLast24h > 0 ? 'text-ok' : undefined}
-            hint={`${stats.reportsLast30d} in 30 days`}
-          />
-          <StatCard
-            label="Viewing"
-            value={stats.activeProjectName ? 'Set' : 'None'}
-            accent={stats.activeProjectId ? 'text-brand' : undefined}
-            hint={
-              stats.activeProjectHasReports
-                ? stats.activeProjectSdkConnected
-                  ? 'Active project ingesting'
-                  : 'Active project — no heartbeat'
-                : 'Pick a project on list tab'
-            }
-          />
-        </div>
-      </Section>
+      {activeTab === 'overview' && stats.activeProjectId ? (
+        <ProjectsSetupReadout
+          activeProjectId={stats.activeProjectId}
+          activeProjectName={stats.activeProjectName}
+          activeKeyCount={stats.activeKeyCount}
+          staleKeyCount={stats.staleKeyCount}
+          activeProjectSdkConnected={stats.activeProjectSdkConnected}
+          keyPrefixes={
+            selectedProject?.api_keys
+              ?.filter((k) => k.is_active)
+              .map((k) => k.key_prefix) ?? []
+          }
+          fetchedAt={fetchedAt}
+          validating={validating}
+        />
+      ) : null}
 
       {activeTab === 'overview' && (
         <div className="space-y-4">

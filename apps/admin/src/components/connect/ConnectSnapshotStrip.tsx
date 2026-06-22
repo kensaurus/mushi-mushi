@@ -12,6 +12,8 @@ import {
   githubTooltip,
   mcpConnectedDetail,
   mcpConnectedTooltip,
+  mcpEndpointDetail,
+  mcpEndpointTooltip,
   mcpToolsDetail,
   mcpToolsTooltip,
   sdkHeartbeatDetail,
@@ -80,7 +82,7 @@ export function ConnectSnapshotStrip({
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
       <SnapshotSectionHint text={description} />
-      <MetricStrip cols={compact ? 4 : 6} ariaLabel="Connect hub snapshot">
+      <MetricStrip cols={compact ? 4 : 7} ariaLabel="Connect hub snapshot">
         <StatCard
           label={statLabels?.github ?? 'GitHub'}
           value={githubConnected ? 'Linked' : '—'}
@@ -127,6 +129,16 @@ export function ConnectSnapshotStrip({
             tooltip={mcpConnectedTooltip(input)}
             detail={mcpStats.neverConnectedCount > 0 ? 'Add to IDE or revoke' : 'All keys used'}
             to={connectLinks.mcpUnused}
+          />
+        ) : null}
+        {!compact ? (
+          <StatCard
+            label={statLabels?.mcpEndpoint ?? 'MCP endpoint'}
+            value={mcpStats.endpointMismatch ? 'Mismatch' : mcpStats.lastSeenEndpointHost ? 'Aligned' : '—'}
+            accent={mcpStats.endpointMismatch ? 'text-warn' : mcpStats.lastSeenEndpointHost ? 'text-ok' : undefined}
+            tooltip={mcpEndpointTooltip(input)}
+            detail={mcpEndpointDetail(input)}
+            to={connectLinks.mcpConnected}
           />
         ) : null}
         {!compact ? (

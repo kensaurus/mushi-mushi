@@ -132,6 +132,33 @@ describe('pollDeviceToken', () => {
 describe('waitForCliToken', () => {
   const session = { device_code: 'dc', interval: 5, expires_in: 600 }
 
+  it('does NOT sleep before the very first poll (immediate-first-poll)', async () => {
+    // Backend approves immediately on the first poll.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { cli_token: 'tok' } }))
+
+    const sleepSpy = vi.fn(async () => {})
+    const token = await waitForCliToken(ENDPOINT, session, { sleep: sleepSpy, now: () => 0 })
+
+    expect(token).toBe('tok')
+    // sleep must NOT have been called before the first poll
+    expect(sleepSpy).toHaveBeenCalledTimes(0)
+  })
+
+  it('sleeps the interval between subsequent polls', async () => {
+    // First poll: pending; second poll: approved
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: 'authorization_pending' }, { ok: false, status: 400 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { cli_token: 'tok2' } }))
+
+    const sleepSpy = vi.fn(async () => {})
+    const token = await waitForCliToken(ENDPOINT, session, { sleep: sleepSpy, now: () => 0 })
+
+    expect(token).toBe('tok2')
+    // sleep should be called exactly once (between first and second poll)
+    expect(sleepSpy).toHaveBeenCalledTimes(1)
+    expect(sleepSpy).toHaveBeenCalledWith(5000) // session.interval * 1000
+  })
+
   it('resolves the token after a pending poll', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ error: 'authorization_pending' }, { ok: false, status: 400 }))

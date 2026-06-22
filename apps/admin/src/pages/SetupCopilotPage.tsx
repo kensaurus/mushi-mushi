@@ -5,6 +5,7 @@
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Section, Card, Btn } from '../components/ui'
 import { VerifySetupPanel } from '../components/VerifySetupPanel'
 import { SdkHealthSummary } from '../components/SdkHealthSummary'
@@ -15,6 +16,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageData } from '../lib/usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { mushiEnvVarsForProjectSlug, isExpoReporterProject } from '../lib/projectMushiEnv'
+import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotReadout'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 
 interface ProjectRow {
@@ -122,6 +124,26 @@ export function SetupCopilotPage() {
 
       {projectId && projectRow && (
         <>
+          <PagePosture
+            slots={[
+              {
+                priority: POSTURE_PRIORITY.guide,
+                children: (
+                  <SetupCopilotReadout
+                    projectId={projectRow.id}
+                    projectName={projectRow.name}
+                    projectSlug={projectRow.slug}
+                    reportCount={projectRow.report_count}
+                    sdkConnected={Boolean(
+                      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
+                    )}
+                    connectCmd={connectCmd}
+                  />
+                ),
+              },
+            ]}
+          />
+
           <Section title="1 · Connect credentials">
             <p className="text-xs text-fg-muted mb-3">Save keys locally and wait for the SDK heartbeat.</p>
             <Card className="p-5 space-y-3">

@@ -1,0 +1,122 @@
+/**
+ * Chrome budget guard — visible PagePosture rows must respect admin mode caps.
+ *
+ * Requires: MUSHI_ADMIN_URL, Supabase auth env (same as dashboard-enhanced.spec.ts).
+ * Caps: quickstart/beginner ≤ 2 rows · advanced ≤ 3 rows (PagePosture.tsx).
+ */
+
+import { test, expect, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const ADMIN_URL = (process.env.MUSHI_ADMIN_URL ?? 'http://localhost:6464').replace(/\/$/, '')
+const PROJECT_ID = '67a6453c-375d-41d7-833a-b33471159442'
+
+function loadEnvFile(relPath: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  try {
+    const raw = readFileSync(resolve(__dirname, '../../../', relPath), 'utf8')
+    for (const line of raw.split('\n')) {
+      const trimmed = line.replace(/\r$/, '').trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const eq = trimmed.indexOf('=')
+      if (eq <= 0) continue
+      out[trimmed.slice(0, eq)] = trimmed.slice(eq + 1).replace(/^["']|["']$/g, '')
+    }
+  } catch {
+    /* optional */
+  }
+  return out
+}
+
+const rootEnv = loadEnvFile('.env.local')
+const adminEnv = loadEnvFile('apps/admin/.env')
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? adminEnv.VITE_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? adminEnv.VITE_SUPABASE_ANON_KEY ?? ''
+const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? rootEnv.TEST_USER_EMAIL ?? ''
+const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? rootEnv.TEST_USER_PASSWORD ?? ''
+
+const ref = SUPABASE_URL.match(/https:\/\/([^.]+)\./)?.[1] ?? 'dxptnwrhwsqckaftyymj'
+const storageKey = `sb-${ref}-auth-token`
+
+const CHROME_ROUTES = [
+  '/dashboard',
+  '/reports',
+  '/health',
+  '/connect',
+  '/billing',
+  '/settings',
+  '/audit',
+  '/rewards',
+] as const
+
+const MODE_BUDGET: Record<'beginner' | 'advanced', number> = {
+  beginner: 2,
+  advanced: 3,
+}
+
+async function seedSession(page: Page, mode: 'beginner' | 'advanced', request: import('@playwright/test').APIRequestContext) {
+  const res = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+    data: { email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD },
+  })
+  expect(res.ok()).toBeTruthy()
+  const session = (await res.json()) as {
+    access_token: string
+    refresh_token: string
+    expires_in: number
+    expires_at?: number
+    token_type: string
+    user: Record<string, unknown>
+  }
+  await page.addInitScript(
+    ({ key, sessionPayload, projectId, adminMode }) => {
+      const expiresAt =
+        sessionPayload.expires_at ??
+        Math.floor(Date.now() / 1000) + (sessionPayload.expires_in ?? 3600)
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...sessionPayload,
+          expires_at: expiresAt,
+        }),
+      )
+      window.localStorage.setItem('mushi:active_project_id', projectId)
+      window.localStorage.setItem('mushi:mode', adminMode)
+    },
+    {
+      key: storageKey,
+      sessionPayload: session,
+      projectId: PROJECT_ID,
+      adminMode: mode,
+    },
+  )
+}
+
+async function countPostureRows(page: Page): Promise<number> {
+  const posture = page.locator('[data-page-posture]')
+  if ((await posture.count()) === 0) return 0
+  return posture.locator(':scope > *').count()
+}
+
+test.describe('Admin chrome budget (PagePosture)', () => {
+  test.skip(
+    !SUPABASE_URL || !SUPABASE_ANON_KEY || !TEST_USER_EMAIL || !TEST_USER_PASSWORD,
+    'Requires Supabase + test user env',
+  )
+
+  for (const mode of ['beginner', 'advanced'] as const) {
+    test(`${mode} mode — posture rows ≤ ${MODE_BUDGET[mode]} on core routes`, async ({ page, request }) => {
+      await seedSession(page, mode, request)
+      const cap = MODE_BUDGET[mode]
+
+      for (const route of CHROME_ROUTES) {
+        await page.goto(`${ADMIN_URL}${route}`, { waitUntil: 'domcontentloaded' })
+        await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 }).catch(() => {})
+        await page.waitForTimeout(500)
+        const rows = await countPostureRows(page)
+        expect(rows, `${route} should expose ≤ ${cap} posture rows in ${mode} mode`).toBeLessThanOrEqual(cap)
+      }
+    })
+  }
+})

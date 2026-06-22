@@ -143,7 +143,7 @@ export function RewardsPage() {
       />
 
       {showHobbyInline && (
-        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
+        <div className="rounded-xl border border-warn/40 bg-surface-raised p-3 text-xs text-warn">
           <strong>Rewards program requires Starter or higher.</strong>{' '}
           <a href="/billing" className="underline">Upgrade your plan</a> to configure rules, tiers, and webhooks.
           You can preview the program below.

@@ -61,4 +61,4 @@ The [verify-fix workflow](../../.github/workflows/verify-fix.yml) runs this auto
 
 ## License
 
-[BSL 1.1](../server/LICENSE) — converts to Apache 2.0 on April 15, 2029.
+[AGPLv3](../server/LICENSE) — copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).

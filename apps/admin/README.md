@@ -118,6 +118,23 @@ The v2 sweep fixed four systemic patterns across all ~50 routes:
 - Advanced-mode users see the help collapsed by default (via `useAdminMode`); Beginner users get it auto-expanded on first visit.
 - Keep `description` to one sentence — it renders at `text-xs` below the title row.
 
+### PagePosture guardrails (P4)
+
+Operator worklist pages enforce a chrome budget via `<PagePosture>` (`src/components/PagePosture.tsx`):
+
+| Mode | Max posture rows |
+|------|------------------|
+| Quickstart / Beginner | 2 |
+| Advanced | 3 |
+
+**Slot recipes:** `src/design-system/page-posture-recipes.ts` (Vitest catalog — Storybook-equivalent).
+
+**Lint:** `mushi-mushi/no-missing-page-posture` and `no-hand-rolled-tablist` (warn) in `eslint.config.js`.
+
+**E2E:** `examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts` asserts `[data-page-posture]` row count per mode.
+
+Full burndown: `docs/admin/UX-UNIFICATION-BURNDOWN.md`.
+
 ### Type floor (WCAG minimum)
 
 | Token | Computed | Use for |

@@ -491,4 +491,4 @@ Admin pages subscribe to these tables via Supabase Realtime (`apps/admin/src/lib
 
 ## License
 
-[BSL 1.1](./LICENSE) — converts to Apache 2.0 on April 15, 2029.
+[AGPLv3](./LICENSE) — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a modified server as a hosted service, publish your changes (§13) or obtain a [commercial license](../../COMMERCIAL-LICENSE.md). A small enterprise-edition boundary ([`./ee/`](./ee/README.md)) is source-available but commercial for production use.

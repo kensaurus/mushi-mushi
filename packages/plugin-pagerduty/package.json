@@ -46,7 +46,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-pagerduty"
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -71,5 +71,6 @@
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/kensaurus"
-  }
+  },
+  "homepage": "https://kensaur.us/mushi-mushi"
 }

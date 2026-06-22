@@ -15,9 +15,15 @@ import {
   Btn,
 } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SignalChip, ConfidenceMeter } from '../components/report-detail/ReportSurface'
+import { ContentQualityReadout } from '../components/content-quality/ContentQualityReadout'
+import {
+  EMPTY_CONTENT_QUALITY_STATS,
+  type ContentQualityStats,
+} from '../components/content-quality/ContentQualityStatsTypes'
 
 interface ContentQualityIssue {
   id: string
@@ -146,6 +152,15 @@ export function ContentQualityPage() {
     : null
 
   const { data, loading, error } = usePageData<ListResponse>(apiPath)
+  const statsPath = activeProjectId
+    ? `/v1/admin/content-quality/stats?project_id=${activeProjectId}`
+    : null
+  const {
+    data: statsData,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<ContentQualityStats>(statsPath, { deps: [activeProjectId] })
+  const contentStats = statsData ?? EMPTY_CONTENT_QUALITY_STATS
   const items = data?.items ?? []
   const total = data?.total ?? 0
 
@@ -194,6 +209,21 @@ export function ContentQualityPage() {
           <option value="high_downvote_ratio">High downvotes</option>
         </select>
       </PageHeaderBar>
+
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.guide,
+            children: (
+              <ContentQualityReadout
+                stats={contentStats}
+                fetchedAt={statsFetchedAt}
+                isValidating={statsValidating}
+              />
+            ),
+          },
+        ]}
+      />
 
       <div className="flex-1 overflow-auto p-4">
         {error && <ErrorAlert message={error} />}

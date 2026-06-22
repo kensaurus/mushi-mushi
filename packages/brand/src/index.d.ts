@@ -29,6 +29,10 @@ export declare const MUSHI_TAGLINE_LEGACY: {
 }
 
 export declare const MUSHI_TAGLINE_V2: {
+  /** Full north-star sentence (VISION.md §1.3). */
+  readonly northStar: string
+  /** Compressed north-star for fixed-width fields (GitHub/npm description, og). */
+  readonly oneLiner: string
   readonly hero: string
   readonly subHero: string
   readonly category: string
@@ -37,6 +41,8 @@ export declare const MUSHI_TAGLINE_V2: {
 }
 
 export declare const MUSHI_TAGLINE: {
+  readonly northStar: string
+  readonly oneLiner: string
   readonly full: string
   readonly short: string
   readonly micro: string

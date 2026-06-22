@@ -29,7 +29,9 @@ import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
+import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
@@ -60,7 +62,7 @@ import {
   type GraphNode,
   type NodeType,
 } from '../components/graph/types'
-import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
+import { GraphWorkspaceReadout } from '../components/graph/GraphWorkspaceReadout'
 import {
   ActionPill,
   ActionPillRow,
@@ -468,7 +470,7 @@ export function GraphPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -677,17 +679,38 @@ export function GraphPage() {
         </Btn>
       </PageHeaderBar>
 
-      <GraphStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadGraph}
-        refreshing={statsValidating || loading}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <GraphStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadGraph}
+                refreshing={statsValidating || loading}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: activeTab === 'overview' && Boolean(stats.projectId),
+            children: (
+              <GraphWorkspaceReadout
+                projectId={stats.projectId!}
+                nodeCount={stats.nodeCount}
+                edgeCount={stats.edgeCount}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
         <SegmentedControl<GraphTabId>
           size="sm"
+          scrollable
           ariaLabel="Graph sections"
           value={activeTab}
           options={tabOptions}
@@ -741,10 +764,10 @@ export function GraphPage() {
             <Card
               className={`space-y-3 p-4 ${
                 stats.topPriority === 'fragile'
-                  ? 'border-danger/30 bg-danger/5'
+                  ? 'border-danger/40 bg-surface-raised'
                   : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
-                    ? 'border-warn/30 bg-warn/5'
-                    : 'border-brand/30 bg-brand/5'
+                    ? 'border-warn/40 bg-surface-raised'
+                    : 'border-brand/40 bg-surface-raised'
               }`}
             >
               <SignalChip

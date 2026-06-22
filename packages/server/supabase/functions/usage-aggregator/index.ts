@@ -43,7 +43,7 @@ interface SummaryRow {
 
 interface MeteredEvent {
   /** Internal `usage_events.event_name`. */
-  internal: 'reports_ingested' | 'fixes_succeeded'
+  internal: 'reports_ingested' | 'fixes_succeeded' | 'diagnoses'
   /** Stripe Billing Meter `event_name` configured via stripe-bootstrap.mjs. */
   stripe: string
 }
@@ -71,9 +71,12 @@ const handler = async (req: Request): Promise<Response> => {
 
   // Internal → Stripe meter mapping. Add new entries here when we ship a
   // new metered SKU; the bootstrap script must create the matching meter.
+  // Phase 2: 'diagnoses' is the new billing unit. 'reports_ingested' runs
+  // in parallel for one billing cycle then retires as a free audit event.
   const meteredEvents: MeteredEvent[] = [
     { internal: 'reports_ingested', stripe: cfg.meterEventName },
     { internal: 'fixes_succeeded', stripe: cfg.fixesMeterEventName },
+    { internal: 'diagnoses', stripe: cfg.diagnosesMeterEventName },
   ]
 
   const db = getServiceClient()

@@ -5,7 +5,6 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { TesterLayout } from './components/tester/TesterLayout'
 import { LoginPage } from './pages/LoginPage'
-import { PublicHomePage } from './pages/PublicHomePage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
@@ -59,7 +58,6 @@ const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ defaul
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
-const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const ConnectPage = lazy(() => import('./pages/ConnectPage').then(m => ({ default: m.ConnectPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const SetupCopilotPage = lazy(() => import('./pages/SetupCopilotPage').then(m => ({ default: m.SetupCopilotPage })))
@@ -282,7 +280,14 @@ export function App() {
           "back to dashboard" instead of "back to home". */}
       <ErrorBoundary source="app-shell">
       <Routes>
-        <Route path="/" element={<PublicHomePage />} />
+        {/* The marketing landing lives at the product root (kensaur.us/mushi-mushi/),
+            served by the docs static export via the CloudFront internal rewrite
+            (scripts/cloudfront-mushi-spa-router.js). The admin SPA root
+            (/mushi-mushi/admin/) is the app itself, so `/` bounces straight to the
+            dashboard — ProtectedRoute redirects to /login when unauthenticated.
+            (Retired PublicHomePage so the noindex admin shell no longer duplicates
+            the indexable landing.) */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
@@ -352,7 +357,7 @@ export function App() {
                   <Route path="/storage" element={<StoragePage />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
-                  <Route path="/mcp" element={<McpPage />} />
+                  <Route path="/mcp" element={<Navigate to="/connect?section=mcp" replace />} />
                   <Route path="/connect" element={<ConnectPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route

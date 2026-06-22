@@ -5,18 +5,18 @@
  * OVERVIEW:
  *   Route: /cli-auth?code=XXXX-XXXX
  *   Opened by `mushi login` — the CLI prints this URL and opens the browser.
- *   The page reads the user_code from the query param, shows it prominently
- *   so the user can verify it matches what the CLI printed, then lets them
- *   approve (or deny) with a single click. On approval, the CLI poll loop
- *   receives the token and finishes setup automatically.
+ *   The page shows a 3-step guide alongside the verification code so users
+ *   understand the flow (approve here → return to terminal) and an explicit
+ *   anti-paste warning ("do not type this in your terminal").
  *
  * FLOW:
  *   1. CLI runs `mushi login`, opens browser to this URL.
  *   2. User is already signed into the console (ProtectedRoute handles
  *      redirect-to-login if not, then comes back here).
- *   3. Page shows user_code, expiry countdown, and Approve / Deny buttons.
+ *   3. Page shows a numbered 3-step guide + code + Approve / Deny buttons.
  *   4. On Approve → POST /v1/cli/auth/device/approve with { user_code }.
  *   5. Backend mints CLI token; CLI poll endpoint returns it; wizard resumes.
+ *   6. Approved state shows large "Switch back to your terminal" banner.
  *
  * DEPENDENCIES:
  *   - apiFetch (lib/supabase)
@@ -27,6 +27,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { CliAuthReadout } from '../components/cli-auth/CliAuthReadout'
 import { Btn } from '../components/ui'
 
 type ApproveState = 'idle' | 'approving' | 'approved' | 'denied' | 'error'
@@ -46,9 +47,9 @@ function TerminalIcon() {
   )
 }
 
-function CheckCircleIcon() {
+function CheckCircleIcon({ className }: { className?: string }) {
   return (
-    <svg className="h-12 w-12 text-ok" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={className ?? 'h-12 w-12 text-ok'} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   )
@@ -61,6 +62,20 @@ function XCircleIcon() {
     </svg>
   )
 }
+
+function ArrowLeftIcon() {
+  return (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+    </svg>
+  )
+}
+
+const STEPS = [
+  { n: '1', text: 'Verify the code below matches what your terminal printed' },
+  { n: '2', text: 'Click "Approve CLI connection" below' },
+  { n: '3', text: 'Switch back to your terminal — setup continues automatically' },
+]
 
 export function CliAuthPage() {
   const [params] = useSearchParams()
@@ -104,53 +119,93 @@ export function CliAuthPage() {
     setApproveState('denied')
   }
 
+  // ── Approved state: big "return to terminal" prompt ──────────────────────────
   if (approveState === 'approved') {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 text-center">
         <CheckCircleIcon />
-        <h1 className="text-xl font-semibold text-fg">CLI connected!</h1>
-        <p className="max-w-sm text-sm text-fg-muted">
-          Your terminal will finish setting up in a moment. You can close this tab.
+        <div>
+          <h1 className="text-2xl font-bold text-fg">CLI connected!</h1>
+          <p className="mt-2 text-sm text-fg-muted">
+            Setup is continuing automatically in your terminal.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-6 py-4 text-ok">
+          <ArrowLeftIcon />
+          <span className="font-medium">Switch back to your terminal now</span>
+        </div>
+        <p className="max-w-xs text-xs text-fg-muted">
+          You can close this tab. The wizard will finish installing the SDK and
+          writing your <code className="font-mono">.env.local</code> file.
         </p>
       </div>
     )
   }
 
+  // ── Denied state ─────────────────────────────────────────────────────────────
   if (approveState === 'denied') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
         <XCircleIcon />
         <h1 className="text-xl font-semibold text-fg">Access denied</h1>
         <p className="max-w-sm text-sm text-fg-muted">
-          The CLI request was denied. Run <code className="font-mono text-xs bg-surface-overlay px-1 py-0.5 rounded">mushi login</code> again in your terminal if you want to try again.
+          The CLI request was denied. Run{' '}
+          <code className="rounded bg-surface-overlay px-1 py-0.5 font-mono text-xs">
+            mushi login
+          </code>{' '}
+          again in your terminal if you want to try again.
         </p>
       </div>
     )
   }
 
+  // ── Main approval page ────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4">
-      <div className="w-full max-w-md">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4 py-10">
+      <div className="w-full max-w-lg">
+        <CliAuthReadout userCode={userCode || null} />
+
         {/* Header */}
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <TerminalIcon />
           <h1 className="text-xl font-semibold text-fg">Connect your CLI</h1>
           <p className="text-sm text-fg-muted">
-            Your terminal is waiting for you to approve this connection.
-            Make sure the code below matches what was printed in your terminal.
+            Your terminal is waiting. Follow the steps below — no typing required.
           </p>
         </div>
 
+        {/* 3-step guide */}
+        <ol className="mb-6 space-y-2">
+          {STEPS.map((step) => (
+            <li key={step.n} className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+                {step.n}
+              </span>
+              <span className="text-sm text-fg">{step.text}</span>
+            </li>
+          ))}
+        </ol>
+
         {/* User code display */}
-        <div className="mb-6 rounded-xl border border-border bg-surface-overlay px-6 py-5">
+        <div className="mb-4 rounded-xl border border-border bg-surface-overlay px-6 py-5">
           <p className="mb-1 text-xs font-medium uppercase tracking-wider text-fg-muted">
-            Confirmation code
+            Verification code — confirm it matches your terminal
           </p>
           <p className="font-mono text-3xl font-bold tracking-[0.15em] text-fg select-all">
             {userCode || <span className="text-fg-muted opacity-40">XXXX-XXXX</span>}
           </p>
           <p className="mt-2 text-2xs text-fg-muted">
-            This code expires in 10 minutes. If it doesn't match, close this tab and run <code className="font-mono">mushi login</code> again.
+            Expires in 10 minutes. If it doesn't match, close this tab and run{' '}
+            <code className="font-mono">mushi login</code> again.
+          </p>
+        </div>
+
+        {/* Anti-paste warning */}
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
+          <span className="mt-0.5 text-warning" aria-hidden="true">⚠</span>
+          <p className="text-sm text-fg-muted">
+            <strong className="text-fg">Do not paste or type this code into your terminal.</strong>{' '}
+            It belongs here in the browser. The terminal waits automatically.
           </p>
         </div>
 
@@ -201,7 +256,9 @@ export function CliAuthPage() {
 
         {/* Security note */}
         <p className="mt-4 text-center text-2xs text-fg-muted">
-          Only approve if you just ran <code className="font-mono">mushi login</code> in your terminal.
+          Only approve if you just ran{' '}
+          <code className="font-mono">mushi login</code> or{' '}
+          <code className="font-mono">npx mushi-mushi</code> in your terminal.
           Never approve a request you didn't initiate.
         </p>
       </div>

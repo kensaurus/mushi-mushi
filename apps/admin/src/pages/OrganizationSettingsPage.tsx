@@ -7,27 +7,28 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
-import { SnapshotSectionHint,Badge,
+import { Badge,
   Btn,
   Card,
   EmptyState,
   ErrorAlert,
   Input,
   RelativeTime,
-  Section,
   SegmentedControl,
   SelectField,
-  StatCard,
   Tooltip, } from '../components/ui'
 import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useUpdateOrganization } from '../lib/useUpdateOrganization'
 import { MembersStatusBanner } from '../components/members/MembersStatusBanner'
+import { MembersReadout } from '../components/members/MembersReadout'
+import { MembersSnapshotStrip } from '../components/members/MembersSnapshotStrip'
 import { OrgRoleGuideCard } from '../components/members/OrgRoleGuideCard'
 import { SeatBillingCallout } from '../components/members/SeatBillingCallout'
 import { orgRoleDefinition } from '../lib/orgRoleGuide'
@@ -699,10 +700,42 @@ export function OrganizationSettingsPage() {
         </Badge>
       </PageHeaderBar>
 
-      <MembersStatusBanner
-        stats={stats}
-        teamsEnabled={teamsEnabled}
-        onInvitesTab={() => setTab('invites')}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <MembersStatusBanner
+                stats={stats}
+                teamsEnabled={teamsEnabled}
+                onInvitesTab={() => setTab('invites')}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <MembersSnapshotStrip
+                stats={stats}
+                fetchedAt={lastFetchedAt}
+                isValidating={isValidating}
+                hint={activeMeta.description}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: activeTab === 'roster',
+            children: (
+              <MembersReadout
+                stats={stats}
+                orgId={activeOrgId}
+                fetchedAt={lastFetchedAt}
+                isValidating={isValidating}
+              />
+            ),
+          },
+        ]}
       />
 
       <SegmentedControl
@@ -710,45 +743,8 @@ export function OrganizationSettingsPage() {
         onChange={setTab}
         options={tabOptions}
         ariaLabel="Members sections"
+        scrollable
       />
-
-      <Section title="Team snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Members"
-            value={stats.memberCount}
-            accent="text-brand"
-            hint={`${stats.activeLast7d} active in the last 7 days`}
-          />
-          <StatCard
-            label="Pending invites"
-            value={stats.pendingInvites}
-            accent={stats.pendingInvites > 0 ? 'text-warn' : undefined}
-            hint={
-              stats.expiringSoonInvites > 0
-                ? `${stats.expiringSoonInvites} expiring within 24h`
-                : 'Open invites not yet accepted'
-            }
-          />
-          <StatCard
-            label="Inactive seats"
-            value={stats.inactiveCount}
-            accent={stats.inactiveCount > 0 && stats.memberCount >= 3 ? 'text-warn' : undefined}
-            hint="No activity in 30d or never seen"
-          />
-          <StatCard
-            label={stats.seatLimit !== null ? 'Seats used' : 'Plan seats'}
-            value={stats.seatLimit !== null ? `${stats.seatsUsed}/${stats.seatLimit}` : 'Unlimited'}
-            accent={stats.atSeatCap ? 'text-danger' : stats.seatLimit !== null ? 'text-ok' : undefined}
-            hint={
-              stats.seatLimit !== null
-                ? `${stats.seatsRemaining ?? 0} remaining on ${stats.planDisplayName ?? stats.planId ?? 'plan'}`
-                : `${stats.planDisplayName ?? stats.planId ?? 'Pro'} — no seat cap`
-            }
-          />
-        </div>
-      </Section>
 
       <SeatBillingCallout
         planDisplayName={stats.planDisplayName}

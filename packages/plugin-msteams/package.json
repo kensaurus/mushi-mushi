@@ -61,12 +61,13 @@
     "access": "public",
     "provenance": true
   },
-  "author": "Kenji Sakuramoto",
+  "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/kensaurus"
-  }
+  },
+  "homepage": "https://kensaur.us/mushi-mushi"
 }

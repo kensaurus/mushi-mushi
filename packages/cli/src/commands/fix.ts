@@ -2,10 +2,11 @@ import type { Command } from 'commander';
 import { loadConfig } from '../config.js';
 import { renderNudgeSnippet, renderNudgeExplainer } from '../nudge.js';
 import type { NudgePhase } from '../nudge.js';
-import { runDoctor, formatDoctorResult } from '../doctor.js';
+import { runDoctor, formatDoctorResult, checkOnboardingStatus } from '../doctor.js';
 import { runUpgrade } from '../upgrade.js';
 import { runConnect } from '../connect.js';
 import { apiCall } from '../cli-shared.js';
+import { resolveConsoleUrl } from '../console-url.js';
 
 export function registerFixCommands(program: Command): void {
 // ─── mushi fix ───────────────────────────────────────────────────────────────
@@ -301,9 +302,42 @@ program
     '--fix',
     'Apply safe local fixes when checks fail: write missing .env.local lines and wire Cursor MCP config.',
   )
-  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean; hostApp?: boolean; mcp?: boolean; fix?: boolean }) => {
+  .option(
+    '--onboarding',
+    'Focused onboarding check: prints the single next action you need to take to finish SDK setup, with a console deep link.',
+  )
+  .option(
+    '--full',
+    'Run ALL check categories (server, ingest, host-app, mcp, qa-stories) in one shot. Good for first-run diagnostics. Exit 0 only when all checks pass.',
+  )
+  .action(async (opts: { cwd?: string; json?: boolean; server?: boolean; ingest?: boolean; qaStories?: boolean; hostApp?: boolean; mcp?: boolean; fix?: boolean; onboarding?: boolean; full?: boolean }) => {
     const config = loadConfig()
-    const doctorOpts = { cwd: opts.cwd, server: opts.server, ingest: opts.ingest, qaStories: opts.qaStories, hostApp: opts.hostApp, mcp: opts.mcp }
+
+    if (opts.onboarding) {
+      const cwd = opts.cwd ?? process.cwd()
+      const consoleBase = await resolveConsoleUrl({ cwd })
+      const status = await checkOnboardingStatus(config, consoleBase, cwd)
+      const base = consoleBase.replace(/\/$/, '')
+      if (status.done) {
+        console.log(`✓ Setup complete. ${status.nextAction}`)
+        console.log(`  ${base}${status.ctaPath}`)
+      } else {
+        console.log(`→ Next: ${status.nextAction}`)
+        console.log(`  Open: ${base}${status.ctaPath}`)
+      }
+      if (!status.done) process.exit(1)
+      return
+    }
+
+    const doctorOpts = {
+      cwd: opts.cwd,
+      server: opts.server,
+      ingest: opts.ingest,
+      qaStories: opts.qaStories,
+      hostApp: opts.hostApp,
+      mcp: opts.mcp,
+      full: opts.full,
+    }
     let result = await runDoctor(config, doctorOpts)
 
     if (!result.ready && opts.fix && config.apiKey && config.projectId && config.endpoint) {

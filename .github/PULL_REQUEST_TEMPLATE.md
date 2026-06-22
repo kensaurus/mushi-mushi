@@ -29,7 +29,16 @@ Implementation approach (if non-obvious).
 - [ ] Changeset added (if modifying a published package)
 - [ ] Documentation updated (if API changed)
 - [ ] Repositioning copy labels unshipped features as **Target** (not shipped)
+- [ ] Positioning stays on-message (`pnpm check:narrative`) — hero, north-star, buyer, and the three "will not"s match [`/VISION.md`](../VISION.md); changed a tagline? update `packages/brand` first
 - [ ] If MCP catalog changed: `pnpm gen:mcp-tools-doc && pnpm check:onboarding-drift`
+
+### Admin console UX (only if this PR touches `apps/admin/src/pages/` or posture chrome)
+
+- [ ] New operator worklist page uses `PagePosture` (status → snapshot → guide/readout) — see `apps/admin/src/design-system/page-posture-recipes.ts`
+- [ ] Section tabs use `<SegmentedControl scrollable>` — not hand-rolled `role="tablist"`
+- [ ] No duplicate "Needs attention" card when a status banner already surfaces the same priority
+- [ ] `pnpm --filter @mushi-mushi/admin lint` passes (`no-hand-rolled-tablist`, `no-missing-page-posture`)
+- [ ] Chrome budget: visible `[data-page-posture]` rows ≤ 2 (Beginner) / ≤ 3 (Advanced) — see `examples/e2e-dogfood/tests/admin-chrome-budget.spec.ts`
 
 ### Supply-chain (only if this PR touches `.github/workflows/`, `scripts/`, package.json files, or adds/upgrades a dependency)
 

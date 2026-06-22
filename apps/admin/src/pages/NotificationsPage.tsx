@@ -15,8 +15,7 @@ import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
-import { notificationsLinks } from '../lib/statCardLinks'
-import { SnapshotSectionHint,
+import {
   Section,
   Card,
   Badge,
@@ -26,24 +25,25 @@ import { SnapshotSectionHint,
   FilterSelect,
   SelectField,
   LogBlock,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
-  RelativeTime, } from '../components/ui'
+  RelativeTime,
+} from '../components/ui'
 import {
   ActionPill,
-  ActionPillRow,
-  ContainedBlock,
   SignalChip,
   InlineProof,
 } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
+import { NotificationsSnapshotStrip } from '../components/notifications/NotificationsSnapshotStrip'
+import { NotificationsReadout } from '../components/notifications/NotificationsReadout'
 import {
   EMPTY_NOTIFICATIONS_STATS,
   TYPE_BADGE,
@@ -346,12 +346,35 @@ export function NotificationsPage() {
         )}
       </PageHeaderBar>
 
-      <NotificationsStatusBanner
-        stats={stats}
-        onTab={setTab}
-        onRefresh={reloadAll}
-        refreshing={validating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <NotificationsStatusBanner
+                stats={stats}
+                onTab={setTab}
+                onRefresh={reloadAll}
+                refreshing={validating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideNotificationsSnapshot,
+            children: (
+              <NotificationsSnapshotStrip
+                stats={stats}
+                fetchedAt={fetchedAt}
+                isValidating={validating}
+                sectionTitle={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'}
+                hint={activeMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
@@ -361,85 +384,12 @@ export function NotificationsPage() {
         options={tabOptions}
         ariaLabel="Notification sections"
         size="sm"
+        scrollable
       />
       )}
 
-      {!ux.hideNotificationsSnapshot && (
-      <Section title={copy?.sections?.snapshot ?? 'NOTIFICATIONS SNAPSHOT'} freshness={{ at: fetchedAt, isValidating: validating }}>
-        <SnapshotSectionHint text={activeMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label={copy?.statLabels?.total ?? 'Total'}
-            value={stats.total}
-            accent={stats.total > 0 ? 'text-brand' : undefined}
-            hint="Messages for this project"
-            to={notificationsLinks.total}
-          />
-          <StatCard
-            label={copy?.statLabels?.unread ?? 'Unread'}
-            value={stats.unread}
-            accent={stats.unread > 0 ? 'text-warn' : undefined}
-            hint="Not yet marked read in admin"
-            to={notificationsLinks.unread}
-          />
-          <StatCard
-            label={copy?.statLabels?.last24h ?? 'Last 24h'}
-            value={stats.last24h}
-            accent={stats.last24h > 0 ? 'text-info' : undefined}
-            hint="Recent outbound volume"
-            to={notificationsLinks.last24h}
-          />
-          <StatCard
-            label={copy?.statLabels?.enabled ?? 'Enabled'}
-            value={stats.notificationsEnabled ? 'Yes' : 'No'}
-            accent={stats.notificationsEnabled ? 'text-ok' : 'text-warn'}
-            hint={stats.notificationsEnabled ? 'SDK polling allowed' : 'Turn on in Settings'}
-            to={notificationsLinks.enabled}
-          />
-          <StatCard
-            label={copy?.statLabels?.fixFailed ?? 'Fix failed'}
-            value={stats.fixFailedCount}
-            accent={stats.fixFailedCount > 0 ? 'text-danger' : undefined}
-            hint="fix_failed type messages"
-            to={notificationsLinks.fixFailed}
-          />
-          <StatCard
-            label={copy?.statLabels?.lastMessage ?? 'Last message'}
-            value={stats.lastNotificationAt ? 'Recent' : 'Never'}
-            accent={stats.lastNotificationAt ? 'text-ok' : undefined}
-            hint={
-              stats.daysSinceLastNotification != null && stats.daysSinceLastNotification > 0
-                ? `${stats.daysSinceLastNotification}d ago`
-                : stats.lastNotificationAt
-                  ? 'Today'
-                  : 'Classify a report to test'
-            }
-            to={notificationsLinks.lastMessage}
-          />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'disabled' || stats.topPriority === 'unread_backlog'
-              ? 'border-warn/30 bg-warn/5'
-              : 'border-edge-subtle bg-chrome'
-          }`}
-        >
-          <SignalChip tone={stats.topPriority === 'unread_backlog' ? 'warn' : stats.topPriority === 'disabled' ? 'warn' : 'brand'}>
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone="info">
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
+      {activeTab === 'overview' && stats.projectId ? (
+        <NotificationsReadout stats={stats} fetchedAt={fetchedAt} isValidating={validating} />
       ) : null}
 
       {activeTab === 'overview' && (

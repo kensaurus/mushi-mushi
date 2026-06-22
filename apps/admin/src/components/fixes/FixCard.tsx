@@ -19,6 +19,7 @@ import { FixAttemptFlow } from './FixAttemptFlow';
 import { MergeFixPreflight } from './MergeFixPreflight';
 import { canMergeFix, getMergeBlockerReason, isFixMerged } from '../../lib/mergeFix';
 import { apiFetch } from '../../lib/supabase';
+import { EndpointCodeRow } from '../readout';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -231,14 +232,19 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
           {fix.pr_url && (
-            <a
-              href={fix.pr_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent hover:text-accent-hover underline"
-            >
-              View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
-            </a>
+            <>
+              <a
+                href={fix.pr_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:text-accent-hover underline shrink-0"
+              >
+                View PR{fix.pr_number ? ` #${fix.pr_number}` : ''}
+              </a>
+              <div className="min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-md">
+                <EndpointCodeRow label="Pull request" url={fix.pr_url} />
+              </div>
+            </>
           )}
           {fix.pr_url && (
             <button

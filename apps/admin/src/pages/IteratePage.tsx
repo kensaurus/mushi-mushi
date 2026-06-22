@@ -17,19 +17,17 @@ import { useIterateUx, resolveQuickIterateTab } from '../lib/iterateModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint, Card,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { Card,
   Section,
   Btn,
   Badge,
   ErrorAlert,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
   RecommendedAction,
   RelativeTime, } from '../components/ui'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -37,6 +35,8 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { IterateStatusBanner } from '../components/iterate/IterateStatusBanner'
+import { IterateSnapshotStrip } from '../components/iterate/IterateSnapshotStrip'
+import { IterateReadout } from '../components/iterate/IterateReadout'
 import { PdcaRunTable } from '../components/iterate/PdcaRunTable'
 import { NewRunForm } from '../components/iterate/NewRunForm'
 import { PdcaRunDrawer } from '../components/iterate/PdcaRunDrawer'
@@ -46,21 +46,6 @@ import {
   type IterateStats,
   type IterateTabId,
 } from '../components/iterate/IterateStatsTypes'
-import {
-  activeRunsDetail,
-  activeRunsTooltip,
-  avgScoreDetail,
-  avgScoreTooltip,
-  failedRunsDetail,
-  failedRunsTooltip,
-  iterationsDetail,
-  iterationsTooltip,
-  succeededRunsDetail,
-  succeededRunsTooltip,
-  totalRunsDetail,
-  totalRunsTooltip,
-} from '../lib/statTooltips/iterate'
-import { iterateLinks } from '../lib/statCardLinks'
 
 const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
   {
@@ -248,7 +233,7 @@ export function IteratePage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -341,93 +326,47 @@ export function IteratePage() {
         )}
       </PageHeaderBar>
 
-      <IterateStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <IterateStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideIterateSnapshot,
+            children: (
+              <IterateSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'PDCA SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       {!ux.hideTabs && (
       <SegmentedControl<IterateTabId>
         size="sm"
+        scrollable
         ariaLabel="Iterate sections"
         value={activeTab}
         options={tabOptions}
         onChange={setActiveTab}
       />
       )}
-
-      {!ux.hideIterateSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'PDCA SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.total ?? 'Total runs'} value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} tooltip={totalRunsTooltip(stats)} detail={totalRunsDetail()} to={iterateLinks.total} />
-          <StatCard
-            label={copy?.statLabels?.active ?? 'Active'}
-            value={stats.running + stats.queued}
-            accent={stats.running + stats.queued > 0 ? 'text-warn' : undefined}
-            tooltip={activeRunsTooltip(stats)}
-            detail={activeRunsDetail(stats)}
-            to={iterateLinks.active}
-          />
-          <StatCard label={copy?.statLabels?.succeeded ?? 'Succeeded'} value={stats.succeeded} accent={stats.succeeded > 0 ? 'text-ok' : undefined} tooltip={succeededRunsTooltip(stats)} detail={succeededRunsDetail()} to={iterateLinks.succeeded} />
-          <StatCard label={copy?.statLabels?.failed ?? 'Failed'} value={stats.failed} accent={stats.failed > 0 ? 'text-danger' : undefined} tooltip={failedRunsTooltip(stats)} detail={failedRunsDetail()} to={iterateLinks.failed} />
-          <StatCard
-            label={copy?.statLabels?.avgScore ?? 'Avg score'}
-            value={stats.avgFinalScorePct != null ? `${stats.avgFinalScorePct}%` : '—'}
-            accent={stats.avgFinalScorePct != null && stats.avgFinalScorePct >= 70 ? 'text-ok' : stats.avgFinalScorePct != null ? 'text-warn' : undefined}
-            tooltip={avgScoreTooltip(stats)}
-            detail={avgScoreDetail(stats)}
-            to={iterateLinks.avgScore}
-          />
-          <StatCard
-            label={copy?.statLabels?.iterations ?? 'Iterations'}
-            value={stats.totalIterations}
-            accent={stats.totalIterations > 0 ? 'text-info' : undefined}
-            tooltip={iterationsTooltip(stats)}
-            detail={iterationsDetail()}
-            to={iterateLinks.iterations}
-          />
-        </div>
-      </Section>
-      )}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 p-4 ${
-            stats.topPriority === 'last_failed'
-              ? 'border-danger/30 bg-danger/5'
-              : stats.topPriority === 'active_runs'
-                ? 'border-warn/30 bg-warn/5'
-                : 'border-brand/30 bg-brand/5'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'last_failed'
-                ? 'danger'
-                : stats.topPriority === 'active_runs'
-                  ? 'warn'
-                  : 'brand'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'last_failed' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
-      ) : null}
 
       {!activeProjectId ? (
         <SetupNudge
@@ -439,6 +378,11 @@ export function IteratePage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
+              <IterateReadout
+                stats={stats}
+                fetchedAt={statsFetchedAt}
+                isValidating={statsValidating}
+              />
               {stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"

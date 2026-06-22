@@ -25,6 +25,8 @@ import {
 import { FeedbackModal } from '../components/FeedbackModal'
 import { SupportTicketDetailModal } from '../components/support/SupportTicketDetailModal'
 import { FeedbackStatusBanner } from '../components/feedback/FeedbackStatusBanner'
+import { FeedbackSnapshotStrip } from '../components/feedback/FeedbackSnapshotStrip'
+import { FeedbackReadout } from '../components/feedback/FeedbackReadout'
 import {
   ActionPill,
   ActionPillRow,
@@ -34,27 +36,17 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { EMPTY_FEEDBACK_STATS, type FeedbackStats, type FeedbackTabId } from '../components/feedback/types'
-import {
-  activeTicketsDetail,
-  activeTicketsTooltip,
-  shippedTicketsDetail,
-  shippedTicketsTooltip,
-  ticketMixDetail,
-  ticketMixTooltip,
-  totalTicketsDetail,
-  totalTicketsTooltip,
-} from '../lib/statTooltips/feedback'
-import { feedbackLinks } from '../lib/statCardLinks'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint, Badge,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import {
+  Badge,
   Btn,
   Card,
   ErrorAlert,
   FreshnessPill,
   RelativeTime,
-  Section,
   SegmentedControl,
-  StatCard, } from '../components/ui'
+} from '../components/ui'
 
 type ListFilter = 'all' | 'bug' | 'feature'
 
@@ -223,7 +215,7 @@ export function FeedbackPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -283,13 +275,35 @@ export function FeedbackPage() {
         </Btn>
       </PageHeaderBar>
 
-      <FeedbackStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onSubmitBug={() => openFeedback('bug')}
-        onSubmitFeature={() => openFeedback('feature')}
-        onRefresh={reloadAll}
-        refreshing={statsValidating || ticketsQuery.isValidating}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <FeedbackStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onSubmitBug={() => openFeedback('bug')}
+                onSubmitFeature={() => openFeedback('feature')}
+                onRefresh={reloadAll}
+                refreshing={statsValidating || ticketsQuery.isValidating}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            children: (
+              <FeedbackSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'FEEDBACK SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+        ]}
       />
 
       <SegmentedControl
@@ -298,72 +312,16 @@ export function FeedbackPage() {
         options={tabOptions}
         ariaLabel="Feedback sections"
         size="sm"
+        scrollable
       />
-
-      <Section title="FEEDBACK SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Total"
-            value={stats.totalTickets}
-            accent={stats.totalTickets > 0 ? 'text-fg' : undefined}
-            tooltip={totalTicketsTooltip(stats)}
-            detail={totalTicketsDetail(stats)}
-            to={feedbackLinks.total}
-          />
-          <StatCard
-            label="Active"
-            value={stats.activeTickets}
-            accent={stats.activeTickets > 0 ? 'text-warn' : 'text-ok'}
-            tooltip={activeTicketsTooltip(stats)}
-            detail={activeTicketsDetail(stats)}
-            to={feedbackLinks.active}
-          />
-          <StatCard
-            label="Shipped"
-            value={stats.shippedTickets}
-            accent={stats.shippedTickets > 0 ? 'text-ok' : undefined}
-            tooltip={shippedTicketsTooltip(stats)}
-            detail={shippedTicketsDetail(stats)}
-            to={feedbackLinks.shipped}
-          />
-          <StatCard
-            label="Mix"
-            value={`${stats.bugTickets}/${stats.featureTickets}`}
-            accent="text-brand"
-            tooltip={ticketMixTooltip(stats)}
-            detail={ticketMixDetail()}
-            to={feedbackLinks.mix}
-          />
-        </div>
-      </Section>
 
       {activeTab === 'overview' && (
         <>
-          {stats.topTicketId && stats.topPriority !== 'first_submit' ? (
-            <Card className={`space-y-3 p-4 ${stats.topPriority === 'reply' ? 'border-brand/30 bg-brand/5' : 'border-warn/30 bg-warn/5'}`}>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SignalChip tone={stats.topPriority === 'reply' ? 'brand' : 'warn'}>Top priority</SignalChip>
-                {stats.topPriority === 'reply' ? (
-                  <SignalChip tone="info">Team replied</SignalChip>
-                ) : (
-                  <SignalChip tone="warn">Needs review</SignalChip>
-                )}
-              </div>
-              <ContainedBlock tone={stats.topPriority === 'reply' ? 'info' : 'warn'} label="Ticket">
-                <p className="text-sm font-medium leading-snug text-fg">{stats.topTicketSubject}</p>
-                <p className="mt-1 text-2xs leading-relaxed text-fg-muted">{stats.topPriorityLabel}</p>
-              </ContainedBlock>
-              <ActionPillRow>
-                <ActionPill tone="brand" onClick={() => setOpenTicketId(stats.topTicketId)}>
-                  Open ticket →
-                </ActionPill>
-                <ActionPill tone="neutral" onClick={() => setActiveTab('active')}>
-                  View active list
-                </ActionPill>
-              </ActionPillRow>
-            </Card>
-          ) : null}
+          <FeedbackReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt}
+            isValidating={statsValidating}
+          />
 
           <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
             <p className="text-2xs leading-relaxed text-fg-muted">

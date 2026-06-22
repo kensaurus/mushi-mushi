@@ -6,8 +6,128 @@ import { Callout, Steps } from 'nextra/components'
 
 # CLI ↔ console setup loop
 
-Use this when `npx mushi-mushi` asks for a **Project ID** and **API key**, or when you
-want the console and terminal to stay in sync during first-time setup.
+The fastest path from zero to a working SDK is `npx mushi-mushi` — the wizard
+handles project creation, key minting, and SDK installation in one command with
+**no copy-paste**. This page explains the full flow and how to recover when
+something goes wrong.
+
+## Which CLI command?
+
+| Command | When to use | What it does |
+| --- | --- | --- |
+| **`npx mushi-mushi`** / **`mushi init`** | First SDK install in an app repo | Detects framework, opens browser auth, installs SDK, writes `.env.local` |
+| **`mushi login`** | Authenticate the CLI without installing | Browser sign-in only; persists to `~/.config/mushi/config.json` |
+| **`mushi connect`** | You already have credentials; want env + MCP + proof | Merges env vars, wires `.cursor/mcp.json`, optional `--wait` heartbeat |
+| **`mushi setup`** | MCP-only wiring after login | Writes Cursor/Claude MCP config — **does not** install the SDK |
+
+<Callout type="warning">
+  `mushi setup` is for MCP wiring only, not SDK installation. To install
+  the SDK for the first time, run `npx mushi-mushi` (not `mushi setup`).
+</Callout>
+
+<Callout type="info">
+  **SDK ingest keys** come from **Setup → Verify** (`report:write` scope).
+  **Settings → API Keys** is for BYOK LLM/Firecrawl keys — not Mushi project
+  credentials.
+</Callout>
+
+## Browser sign-in flow (recommended)
+
+`npx mushi-mushi` uses **zero-copy-paste browser sign-in** (RFC 8628):
+
+```mermaid
+sequenceDiagram
+  participant Dev as Developer
+  participant CLI as npx_mushi_mushi
+  participant Browser as Admin_console
+  participant App as App_repo
+
+  Dev->>CLI: npx mushi-mushi
+  CLI->>CLI: Detect framework
+  CLI->>Browser: Open /cli-auth?code=XXXX-XXXX
+  CLI->>Dev: Show anti-paste banner and wait
+  Dev->>Browser: Click "Approve CLI connection"
+  Browser->>CLI: Token arrives automatically
+  CLI->>Dev: Approved — pick or create a project
+  CLI->>App: Install SDK + write .env.local
+  CLI->>Dev: Next steps checklist
+```
+
+### What happens in the terminal
+
+When the wizard starts the browser sign-in step, you will see a box like this:
+
+```
+  ┌──────────────────────────────────────────────────────────┐
+  │  Browser sign-in — follow these 3 steps                  │
+  ├──────────────────────────────────────────────────────────┤
+  │                                                          │
+  │  1. A browser tab will open (or visit the URL below)    │
+  │  2. Sign in if prompted, then click "Approve"           │
+  │  3. Come back here — setup continues automatically      │
+  │                                                          │
+  ├──────────────────────────────────────────────────────────┤
+  │  Verification code (show in browser — NOT terminal):    │
+  │                                                          │
+  │    TGKX-PBXP                                            │
+  │                                                          │
+  │  ⚠  Do NOT paste or type this code in your terminal     │
+  ├──────────────────────────────────────────────────────────┤
+  │  URL: https://kensaur.us/...                            │
+  └──────────────────────────────────────────────────────────┘
+
+  ⏳ Waiting for browser approval… (Ctrl+C to cancel)
+```
+
+**The terminal waits automatically.** You do not need to type or paste anything.
+Switch to your browser, approve, then come back to this terminal.
+
+### What happens in the browser
+
+The console shows a 3-step guide and displays the same code:
+
+1. Confirm the code matches what your terminal printed
+2. Click **Approve CLI connection**
+3. Switch back to your terminal — setup resumes automatically
+
+After approval the browser shows **"CLI connected — switch back to your terminal"**
+and the terminal continues to the project picker.
+
+<Steps>
+
+### 1. Run the wizard
+
+```bash
+npx mushi-mushi
+```
+
+The wizard auto-detects your framework (Next.js, React, Vue, Expo, …).
+
+### 2. Approve in the browser
+
+A browser tab opens at `/cli-auth?code=XXXX-XXXX`. Click **Approve CLI connection**.
+Your terminal resumes the moment you approve — no copy-paste needed.
+
+### 3. Pick or create a project
+
+The wizard lists your existing projects. Choose one or enter a name to create a
+new project. The SDK API key is minted automatically.
+
+### 4. SDK installed
+
+The wizard installs the SDK package and writes your `.env.local` with
+`MUSHI_PROJECT_ID`, `MUSHI_API_KEY`, and `MUSHI_API_ENDPOINT`.
+
+### 5. Wire Cursor MCP (optional but recommended)
+
+```bash
+mushi connect --write-env --wire-ide --wait
+```
+
+This writes `.cursor/mcp.json` and waits for the first SDK heartbeat to confirm
+the connection is live.
+
+</Steps>
 
 ## Console URLs
 
@@ -18,125 +138,57 @@ want the console and terminal to stay in sync during first-time setup.
 | **Override** | Set `MUSHI_CONSOLE_URL` | CLI hints + browser opens use this base when set |
 
 The CLI resolves the console in this order: `MUSHI_CONSOLE_URL` → saved
-`~/.config/mushi/config.json` `consoleUrl` → localhost `:6464` probe (when the dev
-server responds) → monorepo heuristic → hosted default.
+`~/.config/mushi/config.json` `consoleUrl` → localhost `:6464` probe → hosted default.
 
-<Callout type="info">
-  `app.mushimushi.dev` may redirect to the hosted console — prefer
-  **kensaur.us/mushi-mushi/admin** in docs and scripts.
-</Callout>
+## Manual paste (fallback / self-hosted)
 
-## Which CLI command?
-
-| Command | When to use | What it does |
-| --- | --- | --- |
-| **`mushi init`** / **`npx mushi-mushi`** | First SDK install in an app repo | Detects framework, installs SDK, writes `.env.local`, optional test report |
-| **`mushi connect`** | You already have ID + key; want env + MCP + proof | Saves config, merges env, wires `.cursor/mcp.json`, optional `--wait` heartbeat |
-| **`mushi login`** | Save credentials before other commands | Browser or `--api-key`; persists to `~/.config/mushi/config.json` |
-| **`mushi setup`** | MCP-only wiring after login | Writes Cursor/Claude MCP config from saved credentials — **not** SDK install |
-
-<Callout type="warning">
-  **SDK ingest keys** come from **Setup → Verify** (`report:write`). **Settings → API
-  Keys (BYOK)** is for your own LLM/Firecrawl keys — not Mushi project credentials.
-</Callout>
-
-## Setup flow (console + terminal)
-
-```mermaid
-sequenceDiagram
-  participant Dev as Developer
-  participant CLI as mushi init
-  participant Console as Admin console
-  participant App as App repo
-
-  Dev->>CLI: npx mushi-mushi
-  CLI->>Dev: Already have a project?
-  alt No project yet
-    CLI->>Console: Open /onboarding?tab=steps&setup=cli
-    Dev->>Console: Create project + copy UUID
-    Dev->>Console: Verify tab → Generate API key
-    Dev->>CLI: Paste Project ID + API key
-  end
-  CLI->>CLI: whoami verification
-  CLI->>App: Install SDK + write .env.local
-  CLI->>Dev: Optional mushi connect --wait
-```
-
-<Steps>
-
-### 1. Create a project
-
-Open [Setup → Steps](https://kensaur.us/mushi-mushi/admin/onboarding?tab=steps) or
-[Projects → New project](https://kensaur.us/mushi-mushi/admin/projects?tab=create).
-
-- Enter a name and click **Create**.
-- Copy the **Project ID** (UUID) from the **success panel** — do not hunt the metrics rail.
-- If you already have projects, add `?setup=cli` to the onboarding URL (the CLI opens this
-  automatically) so the create form stays visible.
-
-### 2. Generate an API key
-
-On [Setup → Verify](https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify), click
-**Generate API key**. Use **`report:write`** for SDK ingest.
-
-The plaintext key is shown **once**. Copy it before navigating away.
-
-### 3. Run the CLI in your app repo
-
-**Recommended — full SDK wizard:**
+If the browser auth path isn't available, select "Paste a Project ID + API key"
+in the wizard, or pass flags directly:
 
 ```bash
-npx mushi-mushi
-# or, if you already copied the UUID:
-mushi init --project-id <uuid>
+mushi init --project-id <uuid> --api-key mushi_xxx
 ```
 
-**Agent / script — env + Cursor MCP + heartbeat proof:**
+To get the values manually:
+
+| Value | Where to find it |
+|---|---|
+| `projectId` | UUID on the [Setup → Steps](https://kensaur.us/mushi-mushi/admin/onboarding?tab=steps) success panel |
+| `apiKey` | [Setup → Verify](https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify) → Generate API key (scope: `report:write`) |
+
+<Callout type="warning">
+  **Settings → API Keys** is for BYOK LLM/Firecrawl keys — not SDK ingest keys.
+  Always use **Setup → Verify** to generate `report:write` project keys.
+</Callout>
+
+## CI / non-interactive
+
+Pass all three flags so the wizard skips all interactive prompts:
+
+```bash
+npx mushi-mushi --yes --project-id <uuid> --api-key mushi_xxx
+```
+
+Or use the non-interactive connect command after minting a key in the console:
 
 ```bash
 MUSHI_API_KEY=mushi_xxx mushi connect \
   --project-id <uuid> \
   --endpoint https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api \
-  --write-env --wire-ide --wait
+  --write-env --wire-ide
 ```
-
-Replace `mushi_xxx` with your Verify-tab key. Self-hosted installs: pass your
-`MUSHI_API_ENDPOINT` instead of the cloud URL.
-
-</Steps>
-
-## CLI prerequisite step
-
-When the wizard does not receive `--project-id` / `--api-key` and nothing is saved in
-`~/.config/mushi/config.json`, it asks:
-
-1. **No — open the console to create one** — opens `?setup=cli`, waits for you to finish.
-2. **Yes — I have Project ID + API key** — skips straight to paste prompts.
-3. **Use mushi login first** — exits with instructions to run `mushi login`, then re-run init.
-
-Before installing packages, init calls **`GET /v1/sync/whoami`** so a typo in the UUID or
-key fails fast with a clear error.
-
-## Second project / existing workspace
-
-If you already have a Mushi project but need another app:
-
-1. Open `/onboarding?tab=steps&setup=cli` (or **Projects → New project**).
-2. Create the new project and copy the fresh UUID from the success panel.
-3. Run `mushi init --project-id <new-uuid>` in that app's repo.
-
-The `?setup=cli` flag keeps the create form visible even when you already have projects.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Fix |
 | --- | --- | --- |
-| Wizard opens wrong console URL | Hosted default while you meant local dev | Run `pnpm dev`, or set `MUSHI_CONSOLE_URL=http://localhost:6464` |
-| "Invalid project ID" | Pasted slug/name instead of UUID | Copy from success panel or Projects UUID chip |
-| whoami / 401 | Wrong key or revoked key | Mint a new key on Verify tab; check `report:write` scope |
+| `command not found: TGKX-PBXP` | You pasted the verification code into the shell | That code belongs in the **browser**, not the terminal. The terminal waits automatically. |
+| Terminal exits immediately after showing code | Browser tab didn't open; terminal was closed | Keep the terminal open. Open the URL from the banner manually if the tab didn't open. |
+| "Wizard opens wrong console URL" | Hosted default while you meant local dev | Run `pnpm dev`, or set `MUSHI_CONSOLE_URL=http://localhost:6464` |
+| "Invalid project ID" | Pasted name instead of UUID | Copy from success panel (UUID chip) on Setup → Steps |
+| 401 / whoami failure | Wrong key or revoked key | Mint a new key on [Setup → Verify](https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify) |
+| "Browser sign-in timed out" | 10-minute code expired before approval | Run `npx mushi-mushi` again — a new code is generated |
 | `--write-env` unknown option | CLI older than v1.19 | Upgrade: `npm i -g @mushi-mushi/cli@latest` |
-| connect fails without `--endpoint` | Required flag on `mushi connect` | Pass cloud URL or set `MUSHI_API_ENDPOINT` |
-| Banner says "Name your app" but no form | Missing `?setup=cli` on onboarding | Use CLI deep link or **Projects → New project** |
 | Non-interactive hang in CI | TTY prompts with partial flags | Pass `--yes --project-id <uuid> --api-key mushi_xxx` |
 
 ## Related

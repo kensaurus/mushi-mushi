@@ -201,8 +201,14 @@ export async function waitForCliToken(
   const maxConsecutiveErrors = opts.maxConsecutiveErrors ?? 5
   let consecutiveErrors = 0
 
+  // Poll immediately on the first iteration — a user who approves right away
+  // shouldn't have to wait a full 5-second interval before the wizard resumes.
+  let firstPoll = true
   while (now() < deadline) {
-    await sleep(intervalMs)
+    if (!firstPoll) {
+      await sleep(intervalMs)
+    }
+    firstPoll = false
     const outcome = await pollDeviceToken(endpoint, session.device_code)
     switch (outcome.status) {
       case 'approved':

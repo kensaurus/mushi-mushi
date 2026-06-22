@@ -47,9 +47,9 @@ So the human stays in the loop. The loop just gets compressed from *days* to *mi
 
 ## What's actually open source
 
-Everything you see in the live admin demo, plus all 14 SDKs (web, React, Vue, Svelte, Angular, React Native, Capacitor, Node, MIT) is on [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi). The backend (Supabase Edge Functions + Postgres + pgvector for the embeddings) is BSL 1.1 — free for self-hosting up to ten million reports/month, paid only if you want to resell it as a hosted product.
+Everything you see in the live admin demo, plus all 14 SDKs (web, React, Vue, Svelte, Angular, React Native, Capacitor, Node, MIT) is on [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi). The backend (Supabase Edge Functions + Postgres + pgvector for the embeddings) is AGPLv3 — true OSI open source: self-host it free, fork it, modify it for your own org. Offer a modified server as a hosted service and you publish your changes (§13) or take a commercial license.
 
-We picked BSL specifically because we wanted self-hosting to be free in the cases that almost everyone is in (your team's dev tool), and we wanted the only restriction to be on the case nobody actually does (re-selling a managed Mushi).
+It's open-core, the Grafana / Supabase model: the core is genuinely open (AGPLv3), and the only paid boundary is a small source-available enterprise edition (SSO/SCIM, audit export, region pinning) that a solo builder never needs.
 
 ## Try it
 

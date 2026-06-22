@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { Section, ErrorAlert } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
@@ -40,6 +41,7 @@ import {
   type RoutingProviderDef,
 } from '../components/integrations/types'
 import { IntegrationStatusBanner } from '../components/integrations/IntegrationStatusBanner'
+import { IntegrationsProvenanceReadout } from '../components/integrations/IntegrationsProvenanceReadout'
 import { IntegrationsPageIntro } from '../components/integrations/IntegrationsPageIntro'
 import { isIntegrationsBannerVisible } from '../lib/integrationsExplainer'
 import { usePageCopy } from '../lib/copy'
@@ -361,14 +363,39 @@ export function IntegrationsPage() {
         }
       />
 
-      {!loading &&
-        isIntegrationsBannerVisible(stats.topPriority, stats.hasAnyProject ?? setup.hasAnyProject) && (
-        <IntegrationStatusBanner
-          stats={stats}
-          projectName={stats.projectName ?? null}
-          plainBanner={false}
-        />
-      )}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show:
+              !loading &&
+              isIntegrationsBannerVisible(stats.topPriority, stats.hasAnyProject ?? setup.hasAnyProject),
+            children: (
+              <IntegrationStatusBanner
+                stats={stats}
+                projectName={stats.projectName ?? null}
+                plainBanner={false}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: Boolean(activeProjectId && stats.projectId),
+            children: (
+              <IntegrationsProvenanceReadout
+                stats={stats}
+                githubRepoUrl={
+                  typeof platform?.github?.github_repo_url === 'string'
+                    ? platform.github.github_repo_url
+                    : null
+                }
+                fetchedAt={statsQuery.lastFetchedAt}
+                validating={statsQuery.isValidating}
+              />
+            ),
+          },
+        ]}
+      />
 
       <IntegrationsPageIntro topPriority={stats.topPriority} />
 

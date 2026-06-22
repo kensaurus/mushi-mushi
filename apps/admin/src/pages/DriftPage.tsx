@@ -16,18 +16,18 @@ import { usePageCopy } from '../lib/copy'
 import { useDriftUx, resolveQuickDriftTab } from '../lib/driftModeUx'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import { SnapshotSectionHint,
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import {
   Card,
-  Section,
   Badge,
   Btn,
   EmptyState,
   ErrorAlert,
   RelativeTime,
-  StatCard,
   SegmentedControl,
   FreshnessPill,
-  RecommendedAction, } from '../components/ui'
+  RecommendedAction,
+} from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
@@ -36,6 +36,8 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { DriftStatusBanner } from '../components/drift/DriftStatusBanner'
+import { DriftReadout } from '../components/drift/DriftReadout'
+import { DriftSnapshotStrip } from '../components/drift/DriftSnapshotStrip'
 import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
 import {
   EMPTY_DRIFT_STATS,
@@ -47,21 +49,6 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
-import {
-  contractEdgesDetail,
-  contractEdgesTooltip,
-  criticalOpenDetail,
-  criticalOpenTooltip,
-  openFindingsDetail,
-  openFindingsTooltip,
-  snapshotsDetail,
-  snapshotsTooltip,
-  surfacesWithFindingsDetail,
-  surfacesWithFindingsTooltip,
-  warnOpenDetail,
-  warnOpenTooltip,
-} from '../lib/statTooltips/drift'
-import { driftLinks } from '../lib/statCardLinks'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -255,7 +242,7 @@ export function DriftPage() {
         <div className="h-16 rounded bg-surface-raised/60" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+            <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
       </div>
@@ -417,15 +404,41 @@ export function DriftPage() {
         />
       ) : null}
 
-      <DriftStatusBanner
-        stats={stats}
-        onTab={setActiveTab}
-        onRefresh={reloadAll}
-        refreshing={statsValidating}
-        plainBanner={ux.plainBanner}
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            children: (
+              <DriftStatusBanner
+                stats={stats}
+                onTab={setActiveTab}
+                onRefresh={reloadAll}
+                refreshing={statsValidating}
+                plainBanner={ux.plainBanner}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !ux.hideDriftSnapshot,
+            children: (
+              <DriftSnapshotStrip
+                stats={stats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                sectionTitle={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
+                hint={activeTabMeta.description}
+                statLabels={copy?.statLabels}
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: activeTab === 'overview',
+            children: <DriftSchemaGuide topPriority={stats.topPriority} />,
+          },
+        ]}
       />
-
-      {activeTab === 'overview' && <DriftSchemaGuide topPriority={stats.topPriority} />}
 
       {!ux.hideTabs && (
       <SegmentedControl<DriftTabId>
@@ -437,31 +450,22 @@ export function DriftPage() {
       />
       )}
 
-      {!ux.hideDriftSnapshot && (
-      <Section
-        title={copy?.sections?.snapshot ?? 'DRIFT SNAPSHOT'}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      >
-        <SnapshotSectionHint text={activeTabMeta.description} />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.openFindings ?? 'Open findings'} value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} tooltip={openFindingsTooltip(stats)} detail={openFindingsDetail(stats)} to={driftLinks.openFindings} />
-          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalOpenTooltip(stats)} detail={criticalOpenDetail()} to={driftLinks.critical} />
-          <StatCard label={copy?.statLabels?.warnings ?? 'Warnings'} value={stats.warnOpen} accent={stats.warnOpen > 0 ? 'text-warn' : undefined} tooltip={warnOpenTooltip(stats)} detail={warnOpenDetail(stats)} to={driftLinks.warnings} />
-          <StatCard label={copy?.statLabels?.snapshots ?? 'Snapshots'} value={stats.snapshotCount} accent={stats.snapshotCount > 0 ? 'text-brand' : undefined} tooltip={snapshotsTooltip(stats)} detail={snapshotsDetail(stats)} to={driftLinks.snapshots} />
-          <StatCard label={copy?.statLabels?.contractEdges ?? 'Contract edges'} value={stats.lastSnapshotEdges} accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined} tooltip={contractEdgesTooltip(stats)} detail={contractEdgesDetail(stats)} to={driftLinks.contractEdges} />
-          <StatCard label={copy?.statLabels?.surfaces ?? 'Surfaces'} value={stats.surfacesWithFindings} accent={stats.surfacesWithFindings > 0 ? 'text-warn' : undefined} tooltip={surfacesWithFindingsTooltip(stats)} detail={surfacesWithFindingsDetail()} to={driftLinks.surfaces} />
-        </div>
-      </Section>
-      )}
+      {activeTab === 'overview' && stats.projectId ? (
+        <DriftReadout
+          stats={stats}
+          fetchedAt={statsFetchedAt}
+          validating={statsValidating}
+        />
+      ) : null}
 
       {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`space-y-3 p-4 ${
+          className={`space-y-3 border p-4 ${
             stats.topPriority === 'critical_findings'
-              ? 'border-danger/30 bg-danger/5'
+              ? 'border-danger/40 bg-surface-raised'
               : stats.topPriority === 'never_scanned'
-                ? 'border-brand/30 bg-brand/5'
-                : 'border-warn/30 bg-warn/5'
+                ? 'border-brand/40 bg-surface-raised'
+                : 'border-warn/40 bg-surface-raised'
           }`}
         >
           <SignalChip

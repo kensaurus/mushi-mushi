@@ -60,11 +60,15 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
   }
   if (!plan) return null
 
-  const usageHint = plan.includedReportsPerMonth != null && plan.usagePct != null
-    ? `${plan.usagePct}% of ${plan.includedReportsPerMonth.toLocaleString()} reports used`
-    : plan.includedReportsPerMonth == null
-      ? 'Unlimited reports'
-      : null
+  const usageHint = plan.diagnosesLimit != null && plan.diagnosesUsagePct != null
+    ? `${plan.diagnosesUsagePct}% of ${plan.diagnosesLimit.toLocaleString()} diagnoses used`
+    : plan.diagnosesLimit != null
+      ? `0% of ${plan.diagnosesLimit.toLocaleString()} diagnoses used`
+      : plan.includedReportsPerMonth != null && plan.usagePct != null
+        ? `${plan.usagePct}% of ${plan.includedReportsPerMonth.toLocaleString()} reports used`
+        : plan.includedReportsPerMonth == null
+          ? 'Unlimited reports'
+          : null
 
   // Complimentary accounts (Mushi staff / sponsored / beta) intentionally take
   // over the entire pill — showing "Pro $99/mo" on a comp account

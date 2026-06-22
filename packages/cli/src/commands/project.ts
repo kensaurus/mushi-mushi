@@ -35,6 +35,7 @@ import {
   waitForCliToken,
   type DeviceProject,
 } from '../device-auth.js';
+import { printAuthBanner, printAuthApproved, printAuthFailed } from '../auth-ui.js';
 
 export function registerProjectCommands(program: Command): void {
 // ─── project ──────────────────────────────────────────────────────────────────
@@ -89,29 +90,22 @@ Typical first-time flow:
       process.exit(1)
     }
 
-    console.log(`  Confirmation code: ${session.user_code}`)
-    console.log('')
     if (opts.browser !== false) {
-      console.log('  Opening the Mushi console in your browser…')
-      try { await openInBrowser(session.verification_uri) } catch { /* best-effort */ }
+      try { await openInBrowser(session.verification_uri) } catch { /* best-effort — URL shown in banner */ }
     }
-    console.log(`  If the browser didn't open: ${session.verification_uri}`)
-    console.log('')
-    console.log('  Waiting for you to approve in the browser…  (Ctrl+C to cancel)')
+    printAuthBanner(session.user_code, session.verification_uri)
 
     let cliToken: string
     try {
-      cliToken = await waitForCliToken(endpoint, session, {
-        onPending: () => process.stdout.write('.'),
-        onTransientError: () => process.stdout.write('·'),
-      })
+      cliToken = await waitForCliToken(endpoint, session)
     } catch (err) {
-      console.log('')
-      process.stderr.write(`\nerror: ${err instanceof Error ? err.message : String(err)}\n`)
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('denied')) printAuthFailed('denied')
+      else if (msg.includes('timed out') || msg.includes('expired')) printAuthFailed('timeout')
+      else printAuthFailed('error', msg)
       process.exit(1)
     }
-    console.log('')
-    console.log('  ✓ Approved!')
+    printAuthApproved()
 
     // ── Step 2: pick or create a project ─────────────────────────────────────
     const projectsList = await listProjects(endpoint, cliToken)

@@ -27,6 +27,8 @@ export interface OnboardingStats {
   mergedFixCount: number
   /** Deep link to the tab/action for the next incomplete step. */
   nextStepTo: string | null
+  /** Funnel event counts for the last 7 days (keyed by event_name). Null when not fetched. */
+  funnelCounts: Record<string, number> | null
 }
 
 export const EMPTY_ONBOARDING_STATS: OnboardingStats = {
@@ -51,5 +53,6 @@ export const EMPTY_ONBOARDING_STATS: OnboardingStats = {
   fixCount: 0,
   mergedFixCount: 0,
   nextStepTo: '/onboarding?tab=steps',
+  funnelCounts: null,
 }
 

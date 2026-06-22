@@ -38,7 +38,7 @@ export function Hero() {
           <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]" aria-hidden="true">
             <span className="text-[var(--mushi-ink)]">Mushi</span>
             <span className="mx-2 opacity-40">/</span>
-            bug translation for vibe coders
+            the comprehension layer for AI-built apps
           </p>
 
           <h1 className="mt-3 max-w-3xl font-serif text-5xl font-semibold leading-[0.95] tracking-[-0.06em] text-[var(--mushi-ink)] sm:text-6xl lg:text-7xl">
@@ -89,7 +89,7 @@ export function Hero() {
           <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
             <li>MCP-first · Cursor + Claude</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
-            <li>1,000 reports / mo free</li>
+            <li>50 free diagnoses / mo</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
             <li>MIT-licensed · self-hostable</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
