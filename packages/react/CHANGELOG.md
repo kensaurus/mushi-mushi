@@ -1,5 +1,15 @@
 # @mushi-mushi/react
 
+## 1.21.0
+
+### Patch Changes
+
+- 90bc9d5: Refresh the published READMEs for the framework adapters to match the current install + provider setup guidance.
+- Updated dependencies [90bc9d5]
+- Updated dependencies [90bc9d5]
+  - @mushi-mushi/core@1.21.0
+  - @mushi-mushi/web@1.21.0
+
 ## 1.10.0
 
 ### Minor Changes
