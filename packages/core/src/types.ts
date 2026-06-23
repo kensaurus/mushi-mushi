@@ -29,6 +29,13 @@ export interface MushiConfig {
 
   debug?: boolean;
   enabled?: boolean;
+  /**
+   * Host app release identifier stored on `reports.app_version` at ingest.
+   * Pairs with `environment.buildId` (from `<meta name="mushi:build">`) for
+   * deploy-level provenance. Falls back to `integrations.vercel.analyticsId`
+   * when omitted (legacy Vercel Analytics wiring).
+   */
+  appVersion?: string;
   /** Hook called before a report is sent. Return null to cancel, or return the (possibly modified) report. */
   beforeSendFeedback?: (report: MushiReport) => MushiReport | null | Promise<MushiReport | null>;
   /** Called once if the app crashed during the previous session. */
@@ -1597,6 +1604,8 @@ export interface MushiRuntimeSdkConfig {
     triggerMode?: 'shake' | 'button' | 'both' | 'none';
     minDescriptionLength?: number;
   };
+  /** When false, the widget skips background reporter-inbox polling. Default true. */
+  reporterNotificationsEnabled?: boolean;
 }
 
 export interface MushiSdkVersionInfo {

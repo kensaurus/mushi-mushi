@@ -1,39 +1,7 @@
 /**
  * FILE: apps/admin/src/components/ActivityDrawer.tsx
- * PURPOSE: Live-updating, right-anchored panel that streams repo-wide
- *          Mushi activity (fix dispatched → branch pushed → PR opened →
- *          CI resolved → completed). Subscribes to postgres_changes on
- *          `fix_events` so each new webhook animates in without a reload.
- *
- *          Feature intent:
- *            - Gives operators a "is Mushi working?" heartbeat that's
- *              reachable from every page via the bell in the top bar.
- *            - An unread-badge (tracked in localStorage) lights up when
- *              events arrive while the drawer is closed, so async
- *              operators don't miss a merge-ready PR.
- *            - Events link out to the fix detail page and the underlying
- *              PR so the drawer is both a notification surface and a
- *              navigation shortcut.
- *
- *          Wave U (2026-05-07) — operator feedback rebuild:
- *            - **Stats strip** at the top (totals, failures, PRs opened
- *              today) so the answer to "is Mushi working?" doesn't
- *              require scrolling 50 events.
- *            - **Time-bucketed groups** (Now / Today / Yesterday /
- *              Earlier) using the same convention as Inbox and Slack,
- *              so a quick scan tells you whether the pipeline has been
- *              quiet or busy.
- *            - **Filter pills** (All / Fixes / PRs / Failed) — turns the
- *              feed into a focused worklist when the operator is
- *              triaging a specific incident.
- *            - **Search box** that matches event label, branch name,
- *              and PR number — useful when a Slack thread mentions a
- *              specific PR and the operator wants to find the matching
- *              activity row without leaving the drawer.
- *            - **Per-event expansion** — fix attempt id, branch name,
- *              and any extra detail are tucked behind a chevron so the
- *              row stays tight by default but the underlying metadata
- *              is one click away.
+ * PURPOSE: Live-updating activity drawer (fix_events realtime) with stats,
+ *          time buckets, filter pills, search, and unread badge via localStorage.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'

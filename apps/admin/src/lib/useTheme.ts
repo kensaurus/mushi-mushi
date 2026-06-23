@@ -1,9 +1,9 @@
 /**
  * FILE: apps/admin/src/lib/useTheme.ts
  * PURPOSE: Light / dark theme preference, persisted in localStorage and
- *          applied via `data-theme` on <html>. Defaults to dark (the
- *          original design) with `system` as an opt-in that honours
- *          `prefers-color-scheme`.
+ *          applied via `data-theme` on <html>. Defaults to `system` (honours
+ *          OS light/dark) with explicit dark/light overrides persisted in
+ *          localStorage.
  *
  *          Why light mode matters: the admin console is used in
  *          brightly-lit offices and outdoors (think: on-call rotations,
@@ -22,14 +22,14 @@ export type ResolvedTheme = 'dark' | 'light'
 const STORAGE_KEY = 'mushi:theme:v1'
 
 function readInitial(): Theme {
-  if (typeof window === 'undefined') return 'dark'
+  if (typeof window === 'undefined') return 'system'
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw === 'dark' || raw === 'light' || raw === 'system') return raw
   } catch {
     // ignore
   }
-  return 'dark'
+  return 'system'
 }
 
 function systemPrefersLight(): boolean {

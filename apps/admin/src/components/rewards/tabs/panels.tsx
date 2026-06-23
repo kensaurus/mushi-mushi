@@ -957,7 +957,7 @@ export function ActivityEventRow({
             </div>
           </div>
           {expanded && hasMeta && (
-            <pre className="mt-1 text-2xs font-mono text-fg-muted bg-surface-overlay rounded p-1.5 overflow-auto max-h-24 break-all whitespace-pre-wrap">
+            <pre className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded p-1.5 overflow-auto max-h-24 break-all whitespace-pre-wrap">
               {JSON.stringify(event.metadata, null, 2)}
             </pre>
           )}

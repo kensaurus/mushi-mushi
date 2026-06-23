@@ -1,15 +1,7 @@
 /**
  * FILE: apps/admin/src/components/reports/ReportsFilterBar.tsx
- * PURPOSE: Top-of-table filter row: free-text search, status/category/severity
- *          dropdowns, dismissible context chips for filters that arrived from
- *          another page (component, reporter), and a clear-all link.
- *
- *          Wave T.1.2 (2026-04-23): the inline chip + clear-all row was
- *          extracted into a generic `<ActiveFiltersRail>` so Fixes / Audit
- *          can share it. The bar now renders the rail directly under the
- *          controls so users always see the *applied* filters separated
- *          from the *control* surface, rather than blending them into one
- *          row that becomes hard to scan once 5+ items are active.
+ * PURPOSE: Reports table filter controls plus `<ActiveFiltersRail>` for applied
+ *          search, status/category/severity, and cross-page context chips.
  */
 
 import type { ReactNode, RefObject } from 'react'

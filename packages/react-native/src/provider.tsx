@@ -19,7 +19,7 @@
  *
  * TECHNICAL DETAILS:
  * - open() / close() toggle `sheetVisible` state which drives the bottom sheet
- * - MushiRNConfig.widget.trigger: 'button' (default) | 'shake' | 'both' | 'manual'
+ * - MushiRNConfig.widget.trigger: 'button' (default) | 'shake' | 'both' | 'manual' | 'banner'
  * - MushiRNConfig.widget.buttonPosition: 'bottom-right' (default) | 'bottom-left'
  *
  * NOTES:
@@ -56,6 +56,7 @@ import {
   type MushiReporterComment,
   type MushiHallOfFameEntry,
   type MushiPageContext,
+  type MushiAssistantReply,
 } from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
@@ -65,7 +66,10 @@ import { AsyncStorageQueue } from './storage/async-storage-queue'
 import { loadReporterToken, saveReporterToken } from './storage/secure-storage'
 import { MushiBottomSheet } from './components/MushiBottomSheet'
 import { MushiFloatingButton } from './components/MushiFloatingButton'
+import { MushiBanner } from './components/MushiBanner'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
+
+export { reporterStatusShort } from './reporter-status'
 
 export interface MushiRNConfig {
   projectId: string
@@ -83,7 +87,7 @@ export interface MushiRNConfig {
     onFixStatusChanged?: (reportId: string, status: string) => void
   }
   widget?: {
-    trigger?: 'shake' | 'button' | 'both' | 'manual' | 'auto' | 'edge-tab' | 'hidden' | 'attach'
+    trigger?: 'shake' | 'button' | 'both' | 'manual' | 'auto' | 'banner' | 'edge-tab' | 'hidden' | 'attach'
     shakeThreshold?: number
     buttonPosition?: 'bottom-right' | 'bottom-left'
     inset?: { bottom?: number; left?: number; right?: number }
@@ -97,6 +101,19 @@ export interface MushiRNConfig {
      * - `false` — hide the caption (preview + remove still show).
      */
     screenshotSensitiveHint?: boolean | string
+    /** Banner strip when trigger is `banner` (web parity). */
+    banner?: {
+      message?: string
+      label?: string
+    }
+    /** Poll interval (ms) for My Reports while the inbox tab is open. 0 = off (default). */
+    inboxPollIntervalMs?: number
+  }
+  assistant?: {
+    enabled?: boolean
+    label?: string
+    greeting?: string
+    suggestions?: string[]
   }
   capture?: {
     console?: boolean
@@ -187,6 +204,10 @@ export interface MushiRNInstance {
   getTier(): Promise<MushiTierResult | null>
   /** Returns the current user's reputation + point totals. */
   getReputation(): Promise<MushiReputationResult | null>
+  /** Open the sheet on the Ask tab when assistant is enabled. */
+  openAssistant(): void
+  /** One assistant turn — uses published page context when available. */
+  askAssistant(message: string, threadId?: string | null): Promise<MushiAssistantReply | null>
 }
 
 const MushiContext = createContext<MushiRNInstance | null>(null)
@@ -275,6 +296,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   )
 
   const [sheetVisible, setSheetVisible] = useState(false)
+  const [sheetPreferredTab, setSheetPreferredTab] = useState<'report' | 'inbox' | 'assistant'>('report')
+  const [bannerDismissed, setBannerDismissed] = useState(false)
   // Screenshot captured just before the sheet opens (captured while app content is still visible)
   const [sheetScreenshot, setSheetScreenshot] = useState<string | null>(null)
 
@@ -404,6 +427,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   }, [])
 
   const open = useCallback(() => {
+    setSheetPreferredTab('report')
     breadcrumbsRef.current.add({
       category: 'lifecycle',
       level: 'info',
@@ -440,6 +464,12 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       .catch(() => { setSheetScreenshot(null) })
       .finally(() => { setSheetVisible(true) })
   }, [config.capture?.screenshot])
+  const openAssistant = useCallback(() => {
+    if (!config.assistant?.enabled) return
+    setSheetPreferredTab('assistant')
+    setSheetScreenshot(null)
+    setSheetVisible(true)
+  }, [config.assistant?.enabled])
   const close = useCallback(() => setSheetVisible(false), [])
   const attachTo = useCallback(() => ({ onPress: open }), [open])
 
@@ -482,6 +512,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
 
   const submitReport = useCallback(
     async (data: { description: string; category: string; screenshotDataUrl?: string }) => {
+      await reporterTokenReadyRef.current
+
       const deviceInfo = getDeviceInfo()
 
       breadcrumbsRef.current.add({
@@ -776,16 +808,38 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           totalReports: 0,
         }
       },
+      openAssistant,
+      async askAssistant(message: string, threadId?: string | null) {
+        const client = apiClientRef.current
+        if (!client || !config.assistant?.enabled) return null
+        const res = await client.askAssistant({
+          message,
+          threadId: threadId ?? null,
+          context: pageContextRef.current,
+        })
+        return res.ok ? (res.data as MushiAssistantReply) : null
+      },
     }),
-    [open, close, attachTo, submitReport, config.rewards?.enabled],
+    [open, close, attachTo, submitReport, openAssistant, config.rewards?.enabled, config.assistant?.enabled],
   )
 
   const trigger = config.widget?.trigger ?? 'button'
-  const showFab = trigger === 'button' || trigger === 'both' || trigger === 'auto' || trigger === 'edge-tab'
+  const showBanner = trigger === 'banner' && !bannerDismissed
+  const showFab =
+    !showBanner &&
+    (trigger === 'button' || trigger === 'both' || trigger === 'auto' || trigger === 'edge-tab')
 
   return (
     <MushiContext.Provider value={instance}>
       {children}
+      {showBanner ? (
+        <MushiBanner
+          onPress={open}
+          onDismiss={() => setBannerDismissed(true)}
+          message={config.widget?.banner?.message}
+          label={config.widget?.banner?.label}
+        />
+      ) : null}
       {showFab && (
         <MushiFloatingButton
           onPress={open}
@@ -796,9 +850,15 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       <MushiBottomSheet
         visible={sheetVisible}
         onClose={close}
+        preferredTab={sheetPreferredTab}
         screenshotDataUrl={sheetScreenshot ?? undefined}
         onClearScreenshot={() => setSheetScreenshot(null)}
         screenshotSensitiveHint={resolveScreenshotHint(config.widget?.screenshotSensitiveHint)}
+        assistantEnabled={Boolean(config.assistant?.enabled)}
+        assistantLabel={config.assistant?.label}
+        assistantGreeting={config.assistant?.greeting}
+        assistantSuggestions={config.assistant?.suggestions}
+        inboxPollIntervalMs={config.widget?.inboxPollIntervalMs ?? 0}
       />
     </MushiContext.Provider>
   )

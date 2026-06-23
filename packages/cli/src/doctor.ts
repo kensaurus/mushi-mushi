@@ -229,7 +229,7 @@ export async function checkServerPreflight(
             ok: true,
             detail:
               'Skipped — your key has report:write scope only (pre-Jun 2026 key). ' +
-              'Run `mushi login --upgrade-scope` to get mcp:read and unlock admin checks.',
+              'Run `mushi login --upgrade-scope` to get mcp:read and run admin checks.',
           },
         ]
       }
@@ -846,9 +846,9 @@ export async function runDoctor(
 // ── Formatter ────────────────────────────────────────────────────────────────
 
 export function formatDoctorResult(result: DoctorResult): string {
-  const PASS = '✓'
-  const WARN = '⚠'
-  const FAIL = '✗'
+  const PASS = 'OK'
+  const WARN = 'WARN'
+  const FAIL = 'FAIL'
   const lines: string[] = []
 
   for (const c of result.checks) {

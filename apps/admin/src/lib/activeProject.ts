@@ -55,6 +55,25 @@ export function getActiveProjectIdSnapshot(): string | null {
   return raw
 }
 
+/** Read `?project=` from the current URL when valid. */
+export function getActiveProjectIdFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get(ACTIVE_PROJECT_QUERY_PARAM)
+    return isValidProjectId(fromUrl) ? fromUrl : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Effective project for API calls: URL param wins over localStorage so deep
+ * links and report detail pages stay scoped even when the header pin lags.
+ */
+export function getActiveProjectIdForApi(): string | null {
+  return getActiveProjectIdFromUrl() ?? getActiveProjectIdSnapshot()
+}
+
 export function setActiveProjectIdSnapshot(projectId: string): void {
   if (typeof window === 'undefined') return
   try {

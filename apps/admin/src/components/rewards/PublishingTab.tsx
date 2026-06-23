@@ -422,7 +422,7 @@ export function PublishingTab() {
         <div className="flex gap-2 shrink-0">
           <Link
             to="/rewards/tester-review"
-            className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:border-fg-muted transition-colors"
+            className="inline-flex items-center rounded-md border border-edge-subtle px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:border-fg-muted transition-colors"
           >
             Review submissions
           </Link>
@@ -490,7 +490,7 @@ export function PublishingTab() {
             <div>
               <label className="block text-xs font-medium text-fg-muted mb-1">Description</label>
               <textarea
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg
+                className="w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm text-fg
                            placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-brand/60
                            min-h-[100px] resize-y"
                 value={description}
@@ -510,7 +510,7 @@ export function PublishingTab() {
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       platforms.includes(p)
                         ? 'border-brand bg-brand/10 text-brand'
-                        : 'border-border bg-transparent text-fg-muted hover:border-fg-muted'
+                        : 'border-edge-subtle bg-transparent text-fg-muted hover:border-fg-muted'
                     }`}
                   >
                     {p}
@@ -575,7 +575,7 @@ export function PublishingTab() {
                 />
               </div>
             </div>
-            <div className="flex justify-end border-t border-border/40 px-4 py-3">
+            <div className="flex justify-end border-t border-edge-subtle/40 px-4 py-3">
               <Btn variant="primary" size="sm" loading={savingBudget} onClick={handleSaveBudget}>
                 Save budget
               </Btn>
@@ -592,7 +592,7 @@ export function PublishingTab() {
           <Card>
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-border">
+                <tr className="border-b border-edge-subtle">
                   <th className="px-4 py-2 text-left text-fg-muted font-medium uppercase tracking-wide">Severity</th>
                   <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Points</th>
                   <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Daily cap</th>
@@ -601,7 +601,7 @@ export function PublishingTab() {
               </thead>
               <tbody>
                 {bountyDraft.map((row, idx) => (
-                  <tr key={row.action} className="border-t border-border/40">
+                  <tr key={row.action} className="border-t border-edge-subtle/40">
                     <td className={`px-4 py-2.5 font-medium ${row.color}`}>{row.label}</td>
                     <td className="px-4 py-2.5 text-right">
                       <Input
@@ -653,7 +653,7 @@ export function PublishingTab() {
                 ))}
               </tbody>
             </table>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle/40 px-4 py-3">
               <p className="text-xs text-fg-muted">
                 1,000 pts ≈ $10 gift card or $13 Mushi Pro credit (1.3×). Points are stamped at submit time.
               </p>

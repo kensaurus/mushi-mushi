@@ -1,21 +1,31 @@
 /**
  * FILE: scripts/aws-attach-apex-redirect.mjs
  * PURPOSE: Idempotently add CloudFront cache behaviors for every apex-domain
- *          SPA route prefix so the mushi-mushi-apex-redirect function can 301
- *          historical dead links to /mushi-mushi/admin/<path>.
+ *          route prefix so the mushi-mushi-apex-redirect function can 301
+ *          dead links to /mushi-mushi/docs/<path> or /mushi-mushi/admin/<path>.
  *
  * RUN: node scripts/aws-attach-apex-redirect.mjs
- * ENV: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION (us-east-1)
+ * ENV: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, CLOUDFRONT_DISTRIBUTION_ID (or CF_DIST_ID)
  */
 
 import { execSync } from 'node:child_process'
+import { writeFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
-const DIST_ID = process.env.CF_DIST_ID || 'E246VQ1C9QYZVB'
+const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || process.env.CF_DIST_ID || 'E246VQ1C9QYZVB'
 const FN_ARN = 'arn:aws:cloudfront::590715976857:function/mushi-mushi-apex-redirect'
 const MUSHI_ORIGIN_ID = 'kensaur.us/mushi-mushi'
 
-// Every apex path prefix that could appear in a shared report/admin link.
-// These mirror the SPA_PREFIXES in cloudfront-mushi-apex-redirect.js.
+/** Expand a prefix into exact + wildcard cache behavior patterns. */
+function expandPrefix(prefix) {
+  if (prefix.endsWith('/*')) {
+    return [prefix]
+  }
+  return [prefix, `${prefix}/*`]
+}
+
+// Admin SPA — mirrors SPA_PREFIXES in cloudfront-mushi-apex-redirect.js.
 const SPA_PATTERNS = [
   '/reports/*',
   '/reports',
@@ -43,7 +53,6 @@ const SPA_PATTERNS = [
   '/notifications',
   '/notifications/*',
   '/integrations',
-  '/integrations/*',
   '/marketplace',
   '/marketplace/*',
   '/mcp',
@@ -58,7 +67,54 @@ const SPA_PATTERNS = [
   '/storage/*',
   '/query',
   '/query/*',
+  '/judge',
+  '/judge/*',
+  '/research',
+  '/research/*',
+  '/repo',
+  '/repo/*',
+  '/sso',
+  '/sso/*',
+  '/audit',
+  '/audit/*',
+  '/prompt-lab',
+  '/prompt-lab/*',
+  '/intelligence',
+  '/intelligence/*',
+  '/anti-gaming',
+  '/anti-gaming/*',
+  '/invite/*',
+  '/reset-password',
+  '/org/*',
 ]
+
+// Docs — mirrors DOCS_EXACT + DOCS_NESTED in cloudfront-mushi-apex-redirect.js.
+// NOTE: /integrations/* only (nested docs); exact /integrations stays SPA above.
+const DOCS_ROOTS = [
+  '/quickstart',
+  '/concepts',
+  '/sdks',
+  '/migrations',
+  '/operating',
+  '/connect',
+  '/security',
+  '/self-hosting',
+  '/plugins',
+  '/blog',
+  '/admin',
+  '/pricing',
+  '/roadmap',
+  '/launch-week',
+  '/changelog',
+  '/cloud',
+]
+
+const DOCS_PATTERNS = [
+  ...DOCS_ROOTS.flatMap(expandPrefix),
+  '/integrations/*',
+]
+
+const APEX_PATTERNS = [...new Set([...DOCS_PATTERNS, ...SPA_PATTERNS])]
 
 function aws(cmd) {
   return JSON.parse(execSync(`aws ${cmd} --output json 2>&1`, { encoding: 'utf8' }))
@@ -75,7 +131,6 @@ const config = distResp.DistributionConfig
 console.log(`Current ETag: ${etag}`)
 console.log(`Current behavior count: ${config.CacheBehaviors.Quantity}`)
 
-// Find the /mushi-mushi/* behavior to clone its settings
 const mushiBehavior = config.CacheBehaviors.Items.find(cb => cb.PathPattern === '/mushi-mushi/*')
 if (!mushiBehavior) {
   console.error('ERROR: Could not find /mushi-mushi/* behavior to clone settings from')
@@ -83,7 +138,6 @@ if (!mushiBehavior) {
 }
 console.log(`Found mushi behavior: origin=${mushiBehavior.TargetOriginId}, protocol=${mushiBehavior.ViewerProtocolPolicy}`)
 
-// Build the apex-redirect function association
 const apexFnAssoc = {
   Quantity: 1,
   Items: [
@@ -94,20 +148,16 @@ const apexFnAssoc = {
   ],
 }
 
-// Check which patterns already have a behavior
 const existingPatterns = new Set(config.CacheBehaviors.Items.map(cb => cb.PathPattern))
-const newPatterns = SPA_PATTERNS.filter(p => !existingPatterns.has(p))
+const newPatterns = APEX_PATTERNS.filter(p => !existingPatterns.has(p))
 
 if (newPatterns.length === 0) {
-  console.log('All SPA patterns already have cache behaviors. Nothing to add.')
+  console.log('All apex redirect patterns already have cache behaviors. Nothing to add.')
   process.exit(0)
 }
 
 console.log(`Adding ${newPatterns.length} new cache behaviors: ${newPatterns.join(', ')}`)
 
-// Clone the mushi behavior for each new pattern (with the apex-redirect function).
-// We deep-clone the mushi behavior so all required fields (SmoothStreaming,
-// TrustedSigners, etc.) are present, then override only what differs.
 const newBehaviors = newPatterns.map(pattern => ({
   ...JSON.parse(JSON.stringify(mushiBehavior)),
   PathPattern: pattern,
@@ -115,28 +165,22 @@ const newBehaviors = newPatterns.map(pattern => ({
   FunctionAssociations: apexFnAssoc,
 }))
 
-// Insert new behaviors at the beginning (most specific first)
 config.CacheBehaviors.Items = [
   ...newBehaviors,
   ...config.CacheBehaviors.Items,
 ]
 config.CacheBehaviors.Quantity += newBehaviors.length
 
-// Write updated config to temp file
-import { writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
-
-const tmpDir = 'C:\\tmp'
+const tmpDir = join(tmpdir(), 'mushi-cf-apex-redirect')
 try { mkdirSync(tmpDir, { recursive: true }) } catch {}
 const tmpFile = join(tmpDir, 'cf-update-config.json')
 writeFileSync(tmpFile, JSON.stringify(config))
 console.log(`Config written to ${tmpFile}`)
 
-// Apply the update
 console.log('Applying distribution update...')
 try {
   const result = awsRaw(
-    `cloudfront update-distribution --id ${DIST_ID} --if-match ${etag} --distribution-config file://${tmpFile} --region us-east-1`
+    `cloudfront update-distribution --id ${DIST_ID} --if-match ${etag} --distribution-config file://${tmpFile.replace(/\\/g, '/')} --region us-east-1`
   )
   const parsed = JSON.parse(result)
   console.log(`SUCCESS. New ETag: ${parsed.ETag}`)
@@ -147,4 +191,6 @@ try {
 }
 
 console.log('\nDone. CloudFront will propagate changes in ~5 minutes.')
-console.log('Verify with: curl -I https://kensaur.us/reports/<any-uuid>')
+console.log('Verify with:')
+console.log('  curl -sI https://kensaur.us/quickstart/incident-loop | grep -i location')
+console.log('  curl -sI https://kensaur.us/reports/<any-uuid> | grep -i location')

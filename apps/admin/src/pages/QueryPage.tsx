@@ -572,7 +572,7 @@ function ResultsTable({ rows }: { rows: unknown[] }) {
   const table = asTable(rows)
   if (!table) {
     return (
-      <pre className="p-2 bg-surface-root rounded-sm text-2xs text-fg-muted overflow-x-auto max-h-64 font-mono">
+      <pre className="mushi-code-block mushi-code-body p-2 rounded-sm text-2xs overflow-x-auto max-h-64 font-mono">
         {JSON.stringify(rows.slice(0, 20), null, 2)}
       </pre>
     )
@@ -1354,7 +1354,7 @@ export function QueryPage() {
                               </span>
                               <CopyButton value={run.result.sql} label="Copy SQL" />
                             </summary>
-                            <pre className="px-3 py-2.5 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap bg-surface-root/40 border-t border-edge-subtle/40 max-h-56 leading-relaxed">
+                            <pre className="mushi-code-block mushi-code-body px-3 py-2.5 text-2xs font-mono overflow-x-auto whitespace-pre-wrap border-t border-code-surface-border max-h-56 leading-relaxed">
                               {run.result.sql}
                             </pre>
                           </details>

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { isValidProjectId, setActiveProjectIdSnapshot } from '../lib/activeProject'
+import { reportDetailPath } from '../lib/reportUrl'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import {
@@ -35,6 +38,8 @@ import {
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
@@ -77,12 +82,26 @@ import type { SdkStatus } from '../components/SdkVersionBadge'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useReactSearchParams()
+  const activeProjectId = useActiveProjectId()
   const toast = useToast()
   const path = id ? `/v1/admin/reports/${id}` : null
   const { data: serverReport, loading, error, reload } = usePageData<ReportDetail>(path)
   const [report, setReport] = useState<ReportDetail | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('project')
+    if (isValidProjectId(fromUrl)) setActiveProjectIdSnapshot(fromUrl)
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!serverReport?.project_id || !isValidProjectId(serverReport.project_id)) return
+    if (serverReport.project_id !== activeProjectId) {
+      setActiveProjectIdSnapshot(serverReport.project_id)
+    }
+  }, [serverReport?.project_id, activeProjectId])
 
   useEffect(() => {
     if (serverReport) setReport(serverReport)
@@ -94,7 +113,7 @@ export function ReportDetailPage() {
       kind: 'report',
       id: serverReport.id,
       label: serverReport.description?.slice(0, 80) ?? `Report ${serverReport.id.slice(0, 8)}`,
-      url: `/reports/${serverReport.id}`,
+      url: reportDetailPath(serverReport.id, serverReport.project_id),
     })
   }, [serverReport])
 
@@ -193,7 +212,7 @@ export function ReportDetailPage() {
               We can't find <em>that report</em>.
             </>
           }
-          lead="It may have been deleted, retention-swept, or it never existed under this id. You may also lack access if it belongs to a different organisation."
+          lead="It may have been deleted, retention-swept, or it never existed under this id. If you use multiple projects, switch the ProjectSwitcher to the report's project (or add ?project=<uuid> to the URL) — a mismatched active project is the most common cause of this 404."
           detail={
             <code className="break-all rounded bg-[var(--mushi-paper-wash)] px-2 py-0.5">
               {id}
@@ -301,7 +320,7 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
               'flex items-start gap-3 p-2.5 rounded-lg border',
               preselectedSlug === skill.slug
                 ? 'border-brand bg-brand/5'
-                : 'border-border bg-surface-3',
+                : 'border-edge-subtle bg-surface-3',
             ].join(' ')}
           >
             <div className="flex-1 min-w-0">
@@ -400,6 +419,36 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         helpHowToUse="Use the Recommended action below for the fastest path. Otherwise set Status / Severity manually, dispatch a fix, push to your tracker, or reply in the triage thread."
       />
 
+      <PagePosture
+        maxRows={1}
+        className="mb-3"
+        slots={[
+          {
+            id: 'report-detail-ops',
+            priority: POSTURE_PRIORITY.status,
+            show: Boolean(latestFix?.pr_url || isDispatchEligible),
+            children: (
+              <div className="flex flex-wrap items-center gap-2">
+                {latestFix?.pr_url ? (
+                  <FixCiFeedback
+                    fixId={latestFix.id}
+                    prUrl={latestFix.pr_url}
+                    prNumber={latestFix.pr_number}
+                    ciConclusion={latestFix.check_run_conclusion}
+                    ciStatus={latestFix.check_run_status}
+                    ciUpdatedAt={latestFix.check_run_updated_at}
+                    compact
+                  />
+                ) : null}
+                {isDispatchEligible ? (
+                  <DispatchPreflightBanner preflight={preflight} className="min-w-0 flex-1" />
+                ) : null}
+              </div>
+            ),
+          },
+        ]}
+      />
+
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
       <Section title="Identifiers" className="mb-3">
@@ -453,10 +502,6 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           the first piece of evidence triagers see. audit P0. */}
       {report.screenshot_url && (
         <ScreenshotHero url={report.screenshot_url} className="mb-3" />
-      )}
-
-      {isDispatchEligible && (
-        <DispatchPreflightBanner preflight={preflight} className="mb-2" />
       )}
 
       <RecommendedAction

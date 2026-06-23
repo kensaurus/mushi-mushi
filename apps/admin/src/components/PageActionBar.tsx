@@ -1,17 +1,7 @@
 /**
  * FILE: apps/admin/src/components/PageActionBar.tsx
- * PURPOSE: Per-page "what do I do on this page right now?" strip rendered
- *          below PageHeader on every Advanced PDCA page.
- *
- *          Complements the global <NextBestAction> strip (beginner-only,
- *          whole-loop next step). This one is scope-aware — shown in Advanced
- *          mode, computes the primary + secondary action for the CURRENT
- *          page from live counts (WARN controls on /audit, fragile nodes
- *          on /graph, etc.). If the page has no actionable state, the strip
- *          collapses to a neutral "all clear" pill so the layout stays
- *          stable.
- *
- *          Wave R (2026-04-22) — Ask 1 / plan §Advanced mode usability.
+ * PURPOSE: Advanced-mode per-page primary/secondary action strip driven by
+ *          live counts via `useNextBestAction`; collapses to "all clear" when idle.
  */
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'

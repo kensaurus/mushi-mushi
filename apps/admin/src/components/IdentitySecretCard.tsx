@@ -47,6 +47,32 @@ function formatDate(iso: string | null): string {
   })
 }
 
+const HOST_IDENTITY_HINTS: Record<
+  string,
+  { edgeFn: string; note: string }
+> = {
+  'yen-yen': {
+    edgeFn: 'mushi-identity-token',
+    note: 'Supabase → Edge Functions → mushi-identity-token → Secrets. Env MUSHI_IDENTITY_SECRET overrides private.mushi_identity_config.',
+  },
+  'glot-it': {
+    edgeFn: 'glot-mushi-identity-token',
+    note: 'Host: glot.it supabase/functions/glot-mushi-identity-token. Set MUSHI_IDENTITY_SECRET + MUSHI_PROJECT_ID edge secrets.',
+  },
+  'glot.it': {
+    edgeFn: 'glot-mushi-identity-token',
+    note: 'Host: glot.it supabase/functions/glot-mushi-identity-token. Set MUSHI_IDENTITY_SECRET + MUSHI_PROJECT_ID edge secrets.',
+  },
+  'the-wanting-mind': {
+    edgeFn: 'mushi-identity-token',
+    note: 'Verify edge function name under host supabase/functions/. Deploy with --no-verify-jwt.',
+  },
+  'help-her-take-photo': {
+    edgeFn: 'mushi-identity-token',
+    note: 'Verify edge function name under host supabase/functions/. Deploy with --no-verify-jwt.',
+  },
+}
+
 export function IdentitySecretCard({
   projectId,
   projectSlug,
@@ -126,6 +152,10 @@ export function IdentitySecretCard({
     : null
 
   const isConfigured = status?.configured ?? false
+  const hostHint =
+    (projectSlug && HOST_IDENTITY_HINTS[projectSlug]) ||
+    HOST_IDENTITY_HINTS[projectSlug?.replace(/\./g, '-') ?? ''] ||
+    null
 
   return (
     <div className="space-y-3">
@@ -186,13 +216,18 @@ export function IdentitySecretCard({
 
       {!revealedSecret && isConfigured && (
         <Callout tone="info" label="Next step">
-          Make sure <code>MUSHI_IDENTITY_SECRET</code> and <code>MUSHI_PROJECT_ID</code> are set
-          in your <strong>mushi-identity-token</strong> edge function.{' '}
-          {projectSlug && (
-            <span>
-              Then call <code>Mushi.identifyWithToken(token)</code> after sign-in in your app.
-            </span>
-          )}
+          Set <code>MUSHI_IDENTITY_SECRET</code> and <code>MUSHI_PROJECT_ID</code> on your host
+          edge function
+          {hostHint ? (
+            <>
+              {' '}
+              <strong>{hostHint.edgeFn}</strong>. {hostHint.note}
+            </>
+          ) : (
+            <> (see host repo supabase/functions).</>
+          )}{' '}
+          Then call <code>identifyWithToken()</code> after sign-in. Operator script:{' '}
+          <code>scripts/sync-host-identity-secret.mjs --project {projectId}</code>
         </Callout>
       )}
 

@@ -90,8 +90,12 @@ export interface KpiTileProps {
   seriesDays?: string[]
   /** Optional Y-axis caption for the sparkline (e.g. "runs / day"). */
   seriesYAxisCaption?: string
-  /** Hero emphasis — 2× value size, spans two columns in MetricStrip grids. */
+  /** Hero emphasis — larger value + subtle ring. Does not widen the grid cell. */
   variant?: 'default' | 'primary'
+  /** `flat` = diet panel cell (no gradient card). */
+  density?: 'default' | 'flat'
+  /** When true, spans two columns at lg+ (opt-in — default keeps equal-width rows). */
+  wide?: boolean
   /** Forwarded to the card root (the actual grid item). Lets a parent grid
    *  (e.g. `MetricStrip` with `stagger`) inject entrance-animation classes
    *  onto the tile itself. */
@@ -123,14 +127,17 @@ export function KpiTile({
   seriesAriaLabel,
   seriesDays,
   variant = 'default',
+  wide = false,
+  density = 'default',
   className,
   style,
 }: KpiTileProps) {
   const isPrimary = variant === 'primary'
+  const isFlat = density === 'flat'
   // The card root is the real grid item, so column-span + any parent-injected
   // entrance class/style must live here — not on the inner padding wrapper
   // (where `lg:col-span-2` is inert because it isn't a grid child).
-  const cardClassName = [isPrimary ? 'ring-1 ring-brand/25' : '', isPrimary ? 'lg:col-span-2' : '', className ?? '']
+  const cardClassName = [isPrimary ? 'ring-1 ring-brand/25' : '', wide ? 'lg:col-span-2' : '', className ?? '']
     .filter(Boolean)
     .join(' ')
     .trim()
@@ -192,7 +199,7 @@ export function KpiTile({
             valueFormat="count"
             showRangeSummary={showSparkAxes}
             seriesLabel={label}
-            height={showSparkAxes ? (isPrimary ? 64 : 52) : 18}
+            height={showSparkAxes ? (isPrimary ? 56 : 44) : 18}
           />
           <ChartAccessibleSummary
             caption={sparkAria}
@@ -207,16 +214,33 @@ export function KpiTile({
     </div>
   )
   if (to) {
+    const linkInner = (
+      <Link
+        to={to}
+        className={`block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${isFlat ? 'rounded-none' : 'rounded-md'}`}
+        aria-label={`${label}: ${value}`}
+      >
+        {inner}
+      </Link>
+    )
+    if (isFlat) {
+      return (
+        <div className={`stat-card-link min-w-0 ${cardClassNameOrUndefined ?? ''}`} style={style}>
+          {linkInner}
+        </div>
+      )
+    }
     return (
       <Card elevated interactive className={cardClassNameOrUndefined} style={style}>
-        <Link
-          to={to}
-          className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md"
-          aria-label={`${label}: ${value}`}
-        >
-          {inner}
-        </Link>
+        {linkInner}
       </Card>
+    )
+  }
+  if (isFlat) {
+    return (
+      <div className={`min-w-0 ${cardClassNameOrUndefined ?? ''}`} style={style}>
+        {inner}
+      </div>
     )
   }
   return (
@@ -1054,8 +1078,8 @@ export function KpiRow({
           ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
           : cols === 3
             ? 'grid-cols-2 md:grid-cols-3'
-            : 'grid-cols-2 md:grid-cols-4'
-  return <div className={`grid ${colsCls} gap-2`}>{children}</div>
+            : 'grid-cols-2 sm:grid-cols-4'
+  return <div className={`grid ${colsCls} gap-2 [&>*]:min-w-0`}>{children}</div>
 }
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */

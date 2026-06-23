@@ -37,6 +37,14 @@ function routeExists(route) {
 const linkRe = /\]\((\/(?!\/|https?:)[^)#?]+)\)/g
 const findings = []
 
+// Routes served by the Next.js app router (apps/docs/app/**) rather than Nextra
+// content MDX, so `routeExists` (which only resolves content/*.mdx) can't see
+// them. Keep this list in sync with apps/docs/app/<route>/page.tsx.
+const APP_ROUTER_ROUTES = ["/connect"]
+function isAppRouterRoute(href) {
+  return APP_ROUTER_ROUTES.some((r) => href === r || href.startsWith(`${r}/`))
+}
+
 for (const file of walkMdx(CONTENT)) {
   const rel = path.relative(ROOT, file)
   const source = readFileSync(file, "utf8")
@@ -44,6 +52,7 @@ for (const file of walkMdx(CONTENT)) {
   while ((match = linkRe.exec(source)) !== null) {
     const href = match[1]
     if (href.startsWith("/integrations/cursor.cursorrules")) continue
+    if (isAppRouterRoute(href)) continue
     if (!routeExists(href)) {
       const line = source.slice(0, match.index).split(/\r?\n/).length
       findings.push(`${rel}:${line} dead internal link ${href}`)

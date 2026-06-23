@@ -5,32 +5,32 @@
 export const CONNECT_SETUP_LANES = [
   {
     id: 'github',
-    label: '1. GitHub',
+    label: 'GitHub',
     plain: 'Link the repo where your app lives.',
   },
   {
     id: 'sdk',
-    label: '2. SDK',
+    label: 'SDK',
     plain: 'Add the snippet so users can send bug reports from your app.',
   },
   {
     id: 'mcp',
-    label: '3. MCP',
+    label: 'MCP',
     plain: 'Let Cursor or VS Code reach Mushi while you code.',
   },
   {
     id: 'cli',
-    label: '4. CLI',
+    label: 'CLI',
     plain: 'Optional — run doctor, QA, and merge commands in your terminal.',
   },
   {
     id: 'upgrade',
-    label: '5. Upgrade PR',
+    label: 'Upgrade PR',
     plain: 'Open a PR when @mushi-mushi packages fall behind npm.',
   },
   {
     id: 'native_ci',
-    label: '6. Native CI secrets',
+    label: 'Native CI secrets',
     plain: 'Mobile apps need MUSHI_* vars in GitHub Actions before they build.',
   },
 ] as const

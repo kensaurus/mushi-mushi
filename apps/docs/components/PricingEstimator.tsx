@@ -27,6 +27,7 @@ import {
   getNextTierId,
   getTierById,
 } from '../lib/pricing-estimator'
+import { VIZ } from '../lib/viz-tokens'
 
 export function PricingEstimator() {
   const [diagnoses, setDiagnoses] = useState(300)
@@ -44,11 +45,11 @@ export function PricingEstimator() {
   return (
     <div
       style={{
-        border: '1px solid var(--nextra-colors-primary, #4f46e5)',
+        border: `1px solid ${VIZ.selected}`,
         borderRadius: 12,
         padding: '24px',
         margin: '24px 0',
-        background: 'var(--nextra-bg, #fafafa)',
+        background: VIZ.nodeBg,
         maxWidth: 560,
       }}
     >
@@ -68,13 +69,14 @@ export function PricingEstimator() {
       >
         <button
           type="button"
+          className="docs-pricing-toggle"
           onClick={() => setAnnual(false)}
           style={{
             padding: '4px 12px',
             borderRadius: 999,
-            border: `1.5px solid ${!annual ? '#4f46e5' : '#d1d5db'}`,
-            background: !annual ? '#4f46e5' : 'transparent',
-            color: !annual ? '#fff' : 'inherit',
+            border: `1.5px solid ${!annual ? VIZ.selected : VIZ.nodeBorder}`,
+            background: !annual ? VIZ.selected : 'transparent',
+            color: !annual ? VIZ.selectedFg : 'inherit',
             cursor: 'pointer',
             fontWeight: 500,
           }}
@@ -83,13 +85,14 @@ export function PricingEstimator() {
         </button>
         <button
           type="button"
+          className="docs-pricing-toggle"
           onClick={() => setAnnual(true)}
           style={{
             padding: '4px 12px',
             borderRadius: 999,
-            border: `1.5px solid ${annual ? '#4f46e5' : '#d1d5db'}`,
-            background: annual ? '#4f46e5' : 'transparent',
-            color: annual ? '#fff' : 'inherit',
+            border: `1.5px solid ${annual ? VIZ.selected : VIZ.nodeBorder}`,
+            background: annual ? VIZ.selected : 'transparent',
+            color: annual ? VIZ.selectedFg : 'inherit',
             cursor: 'pointer',
             fontWeight: 500,
           }}
@@ -97,7 +100,7 @@ export function PricingEstimator() {
           Annual
         </button>
         {annual && activeTier.baseUsd > 0 && (
-          <span style={{ fontSize: 12, color: '#059669', fontWeight: 600 }}>
+          <span style={{ fontSize: 12, color: VIZ.positive, fontWeight: 600 }}>
             Save {ANNUAL_DISCOUNT_MONTHS} months free
           </span>
         )}
@@ -109,13 +112,14 @@ export function PricingEstimator() {
           <button
             key={t.id}
             type="button"
+            className="docs-pricing-toggle"
             onClick={() => setActiveTierId(t.id)}
             style={{
               padding: '6px 14px',
               borderRadius: 999,
-              border: `1.5px solid ${t.id === activeTierId ? '#4f46e5' : '#d1d5db'}`,
-              background: t.id === activeTierId ? '#4f46e5' : 'transparent',
-              color: t.id === activeTierId ? '#fff' : 'inherit',
+              border: `1.5px solid ${t.id === activeTierId ? VIZ.selected : VIZ.nodeBorder}`,
+              background: t.id === activeTierId ? VIZ.selected : 'transparent',
+              color: t.id === activeTierId ? VIZ.selectedFg : 'inherit',
               cursor: 'pointer',
               fontSize: 13,
               fontWeight: 500,
@@ -154,13 +158,13 @@ export function PricingEstimator() {
         step={50}
         value={diagnoses}
         onChange={(e) => setDiagnoses(Number(e.target.value))}
-        style={{ width: '100%', accentColor: '#4f46e5', marginBottom: 20 }}
+        style={{ width: '100%', accentColor: VIZ.selected, marginBottom: 20 }}
       />
 
       {/* Cost breakdown */}
       <div
         style={{
-          background: '#f0f0ff',
+          background: VIZ.panelBg,
           borderRadius: 8,
           padding: '16px',
           fontSize: 14,
@@ -175,12 +179,12 @@ export function PricingEstimator() {
           <strong>${displayBase.toFixed(2)}</strong>
         </div>
         {annual && activeTier.baseUsd > 0 && (
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+          <div style={{ fontSize: 12, color: VIZ.muted, marginBottom: 4 }}>
             Billed ${annualTotalUsd(activeTier).toFixed(0)}/yr (${displayBase.toFixed(2)}/mo equivalent)
           </div>
         )}
         {overage > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#6b7280' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: VIZ.muted }}>
             <span>
               Overage ({Math.max(0, diagnoses - activeTier.included).toLocaleString()} × $
               {activeTier.overageUsd})
@@ -190,26 +194,27 @@ export function PricingEstimator() {
           </div>
         )}
         {capped && activeTier.capUsd !== null && (
-          <div style={{ fontSize: 12, color: '#059669', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: VIZ.positive, marginBottom: 6 }}>
             ✓ Spend cap (${activeTier.capUsd}/mo) prevents further charges — diagnoses pause gracefully.
           </div>
         )}
         {capped && activeTier.overageUsd === null && (
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: VIZ.muted, marginBottom: 6 }}>
             Hard stop — diagnoses pause at {activeTier.included.toLocaleString()} / mo. No overage, no charge, no bill shock.
           </div>
         )}
         {capped && nextTier && (
           <button
             type="button"
+            className="docs-pricing-toggle docs-pricing-toggle--cta"
             onClick={() => setActiveTierId(nextTier.id)}
             style={{
               marginBottom: 8,
               padding: '8px 14px',
               borderRadius: 6,
               border: 'none',
-              background: '#4f46e5',
-              color: '#fff',
+              background: VIZ.selected,
+              color: VIZ.selectedFg,
               fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
@@ -219,21 +224,21 @@ export function PricingEstimator() {
             See {nextTier.name} pricing — more headroom
           </button>
         )}
-        <hr style={{ border: 'none', borderTop: '1px solid #c7d2fe', margin: '8px 0' }} />
+        <hr style={{ border: 'none', borderTop: `1px solid ${VIZ.panelBorder}`, margin: '8px 0' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 18 }}>
           <span>Estimated total</span>
           <span>${total.toFixed(2)} / mo</span>
         </div>
         {diagnoses <= activeTier.included && (
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: VIZ.muted, marginTop: 4 }}>
             Within your included {activeTier.included.toLocaleString()} diagnoses — no overage.
           </div>
         )}
       </div>
 
-      <p style={{ margin: '12px 0 0', fontSize: 12, color: '#9ca3af' }}>
+      <p style={{ margin: '12px 0 0', fontSize: 12, color: VIZ.faint }}>
         Estimates use list pricing. Overage is metered monthly; annual saves {ANNUAL_DISCOUNT_MONTHS} months on base fees.{' '}
-        <a href="/self-hosting" style={{ color: '#4f46e5' }}>
+        <a href="/self-hosting" style={{ color: VIZ.selected }}>
           Self-host for free
         </a>{' '}
         using your own LLM key.

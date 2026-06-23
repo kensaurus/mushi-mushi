@@ -789,14 +789,14 @@ function FindingDetailDrawer({
         {finding.expected != null && (
           <div>
             <p className="mb-1 text-xs font-medium text-fg-muted uppercase tracking-wide">Expected</p>
-            <pre className="overflow-x-auto rounded-md bg-surface-overlay px-3 py-2 text-xs">{JSON.stringify(finding.expected, null, 2)}</pre>
+            <pre className="mushi-code-block mushi-code-body overflow-x-auto rounded-md px-3 py-2 text-xs">{JSON.stringify(finding.expected, null, 2)}</pre>
           </div>
         )}
 
         {finding.actual != null && (
           <div>
             <p className="mb-1 text-xs font-medium text-fg-muted uppercase tracking-wide">Actual</p>
-            <pre className="overflow-x-auto rounded-md bg-surface-overlay px-3 py-2 text-xs">{JSON.stringify(finding.actual, null, 2)}</pre>
+            <pre className="mushi-code-block mushi-code-body overflow-x-auto rounded-md px-3 py-2 text-xs">{JSON.stringify(finding.actual, null, 2)}</pre>
           </div>
         )}
 

@@ -1,31 +1,7 @@
 /**
  * FILE: packages/cli/src/cli-shared.ts
- * PURPOSE: Shared HTTP client + terminal helpers for the @mushi-mushi/cli command
- *          modules. Extracted from the former monolithic `index.ts` so each
- *          command group module (src/commands/*.ts) can import the same typed
- *          `apiCall`, error/exit helpers, and formatting utilities.
- *
- * OVERVIEW:
- * - `apiCall<T>` — authenticated request to a Mushi sync endpoint; never throws.
- * - `die` — print an API error and exit with the appropriate code.
- * - `requireConfig` — load config and assert api key + endpoint (+ optional project).
- * - `fmtDate` / `pad` — compact date + fixed-width string formatting for tables.
- *
- * DEPENDENCIES:
- * - ./config.js — CliConfig type + loadConfig().
- * - ./version.js — MUSHI_CLI_VERSION (sent as a request header).
- * - ./signals.js — getAbortSignal() (process-wide SIGINT/SIGTERM abort).
- *
- * USAGE:
- * - Imported by index.ts and every src/commands/*.ts module.
- *
- * TECHNICAL DETAILS:
- * - The API envelope (ApiOk / ApiError / ApiResult) is the single source of
- *   truth for sync endpoint responses across the CLI.
- *
- * NOTES:
- * - Behaviour is byte-for-byte identical to the prior inline implementation;
- *   this is a pure code-move refactor (no behaviour change).
+ * PURPOSE: Shared HTTP client + terminal helpers for @mushi-mushi/cli command modules
+ *          (apiCall, die, requireConfig, fmtDate/pad).
  */
 
 import { loadConfig } from './config.js'
@@ -34,10 +10,36 @@ import { MUSHI_CLI_VERSION } from './version.js'
 import { getAbortSignal } from './signals.js'
 import { CLOUD_API_ENDPOINT } from './endpoint.js'
 import { resolveConsoleUrlSync, consoleUrl } from './console-url.js'
+import { MushiCliError, printAndExit } from './errors.js'
 
 // ─── API client ─────────────────────────────────────────────────────────────
 
 export const API_TIMEOUT_MS = 15_000
+
+export interface EndpointHealthProbe {
+  ok: boolean
+  status: number
+  latencyMs: number
+  body: Record<string, unknown>
+}
+
+/** Canonical GET /health probe — shared by `mushi ping` and `mushi deploy check`. */
+export async function probeEndpointHealth(endpoint: string): Promise<EndpointHealthProbe> {
+  const t0 = Date.now()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${endpoint}/health`, { signal: controller.signal })
+    clearTimeout(timer)
+    const body: Record<string, unknown> = res.headers.get('content-type')?.includes('json')
+      ? await res.json().catch(() => ({}))
+      : {}
+    return { ok: res.ok, status: res.status, latencyMs: Date.now() - t0, body }
+  } catch (err) {
+    clearTimeout(timer)
+    throw err
+  }
+}
 
 /**
  * Typed API response envelope. Every Mushi sync endpoint returns
@@ -195,25 +197,21 @@ export function die(result: ApiError, exitCode = 1): never {
 export function requireConfig(opts: { needsProject?: boolean } = {}): Required<Pick<CliConfig, 'apiKey' | 'endpoint'>> & CliConfig {
   const config = loadConfig()
   if (!config.apiKey) {
-    process.stderr.write(
-      'error: API key not configured.\n' +
-      '  Run:  mushi login --api-key <key>\n' +
-      '  Or:   export MUSHI_API_KEY=<key>\n',
-    )
-    process.exit(2)
+    printAndExit(new MushiCliError(
+      'E_AUTH_MISSING',
+      'API key not configured.',
+      'Run: mushi login --api-key <key>  Or: export MUSHI_API_KEY=<key>',
+    ))
   }
-  // Default to the Mushi Cloud endpoint — self-hosters override via env or config.
   if (!config.endpoint) {
     config.endpoint = process.env.MUSHI_API_ENDPOINT?.trim() || CLOUD_API_ENDPOINT
   }
   if (opts.needsProject && !config.projectId) {
-    process.stderr.write(
-      'error: Project ID not configured.\n' +
-      '  Run:  mushi login --project-id <uuid>\n' +
-      '  Or:   export MUSHI_PROJECT_ID=<uuid>\n' +
-      '  Find your project ID: ' + consoleUrl(resolveConsoleUrlSync(), '/projects') + '\n',
-    )
-    process.exit(2)
+    printAndExit(new MushiCliError(
+      'E_PROJECT_MISSING',
+      'Project ID not configured.',
+      `Run: mushi login --project-id <uuid>  Or find your project ID at ${consoleUrl(resolveConsoleUrlSync(), '/projects')}`,
+    ))
   }
   return config as Required<Pick<CliConfig, 'apiKey' | 'endpoint'>> & CliConfig
 }

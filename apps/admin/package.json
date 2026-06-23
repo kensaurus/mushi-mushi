@@ -6,6 +6,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @mushi-mushi/web build",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint src/",

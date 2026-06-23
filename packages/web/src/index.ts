@@ -24,6 +24,9 @@ export type {
 export { getLocale, getAvailableLocales } from './i18n';
 export type { MushiLocale } from './i18n';
 
+export { getWidgetPreviewTokens, getWidgetThemeVars } from './build-widget-theme';
+export type { WidgetThemeVars } from './build-widget-theme';
+
 export { createProactiveManager } from './proactive-manager';
 export type { ProactiveConfig, ProactiveManager } from './proactive-manager';
 

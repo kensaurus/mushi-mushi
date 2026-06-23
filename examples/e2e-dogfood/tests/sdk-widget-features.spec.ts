@@ -3,7 +3,7 @@
  *
  * End-to-end test for all Mushi SDK widget features shipped in the
  * May 2026 Quality Pass:
- *  - Widget mounts and opens on glot.it (shadow DOM = open)
+ *  - Widget mounts and opens on glot.it (shadow DOM = open for QA pierce)
  *  - Category + intent steps navigate correctly
  *  - Example chips render on step 3 and paste text on click
  *  - Live char counter tracks input length
@@ -19,6 +19,16 @@ import { test, expect, type Page } from '@playwright/test'
 const DOGFOOD_URL = process.env.MUSHI_DOGFOOD_URL ?? 'http://localhost:3000'
 const ADMIN_URL   = process.env.MUSHI_ADMIN_URL   ?? 'http://localhost:6464'
 const BASE_PATH   = '/glot-it'
+const WIDGET_TRIGGER = process.env.MUSHI_WIDGET_TRIGGER ?? 'fab'
+
+/** Open the reporter panel — banner mode (glot.it) or FAB trigger (legacy). */
+async function openMushiWidget(page: Page) {
+  if (WIDGET_TRIGGER === 'banner') {
+    await shadowClick(page, '.mushi-banner-btn')
+  } else {
+    await openMushiWidget(page)
+  }
+}
 
 // ── Shadow DOM helpers ───────────────────────────────────────────────────────
 
@@ -84,7 +94,7 @@ async function openToDetailsStep(page: Page) {
   await page.waitForTimeout(2500)
 
   // Step 1: open the panel
-  await shadowClick(page, '.mushi-trigger')
+  await openMushiWidget(page)
   await shadowWaitFor(page, '.mushi-panel.open')
 
   // Step 2: click the "bug" category option
@@ -127,24 +137,27 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
   })
 
   // ── 1. Widget mounts ──────────────────────────────────────────────────────
-  test('1. Widget host mounts with open shadow DOM and trigger button', async ({ page }) => {
-    const info = await page.evaluate(() => {
+  test('1. Widget host mounts with open shadow DOM and launcher control', async ({ page }) => {
+    const info = await page.evaluate((triggerMode) => {
       const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
+      const shadow = host?.shadowRoot
+      const launcherSel = triggerMode === 'banner' ? '.mushi-banner-btn' : '.mushi-trigger'
+      const launcher = shadow?.querySelector(launcherSel)
       return {
         found: !!host,
         hasShadow: !!host?.shadowRoot,
-        triggerExists: !!host?.shadowRoot?.querySelector('.mushi-trigger'),
-        triggerClass: host?.shadowRoot?.querySelector('.mushi-trigger')?.className ?? '',
+        launcherExists: !!launcher,
+        launcherClass: launcher?.className ?? '',
       }
-    })
+    }, WIDGET_TRIGGER)
     expect(info.found, 'widget host present').toBe(true)
     expect(info.hasShadow, 'shadow root is open').toBe(true)
-    expect(info.triggerExists, 'trigger button present').toBe(true)
+    expect(info.launcherExists, `${WIDGET_TRIGGER} launcher present`).toBe(true)
   })
 
   // ── 2. Panel opens ────────────────────────────────────────────────────────
-  test('2. Clicking trigger opens the panel showing the category step', async ({ page }) => {
-    await shadowClick(page, '.mushi-trigger')
+  test('2. Clicking launcher opens the panel showing the category step', async ({ page }) => {
+    await openMushiWidget(page)
     await shadowWaitFor(page, '.mushi-panel.open')
     await shadowWaitFor(page, '[data-category]')
 
@@ -365,6 +378,39 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
     if (reportId) {
       console.log(`  ✓ Report ID: ${reportId}`)
     }
+  })
+
+  // ── 10. Category step IA (Jun 2026 UX unification) ───────────────────────
+  test('10. Category step shows report section label and More nav toggle', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openMushiWidget(page)
+    await shadowWaitFor(page, '.mushi-panel.open')
+
+    const ia = await page.evaluate(() => {
+      const recorder = (window as unknown as {
+        __mushiRecorder?: {
+          getCategoryStepIA?: () => {
+            sectionLabel: string
+            moreToggle: boolean
+            footerStepIndicators: number
+          }
+        }
+      }).__mushiRecorder
+      if (recorder?.getCategoryStepIA) {
+        return recorder.getCategoryStepIA()
+      }
+      const host = document.querySelector('#mushi-mushi-widget') as HTMLElement & { shadowRoot: ShadowRoot }
+      const shadow = host?.shadowRoot
+      return {
+        sectionLabel: shadow?.querySelector('.mushi-section-label')?.textContent?.trim() ?? '',
+        moreToggle: !!shadow?.querySelector('[data-action="toggle-more-nav"]'),
+        footerStepIndicators: shadow?.querySelectorAll('.mushi-step-indicator').length ?? 0,
+      }
+    })
+
+    expect(ia.sectionLabel.length, 'report section label visible').toBeGreaterThan(0)
+    expect(ia.moreToggle, 'More nav toggle present').toBe(true)
+    expect(ia.footerStepIndicators, 'no duplicate footer step indicators on category step').toBe(0)
   })
 
 })

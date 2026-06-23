@@ -103,7 +103,7 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
           key={i}
           aria-hidden
           className={`h-1.5 w-3 rounded-sm ${
-            i < filledTracks ? 'bg-ok' : 'bg-surface-raised border border-border'
+            i < filledTracks ? 'bg-ok' : 'bg-surface-raised border border-edge-subtle'
           }`}
         />
       ))}

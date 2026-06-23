@@ -295,7 +295,7 @@ export function SentryContextPanel({
                       <span className="opacity-60 group-open:opacity-100">›</span>
                       data
                     </summary>
-                    <pre className="mt-1 text-2xs font-mono text-fg-secondary bg-surface-overlay rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words">
+                    <pre className="mushi-code-block mushi-code-body mt-1 text-2xs font-mono rounded-sm p-1.5 overflow-x-auto whitespace-pre-wrap break-words">
                       {safeStringify(c.data)}
                     </pre>
                   </details>

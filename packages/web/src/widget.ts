@@ -11,7 +11,7 @@ import type {
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 import { MUSHI_SDK_VERSION } from './version';
-import { readPageFaviconHref } from '@mushi-mushi/core';
+import { readPageFaviconHref, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
 import { CATEGORY_ICONS, FEATURE_REQUEST_INTENT, bindFaviconFallbacks, isSubmitShortcut } from './widget-helpers';
 import type {
   AssistantTurn,
@@ -51,6 +51,8 @@ export class MushiWidget {
   private viaFeatureRequest = false;
   /** Whether the category list is fully expanded (progressive disclosure). */
   private showAllCategories = false;
+  /** Secondary hub nav (inbox, assistant, community) collapsed under "More". */
+  private showMoreNav = false;
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
@@ -174,7 +176,7 @@ export class MushiWidget {
       environments: config.environments ?? {},
       smartHide: config.smartHide ?? false,
       draggable: config.draggable ?? false,
-      brandFooter: config.brandFooter ?? true,
+      brandFooter: config.brandFooter ?? false,
       outdatedBanner: config.outdatedBanner ?? 'auto',
       screenshotSensitiveHint: config.screenshotSensitiveHint ?? true,
       betaMode: config.betaMode ?? {},
@@ -196,7 +198,7 @@ export class MushiWidget {
 
     this.host = document.createElement('div');
     this.host.id = 'mushi-mushi-widget';
-    this.shadow = this.host.attachShadow({ mode: 'closed' });
+    this.shadow = this.host.attachShadow({ mode: 'open' });
   }
 
   mount(): void {
@@ -344,6 +346,7 @@ export class MushiWidget {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.showAllCategories = false;
+    this.showMoreNav = false;
     this.render();
     this.callbacks.onClose();
   }
@@ -391,10 +394,10 @@ export class MushiWidget {
           this.assistantTurns.push({ role: 'assistant', text: reply.text ?? '…' });
         }
       } else {
-        this.assistantError = 'No response — please try again.';
+        this.assistantError = this.locale.assistant.errors.noResponse;
       }
     } catch {
-      this.assistantError = 'Something went wrong. Please try again.';
+      this.assistantError = this.locale.assistant.errors.generic;
     } finally {
       this.assistantSending = false;
       this.render();
@@ -1525,13 +1528,8 @@ export class MushiWidget {
 
   /** Tier accent colour for the rewards UI. */
   private tierColor(slug: string): string {
-    const colors: Record<string, string> = {
-      free: '#6b7280',
-      explorer: '#3b82f6',
-      contributor: '#8b5cf6',
-      champion: '#f59e0b',
-    };
-    return colors[slug] ?? '#6c47ff';
+    const colors = MUSHI_TIER_COLORS as Record<string, string>;
+    return colors[slug] ?? MUSHI_TIER_COLORS.default;
   }
 
   /**
@@ -1591,6 +1589,7 @@ export class MushiWidget {
       assistantSending: this.assistantSending,
       assistantError: this.assistantError,
       showAllCategories: this.showAllCategories,
+      showMoreNav: this.showMoreNav,
       pageFaviconHref: readPageFaviconHref(),
     };
   }
@@ -1629,13 +1628,21 @@ export class MushiWidget {
       // Progressive disclosure collapses again whenever we land back on the
       // category step, so a previously-expanded list doesn't stay open across
       // navigation (Sentry 14751132/1).
-      if (this.step === 'category') this.showAllCategories = false;
+      if (this.step === 'category') {
+        this.showAllCategories = false;
+        this.showMoreNav = false;
+      }
       this.render();
     });
 
     // ─── Progressive disclosure: expand full category list ─────────
     panel.querySelector('[data-action="show-all-categories"]')?.addEventListener('click', () => {
       this.showAllCategories = true;
+      this.render();
+    });
+
+    panel.querySelector('[data-action="toggle-more-nav"]')?.addEventListener('click', () => {
+      this.showMoreNav = !this.showMoreNav;
       this.render();
     });
 
@@ -2055,6 +2062,16 @@ export class MushiWidget {
     }
   }
 
+  /** Refresh My Reports data for unread badges without opening the inbox panel. */
+  async refreshReporterInboxQuiet(): Promise<void> {
+    try {
+      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+      if (this.isOpen) this.render();
+    } catch {
+      // Non-fatal background poll — never surface errors outside the inbox UI.
+    }
+  }
+
   private async loadReporterReports(): Promise<void> {
     this.step = 'reports';
     this.reporterLoading = true;
@@ -2157,6 +2174,20 @@ export class MushiWidget {
 
   getRecorderStep(): WidgetStep {
     return this.step;
+  }
+
+  /** QA / Playwright: category-step IA without piercing closed shadow from page JS. */
+  getRecorderCategoryStepIA(): {
+    sectionLabel: string;
+    moreToggle: boolean;
+    footerStepIndicators: number;
+  } {
+    return {
+      sectionLabel:
+        this.shadow.querySelector('.mushi-section-label')?.textContent?.trim() ?? '',
+      moreToggle: !!this.shadow.querySelector('[data-action="toggle-more-nav"]'),
+      footerStepIndicators: this.shadow.querySelectorAll('.mushi-step-indicator').length,
+    };
   }
 
   getRecorderTrigger(): Element | null {

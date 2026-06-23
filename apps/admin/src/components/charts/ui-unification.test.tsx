@@ -88,13 +88,17 @@ describe('MetricStrip layout', () => {
 })
 
 describe('KpiTile hero emphasis + stagger forwarding', () => {
-  // Bug 1: `lg:col-span-2` must land on the card root (the real grid item),
-  // not the inner padding wrapper where the grid never sees it.
-  it('puts lg:col-span-2 on the grid item for variant="primary"', () => {
-    const html = renderToStaticMarkup(<KpiTile label="Backlog" value="5" variant="primary" />)
+  // `wide` spans two columns; `variant="primary"` is visual emphasis only.
+  it('puts lg:col-span-2 on the grid item when wide is true', () => {
+    const html = renderToStaticMarkup(<KpiTile label="Backlog" value="5" wide />)
     expect(html).toContain('lg:col-span-2')
-    // It must be on the outer card div, before the inner padding wrapper.
     expect(html.indexOf('lg:col-span-2')).toBeLessThan(html.indexOf('px-3'))
+  })
+
+  it('does not span columns for variant="primary" alone', () => {
+    const html = renderToStaticMarkup(<KpiTile label="Backlog" value="5" variant="primary" />)
+    expect(html).not.toContain('lg:col-span-2')
+    expect(html).toContain('ring-1 ring-brand/25')
   })
 
   it('does not span columns for the default variant', () => {
@@ -112,12 +116,9 @@ describe('KpiTile hero emphasis + stagger forwarding', () => {
         <KpiTile label="B" value="2" variant="primary" />
       </MetricStrip>,
     )
-    // className forwarded → entrance keyframe actually attached to the tile.
     expect(html).toContain('animate-mushi-fade-in')
-    // style forwarded → per-index animation delay reaches the tile.
     expect(html).toContain('animation-delay')
-    // The primary child still spans two columns within the stagger composition.
-    expect(html).toContain('lg:col-span-2')
+    expect(html).not.toContain('lg:col-span-2')
   })
 
   it('forwards className/style on the linked (to) variant too', () => {
@@ -133,7 +134,7 @@ describe('KpiTile hero emphasis + stagger forwarding', () => {
         />
       </MemoryRouter>,
     )
-    expect(html).toContain('lg:col-span-2')
+    expect(html).not.toContain('lg:col-span-2')
     expect(html).toContain('animate-mushi-fade-in')
     expect(html).toContain('animation-delay:80ms')
   })

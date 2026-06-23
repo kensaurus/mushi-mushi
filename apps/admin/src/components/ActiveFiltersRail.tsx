@@ -1,25 +1,7 @@
 /**
  * FILE: apps/admin/src/components/ActiveFiltersRail.tsx
- * PURPOSE: One-line readout + clear-button row that surfaces the current
- *          filter state of any list page. The pre-existing `ReportsFilterBar`
- *          (and its peers on Fixes / Audit) compose three or four selects in
- *          one block, but once a user clicks "Apply" the controls collapse
- *          and the active state becomes invisible — at which point the user
- *          forgets *why* the list is "empty" or filtered to 4 rows.
- *
- *          This rail makes filter state explicit and one-click reversible:
- *            - Each active filter renders as a removable chip.
- *            - Two or more chips reveal a trailing "Clear all" so the user
- *              can return to the unfiltered view in a single click.
- *            - Zero filters → component renders nothing (clean pages stay
- *              clean, no empty-toolbar tax).
- *
- *          Wave T.1.2 (2026-04-23): consolidates a recurring "show what's
- *          filtered" pattern that was previously duplicated by hand in
- *          ReportsFilterBar's pill row, the Fixes status segmented control
- *          and the Audit page's `<dl>` of active params. Pages keep their
- *          existing controls — this rail sits *below* the controls and
- *          shows the *result* of the user's filter choices.
+ * PURPOSE: Removable filter chips plus optional "Clear all" for list pages;
+ *          renders nothing when no filters are active.
  */
 
 import type { ReactNode } from 'react'

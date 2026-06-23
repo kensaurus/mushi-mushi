@@ -176,7 +176,7 @@ export function MigrationHub({ guides }: Props) {
                   </span>
                   <EffortBadge level={g.effort} />
                   <RiskBadge level={g.risk} />
-                  <span className="ml-auto text-xs text-[var(--mushi-ink-faint)] transition group-hover:text-[var(--mushi-ink-muted)]">
+                  <span className="ml-auto text-xs text-[var(--mushi-ink-faint)] [@media(hover:hover)]:group-hover:text-[var(--mushi-ink-muted)]">
                     Read →
                   </span>
                 </div>

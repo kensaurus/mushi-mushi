@@ -15,7 +15,7 @@
  *     • PAPER + INK     — warm cream surface, deep sumi ink type, no flat
  *                          white. Subtle paper grain via a single noise SVG
  *                          background-image to break the digital flatness.
- *     • VERMILLION 朱   — `widgetAccent` (#E03C2C) used as a hanko stamp colour.
+ *     • VERMILLION 朱   — `widgetAccent` (hanko vermillion) used as a stamp colour.
  *                          Replaces the generic SaaS purple. Used only for:
  *                          active state, focus underline, submit button, and
  *     • SERIF DISPLAY   — Iowan/Palatino/Georgia stack for headings (a real
@@ -35,61 +35,72 @@
  *   motion fully honoured, AA contrast in both themes, no external fonts.
  */
 
-export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText = ''): string {
-  const isDark = theme === 'dark';
+import { getWidgetThemeVars } from './build-widget-theme';
+import {
+  MUSHI_GEOMETRY,
+  MUSHI_MOTION,
+  MUSHI_RADIUS,
+  MUSHI_SPACING,
+  MUSHI_TYPE,
+  MUSHI_Z,
+  type MushiThemeMode,
+} from '@mushi-mushi/core';
 
-  // Validate accent values against a safe CSS color format to prevent injection
-  // inside the shadow-DOM template literal.  Only #rrggbb / #rrggbbaa / #rgb /
-  // #rgba hex literals are accepted; everything else is ignored and falls back
-  // to the default palette.
-  const safeHex = (v: string): string => /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : '';
-  const safeAccent     = safeHex(accent);
-  const safeAccentText = safeHex(accentText);
+export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText = ''): string {
+  const v = getWidgetThemeVars(theme, accent, accentText);
+  const {
+    isDark,
+    paper,
+    paperRaised,
+    ink,
+    inkMuted,
+    inkFaint,
+    inkDim,
+    rule,
+    ruleStrong,
+    widgetAccent,
+    widgetAccentWash,
+    widgetAccentInk,
+    widgetAccentShadow,
+    ok,
+    danger,
+    onAccent,
+    inverse,
+    neonBannerBg,
+    neonBannerFg,
+    neonBannerBorder,
+    brandBannerBorder,
+    statusSent,
+    statusReview,
+    statusFixing,
+    statusFixed,
+    statusClosedBg,
+    fontDisplay,
+    fontBody,
+    fontMono,
+    easeStamp,
+    zBanner,
+    fabSize,
+  } = v;
 
-  /* ── Tokens ──────────────────────────────────────────────────────────
-     Named for the material they evoke (paper, ink, rule, widgetAccent)
-     rather than the role (background, text, border) so the palette is
-     hard to dilute with a generic "primary/secondary" rename later. */
-
-  const paper        = isDark ? '#0F0E0C' : '#F8F4ED';   // washi cream / dark wash
-  const ink          = isDark ? '#F2EBDD' : '#0E0D0B';   // sumi black / cream type
-  const inkMuted     = isDark ? '#928B7E' : '#5C5852';   // captions, descriptions
-  const inkFaint     = isDark ? '#5A5650' : '#9A9489';   // disabled, separators
-  const inkDim       = isDark ? '#7A7268' : '#6E6760';   // dim text — replaces undefined var(--mushi-text-dim)
-  const rule         = isDark ? 'rgba(242,235,221,0.10)' : 'rgba(14,13,11,0.10)';
-  const ruleStrong   = isDark ? 'rgba(242,235,221,0.18)' : 'rgba(14,13,11,0.16)';
-
-  // Accept colour override or fall back to vermillion defaults
-  const widgetAccent   = safeAccent || (isDark ? '#FF5A47' : '#E03C2C');   // 朱 hanko red — signature accent
-  const widgetAccentWash = isDark ? `${widgetAccent}1F` : `${widgetAccent}14`; // ~12% / ~8% opacity
-  const widgetAccentInk  = safeAccentText || (isDark ? '#FFE5E0' : '#7A1F15'); // text on widgetAccent wash
-
-  /* Type stacks. Pure system stacks — no web-font fetch — but curated so
-     every OS lands on a high-quality serif/mono rather than a generic
-     fallback. The body sans intentionally avoids Inter/Roboto (skill:
-     design-frontend "Anti-Generic"); system-ui resolves to SF Pro on
-     Apple, Segoe UI Variable on Windows 11, Roboto on Android — all
-     more characterful than Inter at small sizes. */
-  const fontDisplay = `'Iowan Old Style', 'Palatino Linotype', 'Palatino', 'Book Antiqua', 'Cambria', Georgia, 'Times New Roman', serif`;
-  const fontBody    = `system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', sans-serif`;
-  const fontMono    = `ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace`;
-
-  /* Custom easing — a soft back-out that feels like a stamp pressing down,
-     not a generic ease. Used everywhere a panel/button moves so the whole
-     widget shares a single motion signature. */
-  const easeStamp = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  const { sizeBody, lineBody } = MUSHI_TYPE;
+  const { durationFast } = MUSHI_MOTION;
+  const { bannerHeight, gutter, panelWidth, panelMaxHeight, panelSheetBreakpoint, edgeTabWidth } = MUSHI_GEOMETRY;
+  const panelLauncherGap = fabSize + 12;
+  const { base: zBase } = MUSHI_Z;
+  const controlRadius = MUSHI_RADIUS.control;
 
   return `
     :host {
       all: initial;
       font-family: ${fontBody};
-      font-size: 14px;
-      line-height: 1.55;
+      font-size: ${sizeBody}px;
+      line-height: ${lineBody};
       color: ${ink};
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       font-feature-settings: 'ss01', 'cv11'; /* nicer system-ui glyphs where supported */
-      --mushi-ok: ${isDark ? '#4ade80' : '#16a34a'};
+      --mushi-ok: ${ok};
       /* SDK contract: the host element is always pass-through. Only the
          interactive surfaces (.mushi-trigger, .mushi-banner, .mushi-panel)
          opt back into pointer events so the widget never creates an
@@ -107,10 +118,10 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     .mushi-trigger {
       position: fixed;
-      width: 52px;
-      height: 52px;
+      width: ${fabSize}px;
+      height: ${fabSize}px;
       border: 1px solid ${ruleStrong};
-      border-radius: 4px;
+      border-radius: ${controlRadius}px;
       background: ${paper};
       color: ${ink};
       cursor: pointer;
@@ -124,7 +135,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
         0 1px 0 ${rule},
         0 6px 14px -8px rgba(14,13,11,0.35),
         inset 0 -3px 0 ${widgetAccent};
-      transition: transform 200ms ${easeStamp}, box-shadow 200ms ${easeStamp};
+      transition: transform ${durationFast}ms ${easeStamp}, box-shadow ${durationFast}ms ${easeStamp};
       overflow: visible;
       isolation: isolate;
     }
@@ -174,23 +185,23 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       .mushi-trigger-pulse { animation: none; }
     }
     .mushi-trigger.bottom-right {
-      bottom: var(--mushi-bottom, calc(24px + env(safe-area-inset-bottom, 0px)));
-      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+      bottom: var(--mushi-bottom, calc(${gutter}px + env(safe-area-inset-bottom, 0px)));
+      right: var(--mushi-right, calc(${gutter}px + env(safe-area-inset-right, 0px)));
     }
     .mushi-trigger.bottom-left  {
-      bottom: var(--mushi-bottom, calc(24px + env(safe-area-inset-bottom, 0px)));
-      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+      bottom: var(--mushi-bottom, calc(${gutter}px + env(safe-area-inset-bottom, 0px)));
+      left: var(--mushi-left, calc(${gutter}px + env(safe-area-inset-left, 0px)));
     }
     .mushi-trigger.top-right    {
-      top: var(--mushi-top, calc(24px + env(safe-area-inset-top, 0px)));
-      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+      top: var(--mushi-top, calc(${gutter}px + env(safe-area-inset-top, 0px)));
+      right: var(--mushi-right, calc(${gutter}px + env(safe-area-inset-right, 0px)));
     }
     .mushi-trigger.top-left     {
-      top: var(--mushi-top, calc(24px + env(safe-area-inset-top, 0px)));
-      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+      top: var(--mushi-top, calc(${gutter}px + env(safe-area-inset-top, 0px)));
+      left: var(--mushi-left, calc(${gutter}px + env(safe-area-inset-left, 0px)));
     }
     .mushi-trigger.edge-tab {
-      width: 32px;
+      width: ${edgeTabWidth}px;
       height: 88px;
       border-radius: 4px 0 0 4px;
       writing-mode: vertical-rl;
@@ -215,8 +226,8 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
         inset 3px 0 0 ${widgetAccent};
     }
     .mushi-trigger.shrunk {
-      width: 36px;
-      height: 36px;
+      width: ${bannerHeight}px;
+      height: ${bannerHeight}px;
       opacity: 0.82;
       transform: scale(0.92);
     }
@@ -236,7 +247,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     }
     .mushi-trigger.dragging {
       cursor: grabbing !important;
-      z-index: calc(var(--z, 99999) + 2);
+      z-index: calc(var(--z, ${zBase}) + 2);
       transition: none !important;
       box-shadow:
         0 1px 0 ${rule},
@@ -256,9 +267,9 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     .mushi-panel {
       position: fixed;
-      width: 360px;
-      max-width: calc(100vw - 32px);
-      max-height: min(480px, calc(100dvh - 120px - var(--mushi-keyboard-inset, 0px)));
+      width: ${panelWidth}px;
+      max-width: calc(100vw - ${MUSHI_SPACING.wide}px);
+      max-height: min(${panelMaxHeight}px, calc(100dvh - 120px - var(--mushi-keyboard-inset, 0px)));
       background: ${paper};
       border: 1px solid ${ruleStrong};
       border-radius: 6px;
@@ -277,7 +288,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       bottom: calc(var(--mushi-keyboard-inset, 0px) + 8px) !important;
     }
     /* On narrow mobile, fill the width as a bottom sheet */
-    @media (max-width: 480px) {
+    @media (max-width: ${panelSheetBreakpoint}px) {
       .mushi-panel {
         left: 0 !important;
         right: 0 !important;
@@ -294,23 +305,23 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-panel.open  { animation: mushi-stamp-in 320ms ${easeStamp} both; }
     .mushi-panel.closed { display: none; }
     .mushi-panel.bottom-right {
-      bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, 24px) + 64px));
-      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+      bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, ${gutter}px) + ${panelLauncherGap}px));
+      right: var(--mushi-right, calc(${gutter}px + env(safe-area-inset-right, 0px)));
       --mushi-origin: bottom right;
     }
     .mushi-panel.bottom-left  {
-      bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, 24px) + 64px));
-      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+      bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, ${gutter}px) + ${panelLauncherGap}px));
+      left: var(--mushi-left, calc(${gutter}px + env(safe-area-inset-left, 0px)));
       --mushi-origin: bottom left;
     }
     .mushi-panel.top-right    {
-      top: var(--mushi-panel-top, calc(var(--mushi-top, 24px) + 64px));
-      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+      top: var(--mushi-panel-top, calc(var(--mushi-top, ${gutter}px) + ${panelLauncherGap}px));
+      right: var(--mushi-right, calc(${gutter}px + env(safe-area-inset-right, 0px)));
       --mushi-origin: top right;
     }
     .mushi-panel.top-left     {
-      top: var(--mushi-panel-top, calc(var(--mushi-top, 24px) + 64px));
-      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+      top: var(--mushi-panel-top, calc(var(--mushi-top, ${gutter}px) + ${panelLauncherGap}px));
+      left: var(--mushi-left, calc(${gutter}px + env(safe-area-inset-left, 0px)));
       --mushi-origin: top left;
     }
     .mushi-outdated {
@@ -359,7 +370,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       height: 22px;
       border-radius: 3px;
       background: ${widgetAccent};
-      color: #FAF7F0;
+      color: ${onAccent};
       font-family: ${fontDisplay};
       font-size: 14px;
       font-weight: 600;
@@ -590,29 +601,29 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       border: 1px solid transparent;
     }
     .mushi-status-sent {
-      color: ${isDark ? '#A8C4FF' : '#1E4A8C'};
-      background: ${isDark ? 'rgba(120,160,255,0.12)' : 'rgba(30,74,140,0.08)'};
-      border-color: ${isDark ? 'rgba(120,160,255,0.22)' : 'rgba(30,74,140,0.16)'};
+      color: ${statusSent.fg};
+      background: ${statusSent.bg};
+      border-color: ${statusSent.border};
     }
     .mushi-status-review {
-      color: ${isDark ? '#FFD27A' : '#8A5A00'};
-      background: ${isDark ? 'rgba(255,190,90,0.12)' : 'rgba(180,120,0,0.10)'};
-      border-color: ${isDark ? 'rgba(255,190,90,0.22)' : 'rgba(180,120,0,0.18)'};
+      color: ${statusReview.fg};
+      background: ${statusReview.bg};
+      border-color: ${statusReview.border};
     }
     .mushi-status-fixing {
-      color: ${isDark ? '#FFB899' : '#9A3D12'};
-      background: ${isDark ? 'rgba(255,120,60,0.12)' : 'rgba(224,60,44,0.10)'};
-      border-color: ${isDark ? 'rgba(255,120,60,0.24)' : 'rgba(224,60,44,0.18)'};
+      color: ${statusFixing.fg};
+      background: ${statusFixing.bg};
+      border-color: ${statusFixing.border};
     }
     .mushi-status-fixed {
-      color: ${isDark ? '#8FE3B0' : '#1F6B3A'};
-      background: ${isDark ? 'rgba(80,200,130,0.12)' : 'rgba(31,107,58,0.10)'};
-      border-color: ${isDark ? 'rgba(80,200,130,0.22)' : 'rgba(31,107,58,0.18)'};
+      color: ${statusFixed.fg};
+      background: ${statusFixed.bg};
+      border-color: ${statusFixed.border};
     }
     .mushi-status-closed,
     .mushi-status-unknown {
       color: ${inkMuted};
-      background: ${isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.05)'};
+      background: ${statusClosedBg};
       border-color: ${ruleStrong};
     }
     .mushi-report-when {
@@ -677,8 +688,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       display: block;
       font-family: ${fontMono};
       font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: 0.04em;
       margin-bottom: 3px;
     }
     .mushi-thread-comment p,
@@ -698,10 +708,8 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       border-left: 2px solid ${widgetAccent};
       background: ${widgetAccentWash};
       color: ${widgetAccentInk};
-      font-family: ${fontMono};
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+      font-family: ${fontDisplay};
+      font-size: 13px;
       margin: 4px 0 14px;
       border-radius: 0 3px 3px 0;
     }
@@ -711,38 +719,8 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       flex-direction: column;
       gap: 2px;
     }
-    .mushi-intent-btn {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px 0;
-      border: none;
-      border-bottom: 1px solid ${rule};
-      background: transparent;
-      cursor: pointer;
-      color: inherit;
-      text-align: left;
-      font-family: ${fontDisplay};
-      font-size: 15px;
-      transition: padding 220ms ${easeStamp}, color 220ms ${easeStamp};
-    }
-    .mushi-intent-btn::after {
-      content: '\u2192';
-      font-family: ${fontMono};
-      font-size: 13px;
-      color: ${inkFaint};
-      opacity: 0;
-      transform: translateX(-4px);
-      transition: opacity 220ms ${easeStamp}, transform 220ms ${easeStamp};
-    }
-    .mushi-intent-btn:last-child { border-bottom: none; }
-    .mushi-intent-btn:hover { padding-left: 6px; color: ${widgetAccent}; }
-    .mushi-intent-btn:hover::after { opacity: 1; transform: translateX(0); color: ${widgetAccent}; }
-    .mushi-intent-btn:focus-visible {
-      outline: none;
-      padding-left: 6px;
-      box-shadow: inset 2px 0 0 ${widgetAccent};
+    .mushi-intents .mushi-option-btn {
+      grid-template-columns: 1fr auto;
     }
 
     /* Example starter chips — reduce first-report activation energy */
@@ -952,7 +930,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       border: 1px solid ${widgetAccent};
       border-radius: 3px;
       background: ${widgetAccent};
-      color: #FAF7F0;
+      color: ${onAccent};
       font-family: ${fontMono};
       font-size: 11px;
       letter-spacing: 0.16em;
@@ -960,7 +938,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       cursor: pointer;
       overflow: hidden;
       transition: transform 180ms ${easeStamp}, box-shadow 180ms ${easeStamp};
-      box-shadow: 0 2px 0 ${isDark ? '#7A1F15' : '#9A2A1E'};
+      box-shadow: 0 2px 0 ${widgetAccentShadow};
     }
     .mushi-submit::after {
       content: '';
@@ -974,10 +952,10 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     }
     .mushi-submit:hover {
       transform: translateY(-1px);
-      box-shadow: 0 3px 0 ${isDark ? '#7A1F15' : '#9A2A1E'};
+      box-shadow: 0 3px 0 ${widgetAccentShadow};
     }
     .mushi-submit:hover::after { opacity: 1; transform: scale(1.4); }
-    .mushi-submit:active { transform: translateY(1px); box-shadow: 0 1px 0 ${isDark ? '#7A1F15' : '#9A2A1E'}; }
+    .mushi-submit:active { transform: translateY(1px); box-shadow: 0 1px 0 ${widgetAccentShadow}; }
     .mushi-submit:disabled {
       cursor: wait;
       opacity: 0.7;
@@ -1087,7 +1065,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     /* ── Two-way receipt (success step) ──────────────────────────── */
     /* The receipt block sits below the stamp/meta. Three states:    */
     /*   1. delivering... (spinner pill, while host onSubmit awaits) */
-    /*   2. confirmed     (Receipt #abc12345 + Track on Mushi link)  */
+    /*   2. confirmed     (Receipt id + Track on Mushi link)  */
     /*   3. queued offline (warn pill — degrade gracefully)          */
     .mushi-success-receipt {
       margin-top: 14px;
@@ -1147,7 +1125,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       padding: 6px 10px;
       border-radius: 4px;
       background: ${widgetAccent};
-      color: #fff;
+      color: ${inverse};
       font-family: ${fontMono};
       font-size: 11px;
       letter-spacing: 0.10em;
@@ -1310,7 +1288,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     /* ─── Beta mode strip (category step) ─────────────────────────────── */
     /* Brand palette: widgetAccent (vermillion) + washi ink for the strip.
-       The previous indigo (#6366f1) is the single most recognisable AI-template
+       The previous generic indigo purple is the single most recognisable AI-template
        colour; replaced with the widget's own vermillion wash so the beta panel
        reads as a Mushi-native surface rather than a generic SaaS plug-in. */
 
@@ -1337,7 +1315,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       padding: 1px 6px;
       border-radius: 3px;
       background: ${widgetAccent};
-      color: #FAF7F0;
+      color: ${onAccent};
       font-family: ${fontMono};
       font-size: 9px;
       font-weight: 700;
@@ -1456,7 +1434,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
          fix — Workstream C). Horizontal padding also clears the left/right
          insets for landscape notches. */
       box-sizing: border-box;
-      min-height: 36px;
+      min-height: ${bannerHeight}px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1467,7 +1445,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       letter-spacing: 0.04em;
       white-space: nowrap;
       overflow: hidden;
-      z-index: var(--mushi-banner-z, 99998);
+      z-index: var(--mushi-banner-z, ${zBanner});
       animation: mushi-banner-slide-in 0.3s ${easeStamp} both;
     }
 
@@ -1476,17 +1454,17 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     /* --- neon variant (electric lime — dev / beta tool aesthetic) --- */
     .mushi-banner.neon {
-      background: #0FFF50;
-      color: #0a1a0a;
-      border-bottom: 1.5px solid #00C43A;
+      background: ${neonBannerBg};
+      color: ${neonBannerFg};
+      border-bottom: 1.5px solid ${neonBannerBorder};
     }
     .mushi-banner.neon.bottom {
-      border-top: 1.5px solid #00C43A;
+      border-top: 1.5px solid ${neonBannerBorder};
       border-bottom: none;
     }
     .mushi-banner.neon .mushi-banner-btn {
       background: rgba(0,0,0,0.14);
-      color: #0a1a0a;
+      color: ${neonBannerFg};
       border: 1px solid rgba(0,0,0,0.22);
     }
     .mushi-banner.neon .mushi-banner-btn:hover {
@@ -1496,16 +1474,16 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     /* --- brand variant (widgetAccent — editorial, app-quality) --- */
     .mushi-banner.brand {
       background: ${widgetAccent};
-      color: #fff;
-      border-bottom: 1.5px solid ${isDark ? '#C4321E' : '#B52F1F'};
+      color: ${inverse};
+      border-bottom: 1.5px solid ${brandBannerBorder};
     }
     .mushi-banner.brand.bottom {
-      border-top: 1.5px solid ${isDark ? '#C4321E' : '#B52F1F'};
+      border-top: 1.5px solid ${brandBannerBorder};
       border-bottom: none;
     }
     .mushi-banner.brand .mushi-banner-btn {
       background: rgba(255,255,255,0.18);
-      color: #fff;
+      color: ${inverse};
       border: 1px solid rgba(255,255,255,0.32);
     }
     .mushi-banner.brand .mushi-banner-btn:hover {
@@ -1548,7 +1526,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-banner--rich {
       justify-content: space-between;
       gap: 12px;
-      min-height: 36px;
+      min-height: ${bannerHeight}px;
       height: auto;
       padding: 4px 12px 4px 16px;
       white-space: normal;
@@ -1609,7 +1587,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
       font-size: 11px;
     }
     .mushi-banner-actions::-webkit-scrollbar { display: none; }
-    @media (max-width: 480px) {
+    @media (max-width: ${panelSheetBreakpoint}px) {
       /* Phones: keep only the primary bug CTA (+ dismiss outside the nav). */
       .mushi-banner-actions .mushi-banner-extra { display: none; }
     }
@@ -1732,6 +1710,17 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
 
     .mushi-community-footer{display:flex;align-items:center;gap:8px;padding:10px 0 2px;border-top:1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'};margin-top:8px;flex-wrap:wrap}
     .mushi-community-btn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mushi-section-label{
+      margin:0 0 6px;
+      font-family:${fontMono};
+      font-size:11px;
+      letter-spacing:0.06em;
+      text-transform:uppercase;
+      color:${inkFaint};
+    }
+    .mushi-more-nav{margin-top:4px}
+    .mushi-more-nav-panel{display:flex;flex-direction:column;gap:0;border-top:1px dashed ${rule};padding-top:2px}
+    .mushi-more-nav-link{align-self:flex-start;margin:6px 0 2px;padding:0}
     /* ── "More issue types →" toggle (progressive disclosure) ─────── */
     .mushi-more-toggle {
       display: flex;
@@ -1795,7 +1784,7 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-account-rank{display:block}
     .mushi-xapp-app-head{display:flex;align-items:center;gap:8px;margin:0 0 6px}
     .mushi-xapp-app-name{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:0}
-    .mushi-app-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'};background:#fff;overflow:hidden;flex-shrink:0}
+    .mushi-app-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'};background:${paperRaised};overflow:hidden;flex-shrink:0}
     .mushi-app-icon-img{display:block;width:16px;height:16px;object-fit:contain}
     .mushi-app-icon-initials{font-size:9px;font-weight:700;color:${inkDim};line-height:1}
     .mushi-app-icon-initials-only{background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}}
@@ -1812,14 +1801,14 @@ export function getWidgetStyles(theme: 'light' | 'dark', accent = '', accentText
     .mushi-assistant-chip:hover{background:${isDark ? 'rgba(255,90,71,0.22)' : 'rgba(224,60,44,0.14)'}}
     .mushi-assistant-chip:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}
     .mushi-assistant-msg{max-width:85%;padding:8px 12px;border-radius:12px;font:400 14px/1.45 ${fontBody};white-space:pre-wrap;word-break:break-word}
-    .mushi-assistant-msg-user{align-self:flex-end;background:${widgetAccent};color:#fff;border-bottom-right-radius:4px}
+    .mushi-assistant-msg-user{align-self:flex-end;background:${widgetAccent};color:${inverse};border-bottom-right-radius:4px}
     .mushi-assistant-msg-bot{align-self:flex-start;background:${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'};color:${ink};border-bottom-left-radius:4px}
     .mushi-assistant-thinking{opacity:0.6;font-size:18px;letter-spacing:2px}
-    .mushi-assistant-error{align-self:flex-start;color:${isDark ? '#F87171' : '#DC2626'};font-size:12px;padding:4px 2px}
+    .mushi-assistant-error{align-self:flex-start;color:${danger};font-size:12px;padding:4px 2px}
     .mushi-assistant-form{display:flex;align-items:flex-end;gap:8px;border-top:1px solid ${rule};padding-top:8px}
     .mushi-assistant-input{flex:1;resize:none;max-height:120px;border:1px solid ${ruleStrong};border-radius:10px;padding:8px 12px;font:400 14px/1.4 ${fontBody};background:${paper};color:${ink}}
     .mushi-assistant-input:focus-visible{outline:2px solid ${widgetAccent};outline-offset:1px}
-    .mushi-assistant-submit{flex-shrink:0;width:36px;height:36px;border:none;border-radius:50%;background:${widgetAccent};color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,opacity .15s}
+    .mushi-assistant-submit{flex-shrink:0;width:36px;height:36px;border:none;border-radius:50%;background:${widgetAccent};color:${inverse};font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,opacity .15s}
     .mushi-assistant-submit:hover{transform:translateY(-1px)}
     .mushi-assistant-submit:disabled{opacity:0.5;cursor:default;transform:none}
     .mushi-assistant-submit:focus-visible{outline:2px solid ${widgetAccent};outline-offset:2px}

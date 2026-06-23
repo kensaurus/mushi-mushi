@@ -55,13 +55,16 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
 import {
-  buildCursorDeeplink,
-  buildVsCodeDeeplink,
   buildHttpConfig,
   buildStdioConfig,
   projectServerName,
 } from '../lib/cursorDeeplink'
+import { MCP_CLIENTS } from '@mushi-mushi/mcp/clients'
+import { ClientConnectButton } from '../components/ClientConnectButton'
 import { McpAccountKeyCard } from '../components/McpAccountKeyCard'
+
+const CURSOR_CLIENT = MCP_CLIENTS.find((c) => c.id === 'cursor')!
+const VSCODE_CLIENT = MCP_CLIENTS.find((c) => c.id === 'vscode')!
 
 const TABS: Array<{ id: McpTabId; label: string; description: string }> = [
   {
@@ -461,14 +464,12 @@ export function McpPage() {
   const [snippetMode, setSnippetMode] = useState<'cursor' | 'env' | 'http'>('cursor')
   const [copied, setCopied] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
-  const [connectionTestResult, setConnectionTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [connectionTestResult, setConnectionTestResult] = useState<{ ok: boolean; message: string; testedAt: number } | null>(null)
   const [monorepoNote, setMonorepoNote] = useState<string | null>(null)
   const [monoWarnings, setMonoWarnings] = useState<string[]>([])
   const [detectOpen, setDetectOpen] = useState(false)
   const [detectText, setDetectText] = useState('')
   const [mintingKey, setMintingKey] = useState(false)
-  const [mintingDeeplink, setMintingDeeplink] = useState<'cursor' | 'vscode' | null>(null)
-  const [mintingProjectId, setMintingProjectId] = useState<string | null>(null)
   const [revealedMcpKey, setRevealedMcpKey] = useState<string | null>(null)
   const [sdkSnippetLang, setSdkSnippetLang] = useState<'npm' | 'yarn' | 'pnpm'>('npm')
   const [mcpJsonDraft, setMcpJsonDraft] = useState('')
@@ -593,31 +594,6 @@ export function McpPage() {
     }
   }
 
-  async function openDeeplink(ide: 'cursor' | 'vscode', writeScope: boolean, targetProjectId?: string, targetProjectName?: string) {
-    const pid = targetProjectId ?? activeProjectId
-    if (!pid) return
-    setMintingDeeplink(ide)
-    setMintingProjectId(pid)
-    try {
-      const key = await mintMcpKey(writeScope ? ['mcp:write'] : ['mcp:read'], pid)
-      if (!key) return
-      if (!targetProjectId || targetProjectId === activeProjectId) setRevealedMcpKey(key)
-      const projectLabel = targetProjectName ?? displayName
-      const deeplink =
-        ide === 'cursor'
-          ? buildCursorDeeplink(pid, projectLabel, key, MUSHI_MCP_API)
-          : buildVsCodeDeeplink(pid, projectLabel, key, MUSHI_MCP_API)
-      window.open(deeplink, '_self')
-      toast.success(
-        `${ide === 'cursor' ? 'Cursor' : 'VS Code'} install launched`,
-        `A fresh ${writeScope ? 'mcp:write' : 'mcp:read'} key for "${projectLabel}" has been minted. Server name: ${projectServerName(pid, projectLabel)}`,
-      )
-    } finally {
-      setMintingDeeplink(null)
-      setMintingProjectId(null)
-    }
-  }
-
   const projectId = activeProject?.id ?? activeProjectId ?? '<your-project-id>'
   const displayName = activeProject?.name ?? projectName ?? 'project'
   const snippet =
@@ -640,23 +616,28 @@ export function McpPage() {
         '/v1/admin/mcp/test-connection',
       )
       if (!res.ok || !res.data) {
-        setConnectionTestResult({
-          ok: false,
-          message: res.error?.message ?? 'Connection probe failed.',
-        })
+        const raw = res.error?.message ?? ''
+        const friendly = raw.includes('NO_PROJECT')
+          ? 'Select a project first.'
+          : raw.includes('MCP_PROBE_FAILED')
+            ? 'Hosted MCP did not respond — the function may be deploying. Wait 30 s and try again.'
+            : raw || 'Connection probe failed — check your API key is active.'
+        setConnectionTestResult({ ok: false, message: friendly, testedAt: Date.now() })
         return
       }
       const { tool_count: count, expected, healthy } = res.data
       setConnectionTestResult({
         ok: healthy,
         message: healthy
-          ? `Connected — ${count} tools advertised.`
-          : `Partial — only ${count}/${expected} tools (deploy may be stale).`,
+          ? `Connected — ${count} tools ready.`
+          : `Partial — only ${count} of ${expected} tools visible. The deploy may be stale; redeploy the MCP function and test again.`,
+        testedAt: Date.now(),
       })
     } catch (err) {
       setConnectionTestResult({
         ok: false,
-        message: err instanceof Error ? err.message : 'Connection failed',
+        message: err instanceof Error ? err.message : 'Could not reach the MCP server — check your network.',
+        testedAt: Date.now(),
       })
     } finally {
       setTestingConnection(false)
@@ -681,7 +662,7 @@ export function McpPage() {
     {
       label: 'Query production data',
       tools: ['run_nl_query', 'get_similar_bugs', 'list_projects', 'get_project_context', 'ingest_setup_check'],
-      description: 'Ask your bug data questions in plain English — no dashboard browsing needed.',
+      description: 'Query report data from your editor.',
     },
   ]
 
@@ -736,7 +717,7 @@ export function McpPage() {
             copy?.help?.useCases ?? [
               'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
               'Have the agent draft a fix for a specific report in one command',
-              'Query your bug data in plain English from inside your editor',
+              'Query report data from inside your editor',
             ]
           }
           helpHowToUse={
@@ -798,7 +779,7 @@ export function McpPage() {
           copy?.help?.useCases ?? [
             'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
             'Have the agent draft a fix for a specific report in one command',
-            'Query your bug data in plain English from inside your editor',
+            'Query report data from inside your editor',
           ]
         }
         helpHowToUse={
@@ -831,7 +812,7 @@ export function McpPage() {
           size="sm"
           variant="ghost"
           data-testid="mcp-mint-key-link"
-          loading={mintingKey && mintingDeeplink === null}
+          loading={mintingKey}
           disabled={!activeProjectId}
           onClick={() => void mintMcpReadKey()}
         >
@@ -841,7 +822,7 @@ export function McpPage() {
           size="sm"
           variant="ghost"
           data-testid="mcp-mint-write-key-link"
-          loading={mintingKey && mintingDeeplink === null}
+          loading={mintingKey}
           disabled={!activeProjectId}
           onClick={() => void mintMcpWriteKey()}
         >
@@ -1102,46 +1083,49 @@ export function McpPage() {
               <div className="pt-1 space-y-3">
                 {!hasReadKey && (
                   <div className="space-y-2">
-                    <Btn size="sm" data-testid="mcp-status-mint" loading={mintingKey && mintingDeeplink === null} onClick={() => void mintMcpReadKey()}>
+                    <Btn size="sm" data-testid="mcp-status-mint" loading={mintingKey} onClick={() => void mintMcpReadKey()}>
                       Mint mcp:read key here
                       <IconArrowRight className="h-3.5 w-3.5 ml-1" />
                     </Btn>
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Btn
-                    size="sm"
-                    variant="primary"
-                    data-testid="mcp-add-to-cursor"
-                    loading={mintingDeeplink === 'cursor'}
-                    disabled={!activeProjectId}
-                    onClick={() => void openDeeplink('cursor', false)}
-                    title="Mints a new mcp:read key and opens Cursor's one-click MCP install dialog"
-                  >
-                    ⚡ Add to Cursor
-                  </Btn>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    data-testid="mcp-add-to-cursor-write"
-                    loading={mintingDeeplink === 'cursor'}
-                    disabled={!activeProjectId}
-                    onClick={() => void openDeeplink('cursor', true)}
-                    title="Mints a new mcp:write key (can dispatch fixes) and opens Cursor's install dialog"
-                  >
-                    Add to Cursor (+ write)
-                  </Btn>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    data-testid="mcp-add-to-vscode"
-                    loading={mintingDeeplink === 'vscode'}
-                    disabled={!activeProjectId}
-                    onClick={() => void openDeeplink('vscode', false)}
-                    title="Mints a new mcp:read key and opens VS Code's one-click MCP install dialog"
-                  >
-                    Add to VS Code
-                  </Btn>
+                  {activeProjectId ? (
+                    <>
+                      <ClientConnectButton
+                        client={CURSOR_CLIENT}
+                        projectId={activeProjectId}
+                        projectName={displayName}
+                        endpoint={RESOLVED_EXTERNAL_API_URL}
+                        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+                        variant="primary"
+                        size="sm"
+                      />
+                      <ClientConnectButton
+                        client={CURSOR_CLIENT}
+                        projectId={activeProjectId}
+                        projectName={displayName}
+                        endpoint={RESOLVED_EXTERNAL_API_URL}
+                        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+                        scopes={['mcp:write']}
+                        variant="ghost"
+                        size="sm"
+                      />
+                      <ClientConnectButton
+                        client={VSCODE_CLIENT}
+                        projectId={activeProjectId}
+                        projectName={displayName}
+                        endpoint={RESOLVED_EXTERNAL_API_URL}
+                        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+                        variant="ghost"
+                        size="sm"
+                      />
+                    </>
+                  ) : (
+                    <Btn size="sm" variant="primary" disabled>
+                      Add to Cursor
+                    </Btn>
+                  )}
                 </div>
                 <ContainedBlock tone="muted">
                   <p className="text-2xs text-fg-muted">
@@ -1257,51 +1241,64 @@ export function McpPage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-1 border-b border-edge-subtle pb-2 flex-wrap">
+              <div className="flex items-center gap-2 border-b border-edge-subtle pb-2 flex-wrap">
                 <ConfigHelp helpId="mcp.snippet_mode" />
-                {(['cursor', 'http', 'env'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setSnippetMode(m)}
-                    data-testid={`mcp-snippet-mode-${m}`}
-                    className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
-                      snippetMode === m
-                        ? 'bg-brand text-brand-fg font-medium'
-                        : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
-                    }`}
-                  >
-                    {m === 'cursor' ? 'Stdio (.cursor/mcp.json)' : m === 'http' ? 'Hosted HTTP' : '.env.local'}
-                  </button>
-                ))}
+                <SegmentedControl
+                  value={snippetMode}
+                  onChange={setSnippetMode}
+                  options={[
+                    { id: 'cursor' as const, label: 'Stdio (.cursor/mcp.json)' },
+                    { id: 'http' as const, label: 'Hosted HTTP' },
+                    { id: 'env' as const, label: '.env.local' },
+                  ]}
+                  ariaLabel="Snippet format"
+                  size="sm"
+                  scrollable
+                />
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  loading={testingConnection}
-                  onClick={() => void testMcpConnection()}
-                  data-testid="mcp-test-connection"
-                >
-                  Test connection
-                </Btn>
-                <Link
-                  to="/docs-bridge?topic=cli-setup"
-                  className="text-xs text-brand hover:underline"
-                >
-                  CLI: mushi setup --ide cursor
-                </Link>
-                {connectionTestResult && (
-                  <Badge
-                    className={
-                      connectionTestResult.ok
-                        ? 'bg-ok-muted text-ok border border-ok/30'
-                        : 'bg-danger-muted text-danger-foreground border border-danger/30'
-                    }
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    loading={testingConnection}
+                    onClick={() => void testMcpConnection()}
+                    data-testid="mcp-test-connection"
                   >
-                    {connectionTestResult.message}
-                  </Badge>
+                    {connectionTestResult ? 'Re-test' : 'Test connection'}
+                  </Btn>
+                  <Link
+                    to="/docs-bridge?topic=cli-setup"
+                    className="text-xs text-brand hover:underline"
+                  >
+                    CLI: mushi setup --ide cursor
+                  </Link>
+                </div>
+                {connectionTestResult && (
+                  <div
+                    data-testid="mcp-connection-result"
+                    className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs ${
+                      connectionTestResult.ok
+                        ? 'border-ok/30 bg-ok/8 text-ok'
+                        : 'border-danger/30 bg-danger/8 text-danger-foreground'
+                    }`}
+                  >
+                    <span className="shrink-0 text-sm leading-none mt-0.5" aria-hidden>
+                      {connectionTestResult.ok ? '✓' : '✕'}
+                    </span>
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="font-medium">{connectionTestResult.message}</p>
+                      {!connectionTestResult.ok && (
+                        <p className="text-fg-muted">
+                          Run <code className="font-mono bg-surface px-1 rounded">mushi doctor --server</code> for a full diagnostic, or check the Supabase Edge Function logs.
+                        </p>
+                      )}
+                      <p className="text-fg-muted">
+                        Tested at {new Date(connectionTestResult.testedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -1338,7 +1335,7 @@ export function McpPage() {
                   />
                 </div>
                 <pre
-                  className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
+                  className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 mt-1 text-2xs font-mono overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
                   data-testid="mcp-snippet"
                 >
                   {snippet}
@@ -1395,7 +1392,7 @@ export function McpPage() {
                     <p className="text-xs text-fg-muted leading-relaxed">
                       Each Mushi project uses its own API key and gets a uniquely-named MCP server entry
                       (<span className="font-mono text-fg-secondary">mushi-{'{'}name{'}'}-{'{'}id{'}'}</span>).
-                      Click <strong>"⚡ Add to Cursor"</strong> for each project below — all of them will appear
+                      Click <strong>Add to Cursor</strong> for each project below — all of them will appear
                       simultaneously in your IDE so you can triage bugs across all your apps in one session.
                     </p>
                   </ContainedBlock>
@@ -1404,7 +1401,6 @@ export function McpPage() {
                   {projectsQuery.data.projects.map((p) => {
                     const serverSlug = projectServerName(p.id, p.name)
                     const isActive = p.id === activeProjectId
-                    const isMintingThis = mintingProjectId === p.id
                     return (
                       <div
                         key={p.id}
@@ -1422,26 +1418,26 @@ export function McpPage() {
                           <p className="text-2xs text-fg-faint font-mono truncate mt-0.5">{serverSlug}</p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <Btn
-                            size="sm"
+                          <ClientConnectButton
+                            client={CURSOR_CLIENT}
+                            projectId={p.id}
+                            projectName={p.name}
+                            endpoint={RESOLVED_EXTERNAL_API_URL}
+                            mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+                            scopes={['mcp:write']}
                             variant={isActive ? 'primary' : 'ghost'}
-                            loading={isMintingThis && mintingDeeplink === 'cursor'}
-                            disabled={!!(mintingDeeplink && !isMintingThis)}
-                            onClick={() => void openDeeplink('cursor', true, p.id, p.name)}
-                            title={`Add ${p.name} to Cursor as "${serverSlug}"`}
-                          >
-                            {isActive ? '⚡ Add to Cursor' : 'Add to Cursor'}
-                          </Btn>
-                          <Btn
                             size="sm"
+                          />
+                          <ClientConnectButton
+                            client={VSCODE_CLIENT}
+                            projectId={p.id}
+                            projectName={p.name}
+                            endpoint={RESOLVED_EXTERNAL_API_URL}
+                            mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+                            scopes={['mcp:write']}
                             variant="ghost"
-                            loading={isMintingThis && mintingDeeplink === 'vscode'}
-                            disabled={!!(mintingDeeplink && !isMintingThis)}
-                            onClick={() => void openDeeplink('vscode', true, p.id, p.name)}
-                            title={`Add ${p.name} to VS Code as "${serverSlug}"`}
-                          >
-                            VS Code
-                          </Btn>
+                            size="sm"
+                          />
                         </div>
                       </div>
                     )
@@ -1498,28 +1494,25 @@ export function McpPage() {
                 <div className="space-y-3">
                   <div>
                     <div className="flex items-center gap-1 mb-1.5">
-                      {(['npm', 'yarn', 'pnpm'] as const).map((pm) => (
-                        <button
-                          key={pm}
-                          type="button"
-                          onClick={() => setSdkSnippetLang(pm)}
-                          className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
-                            sdkSnippetLang === pm
-                              ? 'bg-brand text-brand-fg font-medium'
-                              : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
-                          }`}
-                        >
-                          {pm}
-                        </button>
-                      ))}
+                      <SegmentedControl
+                        value={sdkSnippetLang}
+                        onChange={setSdkSnippetLang}
+                        options={[
+                          { id: 'npm' as const, label: 'npm' },
+                          { id: 'yarn' as const, label: 'yarn' },
+                          { id: 'pnpm' as const, label: 'pnpm' },
+                        ]}
+                        ariaLabel="Package manager"
+                        size="sm"
+                      />
                     </div>
-                    <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 text-2xs font-mono text-fg-secondary overflow-auto select-all">
+                    <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 text-2xs font-mono overflow-auto select-all">
                       {buildSdkInstallSnippet(sdkSnippetLang)}
                     </pre>
                   </div>
                   <div>
                     <p className="text-2xs text-fg-faint uppercase tracking-wide font-medium mb-1">Init snippet</p>
-                    <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap select-all max-h-52">
+                    <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 text-2xs font-mono overflow-auto whitespace-pre-wrap select-all max-h-52">
                       {buildSdkInitSnippet(projectId)}
                     </pre>
                   </div>

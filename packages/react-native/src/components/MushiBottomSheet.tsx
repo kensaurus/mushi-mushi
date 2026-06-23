@@ -51,33 +51,23 @@ import {
   type ViewStyle,
   type TextStyle,
 } from 'react-native'
-import { mushiPalette } from '@mushi-mushi/core'
+import { mushiPalette, MUSHI_BANNER_NEON, MUSHI_COPY } from '@mushi-mushi/core'
+import { getLocale } from '@mushi-mushi/web/i18n'
 import { useMushiContext } from '../provider'
+import { reporterStatusShort } from '../reporter-status'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.55
 const DISMISS_THRESHOLD = 80
 
-/**
- * Neon-lime accent — matches @mushi-mushi/web `.mushi-banner.neon` (#0FFF50)
- * so the report sheet reads as the same product surface as the banner the
- * user tapped to open it. `ink` is the dark text/icon colour used on top of
- * the lime so contrast stays AA on the bright accent.
- */
-const NEON = {
-  accent: '#0FFF50',
-  accentHover: '#00E646',
-  ink: '#0a1a0a',
-  border: '#00C43A',
-} as const
-
-const CATEGORIES = [
-  { key: 'bug', emoji: '🐛', label: 'Bug' },
-  { key: 'slow', emoji: '🐢', label: 'Slow' },
-  { key: 'visual', emoji: '🎨', label: 'Visual' },
-  { key: 'confusing', emoji: '😕', label: 'Confusing' },
-  { key: 'other', emoji: '💬', label: 'Other' },
-] as const
+const CATEGORY_KEYS = ['bug', 'slow', 'visual', 'confusing', 'other'] as const
+const CATEGORY_EMOJI: Record<(typeof CATEGORY_KEYS)[number], string> = {
+  bug: '🐛',
+  slow: '🐢',
+  visual: '🎨',
+  confusing: '😕',
+  other: '💬',
+}
 
 // Reporter-fixed/terminal statuses that should surface the verify ("Yes,
 // fixed") / reopen ("Not fixed") row. Mirrors the web widget, which treats
@@ -88,6 +78,8 @@ const VERIFIABLE_STATUSES = new Set(['fixed', 'resolved', 'verified'])
 export interface MushiBottomSheetProps {
   visible: boolean
   onClose: () => void
+  /** Tab to select when the sheet opens (controlled by MushiProvider). */
+  preferredTab?: 'report' | 'inbox' | 'assistant'
   /** Base64 data-URI of the screenshot captured before the sheet opened. Optional. */
   screenshotDataUrl?: string
   /** Called when the user removes the attached screenshot. */
@@ -97,16 +89,31 @@ export interface MushiBottomSheetProps {
    * Resolved by the provider from `widget.screenshotSensitiveHint`.
    */
   screenshotSensitiveHint?: string | null
+  /** When true, renders an Ask tab with page-aware assistant (web parity). */
+  assistantEnabled?: boolean
+  assistantLabel?: string
+  assistantGreeting?: string
+  assistantSuggestions?: string[]
+  /** Poll My Reports while inbox tab is open. 0 disables polling. */
+  inboxPollIntervalMs?: number
 }
 
 export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   visible,
   onClose,
+  preferredTab = 'report',
   screenshotDataUrl,
   onClearScreenshot,
   screenshotSensitiveHint,
+  assistantEnabled = false,
+  assistantLabel = MUSHI_COPY.assistantTab,
+  assistantGreeting,
+  assistantSuggestions = [],
+  inboxPollIntervalMs = 0,
 }) => {
   const mushi = useMushiContext()
+  const t = getLocale()
+  const greeting = assistantGreeting ?? t.assistant.defaultGreeting
   const scheme = useColorScheme()
   const dark = scheme === 'dark'
 
@@ -116,12 +123,17 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [category, setCategory] = useState<string | null>(null)
   const [description, setDescription] = useState('')
   const [phase, setPhase] = useState<'form' | 'sending' | 'sent'>('form')
-  const [sheetTab, setSheetTab] = useState<'report' | 'inbox' | 'community'>('report')
+  const [sheetTab, setSheetTab] = useState<'report' | 'inbox' | 'assistant'>('report')
   const [inboxReports, setInboxReports] = useState<Array<{ id: string; status: string; summary?: string | null; description?: string }>>([])
   const [inboxLoading, setInboxLoading] = useState(false)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const [threadComments, setThreadComments] = useState<Array<{ id: number; body: string; author_kind: string; created_at: string }>>([])
   const [replyText, setReplyText] = useState('')
+  const [assistantInput, setAssistantInput] = useState('')
+  const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null)
+  const [assistantSending, setAssistantSending] = useState(false)
+  const [assistantError, setAssistantError] = useState<string | null>(null)
+  const [assistantTurns, setAssistantTurns] = useState<Array<{ role: 'user' | 'bot'; text: string; options?: string[] }>>([])
   // Local shadow of the screenshot so we can clear it from inside the sheet
   const [screenshotAttached, setScreenshotAttached] = useState(true)
 
@@ -139,9 +151,18 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   useEffect(() => {
     if (visible) {
       setScreenshotAttached(true)
-      if (sheetTab === 'inbox') void loadInbox()
+      setSheetTab(preferredTab)
+      if (preferredTab === 'inbox') void loadInbox()
     }
-  }, [visible, sheetTab, loadInbox])
+  }, [visible, preferredTab, loadInbox])
+
+  useEffect(() => {
+    if (!visible || sheetTab !== 'inbox' || inboxPollIntervalMs <= 0) return
+    const timer = setInterval(() => {
+      void loadInbox()
+    }, inboxPollIntervalMs)
+    return () => clearInterval(timer)
+  }, [visible, sheetTab, inboxPollIntervalMs, loadInbox])
 
   const openThread = useCallback(async (reportId: string) => {
     setSelectedReportId(reportId)
@@ -163,6 +184,30 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
     await loadInbox()
     await openThread(selectedReportId)
   }, [mushi, selectedReportId, loadInbox, openThread])
+
+  const sendAssistant = useCallback(async (message: string) => {
+    if (!mushi?.askAssistant || !message.trim() || assistantSending) return
+    const trimmed = message.trim()
+    setAssistantInput('')
+    setAssistantError(null)
+    setAssistantTurns((prev) => [...prev, { role: 'user', text: trimmed }])
+    setAssistantSending(true)
+    try {
+      const reply = await mushi.askAssistant(trimmed, assistantThreadId)
+      if (!reply) {
+        setAssistantError('Could not reach the assistant. Try again.')
+        return
+      }
+      if (reply.threadId) setAssistantThreadId(reply.threadId)
+      const botText = reply.kind === 'clarify' ? (reply.question ?? reply.text ?? '') : (reply.text ?? '')
+      setAssistantTurns((prev) => [
+        ...prev,
+        { role: 'bot', text: botText, options: reply.options },
+      ])
+    } finally {
+      setAssistantSending(false)
+    }
+  }, [mushi, assistantSending, assistantThreadId])
 
   const resetForm = useCallback(() => {
     setCategory(null)
@@ -261,8 +306,12 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   // banner the user tapped to open this sheet.
   const pal = mushiPalette(dark ? 'dark' : 'light')
   const colors = dark
-    ? { bg: pal.paper, text: pal.ink, sub: pal.inkMuted, card: pal.paperRaised, accent: NEON.accent, accentInk: NEON.ink, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.6)', disabled: '#3a3a3c', disabledText: pal.inkFaint }
-    : { bg: pal.paperRaised, text: pal.ink, sub: pal.inkMuted, card: pal.paper, accent: NEON.accent, accentInk: NEON.ink, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.35)', disabled: '#d1d1d6', disabledText: pal.inkFaint }
+    ? { bg: pal.paper, text: pal.ink, sub: pal.inkMuted, card: pal.paperRaised, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.6)', disabled: '#3a3a3c', disabledText: pal.inkFaint }
+    : { bg: pal.paperRaised, text: pal.ink, sub: pal.inkMuted, card: pal.paper, accent: MUSHI_BANNER_NEON.bg, accentInk: MUSHI_BANNER_NEON.fg, border: pal.ruleStrong, backdrop: 'rgba(0,0,0,0.35)', disabled: '#d1d1d6', disabledText: pal.inkFaint }
+
+  const sheetTabs = (
+    ['report', 'inbox', ...(assistantEnabled ? (['assistant'] as const) : [])] as const
+  )
 
   const canSubmit = !!category && description.trim().length > 0 && phase === 'form'
 
@@ -294,16 +343,20 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
 
           {/* Neon brand header — mirrors the web SDK banner so the sheet reads
               as the same surface the user tapped to open it. */}
-          <View style={[s.brandHeader, { backgroundColor: NEON.accent, borderBottomColor: NEON.border }]}>
-            <Text style={[s.brandEyebrow, { color: NEON.ink }]}>MUSHI · BETA</Text>
-            <Text style={[s.brandTitle, { color: NEON.ink }]}>
-              {sheetTab === 'inbox' ? 'Your reports' : sheetTab === 'community' ? 'Community' : 'Report an issue'}
+          <View style={[s.brandHeader, { backgroundColor: MUSHI_BANNER_NEON.bg, borderBottomColor: MUSHI_BANNER_NEON.border }]}>
+            <Text style={[s.brandEyebrow, { color: MUSHI_BANNER_NEON.fg }]}>MUSHI · BETA</Text>
+            <Text style={[s.brandTitle, { color: MUSHI_BANNER_NEON.fg }]}>
+              {sheetTab === 'assistant'
+                ? assistantLabel
+                : sheetTab === 'inbox'
+                  ? t.flows.reports.title
+                  : t.widget.title}
             </Text>
           </View>
 
           {/* Tab row */}
           <View style={s.tabRow}>
-            {(['report', 'inbox', 'community'] as const).map((tab) => (
+            {sheetTabs.map((tab) => (
               <TouchableOpacity
                 key={tab}
                 onPress={() => {
@@ -314,20 +367,88 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 style={[s.tabBtn, sheetTab === tab && { borderBottomColor: colors.accent }]}
               >
                 <Text style={[s.tabLabel, { color: sheetTab === tab ? colors.text : colors.sub }]}>
-                  {tab === 'report' ? 'Report' : tab === 'inbox' ? 'Your reports' : 'Community'}
+                  {tab === 'report'
+                    ? t.widget.trigger
+                    : tab === 'inbox'
+                      ? t.flows.reports.title
+                      : assistantLabel}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {sheetTab === 'inbox' ? (
+          {sheetTab === 'assistant' ? (
+            <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
+              {assistantTurns.length === 0 ? (
+                <>
+                  <Text style={{ color: colors.sub, marginBottom: 12, lineHeight: 20 }}>{greeting}</Text>
+                  {assistantSuggestions.map((chip) => (
+                    <TouchableOpacity
+                      key={chip}
+                      style={[s.assistantChip, { borderColor: colors.border, backgroundColor: colors.card }]}
+                      onPress={() => void sendAssistant(chip)}
+                    >
+                      <Text style={{ color: colors.text, fontSize: 13 }}>{chip}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : (
+                assistantTurns.map((turn, idx) => (
+                  <View
+                    key={`${turn.role}-${idx}`}
+                    style={[
+                      s.assistantBubble,
+                      {
+                        alignSelf: turn.role === 'user' ? 'flex-end' : 'flex-start',
+                        backgroundColor: turn.role === 'user' ? colors.accent : colors.card,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: turn.role === 'user' ? colors.accentInk : colors.text }}>{turn.text}</Text>
+                    {turn.options?.map((opt) => (
+                      <TouchableOpacity key={opt} onPress={() => void sendAssistant(opt)} style={{ marginTop: 8 }}>
+                        <Text style={{ color: colors.accent, fontSize: 12 }}>{opt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ))
+              )}
+              {assistantSending ? (
+                <Text style={{ color: colors.sub, marginTop: 8 }} accessibilityLiveRegion="polite">
+                  {t.assistant.thinking}
+                </Text>
+              ) : null}
+              {assistantError ? (
+                <Text style={{ color: pal.danger, marginTop: 8 }} accessibilityRole="alert">
+                  {assistantError}
+                </Text>
+              ) : null}
+              <View style={s.assistantComposer}>
+                <TextInput
+                  style={[s.input, { flex: 1, minHeight: 44, backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                  placeholder={t.assistant.inputPlaceholder}
+                  placeholderTextColor={colors.sub}
+                  value={assistantInput}
+                  onChangeText={setAssistantInput}
+                  editable={!assistantSending}
+                />
+                <TouchableOpacity
+                  style={[s.submitBtn, { backgroundColor: colors.accent, paddingHorizontal: 16 }]}
+                  onPress={() => void sendAssistant(assistantInput)}
+                  disabled={!assistantInput.trim() || assistantSending}
+                >
+                  <Text style={[s.submitText, { color: colors.accentInk }]}>↑</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          ) : sheetTab === 'inbox' ? (
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
               {inboxLoading ? (
-                <Text style={{ color: colors.sub }}>Loading…</Text>
+                <Text style={{ color: colors.sub }}>{t.flows.reports.loading}</Text>
               ) : selectedReportId ? (
                 <>
                   <TouchableOpacity onPress={() => setSelectedReportId(null)}>
-                    <Text style={{ color: colors.accent, marginBottom: 8 }}>← Back</Text>
+                    <Text style={{ color: colors.accent, marginBottom: 8 }}>← {t.widget.back}</Text>
                   </TouchableOpacity>
                   {threadComments.map((c) => (
                     <View key={c.id} style={[s.threadBubble, { backgroundColor: colors.card }]}>
@@ -340,22 +461,22 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                   ) && (
                     <View style={s.verifyRow}>
                       <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.accent }]} onPress={() => submitFeedback('confirms')}>
-                        <Text style={[s.submitText, { color: colors.accentInk }]}>Yes, fixed</Text>
+                        <Text style={[s.submitText, { color: colors.accentInk }]}>{t.flows.thread.confirmFixed}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[s.verifyBtn, { backgroundColor: colors.border }]} onPress={() => submitFeedback('not_fixed')}>
-                        <Text style={[s.submitText, { color: colors.text }]}>Not fixed</Text>
+                        <Text style={[s.submitText, { color: colors.text }]}>{t.flows.thread.notFixed}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
                   <TextInput
                     style={[s.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, minHeight: 48 }]}
-                    placeholder="Reply…"
+                    placeholder={t.flows.thread.replyPlaceholder}
                     placeholderTextColor={colors.sub}
                     value={replyText}
                     onChangeText={setReplyText}
                   />
                   <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]} onPress={sendReply}>
-                    <Text style={[s.submitText, { color: colors.accentInk }]}>Send</Text>
+                    <Text style={[s.submitText, { color: colors.accentInk }]}>{t.flows.thread.send}</Text>
                   </TouchableOpacity>
                 </>
               ) : (
@@ -364,50 +485,29 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                     <Text style={{ color: colors.text, fontWeight: '600' }} numberOfLines={1}>
                       {(r.summary ?? r.description ?? 'Report').slice(0, 60)}
                     </Text>
-                    <Text style={{ color: colors.sub, fontSize: 11 }}>{r.status}</Text>
+                    <Text style={{ color: colors.sub, fontSize: 11 }}>{reporterStatusShort(r.status)}</Text>
                   </TouchableOpacity>
                 ))
               )}
             </ScrollView>
-          ) : sheetTab === 'community' ? (
-            <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
-              <Text style={{ color: colors.sub, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                Sign in to track your reports across apps and see the global leaderboard. No password needed.
-              </Text>
-              <TextInput
-                style={[s.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border, minHeight: 48 }]}
-                placeholder="you@example.com"
-                placeholderTextColor={colors.sub}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                textContentType="emailAddress"
-              />
-              <TouchableOpacity style={[s.submitBtn, { backgroundColor: colors.accent }]}>
-                <Text style={[s.submitText, { color: colors.accentInk }]}>Send sign-in link →</Text>
-              </TouchableOpacity>
-              <Text style={{ color: colors.sub, fontSize: 11, textAlign: 'center', marginTop: 12 }}>
-                We'll email you a one-tap sign-in link. No password, ever.
-              </Text>
-            </ScrollView>
           ) : phase === 'sent' ? (
             <View style={s.sentWrap}>
               <Text style={[s.sentEmoji]}>✅</Text>
-              <Text style={[s.sentText, { color: colors.text }]}>Report sent!</Text>
+              <Text style={[s.sentText, { color: colors.text }]}>{t.widget.submitted}</Text>
             </View>
           ) : (
             <ScrollView style={s.body} keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 24 }}>
-              <Text style={[s.stepLabel, { color: colors.sub }]}>What kind of issue?</Text>
+              <Text style={[s.stepLabel, { color: colors.sub }]}>{t.step1.heading}</Text>
 
               {/* Categories */}
               <View style={s.catRow}>
-                {CATEGORIES.map((c) => {
-                  const active = category === c.key
+                {CATEGORY_KEYS.map((key) => {
+                  const active = category === key
                   return (
                     <TouchableOpacity
-                      key={c.key}
-                      onPress={() => setCategory(c.key)}
+                      key={key}
+                      onPress={() => setCategory(key)}
                       activeOpacity={0.7}
                       style={[
                         s.catBtn,
@@ -417,14 +517,14 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                         },
                       ]}
                     >
-                      <Text style={s.catEmoji}>{c.emoji}</Text>
+                      <Text style={s.catEmoji}>{CATEGORY_EMOJI[key]}</Text>
                       <Text
                         style={[
                           s.catLabel,
                           { color: active ? colors.accentInk : colors.text } as TextStyle,
                         ]}
                       >
-                        {c.label}
+                        {t.step1.categories[key]}
                       </Text>
                     </TouchableOpacity>
                   )
@@ -441,7 +541,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                     borderColor: colors.border,
                   },
                 ]}
-                placeholder="What happened?"
+                placeholder={t.step3.descriptionPlaceholder}
                 placeholderTextColor={colors.sub}
                 multiline
                 textAlignVertical="top"
@@ -456,16 +556,16 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                   <Image
                     source={{ uri: activeScreenshot }}
                     style={s.screenshotThumb}
-                    accessibilityLabel="Attached screenshot"
+                    accessibilityLabel={t.step3.screenshotPreviewAlt}
                   />
                   <View style={s.screenshotMeta}>
                     <Text style={[s.screenshotLabel, { color: colors.text }]}>
-                      Screenshot attached
+                      {t.step3.screenshotAttached.replace(' ✓', '')}
                     </Text>
                     <Text style={[s.screenshotSub, { color: colors.sub }]}>
                       {screenshotSensitiveHint && screenshotSensitiveHint.trim()
                         ? `⚠ ${screenshotSensitiveHint}`
-                        : 'Helps the team see the issue'}
+                        : t.step3.screenshotSensitiveHint.split('—')[0]?.trim() ?? t.step3.screenshotSensitiveHint}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -474,7 +574,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                       onClearScreenshot?.()
                     }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityLabel="Remove screenshot"
+                    accessibilityLabel={t.widget.close}
                   >
                     <Text style={[s.screenshotRemove, { color: colors.sub }]}>✕</Text>
                   </TouchableOpacity>
@@ -492,7 +592,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
                 ]}
               >
                 <Text style={[s.submitText, { color: canSubmit ? colors.accentInk : colors.disabledText }]}>
-                  {phase === 'sending' ? 'Sending…' : 'Submit report'}
+                  {phase === 'sending' ? t.widget.submitting : t.widget.submit}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -696,5 +796,26 @@ const s = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
+  },
+  assistantBubble: {
+    maxWidth: '88%',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  assistantChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  assistantComposer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 12,
+    paddingBottom: 8,
   },
 })

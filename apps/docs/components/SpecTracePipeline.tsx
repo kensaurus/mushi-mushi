@@ -1,4 +1,5 @@
-'use client'
+import { VIZ } from '../lib/viz-tokens'
+import { DiagramFigure } from './diagram-primitives'
 
 interface StageProps {
   step: number
@@ -9,7 +10,7 @@ interface StageProps {
 }
 
 function Stage({ step, title, detail, accent, last }: StageProps) {
-  const accentColor = 'var(--mushi-vermillion, #e03c2c)'
+  const accentColor = VIZ.accent
   return (
     <div style={{ display: 'flex', gap: 14, position: 'relative' }}>
       {/* Left rail */}
@@ -19,10 +20,10 @@ function Stage({ step, title, detail, accent, last }: StageProps) {
             width: 28,
             height: 28,
             borderRadius: '50%',
-            border: `2px solid ${accent ? accentColor : 'var(--nextra-border, #e5e7eb)'}`,
+            border: `2px solid ${accent ? accentColor : VIZ.nodeBorder}`,
             background: accent
-              ? 'color-mix(in srgb, var(--mushi-vermillion, #e03c2c) 10%, var(--nextra-bg, white))'
-              : 'var(--nextra-bg, white)',
+              ? VIZ.accentWash
+              : VIZ.nodeBg,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -91,10 +92,10 @@ const STAGES = [
 
 export function SpecTracePipeline() {
   return (
-    <div className="not-prose my-8 rounded-xl border border-[color:var(--nextra-border)] bg-[color:var(--nextra-bg)] p-5 md:p-6">
+    <DiagramFigure ariaLabel="Nine-stage spec traceability pipeline from inventory contract through fix PR, validation gate, synthetic probe, and outcome verification.">
       <div
         style={{
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 700,
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
@@ -108,6 +109,6 @@ export function SpecTracePipeline() {
       {STAGES.map((s, i) => (
         <Stage key={s.title} step={i + 1} title={s.title} detail={s.detail} accent={s.accent} last={i === STAGES.length - 1} />
       ))}
-    </div>
+    </DiagramFigure>
   )
 }

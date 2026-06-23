@@ -25,6 +25,10 @@
     "./feature-groups": {
       "types": "./dist/feature-groups.d.ts",
       "import": "./dist/feature-groups.js"
+    },
+    "./clients": {
+      "types": "./dist/clients.d.ts",
+      "import": "./dist/clients.js"
     }
   },
   "main": "./dist/index.js",

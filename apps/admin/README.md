@@ -170,7 +170,29 @@ Amber (`brand`) is **reserved** for primary CTAs and the nav active-state. Every
 
 ### Theme control (light / dark / system)
 
-The sidebar footer exposes **System**, **Dark**, and **Light** via `useTheme()` (`data-theme` on `<html>`). System honours `prefers-color-scheme` and reacts to OS changes without reload. Light mode maps `--color-brand` to `--mushi-vermillion` (editorial vermillion) while dark mode keeps amber oklch — intentional perceptual mapping per theme.
+The sidebar footer exposes **System**, **Dark**, and **Light** via `useTheme()` (`data-theme` on `<html>`). **System is the default** for new sessions (honours `prefers-color-scheme` and reacts to OS changes without reload). Light mode maps `--color-brand` to `--mushi-vermillion` (editorial vermillion) while dark mode keeps amber oklch — intentional perceptual mapping per theme.
+
+### Diet chrome (Supabase-style flat panels)
+
+Operational pages use **border-first, flat surfaces** instead of gradient elevation:
+
+| Primitive | When to use |
+|-----------|-------------|
+| `<Panel>` / `.panel` | Grouped lists (settings rows, integration cards, KPI band wrapper) |
+| `<PanelRow>` / `.panel-row` | Single tappable row with hairline divider |
+| `<PanelSectionLabel>` | ALL-CAPS section header above a panel (Settings / Add-ons rhythm) |
+| `<Card variant="flat">` | Standalone content block — default for new page code |
+| `<Card variant="elevated">` | **Allowlisted only** — PageHero, onboarding, report editorial, marketing |
+
+Tokens: `--color-panel`, `--color-panel-border`, `--radius-panel`, `.panel--metrics` (flat KPI grid inside one border).
+
+**Rules:**
+- New list UI → `Panel` + `PanelRow`, not a grid of elevated `Card`s
+- KPI metrics → `MetricStrip panel` + `KpiTile density="flat"`
+- Global chrome → at most one collapsible status strip (`GlobalStatusStrip`) before page headers
+- Theme default → `system`; verify light **and** dark when touching chrome tokens
+
+ESLint `no-card-elevated-outside-allowlist` (warn) and `lint:tokens` `[diet-chrome]` guard catch regressions on `*Page.tsx` files.
 
 Optional **high-contrast** mode is available via `html[data-theme="high-contrast"]` for WCAG-maximum chrome; `forced-colors: active` maps edge/fg to system colors.
 
@@ -192,9 +214,10 @@ New rules added in v2:
 
 | Rule | Severity | What it catches |
 |------|----------|----------------|
-| `no-raw-palette-color` | warn | `text-gray-400`, `bg-yellow-400`, etc. in `apps/admin/src` — replace with design tokens |
+| `no-raw-palette-color` | **error** | `text-gray-400`, `bg-yellow-400`, etc. in `apps/admin/src` — replace with design tokens |
 | `no-text-3xs-on-interactive` | warn | `text-3xs` on `button`/`a`/`input`/`label`/`th`/`td` — use `text-2xs` minimum |
 | `no-hand-rolled-dialog` | error | `fixed inset-0 … role="dialog"` on raw HTML — use `<Modal>` or `<Drawer>` |
+| `no-card-elevated-outside-allowlist` | warn | `Card elevated` / `card-elevated` on operational `*Page.tsx` — use diet `Panel` / `variant="flat"` |
 
 Also extended `scripts/check-design-tokens.mjs` with a **type-floor check**: hard-coded pixel/rem sizes below 12px (e.g. `text-[10px]`, `fontSize: '11px'`) fail the build with `[type-floor]` in the output.
 
@@ -318,16 +341,18 @@ Pure, dependency-free string utilities. Use these instead of inline `count === 1
 
 ## Information architecture (PDCA loop)
 
-The sidebar (`src/components/Layout.tsx`) groups admin pages into the Plan → Do → Check → Act loop. **June 2026** added **Connect & Update** (`/connect`) under **Start here** — the single hub for GitHub, SDK install, MCP deeplinks, CLI copy, and **Create Upgrade PR** (see [`ConnectPage.tsx`](./src/pages/ConnectPage.tsx), [`SdkUpgradeCTA`](./src/components/SdkUpgradeCTA.tsx), [`McpInstallButtons`](./src/components/McpInstallButtons.tsx)).
+The sidebar (`src/components/Layout.tsx`) groups admin pages into the Plan → Do → Check → Act loop. Navigation metadata is centralized in [`src/lib/navRegistry.ts`](./src/lib/navRegistry.ts) and built via [`src/lib/buildNav.ts`](./src/lib/buildNav.ts) so sidebar labels, PDCA stage chips, and command-palette entries stay in sync.
+
+**June 2026** added **Connect & Update** (`/connect`) under **Start here** only — the single hub for GitHub, SDK install, MCP deeplinks, CLI copy, and **Create Upgrade PR** (see [`ConnectPage.tsx`](./src/pages/ConnectPage.tsx), [`SdkUpgradeCTA`](./src/components/SdkUpgradeCTA.tsx), [`McpInstallButtons`](./src/components/McpInstallButtons.tsx)).
 
 The sidebar groups the 24+ admin pages into the same Plan → Do → Check → Act loop the README sells, so first-day users see the story instead of jargon-heavy nav items:
 
-- **Start here** — `Dashboard`, `Inbox`, `Get started`, **`Connect & Update`**. The **Action Inbox** is pinned above the PDCA groups so Advanced-mode users land on a single "what should I do next?" surface the same way beginner users land on the Dashboard. Reachable via `⌘⇧I` / `Ctrl⇧I` from anywhere (SPA-nav so the toast queue, scroll, and focus survive the jump)
-- **Plan — capture & classify** — `Reports`, `Graph`, `Anti-Gaming`, `Queue`
+- **Start here** — `Get started`, **`Connect & Update`**, `Dashboard`, **`Action Inbox`**, `Support`, `Feature board`. The **Action Inbox** is pinned in Start so Advanced-mode users land on a single "what should I do next?" surface. Reachable via `⌘⇧I` / `Ctrl⇧I` from anywhere (SPA-nav so the toast queue, scroll, and focus survive the jump)
+- **Plan — capture & classify** — `Reports`, `Graph`, `Explore`, `Content QA`, `User stories` (Advanced), `Failed events` (DLQ), `Anti-Gaming`
 - **Do — dispatch fixes** — `Fixes`, `Repo`, `Prompt Lab`
-- **Check — verify quality** — `Judge`, `Health`, `Intelligence`, `Research`
-- **Act — integrate & scale** — `Integrations`, **`Connect & Update`**, `MCP`, `Skill Pipelines`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
-- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Members`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
+- **Check — verify quality** — In **Advanced** mode, three collapsible sub-groups: *Quality gates* (Judge, QA Coverage, Full-Stack Audit, Lessons), *System health* (Health, Code Health, Drift, Anomalies), *Release & intel* (Releases, Intelligence, Research, Experiments). **Beginner** mode shows Judge, Health, and QA Coverage plus a link to the verification hub on `/health?hub=check`
+- **Act — integrate & scale** — `Iterate`, `Skill Pipelines`, `Integrations`, `MCP`, `Marketplace`, `Alert routing` (Notifications) — standardise verified fixes back into the upstream tools your team already lives in
+- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Members`, `Settings`, `Rewards`, `LLM Cost`, `Billing`, `SSO`, `Compliance`, `Audit Log`, `Storage`, `Query`, `Users` (super-admin)
 
 `SSO` and `Billing` deliberately sit in **Workspace**, not Act — they're one-time admin / account concerns that don't iterate every loop. Act is reserved for tabs that turn a verified fix into something the rest of the team's toolchain consumes.
 

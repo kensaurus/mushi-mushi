@@ -282,7 +282,7 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
         {release.status === 'published' && (
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-secondary">Changelog</h3>
-            <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border border-edge-subtle bg-surface-raised p-3 text-sm">
+            <pre className="mushi-code-block mushi-code-body max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border border-code-surface-border p-3 text-sm">
               {release.body_md}
             </pre>
           </div>

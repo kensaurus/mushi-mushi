@@ -34,6 +34,9 @@ export const PAGE_ROUTES_SKIP_LAYOUT_HERO = new Set([
   '/inbox',
   '/reports',
   '/fixes',
+  '/connect',
+  '/setup-copilot',
+  '/onboarding',
 ])
 
 export function hasPageOwnedHero(pathname: string): boolean {

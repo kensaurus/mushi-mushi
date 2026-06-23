@@ -1,22 +1,6 @@
 /**
  * FILE: packages/cli/src/commands/account.ts
- * PURPOSE: CLI account management commands: init, login, whoami, ping, status, config, migrate.
- *
- * OVERVIEW:
- *   - `mushi init`   — guided SDK setup wizard
- *   - `mushi login`  — RFC 8628 browser device-auth (zero copy-paste) or --api-key CI path
- *   - `mushi whoami` — verify key and show project info
- *   - `mushi ping`   — health-check connectivity
- *   - `mushi status` — show project report stats
- *   - `mushi config` — view/update CLI config
- *   - `mushi migrate`— suggest migration guide
- *
- * DEPENDENCIES:
- *   - config.ts (loadConfig / saveConfig)
- *   - init.ts (runInit)
- *   - console-url.ts (resolveConsoleUrl, openInBrowser, apiKeyHint, cliSetupDeepLink, etc.)
- *   - cli-shared.ts (apiCall, die, requireConfig, pad)
- *   - endpoint.ts (CLOUD_API_ENDPOINT, resolveCloudEndpoint)
+ * PURPOSE: CLI account commands — init, login, whoami, ping, status, config, migrate.
  */
 
 import type { Command } from 'commander';
@@ -31,7 +15,7 @@ import {
   openInBrowser,
   resolveConsoleUrl,
 } from '../console-url.js';
-import { apiCall, die, requireConfig, pad, API_TIMEOUT_MS } from '../cli-shared.js';
+import { apiCall, die, requireConfig, pad, probeEndpointHealth } from '../cli-shared.js';
 import {
   createProject,
   listProjects,
@@ -354,24 +338,19 @@ program
     const config = requireConfig()
     const t0 = Date.now()
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
-      const res = await fetch(`${config.endpoint}/health`, { signal: controller.signal })
-      clearTimeout(timer)
-      const latency = Date.now() - t0
+      const probe = await probeEndpointHealth(config.endpoint)
       if (opts.json) {
-        console.log(JSON.stringify({ ok: res.ok, status: res.status, latency_ms: latency }))
+        console.log(JSON.stringify({ ok: probe.ok, status: probe.status, latency_ms: probe.latencyMs }))
       } else {
-        const symbol = res.ok ? '✓' : '✗'
-        console.log(`${symbol} ${res.ok ? 'OK' : 'FAIL'} — ${res.status} (${latency}ms)`)
-        if (!res.ok) process.exit(1)
+        console.log(`${probe.ok ? 'OK' : 'FAIL'} — ${probe.status} (${probe.latencyMs}ms)`)
+        if (!probe.ok) process.exit(1)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (opts.json) {
         console.log(JSON.stringify({ ok: false, error: msg, latency_ms: Date.now() - t0 }))
       } else {
-        process.stderr.write(`✗ Unreachable: ${msg}\n`)
+        process.stderr.write(`FAIL Unreachable: ${msg}\n`)
       }
       process.exit(1)
     }

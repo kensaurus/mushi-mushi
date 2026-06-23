@@ -10,7 +10,10 @@ import * as Sentry from '@sentry/react'
 import type { ZodType } from 'zod'
 import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
-import { getActiveProjectIdSnapshot, isValidProjectId } from './activeProject'
+import {
+  getActiveProjectIdForApi,
+  isValidProjectId,
+} from './activeProject'
 import { getActiveOrgIdSnapshot, isValidOrgId } from './activeOrg'
 import { coerceApiResult, type ApiResult } from './apiEnvelope'
 
@@ -116,7 +119,7 @@ function coalesceKey(
 ): string | null {
   if (method !== 'GET' && method !== 'HEAD') return null
   if (body != null) return null
-  return `${method}:${getActiveOrgIdSnapshot() ?? 'no-org'}:${getActiveProjectIdSnapshot() ?? 'no-project'}:${path}`
+  return `${method}:${getActiveOrgIdSnapshot() ?? 'no-org'}:${getActiveProjectIdForApi() ?? 'no-project'}:${path}`
 }
 
 export function invalidateApiCache(pathPrefix?: string): void {
@@ -210,7 +213,7 @@ async function doFetch<T>(
 
   try {
     const scope = options?.scope ?? 'project'
-    const storedProjectId = scope === 'project' ? getActiveProjectIdSnapshot() : null
+    const storedProjectId = scope === 'project' ? getActiveProjectIdForApi() : null
     const storedOrgId = scope === 'none' ? null : getActiveOrgIdSnapshot()
     const activeProjectId =
       storedProjectId && isValidProjectId(storedProjectId) ? storedProjectId : null
@@ -411,7 +414,7 @@ export async function apiFetchRaw(path: string, options?: RequestInit): Promise<
   const t0 = performance.now()
   try {
     const token = await getAccessToken()
-    const activeProjectId = getActiveProjectIdSnapshot()
+    const activeProjectId = getActiveProjectIdForApi()
     const activeOrgId = getActiveOrgIdSnapshot()
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,

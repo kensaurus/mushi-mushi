@@ -3,7 +3,7 @@
  */
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 interface FaqItem {
   q: string
@@ -35,25 +35,34 @@ interface Props {
 
 export function TroubleshootingAccordion({ items = DEFAULT_FAQ }: Props) {
   const [open, setOpen] = useState<number | null>(null)
+  const baseId = useId()
 
   return (
-    <div className="not-prose border border-[var(--docs-rule)] rounded-md divide-y divide-[var(--docs-rule)]">
-      <p className="px-4 py-3 m-0 font-semibold text-sm">Not seeing what you expected?</p>
-      {items.map((item, i) => (
-        <div key={item.q}>
-          <button
-            type="button"
-            className="w-full text-left px-4 py-3 text-sm font-medium hover:bg-[var(--docs-paper-hover)]"
-            aria-expanded={open === i}
-            onClick={() => setOpen(open === i ? null : i)}
-          >
-            {item.q}
-          </button>
-          {open === i ? (
-            <p className="px-4 pb-3 m-0 text-sm text-[var(--docs-ink-muted)]">{item.a}</p>
-          ) : null}
-        </div>
-      ))}
+    <div className="not-prose border border-mushi-rule rounded-md divide-y divide-mushi-rule">
+      <p className="px-4 py-3 m-0 font-semibold text-sm text-mushi-ink">Not seeing what you expected?</p>
+      {items.map((item, i) => {
+        const panelId = `${baseId}-panel-${i}`
+        const isOpen = open === i
+        return (
+          <div key={item.q}>
+            <button
+              type="button"
+              id={`${baseId}-trigger-${i}`}
+              className="w-full text-left px-4 py-3 text-sm font-medium text-mushi-ink hover:bg-mushi-paper-wash focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mushi-vermillion"
+              aria-expanded={isOpen}
+              aria-controls={panelId}
+              onClick={() => setOpen(isOpen ? null : i)}
+            >
+              {item.q}
+            </button>
+            {isOpen ? (
+              <p id={panelId} role="region" aria-labelledby={`${baseId}-trigger-${i}`} className="px-4 pb-3 m-0 text-sm text-mushi-ink-muted">
+                {item.a}
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
     </div>
   )
 }

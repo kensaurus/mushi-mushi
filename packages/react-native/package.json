@@ -42,7 +42,8 @@
     }
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:^"
+    "@mushi-mushi/core": "workspace:^",
+    "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

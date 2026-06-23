@@ -1,22 +1,6 @@
 /**
  * FILE: packages/cli/src/console-url.ts
- * PURPOSE: Resolve the Mushi admin console base URL for CLI hints, browser
- *          opens, and deep links — hosted cloud, local :6464, or override.
- *
- * OVERVIEW:
- * - `resolveConsoleUrl()` async: env → saved config → localhost probe → hosted
- * - `resolveConsoleUrlSync()` for copy-only hints without network
- * - Path helpers build onboarding/projects/connect deep links
- *
- * DEPENDENCIES:
- * - `./config.js` for persisted `consoleUrl`
- *
- * USAGE:
- * - Imported by `init.ts`, `commands/account.ts`, and tests
- *
- * NOTES:
- * - Local dev serves admin at http://localhost:6464 (no /admin prefix)
- * - Hosted production uses https://kensaur.us/mushi-mushi/admin
+ * PURPOSE: Resolve the Mushi admin console base URL and build CLI deep links (hosted, local, or override).
  */
 
 import { existsSync, readFileSync } from 'node:fs'

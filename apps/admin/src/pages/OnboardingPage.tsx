@@ -584,6 +584,13 @@ export function OnboardingPage() {
               >
                 Continue to Connect hub →
               </Link>
+              <span className="text-fg-faint text-xs" aria-hidden="true">·</span>
+              <Link
+                to="/setup-copilot"
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-brand hover:underline"
+              >
+                Setup copilot
+              </Link>
             </span>
           )}
         </nav>

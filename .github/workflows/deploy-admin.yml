@@ -40,7 +40,7 @@ on:
     paths:
       - 'apps/admin/**'
       - 'scripts/cloudfront-mushi-*'
-      - 'scripts/cloudfront-mushi-apex-redirect.js'
+      - 'scripts/aws-attach-apex-redirect.mjs'
   workflow_dispatch:
 
 concurrency:
@@ -271,11 +271,8 @@ jobs:
             --region us-east-1
 
       - name: Deploy CloudFront apex redirect function
-        # Rescues historical bad links (e.g. https://kensaur.us/reports/<uuid>)
-        # that were generated before the copy-link BASE_URL fix.
-        # The function is created/updated here on every deploy; it must be
-        # manually associated with the correct CloudFront cache behavior(s)
-        # once — see scripts/cloudfront-mushi-apex-redirect.js for the list.
+        # Rescues apex dead links: admin SPA (/reports/<uuid>) and docs routes
+        # (/quickstart/incident-loop from Nextra unprefixed .txt payloads).
         run: |
           FUNC_NAME="mushi-mushi-apex-redirect"
 
@@ -286,7 +283,7 @@ jobs:
             echo "Creating new CloudFront Function: $FUNC_NAME"
             aws cloudfront create-function \
               --name "$FUNC_NAME" \
-              --function-config '{"Comment":"Redirect apex-domain SPA routes to /mushi-mushi/admin/","Runtime":"cloudfront-js-2.0"}' \
+              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
               --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           else
@@ -294,7 +291,7 @@ jobs:
             aws cloudfront update-function \
               --name "$FUNC_NAME" \
               --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"Redirect apex-domain SPA routes to /mushi-mushi/admin/","Runtime":"cloudfront-js-2.0"}' \
+              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
               --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           fi
@@ -306,16 +303,26 @@ jobs:
             --if-match "$ETAG" \
             --region us-east-1
 
+      - name: Attach apex redirect cache behaviors
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: node scripts/aws-attach-apex-redirect.mjs
+
       - name: Invalidate CloudFront cache
-        # Invalidate the full /mushi-mushi/* tree, not just /mushi-mushi/admin/*.
-        # The spa-router CloudFront Function controls every prefix (admin SPA,
-        # docs static export, and the bare-root 302), so a router code change
-        # must purge cached HTML at every level — otherwise edge POPs serve
-        # stale rewrites for hours.
+        # Invalidate /mushi-mushi/* (spa-router) and apex docs prefixes (apex-redirect).
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/mushi-mushi/*" \
+            --paths \
+              "/mushi-mushi/*" \
+              "/quickstart/*" \
+              "/concepts/*" \
+              "/sdks/*" \
+              "/migrations/*" \
+              "/integrations/*" \
+              "/operating/*" \
+              "/admin/*" \
+              "/connect/*" \
             --region us-east-1
 
       - name: Post-deploy health check

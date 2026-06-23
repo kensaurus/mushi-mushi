@@ -164,7 +164,8 @@ function countHealthIssues(dashboard: DashboardData | undefined): number {
 
 export function useNavCounts(): NavCounts {
   const [counts, setCounts] = useState<NavCounts>(INITIAL)
-  const { isSuperAdmin } = useEntitlements()
+  const { isSuperAdmin, has: hasFeature } = useEntitlements()
+  const inventoryEnabled = hasFeature('inventory_v2')
   const activeProjectSignal = useActiveProjectSignal()
   const activeOrgSignal = useActiveOrgSignal()
 
@@ -187,7 +188,7 @@ export function useNavCounts(): NavCounts {
     ] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
-      projectId
+      projectId && inventoryEnabled
         ? apiFetch<{ summary: InventorySummary | null }>(`/v1/admin/inventory/${projectId}`)
         : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
       apiFetch<DashboardData>('/v1/admin/dashboard'),
@@ -301,7 +302,7 @@ export function useNavCounts(): NavCounts {
       slices,
       ready: true,
     })
-  }, [activeProjectSignal, activeOrgSignal, isSuperAdmin])
+  }, [activeProjectSignal, activeOrgSignal, inventoryEnabled, isSuperAdmin])
 
   useEffect(() => {
     void load()

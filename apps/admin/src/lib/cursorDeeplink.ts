@@ -1,16 +1,22 @@
 /**
- * Cursor and VS Code one-click MCP install deeplinks.
+ * FILE: apps/admin/src/lib/cursorDeeplink.ts
+ * PURPOSE: Back-compat re-exports for Cursor and VS Code deeplink builders.
  *
- * Cursor: cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64(config)>
- * VS Code: vscode:mcp/install?name=<name>&config=<url-encoded JSON config>
+ * OVERVIEW:
+ * - The canonical implementations now live in `packages/mcp/src/clients.ts`
+ *   (shared registry). This file re-exports the named functions that existing
+ *   callers in McpPage and McpInstallButtons depend on, so no import paths
+ *   need to change outside this file.
+ * - New code should import directly from `@mushi-mushi/mcp/clients` instead.
  *
- * The `config` payload is the single server config object (not the whole mcp.json).
- * Cursor base64-encodes it; VS Code URL-encodes JSON.stringify(config) with `name`
- * as a separate query param — see https://github.com/merill/vscode-mcp
+ * DEPENDENCIES:
+ * - @mushi-mushi/mcp/clients  (shared pure builders)
+ * - @mushi-mushi/mcp/feature-groups
+ * - @mushi-mushi/mcp/branding
  *
- * Icon note: Cursor often shows the **host favicon** for HTTP MCP URLs
- * (e.g. supabase.co). Prefer stdio for the Mushi stamp icon, or set `icon`
- * explicitly (supported in recent Cursor builds).
+ * USAGE:
+ *   import { buildCursorDeeplink, buildVsCodeDeeplink } from '@/lib/cursorDeeplink'
+ *   // Works exactly as before — all signatures preserved.
  */
 
 import {
@@ -19,6 +25,7 @@ import {
   featuresQueryString,
 } from '@mushi-mushi/mcp/feature-groups'
 import { MUSHI_ICON_PNG_URL } from '@mushi-mushi/mcp/branding'
+import { projectServerName } from '@mushi-mushi/mcp/clients'
 
 interface McpStdioConfig {
   command: string
@@ -108,20 +115,8 @@ export function buildVsCodeOrgDeeplink(accountLabel: string, apiKey: string, api
   return encodeVsCodeInstallDeeplink(`mushi-${slug}`, buildOrgStdioConfig(apiKey, apiEndpoint))
 }
 
-/**
- * Build a stable, unique, human-readable MCP server slug for a project.
- *
- * Format: `mushi-{name-slug}-{id-prefix}`
- */
-export function projectServerName(projectId: string, projectName: string): string {
-  const nameSlug = projectName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 22)
-  const idSuffix = projectId.replace(/-/g, '').slice(0, 6)
-  return `mushi-${nameSlug}-${idSuffix}`
-}
+// Re-export from shared registry for new consumers.
+export { projectServerName }
 
 function encodeCursorInstallDeeplink(name: string, config: McpStdioConfig | McpHttpConfig): string {
   const encoded = btoa(JSON.stringify(config))

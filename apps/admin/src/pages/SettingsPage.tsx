@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PageScopeHint,SnapshotSectionHint,Section, SegmentedControl, StatCard, ErrorAlert } from '../components/ui'
+import { PageScopeHint, SnapshotSectionHint, SegmentedControl, StatCard, ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { SettingsCompactSnapshot } from '../components/settings/SettingsCompactSnapshot'
@@ -205,9 +205,18 @@ export function SettingsPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             show: !shouldHideSettingsSnapshot(ux, stats),
             children: (
-              <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-                <SnapshotSectionHint text={activeMeta.description} />
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <>
+                <PanelSectionLabel>{copy?.sections?.snapshot ?? 'Settings snapshot'}</PanelSectionLabel>
+                <Panel>
+                  <div className="px-4 pt-3 pb-2 border-b border-panel-border">
+                    <SnapshotSectionHint text={activeMeta.description} />
+                    {lastFetchedAt != null && (
+                      <p className="mt-1 text-2xs text-fg-faint">
+                        {isValidating ? 'Refreshing…' : `Updated ${new Date(lastFetchedAt).toLocaleTimeString()}`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="panel--metrics grid gap-0 sm:grid-cols-2 lg:grid-cols-4">
                   <StatCard
                     label={copy?.statLabels?.byok ?? 'AI keys'}
                     value={stats.byokKeysConfigured}
@@ -248,7 +257,8 @@ export function SettingsPage() {
                     to={settingsLinks.classifier}
                   />
                 </div>
-              </Section>
+                </Panel>
+              </>
             ),
           },
           {

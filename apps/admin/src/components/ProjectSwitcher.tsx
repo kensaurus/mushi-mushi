@@ -314,6 +314,6 @@ export function ProjectSwitcher() {
 export function useActiveProjectId(): string | null {
   const [searchParams] = useSearchParams()
   const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
-  if (fromUrl) return fromUrl
+  if (isValidProjectId(fromUrl)) return fromUrl
   return getActiveProjectIdSnapshot()
 }

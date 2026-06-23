@@ -1,16 +1,7 @@
 /**
  * FILE: apps/admin/src/components/ChartActionsMenu.tsx
- * PURPOSE: Tiny kebab menu that every chart across the Advanced-mode
- *          pages renders in its top-right corner. Turns a passive chart
- *          into something the operator can act on without leaving the
- *          page — export CSV, copy a saved filter link, or jump to the
- *          filtered queue that powers the chart.
- *
- *          All CTAs are optional. Pass only what the chart can support.
- *          If no CTAs are supplied the menu renders nothing — so it's
- *          safe to drop into shared chart shells without blank UI.
- *
- *          Wave R (2026-04-22).
+ * PURPOSE: Optional chart kebab menu for CSV export, saved-filter copy, and
+ *          deep-links to the filtered queue backing the chart.
  */
 
 import { useEffect, useRef, useState } from 'react'

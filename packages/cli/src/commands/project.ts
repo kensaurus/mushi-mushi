@@ -1,30 +1,10 @@
 /**
  * FILE: packages/cli/src/commands/project.ts
- * PURPOSE: `mushi project create` — zero-copy-paste project bootstrap. Signs in
- *          via the browser (RFC 8628 device-auth), creates or selects a project,
- *          mints a report:write SDK key, and writes .env.local + .cursor/mcp.json.
- *
- * OVERVIEW:
- *   - Reuses the shared device-auth primitives so the auth + project + key flow
- *     is identical to `mushi login` and the `mushi init` wizard.
- *   - No UUID / API-key copy-paste: the console approval page hands the CLI a
- *     scoped token, and the key is minted server-side.
- *
- * DEPENDENCIES:
- *   - device-auth.ts (startDeviceAuth / waitForCliToken / listProjects / createProject / mintProjectKey)
- *   - console-url.ts (resolveConsoleUrl, openInBrowser)
- *   - endpoint.ts (resolveCloudEndpoint)
- *   - config.ts (loadConfig / saveConfig)
- *   - mcp-config.ts (buildMcpServerBlock / buildMcpServerName / writeMcpServerEntry)
- *
- * NOTES:
- *   - `--no-browser` prints the verification URL instead of opening it
- *     (headless / SSH). `--name` skips the project-name prompt.
+ * PURPOSE: `mushi project create` — device-auth sign-in, project bootstrap, SDK key mint, and env/MCP writes.
  */
 
 import type { Command } from 'commander';
 import { loadConfig, saveConfig } from '../config.js';
-import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from '../mcp-config.js';
 import { resolveConsoleUrl, openInBrowser } from '../console-url.js';
 import { resolveCloudEndpoint } from '../endpoint.js';
 import {
@@ -36,6 +16,7 @@ import {
   type DeviceProject,
 } from '../device-auth.js';
 import { printAuthBanner, printAuthApproved, printAuthFailed } from '../auth-ui.js';
+import { writeProjectBootstrapFiles } from '../project-bootstrap.js';
 
 export function registerProjectCommands(program: Command): void {
 // ─── project ──────────────────────────────────────────────────────────────────
@@ -59,16 +40,9 @@ Typical first-time flow:
   # CLI writes .env.local and .cursor/mcp.json
   # mushi whoami to confirm`)
   .action(async (opts: { name?: string; browser?: boolean; endpoint?: string }) => {
-    const { writeFile } = await import('node:fs/promises')
-    const { existsSync } = await import('node:fs')
-    const nodePath = await import('node:path')
-
     // Honor a previously-saved self-hosted endpoint (`mushi config endpoint …`)
     // so existing users aren't silently redirected to Mushi Cloud. Precedence:
     // --endpoint flag → MUSHI_API_ENDPOINT env → saved config → cloud default.
-    // The env var is resolved here (ahead of the saved value) rather than left to
-    // resolveCloudEndpoint, otherwise passing saved config as "explicit" would
-    // let it outrank MUSHI_API_ENDPOINT and invert the documented precedence.
     const savedConfig = loadConfig()
     const endpoint = resolveCloudEndpoint(
       opts.endpoint ?? process.env.MUSHI_API_ENDPOINT?.trim() ?? savedConfig.endpoint,
@@ -176,25 +150,13 @@ Typical first-time flow:
     config.consoleUrl = consoleBase
     saveConfig(config)
 
-    const cwd = process.cwd()
-
-    const envPath = nodePath.join(cwd, '.env.local')
-    const envLines = [
-      '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
-      `MUSHI_API_ENDPOINT=${endpoint}`,
-      `MUSHI_PROJECT_ID=${projectId}`,
-      `MUSHI_API_KEY=${apiKey}`,
-      '',
-    ]
-    const envExisting = existsSync(envPath)
-    await writeFile(envPath, envLines.join('\n'), 'utf8')
-    console.log(`\n  ✓ ${envExisting ? 'Updated' : 'Created'} .env.local`)
-
-    const mcpPath = nodePath.join(cwd, '.cursor', 'mcp.json')
-    const serverName = buildMcpServerName({ legacy: true })
-    const serverBlock = buildMcpServerBlock({ endpoint, projectId, apiKey })
-    const { created: mcpCreated } = await writeMcpServerEntry({ configPath: mcpPath, serverName, serverBlock })
-    console.log(`  ✓ ${mcpCreated ? 'Created' : 'Updated'} .cursor/mcp.json`)
+    const { envUpdated, mcpUpdated } = await writeProjectBootstrapFiles({
+      endpoint,
+      projectId,
+      apiKey,
+    })
+    console.log(`\n  OK  ${envUpdated ? 'Updated' : 'Created'} .env.local`)
+    console.log(`  OK  ${mcpUpdated ? 'Updated' : 'Created'} .cursor/mcp.json`)
 
     console.log('')
     console.log('  Done! Restart Cursor and ask: "list mushi tools"')
