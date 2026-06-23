@@ -3,7 +3,6 @@
  * PURPOSE: Shared local file writes after browser project bootstrap (env + MCP).
  */
 import { writeFile, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import nodePath from 'node:path'
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from './mcp-config.js'
 
@@ -30,11 +29,20 @@ export async function writeProjectBootstrapFiles(opts: {
 
   // Merge — never clobber. A vibe-coder running `mushi project create` inside an
   // existing app must keep every other var (DATABASE_URL, NEXT_PUBLIC_*, Stripe
-  // keys, …). Read the existing file, strip only prior MUSHI_* lines (bare and
-  // framework-prefixed) plus our own comment, then append a fresh Mushi block.
-  // Mirrors the strip logic in init.ts so a re-run is idempotent.
-  const envUpdated = existsSync(envPath)
-  const existing = envUpdated ? await readFile(envPath, 'utf8') : ''
+  // keys, …). Read the existing file in a single attempt and treat a read error
+  // as "no file yet" — deliberately no `existsSync` precheck, which would open a
+  // TOCTOU race between the check and the read/write. Then strip only prior
+  // MUSHI_* lines (bare and framework-prefixed) plus our own comment and append
+  // a fresh Mushi block. Mirrors the strip logic in init.ts so re-runs are
+  // idempotent.
+  let existing = ''
+  let envUpdated = false
+  try {
+    existing = await readFile(envPath, 'utf8')
+    envUpdated = true
+  } catch {
+    // No existing .env.local (ENOENT) — this is a fresh create.
+  }
   const MUSHI_LINE_RE = /^(NEXT_PUBLIC_|NUXT_PUBLIC_|VITE_|EXPO_PUBLIC_)?MUSHI_[A-Z_]+=.*/gm
   const MUSHI_COMMENT_RE = /^# Mushi MCP\b.*/gm
   const stripped = existing
