@@ -3,7 +3,6 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import { awardPoints } from '../../_shared/reputation.ts';
 import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts';
 import { normalizeAdminStatus, toStoredStatus } from '../../_shared/report-status.ts';
 import { logAudit } from '../../_shared/audit.ts';
@@ -978,29 +977,16 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
             log.error('resolveExternalIssue failed', { reportId: id, err: String(e) }),
           );
         }
-        const reputationAction =
-          newStatus === 'fixing'
-            ? 'confirmed'
-            : newStatus === 'fixed'
-              ? 'fixed'
-              : newStatus === 'dismissed'
-                ? 'dismissed'
-                : null;
-        if (reputationAction) {
-          const points =
-            reputationAction === 'confirmed' ? 50 : reputationAction === 'fixed' ? 25 : 0;
-          awardPoints(db, prev.project_id, prev.reporter_token_hash, {
-            action: reputationAction,
-          }).catch((e) =>
-            log.error('Reputation award failed', { action: reputationAction, err: String(e) }),
-          );
-          createNotification(db, prev.project_id, id, prev.reporter_token_hash, reputationAction, {
-            message: buildNotificationMessage(reputationAction, points ? { points } : {}),
-            ...(points ? { points } : {}),
+        if (prev.reporter_token_hash) {
+          // Mirror the per-row PATCH path: a single consolidated helper owns
+          // reputation + reporter notification so the two code paths never diverge.
+          notifyReportStatusTransition(db, {
+            projectId: prev.project_id,
             reportId: id,
-          }).catch((e) =>
-            log.error('Notification failed', { type: reputationAction, err: String(e) }),
-          );
+            reporterTokenHash: prev.reporter_token_hash,
+            previousStatus: prev.status,
+            newStatus,
+          }).catch((e) => log.error('Notification failed', { reportId: id, err: String(e) }));
         }
       }
     }
