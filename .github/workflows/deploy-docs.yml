@@ -88,6 +88,15 @@ jobs:
           echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
           echo "::notice::Docs ${DOCS_VERSION} (${SHORT_SHA}) built ${BUILD_DATE}"
 
+      - name: Build docs workspace dependencies
+        # The docs site imports `@mushi-mushi/mcp/clients` (resolves to the
+        # package's `./dist/clients.js` export — there is no transpilePackages
+        # fallback). Building docs in isolation fails with "Module not found"
+        # because the workspace dependency's `dist/` is never produced. turbo
+        # `--filter` builds `@mushi-mushi/mcp` plus its upstream `^build` deps in
+        # topological order, so the export target exists before the docs build.
+        run: pnpm exec turbo run build --filter=@mushi-mushi/mcp
+
       - name: Build docs site
         run: pnpm --filter @mushi-mushi/docs build
         env:
