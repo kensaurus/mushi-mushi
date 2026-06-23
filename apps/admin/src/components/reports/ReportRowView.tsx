@@ -16,6 +16,8 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
 import { useRowFlash } from '../../lib/useRowFlash'
+import { reportDetailPath } from '../../lib/reportUrl'
+import { useActiveProjectId } from '../ProjectSwitcher'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
 import { ReportRowMeta, ReportRowLayerPill } from './ReportRowSummaryMeta'
@@ -85,6 +87,8 @@ function ReportRowViewInner({
   onDispatchFix,
   preflight,
 }: Props) {
+  const activeProjectId = useActiveProjectId()
+  const detailPath = reportDetailPath(row.id, activeProjectId)
   const summary = row.summary ?? row.description
   const dedupCount = row.dedup_count ?? 1
   // Real blast radius — distinct people who felt this. Falls back to the raw
@@ -265,7 +269,7 @@ function ReportRowViewInner({
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
             <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
-              <RowKebab row={row} onCopyLink={onCopyLink} onDismiss={onDismiss} />
+              <RowKebab detailPath={detailPath} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
             {canDispatch ? (
               <span
@@ -286,7 +290,7 @@ function ReportRowViewInner({
               </span>
             ) : (
               <Link
-                to={`/reports/${row.id}`}
+                to={detailPath}
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
               >
@@ -309,12 +313,12 @@ function ReportRowViewInner({
 }
 
 interface KebabProps {
-  row: ReportRow
+  detailPath: string
   onCopyLink: () => void
   onDismiss: () => void
 }
 
-function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
+function RowKebab({ detailPath, onCopyLink, onDismiss }: KebabProps) {
   return (
     <>
       <Tooltip portal content="Copy share link">
@@ -332,7 +336,7 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
       </Tooltip>
       <Tooltip portal content="Open in new tab">
         <a
-          href={`/reports/${row.id}`}
+          href={detailPath}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}

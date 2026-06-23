@@ -1,30 +1,7 @@
 /**
  * FILE: apps/admin/src/components/RouteProgress.tsx
- * PURPOSE: GitHub/Linear-style top-edge progress bar that fills on every
- *          route transition. Mounted once in Layout so every navigation
- *          gets a 2 px brand-toned indicator without the page having to
- *          opt in.
- *
- *          Implementation note: the admin uses the legacy
- *          `<BrowserRouter>` (not a data router created via
- *          `createBrowserRouter`), so `useNavigation()` is unavailable
- *          and throws "useNavigation must be used within a data
- *          router." We instead key off `useLocation().pathname`
- *          transitions — whenever the path changes, we animate the bar
- *          from 0 → 70 → 100 % over ~650 ms regardless of actual load
- *          state. The result is visually indistinguishable for the user
- *          because the admin's lazy routes resolve in well under 200 ms
- *          in dev and the cached-chunk case still benefits from the
- *          motion confirming "yes, we moved".
- *
- *          - Gated by `motion-reduce:hidden` so reduced-motion users
- *            see no bar (NN/g / WCAG 2.3.3).
- *          - Skips the very first mount — the initial paint isn't a
- *            "navigation" in the UX sense, it's just the app loading.
- *
- *          Wave T.1.3 (2026-04-23): introduced as part of the trust /
- *          context wave alongside `<FreshnessPill>` and
- *          `<ActiveFiltersRail>`.
+ * PURPOSE: Top-edge route-transition progress bar keyed off `useLocation()` pathname
+ *          changes (legacy BrowserRouter; motion-reduce gated, skips first mount).
  */
 
 import { useEffect, useRef, useState } from 'react'

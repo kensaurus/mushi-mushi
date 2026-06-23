@@ -225,7 +225,7 @@ const STAGE_FLOW_LABEL: Record<RibbonTile['stage'], string> = {
   A: 'Ship',
 }
 
-export function PipelineStatusRibbon() {
+export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean }) {
   const { isAdvanced } = useAdminMode()
   const { pathname } = useLocation()
   const nav = useNavCounts()
@@ -348,7 +348,7 @@ export function PipelineStatusRibbon() {
     .map((t) => `${t.label}: ${t.metric} — ${t.summary}`)
     .join('\n')
 
-  if (collapsed) {
+  if (collapsed && !embedded) {
     return (
       <section
         role="status"
@@ -406,11 +406,13 @@ export function PipelineStatusRibbon() {
       aria-label="Pipeline pulse"
       data-testid="pipeline-status-ribbon"
       data-collapsed="false"
-      className="mb-3 w-full rounded-md border border-edge-subtle bg-surface-raised shadow-card px-1 py-1"
+      className={
+        embedded
+          ? 'w-full px-1 py-1'
+          : 'mb-3 w-full rounded-md border border-edge-subtle bg-surface-raised shadow-card px-1 py-1'
+      }
     >
-      {/* Header strip — provides the collapse affordance + a context label.
-          Kept tight (one line) so the ribbon's vertical footprint barely
-          grows from the previous version. */}
+      {!embedded && (
       <div className="flex items-center justify-between gap-2 px-2 pb-1 border-b border-edge-subtle/50">
         <span className="flex items-center gap-2 text-3xs font-medium text-fg-faint uppercase tracking-wider">
           Workspace pipeline
@@ -434,6 +436,7 @@ export function PipelineStatusRibbon() {
           Collapse <span aria-hidden>▴</span>
         </button>
       </div>
+      )}
       {/* Mobile/tablet: 2×2 grid. Desktop: tiles + fixed-width arrow gutters. */}
       <div
         id="pipeline-status-ribbon-tiles"

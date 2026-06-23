@@ -19,10 +19,10 @@ Description:
     • Gate results: API contract (G3), spec drift (G6), orphan endpoints (G7),
       unknown frontend calls (G8), schema drift, status claim (G5)
 
-  Returns a PM-readable scorecard with severity-ranked findings.
+  Returns a human-readable summary with severity-ranked findings.
 
   Prerequisites:
-    1. Configure your Supabase PAT: mushi settings set supabase-pat <token>
+    1. Add your Supabase PAT in Admin → Settings → API Keys
     2. Set supabase_project_ref in Admin → Settings → Project.
 
 Examples:
@@ -89,19 +89,19 @@ Examples:
         audit_at: string
       }
 
-      const overallGlyph = data.summary.overall === 'fail' ? '❌' : data.summary.overall === 'warn' ? '⚠️ ' : '✅'
-      process.stdout.write(`${overallGlyph}\n\n`)
+      const overallLabel = data.summary.overall === 'fail' ? 'FAIL' : data.summary.overall === 'warn' ? 'WARN' : 'OK'
+      process.stdout.write(`${overallLabel}\n\n`)
 
       console.log(`Full-Stack Audit — ${new Date(data.audit_at).toLocaleString()}`)
       console.log(`Backend linked: ${data.backend_linked ? 'yes' : 'no (configure Supabase PAT + project ref)'}`)
       console.log(`Summary: ${data.summary.error_count} error(s) · ${data.summary.warn_count} warning(s)\n`)
 
       if (data.findings.length === 0) {
-        console.log('  ✓ No findings. Your project looks healthy.')
+        console.log('  OK  No findings. Your project looks healthy.')
       } else {
         for (const f of data.findings) {
-          const icon = f.severity === 'error' ? '🔴' : f.severity === 'warn' ? '🟡' : 'ℹ️ '
-          console.log(`  ${icon} ${f.title}`)
+          const icon = f.severity === 'error' ? 'FAIL' : f.severity === 'warn' ? 'WARN' : 'INFO'
+          console.log(`  ${icon}  ${f.title}`)
           console.log(`     ${f.detail.slice(0, 120)}${f.detail.length > 120 ? '…' : ''}`)
         }
       }
@@ -109,7 +109,7 @@ Examples:
       if (data.gate_runs.length > 0) {
         console.log('\nGate Results:')
         for (const run of data.gate_runs) {
-          const g = run.status === 'pass' ? '✓' : run.status === 'fail' ? '✗' : '~'
+          const g = run.status === 'pass' ? 'OK' : run.status === 'fail' ? 'FAIL' : 'SKIP'
           console.log(`  ${g} ${run.gate.padEnd(22)} ${run.status}  (${run.findings_count} finding${run.findings_count !== 1 ? 's' : ''})`)
         }
       }

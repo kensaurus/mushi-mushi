@@ -188,6 +188,10 @@ interface BlockedDetail {
   path?: string
 }
 
+/** Suppress repeat upgrade toasts from background polls (e.g. nav counts). */
+const UPGRADE_TOAST_COOLDOWN_MS = 60_000
+const lastUpgradeToastAt = new Map<string, number>()
+
 /**
  * Root-mounted listener. On `mushi:entitlement-blocked` (402 from apiFetch)
  * pushes a warn toast with a "View plans" action — same stack as every
@@ -201,6 +205,10 @@ export function UpgradePromptHost() {
     function handler(ev: Event) {
       const detail = (ev as CustomEvent<BlockedDetail>).detail
       if (!detail?.flag) return
+      const now = Date.now()
+      const last = lastUpgradeToastAt.get(detail.flag) ?? 0
+      if (now - last < UPGRADE_TOAST_COOLDOWN_MS) return
+      lastUpgradeToastAt.set(detail.flag, now)
       const copy = FEATURE_COPY[detail.flag]
       toast.push({
         tone: 'warn',

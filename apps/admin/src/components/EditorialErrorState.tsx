@@ -1,32 +1,6 @@
 /**
  * FILE: apps/admin/src/components/EditorialErrorState.tsx
- * PURPOSE: Brand-aligned fallback UI used by every "page is not available"
- *          surface in the admin SPA — the unknown-route 404, the
- *          top-level ErrorBoundary, and any feature-level boundary that
- *          wants the same calm-but-honest treatment.
- *
- * WHY ONE COMPONENT
- * -----------------
- * Before this lived in two places (a tiny `NotFoundPage` in App.tsx, and
- * an inline Card inside ErrorBoundary). The two diverged on copy, on
- * spacing, and on whether the visitor saw any wayfinding back to safe
- * ground. Centralising forces one editorial voice: mono caps eyebrow,
- * display H1 with one vermillion-accented word, hairline rule, lead, two
- * CTAs (primary back-to-home, secondary back-to-docs).
- *
- * DESIGN NOTES
- * ------------
- * - The component is *self-contained*: it does NOT depend on the admin
- *   Layout chrome being mounted (so it renders cleanly when the app
- *   itself crashes during boot or when an unauthenticated visitor hits
- *   an unknown public route). It uses brand tokens via inline classes,
- *   not Layout-scoped CSS variables.
- * - The two CTAs are deliberate. NN/g visibility-of-system-status: the
- *   visitor needs an obvious way back, but a single button forces a
- *   choice that may not match their intent. Two affordances let them
- *   pick: "Go home" (primary, the safest action) vs. "Open docs"
- *   (secondary, for the technical visitor who hit a moved route and
- *   wants to look it up).
+ * PURPOSE: Brand-aligned fallback UI for 404, ErrorBoundary, and feature-level error surfaces.
  */
 
 import type { ReactNode } from 'react'

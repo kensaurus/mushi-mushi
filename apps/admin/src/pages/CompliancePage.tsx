@@ -1171,7 +1171,7 @@ export function CompliancePage() {
         }
       >
         {payloadModalEvidence && (
-          <pre className="text-2xs leading-snug whitespace-pre-wrap break-words bg-surface-overlay border border-edge-subtle rounded-sm p-3 font-mono">
+          <pre className="mushi-code-block mushi-code-body text-2xs leading-snug whitespace-pre-wrap break-words border border-code-surface-border rounded-sm p-3 font-mono">
 {JSON.stringify(payloadModalEvidence.payload, null, 2)}
           </pre>
         )}

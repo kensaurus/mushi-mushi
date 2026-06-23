@@ -4,15 +4,16 @@
  *          MCP setup, CLI install, and SDK upgrade PRs.
  *
  * Sections:
- *   1. Connect GitHub (prerequisite for upgrade PRs)
- *   2. Install SDK (reuses SdkInstallCard)
- *   3. Install MCP (reuses McpInstallButtons)
- *   4. Install CLI (copy `npm i -g @mushi-mushi/cli@latest`)
- *   5. Update center (per-package freshness, "Create Upgrade PR" CTA)
+ *   1. PagePosture — MCP status banner + Connect snapshot strip
+ *   2. ConnectStudio — client picker + MCP / CLI / Skills lanes
+ *   3. Connect GitHub (prerequisite for upgrade PRs)
+ *   4. Install SDK (SdkInstallCard)
+ *   5. Native CI secrets (conditional)
+ *   6. Update center (Create Upgrade PR)
  */
 
 import { useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -25,19 +26,15 @@ import { ResponsiveTable } from '../components/ResponsiveTable'
 import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
-import { buildMushiConnectCommand, buildMushiInitCommand } from '../lib/cliSetupCommands'
-import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
-import { ConnectHubGuide } from '../components/connect/ConnectHubGuide'
-import { ConnectActivationStrip } from '../components/connect/ConnectActivationStrip'
-import type { ConnectLaneContext } from '../lib/connectLaneMetadata'
 import { CliSetupGuide } from '../components/CliSetupGuide'
-import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
-import { ConnectProvenanceBand } from '../components/connect/ConnectProvenanceBand'
-import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
+import { ConnectStudio } from '../components/connect/ConnectStudio'
+import { ConnectRelatedRail } from '../components/connect/ConnectRelatedRail'
+import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
+import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { useConnectUx } from '../lib/connectModeUx'
-import { resolveMcpConnectUx } from '../lib/mcpConnectUx'
-import { McpInstallButtons } from '../components/McpInstallButtons'
+import { LINK_BRAND } from '../lib/chipTone'
 import { SdkVersionBadge } from '../components/SdkVersionBadge'
 import { useSdkUpgrade, type BumpEntry } from '../lib/useSdkUpgrade'
 import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
@@ -50,10 +47,8 @@ import {
   IconExternalLink,
   IconRefresh,
   IconBolt,
-  IconTerminal,
   IconAlertTriangle,
   IconArrowRight,
-  IconMcp,
   IconIntegrations,
 } from '../components/icons'
 import { CodeInline } from '../components/CodePanel'
@@ -91,15 +86,6 @@ interface ProjectsPayload {
   projects: ProjectRow[]
 }
 
-function formatConnectRelative(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60_000) return 'just now'
-  const mins = Math.floor(ms / 60_000)
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 48) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
 
 // ---------------------------------------------------------------------------
 // Upgrade status inline indicator
@@ -136,7 +122,7 @@ function UpgradeStatusIndicator({ status, prUrl, error }: {
       <span
         role="status"
         aria-live="polite"
-        className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent border border-accent/25"
+        className="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand border border-brand/25"
       >
         {spinner}
         Opening PR…
@@ -513,21 +499,29 @@ function ProjectFallbackNote({
 // ---------------------------------------------------------------------------
 export function ConnectPage() {
   const copy = usePageCopy('/connect')
+  const connectUx = useConnectUx()
   usePublishPageContext({
     route: '/connect',
     title: 'Connect & Update',
   })
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const activeProjectId = useActiveProjectId()
   const projectsFeed = usePageData<ProjectsPayload>('/v1/admin/projects')
-  const {
-    data: mcpStatsData,
-    lastFetchedAt: mcpStatsFetchedAt,
-    isValidating: mcpStatsValidating,
-  } = usePageData<McpStats>('/v1/admin/mcp/stats')
-  const mcpStats = mcpStatsData ?? EMPTY_MCP_STATS
-  const connectUx = useConnectUx()
+  const mcpStatsQuery = usePageData<McpStats>('/v1/admin/mcp/stats')
+  const mcpStats = mcpStatsQuery.data ?? EMPTY_MCP_STATS
+  const statsFetchedAt = mcpStatsQuery.lastFetchedAt
+  const statsValidating = projectsFeed.isValidating || mcpStatsQuery.isValidating
   const preflight = useDispatchPreflight(activeProjectId)
+
+  // Legacy deep link from the brief /mcp → /connect redirect — Agent help
+  // belongs on the MCP console, not the Connect hub.
+  useEffect(() => {
+    if (searchParams.get('section') === 'mcp') {
+      const project = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
+      navigate(project ? `/mcp?${ACTIVE_PROJECT_QUERY_PARAM}=${project}` : '/mcp', { replace: true })
+    }
+  }, [searchParams, navigate])
 
   // Deep links like /connect?project=<uuid> should hydrate storage before
   // child hooks (SdkInstallCard, useSdkUpgrade) read the active project.
@@ -554,106 +548,31 @@ export function ConnectPage() {
   const sdkConnected = Boolean(
     project?.api_keys?.some((k) => k.is_active && k.last_seen_at),
   )
-  const mcpUx = resolveMcpConnectUx(mcpStats)
   const setupStatus = useSetupStatus(activeProjectId)
   const nextSetupStep = nextRequiredSetupStep(
     setupStatus.activeProject ?? { steps: [], required_total: 0, required_complete: 0, total: 0, complete: 0, done: false, report_count: 0, fix_count: 0, merged_fix_count: 0, project_id: '', project_name: '', project_slug: '', created_at: '' },
   )
   const requiredSetupDone = setupStatus.selectors.done
 
-  const CLI_INSTALL = 'npm install -g @mushi-mushi/cli@latest'
-  // Prefill the active project's id (a non-secret UUID) so the dev only has to
-  // paste/confirm the API key during `mushi init`, not hunt for the project id.
-  const CLI_INIT = project ? buildMushiInitCommand(project.id) : 'mushi init'
-  const CLI_CONNECT = project
-    ? buildMushiConnectCommand(project.id, RESOLVED_EXTERNAL_API_URL)
-    : `MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint ${RESOLVED_EXTERNAL_API_URL} --write-env --wire-ide --wait`
-
-  const sdkInstalled = Boolean(
-    setupStatus.activeProject?.steps.find((s) => s.id === 'sdk_installed')?.complete,
-  )
-  const apiKeyActive = Boolean(project?.api_keys?.some((k) => k.is_active))
-  const firstReportReceived = Boolean(
-    setupStatus.activeProject?.steps.find((s) => s.id === 'first_report_received')?.complete,
-  )
-  const activationSteps = [
-    {
-      done: Boolean(project),
-      label: 'Project',
-      href: '/projects',
-      hint: 'Create a project to get a project ID and API key.',
-    },
-    {
-      done: sdkInstalled,
-      label: 'SDK',
-      href: '#sdk-install',
-      hint: 'Install the SDK in your app — copy the snippet below.',
-    },
-    {
-      done: apiKeyActive,
-      label: 'API key',
-      href: '#sdk-install',
-      hint: 'An active API key is required for the SDK and MCP.',
-    },
-    {
-      done: mcpUx.ideConnected,
-      label: 'MCP',
-      href: '#mcp-install',
-      hint: 'Add MCP to Cursor or Claude — takes 30 seconds via deeplink.',
-    },
-    {
-      done: firstReportReceived,
-      label: 'First report',
-      href: '/reports',
-      hint: 'Trigger a test report from your app to confirm the pipeline is live.',
-    },
-  ]
-  const laneFlags: ConnectLaneContext = {
-    githubConnected,
-    githubRepoUrl,
-    sdkConnected,
-    sdkVersion: project?.sdk_version ?? null,
-    sdkLatestVersion: project?.sdk_latest_version ?? null,
-    sdkStatus: project?.sdk_status ?? null,
-    sdkLastSeenAt:
-      project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null,
-    mcpStats,
-    mcpConnected: mcpUx.ideConnected,
-    nativeCiNeedsAttention: Boolean(project && isExpoReporterNeverConnected(project)),
-    upgradeComplete: Boolean(
-      project &&
-        project.sdk_status === 'up-to-date' &&
-        !(project.sdk_version && project.sdk_latest_version && project.sdk_version !== project.sdk_latest_version),
-    ),
-  }
-
   return (
     <div className="space-y-6">
-      {/* Gating banner — required setup steps must be done first */}
       {!requiredSetupDone && nextSetupStep && (
-        <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/8 px-4 py-3">
-          <span className="mt-0.5 text-warning" aria-hidden="true">⚠</span>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-fg">Finish setup first</p>
-            <p className="mt-0.5 text-xs text-fg-muted">
-              Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
-              wiring integrations here.
-            </p>
-          </div>
-          <Link
-            to={nextSetupStep.cta_to}
-            className="shrink-0 rounded-lg border border-warning/40 bg-surface px-3 py-1.5 text-xs font-medium text-fg hover:bg-surface-raised transition-colors"
-          >
-            {nextSetupStep.cta_label} →
+        <HelpBanner tone="warn" title="Finish setup first">
+          <p className="text-xs text-fg-muted">
+            Complete <strong>{nextSetupStep.label}</strong> in the setup wizard before
+            wiring integrations here.
+          </p>
+          <Link to={nextSetupStep.cta_to} className="mt-2 inline-block">
+            <Btn size="sm" variant="ghost">{nextSetupStep.cta_label} →</Btn>
           </Link>
-        </div>
+        </HelpBanner>
       )}
 
       <PageHeaderBar
         title={copy?.title ?? 'Connect & Update'}
         description={
           copy?.description ??
-          'Get from install to first diagnosis fast: drop in the SDK, add the MCP to Cursor or Claude, set up the CLI, and keep @mushi-mushi/* up to date — one place, no second LLM key.'
+          'Connect GitHub, install the SDK, add MCP to your editor, set up the CLI, and keep @mushi-mushi/* packages current.'
         }
         helpTitle={copy?.help?.title ?? 'About Connect & Update'}
         helpWhatIsIt={
@@ -674,21 +593,22 @@ export function ConnectPage() {
       />
 
       <PagePosture
-        maxRows={3}
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: mcpStats.topPriority !== 'healthy' && mcpStats.topPriority !== 'no_project',
             children: (
-              <ConnectActivationStrip
-                projectSelected={Boolean(project)}
-                activationSteps={activationSteps}
-                laneFlags={laneFlags}
+              <McpStatusBanner
+                stats={mcpStats}
+                onRefresh={() => { void mcpStatsQuery.reload() }}
+                refreshing={statsValidating}
+                plainBanner
               />
             ),
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(project) && !connectUx.hideConnectSnapshot,
+            show: !connectUx.hideConnectSnapshot,
             children: (
               <ConnectSnapshotStrip
                 githubConnected={githubConnected}
@@ -701,68 +621,24 @@ export function ConnectPage() {
                 sdkLatestVersion={project?.sdk_latest_version ?? null}
                 sdkStatus={project?.sdk_status ?? null}
                 mcpStats={mcpStats}
-                statsFetchedAt={mcpStatsFetchedAt}
-                statsValidating={mcpStatsValidating}
-                description={copy?.description}
-                sectionTitle={copy?.sections?.snapshot ?? 'CONNECT SNAPSHOT'}
-                statLabels={copy?.statLabels}
-                hideLinks={connectUx.hideSnapshotLinks}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
                 compact={connectUx.compactSnapshot}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            children: (
-              <ConnectHubGuide
-                githubConnected={githubConnected}
-                githubRepoUrl={githubRepoUrl}
-                sdkConnected={sdkConnected}
-                sdkVersion={project?.sdk_version ?? null}
-                sdkLatestVersion={project?.sdk_latest_version ?? null}
-                sdkStatus={project?.sdk_status ?? null}
-                sdkLastSeenAt={
-                  project?.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
-                }
-                mcpStats={mcpStats}
-                mcpConnected={mcpUx.ideConnected}
-                nativeCiNeedsAttention={laneFlags.nativeCiNeedsAttention}
-                upgradeComplete={laneFlags.upgradeComplete}
+                hideLinks={connectUx.hideSnapshotLinks}
               />
             ),
           },
         ]}
       />
 
-      {project ? (
-        <ConnectProvenanceBand
-          mcpStats={mcpStats}
-          sdkLastSeenAt={
-            project.api_keys?.find((k) => k.is_active && k.last_seen_at)?.last_seen_at ?? null
-          }
-          sdkConnected={sdkConnected}
-          projectId={project.id}
-          statsFetchedAt={mcpStatsFetchedAt}
-          statsValidating={mcpStatsValidating}
-        />
-      ) : null}
+      <ConnectStudio
+        projectId={project?.id ?? activeProjectId}
+        projectName={project?.name}
+      />
 
-      {mcpStats.endpointMismatch && mcpStats.topPriorityLabel ? (
-        <HelpBanner
-          tone="warn"
-          title="MCP endpoint mismatch"
-          icon={<IconAlertTriangle className="h-4 w-4 text-warning-foreground" />}
-          className="mb-3"
-        >
-          <p className="text-xs leading-relaxed">{mcpStats.topPriorityLabel}</p>
-          {mcpStats.topPriorityTo ? (
-            <Link to={mcpStats.topPriorityTo} className="mt-2 inline-block text-xs text-brand underline">
-              Open MCP setup →
-            </Link>
-          ) : null}
-        </HelpBanner>
-      ) : null}
+      <ConnectRelatedRail projectId={project?.id ?? activeProjectId} />
 
+      {/* ── Fallback CLI guide for first-run (no SDK heartbeat yet) ──────── */}
       {!sdkConnected && !feedError ? (
         <CliSetupGuide projectId={project?.id ?? activeProjectId} />
       ) : null}
@@ -772,7 +648,7 @@ export function ConnectPage() {
           tone="danger"
           role="alert"
           title="Couldn't load your projects"
-          icon={<IconAlertTriangle className="h-4 w-4 text-[var(--color-error-foreground)]" />}
+          icon={<IconAlertTriangle className="h-4 w-4 text-danger-foreground" />}
         >
           <p className="text-xs">{feedError}</p>
           <Btn size="sm" variant="ghost" className="mt-2" onClick={() => projectsFeed.reload()}>
@@ -818,7 +694,7 @@ export function ConnectPage() {
           <HelpBanner
             tone="warn"
             title="No SDK heartbeat from store builds yet"
-            icon={<IconAlertTriangle className="h-5 w-5 text-warn" />}
+            icon={<IconAlertTriangle className="h-5 w-5 text-warning-foreground" />}
             className="mb-3"
           >
             <p className="text-xs leading-relaxed">
@@ -829,7 +705,7 @@ export function ConnectPage() {
               compile-time env. <code className="font-mono text-2xs">MUSHI_INGEST_KEY</code> is
               Code Health only, not the in-app band.
             </p>
-            <Link to={`/setup-copilot?project=${project.id}`} className="mt-2 inline-block text-xs text-accent underline">
+            <Link to={`/setup-copilot?project=${project.id}`} className={`mt-2 inline-block text-xs ${LINK_BRAND}`}>
               Open Setup Copilot → CI &amp; store builds
             </Link>
           </HelpBanner>
@@ -878,115 +754,7 @@ export function ConnectPage() {
       </div>
 
       <div className="space-y-6 xl:sticky xl:top-4">
-      {/* ---------------------------------------------------------------- */}
-      {/* 3. Install MCP                                                    */}
-      {/* ---------------------------------------------------------------- */}
-      <Section title="AI agent (MCP)">
-        <SectionDescription>
-          Connect Cursor or VS Code to your Mushi project so your AI agent can read reports,
-          dispatch fixes, and check health — no copy-paste needed.
-        </SectionDescription>
-        <Card>
-          <div className="space-y-4 p-4">
-            <div className="flex items-start gap-3">
-              <IconMcp className="h-5 w-5 text-fg-muted mt-0.5 shrink-0" aria-hidden />
-              <div className="min-w-0 space-y-1">
-                <p className="text-sm font-medium text-fg">One-click IDE setup</p>
-                <p className="text-xs text-fg-muted">
-                  Mints a fresh API key and opens your IDE's extension install dialog. The MCP
-                  server is configured automatically — no JSON editing required.
-                </p>
-              </div>
-            </div>
-            <div className="rounded-md border border-edge-subtle bg-surface-raised/50 px-3 py-2">
-              <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">MCP server endpoint</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg-secondary">
-                  {RESOLVED_MCP_HTTP_URL}
-                </code>
-                <CopyButton
-                  value={RESOLVED_MCP_HTTP_URL}
-                  label="Copy MCP endpoint"
-                  copiedLabel="Copied"
-                  size="sm"
-                />
-              </div>
-              <p className="mt-1 text-3xs text-fg-muted">
-                {mcpStats.connectedKeyCount > 0
-                  ? `${mcpStats.connectedKeyCount} IDE key(s) connected`
-                  : mcpStats.mcpReadKeyCount > 0
-                    ? `${mcpStats.neverConnectedCount} unused MCP key(s) — add to IDE below`
-                    : 'Mint mcp:read on Projects, then use the buttons below'}
-                {mcpStats.lastSeenAt
-                  ? ` · last handshake ${formatConnectRelative(mcpStats.lastSeenAt)}`
-                  : ''}
-              </p>
-            </div>
-            {project ? (
-              <McpInstallButtons projectId={project.id} projectName={project.name} />
-            ) : (
-              <ProjectFallbackNote pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
-            )}
-            <p className="text-xs text-fg-muted">
-              Prefer a manual snippet?{' '}
-              <Link to="/connect?section=mcp" className="underline focus-visible:ring-2 focus-visible:ring-focus">
-                Open MCP setup
-              </Link>
-            </p>
-          </div>
-        </Card>
-      </Section>
-
-      {/* ---------------------------------------------------------------- */}
-      {/* 4. Install CLI                                                    */}
-      {/* ---------------------------------------------------------------- */}
-      <Section title="CLI">
-        <SectionDescription>
-          The Mushi CLI gives you doctor checks, QA story runs, skill pipelines, and local
-          upgrade commands from the terminal.
-        </SectionDescription>
-        <Card>
-          <div className="space-y-4 p-4">
-            <div className="flex items-start gap-3">
-              <IconTerminal className="h-5 w-5 text-fg-muted mt-0.5 shrink-0" aria-hidden />
-              <div className="min-w-0 space-y-3">
-                <div>
-                  <p className="text-xs text-fg-muted mb-1">Install globally:</p>
-                  <div className="flex items-center gap-2">
-                    <CodeInline className="text-xs flex-1 min-w-0 truncate">{CLI_INSTALL}</CodeInline>
-                    <CopyButton value={CLI_INSTALL} label="Copy install command" copiedLabel="Copied" size="sm" />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-fg-muted mb-1">Connect SDK + MCP (recommended):</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <CodeInline className="text-xs flex-1 min-w-0 break-all whitespace-normal">{CLI_CONNECT}</CodeInline>
-                    <CopyButton value={CLI_CONNECT} label="Copy connect command" copiedLabel="Copied" size="sm" />
-                  </div>
-                  <p className="mt-1 text-2xs text-fg-faint">
-                    Run <span className="font-mono">mushi login</span> first if you need to paste an API key interactively.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-fg-muted mb-1">SDK-only init:</p>
-                  <div className="flex items-center gap-2">
-                    <CodeInline className="text-xs flex-1 min-w-0 truncate">{CLI_INIT}</CodeInline>
-                    <CopyButton value={CLI_INIT} label="Copy init command" copiedLabel="Copied" size="sm" />
-                  </div>
-                </div>
-                <p className="text-xs text-fg-muted">
-                  Also available:{' '}
-                  <CodeInline>mushi doctor --server</CodeInline>
-                  {' · '}
-                  <CodeInline>mushi qa stories</CodeInline>
-                  {' · '}
-                  <CodeInline>mushi upgrade</CodeInline>
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </Section>
+      {/* Sections 3 (MCP) and 4 (CLI) are now covered by ConnectStudio above */}
 
       {/* ---------------------------------------------------------------- */}
       {/* 5. Update center                                                  */}

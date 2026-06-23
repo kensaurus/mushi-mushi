@@ -28,6 +28,9 @@
  */
 'use client'
 
+import { VIZ } from '../lib/viz-tokens'
+import { DiagramFigure } from './diagram-primitives'
+
 interface StepProps {
   label: string
   sublabel?: string
@@ -63,7 +66,7 @@ function Step({ label, sublabel, accent, glyph }: StepProps) {
       {sublabel && (
         <div
           style={{
-            fontSize: 10.5,
+            fontSize: 11,
             opacity: accent ? 0.8 : 0.6,
             marginTop: 3,
             fontFamily: 'var(--mushi-font-mono, monospace)',
@@ -90,7 +93,7 @@ function Arrow({ label, vermillion }: { label?: string; vermillion?: boolean }) 
       {label && (
         <span
           style={{
-            fontSize: 9.5,
+            fontSize: 11,
             opacity: 0.7,
             fontFamily: 'var(--mushi-font-mono, monospace)',
             color: vermillion ? 'var(--mushi-vermillion, #e03c2c)' : 'inherit',
@@ -153,14 +156,17 @@ const LOOP_STEPS: StepProps[] = [
 
 export function LoopComparison() {
   return (
-    <div
-      className="not-prose my-8 grid grid-cols-1 sm:grid-cols-2"
-      style={{
-        gap: 24,
-        maxWidth: 740,
-        margin: '32px auto',
-      }}
+    <DiagramFigure
+      ariaLabel="Comparison of linear SDLC random walk without memory versus Mushi cumulative selection loop with genome encoding in lessons.json."
     >
+      <div
+        className="not-prose grid grid-cols-1 sm:grid-cols-2"
+        style={{
+          gap: 24,
+          maxWidth: 740,
+          margin: '0 auto',
+        }}
+      >
       {/* ── Left: random walk ── */}
       <div>
         <div
@@ -207,7 +213,7 @@ export function LoopComparison() {
             fontWeight: 700,
             fontSize: 12,
             marginBottom: 12,
-            color: 'var(--mushi-vermillion, #e03c2c)',
+            color: VIZ.accent,
             textTransform: 'uppercase',
             letterSpacing: '0.09em',
             fontFamily: 'var(--mushi-font-mono, monospace)',
@@ -234,7 +240,7 @@ export function LoopComparison() {
             textAlign: 'center',
             marginTop: 4,
             fontSize: 11,
-            color: 'var(--mushi-vermillion, #e03c2c)',
+            color: VIZ.accent,
             fontFamily: 'var(--mushi-font-mono, monospace)',
             letterSpacing: '0.04em',
           }}
@@ -243,5 +249,6 @@ export function LoopComparison() {
         </div>
       </div>
     </div>
+    </DiagramFigure>
   )
 }

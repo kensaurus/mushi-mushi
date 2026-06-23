@@ -479,3 +479,241 @@
     transition: none;
   }
 }
+
+/* ── Connect lane picker (admin /connect + docs /connect) ───────────────── */
+
+.mushi-connect-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.mushi-connect-card {
+  overflow: hidden;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.375rem;
+  background: var(--mushi-paper);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--mushi-ink) 6%, transparent);
+}
+
+.mushi-connect-card .mushi-connect-clients {
+  padding: 1.25rem 1.25rem 0;
+}
+
+.mushi-connect-card .mushi-connect-lanes {
+  margin-top: 0.25rem;
+}
+
+.mushi-connect-section-label {
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+}
+
+.mushi-connect-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.mushi-connect-chip {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.375rem;
+  background: var(--mushi-paper);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--mushi-ink-muted);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.mushi-connect-chip:hover {
+  border-color: color-mix(in oklch, var(--mushi-ink) 20%, transparent);
+  background: var(--mushi-paper-wash);
+  color: var(--mushi-ink);
+}
+
+.mushi-connect-chip:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.mushi-connect-chip--selected {
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 55%, transparent);
+  background: var(--mushi-vermillion-wash);
+  color: var(--mushi-vermillion-ink);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--mushi-ink) 8%, transparent);
+}
+
+.mushi-connect-chip-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.mushi-connect-tablist {
+  display: flex;
+  border-bottom: 1px solid var(--mushi-rule);
+}
+
+.mushi-connect-tab {
+  flex: 1;
+  min-height: 48px;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--mushi-ink-muted);
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.mushi-connect-tab:hover {
+  color: var(--mushi-ink);
+}
+
+.mushi-connect-tab:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: -2px;
+}
+
+.mushi-connect-tab--selected {
+  border-bottom-color: var(--mushi-vermillion);
+  color: var(--mushi-vermillion);
+}
+
+.mushi-connect-panel {
+  padding: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .mushi-connect-card .mushi-connect-clients {
+    padding: 1.5rem 1.5rem 0;
+  }
+
+  .mushi-connect-panel {
+    padding: 1.5rem;
+  }
+}
+
+.mushi-connect-primary-btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  background: var(--mushi-vermillion);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+  text-decoration: none;
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--mushi-ink) 8%, transparent);
+  transition: opacity 150ms ease;
+}
+
+.mushi-connect-primary-btn:hover {
+  opacity: 0.9;
+}
+
+.mushi-connect-primary-btn:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.mushi-connect-secondary-btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.375rem;
+  background: var(--mushi-paper);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.mushi-connect-secondary-btn:hover {
+  background: var(--mushi-paper-wash);
+}
+
+.mushi-connect-secondary-btn:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.mushi-connect-copy-btn {
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--mushi-vermillion);
+  cursor: pointer;
+}
+
+.mushi-connect-copy-btn:hover {
+  background: var(--mushi-vermillion-wash);
+}
+
+.mushi-connect-copy-btn:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.mushi-connect-code-block {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid var(--mushi-code-surface-border);
+  border-radius: 0.375rem;
+  background: var(--mushi-code-surface);
+  padding: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--mushi-code-surface-fg);
+  user-select: all;
+}
+
+.mushi-connect-callout {
+  border: 1px solid color-mix(in oklch, var(--mushi-vermillion) 35%, var(--mushi-rule));
+  border-radius: 0.375rem;
+  background: var(--mushi-vermillion-wash);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--mushi-vermillion-ink);
+}
+
+.mushi-connect-step-badge {
+  display: flex;
+  height: 1.25rem;
+  width: 1.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.125rem;
+  border-radius: 9999px;
+  background: var(--mushi-vermillion-wash);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--mushi-vermillion-ink);
+}

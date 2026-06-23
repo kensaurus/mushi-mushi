@@ -87,21 +87,29 @@ describe('hmacSha256Hex', () => {
   });
 
   it('noble and native paths produce byte-identical output', async () => {
-    // Native (Web Crypto) path — crypto.subtle is present in the test runtime.
-    const nativeResult = await hmacSha256Hex('test-key', 'test-message');
-    expect(nativeResult).toMatch(/^[0-9a-f]{64}$/);
+    // Use the same RFC 4231 §4.3 inputs as the standalone vector test so both paths
+    // are anchored to a known-correct reference, not just to each other.  Without a
+    // fixed reference, two implementations that both fall through to noble (e.g. in an
+    // env where crypto.subtle is absent) trivially agree without exercising Web Crypto.
+    const RFC_KEY = 'Jefe';
+    const RFC_DATA = 'what do ya want for nothing?';
+    const RFC_EXPECTED = '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843';
+
+    // Native Web Crypto path — crypto.subtle is present in Node ≥ 20 / vitest runtime.
+    const nativeResult = await hmacSha256Hex(RFC_KEY, RFC_DATA);
+    expect(nativeResult).toBe(RFC_EXPECTED);
 
     // Noble fallback path — force native crypto absent so getSubtle() returns null.
     vi.stubGlobal('crypto', undefined);
     let nobleResult: string;
     try {
-      nobleResult = await hmacSha256Hex('test-key', 'test-message');
+      nobleResult = await hmacSha256Hex(RFC_KEY, RFC_DATA);
     } finally {
       vi.unstubAllGlobals();
     }
 
-    // The whole point of this module is cross-runtime consistency: the pure-JS
-    // fallback must agree byte-for-byte with the hardware-accelerated path.
+    // Both paths must independently match the RFC reference value and each other.
+    expect(nobleResult).toBe(RFC_EXPECTED);
     expect(nobleResult).toBe(nativeResult);
   });
 });

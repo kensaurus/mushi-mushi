@@ -1,36 +1,7 @@
 /**
  * FILE: apps/admin/src/components/HotkeysModal.tsx
- * PURPOSE: App-wide keyboard-shortcut cheatsheet. Opens on `?` from any page,
- *          listing global shortcuts plus the page-scoped ones that live on
- *          Reports and Fixes. Keeps the full shortcut registry in a single
- *          place so discoverability stays honest as new hotkeys are added.
- *
- *          Context-aware rendering:
- *            - The group that matches the current route is promoted to
- *              the top of the list and labelled "On this page" so the
- *              user sees their most-relevant shortcuts first.
- *            - Every group is still rendered — users who hit `?` from a
- *              page mid-task can glance up for global shortcuts without
- *              closing and reopening the cheatsheet somewhere else.
- *
- *          Wave U (2026-05-07) — operator feedback rebuild:
- *            - **Search box** filters every group by description, key
- *              name, or category — essential as the registry grows past
- *              a single screen of shortcuts.
- *            - **Categorised by intent** (Find · View · Reports · Fixes
- *              · Tips) rather than by where the registration happens.
- *              The "Find" bucket groups every "open something" shortcut
- *              so muscle memory clusters semantically.
- *            - **Backfilled missing globals** that were already wired in
- *              Layout.tsx but undocumented: ⌘/Ctrl+. (focus mode), [
- *              (toggle sidebar), and the explicit Esc-exits-focus
- *              behavior.
- *            - **Per-group count badge** so a quick scan tells the
- *              operator how dense each section is.
- *
- *          Single source of truth for the shortcut registry so adding a
- *          hotkey means adding one entry here, not hunting for a
- *          forgotten help overlay.
+ * PURPOSE: App-wide keyboard-shortcut cheatsheet (? key) with route-aware grouping,
+ *          search, and the single registry for all global and page-scoped hotkeys.
  */
 
 import { useMemo, useState, type ReactNode } from 'react'

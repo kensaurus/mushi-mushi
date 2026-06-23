@@ -1,15 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/useNextBestAction.ts
- * PURPOSE: Per-page Next-Best-Action computation — keyed by page scope +
- *          live counts the page already has in scope. Pages call this with
- *          a scope and a typed input shape; the hook returns `{ action }`
- *          that <PageActionBar> renders.
- *
- *          The rules live here so every Advanced PDCA page ends up with a
- *          consistent "do this next" strip sourced from real data rather
- *          than static copy.
- *
- *          Wave R (2026-04-22).
+ * PURPOSE: Per-page next-best-action rules keyed by scope and live counts;
+ *          returns `{ action }` for `<PageActionBar>`.
  */
 
 import type { PageAction } from '../components/PageActionBar'

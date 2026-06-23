@@ -57,7 +57,10 @@ interface CardProps {
   children: ReactNode
   className?: string
   interactive?: boolean
+  /** @deprecated Prefer `variant="elevated"`. */
   elevated?: boolean
+  /** `flat` = diet panel (border-only). `elevated` = gradient KPI tiles. Default keeps legacy raised surface. */
+  variant?: 'default' | 'flat' | 'elevated'
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void
   title?: string
   /** Inline style forwarded to the card root. Needed so callers (e.g.
@@ -71,6 +74,7 @@ export function Card({
   className = '',
   interactive,
   elevated,
+  variant,
   onClick,
   title,
   style,
@@ -91,12 +95,26 @@ export function Card({
     : {}
   const interactiveCls =
     interactive || onClick
-      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-all motion-safe:duration-150 hover:border-edge hover:-translate-y-px hover:shadow-raised motion-safe:active:translate-y-0 motion-safe:active:scale-[0.995] motion-safe:active:shadow-card'
+      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-[border-color,background-color] motion-safe:duration-150 hover:border-edge hover:bg-surface-hover motion-safe:active:scale-[0.995]'
       : ''
-  if (elevated) {
+  const resolvedVariant = variant ?? (elevated ? 'elevated' : 'default')
+  if (resolvedVariant === 'elevated') {
     return (
       <div
         className={`card-elevated ${interactiveCls} ${className}`}
+        style={style}
+        onClick={onClick}
+        title={title}
+        {...interactiveProps}
+      >
+        {children}
+      </div>
+    )
+  }
+  if (resolvedVariant === 'flat') {
+    return (
+      <div
+        className={`card-flat ${interactiveCls} ${className}`}
         style={style}
         onClick={onClick}
         title={title}
@@ -194,9 +212,69 @@ export function SurfacePanel({
   className?: string
 } & React.HTMLAttributes<HTMLDivElement>) {
   return (
+    <div className={`card-flat ${className}`} {...props}>
+      {children}
+    </div>
+  )
+}
+
+/** Grouped list container — Supabase Settings / Add-ons pattern. */
+export function Panel({
+  children,
+  className = '',
+  ...props
+}: {
+  children: ReactNode
+  className?: string
+} & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`panel ${className}`} {...props}>
+      {children}
+    </div>
+  )
+}
+
+export function PanelSectionLabel({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return <p className={`panel-section-label mb-2 ${className}`}>{children}</p>
+}
+
+interface PanelRowProps {
+  children: ReactNode
+  className?: string
+  interactive?: boolean
+  onClick?: () => void
+}
+
+/** Single row inside a `Panel` — hairline divider handled by CSS. */
+export function PanelRow({
+  children,
+  className = '',
+  interactive,
+  onClick,
+}: PanelRowProps) {
+  const interactiveProps = onClick
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick()
+          }
+        },
+      }
+    : {}
+  return (
     <div
-      className={`rounded-md border border-edge-subtle bg-surface-raised shadow-card ${className}`}
-      {...props}
+      className={`panel-row ${interactive || onClick ? 'panel-row--interactive' : ''} ${className}`}
+      {...interactiveProps}
     >
       {children}
     </div>

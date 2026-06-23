@@ -2,42 +2,7 @@
 // Copyright (c) 2024–2026 Kenji Sakuramoto (kensaurus) — Mushi Mushi
 /**
  * FILE: packages/cli/src/index.ts
- * PURPOSE: @mushi-mushi/cli entry point — wires the shared Commander program,
- *          registers every command group, and dispatches via parseAsync.
- *
- * OVERVIEW:
- * - This file is intentionally thin: the actual command definitions live in
- *   src/commands/*.ts (one module per group), the HTTP client + helpers live in
- *   src/cli-shared.ts, and the response types in src/cli-types.ts. The former
- *   monolithic ~2.9k-LOC index.ts was decomposed here without behaviour change.
- *
- * AUTH MODEL
- * ----------
- * All network commands use the project's SDK API key (MUSHI_API_KEY), validated
- * server-side via `apiKeyAuth` middleware. The CLI never needs an interactive
- * Supabase JWT — the API key alone is sufficient for every operation here.
- *
- * Auth precedence (highest wins):
- *   1. Explicit flags (--api-key, --endpoint, --project-id)
- *   2. Environment variables (MUSHI_API_KEY, MUSHI_API_ENDPOINT, MUSHI_PROJECT_ID)
- *   3. ~/.config/mushi/config.json config file (written by `mushi login`)
- *
- * EXIT CODES
- * ----------
- *   0  — success
- *   1  — API or runtime error
- *   2  — configuration error (missing credentials / bad endpoint)
- *   3  — not found (report/lesson ID does not exist)
- *
- * DEPENDENCIES:
- * - commander — argument parser.
- * - ./signals.js — process-wide SIGINT/SIGTERM AbortController.
- * - ./version.js — MUSHI_CLI_VERSION.
- * - ./commands/*.js — per-group command registrars.
- *
- * NOTES:
- * - Command registration order is preserved exactly so `mushi --help` lists
- *   commands in the same order as before the refactor.
+ * PURPOSE: @mushi-mushi/cli entry point — registers command groups and dispatches via parseAsync.
  */
 
 import { Command } from 'commander'
@@ -52,6 +17,11 @@ import { registerDiagnosticsCommands } from './commands/diagnostics.js'
 import { registerProjectCommands } from './commands/project.js'
 import { registerSetupCommands } from './commands/setup.js'
 import { registerFixCommands } from './commands/fix.js'
+import { registerNudgeCommand } from './commands/nudge.js'
+import { registerUpgradeCommand } from './commands/upgrade-cli.js'
+import { registerConnectCommand } from './commands/connect-cli.js'
+import { registerDoctorCommand } from './commands/doctor-cli.js'
+import { registerResetCommand } from './commands/reset-cli.js'
 import { registerTddCommands } from './commands/tdd.js'
 import { registerKeysCommands } from './commands/keys.js'
 import { registerIntegrationsCommands } from './commands/integrations.js'
@@ -72,7 +42,7 @@ installSignalHandlers()
 
 const program = new Command()
   .name('mushi')
-  .description('Mushi Mushi CLI — set up the SDK, manage bug reports, monitor pipeline')
+  .description('Mushi CLI — set up the SDK, triage a report, fix from your editor')
   .version(MUSHI_CLI_VERSION)
   .addHelpText('after', `
 Environment variables:
@@ -100,6 +70,11 @@ registerLessonsCommands(program)
 registerDiagnosticsCommands(program)
 registerProjectCommands(program)
 registerSetupCommands(program)
+registerNudgeCommand(program)
+registerUpgradeCommand(program)
+registerConnectCommand(program)
+registerDoctorCommand(program)
+registerResetCommand(program)
 registerFixCommands(program)
 registerTddCommands(program)
 registerKeysCommands(program)

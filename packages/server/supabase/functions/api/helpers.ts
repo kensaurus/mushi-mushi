@@ -143,6 +143,7 @@ export interface SdkConfigRow {
   sdk_native_trigger_mode?: string | null;
   sdk_min_description_length?: number | null;
   sdk_config_updated_at?: string | null;
+  reporter_notifications_enabled?: boolean | null;
 }
 
 function oneOf<T extends readonly string[]>(
@@ -197,6 +198,7 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null) {
       triggerMode: oneOf(row?.sdk_native_trigger_mode, SDK_NATIVE_TRIGGER_MODES, 'both'),
       minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
     },
+    reporterNotificationsEnabled: row?.reporter_notifications_enabled !== false,
   };
 }
 
@@ -659,7 +661,12 @@ export async function ingestReport(
     reporter_token_hash: tokenHash,
     reporter_user_id: reporterIdentity.id,
     session_id: sanitizeText(report.sessionId),
-    app_version: sanitizeText(report.appVersion),
+    app_version: sanitizeText(
+      report.appVersion ??
+        (typeof (report.metadata as Record<string, unknown> | undefined)?.appVersion === 'string'
+          ? ((report.metadata as Record<string, unknown>).appVersion as string)
+          : null),
+    ),
     sdk_package: sanitizeText(report.sdkPackage),
     sdk_version: sanitizeText(report.sdkVersion),
     sentry_event_id: sentryEventId,

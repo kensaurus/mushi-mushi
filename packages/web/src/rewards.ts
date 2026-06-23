@@ -14,6 +14,7 @@
 // ============================================================
 
 import type { MushiApiClient, MushiRewardsConfig, MushiTierResult, MushiActivityEvent } from '@mushi-mushi/core';
+import { sha256Hex, MUSHI_COLORS_LIGHT } from '@mushi-mushi/core';
 
 const MIN_FLUSH_INTERVAL = 30_000;
 const DEFAULT_FLUSH_INTERVAL = 300_000; // 5 min
@@ -34,7 +35,7 @@ let flushTimer: ReturnType<typeof setInterval> | null = null;
 let dwellTimer: ReturnType<typeof setInterval> | null = null;
 let currentUserId: string | null = null;
 let currentUserTraits: { email?: string; name?: string; provider?: string } | null = null;
-let reporterTokenHash: string | null = null;
+let reporterTokenRaw: string | null = null;
 let apiClient: MushiApiClient | null = null;
 let optedIn = false;
 let tierCache: MushiTierResult | null = null;
@@ -131,7 +132,7 @@ export function initRewards(ctx: RewardsContext): void {
   void ctx.config; // config stored for future use
   currentUserId = ctx.userId;
   currentUserTraits = ctx.traits ?? null;
-  reporterTokenHash = ctx.reporterToken ?? null;
+  reporterTokenRaw = ctx.reporterToken ?? null;
 
   const { projectId } = ctx;
   const flushMs = Math.max(
@@ -184,9 +185,11 @@ export function initRewards(ctx: RewardsContext): void {
 export function updateRewardsUser(
   userId: string,
   traits?: { email?: string; name?: string; provider?: string },
+  reporterToken?: string,
 ): void {
   currentUserId = userId;
   currentUserTraits = traits ?? null;
+  if (reporterToken) reporterTokenRaw = reporterToken;
   // Invalidate tier cache on user change
   tierCache = null;
   tierCacheTime = 0;
@@ -217,9 +220,10 @@ export async function flush(ctx: RewardsContext): Promise<void> {
 
   const batch = pendingEvents.splice(0, 100);
   try {
+    const reporterTokenHash = reporterTokenRaw ? await sha256Hex(reporterTokenRaw) : undefined;
     const result = await ctx.client.submitActivity(currentUserId, batch, {
       userTraits: currentUserTraits ?? undefined,
-      reporterTokenHash: reporterTokenHash ?? undefined,
+      reporterTokenHash,
       optedIn: true,
       hostJwt: hostJwt ?? undefined,
     });
@@ -403,7 +407,7 @@ function renderTierBadge(tier: MushiTierResult, config: MushiRewardsConfig): voi
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: #6c47ff;
+        background: ${MUSHI_COLORS_LIGHT.accent};
         flex-shrink: 0;
       }
     </style>
@@ -446,16 +450,16 @@ function renderConsentBanner(projectId: string, config: MushiRewardsConfig): voi
     <style>
       :host { display: block; }
       .banner {
-        background: #fff;
-        border: 1px solid #e5e7eb;
+        background: ${MUSHI_COLORS_LIGHT.paperRaised};
+        border: 1px solid ${MUSHI_COLORS_LIGHT.ruleStrong};
         border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0,0,0,0.12);
         padding: 14px 16px;
         font-size: 13px;
         line-height: 1.5;
-        color: #374151;
+        color: ${MUSHI_COLORS_LIGHT.inkMuted};
       }
-      .title { font-weight: 700; margin-bottom: 6px; color: #111827; }
+      .title { font-weight: 700; margin-bottom: 6px; color: ${MUSHI_COLORS_LIGHT.ink}; }
       .actions { display: flex; gap: 8px; margin-top: 10px; }
       button {
         flex: 1;
@@ -466,8 +470,8 @@ function renderConsentBanner(projectId: string, config: MushiRewardsConfig): voi
         font-size: 12px;
         font-weight: 600;
       }
-      .accept { background: #6c47ff; color: #fff; }
-      .decline { background: #f3f4f6; color: #374151; }
+      .accept { background: ${MUSHI_COLORS_LIGHT.accent}; color: ${MUSHI_COLORS_LIGHT.paperRaised}; }
+      .decline { background: ${MUSHI_COLORS_LIGHT.paper}; color: ${MUSHI_COLORS_LIGHT.inkMuted}; }
     </style>
     <div class="banner">
       <div class="title">🎯 Earn rewards</div>

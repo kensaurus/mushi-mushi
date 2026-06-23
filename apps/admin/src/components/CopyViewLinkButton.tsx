@@ -11,22 +11,16 @@
  */
 
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import { useToast } from '../lib/toast'
+import { currentAdminViewUrl } from '../lib/reportUrl'
 import { Tooltip } from './ui'
 
-function currentViewUrl(location: ReturnType<typeof useLocation>): string {
-  const relative = `${location.pathname}${location.search}${location.hash}`
-  return new URL(`${import.meta.env.BASE_URL.replace(/\/$/, '')}${relative}`, window.location.origin).toString()
-}
-
 export function CopyViewLinkButton() {
-  const location = useLocation()
   const toast = useToast()
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
-    const url = currentViewUrl(location)
+    const url = currentAdminViewUrl()
     try {
       await navigator.clipboard.writeText(url)
       setCopied(true)

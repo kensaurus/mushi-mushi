@@ -54,6 +54,47 @@ function slackRedirectUri(): string {
   return `${base}/functions/v1/api/v1/webhooks/slack/oauth-callback`;
 }
 
+// ── Webhook URL validation (SSRF guard) ──────────────────────────────────────
+// Slack / Discord / Teams webhook URLs are persisted via the settings PATCH
+// route and later fetched server-side with the service role (inside the
+// provider network) by the notification helpers and by classify-report /
+// fast-filter. Without a write-time scheme + host allowlist an authenticated
+// project owner could point a webhook at an internal address (cloud metadata
+// endpoint, localhost, an internal service) and turn the notification fetch
+// into a blind SSRF probe. Validate at this single write path so every
+// downstream reader can trust the stored value.
+const WEBHOOK_HOST_SUFFIXES: Record<string, string[]> = {
+  slack_webhook_url: ['hooks.slack.com'],
+  discord_webhook_url: ['discord.com', 'discordapp.com'],
+  // Teams: legacy O365 connectors (*.webhook.office.com / outlook.office.com)
+  // and Power Automate "When a Teams webhook request is received" triggers
+  // (*.logic.azure.com / *.powerplatform.com).
+  teams_webhook_url: ['office.com', 'logic.azure.com', 'powerplatform.com'],
+};
+
+function isAllowedWebhookHost(hostname: string, suffixes: string[]): boolean {
+  const host = hostname.toLowerCase();
+  return suffixes.some((s) => host === s || host.endsWith(`.${s}`));
+}
+
+function validateWebhookUrl(
+  field: string,
+  raw: string,
+): { ok: true } | { ok: false; reason: string } {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { ok: false, reason: 'must be a valid URL' };
+  }
+  if (url.protocol !== 'https:') return { ok: false, reason: 'must use https://' };
+  const suffixes = WEBHOOK_HOST_SUFFIXES[field];
+  if (suffixes && !isAllowedWebhookHost(url.hostname, suffixes)) {
+    return { ok: false, reason: 'host is not an allowed webhook provider' };
+  }
+  return { ok: true };
+}
+
 async function hmacSign(payload: string, secret: string): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -157,7 +198,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         .from('project_settings')
         .select(
           'updated_at, slack_webhook_url, slack_channel_id, slack_bot_token_ref, slack_team_name, ' +
-            'discord_webhook_url, notification_prefs, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
+            'discord_webhook_url, teams_webhook_url, notification_prefs, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
             'sdk_config_enabled, sdk_config_updated_at, ' +
             'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
             'byok_openai_key_ref, byok_openai_test_status, ' +
@@ -246,6 +287,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         slackTeamName: (row.slack_team_name as string | null) ?? null,
         slackChannelId: (row.slack_channel_id as string | null) ?? null,
         discordConfigured: Boolean(row.discord_webhook_url),
+        teamsConfigured: Boolean(row.teams_webhook_url),
         notificationPrefs: (row.notification_prefs as Record<string, unknown> | null) ?? null,
         sentryConfigured: Boolean(row.sentry_dsn),
         reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
@@ -282,6 +324,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'slack_channel_id',
       'slack_team_id',
       'discord_webhook_url',
+      'teams_webhook_url',
       'notification_prefs',
       'sentry_dsn',
       'sentry_webhook_secret',
@@ -330,6 +373,28 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
           updates[key] = null;
         }
         // Non-string, non-null values for text fields are dropped.
+        continue;
+      }
+      if (key in WEBHOOK_HOST_SUFFIXES) {
+        // Clearing the webhook is always allowed.
+        if (value === null || value === '') {
+          updates[key] = null;
+          continue;
+        }
+        if (typeof value !== 'string') continue; // drop non-string writes
+        const trimmed = value.trim();
+        if (!trimmed) {
+          updates[key] = null;
+          continue;
+        }
+        const verdict = validateWebhookUrl(key, trimmed);
+        if (!verdict.ok) {
+          return c.json(
+            { error: { code: 'INVALID_WEBHOOK_URL', message: `${key}: ${verdict.reason}` } },
+            400,
+          );
+        }
+        updates[key] = trimmed;
         continue;
       }
       updates[key] = value;
@@ -583,7 +648,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
   async function handleIntegrationsList(pid: string, db: ReturnType<typeof getServiceClient>) {
     const { data: settings } = await db
       .from('project_settings')
-      .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref, discord_webhook_url')
+      .select('slack_channel_id, slack_webhook_url, slack_bot_token_ref, discord_webhook_url, teams_webhook_url')
       .eq('project_id', pid)
       .maybeSingle();
     const ps = settings as Record<string, unknown> | null;
@@ -603,6 +668,11 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         kind: 'discord',
         status: ps?.discord_webhook_url ? 'ok' : 'unknown',
         detail: ps?.discord_webhook_url ? 'Discord webhook configured' : null,
+      },
+      {
+        kind: 'teams',
+        status: ps?.teams_webhook_url ? 'ok' : 'unknown',
+        detail: ps?.teams_webhook_url ? 'Microsoft Teams webhook configured' : null,
       },
     ];
 
@@ -729,7 +799,45 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     if (!webhookUrl) return c.json({ ok: false, error: 'No Discord webhook URL configured. Set one in Integrations → Discord.' }, 400);
 
     const { sendDiscordNotification } = await import('../../_shared/slack.ts');
-    await sendDiscordNotification(webhookUrl, `🐛 Mushi test — Discord is wired up for **${displayName}**.`);
+    const discordResult = await sendDiscordNotification(webhookUrl, `🐛 Mushi test — Discord is wired up for **${displayName}**.`);
+    if (!discordResult.ok) return c.json({ ok: false, error: discordResult.error ?? 'Discord test failed' }, 502);
+    return c.json({ ok: true });
+  });
+
+  // ── Per-project Teams test endpoint ────────────────────────────────────────
+  // POST /v1/admin/projects/:pid/integrations/teams/test
+  // JWT or API key (mcp:read) so CLI can call it.
+  app.post('/v1/admin/projects/:pid/integrations/teams/test', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const pid = c.req.param('pid')!;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const contextPid = (c.get as (k: string) => string | undefined)('projectId');
+    let projectId: string;
+    let displayName: string;
+    if (contextPid) {
+      if (contextPid !== pid) return c.json({ ok: false, error: 'API key does not belong to this project' }, 403);
+      projectId = pid;
+      displayName = (c.get as (k: string) => string | undefined)('projectName') ?? pid;
+    } else {
+      const resolvedProject = await resolveOwnedProject(c, db, userId);
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
+      projectId = project.id;
+      displayName = project.name ?? pid;
+    }
+
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('teams_webhook_url')
+      .eq('project_id', projectId)
+      .maybeSingle();
+    const webhookUrl = (settings as Record<string, unknown> | null)?.teams_webhook_url as string | null;
+    if (!webhookUrl) return c.json({ ok: false, error: 'No Teams webhook URL configured. Set one in Integrations → Microsoft Teams.' }, 400);
+
+    const { sendTeamsTestMessage } = await import('../../_shared/teams.ts');
+    const result = await sendTeamsTestMessage(webhookUrl, displayName);
+    if (!result.ok) return c.json({ ok: false, error: result.error ?? 'Teams test failed' }, 502);
     return c.json({ ok: true });
   });
 

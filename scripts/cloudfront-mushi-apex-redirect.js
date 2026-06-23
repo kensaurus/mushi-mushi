@@ -1,48 +1,74 @@
 /**
  * FILE: cloudfront-mushi-apex-redirect.js
  * PURPOSE: CloudFront Function (viewer-request) that 301-redirects apex-domain
- *          SPA route URLs to their canonical form under /mushi-mushi/admin/.
+ *          URLs to their canonical form under /mushi-mushi/docs/ or
+ *          /mushi-mushi/admin/.
  *
  * PROBLEM SOLVED
  * --------------
- * The admin SPA is deployed to kensaur.us/mushi-mushi/admin/, but the app's
- * "Copy link" button used to produce bare apex URLs such as:
+ * 1. Admin SPA — historical "Copy link" URLs like
+ *    https://kensaur.us/reports/<uuid> (fixed in ReportsPage.tsx, but links
+ *    still circulate).
+ * 2. Docs site — Nextra static export embeds unprefixed routes in `.txt` RSC
+ *    payloads (e.g. {"route":"/quickstart/incident-loop"}). Crawlers and
+ *    bookmarks hit https://kensaur.us/quickstart/incident-loop which would
+ *    otherwise 404 with raw S3 NoSuchKey XML.
  *
- *     https://kensaur.us/reports/a8054224-5d19-45e3-8c2b-1ad79182f761
+ * MATCHING ORDER (first win):
+ *   1. Static assets (has extension) → pass through
+ *   2. Docs routes → /mushi-mushi/docs{uri}
+ *   3. Admin SPA routes → /mushi-mushi/admin{uri}
+ *   4. Unknown → pass through
  *
- * Those links circulated in Slack, email, and Discord before the copy-link
- * bug was fixed in ReportsPage.tsx. This function rescues them by issuing a
- * permanent 301 so search engines and bookmarks learn the canonical path.
+ * CONFLICT: /integrations alone is the admin console route; /integrations/*
+ * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
+ * trailing slash so exact /integrations is not captured by docs rules.
  *
- * SCOPE — only the SPA routes that could appear in a shared link are listed.
- * Unknown apex paths are left untouched so other CloudFront behaviors / origins
- * on the same distribution keep working.
- *
- * ATTACHMENT
- * ----------
- * This function must be attached as a viewer-request function to the
- * CloudFront cache behavior(s) that cover apex-domain SPA paths.
- * The deploy step in deploy-admin.yml creates/updates and publishes the
- * function. The behavior association must be set up once in the AWS console
- * or via `aws cloudfront update-distribution` (it is not managed here because
- * the full distribution config is not stored in source control).
- *
- * Behaviors that should use this function (create one per pattern, or use
- * a single wildcard behavior that points at the same S3 bucket):
- *   /reports/*       → most common from the shared-link bug
- *   /dashboard/*
- *   /inbox/*
- *   /login
- *   /projects/*
- *   /settings/*
- *   /fixes/*
- *   /graph/*
+ * ATTACHMENT: viewer-request on apex cache behaviors — see
+ * scripts/aws-attach-apex-redirect.mjs (updated by deploy-admin.yml and
+ * deploy-docs.yml).
  *
  * RUNTIME: cloudfront-js-2.0
  */
 
-// SPA route prefixes that live under /mushi-mushi/admin/ on the real SPA.
-// Every path that starts with one of these is a redirect candidate.
+// Docs folder roots (exact match) + single-page slugs at apex.
+var DOCS_EXACT = [
+  '/quickstart',
+  '/concepts',
+  '/sdks',
+  '/migrations',
+  '/operating',
+  '/connect',
+  '/security',
+  '/self-hosting',
+  '/plugins',
+  '/blog',
+  '/admin',
+  '/pricing',
+  '/roadmap',
+  '/launch-week',
+  '/changelog',
+  '/cloud',
+];
+
+// Docs nested paths — trailing slash required so /integrations (admin) is not
+// mistaken for a docs route.
+var DOCS_NESTED_PREFIXES = [
+  '/quickstart/',
+  '/concepts/',
+  '/sdks/',
+  '/migrations/',
+  '/integrations/',
+  '/operating/',
+  '/admin/',
+  '/connect/',
+  '/security/',
+  '/self-hosting/',
+  '/plugins/',
+  '/blog/',
+];
+
+// SPA route prefixes under /mushi-mushi/admin/.
 var SPA_PREFIXES = [
   '/reports/',
   '/dashboard',
@@ -79,29 +105,66 @@ var SPA_PREFIXES = [
   '/reset-password',
 ];
 
-function handler(event) {
-  var uri = event.request.uri;
-
-  // Static assets: never redirect (they would 404 in S3 anyway, not here).
-  if (/\.[a-zA-Z0-9]+$/.test(uri)) {
-    return event.request;
+function redirect301(targetPath, querystring) {
+  var location = targetPath;
+  if (querystring) {
+    location = location + '?' + querystring;
   }
+  return {
+    statusCode: 301,
+    statusDescription: 'Moved Permanently',
+    headers: {
+      'location': { value: location },
+      'cache-control': { value: 'public, max-age=31536000' },
+    },
+  };
+}
 
-  // Check if the URI matches any known SPA route prefix.
-  for (var i = 0; i < SPA_PREFIXES.length; i++) {
-    var prefix = SPA_PREFIXES[i];
-    if (uri === prefix.replace(/\/$/, '') || uri.indexOf(prefix) === 0 || uri === prefix) {
-      return {
-        statusCode: 301,
-        statusDescription: 'Moved Permanently',
-        headers: {
-          'location': { value: '/mushi-mushi/admin' + uri },
-          'cache-control': { value: 'public, max-age=31536000' },
-        },
-      };
+function matchesDocs(uri) {
+  var i;
+  for (i = 0; i < DOCS_EXACT.length; i++) {
+    if (uri === DOCS_EXACT[i]) {
+      return true;
     }
   }
+  for (i = 0; i < DOCS_NESTED_PREFIXES.length; i++) {
+    if (uri.indexOf(DOCS_NESTED_PREFIXES[i]) === 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
-  // Not a known SPA route — pass through unchanged.
-  return event.request;
+function matchesSpa(uri) {
+  var i;
+  for (i = 0; i < SPA_PREFIXES.length; i++) {
+    var prefix = SPA_PREFIXES[i];
+    if (uri === prefix.replace(/\/$/, '') || uri.indexOf(prefix) === 0 || uri === prefix) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+  var qs = request.querystring;
+
+  // Static assets: never redirect.
+  if (/\.[a-zA-Z0-9]+$/.test(uri)) {
+    return request;
+  }
+
+  // Docs before SPA — unprefixed Nextra routes and nested docs paths.
+  if (matchesDocs(uri)) {
+    return redirect301('/mushi-mushi/docs' + uri, qs);
+  }
+
+  // Admin SPA shared-link rescue.
+  if (matchesSpa(uri)) {
+    return redirect301('/mushi-mushi/admin' + uri, qs);
+  }
+
+  return request;
 }

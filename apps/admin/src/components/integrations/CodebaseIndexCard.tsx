@@ -547,7 +547,7 @@ function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss:
       <div className="text-2xs text-warn font-medium uppercase tracking-wider mb-2">
         {WARNING_EMOJI} One-time webhook secret {EM_DASH} copy now, will not be shown again
       </div>
-      <pre className="font-mono text-xs text-fg bg-surface-raised px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all">
+      <pre className="mushi-code-block mushi-code-body font-mono text-xs text-fg px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all">
         {secret}
       </pre>
       <div className="mt-2 flex items-center gap-2">

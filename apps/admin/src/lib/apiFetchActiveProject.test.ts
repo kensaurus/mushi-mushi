@@ -58,6 +58,7 @@ describe('apiFetch active project scoping', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
     window.localStorage.clear()
+    window.history.replaceState({}, '', '/')
     invalidateApiCache()
   })
 
@@ -72,6 +73,23 @@ describe('apiFetch active project scoping', () => {
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer test-token',
       'X-Mushi-Project-Id': '11111111-1111-4111-8111-111111111111',
+    })
+  })
+
+  it('prefers ?project= in the URL over localStorage for API headers', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ settings: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    window.history.replaceState(
+      {},
+      '',
+      '/reports/abc?project=22222222-2222-4222-8222-222222222222',
+    )
+    setActiveProjectIdSnapshot('11111111-1111-4111-8111-111111111111')
+    await apiFetch('/v1/admin/settings')
+
+    expect(requestInitAt(fetchMock, 0).headers).toMatchObject({
+      'X-Mushi-Project-Id': '22222222-2222-4222-8222-222222222222',
     })
   })
 

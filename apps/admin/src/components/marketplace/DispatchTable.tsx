@@ -70,7 +70,7 @@ export function DispatchTable({
                 return (
                   <Fragment key={d.id}>
                     <tr
-                      className="border-t border-border-subtle hover:bg-surface-overlay/30 cursor-pointer"
+                      className="border-t border-edge-subtle hover:bg-surface-overlay/30 cursor-pointer"
                       onClick={() =>
                         hasResponse && setExpandedDelivery(isExpanded ? null : d.id)
                       }
@@ -100,12 +100,12 @@ export function DispatchTable({
                       </td>
                     </tr>
                     {isExpanded && hasResponse && (
-                      <tr className="bg-surface-overlay/30 border-t border-border-subtle">
+                      <tr className="bg-surface-overlay/30 border-t border-edge-subtle">
                         <td colSpan={7} className="px-3 py-2">
                           <div className="text-3xs text-fg-muted uppercase tracking-wider mb-1">
                             Full response · delivery {d.delivery_id.slice(0, 8)}…
                           </div>
-                          <pre className="text-3xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere bg-surface-raised rounded-sm p-2 max-h-64">
+                          <pre className="mushi-code-block mushi-code-body text-3xs font-mono overflow-auto whitespace-pre-wrap wrap-anywhere rounded-sm p-2 max-h-64">
                             {d.response_excerpt}
                           </pre>
                         </td>

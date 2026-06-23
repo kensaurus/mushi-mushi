@@ -201,7 +201,7 @@ export function ProjectCreatedSuccessPanel({
         </h3>
         <p className="mt-1 text-xs text-fg-muted">
           {liveKey
-            ? 'Copy the command below — it has everything you need to finish SDK setup.'
+            ? 'Copy the command below to finish SDK setup.'
             : 'Your Project ID is shown below. Generate an API key next, then run the CLI in your app folder.'}
         </p>
       </div>

@@ -489,11 +489,17 @@ export function CopyButton(props: CopyButtonProps) {
  */
 type CodeValueTone = 'neutral' | 'id' | 'url' | 'hash'
 
+/** Inverted terminal-style shell shared by CodeValue, LogBlock, and hand-rolled `<pre>`. */
+export const CODE_BLOCK_SHELL =
+  'mushi-code-block border border-code-surface-border rounded-sm'
+export const CODE_BLOCK_BODY =
+  'mushi-code-body font-mono text-[0.8125rem] leading-relaxed wrap-anywhere'
+
 const CODE_TONES: Record<CodeValueTone, string> = {
-  neutral: 'text-fg',
+  neutral: 'text-code-surface-fg',
   id:      'text-brand',
   url:     'text-info',
-  hash:    'text-accent',
+  hash:    'text-accent-foreground',
 }
 
 interface CodeValueProps {
@@ -513,10 +519,10 @@ interface CodeValueProps {
 }
 
 export function CodeValue({ value, tone = 'neutral', copyable = true, className = '', inline, multiline }: CodeValueProps) {
-  const baseFont = `font-mono text-[0.8125rem] leading-relaxed ${CODE_TONES[tone]}`
+  const toneClass = CODE_TONES[tone]
   if (inline) {
     return (
-      <code className={`${baseFont} px-1 py-0.5 rounded-sm bg-surface-overlay/50 border border-edge-subtle wrap-anywhere ${className}`}>
+      <code className={`mushi-code-inline ${toneClass} wrap-anywhere ${className}`}>
         {value}
       </code>
     )
@@ -525,7 +531,7 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
     return (
       <div className={`group/code relative max-w-full ${className}`}>
         <pre
-          className={`${baseFont} w-full rounded-sm bg-surface-overlay/60 border border-edge-subtle px-2 py-1.5 pr-8 whitespace-pre-wrap wrap-anywhere`}
+          className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} w-full px-2 py-1.5 pr-8 whitespace-pre-wrap ${toneClass}`}
         >
           <code className="block min-w-0">{value}</code>
         </pre>
@@ -536,7 +542,7 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
   return (
     <div className={`group/code inline-flex max-w-full items-start gap-1.5 ${className}`}>
       <code
-        className={`${baseFont} block w-full rounded-sm bg-surface-overlay/60 border border-edge-subtle px-2 py-1 wrap-anywhere`}
+        className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} block w-full px-2 py-1 ${toneClass}`}
       >
         {value}
       </code>
@@ -565,11 +571,11 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
 type LogBlockTone = 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
 
 const LOG_TONES: Record<LogBlockTone, string> = {
-  neutral: 'bg-surface-overlay/60 border-edge-subtle text-fg',
-  info:    'bg-info-muted/12 border-info/35 text-fg',
-  ok:      'bg-ok-muted/10 border-ok/40 text-fg',
-  warn:    'bg-warn-muted/12 border-warn/40 text-fg',
-  danger:  'bg-danger-muted/10 border-danger/40 text-fg',
+  neutral: `${CODE_BLOCK_SHELL} text-code-surface-fg`,
+  info:    `${CODE_BLOCK_SHELL} border-info/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-info-muted))]`,
+  ok:      `${CODE_BLOCK_SHELL} border-ok/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-ok-muted))]`,
+  warn:    `${CODE_BLOCK_SHELL} border-warn/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-warn-muted))]`,
+  danger:  `${CODE_BLOCK_SHELL} border-danger/40 text-code-surface-fg bg-[color-mix(in_oklch,var(--color-code-surface)_86%,var(--color-danger-muted))]`,
 }
 
 interface LogBlockProps {
@@ -614,7 +620,7 @@ export function LogBlock({
         </div>
       )}
       <pre
-        className={`font-mono text-[0.78125rem] leading-relaxed rounded-sm border px-2 py-1.5 overflow-auto whitespace-pre-wrap wrap-anywhere ${maxHeightClass} ${LOG_TONES[tone]}`}
+        className={`${CODE_BLOCK_BODY} overflow-auto whitespace-pre-wrap ${maxHeightClass} ${LOG_TONES[tone]} px-2 py-1.5 ${className}`}
       >
         <code className="block min-w-0">{trimmed || '\u00A0'}</code>
       </pre>

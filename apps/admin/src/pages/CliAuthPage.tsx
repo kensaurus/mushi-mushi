@@ -177,7 +177,7 @@ export function CliAuthPage() {
         {/* 3-step guide */}
         <ol className="mb-6 space-y-2">
           {STEPS.map((step) => (
-            <li key={step.n} className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3">
+            <li key={step.n} className="flex items-start gap-3 rounded-lg border border-edge-subtle bg-surface-raised px-4 py-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
                 {step.n}
               </span>
@@ -187,7 +187,7 @@ export function CliAuthPage() {
         </ol>
 
         {/* User code display */}
-        <div className="mb-4 rounded-xl border border-border bg-surface-overlay px-6 py-5">
+        <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-overlay px-6 py-5">
           <p className="mb-1 text-xs font-medium uppercase tracking-wider text-fg-muted">
             Verification code — confirm it matches your terminal
           </p>
@@ -222,7 +222,7 @@ export function CliAuthPage() {
               onChange={(e) => setManualCode(e.target.value.toUpperCase())}
               placeholder="XXXX-XXXX"
               maxLength={9}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm uppercase tracking-widest text-fg placeholder:text-fg-muted/40 focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full rounded-lg border border-edge-subtle bg-surface px-3 py-2 font-mono text-sm uppercase tracking-widest text-fg placeholder:text-fg-muted/40 focus:outline-none focus:ring-2 focus:ring-brand"
               autoComplete="off"
               autoFocus
             />

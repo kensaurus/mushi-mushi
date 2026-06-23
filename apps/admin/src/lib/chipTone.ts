@@ -35,3 +35,21 @@ export const META_CHIP_TONE = {
   warn: CHIP_TONE.warnSubtle,
   danger: CHIP_TONE.dangerSubtle,
 } as const
+
+/** Map IA severity labels to the canonical CHIP_TONE entry (consolidates ad-hoc pill classes). */
+export type StatusSeverity = 'ok' | 'warn' | 'danger' | 'neutral' | 'info'
+
+export function statusChipTone(severity: StatusSeverity): string {
+  switch (severity) {
+    case 'ok':
+      return CHIP_TONE.okSubtle
+    case 'warn':
+      return CHIP_TONE.warnSubtle
+    case 'danger':
+      return CHIP_TONE.dangerSubtle
+    case 'info':
+      return CHIP_TONE.infoSubtle
+    default:
+      return CHIP_TONE.neutral
+  }
+}

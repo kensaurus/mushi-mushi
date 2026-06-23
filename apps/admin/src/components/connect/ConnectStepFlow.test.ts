@@ -12,11 +12,11 @@ import {
 } from './ConnectStepFlow'
 
 const SAMPLE_LANES: StepNodeData[] = [
-  { label: '1. GitHub', shortLabel: 'GitHub', posture: 'clear', stepIdx: 0, totalSteps: 6 },
-  { label: '2. SDK', shortLabel: 'SDK', posture: 'clear', stepIdx: 1, totalSteps: 6 },
-  { label: '3. MCP', shortLabel: 'MCP', posture: 'current', stepIdx: 2, totalSteps: 6 },
-  { label: '5. Upgrade PR', shortLabel: 'Upgrade PR', posture: 'info', stepIdx: 4, totalSteps: 6 },
-  { label: '6. Native CI secrets', shortLabel: 'Native CI', posture: 'clear', stepIdx: 5, totalSteps: 6 },
+  { label: 'GitHub', shortLabel: 'GitHub', posture: 'clear', stepIdx: 0, totalSteps: 6 },
+  { label: 'SDK', shortLabel: 'SDK', posture: 'clear', stepIdx: 1, totalSteps: 6 },
+  { label: 'MCP', shortLabel: 'MCP', posture: 'current', stepIdx: 2, totalSteps: 6 },
+  { label: 'Upgrade PR', shortLabel: 'Upgrade PR', posture: 'info', stepIdx: 4, totalSteps: 6 },
+  { label: 'Native CI secrets', shortLabel: 'Native CI', posture: 'clear', stepIdx: 5, totalSteps: 6 },
 ]
 
 describe('ConnectStepFlow lane labels', () => {

@@ -37,6 +37,34 @@
   --mushi-font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", sans-serif;
   --mushi-font-mono: var(--font-jetbrains-mono, ui-monospace), "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --mushi-ease-stamp: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Inverted code blocks — dark terminal on light paper for readability. */
+  --mushi-code-surface: #1a1917;
+  --mushi-code-surface-fg: #f2ebdd;
+  --mushi-code-surface-fg-muted: #b8b0a4;
+  --mushi-code-surface-border: rgba(242, 235, 221, 0.14);
+
+  /* Diagram / data-viz accents — editorial palette for docs SVG + pipeline nodes */
+  --mushi-viz-accent: var(--mushi-vermillion);
+  --mushi-viz-accent-wash: var(--mushi-vermillion-wash);
+  --mushi-viz-accent-ink: var(--mushi-vermillion-ink);
+  --mushi-viz-positive: var(--mushi-jade);
+  --mushi-viz-positive-wash: var(--mushi-jade-wash);
+  --mushi-viz-warn: #b8720e;
+  --mushi-viz-wash-warn: rgba(184, 114, 14, 0.1);
+  --mushi-viz-info: #5c5580;
+  --mushi-viz-wash-info: rgba(92, 85, 128, 0.09);
+  --mushi-viz-danger: #b83232;
+  --mushi-viz-wash-danger: rgba(184, 50, 50, 0.08);
+  --mushi-viz-track: var(--mushi-rule);
+  --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 22%, transparent);
+  --mushi-viz-node-border: var(--mushi-rule);
+  --mushi-viz-node-bg: var(--mushi-paper);
+  --mushi-viz-selected: var(--mushi-vermillion);
+  --mushi-viz-selected-fg: #ffffff;
+  --mushi-viz-panel-bg: var(--mushi-paper-wash);
+  --mushi-viz-panel-border: var(--mushi-rule);
+  --mushi-viz-muted: var(--mushi-ink-muted);
+  --mushi-viz-faint: var(--mushi-ink-faint);
 }
 
 [data-mushi-theme="dark"] {
@@ -49,4 +77,17 @@
   --mushi-vermillion-ink: #ffe5e0;
   --mushi-jade: #3a9e6e;
   --mushi-jade-wash: rgba(58, 158, 110, 0.12);
+  --mushi-code-surface: #0f0e0c;
+  --mushi-code-surface-fg: #f2ebdd;
+  --mushi-code-surface-fg-muted: #928b7e;
+  --mushi-code-surface-border: rgba(242, 235, 221, 0.12);
+  --mushi-viz-warn: #d4922a;
+  --mushi-viz-wash-warn: rgba(212, 146, 42, 0.12);
+  --mushi-viz-info: #8a82b0;
+  --mushi-viz-wash-info: rgba(138, 130, 176, 0.12);
+  --mushi-viz-danger: #e05555;
+  --mushi-viz-wash-danger: rgba(224, 85, 85, 0.12);
+  --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 28%, transparent);
+  --mushi-viz-node-bg: var(--mushi-paper);
+  --mushi-viz-selected-fg: #ffffff;
 }

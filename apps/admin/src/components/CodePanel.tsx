@@ -19,13 +19,13 @@ export function CodePanel({ label, language, code, onCopy, copied, maxHeight }: 
   const tokens = tokenizeSnippet(code, language)
 
   return (
-    <div className="mushi-code-block rounded-md border border-edge-subtle overflow-hidden">
-      <div className="mushi-code-toolbar flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle">
+    <div className="mushi-code-block rounded-md border border-code-surface-border overflow-hidden">
+      <div className="mushi-code-toolbar flex items-center justify-between gap-2 px-3 py-1.5 border-b border-code-surface-border">
         <div className="flex items-center gap-2 min-w-0">
           <span aria-hidden="true" className="mushi-code-glyph font-mono text-2xs leading-none select-none">
             {'</>'}
           </span>
-          <span className="text-2xs uppercase tracking-wider font-medium text-fg-secondary truncate">
+          <span className="text-2xs uppercase tracking-wider font-medium text-code-surface-fg-muted truncate">
             {label}
           </span>
           <span className="mushi-code-lang text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm border">
@@ -37,11 +37,11 @@ export function CodePanel({ label, language, code, onCopy, copied, maxHeight }: 
           copied={copied}
           label={`Copy ${label.toLowerCase()} snippet`}
           copiedLabel={`${label} snippet copied`}
-          className="shrink-0"
+          className="shrink-0 text-code-surface-fg-muted hover:text-code-surface-fg hover:bg-white/10 focus-visible:ring-code-surface-fg-muted/40"
         />
       </div>
       <pre
-        className={`mushi-code-body px-3 py-2.5 text-2xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`.trim()}
+        className={`mushi-code-body px-3 py-2.5 font-mono overflow-x-auto whitespace-pre-wrap ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`.trim()}
       >
         <code>
           {tokens.map((token, index) => (

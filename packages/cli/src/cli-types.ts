@@ -1,17 +1,6 @@
 /**
  * FILE: packages/cli/src/cli-types.ts
- * PURPOSE: Shared response/domain type definitions for the @mushi-mushi/cli
- *          command modules. Extracted from the former monolithic `index.ts`.
- *
- * OVERVIEW:
- * - Typed shapes for the JSON returned by the Mushi sync + admin endpoints
- *   (reports, lessons, integrations, QA stories, skill pipelines, etc.).
- *
- * USAGE:
- * - Imported (type-only) by index.ts and src/commands/*.ts.
- *
- * NOTES:
- * - Pure type-move refactor; no shapes were changed.
+ * PURPOSE: Shared response/domain type definitions for @mushi-mushi/cli sync and admin endpoints.
  */
 
 export interface WhoamiData {

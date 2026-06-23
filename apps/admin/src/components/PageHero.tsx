@@ -1,52 +1,6 @@
 /**
  * FILE: apps/admin/src/components/PageHero.tsx
- * PURPOSE: "Decide → Act → Verify" hero strip rendered above the fold on
- *          every Advanced PDCA page. Charts now move below the fold —
- *          this hero surfaces the three things a human actually needs:
- *
- *              1. DECIDE — "what's the state?" (one headline number +
- *                 a one-liner telling the operator whether it's nominal)
- *              2. ACT — "what should I do next?" (primary CTA driven by
- *                 useNextBestAction, identical rule the PageActionBar
- *                 already computes for the same scope)
- *              3. VERIFY — "how do I know the action worked?" (deeplinks
- *                 to the evidence: logs, deltas, proof-of-life)
- *
- *          Wave S (2026-04-23) — initial 3-tile hero introduction.
- *          Wave U (2026-05-07) — operator feedback rebuild:
- *            • Whole hero is now collapsible (mirrors Pipeline Pulse), with
- *              localStorage persistence so the choice sticks across reloads.
- *            • Bezel-less single-card visual: tiles are flush sections of
- *              one container instead of three separate cards floating in
- *              a 3-column grid. Animated marching-dot arrows flow between
- *              D → A → V so the page reads as a single decision narrative
- *              rather than three unrelated boxes.
- *            • Each tile is click-to-expand — the headline + summary stay
- *              compact by default, and operators reveal secondary CTAs,
- *              full detail strings, and any optional accessory content
- *              by toggling the per-tile chevron.
- *          Wave V (2026-05-08) — ReactFlow lane rebuild:
- *            • Replaces the 5-column flex grid + CSS-channel `<FlowArrow />`
- *              with a real `<HeroFlow />` ReactFlow canvas (3 custom
- *              nodes + 2 gradient bezier edges), so the hero shares the
- *              dashboard's flow vocabulary and severity colour bleeds
- *              through the edges visually.
- *            • Beginner mode + collapsed advanced mode are unchanged.
- *              Public API (props) is unchanged so all 11 consumer pages
- *              keep working without edits.
- *
- *          Design principles:
- *          - No hard-coded copy — every tile's body comes from a typed
- *            prop so pages stay the source of truth on their own metrics.
- *          - Degrades gracefully: if Act is null (no next-best-action),
- *            the tile renders a calm "all clear" affordance rather than
- *            a dead button.
- *          - Respects admin mode: beginner sees simpler, one-liner
- *            callouts; Advanced gets the full 3-tile flowing layout.
- *          - Accessibility: each tile is a landmark `<section>` with an
- *            explicit heading, and the primary CTA is focusable first
- *            in tab order inside Act. The collapse + per-tile expand
- *            buttons are real `<button>`s with `aria-expanded`.
+ * PURPOSE: Decide → Act → Verify hero strip for Advanced-mode PDCA pages.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -164,7 +118,12 @@ const SEVERITY_STYLE: Record<
 const HERO_COLLAPSE_KEY = 'mushi:pageHero:collapsed:v1'
 
 /** Workhorse list pages — start collapsed so triage tables get vertical space. */
-const DEFAULT_COLLAPSED_SCOPES = new Set(['reports', 'fixes', 'inventory', 'inbox'])
+const DEFAULT_COLLAPSED_SCOPES = new Set([
+  'reports', 'fixes', 'inventory', 'inbox',
+  // Config / exploration pages — DAV hero collapsed by default (triage/health stay expanded).
+  'query', 'graph', 'explore', 'qa-coverage', 'storage', 'onboarding', 'feedback',
+  'projects', 'feature-board', 'queue', 'anti-gaming', 'integrations', 'compliance',
+])
 
 function readCollapsedScopes(): Record<string, boolean> {
   if (typeof window === 'undefined') return {}

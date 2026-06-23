@@ -7,24 +7,22 @@
  * on the very first visit. Reopenable via the "Change mode" link in the sidebar.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAdminMode, type AdminMode } from '../../lib/mode'
+import { SegmentedControl } from '../ui'
 
-const MODE_INFO: Record<AdminMode, { emoji: string; label: string; tagline: string }> = {
+const MODE_INFO: Record<AdminMode, { label: string; tagline: string }> = {
   quickstart: {
-    emoji: '⚡',
     label: 'Quick',
-    tagline: '3 steps, plain English, hide everything you don\'t need yet.',
+    tagline: 'Three steps. Advanced pages stay hidden until you need them.',
   },
   beginner: {
-    emoji: '🐛',
     label: 'Step-by-step',
-    tagline: 'All the options, with tooltips on every term you haven\'t seen before.',
+    tagline: 'All the options, with tooltips on every term you have not seen before.',
   },
   advanced: {
-    emoji: '🏯',
     label: 'Power user',
-    tagline: 'Full console with jargon-rich labels, dense tables, and no hand-holding.',
+    tagline: 'Full console with dense tables and no hand-holding.',
   },
 }
 
@@ -57,10 +55,21 @@ export function OnboardingModeIntroCard() {
     setVisible(false)
   }, [])
 
-  const choose = useCallback((m: AdminMode) => {
-    setMode(m)
-    dismiss()
-  }, [setMode, dismiss])
+  const options = useMemo(
+    () =>
+      (Object.entries(MODE_INFO) as [AdminMode, typeof MODE_INFO[AdminMode]][]).map(
+        ([id, info]) => ({ id, label: info.label }),
+      ),
+    [],
+  )
+
+  const handleModeChange = useCallback(
+    (next: AdminMode) => {
+      setMode(next)
+      dismiss()
+    },
+    [setMode, dismiss],
+  )
 
   if (!visible) return null
 
@@ -68,7 +77,7 @@ export function OnboardingModeIntroCard() {
     <div className="rounded-xl border border-brand/20 bg-brand/5 p-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand">
+          <p className="text-xs font-semibold text-brand">
             How do you want to use Mushi?
           </p>
           <p className="mt-0.5 text-2xs text-fg-muted">
@@ -81,28 +90,23 @@ export function OnboardingModeIntroCard() {
           className="shrink-0 text-xs text-fg-faint hover:text-fg"
           aria-label="Dismiss mode picker"
         >
-          ✕
+          Dismiss
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {(Object.entries(MODE_INFO) as [AdminMode, typeof MODE_INFO[AdminMode]][]).map(([m, info]) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => choose(m)}
-            className={[
-              'flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition',
-              mode === m
-                ? 'border-brand bg-brand/10'
-                : 'border-edge bg-surface hover:border-brand/40',
-            ].join(' ')}
-          >
-            <span className="text-base">{info.emoji}</span>
-            <span className="text-xs font-semibold text-fg">{info.label}</span>
-            <span className="text-2xs leading-relaxed text-fg-muted">{info.tagline}</span>
-          </button>
-        ))}
+      <div className="mt-3 space-y-2">
+        <SegmentedControl
+          value={mode}
+          options={options}
+          onChange={handleModeChange}
+          ariaLabel="Admin console mode"
+          size="md"
+          wrap
+          className="w-full sm:w-auto"
+        />
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          {MODE_INFO[mode].tagline}
+        </p>
       </div>
     </div>
   )

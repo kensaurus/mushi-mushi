@@ -1,0 +1,101 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
+  "$description": "W3C DTCG 2025.10 primitive source for Mushi editorial + widget palette. Builds editorial.css and @mushi-mushi/core mirrors via Style Dictionary (planned).",
+  "color": {
+    "paper": {
+      "$type": "color",
+      "$value": "#f8f4ed",
+      "$description": "Washi cream — primary light surface"
+    },
+    "paper-wash": {
+      "$type": "color",
+      "$value": "#efe7da"
+    },
+    "ink": {
+      "$type": "color",
+      "$value": "#0e0d0b",
+      "$description": "Sumi black — primary text on light paper"
+    },
+    "ink-muted": {
+      "$type": "color",
+      "$value": "#5c5852"
+    },
+    "ink-faint": {
+      "$type": "color",
+      "$value": "#9a9489"
+    },
+    "vermillion": {
+      "$type": "color",
+      "$value": "#e03c2c",
+      "$description": "朱 hanko red — signature accent"
+    },
+    "vermillion-wash": {
+      "$type": "color",
+      "$value": "rgba(224, 60, 44, 0.08)"
+    },
+    "vermillion-ink": {
+      "$type": "color",
+      "$value": "#7a1f15"
+    },
+    "jade": {
+      "$type": "color",
+      "$value": "#2d7a55",
+      "$description": "Muted editorial pass/OK green — never a CTA"
+    },
+    "banner-neon-bg": {
+      "$type": "color",
+      "$value": "#0fff50",
+      "$description": "Default SDK neon banner strip"
+    },
+    "banner-neon-fg": {
+      "$type": "color",
+      "$value": "#0a1a0a"
+    },
+    "banner-neon-border": {
+      "$type": "color",
+      "$value": "#00c43a"
+    },
+    "dark-paper": {
+      "$type": "color",
+      "$value": "#0f0e0c"
+    },
+    "dark-ink": {
+      "$type": "color",
+      "$value": "#f2ebdd"
+    },
+    "dark-ink-muted": {
+      "$type": "color",
+      "$value": "#928b7e"
+    }
+  },
+  "font": {
+    "display": {
+      "$type": "fontFamily",
+      "$value": "Iowan Old Style, Palatino Linotype, Palatino, Book Antiqua, Cambria, Georgia, Times New Roman, serif"
+    },
+    "body": {
+      "$type": "fontFamily",
+      "$value": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI Variable Display, Segoe UI, sans-serif"
+    },
+    "mono": {
+      "$type": "fontFamily",
+      "$value": "ui-monospace, SF Mono, JetBrains Mono, Menlo, Consolas, Liberation Mono, monospace"
+    }
+  },
+  "motion": {
+    "ease-stamp": {
+      "$type": "cubicBezier",
+      "$value": [0.22, 1, 0.36, 1]
+    }
+  },
+  "geometry": {
+    "banner-height": {
+      "$type": "dimension",
+      "$value": "36px"
+    },
+    "fab-size": {
+      "$type": "dimension",
+      "$value": "52px"
+    }
+  }
+}

@@ -30,7 +30,7 @@ type SdkDisplayResolutionTone =
 const STATUS_TONE: Record<Exclude<SdkDisplayResolutionTone, 'unknown'>, string> = {
   'up-to-date': 'bg-ok-muted text-ok border border-ok/30',
   'catalog-ahead': 'bg-info-muted text-info border border-info/30',
-  'upgrade-available': 'bg-warn-muted text-warn border border-warn/30',
+  'upgrade-available': 'bg-warn-muted text-warning-foreground border border-warn/30',
   deprecated: 'bg-danger-muted text-danger border border-danger/30',
 }
 

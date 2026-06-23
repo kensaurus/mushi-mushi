@@ -49,6 +49,8 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:nav-registry": "node scripts/check-nav-registry.mjs",
+    "check:ia-labels": "node scripts/check-ia-labels.mjs",
     "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check",
     "sync:mcp-tool-count": "node scripts/sync-mcp-tool-count.mjs",
     "check:cursor-plugin": "node scripts/check-cursor-plugin.mjs",
@@ -93,7 +95,8 @@
     "check:onboarding-drift": "node scripts/check-onboarding-drift.mjs",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
-    "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"
+    "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e",
+    "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -145,6 +148,5 @@
   },
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
-  },
-  "author": "Kenji Sakuramoto"
+  }
 }

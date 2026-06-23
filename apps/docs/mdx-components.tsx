@@ -16,6 +16,12 @@ import { DocScreenshot } from './components/DocScreenshot'
 import { AdminDocHero } from './components/AdminDocHero'
 import { DocsMediaShowcase } from './components/DocsMediaShowcase'
 import { OssTrustStrip } from './components/OssTrustStrip'
+import { WhereToStartGrid } from './components/WhereToStartGrid'
+import { TroubleshootingAccordion } from './components/TroubleshootingAccordion'
+import { SdkEnvMatrix } from './components/SdkEnvMatrix'
+import { EvolutionDiagram } from './components/EvolutionDiagram'
+import { LoopComparison } from './components/LoopComparison'
+import { PricingEstimator } from './components/PricingEstimator'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ...getDocsComponents(),
@@ -40,5 +46,11 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   AdminDocHero,
   DocsMediaShowcase,
   OssTrustStrip,
+  WhereToStartGrid,
+  TroubleshootingAccordion,
+  SdkEnvMatrix,
+  EvolutionDiagram,
+  LoopComparison,
+  PricingEstimator,
   ...(components ?? {}),
 })

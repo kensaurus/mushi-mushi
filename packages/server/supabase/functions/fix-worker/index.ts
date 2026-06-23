@@ -87,6 +87,7 @@ import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { checkAutofixBudget } from '../_shared/autofix-budget.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import { notifyReportStatusTransition } from '../_shared/report-status-notify.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -305,7 +306,7 @@ Deno.serve(
         db
           .from('reports')
           .select(
-            'id, description, summary, category, severity, component, confidence, user_intent, ' +
+            'id, description, summary, category, severity, component, confidence, user_intent, status, reporter_token_hash, ' +
               'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
               'judge_score',
           )
@@ -944,6 +945,27 @@ ${
           status: 'fixing',
         })
         .eq('id', dispatch.report_id);
+
+      const previousReportStatus =
+        typeof (report as Record<string, unknown> | null)?.status === 'string'
+          ? ((report as Record<string, unknown>).status as string)
+          : null;
+      const reporterTokenHash =
+        typeof (report as Record<string, unknown> | null)?.reporter_token_hash === 'string'
+          ? ((report as Record<string, unknown>).reporter_token_hash as string)
+          : null;
+
+      if (reporterTokenHash) {
+        void notifyReportStatusTransition(db, {
+          projectId: dispatch.project_id,
+          reportId: dispatch.report_id,
+          reporterTokenHash,
+          previousStatus: previousReportStatus,
+          newStatus: 'fixing',
+        }).catch((e) =>
+          log.warn('Reporter notification failed', { reportId: dispatch.report_id, err: String(e) }),
+        );
+      }
 
       // Loop-closure: fan out `fix.proposed` to every project plugin so the
       // outbound bridges (plugin-jira, plugin-linear, plugin-github-issues,

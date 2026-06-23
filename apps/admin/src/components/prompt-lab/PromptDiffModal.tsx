@@ -63,7 +63,7 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
         {!parent ? (
           <p className="text-2xs text-fg-faint">Parent prompt not found (it may have been deleted).</p>
         ) : (
-          <pre className="flex-1 overflow-auto bg-surface-overlay border border-edge-subtle rounded-sm p-2 text-2xs font-mono leading-snug">
+          <pre className="mushi-code-block mushi-code-body flex-1 overflow-auto border border-code-surface-border rounded-sm p-2 text-2xs font-mono leading-snug">
             {lines.map((l, idx) => (
               <div
                 key={idx}

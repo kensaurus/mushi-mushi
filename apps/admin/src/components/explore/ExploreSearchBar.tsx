@@ -290,7 +290,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                   <SimilarityBar score={hit.similarity} />
                 </div>
                 {hit.content_preview && (
-                  <pre className="text-3xs font-mono text-fg-muted bg-surface-overlay rounded-sm px-2.5 py-1.5 overflow-hidden max-h-16 whitespace-pre-wrap break-words leading-5">
+                  <pre className="mushi-code-block mushi-code-body text-3xs font-mono rounded-sm px-2.5 py-1.5 overflow-hidden max-h-16 whitespace-pre-wrap break-words leading-5">
                     {hit.content_preview.slice(0, 240)}
                   </pre>
                 )}
@@ -312,7 +312,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
           <div>
             <div className="text-2xs font-semibold text-fg mb-0.5">Semantic search</div>
             <p className="text-2xs text-fg-muted leading-relaxed">
-              Describe what you're looking for in plain English. Vector similarity finds the most relevant files even when the exact words don't match.
+              Search by meaning, not exact filenames — describe what you are looking for in a sentence or two.
             </p>
           </div>
           <div>

@@ -32,7 +32,7 @@ interface NextReport {
 
 const SHOW_ON_PATHS = new Set(['/', '/reports', '/fixes'])
 
-export function QuickstartMegaCta() {
+export function QuickstartMegaCta({ embedded = false }: { embedded?: boolean }) {
   const { isQuickstart } = useAdminMode()
   const { pathname } = useLocation()
   const activeProjectId = useActiveProjectId()
@@ -99,7 +99,7 @@ export function QuickstartMegaCta() {
       title: "You're caught up",
       sub: 'No new bugs waiting. Mushi will surface the next one here as soon as it lands.',
       button: 'Open inbox',
-      to: '/reports',
+      to: '/inbox',
       tone: 'idle' as const,
     }
   }, [setup, reportsQuery.data])
@@ -128,12 +128,16 @@ export function QuickstartMegaCta() {
       ? 'bg-surface-raised text-fg border border-edge hover:bg-surface-overlay'
       : 'bg-brand text-brand-fg hover:bg-brand-hover'
 
+  const outerClass = embedded
+    ? 'flex items-center gap-4 px-3 py-2.5'
+    : `mb-4 -mt-1 flex items-center gap-4 rounded-xl border ${ringTone} px-4 py-3.5 motion-safe:animate-mushi-fade-in`
+
   return (
     <aside
       role="complementary"
       aria-label="Quickstart primary action"
       data-tour-id="quickstart-mega-cta"
-      className={`mb-4 -mt-1 flex items-center gap-4 rounded-xl border ${ringTone} px-4 py-3.5 motion-safe:animate-mushi-fade-in`}
+      className={outerClass}
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">

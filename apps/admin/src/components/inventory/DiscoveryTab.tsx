@@ -396,7 +396,7 @@ function ActionCard({
             </ContainedBlock>
           </div>
         </div>
-        <pre className="text-2xs font-mono p-3 rounded-md bg-surface-overlay/60 border border-edge-subtle overflow-auto whitespace-pre">{`import { Mushi } from '@mushi-mushi/web'
+        <pre className="mushi-code-block mushi-code-body text-2xs font-mono p-3 rounded-md border border-code-surface-border overflow-auto whitespace-pre">{`import { Mushi } from '@mushi-mushi/web'
 
 Mushi.init({
   projectId: '${projectId}',
