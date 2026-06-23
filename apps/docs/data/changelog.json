@@ -1,33 +1,18 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "v0.22.1 — Post-release SDK reliability fixes",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.21",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.21.1",
+      "1.21.0"
+    ],
     "highlights": [
-      {
-        "title": "CLI keeps your `.env.local`",
-        "description": "`mushi project create` no longer overwrites an existing `.env.local`. It reads the current file, replaces only prior `MUSHI_*` lines (bare and framework-prefixed), and appends a fresh Mushi block — preserving `DATABASE_URL`, `NEXT_PUBLIC_*`, Stripe keys, and everything else. Re-runs are idempotent."
-      },
-      {
-        "title": "React Native types resolve after publish",
-        "description": "removed the `web-i18n.d.ts` ambient shim that re-exported `MushiLocale` from a monorepo-relative source path (`../../web/src/i18n/types`) that does not exist in a published install. `@mushi-mushi/web` already ships proper `./i18n` types via its `exports` map, which `moduleResolution: \"bundler\"`/`nodenext` resolves directly."
-      },
       {
         "title": "Rewards listeners install once",
         "description": "web rewards now wires its route/click/dwell listeners exactly once per page. Previously every `identify()` / `identifyWithToken()` call re-wrapped `history.pushState` and re-added the `popstate`/`click`/`MutationObserver` handlers, leaking listeners and double-counting activity and reward events. Re-identifying a user no longer re-installs DOM hooks."
       }
     ],
-    "packages": []
-  },
-  {
-    "majorMinor": "1.21",
-    "headline": null,
-    "pending": false,
-    "versions": [
-      "1.21.0"
-    ],
-    "highlights": [],
     "packages": [
       {
         "name": "@mushi-mushi/core",
@@ -39,7 +24,7 @@
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.21.0"
+        "version": "1.21.1"
       }
     ]
   },
@@ -784,13 +769,19 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.22.1",
       "0.22.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "CLI keeps your `.env.local`",
+        "description": "`mushi project create` no longer overwrites an existing `.env.local`. It reads the current file, replaces only prior `MUSHI_*` lines (bare and framework-prefixed), and appends a fresh Mushi block — preserving `DATABASE_URL`, `NEXT_PUBLIC_*`, Stripe keys, and everything else. Re-runs are idempotent."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.22.0"
+        "version": "0.22.1"
       }
     ]
   },
@@ -814,6 +805,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.20.1",
       "0.20.0"
     ],
     "highlights": [
@@ -856,6 +848,10 @@
       {
         "title": "`mushi connect` flag clarity",
         "description": "`--write-env` / `--wire-ide` now actually force their action on (overriding a prior `--no-env` / `--no-ide`) instead of being silent no-ops."
+      },
+      {
+        "title": "React Native types resolve after publish",
+        "description": "removed the `web-i18n.d.ts` ambient shim that re-exported `MushiLocale` from a monorepo-relative source path (`../../web/src/i18n/types`) that does not exist in a published install. `@mushi-mushi/web` already ships proper `./i18n` types via its `exports` map, which `moduleResolution: \"bundler\"`/`nodenext` resolves directly."
       }
     ],
     "packages": [
@@ -865,7 +861,7 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.20.0"
+        "version": "0.20.1"
       }
     ]
   },
