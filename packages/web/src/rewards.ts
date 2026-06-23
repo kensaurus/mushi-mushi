@@ -307,8 +307,18 @@ let clickHandler: ((e: MouseEvent) => void) | null = null;
 let popstateHandler: (() => void) | null = null;
 let origPushState: typeof history.pushState | null = null;
 let lastRoute = '';
+let listenersInstalled = false;
 
 function installActivityListeners(projectId: string): void {
+  // Install exactly once per page. `initRewards` runs on every `identify()` /
+  // `identifyWithToken()` call (e.g. on each route change or auth refresh); a
+  // second install would re-wrap `history.pushState` over the already-wrapped
+  // function and re-add the popstate/click/MutationObserver handlers, leaking
+  // listeners and double-counting activity events. Re-identifying a user must
+  // not re-install DOM hooks. `removeActivityListeners` resets the flag.
+  if (listenersInstalled) return;
+  listenersInstalled = true;
+
   // Route: pushState + popstate
   const emitRoute = () => {
     const route = location.pathname;
@@ -347,6 +357,7 @@ function installActivityListeners(projectId: string): void {
 }
 
 function removeActivityListeners(): void {
+  listenersInstalled = false;
   // Restore original pushState before removing listeners
   if (origPushState) {
     history.pushState = origPushState;
