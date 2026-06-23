@@ -29,6 +29,9 @@
   --color-surface: oklch(0.175 0.005 285);          /* main bg */
   --color-surface-raised: oklch(0.215 0.007 285);   /* cards, wells */
   --color-surface-overlay: oklch(0.255 0.007 285);  /* hover, active cards */
+  /* Subtle hover wash between surface and surface-raised — used by list rows,
+     icon buttons, and table hover states (bg-surface-hover). */
+  --color-surface-hover: oklch(0.195 0.006 285);
   /* Aliases used by skill pipelines + inline panels — must stay opaque so
      category tints / page wash never bleed through stacked surfaces. */
   --color-surface-2: var(--color-surface-raised);
@@ -110,6 +113,18 @@
   --color-info-subtle: var(--color-info-muted);
   --color-ok-subtle: var(--color-ok-muted);
 
+  /* ── Editorial bridge (packages/brand editorial.css) ────────────────
+     Use bg-editorial-paper / text-editorial-ink in admin islands that
+     share the SDK/marketing washi identity instead of text-[var(--mushi-*)]. */
+  --color-editorial-paper: var(--mushi-paper);
+  --color-editorial-paper-wash: var(--mushi-paper-wash);
+  --color-editorial-ink: var(--mushi-ink);
+  --color-editorial-ink-muted: var(--mushi-ink-muted);
+  --color-editorial-ink-faint: var(--mushi-ink-faint);
+  --color-editorial-rule: var(--mushi-rule);
+  --color-editorial-vermillion: var(--mushi-vermillion);
+  --color-editorial-jade: var(--mushi-jade);
+
   /* ── Data viz (xyflow edges, sparklines, lang chips) ─────────────── */
   --color-viz-edge-dark: oklch(0.22 0.01 285);
   --color-viz-edge-light: oklch(0.91 0.01 285);
@@ -121,6 +136,11 @@
   --color-viz-score-danger: oklch(0.63 0.22 25);
   --color-viz-lang-default: oklch(0.55 0.01 285);
   --color-viz-terminal-bg: oklch(0.12 0.01 285);
+  --color-viz-terminal-fg: oklch(0.88 0.006 285);
+  --color-code-surface: var(--color-viz-terminal-bg);
+  --color-code-surface-fg: var(--color-viz-terminal-fg);
+  --color-code-surface-fg-muted: oklch(0.72 0.008 285);
+  --color-code-surface-border: oklch(0.28 0.01 285);
   --color-viz-step-pending: oklch(0.65 0.02 285);
   --color-viz-step-running: oklch(0.68 0.15 250);
   --color-viz-step-passed: oklch(0.72 0.17 160);
@@ -167,6 +187,12 @@
   --color-fg-on-accent: var(--color-fg);
   --color-border: var(--color-edge);
   --color-border-subtle: var(--color-edge-subtle);
+  /* Legacy shadcn aliases — prefer edge-* / fg-muted in new code */
+  --color-muted-foreground: var(--color-fg-muted);
+  --color-muted: var(--color-surface-overlay);
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-fg);
+  --color-card: var(--color-surface-raised);
 
   /* ── Chrome (page-level UI chrome: help banners, info panels, section
      frames). Distinct from brand-amber so semantic colours (ok/warn/danger)
@@ -203,6 +229,12 @@
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.625rem;
+  /* Diet / Supabase-style flat panels — border-first, no gradient lift */
+  --radius-panel: 0.375rem;
+  --color-panel: var(--color-surface-raised);
+  --color-panel-border: var(--color-edge-subtle);
+  --shadow-panel: none;
+  --chrome-row-height: 2.5rem;
 
   /* ── Shadows (for dark UI — subtle inset glow) ─────────────────────── */
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
@@ -215,7 +247,8 @@
      PDCA scaffolding actually communicates structure instead of decorating
      it. Nav-hover-bg also nudged so the row lift is perceptible against
      the sidebar root, not just visible if you stare for a second. */
-  --color-nav-active-bg: oklch(0.24 0.015 80);
+  /* Diet nav: neutral wash + brand left-bar only (not full amber fill) */
+  --color-nav-active-bg: oklch(0.195 0.006 285);
   --color-nav-active-border: oklch(0.72 0.14 80);
   --color-nav-hover-bg: oklch(0.235 0.005 285);
   --color-nav-section-label: oklch(0.62 0.005 285);
@@ -409,6 +442,7 @@ html[data-theme="light"] {
   --color-surface:         oklch(0.965 0.002 285);
   --color-surface-raised:  oklch(0.995 0.002 285);
   --color-surface-overlay: oklch(0.92 0.004 285);
+  --color-surface-hover:   oklch(0.94 0.003 285);
   --color-surface-2:       var(--color-surface-raised);
   --color-surface-3:       var(--color-surface-overlay);
 
@@ -473,8 +507,8 @@ html[data-theme="light"] {
   --color-chrome:        oklch(0.975 0.002 285);
   --color-chrome-border: oklch(0.80 0.003 285);
 
-  --color-nav-active-bg:     oklch(0.95 0.02 80);
-  --color-nav-active-border: oklch(0.62 0.16 80);
+  --color-nav-active-bg:     oklch(0.94 0.003 285);
+  --color-nav-active-border: oklch(0.48 0.16 80);
   --color-nav-hover-bg:      oklch(0.94 0.004 285);
   --color-nav-section-label: oklch(0.50 0.005 285);
 
@@ -502,18 +536,23 @@ html[data-theme="light"] {
   --color-viz-score-ok: oklch(0.45 0.19 155);
   --color-viz-score-warn: oklch(0.58 0.16 80);
   --color-viz-score-danger: oklch(0.52 0.22 25);
-  --color-viz-terminal-bg: oklch(0.97 0.004 265);
+  --color-viz-terminal-bg: oklch(0.17 0.014 285);
+  --color-viz-terminal-fg: oklch(0.92 0.005 285);
+  --color-code-surface: var(--color-viz-terminal-bg);
+  --color-code-surface-fg: var(--color-viz-terminal-fg);
+  --color-code-surface-fg-muted: oklch(0.74 0.008 285);
+  --color-code-surface-border: oklch(0.32 0.012 285);
   --color-viz-canvas-bg: oklch(0.97 0.004 265);
   --color-viz-canvas-dot: oklch(0.84 0.004 285);
   --color-viz-node-subtext: oklch(0.48 0.004 265);
 
-  /* Syntax highlighting on light paper. */
-  --color-code-kw: oklch(0.48 0.22 280);
-  --color-code-str: oklch(0.42 0.17 155);
-  --color-code-cmd: oklch(0.42 0.16 240);
-  --color-code-type: oklch(0.44 0.18 280);
-  --color-code-tag: oklch(0.48 0.20 5);
-  --color-code-attr: oklch(0.50 0.14 80);
+  /* Syntax on inverted-dark code surfaces — same bright palette as :root. */
+  --color-code-kw: oklch(0.78 0.18 280);
+  --color-code-str: oklch(0.72 0.17 155);
+  --color-code-cmd: oklch(0.72 0.14 240);
+  --color-code-type: oklch(0.74 0.16 280);
+  --color-code-tag: oklch(0.68 0.20 5);
+  --color-code-attr: oklch(0.75 0.15 80);
 }
 html[data-theme="light"] body {
   color-scheme: light;
@@ -1424,6 +1463,68 @@ select, input, textarea {
     inset 0 1px 0 var(--card-elevated-inset-highlight);
 }
 
+/* Diet chrome — flat bordered panels (Supabase Settings / Add-ons pattern) */
+.card-flat,
+.panel {
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.panel-row + .panel-row,
+.panel > .panel-row:not(:first-child) {
+  border-top: 1px solid var(--color-panel-border);
+}
+
+.panel-row:hover,
+.panel-row:focus-within {
+  background-color: var(--color-surface-hover);
+}
+
+.panel-row--interactive {
+  cursor: pointer;
+}
+
+.panel-section-label {
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-fg-faint);
+}
+
+.panel--metrics {
+  overflow: hidden;
+}
+
+.panel--metrics > [role='group'] {
+  gap: 0;
+}
+
+.panel--metrics > [role='group'] > * {
+  border-right: 1px solid var(--color-panel-border);
+  border-radius: 0;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.panel--metrics > [role='group'] > *:last-child {
+  border-right: none;
+}
+
 /* Stat card — number emphasis */
 .stat-value {
   font-variant-numeric: tabular-nums;
@@ -1477,9 +1578,8 @@ select, input, textarea {
 .stat-card-link:hover,
 .stat-card-link:focus-within {
   border-color: color-mix(in oklch, var(--color-brand) 30%, var(--color-edge-subtle));
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-raised, 0 4px 12px rgb(0 0 0 / 0.18));
-  transition-delay: 90ms, 90ms, 90ms, 0ms;
+  background-color: var(--color-surface-hover);
+  transition-delay: 0ms, 0ms, 0ms;
 }
 
 .stat-card-link:hover::before,
@@ -3068,38 +3168,53 @@ html[data-theme="light"] .report-path-code {
 --------------------------------------------------------------------------- */
 
 .mushi-code-block {
-  background: color-mix(in oklch, var(--color-surface-root) 88%, black);
-  box-shadow: inset 0 1px 0 color-mix(in oklch, white 6%, transparent);
+  background: var(--color-code-surface);
+  border-color: var(--color-code-surface-border);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, white 8%, transparent);
 }
 
 .mushi-code-toolbar {
-  background: color-mix(in oklch, var(--color-surface-overlay) 72%, var(--color-surface-root));
+  background: color-mix(in oklch, var(--color-code-surface) 82%, var(--color-surface-overlay));
+  border-color: var(--color-code-surface-border);
 }
 
 .mushi-code-glyph {
-  color: color-mix(in oklch, var(--color-brand) 72%, var(--color-fg-faint));
+  color: color-mix(in oklch, var(--color-brand) 78%, var(--color-code-surface-fg-muted));
 }
 
 .mushi-code-lang {
-  color: var(--color-fg-faint);
-  background: color-mix(in oklch, var(--color-surface-overlay) 80%, transparent);
-  border-color: color-mix(in oklch, var(--color-edge-subtle) 80%, transparent);
+  color: var(--color-code-surface-fg-muted);
+  background: color-mix(in oklch, var(--color-code-surface) 70%, var(--color-surface-overlay));
+  border-color: var(--color-code-surface-border);
 }
 
 .mushi-code-body {
-  color: var(--color-fg-secondary);
+  color: var(--color-code-surface-fg);
+  font-size: 0.8125rem;
+  line-height: 1.625;
   tab-size: 2;
 }
 
-.mushi-code-plain { color: var(--color-fg-secondary); }
-.mushi-code-kw { color: color-mix(in oklch, var(--color-brand) 88%, white); font-weight: 600; }
-.mushi-code-str { color: color-mix(in oklch, var(--color-ok) 82%, white); }
-.mushi-code-cmt { color: var(--color-fg-faint); font-style: italic; }
-.mushi-code-cmd { color: color-mix(in oklch, var(--color-info) 86%, white); font-weight: 600; }
-.mushi-code-type { color: color-mix(in oklch, var(--color-brand) 70%, #c8b6ff); }
-.mushi-code-tag { color: color-mix(in oklch, var(--color-danger) 72%, #ff9f8d); }
-.mushi-code-attr { color: color-mix(in oklch, var(--color-warn) 78%, white); }
-.mushi-code-punc { color: var(--color-fg-faint); }
+.mushi-code-plain { color: var(--color-code-surface-fg-muted); }
+.mushi-code-kw { color: var(--color-code-kw); font-weight: 600; }
+.mushi-code-str { color: var(--color-code-str); }
+.mushi-code-cmt { color: var(--color-code-surface-fg-muted); font-style: italic; }
+.mushi-code-cmd { color: var(--color-code-cmd); font-weight: 600; }
+.mushi-code-type { color: var(--color-code-type); }
+.mushi-code-tag { color: var(--color-code-tag); }
+.mushi-code-attr { color: var(--color-code-attr); }
+.mushi-code-punc { color: var(--color-code-surface-fg-muted); }
+
+.mushi-code-toolbar button {
+  color: var(--color-code-surface-fg-muted);
+}
+.mushi-code-toolbar button:hover {
+  color: var(--color-code-surface-fg);
+  background: color-mix(in oklch, white 10%, transparent);
+}
+.mushi-code-toolbar button.text-ok {
+  color: var(--color-ok);
+}
 
 .mushi-code-inline {
   display: inline-block;
@@ -3107,30 +3222,14 @@ html[data-theme="light"] .report-path-code {
   max-width: 100%;
   padding: 0.1rem 0.4rem;
   border-radius: var(--radius-sm, 0.25rem);
-  border: 1px solid color-mix(in oklch, var(--color-edge-subtle) 85%, transparent);
-  background: color-mix(in oklch, var(--color-surface-overlay) 78%, var(--color-surface-root));
-  color: var(--color-fg);
+  border: 1px solid var(--color-code-surface-border);
+  background: var(--color-code-surface);
+  color: var(--color-code-surface-fg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.92em;
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
 }
-
-html[data-theme="light"] .mushi-code-block {
-  background: color-mix(in oklch, var(--color-surface-raised) 90%, #e8edf2);
-  box-shadow: inset 0 1px 0 color-mix(in oklch, white 70%, transparent);
-}
-
-html[data-theme="light"] .mushi-code-toolbar {
-  background: color-mix(in oklch, var(--color-surface-overlay) 55%, white);
-}
-
-.mushi-code-kw { color: var(--color-code-kw); }
-.mushi-code-str { color: var(--color-code-str); }
-.mushi-code-cmd { color: var(--color-code-cmd); }
-.mushi-code-type { color: var(--color-code-type); }
-.mushi-code-tag { color: var(--color-code-tag); }
-.mushi-code-attr { color: var(--color-code-attr); }
 
 @media print {
   html,

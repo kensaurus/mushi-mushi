@@ -319,7 +319,7 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
             Copy paste snippet
           </summary>
           <div className="mt-1 relative">
-            <pre className="text-2xs font-mono bg-surface-overlay/60 border border-edge-subtle rounded-sm p-2 overflow-x-auto whitespace-pre">
+            <pre className="mushi-code-block mushi-code-body text-2xs font-mono border border-code-surface-border rounded-sm p-2 overflow-x-auto whitespace-pre">
               {item.snippet}
             </pre>
             <Btn

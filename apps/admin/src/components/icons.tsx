@@ -822,3 +822,61 @@ export function IconDots(p: IconProps) {
   </>)
 }
 
+// ─── AI Client glyphs (for ClientConnectButton / ConnectStudio) ──────────────
+
+// Cursor — stylised cursor pointer mark.
+export function IconCursor(p: IconProps) {
+  return wrap(p, <>
+    <path d="M4 2 L4 14 L7.5 10.5 L10 14 L11.5 13 L9 9 L13 9 Z" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// VS Code — two overlapping angle brackets.
+export function IconVSCode(p: IconProps) {
+  return wrap(p, <>
+    <polyline points="9,3 4,8 9,13" strokeWidth="1.8" />
+    <polyline points="11,5 14,8 11,11" strokeWidth="1.8" />
+  </>)
+}
+
+// Windsurf — wave / sail shape.
+export function IconWindsurf(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3 13 Q6 4 9 6 Q12 8 14 3" strokeWidth="1.6" fill="none" />
+    <path d="M3 13 L14 13" strokeWidth="1.2" />
+  </>)
+}
+
+// Cline — terminal chevron prompt.
+export function IconCline(p: IconProps) {
+  return wrap(p, <>
+    <polyline points="3,5 8,8 3,11" strokeWidth="1.6" />
+    <line x1="10" y1="11" x2="14" y2="11" strokeWidth="1.6" />
+  </>)
+}
+
+// Claude — stylised "C" arc mark.
+export function IconClaude(p: IconProps) {
+  return wrap(p, <>
+    <path d="M12 5.5 A5.5 5.5 0 1 0 12 10.5" strokeWidth="1.6" fill="none" />
+    <polyline points="10,3 12,5.5 9.5,7" strokeWidth="1.4" />
+  </>)
+}
+
+// Zed — bold "Z" letterform.
+export function IconZed(p: IconProps) {
+  return wrap(p, <>
+    <polyline points="4,4 12,4 4,12 12,12" strokeWidth="1.8" />
+  </>)
+}
+
+// Any client — globe / world.
+export function IconAnyClient(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M8 2.5 Q10.5 5.5 10.5 8 Q10.5 10.5 8 13.5" fill="none" />
+    <path d="M8 2.5 Q5.5 5.5 5.5 8 Q5.5 10.5 8 13.5" fill="none" />
+    <line x1="2.5" y1="8" x2="13.5" y2="8" />
+  </>)
+}
+

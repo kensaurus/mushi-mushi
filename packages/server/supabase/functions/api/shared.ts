@@ -385,12 +385,49 @@ export async function callerProjectIds(
 ): Promise<string[]> {
   if (c.get('authMethod') === 'apiKey') {
     const bound = c.get('projectId') as string | undefined;
-    if (!bound) return [];
+    const isOrgScoped = Boolean(c.get('isOrgScopedKey'));
     const requested = requestedProjectId(c);
+
+    // Org-scoped keys (project_id NULL on the key row) enumerate every
+    // project the key owner can reach — same set JWT callers see.
+    if (isOrgScoped && !bound) {
+      const all = await accessibleProjectIds(db, userId);
+      if (!requested) return all;
+      if (!UUID_RE.test(requested)) return [];
+      return all.includes(requested) ? [requested] : [];
+    }
+
+    if (!bound) return [];
     if (requested && requested !== bound) return [];
     return [bound];
   }
   return scopedOwnedProjectIds(c, db, userId);
+}
+
+/**
+ * Authorize read access to a report's owning project on detail endpoints.
+ *
+ * List routes stay pinned via {@link callerProjectIds}; detail routes fetch
+ * by UUID first, then gate with this helper so a JWT user (or org-scoped
+ * MCP key) can open a report in project B while the console header pins A.
+ */
+export async function canAccessReportProject(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  reportProjectId: string,
+): Promise<boolean> {
+  if (c.get('authMethod') === 'apiKey') {
+    const bound = c.get('projectId') as string | undefined;
+    const isOrgScoped = Boolean(c.get('isOrgScopedKey'));
+    if (isOrgScoped && !bound) {
+      const allowed = await accessibleProjectIds(db, userId);
+      return allowed.includes(reportProjectId);
+    }
+    return bound === reportProjectId;
+  }
+  const access = await userCanAccessProject(db, userId, reportProjectId);
+  return access.allowed;
 }
 
 /** Explicit 403 when a named-resource route targets a project outside API-key scope. */

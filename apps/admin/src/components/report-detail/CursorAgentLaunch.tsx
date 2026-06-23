@@ -144,7 +144,7 @@ export function CursorAgentLaunch({ report, cursorWorkspace }: CursorAgentLaunch
         <summary className="cursor-pointer text-3xs font-medium uppercase tracking-wider text-fg-faint hover:text-fg-secondary">
           View prompt
         </summary>
-        <pre className="mt-1.5 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-sm border border-edge-subtle/50 bg-surface-overlay/40 p-2 font-mono text-fg-secondary">
+        <pre className="mushi-code-block mushi-code-body mt-1.5 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-sm border border-code-surface-border p-2 font-mono">
           {prompt}
         </pre>
       </details>

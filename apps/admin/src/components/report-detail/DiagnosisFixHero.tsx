@@ -65,7 +65,7 @@ export function DiagnosisFixHero({
         <div className="mb-1.5 flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-fg">
             <IconIntelligence className="text-info" />
-            {isConfident ? "Here's why it broke" : 'Not sure yet — here\u2019s what I\u2019d check first'}
+            {isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
             {severityText && (

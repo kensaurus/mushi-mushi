@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "@mushi-mushi/mcp@latest"],
+      "env": {
+        "MUSHI_API_KEY": "<mint-mcp-dev-key-in-console>",
+        "MUSHI_PROJECT_ID": "6e7e0c3a-a777-4f1e-a699-6515993cf3bd",
+        "MUSHI_API_ENDPOINT": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api"
+      }
+    }
+  }
+}

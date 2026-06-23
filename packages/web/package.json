@@ -17,6 +17,11 @@
       "types": "./dist/test-utils.d.ts",
       "import": "./dist/test-utils.js",
       "require": "./dist/test-utils.cjs"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "import": "./dist/i18n/index.js",
+      "require": "./dist/i18n/index.cjs"
     }
   },
   "files": [
@@ -98,6 +103,7 @@
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
+    "eslint-plugin-mushi-mushi": "workspace:*",
     "@size-limit/file": "^12.1.0",
     "eslint": "^10.4.1",
     "jsdom": "^29.1.1",

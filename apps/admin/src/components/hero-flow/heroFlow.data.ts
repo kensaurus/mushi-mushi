@@ -1,17 +1,7 @@
 /**
  * FILE: apps/admin/src/components/hero-flow/heroFlow.data.ts
- * PURPOSE: Factory helpers that turn the per-page Decide / Act / Verify
- *          payload into React Flow nodes + edges for `<HeroFlow />`. The
- *          three-node, two-edge "lane" layout is hard-coded — this is a
- *          narrative diagram of the operator's loop on a single page, NOT
- *          a draggable canvas. Variants like `pdcaFlow.data.ts`, but
- *          purpose-built for the page hero (3 stations, not 4).
- *
- *          Wave V (2026-05-08): refactor of `PageHero` away from the
- *          5-column flex grid + CSS marching dots. The same Decide / Act /
- *          Verify props now drive a real ReactFlow canvas so the hero
- *          shares the dashboard's flow vocabulary (gradient bezier edges,
- *          severity-tinted ribbon, hover lift, click-to-expand).
+ * PURPOSE: Builds React Flow nodes and edges for the page-hero `<HeroFlow />`
+ *          Decide / Act / Verify narrative diagram (three-node lane layout).
  */
 import type { Edge, Node } from '@xyflow/react'
 

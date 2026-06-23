@@ -131,7 +131,7 @@ const AVATAR_TONE: Record<AuthProvider, string> = {
   google:  'bg-info-muted text-info ring-info/40',
   apple:   'bg-surface-overlay text-fg ring-edge',
   email:   'bg-brand/15 text-brand ring-brand/40',
-  github:  'bg-accent-muted/70 text-accent-foreground ring-accent/40',
+  github:  'bg-accent-muted/70 text-accent-foreground ring-brand/40',
   unknown: 'bg-surface-overlay text-fg-muted ring-edge-subtle',
 }
 

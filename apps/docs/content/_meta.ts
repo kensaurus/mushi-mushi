@@ -16,6 +16,7 @@ export default {
   },
 
   '-- Get started': { type: 'separator', title: 'Get started' },
+  connect: { title: 'Connect your client', href: '/connect' },
   quickstart: 'Quickstart',
   concepts: 'Concepts',
 

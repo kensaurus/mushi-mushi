@@ -143,6 +143,18 @@ Supabase project URLs at build time.
   `title`, `href`, and `theme` keys are accepted. `newWindow` is **not** a
   supported key and will trip a Zod validation error at build time.
 
+## UX / design-system docs (contributors)
+
+Operator-facing **admin console** UX lives in [`docs/admin/UX-UNIFICATION-BURNDOWN.md`](../../docs/admin/UX-UNIFICATION-BURNDOWN.md). This site has its own burndown:
+
+| Doc | Purpose |
+|-----|---------|
+| [`docs/docs-site/UX-UNIFICATION-BURNDOWN.md`](../../docs/docs-site/UX-UNIFICATION-BURNDOWN.md) | Living checklist — what shipped, what is open |
+| [`docs/docs-site/COMPONENT-REGISTRY.md`](../../docs/docs-site/COMPONENT-REGISTRY.md) | Which MDX component to use where |
+| [`docs/docs-site/TOKEN-CONTRACT.md`](../../docs/docs-site/TOKEN-CONTRACT.md) | `--mushi-*` / `VIZ` rules; no `--docs-*` or Tailwind palette |
+
+**Adding a component:** create under `components/`, use brand tokens, register in `mdx-components.tsx` if reused, run `pnpm lint` + `node ../../scripts/check-design-tokens.mjs`.
+
 ## Deployment
 
 The docs site is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/docs/`, sharing the same distribution as the admin console (`kensaur.us-mushi-mushi`, `ap-northeast-1`). The static export from `pnpm build` is synced into the bucket under the `mushi-mushi/docs/` prefix.

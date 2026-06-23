@@ -11,8 +11,8 @@
  *
  * Colour values mirror the historical washi/vermillion palette previously
  * inlined in `@mushi-mushi/web`'s styles.ts so the visual identity is
- * unchanged; the difference is that RN and Capacitor now share the exact
- * same constants instead of re-deriving their own.
+ * unchanged; `@mushi-mushi/web` imports mushiPalette() + MUSHI_* here
+ * instead of duplicating hex literals.
  */
 
 export type MushiThemeMode = 'light' | 'dark';
@@ -78,6 +78,65 @@ export const MUSHI_COLORS_DARK: MushiColorPalette = {
   accentInk: '#FFE5E0',
   ok: '#4ADE80',
   danger: '#F87171',
+};
+
+/** Reward tier accent colours — editorial palette, not Tailwind defaults. */
+export const MUSHI_TIER_COLORS = {
+  free: MUSHI_COLORS_LIGHT.inkMuted,
+  explorer: '#2563EB',
+  contributor: '#7C3AED',
+  champion: '#D97706',
+  default: MUSHI_COLORS_LIGHT.accent,
+} as const;
+
+/** Neon beta banner — web `.mushi-banner.neon` + RN sheet header parity. */
+export const MUSHI_BANNER_NEON = {
+  bg: '#0FFF50',
+  fg: '#0a1a0a',
+  border: '#00C43A',
+} as const;
+
+/** On-accent button text (hanko stamp, submit CTA). */
+export const MUSHI_ON_ACCENT = '#FAF7F0';
+
+/** Pure white for assistant bubbles on accent backgrounds. */
+export const MUSHI_INVERSE = '#ffffff';
+
+/** Submit-button depth shadow (accent ink, mode-specific). */
+export const MUSHI_ACCENT_SHADOW = {
+  light: '#9A2A1E',
+  dark: '#7A1F15',
+} as const;
+
+/** Brand banner border under vermillion strip. */
+export const MUSHI_BANNER_BRAND_BORDER = {
+  light: '#B52F1F',
+  dark: '#C4321E',
+} as const;
+
+/** Reporter inbox status chip colours (fg / bg / border). */
+export interface MushiReporterStatusTone {
+  fg: string;
+  bg: string;
+  border: string;
+}
+
+export const MUSHI_REPORTER_STATUS: Record<
+  MushiThemeMode,
+  Record<'sent' | 'review' | 'fixing' | 'fixed', MushiReporterStatusTone>
+> = {
+  light: {
+    sent: { fg: '#1E4A8C', bg: 'rgba(30,74,140,0.08)', border: 'rgba(30,74,140,0.16)' },
+    review: { fg: '#8A5A00', bg: 'rgba(180,120,0,0.10)', border: 'rgba(180,120,0,0.18)' },
+    fixing: { fg: '#9A3D12', bg: 'rgba(224,60,44,0.10)', border: 'rgba(224,60,44,0.18)' },
+    fixed: { fg: '#1F6B3A', bg: 'rgba(31,107,58,0.10)', border: 'rgba(31,107,58,0.18)' },
+  },
+  dark: {
+    sent: { fg: '#A8C4FF', bg: 'rgba(120,160,255,0.12)', border: 'rgba(120,160,255,0.22)' },
+    review: { fg: '#FFD27A', bg: 'rgba(255,190,90,0.12)', border: 'rgba(255,190,90,0.22)' },
+    fixing: { fg: '#FFB899', bg: 'rgba(255,120,60,0.12)', border: 'rgba(255,120,60,0.24)' },
+    fixed: { fg: '#8FE3B0', bg: 'rgba(80,200,130,0.12)', border: 'rgba(80,200,130,0.22)' },
+  },
 };
 
 /** Resolve the palette for a theme mode. */
@@ -149,13 +208,42 @@ export const MUSHI_MOTION = {
 export const MUSHI_GEOMETRY = {
   bannerHeight: 36,
   fabSize: 52,
-  edgeTabWidth: 28,
+  /** edge-tab launcher width (px) */
+  edgeTabWidth: 32,
   /** default gutter from the screen edge (added on top of safe-area insets) */
   gutter: 24,
-  panelWidth: 384,
+  /** Web panel width (px) — matches shipped Shadow DOM widget */
+  panelWidth: 360,
+  /** max panel height before keyboard inset (px) */
+  panelMaxHeight: 480,
   /** below this viewport width the panel becomes a full-width bottom sheet */
   panelSheetBreakpoint: 480,
 } as const;
+
+/** Safe hex validator for user-supplied accent overrides (Shadow DOM CSS injection guard). */
+export function safeWidgetHex(v: string): string {
+  return /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : '';
+}
+
+/**
+ * Resolve widget accent colours, honouring optional host overrides while
+ * falling back to the canonical palette from mushiPalette().
+ */
+export function resolveWidgetAccent(
+  mode: MushiThemeMode,
+  accent = '',
+  accentText = '',
+): { accent: string; accentWash: string; accentInk: string } {
+  const pal = mushiPalette(mode);
+  const safeAccent = safeWidgetHex(accent);
+  const safeAccentText = safeWidgetHex(accentText);
+  const resolvedAccent = safeAccent || pal.accent;
+  const accentWash = safeAccent
+    ? (mode === 'dark' ? `${resolvedAccent}1F` : `${resolvedAccent}14`)
+    : pal.accentWash;
+  const accentInk = safeAccentText || pal.accentInk;
+  return { accent: resolvedAccent, accentWash, accentInk };
+}
 
 /**
  * Default user-facing copy. Centralised so apps stop drifting on the banner
@@ -163,7 +251,7 @@ export const MUSHI_GEOMETRY = {
  */
 export const MUSHI_COPY = {
   bannerLabel: 'Beta',
-  bannerMessage: 'Help us improve — your feedback shapes what we ship.',
+  bannerMessage: 'Found a bug? Tap to report it.',
   bugCta: 'Report a bug',
   featureCta: 'Feature request',
   triggerText: '🐛',

@@ -431,10 +431,14 @@ Console "Create Upgrade PR" button
 
 | Surface | Location | What it adds |
 |---------|----------|-------------|
-| `ConnectPage` | `apps/admin/src/pages/ConnectPage.tsx` (route `/connect`) | Unified hub: GitHub connect → SDK install → MCP install → CLI install → Update center with "Create Upgrade PR" |
+| `ConnectPage` | `apps/admin/src/pages/ConnectPage.tsx` (route `/connect`) | Unified hub: **ConnectStudio** hero (3 lanes: MCP one-click, CLI, Skills) + GitHub connect → SDK install → Update center with "Create Upgrade PR" |
+| `ConnectStudio` | `apps/admin/src/components/connect/ConnectStudio.tsx` | Higgsfield-style "pick your client → connect in one click" hero. 9-client picker + 3 lanes (MCP / CLI / Skills). Collapses old activation/snapshot/provenance strips into a single collapsible "Connection status" disclosure. |
+| `ClientConnectButton` | `apps/admin/src/components/ClientConnectButton.tsx` | Registry-driven install button: handles deeplink (opens IDE), config-json, cli-command, and remote-url methods. Mints a per-project key before building the artifact. |
+| `MCP_CLIENTS` registry | `packages/mcp/src/clients.ts` | Pure shared registry of all 9 AI clients (Cursor, VS Code, VS Code Insiders, Windsurf, Cline, Claude Code, Claude Desktop, Zed, Any). Consumed by both the admin console and the public docs `/connect` landing — single source of truth so the two never drift. |
+| Public Connect landing | `apps/docs/app/connect/page.tsx` | Public Higgsfield-style landing at `/connect` on the docs site. Same 3-lane picker but with placeholder keys + "Sign in to mint & one-click install" CTA. Registered in docs nav. |
 | `SdkUpgradeCTA` | `apps/admin/src/components/SdkUpgradeCTA.tsx` | Primary "Create Upgrade PR" button (when `projectId` supplied + GitHub connected); copy-cmd fallback always present |
 | `SdkUpgradeBanner` | `apps/admin/src/components/dashboard/SdkUpgradeBanner.tsx` | Dashboard nudge when active project SDK is outdated/deprecated |
-| `McpInstallButtons` | `apps/admin/src/components/McpInstallButtons.tsx` | Extracted from `McpPage` — reusable "Add to Cursor / VS Code" deeplink buttons |
+| `McpInstallButtons` | `apps/admin/src/components/McpInstallButtons.tsx` | Back-compat thin wrapper around `ClientConnectButton` for Cursor + VS Code — keeps `McpPage` working unchanged |
 | `useSdkUpgrade` | `apps/admin/src/lib/useSdkUpgrade.ts` | React hook mirroring `useDispatchFix`: POST → SSE stream with poll fallback |
 
 ### sdk_versions catalog sync

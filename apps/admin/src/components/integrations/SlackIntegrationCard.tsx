@@ -156,7 +156,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
+    <div className="rounded-xl border border-edge-subtle bg-surface p-5 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -189,7 +189,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           )}
           {slackConfigured && (
             <button
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-hover transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-edge-subtle px-3 py-1.5 text-xs font-medium hover:bg-surface-hover transition-colors"
               onClick={handleTest}
               disabled={testingSlack}
             >
@@ -198,7 +198,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           )}
           {/* Always show the Add/Re-add button so the user can refresh scopes */}
           <button
-            className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${slackConfigured ? 'border border-border hover:bg-surface-hover' : 'bg-accent text-white hover:bg-accent-hover'}`}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${slackConfigured ? 'border border-edge-subtle hover:bg-surface-hover' : 'bg-accent text-white hover:bg-accent-hover'}`}
             onClick={handleAddToSlack}
             disabled={!projectId}
             title={slackConfigured ? 'Reinstall Mushi Slack bot to refresh scopes or reconnect' : 'Install Mushi Slack bot'}
@@ -266,12 +266,12 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
                     <input
                       type="text"
                       placeholder="C0ABC123XYZ"
-                      className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-mono focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                      className="flex-1 rounded-lg border border-edge-subtle bg-surface px-3 py-1.5 text-xs font-mono focus:ring-2 focus:ring-brand/30 focus:border-brand"
                       value={manualChannelId}
                       onChange={(e) => setManualChannelId(e.target.value)}
                     />
                     <button
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
+                      className="rounded-lg border border-edge-subtle px-3 py-1.5 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
                       disabled={!manualChannelId.trim() || savingManual}
                       onClick={handleSaveManualChannelId}
                     >
@@ -283,7 +283,7 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
             ) : channels.length > 0 ? (
               <div className="flex gap-2">
                 <select
-                  className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                  className="flex-1 rounded-lg border border-edge-subtle bg-surface px-3 py-2 text-sm focus:ring-2 focus:ring-brand/30 focus:border-brand"
                   value={selectedChannel}
                   onChange={(e) => setSelectedChannel(e.target.value)}
                 >
@@ -321,12 +321,12 @@ export function SlackIntegrationCard({ projectId, slackConfigured, teamName, lat
           <input
             type="url"
             placeholder="https://hooks.slack.com/services/…"
-            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-brand/30 focus:border-brand"
+            className="flex-1 rounded-lg border border-edge-subtle bg-surface px-3 py-2 text-xs font-mono focus:ring-2 focus:ring-brand/30 focus:border-brand"
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
           />
           <button
-            className="rounded-lg border border-border px-4 py-2 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
+            className="rounded-lg border border-edge-subtle px-4 py-2 text-xs font-medium hover:bg-surface-hover disabled:opacity-50 transition-colors"
             disabled={!webhookUrl}
             onClick={handleSaveWebhook}
           >

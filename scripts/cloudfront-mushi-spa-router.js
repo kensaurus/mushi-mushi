@@ -16,6 +16,9 @@
  *                                    HTML are absolute (/mushi-mushi/docs/_next/…), so
  *                                    serving the same bytes at the bare root resolves
  *                                    correctly against S3.
+ *            /mushi-mushi/<docs-path> -> 301 to /mushi-mushi/docs/<docs-path>
+ *                                    when the suffix is a docs content route
+ *                                    (e.g. /mushi-mushi/quickstart/incident-loop)
  *            /mushi-mushi/<other>  -> 302 to /mushi-mushi/admin/<other> so the
  *                                    admin React Router can take it from there
  *
@@ -36,9 +39,61 @@
  *   pre-fix HTML at the CloudFront edge is purged immediately.
  */
 
+// Docs content prefixes (mirror cloudfront-mushi-apex-redirect.js).
+var DOCS_EXACT = [
+  '/quickstart',
+  '/concepts',
+  '/sdks',
+  '/migrations',
+  '/operating',
+  '/connect',
+  '/security',
+  '/self-hosting',
+  '/plugins',
+  '/blog',
+  '/admin',
+  '/pricing',
+  '/roadmap',
+  '/launch-week',
+  '/changelog',
+  '/cloud',
+];
+
+var DOCS_NESTED_PREFIXES = [
+  '/quickstart/',
+  '/concepts/',
+  '/sdks/',
+  '/migrations/',
+  '/integrations/',
+  '/operating/',
+  '/admin/',
+  '/connect/',
+  '/security/',
+  '/self-hosting/',
+  '/plugins/',
+  '/blog/',
+];
+
+function matchesDocsSuffix(suffix) {
+  var path = suffix.charAt(0) === '/' ? suffix : '/' + suffix;
+  var i;
+  for (i = 0; i < DOCS_EXACT.length; i++) {
+    if (path === DOCS_EXACT[i]) {
+      return true;
+    }
+  }
+  for (i = 0; i < DOCS_NESTED_PREFIXES.length; i++) {
+    if (path.indexOf(DOCS_NESTED_PREFIXES[i]) === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function handler(event) {
   var request = event.request;
   var uri = request.uri;
+  var qs = request.querystring;
 
   // 1. Static assets (anything with a file extension): pass through to S3 unchanged.
   //    Examples: .js .css .png .json .ico .map .woff2 .svg .txt
@@ -97,11 +152,28 @@ function handler(event) {
     return request;
   }
 
-  // 5. Anything else under /mushi-mushi/* -> 302 to the admin SPA. We forward
+  // 5. Mis-prefixed docs paths (/mushi-mushi/quickstart/… without /docs/) ->
+  //    301 to the canonical docs URL before the admin SPA fallback.
+  var suffix = uri.replace(/^\/mushi-mushi\/?/, '');
+  if (suffix && matchesDocsSuffix(suffix)) {
+    var docsLocation = '/mushi-mushi/docs/' + suffix.replace(/^\/+/, '');
+    if (qs) {
+      docsLocation = docsLocation + '?' + qs;
+    }
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: docsLocation },
+        'cache-control': { value: 'public, max-age=31536000' },
+      },
+    };
+  }
+
+  // 6. Anything else under /mushi-mushi/* -> 302 to the admin SPA. We forward
   //    whatever path suffix the user typed so deep links survive (e.g.
   //    /mushi-mushi/login -> /mushi-mushi/admin/login, which the admin React
   //    Router knows how to handle).
-  var suffix = uri.replace(/^\/mushi-mushi\/?/, '');
   var location = '/mushi-mushi/admin/' + suffix;
 
   // X-Robots-Tag on the 302 itself so Google drops the source URL on first

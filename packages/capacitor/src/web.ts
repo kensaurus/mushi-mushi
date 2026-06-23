@@ -82,7 +82,7 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
         ...(this.currentUser ? { user: this.currentUser } : {}),
       },
       environment,
-      reporterToken: getReporterToken(),
+      reporterToken: getReporterToken(cfg.projectId),
     };
 
     const res = await client.submitReport(report);
@@ -167,15 +167,17 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
 
   async listMyReports(): Promise<{ reports: Array<Record<string, unknown>> }> {
     const client = this.apiClient;
-    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
-    const result = await client.listReporterReports(getReporterToken());
+    const cfg = this.pluginConfig;
+    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.listReporterReports(getReporterToken(cfg.projectId));
     return { reports: (result.data?.reports ?? []) as unknown as Array<Record<string, unknown>> };
   }
 
   async listMyComments(options: { reportId: string }): Promise<{ comments: Array<Record<string, unknown>> }> {
     const client = this.apiClient;
-    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
-    const result = await client.listReporterComments(options.reportId, getReporterToken());
+    const cfg = this.pluginConfig;
+    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.listReporterComments(options.reportId, getReporterToken(cfg.projectId));
     return { comments: (result.data?.comments ?? []) as unknown as Array<Record<string, unknown>> };
   }
 
@@ -185,10 +187,11 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
     feedbackSignal?: string;
   }): Promise<{ comment?: Record<string, unknown>; feedback?: Record<string, unknown> }> {
     const client = this.apiClient;
-    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const cfg = this.pluginConfig;
+    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
     const result = await client.replyToReporterReport(
       options.reportId,
-      getReporterToken(),
+      getReporterToken(cfg.projectId),
       options.body ?? '',
       options.feedbackSignal,
     );
@@ -200,8 +203,9 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
 
   async reopenReport(options: { reportId: string; note?: string }): Promise<{ outcome: Record<string, unknown> }> {
     const client = this.apiClient;
-    if (!client) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
-    const result = await client.reopenReporterReport(options.reportId, getReporterToken(), options.note);
+    const cfg = this.pluginConfig;
+    if (!client || !cfg) throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    const result = await client.reopenReporterReport(options.reportId, getReporterToken(cfg.projectId), options.note);
     return { outcome: (result.data?.outcome ?? {}) as Record<string, unknown> };
   }
 }

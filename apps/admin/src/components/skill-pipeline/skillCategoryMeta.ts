@@ -1,6 +1,9 @@
 /**
  * Visual + copy metadata for cursor-kenji skill categories.
  * Used by SkillPipelinesPage catalog headers and skill cards.
+ *
+ * Badge/accent classes use admin @theme semantic tokens only (no raw Tailwind
+ * palette) so category chips stay WCAG-safe and theme-consistent.
  */
 import type { ComponentType } from 'react'
 
@@ -37,106 +40,106 @@ export const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Workflows',
     hint: 'Multi-step bundles that chain skills end-to-end',
     Icon: IconGraph,
-    badgeClass: 'bg-violet-500/15 text-violet-400',
-    accentClass: 'border-l-violet-500/50',
+    badgeClass: 'bg-accent-muted text-accent-foreground',
+    accentClass: 'border-l-accent/50',
   },
   debug: {
     label: 'Debug',
     hint: 'Reproduce, isolate, and fix errors with production context',
     Icon: IconTerminal,
-    badgeClass: 'bg-amber-500/15 text-amber-400',
-    accentClass: 'border-l-amber-500/50',
+    badgeClass: 'bg-warn-muted text-warn-foreground',
+    accentClass: 'border-l-warn/50',
   },
   test: {
     label: 'Test',
     hint: 'Playwright sweeps, QA coverage, and adversarial red-team',
     Icon: IconPlay,
-    badgeClass: 'bg-emerald-500/15 text-emerald-400',
-    accentClass: 'border-l-emerald-500/50',
+    badgeClass: 'bg-ok-muted text-ok-foreground',
+    accentClass: 'border-l-ok/50',
   },
   audit: {
     label: 'Audit',
     hint: 'Security, accessibility, performance, and design-system checks',
     Icon: IconAudit,
-    badgeClass: 'bg-sky-500/15 text-sky-400',
-    accentClass: 'border-l-sky-500/50',
+    badgeClass: 'bg-info-muted text-info-foreground',
+    accentClass: 'border-l-info/50',
   },
   enhance: {
     label: 'Enhance',
     hint: 'Polish UI, UX, SEO, PWA, and post-launch iteration',
     Icon: IconSliders,
-    badgeClass: 'bg-rose-500/15 text-rose-400',
-    accentClass: 'border-l-rose-500/50',
+    badgeClass: 'bg-rose-muted text-rose',
+    accentClass: 'border-l-rose/50',
   },
   backend: {
     label: 'Backend',
     hint: 'API design, observability, error handling, and data pipelines',
     Icon: IconNetwork,
-    badgeClass: 'bg-cyan-500/15 text-cyan-400',
-    accentClass: 'border-l-cyan-500/50',
+    badgeClass: 'bg-info-muted text-info-foreground',
+    accentClass: 'border-l-info/50',
   },
   design: {
     label: 'Design',
     hint: 'PRDs, themes, motion, and generative visual assets',
     Icon: IconPencil,
-    badgeClass: 'bg-fuchsia-500/15 text-fuchsia-400',
-    accentClass: 'border-l-fuchsia-500/50',
+    badgeClass: 'bg-accent-muted text-accent-foreground',
+    accentClass: 'border-l-accent/50',
   },
   deploy: {
     label: 'Deploy',
     hint: 'Ship verification, npm releases, and launch readiness',
     Icon: IconExport,
-    badgeClass: 'bg-orange-500/15 text-orange-400',
-    accentClass: 'border-l-orange-500/50',
+    badgeClass: 'bg-warn-muted text-warn-foreground',
+    accentClass: 'border-l-warn/50',
   },
   data: {
     label: 'Data',
     hint: 'ETL, visualization, and pipeline idempotency',
     Icon: IconStorage,
-    badgeClass: 'bg-slate-500/15 text-slate-300',
-    accentClass: 'border-l-slate-500/50',
+    badgeClass: 'bg-surface-overlay text-fg-muted',
+    accentClass: 'border-l-edge-subtle',
   },
   mobile: {
     label: 'Mobile',
     hint: 'React Native, Capacitor, and emulator workflows',
     Icon: IconBolt,
-    badgeClass: 'bg-teal-500/15 text-teal-400',
-    accentClass: 'border-l-teal-500/50',
+    badgeClass: 'bg-ok-muted text-ok-foreground',
+    accentClass: 'border-l-ok/50',
   },
   docs: {
     label: 'Docs',
     hint: 'READMEs, API docs, and co-authored documentation',
     Icon: IconNote,
-    badgeClass: 'bg-stone-500/15 text-stone-300',
-    accentClass: 'border-l-stone-500/50',
+    badgeClass: 'bg-surface-overlay text-fg-secondary',
+    accentClass: 'border-l-edge-subtle',
   },
   mushi: {
     label: 'Mushi',
     hint: 'Health checks, setup, and integration smoke tests',
     Icon: IconSkills,
-    badgeClass: 'bg-brand/15 text-brand',
+    badgeClass: 'bg-brand-subtle text-brand-foreground',
     accentClass: 'border-l-brand/50',
   },
   meta: {
     label: 'Meta',
     hint: 'Skill authoring, MCP builders, and agent tooling',
     Icon: IconSliders,
-    badgeClass: 'bg-indigo-500/15 text-indigo-400',
-    accentClass: 'border-l-indigo-500/50',
+    badgeClass: 'bg-accent-muted text-accent-foreground',
+    accentClass: 'border-l-accent/50',
   },
   protocol: {
     label: 'Protocol',
     hint: 'Browser anti-stall and automation guardrails',
     Icon: IconShield,
-    badgeClass: 'bg-yellow-500/15 text-yellow-400',
-    accentClass: 'border-l-yellow-500/50',
+    badgeClass: 'bg-warn-muted text-warn-foreground',
+    accentClass: 'border-l-warn/50',
   },
   other: {
     label: 'Other',
     hint: 'Uncategorized skills from synced sources',
     Icon: IconMenu,
     badgeClass: 'bg-surface-overlay text-fg-muted',
-    accentClass: 'border-l-border',
+    accentClass: 'border-l-edge-subtle',
   },
 }
 
@@ -146,6 +149,6 @@ export function getSkillCategoryMeta(category: string): SkillCategoryMeta {
     hint: 'Skills from synced sources',
     Icon: IconMenu,
     badgeClass: 'bg-surface-overlay text-fg-muted',
-    accentClass: 'border-l-border',
+    accentClass: 'border-l-edge-subtle',
   }
 }

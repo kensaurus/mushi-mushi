@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { reportPermalink } from '../lib/reportUrl'
+import { reportDetailPath, reportPermalink } from '../lib/reportUrl'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { useStagedRealtime } from '../lib/useStagedRealtime'
@@ -327,8 +327,8 @@ export function ReportsPage() {
 
   const openCursor = useCallback(() => {
     const r = reports[cursor]
-    if (r) navigate(`/reports/${r.id}`)
-  }, [cursor, reports, navigate])
+    if (r) navigate(reportDetailPath(r.id, activeProjectId))
+  }, [cursor, reports, navigate, activeProjectId])
 
   // Publish page context so Ask Mushi, the hotkeys modal, and command
   // palette all see the user's current filters, the number of matches,
@@ -384,7 +384,7 @@ export function ReportsPage() {
         shortcut: 'g n',
         run: () => {
           const next = reports.find((r) => r.status === 'new')
-          if (next) navigate(`/reports/${next.id}`)
+          if (next) navigate(reportDetailPath(next.id, activeProjectId))
           else toast.info('No new reports to triage', 'Switch status filter to "new" to find them')
         },
       },
@@ -605,14 +605,14 @@ export function ReportsPage() {
 
   const handleOpen = useCallback(
     (r: ReportRow) => {
-      navigate(`/reports/${r.id}`)
+      navigate(reportDetailPath(r.id, activeProjectId))
     },
-    [navigate],
+    [navigate, activeProjectId],
   )
 
   const handleCopyLink = useCallback(
     (r: ReportRow) => {
-      const url = reportPermalink(r.id)
+      const url = reportPermalink(r.id, activeProjectId)
       navigator.clipboard.writeText(url).then(
         () => toast.success('Link copied'),
         () => toast.error('Could not copy link'),

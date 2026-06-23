@@ -2,100 +2,26 @@
  * FILE: apps/admin/src/lib/useDocumentTitle.ts
  * PURPOSE: Keep `document.title` in sync with the active page, using the
  *          existing `pageContext` registry as the authoritative source
- *          and a static route → label map as the fallback for pages that
- *          haven't (yet) opted into `usePublishPageContext`.
+ *          and navRegistry-derived route labels as the fallback for pages
+ *          that haven't (yet) opted into `usePublishPageContext`.
  *
  *          Title shape (composed):
  *
  *            ${contextTitle}${summary ? ` · ${summary}` : ''} — Mushi Mushi
  *
- *          Examples:
- *
- *            Reports · 12 reports · page 1 of 2 — Mushi Mushi
- *            Fixes · 3 in flight — Mushi Mushi
- *            BYOK — Settings — Mushi Mushi
- *            Health — Mushi Mushi           (pure route fallback)
- *
- *          Why centralise instead of using React 19's <title> hoisting?
- *          Every admin page already publishes a rich `PageContext` for
- *          Ask Mushi + command palette that includes a live
- *          `summary`. Reading from that single source of truth means
- *          the tab title stays consistent with the in-app chrome with
- *          zero extra wiring per page.
+ *          Route fallbacks come from `routeFallbackTitle()` in navRegistry.ts
+ *          so sidebar / palette / tab labels never drift.
  *
  *          Call this exactly once, from `<Layout>`.
  */
 
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
+import { routeFallbackTitle } from './navRegistry'
 import { usePageContext } from './pageContext'
 
 const APP_SUFFIX = 'Mushi Mushi'
 const DEFAULT_TITLE = 'Mushi Mushi — Bug Intelligence for Software Teams'
-
-/**
- * Static route → human title fallback. Kept in sync with the `<Route>`
- * list in `apps/admin/src/App.tsx`. Pages that publish a `PageContext`
- * override this with a live, contextual title.
- */
-const ROUTE_TITLES: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\/dashboard$/, 'Dashboard'],
-  [/^\/reports\/[^/]+$/, 'Report'],
-  [/^\/reports$/, 'Reports'],
-  [/^\/projects$/, 'Projects'],
-  [/^\/settings$/, 'Settings'],
-  [/^\/queue$/, 'Queue'],
-  [/^\/graph$/, 'Knowledge graph'],
-  [/^\/inventory$/, 'User stories'],
-  [/^\/judge$/, 'Judge'],
-  [/^\/query$/, 'Query'],
-  [/^\/research$/, 'Research'],
-  [/^\/fixes$/, 'Fixes'],
-  [/^\/repo$/, 'Repo'],
-  [/^\/sso$/, 'SSO'],
-  [/^\/audit$/, 'Audit log'],
-  [/^\/prompt-lab$/, 'Prompt Lab'],
-  [/^\/fine-tuning$/, 'Prompt Lab'],
-  [/^\/intelligence$/, 'Intelligence'],
-  [/^\/compliance$/, 'Compliance'],
-  [/^\/storage$/, 'Storage'],
-  [/^\/marketplace$/, 'Marketplace'],
-  // Matches both /integrations (public gate) and /integrations/config (admin panel)
-  [/^\/integrations/, 'Integrations'],
-  [/^\/mcp$/, 'MCP'],
-  [/^\/onboarding$/, 'Onboarding'],
-  [/^\/health$/, 'Health'],
-  [/^\/qa-coverage$/, 'QA Coverage'],
-  [/^\/anti-gaming$/, 'Anti-gaming'],
-  [/^\/notifications$/, 'Notifications'],
-  [/^\/billing$/, 'Billing'],
-  [/^\/feedback$/, 'Feedback'],
-  [/^\/rewards$/, 'Rewards'],
-  [/^\/lessons$/, 'Lessons'],
-  [/^\/releases$/, 'Releases'],
-  [/^\/iterate$/, 'Iterate'],
-  [/^\/drift$/, 'Drift'],
-  [/^\/experiments$/, 'Experiments'],
-  [/^\/anomalies$/, 'Anomalies'],
-  [/^\/cost$/, 'Cost'],
-  [/^\/inbox$/, 'Action inbox'],
-  [/^\/explore$/, 'Explore'],
-  [/^\/(organization\/members|org\/.+\/settings)/, 'Organization settings'],
-  [/^\/tester\/apps$/, 'Tester · Apps'],
-  [/^\/tester\/wallet$/, 'Tester · Wallet'],
-  [/^\/tester\/learn$/, 'Tester · Learn'],
-  [/^\/tester\/settings$/, 'Tester · Settings'],
-  [/^\/tester$/, 'Tester'],
-  [/^\/login$/, 'Sign in'],
-  [/^\/reset-password$/, 'Reset password'],
-]
-
-function routeFallbackTitle(pathname: string): string | null {
-  for (const [re, label] of ROUTE_TITLES) {
-    if (re.test(pathname)) return label
-  }
-  return null
-}
 
 function composeTitle(primary: string | null, summary?: string | null): string {
   if (!primary) return DEFAULT_TITLE

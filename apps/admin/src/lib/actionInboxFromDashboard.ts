@@ -8,6 +8,10 @@
 import { computeNextBestAction } from './useNextBestAction'
 import type { PageAction } from '../components/PageActionBar'
 import type { DashboardData } from '../components/dashboard/types'
+import type { InboxStats } from '../components/inbox/types'
+
+/** Judge staleness from `/v1/admin/inbox/stats` — keeps cards aligned with the banner. */
+export type InboxCardBuildContext = Pick<InboxStats, 'judgeStale' | 'judgeStaleHours'> | undefined
 
 export type InboxCardGroup = 'plan' | 'do' | 'check' | 'act' | 'ops'
 
@@ -20,7 +24,31 @@ export interface InboxCard {
   action: PageAction | null
 }
 
-export function buildInboxCards(data: DashboardData | undefined): InboxCard[] {
+function resolveJudgeAction(ctx: InboxCardBuildContext): PageAction | null {
+  const staleHoursAgo = ctx?.judgeStaleHours ?? null
+  const fromRules = computeNextBestAction({
+    scope: 'judge',
+    disagreementRate: null,
+    sampledCount: 0,
+    staleHoursAgo,
+  })
+  if (fromRules) return fromRules
+  // Server marks judgeStale when no eval exists; computeNextBestAction only checks >48h.
+  if (ctx?.judgeStale && staleHoursAgo == null) {
+    return {
+      tone: 'plan',
+      title: 'No judge scores yet — run an evaluation',
+      reason: 'The judge audits classifier quality — run after prompt changes.',
+      primary: { kind: 'link', to: '/judge?action=run', label: 'Run judge batch' },
+    }
+  }
+  return null
+}
+
+export function buildInboxCards(
+  data: DashboardData | undefined,
+  ctx?: InboxCardBuildContext,
+): InboxCard[] {
   const reportsByDay = data?.reportsByDay ?? []
   const critical14d = reportsByDay.reduce((n, d) => n + (d.critical ?? 0), 0)
   const openBacklog = data?.counts?.openBacklog ?? 0
@@ -53,12 +81,7 @@ export function buildInboxCards(data: DashboardData | undefined): InboxCard[] {
       group: 'check',
       pageLabel: 'Judge',
       pageTo: '/judge',
-      action: computeNextBestAction({
-        scope: 'judge',
-        disagreementRate: null,
-        sampledCount: 0,
-        staleHoursAgo: 49,
-      }),
+      action: resolveJudgeAction(ctx),
     },
     {
       id: 'fixes-do',
@@ -93,7 +116,7 @@ export function buildInboxCards(data: DashboardData | undefined): InboxCard[] {
       scope: 'integrations',
       group: 'act',
       pageLabel: 'Integrations',
-      pageTo: '/integrations',
+      pageTo: '/integrations/config',
       action: computeNextBestAction({
         scope: 'integrations',
         disconnectedCount: redIntegrations,
@@ -104,6 +127,9 @@ export function buildInboxCards(data: DashboardData | undefined): InboxCard[] {
 }
 
 /** Count of inbox cards with a non-null next action — matches InboxPage "Open". */
-export function inboxOpenActionCount(data: DashboardData | undefined): number {
-  return buildInboxCards(data).filter((c) => c.action !== null).length
+export function inboxOpenActionCount(
+  data: DashboardData | undefined,
+  ctx?: InboxCardBuildContext,
+): number {
+  return buildInboxCards(data, ctx).filter((c) => c.action !== null).length
 }

@@ -13,8 +13,7 @@ import {
 } from './github.ts';
 import { log } from './logger.ts';
 import { dispatchPluginEvent } from './plugins.ts';
-import { awardPoints } from './reputation.ts';
-import { createNotification, buildNotificationMessage } from './notifications.ts';
+import { notifyReportStatusTransition } from './report-status-notify.ts';
 import { resolveExternalIssue } from './integrations.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
@@ -150,21 +149,13 @@ export async function finalizeFixMerge(
   }
 
   if (reportStatus === 'fixed' && previousStatus !== 'fixed' && report?.reporter_token_hash) {
-    awardPoints(db, attempt.project_id, report.reporter_token_hash, { action: 'fixed' }).catch(
-      (e) => log.warn('Reputation award failed', { action: 'fixed', err: String(e) }),
-    );
-    createNotification(
-      db,
-      attempt.project_id,
-      attempt.report_id,
-      report.reporter_token_hash,
-      'fixed',
-      {
-        message: buildNotificationMessage('fixed', { points: 25 }),
-        points: 25,
-        reportId: attempt.report_id,
-      },
-    ).catch((e) => log.warn('Notification failed', { type: 'fixed', err: String(e) }));
+    notifyReportStatusTransition(db, {
+      projectId: attempt.project_id,
+      reportId: attempt.report_id,
+      reporterTokenHash: report.reporter_token_hash,
+      previousStatus,
+      newStatus: 'fixed',
+    }).catch((e) => log.warn('Notification failed', { type: 'fixed', err: String(e) }));
   }
 
   if (reportStatus === 'fixed' && previousStatus !== 'fixed') {

@@ -16,6 +16,7 @@ export default {
   'anti-gaming': 'Anti-gaming',
 
   // Do — make the fix
+  connect: 'Connect hub (console)',
   'skill-pipelines': 'Skill Pipelines',
   fixes: 'Fix orchestrator',
   repo: 'Repo graph',
@@ -24,6 +25,7 @@ export default {
 
   // Check — measure quality
   judge: 'Judge dashboard',
+  'code-health': 'Code health',
   health: 'Integration health',
   'qa-coverage': 'QA Coverage',
   intelligence: 'Intelligence reports',
@@ -34,6 +36,7 @@ export default {
   // Act — improve and iterate
   iterate: 'Iterate (PDCA)',
   drift: 'Drift scanner',
+  'fullstack-audit': 'Full-stack audit',
 
   // Workspace
   settings: 'Settings',

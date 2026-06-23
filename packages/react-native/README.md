@@ -1,7 +1,5 @@
 # @mushi-mushi/react-native
 
-> **Your AI wrote it. Mushi tells you why it broke.**
-> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
 
 React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — shake-to-report widget, offline queue, and the closed-loop lesson layer for iOS + Android.
 

@@ -1,4 +1,5 @@
 import type { MushiSelectedElement } from '@mushi-mushi/core';
+import { MUSHI_COLORS_LIGHT } from '@mushi-mushi/core';
 
 export interface ElementSelector {
   activate(): Promise<MushiSelectedElement | null>;
@@ -80,8 +81,8 @@ export function createElementSelector(): ElementSelector {
       position: fixed;
       pointer-events: none;
       z-index: 2147483647;
-      border: 2px solid #6366f1;
-      background: rgba(99, 102, 241, 0.1);
+      border: 2px solid ${MUSHI_COLORS_LIGHT.accent};
+      background: ${MUSHI_COLORS_LIGHT.accentWash};
       border-radius: 4px;
       transition: all 0.1s ease;
       display: none;

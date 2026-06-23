@@ -288,6 +288,7 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           'sdk_screenshot_sensitive_hint, ' +
           'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
+          'reporter_notifications_enabled, ' +
           'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions',
       )
       .eq('project_id', projectId)

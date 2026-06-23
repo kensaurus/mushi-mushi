@@ -35,10 +35,13 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
+import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
+import { Drawer } from '../components/Drawer'
+import { useSkillsUx, resolveQuickSkillsTab } from '../lib/skillsModeUx'
 import { useRealtime } from '../lib/realtime'
 import { SkillStepNode } from '../components/skill-pipeline/SkillStepNode'
 import { PdcaGradientEdge } from '../components/pdca-flow/PdcaGradientEdge'
@@ -56,7 +59,7 @@ import {
 } from '../components/skills/SkillsStatusBanner'
 import { SkillsPipelineGuide } from '../components/skills/SkillsPipelineGuide'
 import { SkillsSnapshotStrip } from '../components/skills/SkillsSnapshotStrip'
-import { SkillsReadout } from '../components/skills/SkillsReadout'
+import { SkillsEndpointReadout } from '../components/skills/SkillsEndpointReadout'
 import {
   EMPTY_SKILLS_STATS,
   type SkillsStats,
@@ -129,6 +132,7 @@ export function SkillPipelinesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = (searchParams.get('tab') as Tab | null) ?? 'catalog'
   const projectId = useActiveProjectId()
+  const ux = useSkillsUx()
   const { push } = useToast()
   const addToast = (t: { type: string; message: string }) =>
     push({ tone: t.type as 'success' | 'error' | 'info' | 'warn', message: t.message })
@@ -157,6 +161,12 @@ export function SkillPipelinesPage() {
     usePageData<SkillsStats>(statsPath, { deps: [projectId] })
   usePublishPageHeroStats('/skills', skillsStatsData)
   const skillsStats = skillsStatsData ?? EMPTY_SKILLS_STATS
+
+  useEffect(() => {
+    if (!ux.isQuickstart || !projectId || statsValidating) return
+    const quickTab = resolveQuickSkillsTab(skillsStats)
+    if (tab !== quickTab) setTab(quickTab)
+  }, [ux.isQuickstart, projectId, statsValidating, skillsStats, tab, setTab])
 
   usePublishPageContext({
     route: '/skills',
@@ -201,53 +211,58 @@ export function SkillPipelinesPage() {
   })
 
   return (
-    <div className="flex flex-col h-full gap-0">
-      {/* Page header */}
-      <div className="px-6 pt-5 pb-0 flex flex-col gap-1">
-        <PageHeaderBar
-          title="Skill Pipelines"
-          description="Attach cursor-kenji skills to reports, run them as pipelines, and track each step live."
-          helpTitle="About Skill Pipelines"
-          helpWhatIsIt="Browse the cursor-kenji skill catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
-          helpUseCases={[
-            'Run audit-uiux-design-system or other skills against a report',
-            'Track pipeline step runs in real time via React Flow',
-            'Sync skill sources from GitHub repos like kensaurus/cursor-kenji',
-          ]}
-          helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
-        />
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-skills">
+      <PageHeaderBar
+        title="Skill Pipelines"
+        description="Attach cursor-kenji skills to reports, run them as pipelines, and track each step live."
+        helpTitle="About Skill Pipelines"
+        helpWhatIsIt="Browse the cursor-kenji skill catalog, attach skills to bug reports, and run handoff or cloud pipeline steps with live status."
+        helpUseCases={[
+          'Run audit-uiux-design-system or other skills against a report',
+          'Track pipeline step runs in real time via React Flow',
+          'Sync skill sources from GitHub repos like kensaurus/cursor-kenji',
+        ]}
+        helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
+      >
+        {projectId ? (
+          <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        ) : null}
+      </PageHeaderBar>
 
-        <PagePosture
-          slots={[
-            {
-              priority: POSTURE_PRIORITY.status,
-              show: isSkillsBannerVisible(skillsStats),
-              children: <SkillsStatusBanner stats={skillsStats} onTab={setTab} />,
-            },
-            {
-              priority: POSTURE_PRIORITY.heroOrSnapshot,
-              show: Boolean(projectId),
-              children: (
-                <SkillsSnapshotStrip
-                  stats={skillsStats}
-                  statsFetchedAt={statsFetchedAt}
-                  statsValidating={statsValidating}
-                  hint="Catalog size, active pipeline runs, and sync posture for cursor-kenji skills."
-                />
-              ),
-            },
-            {
-              priority: POSTURE_PRIORITY.guide,
-              show: !shouldHideGuideWhenBannerActive(
-                isSkillsBannerVisible(skillsStats),
-                COMMON_HEALTHY_PRIORITIES,
-                skillsStats.topPriority,
-              ),
-              children: <SkillsPipelineGuide topPriority={skillsStats.topPriority} />,
-            },
-          ]}
-        />
+      <PagePosture
+        slots={[
+          {
+            priority: POSTURE_PRIORITY.status,
+            show: isSkillsBannerVisible(skillsStats),
+            children: (
+              <SkillsStatusBanner stats={skillsStats} onTab={setTab} plainBanner={ux.plainBanner} />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: Boolean(projectId) && !ux.hideSkillsSnapshot,
+            children: (
+              <SkillsSnapshotStrip
+                stats={skillsStats}
+                statsFetchedAt={statsFetchedAt}
+                statsValidating={statsValidating}
+                hint="Catalog size, active pipeline runs, and sync posture for cursor-kenji skills."
+              />
+            ),
+          },
+          {
+            priority: POSTURE_PRIORITY.guide,
+            show: !shouldHideGuideWhenBannerActive(
+              isSkillsBannerVisible(skillsStats),
+              COMMON_HEALTHY_PRIORITIES,
+              skillsStats.topPriority,
+            ),
+            children: <SkillsPipelineGuide topPriority={skillsStats.topPriority} />,
+          },
+        ]}
+      />
 
+      {!ux.hideTabs && (
         <SegmentedControl<Tab>
           size="sm"
           scrollable
@@ -258,59 +273,214 @@ export function SkillPipelinesPage() {
             id: t,
             label: TAB_META[t].label,
           }))}
-          className="mt-3"
         />
-      </div>
+      )}
 
-      <div className="flex-1 overflow-auto px-6 py-4">
-        {!projectId ? (
-          <Card className="p-6 border-dashed border-edge">
-            <h2 className="text-sm font-semibold text-fg">Pick a project first</h2>
-            <p className="mt-1 text-xs text-fg-muted">
-              Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link to="/onboarding" className="text-xs text-brand underline">Open setup cockpit</Link>
-              <Link to="/skills?tab=sources" className="text-xs text-fg-muted underline">Manage skill sources</Link>
-            </div>
-          </Card>
-        ) : (
-          <>
-            {tab === 'catalog' && projectId ? (
-              <SkillsReadout
-                stats={skillsStats}
-                fetchedAt={statsFetchedAt}
-                isValidating={statsValidating}
-              />
-            ) : null}
-            {tab === 'catalog' && (
-              <CatalogTab
-                projectId={projectId}
-                addToast={addToast}
-                initialSkillSlug={skillSlug}
-                onPipelineStarted={(runId) => setTab('pipelines', { run: runId })}
-                onSkillChange={(slug) => setTab('catalog', { skill: slug ?? undefined })}
-                onGoToSources={() => setTab('sources')}
-              />
-            )}
-            {tab === 'pipelines' && (
-              <PipelinesTab
-                projectId={projectId}
-                addToast={addToast}
-                initialRunId={pipelineRunId}
-                onOpenSkill={(slug) => setTab('catalog', { skill: slug })}
-                onGoToCatalog={() => setTab('catalog', { skill: 'audit-uiux-design-system' })}
-              />
-            )}
-            {tab === 'sources' && <SourcesTab projectId={projectId} addToast={addToast} />}
-          </>
-        )}
-      </div>
+      {!projectId ? (
+        <Card className="p-6 border-dashed border-edge">
+          <h2 className="text-sm font-semibold text-fg">Pick a project first</h2>
+          <p className="mt-1 text-xs text-fg-muted">
+            Skill pipelines attach cursor-kenji workflows to bug reports. Select a project in the header, then sync skill sources or start a handoff run.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link to="/onboarding" className="text-xs text-brand underline">Open setup cockpit</Link>
+            <Link to="/skills?tab=sources" className="text-xs text-fg-muted underline">Manage skill sources</Link>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {tab === 'catalog' && (
+            <CatalogTab
+              projectId={projectId}
+              addToast={addToast}
+              initialSkillSlug={skillSlug}
+              onPipelineStarted={(runId) => setTab('pipelines', { run: runId })}
+              onSkillChange={(slug) => setTab('catalog', { skill: slug ?? undefined })}
+              onGoToSources={() => setTab('sources')}
+            />
+          )}
+          {tab === 'pipelines' && (
+            <PipelinesTab
+              projectId={projectId}
+              addToast={addToast}
+              initialRunId={pipelineRunId}
+              onOpenSkill={(slug) => setTab('catalog', { skill: slug })}
+              onGoToCatalog={() => setTab('catalog', { skill: 'audit-uiux-design-system' })}
+            />
+          )}
+          {tab === 'sources' && (
+            <SourcesTab
+              projectId={projectId}
+              addToast={addToast}
+              stats={skillsStats}
+              statsFetchedAt={statsFetchedAt}
+              statsValidating={statsValidating}
+              showEndpointReadout={!ux.hideEndpointReadout}
+            />
+          )}
+        </>
+      )}
     </div>
   )
 }
 
 // ── Catalog Tab ───────────────────────────────────────────────────────────────
+
+function SkillDetailPanel({
+  selected,
+  projectId,
+  reportId,
+  setReportId,
+  mode,
+  setMode,
+  cloudReadiness,
+  startingSlug,
+  onClose,
+  onStartPipeline,
+  embedded = false,
+}: {
+  selected: AgentSkill
+  projectId: string | null
+  reportId: string
+  setReportId: (v: string) => void
+  mode: 'handoff' | 'cloud'
+  setMode: (v: 'handoff' | 'cloud') => void
+  cloudReadiness: CloudReadiness | null | undefined
+  startingSlug: string | null
+  onClose: () => void
+  onStartPipeline: () => void
+  /** When true, renders without SurfacePanel wrapper (inside Drawer). */
+  embedded?: boolean
+}) {
+  const meta = getSkillCategoryMeta(selected.category)
+  const body = (
+    <>
+      <div className="flex items-start gap-2.5">
+        <span className={`flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
+          <meta.Icon size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-2xs font-medium text-fg-muted">{meta.label}</p>
+          <h2 className="text-sm font-bold text-fg">{selected.title}</h2>
+          <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
+        </div>
+        {!embedded ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn-xs btn-ghost flex-shrink-0"
+            aria-label="Close skill details"
+          >
+            <IconClose size={14} />
+          </button>
+        ) : null}
+      </div>
+      <p className="text-xs text-fg-muted">{selected.description}</p>
+
+      {selected.body_md ? (
+        <details className="text-2xs text-fg-muted">
+          <summary className="cursor-pointer font-semibold text-fg">SKILL.md preview</summary>
+          <pre className="mushi-code-block mushi-code-body mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-2xs rounded-lg p-2 border border-edge-subtle">
+            {selected.body_md.slice(0, 4000)}
+            {selected.body_md.length > 4000 ? '\n…' : ''}
+          </pre>
+        </details>
+      ) : null}
+
+      {selected.chain_slugs?.length > 0 ? (
+        <div>
+          <p className="text-2xs font-semibold text-fg mb-1">Chain ({selected.chain_slugs.length} steps)</p>
+          <div className="flex flex-col gap-1">
+            {selected.chain_slugs.map((s, i) => (
+              <span key={s} className="text-2xs text-fg-muted font-mono">
+                {i + 1}. {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="border-t border-edge-subtle pt-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-2xs font-semibold text-fg">Apply to a report</p>
+          <Link to="/reports" className="text-2xs text-brand hover:underline">Browse reports →</Link>
+        </div>
+        <div className="space-y-1">
+          <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}>
+            Report ID <span className="text-fg-faint">(optional — gives the agent exact bug context)</span>
+          </label>
+          <input
+            id={embedded ? 'skill-report-id-drawer' : 'skill-report-id'}
+            type="text"
+            placeholder="Paste report ID from a report URL, e.g. abc123de"
+            value={reportId}
+            onChange={(e) => setReportId(e.target.value)}
+            className="input text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-2xs text-fg-muted" htmlFor={embedded ? 'skill-mode-drawer' : 'skill-mode'}>Mode</label>
+          <select
+            id={embedded ? 'skill-mode-drawer' : 'skill-mode'}
+            value={mode}
+            onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
+            className="input text-xs"
+            aria-label="Pipeline mode"
+          >
+            <option value="handoff">Handoff — copy context packet into your local Cursor agent</option>
+            <option value="cloud" disabled={!cloudReadiness?.cloudReady}>
+              Cloud — auto-dispatch each step via Cursor Cloud
+            </option>
+          </select>
+        </div>
+        {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady ? (
+          <HelpBanner tone="neutral" className="rounded-lg">
+            Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
+            <Link to="/integrations/config#cursor_cloud" className="text-brand hover:underline">
+              Open Integrations → Cursor Cloud
+            </Link>
+            {!cloudReadiness.githubRepoConfigured ? (
+              <>
+                {' '}and{' '}
+                <Link to="/integrations/config#github" className="text-brand hover:underline">
+                  GitHub repo
+                </Link>
+              </>
+            ) : null}
+          </HelpBanner>
+        ) : null}
+        <button
+          type="button"
+          onClick={onStartPipeline}
+          disabled={
+            startingSlug === selected.slug ||
+            !projectId ||
+            (mode === 'cloud' && !cloudReadiness?.cloudReady)
+          }
+          className="btn btn-primary text-xs"
+        >
+          {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline →'}
+        </button>
+        {!reportId ? (
+          <p className="text-2xs text-fg-faint">
+            Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
+            <Link to="/reports" className="text-brand hover:underline">Reports</Link>.
+          </p>
+        ) : null}
+      </div>
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex flex-col gap-3">{body}</div>
+  }
+
+  return (
+    <SurfacePanel className="w-full lg:w-80 flex-shrink-0 rounded-xl p-4 flex flex-col gap-3">
+      {body}
+    </SurfacePanel>
+  )
+}
 
 function CatalogTab({
   projectId,
@@ -362,6 +532,8 @@ function CatalogTab({
 
   const orderedCategories = CATEGORY_ORDER.filter((c) => grouped[c]?.length)
   const otherCategories = Object.keys(grouped).filter((c) => !CATEGORY_ORDER.includes(c) && grouped[c]?.length)
+
+  const isLgUp = useMediaMin(1024)
 
   // Deep-link: ?skill=… opens drawer — fetch by slug if not in loaded catalog page
   useEffect(() => {
@@ -439,7 +611,7 @@ function CatalogTab({
   }
 
   return (
-    <div className="flex gap-4 h-full">
+    <div className="flex flex-col lg:flex-row gap-4 min-w-0">
       {/* Skill list */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
         <div className="flex gap-2 items-center">
@@ -476,7 +648,7 @@ function CatalogTab({
                       'text-left p-3 rounded-lg border transition-colors',
                       selected?.slug === skill.slug
                         ? 'border-brand bg-surface-raised ring-1 ring-brand/30'
-                        : 'border-border bg-surface-raised hover:border-brand/40 hover:bg-surface-overlay',
+                        : 'border-edge-subtle bg-surface-raised hover:border-brand/40 hover:bg-surface-overlay',
                     ].join(' ')}
                   >
                     <div className="flex items-start gap-2">
@@ -500,124 +672,48 @@ function CatalogTab({
         })}
       </div>
 
-      {/* Skill detail + start pipeline */}
-      {selected && (() => {
-        const meta = getSkillCategoryMeta(selected.category)
-        return (
-        <SurfacePanel className="w-80 flex-shrink-0 rounded-xl p-4 flex flex-col gap-3">
-          <div className="flex items-start gap-2.5">
-            <span className={`flex items-center justify-center w-9 h-9 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
-              <meta.Icon size={16} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-2xs font-medium text-fg-muted">{meta.label}</p>
-              <h2 className="text-sm font-bold text-fg">{selected.title}</h2>
-              <p className="text-2xs font-mono text-fg-muted">{selected.slug}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => selectSkill(null)}
-              className="btn btn-xs btn-ghost flex-shrink-0"
-              aria-label="Close skill details"
-            >
-              <IconClose size={14} />
-            </button>
-          </div>
-          <p className="text-xs text-fg-muted">{selected.description}</p>
+      {/* Desktop skill detail panel */}
+      {selected && isLgUp ? (
+        <SkillDetailPanel
+          selected={selected}
+          projectId={projectId}
+          reportId={reportId}
+          setReportId={setReportId}
+          mode={mode}
+          setMode={setMode}
+          cloudReadiness={cloudReadiness}
+          startingSlug={startingSlug}
+          onClose={() => selectSkill(null)}
+          onStartPipeline={() => startPipeline(selected.slug)}
+        />
+      ) : null}
 
-          {selected.body_md && (
-            <details className="text-2xs text-fg-muted">
-              <summary className="cursor-pointer font-semibold text-fg">SKILL.md preview</summary>
-              <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-2xs bg-surface-overlay rounded-lg p-2 border border-border">
-                {selected.body_md.slice(0, 4000)}
-                {selected.body_md.length > 4000 ? '\n…' : ''}
-              </pre>
-            </details>
-          )}
-
-          {selected.chain_slugs?.length > 0 && (
-            <div>
-              <p className="text-2xs font-semibold text-fg mb-1">Chain ({selected.chain_slugs.length} steps)</p>
-              <div className="flex flex-col gap-1">
-                {selected.chain_slugs.map((s, i) => (
-                  <span key={s} className="text-2xs text-fg-muted font-mono">
-                    {i + 1}. {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="border-t border-border pt-3 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-2xs font-semibold text-fg">Apply to a report</p>
-              <Link to="/reports" className="text-2xs text-brand hover:underline">Browse reports →</Link>
-            </div>
-            <div className="space-y-1">
-              <label className="text-2xs text-fg-muted" htmlFor="skill-report-id">
-                Report ID <span className="text-fg-faint">(optional — gives the agent exact bug context)</span>
-              </label>
-              <input
-                id="skill-report-id"
-                type="text"
-                placeholder="Paste report ID from a report URL, e.g. abc123de"
-                value={reportId}
-                onChange={(e) => setReportId(e.target.value)}
-                className="input text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-2xs text-fg-muted" htmlFor="skill-mode">Mode</label>
-              <select
-                id="skill-mode"
-                value={mode}
-                onChange={(e) => setMode(e.target.value as 'handoff' | 'cloud')}
-                className="input text-xs"
-                aria-label="Pipeline mode"
-              >
-                <option value="handoff">Handoff — copy context packet into your local Cursor agent</option>
-                <option value="cloud" disabled={!cloudReadiness?.cloudReady}>
-                  Cloud — auto-dispatch each step via Cursor Cloud
-                </option>
-              </select>
-            </div>
-            {mode === 'cloud' && cloudReadiness && !cloudReadiness.cloudReady && (
-              <HelpBanner tone="neutral" className="rounded-lg">
-                Cloud mode needs a Cursor API key and GitHub repo URL.{' '}
-                <Link to="/integrations/config#cursor_cloud" className="text-brand hover:underline">
-                  Open Integrations → Cursor Cloud
-                </Link>
-                {!cloudReadiness.githubRepoConfigured && (
-                  <>
-                    {' '}and{' '}
-                    <Link to="/integrations/config#github" className="text-brand hover:underline">
-                      GitHub repo
-                    </Link>
-                  </>
-                )}
-              </HelpBanner>
-            )}
-            <button
-              onClick={() => startPipeline(selected.slug)}
-              disabled={
-                startingSlug === selected.slug ||
-                !projectId ||
-                (mode === 'cloud' && !cloudReadiness?.cloudReady)
-              }
-              className="btn btn-primary text-xs"
-            >
-              {startingSlug === selected.slug ? 'Starting…' : mode === 'cloud' ? 'Start cloud pipeline' : 'Start pipeline →'}
-            </button>
-            {!reportId && (
-              <p className="text-2xs text-fg-faint">
-                Tip: paste a report ID above so the skill gets your exact bug context. Find IDs in{' '}
-                <Link to="/reports" className="text-brand hover:underline">Reports</Link>.
-              </p>
-            )}
-          </div>
-        </SurfacePanel>
-        )
-      })()}
+      {/* Mobile skill detail drawer */}
+      {!isLgUp ? (
+        <Drawer
+          open={!!selected}
+          onClose={() => selectSkill(null)}
+          title={selected?.title}
+          ariaLabel="Skill detail"
+          width="md"
+        >
+          {selected ? (
+            <SkillDetailPanel
+              selected={selected}
+              projectId={projectId}
+              reportId={reportId}
+              setReportId={setReportId}
+              mode={mode}
+              setMode={setMode}
+              cloudReadiness={cloudReadiness}
+              startingSlug={startingSlug}
+              onClose={() => selectSkill(null)}
+              onStartPipeline={() => startPipeline(selected.slug)}
+              embedded
+            />
+          ) : null}
+        </Drawer>
+      ) : null}
     </div>
   )
 }
@@ -659,6 +755,8 @@ function PipelinesTab({
 
   const runs = data?.data ?? []
   const runsTotal = data?.total ?? runs.length
+
+  const isLgUp = useMediaMin(1024)
 
   // Realtime: reload list when any step changes
   useRealtime(
@@ -731,7 +829,7 @@ function PipelinesTab({
   if (error) return <ErrorState message={error} />
 
   return (
-    <div className="flex gap-4 h-full">
+    <div className="flex flex-col lg:flex-row gap-4 min-w-0">
       {/* Run list */}
       <div className="flex-1 flex flex-col gap-2 min-w-0">
         {runs.length > 0 && (
@@ -766,7 +864,7 @@ function PipelinesTab({
                 'p-3 rounded-lg border transition-colors flex items-start gap-3',
                 selectedRun?.id === run.id
                   ? 'border-brand bg-surface-raised ring-1 ring-brand/30'
-                  : 'border-border bg-surface-raised hover:bg-surface-overlay',
+                  : 'border-edge-subtle bg-surface-raised hover:bg-surface-overlay',
               ].join(' ')}
             >
               <button
@@ -808,8 +906,8 @@ function PipelinesTab({
         )}
       </div>
 
-      {/* Pipeline flow canvas */}
-      {selectedRun && (
+      {/* Desktop pipeline detail */}
+      {selectedRun && isLgUp ? (
         <RunDetail
           run={selectedRun}
           skillTitleMap={skillTitleMap}
@@ -819,7 +917,31 @@ function PipelinesTab({
           aborting={abortingId === selectedRun.id}
           addToast={addToast}
         />
-      )}
+      ) : null}
+
+      {/* Mobile pipeline drawer */}
+      {!isLgUp ? (
+        <Drawer
+          open={!!selectedRun}
+          onClose={() => setSelectedRun(null)}
+          title={selectedRun?.root_skill_slug ?? 'Pipeline run'}
+          ariaLabel="Pipeline run detail"
+          width="lg"
+        >
+          {selectedRun ? (
+            <RunDetail
+              run={selectedRun}
+              skillTitleMap={skillTitleMap}
+              onClose={() => setSelectedRun(null)}
+              onOpenSkill={onOpenSkill}
+              onAbort={abortRun}
+              aborting={abortingId === selectedRun.id}
+              addToast={addToast}
+              embedded
+            />
+          ) : null}
+        </Drawer>
+      ) : null}
     </div>
   )
 }
@@ -832,6 +954,7 @@ function RunDetail({
   onAbort,
   aborting,
   addToast,
+  embedded = false,
 }: {
   run: PipelineRun
   skillTitleMap: Map<string, string>
@@ -840,6 +963,7 @@ function RunDetail({
   onAbort: (runId: string) => void
   aborting: boolean
   addToast: (t: { type: string; message: string }) => void
+  embedded?: boolean
 }) {
   const steps: PipelineStep[] = run.steps ?? run.skill_pipeline_step_runs ?? []
 
@@ -883,10 +1007,10 @@ function RunDetail({
     }
   }
 
-  return (
-    <SurfacePanel className="w-[560px] flex-shrink-0 rounded-xl flex flex-col overflow-hidden p-0">
+  const panelBody = (
+    <>
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+      <div className="px-4 py-3 border-b border-edge-subtle flex items-center gap-2">
         <StatusDot status={run.status} />
         <div className="flex-1 min-w-0">
           <button
@@ -902,12 +1026,12 @@ function RunDetail({
           </p>
         </div>
         <div className="flex gap-1">
-          {run.context_packet && (
-            <button onClick={copyPacket} disabled={copying} className="btn btn-xs btn-ghost" title="Copy run packet for local Cursor agent">
+          {run.context_packet ? (
+            <button type="button" onClick={copyPacket} disabled={copying} className="btn btn-xs btn-ghost" title="Copy run packet for local Cursor agent">
               {copying ? 'Copied!' : 'Copy packet'}
             </button>
-          )}
-          {['pending', 'running'].includes(run.status) && (
+          ) : null}
+          {['pending', 'running'].includes(run.status) ? (
             <button
               type="button"
               onClick={() => onAbort(run.id)}
@@ -917,13 +1041,15 @@ function RunDetail({
             >
               {aborting ? '…' : 'Cancel'}
             </button>
-          )}
-          <button onClick={onClose} className="btn btn-xs btn-ghost" aria-label="Close">✕</button>
+          ) : null}
+          {!embedded ? (
+            <button type="button" onClick={onClose} className="btn btn-xs btn-ghost" aria-label="Close">✕</button>
+          ) : null}
         </div>
       </div>
 
       {/* React Flow pipeline canvas */}
-      <div className="flex-1 min-h-[200px]" style={{ height: 200 }}>
+      <div className="min-h-[220px]" style={{ height: embedded ? 220 : 240 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -944,7 +1070,7 @@ function RunDetail({
       </div>
 
       {/* Step list */}
-      <div className="border-t border-border px-4 py-3 overflow-y-auto max-h-60 flex flex-col gap-2">
+      <div className="border-t border-edge-subtle px-4 py-3 overflow-y-auto max-h-60 flex flex-col gap-2">
         {steps.map((step) => (
           <div key={step.step_index} className="flex items-center gap-2 text-xs">
             <StatusDot status={step.status} size="sm" />
@@ -953,7 +1079,7 @@ function RunDetail({
               {skillTitleMap.get(step.skill_slug) ?? step.skill_slug}
             </span>
             <span className="text-fg-muted text-2xs">{STEP_STATUS_LABEL[step.status] ?? step.status}</span>
-            {step.agent_ref && (
+            {step.agent_ref ? (
               <a
                 href={`https://cursor.com/agents/${step.agent_ref}`}
                 target="_blank"
@@ -963,35 +1089,59 @@ function RunDetail({
               >
                 Agent
               </a>
-            )}
-            {step.pr_url && (
+            ) : null}
+            {step.pr_url ? (
               <a href={step.pr_url} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline text-2xs">PR</a>
-            )}
+            ) : null}
           </div>
         ))}
-        {steps.length === 0 && (
+        {steps.length === 0 ? (
           <p className="text-xs text-fg-muted italic">Steps pending…</p>
-        )}
+        ) : null}
       </div>
 
       {/* CLI handoff hint */}
       {run.mode === 'handoff' ? (
-        <div className="border-t border-border px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
+        <div className="border-t border-edge-subtle px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
           Dev: <code className="font-mono">mushi pipeline watch {run.id.slice(0, 8)}</code> · check in each step with{' '}
           <code className="font-mono">mushi pipeline checkin {run.id.slice(0, 8)} --step 0 --status passed</code>
         </div>
       ) : (
-        <div className="border-t border-border px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
+        <div className="border-t border-edge-subtle px-4 py-2 bg-surface-overlay text-2xs text-fg-muted">
           Cloud mode dispatches each step to Cursor Cloud automatically. Agents check in via MCP when done — or use the CLI checkin command above.
         </div>
       )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="flex flex-col overflow-hidden rounded-xl border border-edge">{panelBody}</div>
+  }
+
+  return (
+    <SurfacePanel className="w-full lg:w-[560px] flex-shrink-0 rounded-xl flex flex-col overflow-hidden p-0">
+      {panelBody}
     </SurfacePanel>
   )
 }
 
 // ── Sources Tab ───────────────────────────────────────────────────────────────
 
-function SourcesTab({ projectId, addToast }: { projectId: string | null; addToast: (t: { type: string; message: string }) => void }) {
+function SourcesTab({
+  projectId,
+  addToast,
+  stats,
+  statsFetchedAt,
+  statsValidating,
+  showEndpointReadout,
+}: {
+  projectId: string | null
+  addToast: (t: { type: string; message: string }) => void
+  stats: SkillsStats
+  statsFetchedAt: string | null
+  statsValidating: boolean
+  showEndpointReadout: boolean
+}) {
   const [repoSlug, setRepoSlug] = useState('')
   const [ref, setRef] = useState('main')
   const [adding, setAdding] = useState(false)
@@ -1078,7 +1228,14 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
   if (error) return <ErrorState message={error} />
 
   return (
-    <div className="flex flex-col gap-4 max-w-xl">
+    <div className="flex flex-col gap-4 min-w-0">
+      {showEndpointReadout ? (
+        <SkillsEndpointReadout
+          stats={stats}
+          fetchedAt={statsFetchedAt}
+          isValidating={statsValidating}
+        />
+      ) : null}
       <SurfacePanel className="rounded-xl p-4 flex flex-col gap-3">
         <p className="text-sm font-semibold text-fg">Add skill source</p>
         <p className="text-xs text-fg-muted">Any GitHub repo containing <code className="font-mono">skills/*/SKILL.md</code> (skills.sh-compatible).</p>
@@ -1152,6 +1309,21 @@ function SourcesTab({ projectId, addToast }: { projectId: string | null; addToas
 }
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
+
+/** Tailwind `lg` breakpoint (1024px) — side panel vs drawer split. */
+function useMediaMin(minPx: number): boolean {
+  const [matches, setMatches] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(`(min-width: ${minPx}px)`).matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${minPx}px)`)
+    const onChange = () => setMatches(mq.matches)
+    mq.addEventListener('change', onChange)
+    setMatches(mq.matches)
+    return () => mq.removeEventListener('change', onChange)
+  }, [minPx])
+  return matches
+}
 
 function SkillCategoryHeader({
   meta,

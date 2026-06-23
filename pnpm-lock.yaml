@@ -161,6 +161,12 @@ importers:
       '@mushi-mushi/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@mushi-mushi/marketing-ui':
+        specifier: workspace:*
+        version: link:../../packages/marketing-ui
+      '@mushi-mushi/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@theguild/remark-mermaid':
         specifier: ^0.3.0
         version: 0.3.0(react@19.2.7)
@@ -198,6 +204,9 @@ importers:
       eslint:
         specifier: ^10.4.1
         version: 10.4.1(jiti@2.7.0)
+      eslint-plugin-mushi-mushi:
+        specifier: workspace:*
+        version: link:../../packages/eslint-plugin-mushi-mushi
       pagefind:
         specifier: ^1.5.2
         version: 1.5.2
@@ -659,6 +668,9 @@ importers:
       '@mushi-mushi/brand':
         specifier: workspace:*
         version: link:../brand
+      '@mushi-mushi/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@xyflow/react':
         specifier: ^12.11.0
         version: 12.11.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1179,6 +1191,9 @@ importers:
       '@mushi-mushi/core':
         specifier: workspace:^
         version: link:../core
+      '@mushi-mushi/web':
+        specifier: workspace:^
+        version: link:../web
       '@react-native-async-storage/async-storage':
         specifier: '>=1.19'
         version: 3.1.1(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.7))(react@19.2.7)
@@ -1381,6 +1396,9 @@ importers:
       eslint:
         specifier: ^10.4.1
         version: 10.4.1(jiti@2.7.0)
+      eslint-plugin-mushi-mushi:
+        specifier: workspace:*
+        version: link:../eslint-plugin-mushi-mushi
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1(@noble/hashes@2.2.0)

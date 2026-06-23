@@ -84,6 +84,7 @@ export { createPreFilter, type PreFilterResult } from './pre-filter';
 export { createOfflineQueue, type OfflineQueue } from './queue';
 export { captureEnvironment } from './environment';
 export { getReporterToken } from './reporter-token';
+export { sha256Hex, hmacSha256Hex } from './digest';
 export { newUuid } from './uuid';
 export { getDeviceFingerprintHash } from './fingerprint';
 export { getSessionId } from './session';
@@ -125,8 +126,17 @@ export {
   MUSHI_MOTION,
   MUSHI_GEOMETRY,
   MUSHI_COPY,
+  MUSHI_BANNER_NEON,
+  MUSHI_TIER_COLORS,
+  MUSHI_ON_ACCENT,
+  MUSHI_INVERSE,
+  MUSHI_ACCENT_SHADOW,
+  MUSHI_BANNER_BRAND_BORDER,
+  MUSHI_REPORTER_STATUS,
   mushiPalette,
   mushiTokens,
+  resolveWidgetAccent,
+  safeWidgetHex,
   type MushiThemeMode,
   type MushiColorPalette,
   type MushiTokenSnapshot,

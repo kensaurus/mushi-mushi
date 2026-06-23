@@ -89,7 +89,7 @@ export const stages: MushiStage[] = [
     index: 0,
     kicker: 'mushi.web · capture',
     title: 'User feels a bug. Mushi writes it down.',
-    oneLiner: 'Shake to report — the SDK captures screenshot, intent, console, and network context in one send.',
+    oneLiner: 'Shake to report — screenshot, intent, console, and network context in one send.',
     drawerTitle: 'No support ticket. No redirect. No memory loss.',
     drawerBody:
       'Mushi lives inside the app. The person who felt the bug reports it while the moment is still fresh — screenshot, what they were doing, and what broke, all bundled together.',
@@ -119,10 +119,10 @@ export const stages: MushiStage[] = [
     index: 2,
     kicker: 'agent.fix · pr #42',
     title: 'AI opens a draft PR. You merge or ignore.',
-    oneLiner: 'The fix agent reads your codebase via RAG, writes a diff, and opens a GitHub PR — no Jira, no ticket.',
+    oneLiner: 'The fix agent reads your codebase, writes a diff, and opens a draft GitHub PR.',
     drawerTitle: 'The agent does the first pass.',
     drawerBody:
-      'Instead of another TODO in a tracker, the evolution loop gives you a branch, a diff, and a clear place to review. You keep the final merge decision — the agent just eliminates the blank-page problem.',
+      'Instead of a blank tracker row, you get a branch, a diff, and a clear review point. You keep the merge decision.',
     bullets: ['Branch, commit, and test notes are grouped together.', 'BYOK: your Anthropic key, your account.'],
     stat: 'PR #42',
     tone: 'link',

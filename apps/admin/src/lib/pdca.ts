@@ -160,23 +160,10 @@ export const PDCA_STAGE_OUTCOMES: Record<PdcaStageId, {
  * Three surfaces, one source of truth — keep this list lock-step with the
  * stage-bearing sections in the sidebar.
  */
-const STAGE_ROUTES: Array<{ prefix: string; stage: PdcaStageId }> = [
-  { prefix: '/reports',       stage: 'plan' },
-  { prefix: '/inventory',     stage: 'plan' },
-  { prefix: '/graph',         stage: 'plan' },
-  { prefix: '/anti-gaming',   stage: 'plan' },
-  { prefix: '/queue',         stage: 'plan' },
-  { prefix: '/fixes',         stage: 'do' },
-  { prefix: '/repo',           stage: 'do' },
-  { prefix: '/prompt-lab',    stage: 'do' },
-  { prefix: '/judge',         stage: 'check' },
-  { prefix: '/health',        stage: 'check' },
-  { prefix: '/intelligence',  stage: 'check' },
-  { prefix: '/research',      stage: 'check' },
-  { prefix: '/integrations',  stage: 'act' },
-  { prefix: '/marketplace',   stage: 'act' },
-  { prefix: '/notifications', stage: 'act' },
-]
+import { buildStageRoutes } from './navRegistry'
+
+/** Derived from navRegistry — keep lock-step with sidebar PDCA items. */
+const STAGE_ROUTES = buildStageRoutes()
 
 export function stageForPath(pathname: string): PdcaStageId | null {
   const hit = STAGE_ROUTES.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'))

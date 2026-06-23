@@ -266,7 +266,7 @@ export function RevealedKeyCard({
       </div>
 
       <pre
-        className="font-mono text-xs text-fg bg-surface-raised px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all max-h-48 overflow-auto"
+        className="mushi-code-block mushi-code-body font-mono text-xs text-fg px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all max-h-48 overflow-auto"
         data-testid={`revealed-key-payload-${mode}`}
       >
         {payload}

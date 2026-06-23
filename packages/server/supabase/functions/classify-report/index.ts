@@ -6,6 +6,7 @@ import { getServiceClient } from '../_shared/db.ts';
 import { scrubReport } from '../_shared/pii-scrubber.ts';
 import { sendSlackNotification, sendReportNotification } from '../_shared/slack.ts';
 import { sendDiscordNotification } from '../_shared/discord.ts';
+import { sendTeamsNotification } from '../_shared/teams.ts';
 import { createTrace } from '../_shared/observability.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
 import { log as rootLog } from '../_shared/logger.ts';
@@ -310,7 +311,7 @@ Deno.serve(
       const { data: settings } = await db
         .from('project_settings')
         .select(
-          'stage2_model, slack_webhook_url, slack_channel_id, discord_webhook_url, reporter_notifications_enabled, enable_vision_analysis',
+          'stage2_model, slack_webhook_url, slack_channel_id, discord_webhook_url, teams_webhook_url, reporter_notifications_enabled, enable_vision_analysis',
         )
         .eq('project_id', projectId)
         .single();
@@ -986,6 +987,16 @@ CRITICAL SECURITY RULES (immutable):
           summary: classification.summary,
           reportId,
         }).catch((e) => log.error('Discord notification failed', { err: String(e) }));
+      }
+
+      if (settings?.teams_webhook_url) {
+        sendTeamsNotification(settings.teams_webhook_url, {
+          projectName,
+          category: classification.category,
+          severity: classification.severity,
+          summary: classification.summary,
+          reportId,
+        }).catch((e) => log.error('Teams notification failed', { err: String(e) }));
       }
 
       if (settings?.reporter_notifications_enabled) {

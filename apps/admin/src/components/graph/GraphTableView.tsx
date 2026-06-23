@@ -1,24 +1,7 @@
 /**
  * FILE: apps/admin/src/components/graph/GraphTableView.tsx
- * PURPOSE: Screen-reader-friendly fallback for the React Flow canvas. Renders
- *          the graph as two paired tables (nodes + edges) keyed by stable IDs
- *          so AT can announce relationships and keyboard users can focus and
- *          select nodes.
- *
- * Wave S (2026-04-23) — Lightweight windowing.
- *
- * Prior revisions `nodes.map((n) => ...)` rendered every row unconditionally.
- * On knowledge graphs with >2k nodes that dropped the admin console frame
- * budget below 20 fps on mid-range laptops — operators reported the
- * accessibility toggle "freezing the browser" during graph imports.
- *
- * We deliberately avoid pulling in a virtualization library (tanstack/react
- * virtual would add ~8 KB gzipped and the rest of the admin console doesn't
- * need it). Instead we cap the initial render at `PAGE_SIZE` rows and
- * expose a plain "Show N more" button; AT users can page through without
- * the overhead of a custom scroll listener, and we keep the bundle budget
- * intact. The `<h3>` count reflects the full dataset size so operators
- * always know what's hidden.
+ * PURPOSE: Screen-reader-friendly table fallback for the React Flow graph canvas,
+ *          with paginated windowing (PAGE_SIZE) for large knowledge graphs.
  */
 
 import { useMemo, useState } from 'react'

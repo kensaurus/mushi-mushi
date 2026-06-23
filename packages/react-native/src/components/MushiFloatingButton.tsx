@@ -20,9 +20,10 @@ import {
   useColorScheme,
   type ViewStyle,
 } from 'react-native'
-import { mushiPalette, MUSHI_COPY } from '@mushi-mushi/core'
+import { mushiPalette, MUSHI_COPY, MUSHI_GEOMETRY } from '@mushi-mushi/core'
 
-const FAB_SIZE = 56
+/** Shared footprint with web widget; RN keeps a circle for native FAB ergonomics. */
+const FAB_SIZE = MUSHI_GEOMETRY.fabSize
 const EDGE_PADDING = 12
 
 function getScreenBounds() {

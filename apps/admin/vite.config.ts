@@ -6,6 +6,7 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { createDevLogger } from './vite.dev-logger.ts'
+import { invalidateWebWorkspaceDep } from './vite-plugin-invalidate-web-dep.ts'
 
 // Base path is environment-driven so the same build works for:
 //   - local dev      (VITE_BASE_PATH unset → "/")
@@ -128,6 +129,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    invalidateWebWorkspaceDep(),
     ...(sentryEnabled
       ? [
           sentryVitePlugin({

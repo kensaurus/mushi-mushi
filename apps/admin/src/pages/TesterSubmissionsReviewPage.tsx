@@ -153,7 +153,7 @@ export function TesterSubmissionsReviewPage() {
           {items.map((item) => (
             <li
               key={item.id}
-              className="rounded-lg border border-border bg-surface p-4 space-y-3"
+              className="rounded-lg border border-edge-subtle bg-surface p-4 space-y-3"
             >
               <div>
                 <h3 className="text-sm font-semibold text-fg">{item.title}</h3>

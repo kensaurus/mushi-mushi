@@ -21,12 +21,13 @@ Primary work UI
 |-------|-------------|----------------|---------|------|-------|
 | `/` dashboard | Yes | `KpiRow` | `useDashboardUx` | — | Insight banner + loop readout |
 | `/reports` | Yes | `ReportsKpiStrip` | — | — | Guide hidden when banner active |
-| `/inbox` | Yes | `InboxSnapshotStrip` | `useInboxUx` | Scrollable | Priority card deduped |
+| `/inbox` | Yes | `InboxSnapshotStrip` | `useInboxUx` | Scrollable | Overview uses `EmptySectionMessage` + clear chips (matches Actions tab); no editorial empty under snapshot chrome; judge cards sync with `/inbox/stats` |
 | `/fixes` | Yes | `FixesSnapshotStrip` | `useFixesUx` | Scrollable | Guide overview-only |
 | `/repo` | Yes | `RepoSnapshotStrip` | `useRepoUx` | Scrollable | |
 | `/health` | Yes | `HealthSnapshotStrip` | `useHealthUx` | Scrollable | Snapshot above tabs |
-| `/mcp` → `/connect` | Yes | `McpSnapshotStrip` | `useMcpUx` | — | Redirect; content on Connect |
-| `/connect` | Yes | `ConnectSnapshotStrip` | `useConnectUx` | N/A | Reference impl |
+| `/mcp` | Yes | `McpSnapshotStrip` | `useMcpUx` | Scrollable | Agent help / MCP console; sidebar quickstart label |
+| `/mcp/manual` | — | — | — | — | Legacy alias → redirects to `/mcp` |
+| `/connect` | Yes | `ConnectSnapshotStrip` | `useConnectUx` | N/A | Reference impl — `ConnectStudio` + `FilterChip`/`SegmentedControl` |
 | `/qa-coverage` | Yes | `QaCoverageSnapshotStrip` | `useQaCoverageUx` | — | PageHero advanced-only |
 | `/rewards` | Yes | `RewardsSnapshotStrip` | `useRewardsUx` | Scrollable | Reference impl |
 | `/settings` | Yes | `SettingsCompactSnapshot` | `useSettingsUx` | Scrollable | Needs-attention card removed |
@@ -43,7 +44,7 @@ Primary work UI
 | `/sso` | Yes | `SsoSnapshotStrip` | — | — | Guide in posture |
 | `/queue` (DLQ) | Yes | `QueueSnapshotStrip` | — | — | |
 | `/prompt-lab` | Yes | `PromptLabSnapshotStrip` | — | Custom stages | Guide dedupe |
-| `/skills` | Yes | `SkillsSnapshotStrip` | — | Custom tabs | Guide dedupe |
+| `/skills` | Yes | `SkillsSnapshotStrip` | `useSkillsUx` | Scrollable tabs | Endpoint readout on Sources; drawer on mobile |
 | `/marketplace` | Yes | `MarketplaceSnapshotStrip` | — | Scrollable | Priority card removed |
 | `/anomalies` | Yes | `AnomaliesSnapshotStrip` | `useAnomaliesUx` | Scrollable | Guide dedupe |
 | `/experiments` | Yes | `ExperimentsSnapshotStrip` | — | Scrollable | |
@@ -143,7 +144,7 @@ Manual: each operator route at 390 / 768 / 1280 px in Beginner mode — max 2 ch
 | `/sso` | yes | yes | — | |
 | `/queue` | yes | yes | — | |
 | `/prompt-lab` | yes | yes | — | |
-| `/skills` | yes | yes | — | |
+| `/skills` | yes | yes | `useSkillsUx` | |
 | `/marketplace` | yes | yes | — | |
 | `/anomalies` | yes | yes | yes | |
 | `/experiments` | yes | yes | — | |
@@ -166,7 +167,32 @@ Manual: each operator route at 390 / 768 / 1280 px in Beginner mode — max 2 ch
 | `/inventory` | yes | — | yes | |
 | `/onboarding` | yes | inline | yes | |
 | `/setup-copilot` | yes | — | — | |
-| `/reports/:id` | — | — | — | Detail surface |
+| `/reports/:id` | compact | — | — | Detail — ops posture (CI + dispatch) |
 | Public/auth | — | — | — | No operator chrome |
 
-**Coverage:** 44/44 operator list pages use `PagePosture` (excluding skipped auth/public/detail routes).
+**Coverage:** 44/44 operator list pages use `PagePosture` (excluding skipped auth/public routes). Detail routes use optional compact posture.
+
+---
+
+## Phase 2 — Cross-surface SDK unification (Jun 2026)
+
+**Plan:** SDK UI unification burndown (Phase A–C + guardrails).
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `--color-surface-hover` + editorial bridge aliases | ✅ | `apps/admin/src/index.css` |
+| Widget hex → `build-widget-theme.ts` + core tokens | ✅ | `packages/web/src/build-widget-theme.ts` |
+| Assistant hub chip + i18n | ✅ | `packages/web/src/widget-render.ts` |
+| Legacy shadcn codemod | ✅ | `border-edge-subtle`, `text-fg-muted`, … |
+| SdkInstallCard preview tokens | ✅ | `getWidgetPreviewTokens()` |
+| RN FAB size from `MUSHI_GEOMETRY` | ✅ | Circle shape documented |
+| RN `MushiBanner` + assistant tab | ✅ | `packages/react-native/src/components/*` |
+| Report detail compact posture | ✅ | `ReportDetailPage.tsx` |
+| DTCG `brand.tokens.json` | ✅ | `packages/brand/tokens/` |
+| ESLint `no-raw-hex-in-widget` + Playwright a11y spec | ✅ | See PR template SDK section |
+| Admin `predev` rebuilds `@mushi-mushi/web` before Vite | ✅ | `apps/admin/package.json` |
+| Vite watcher re-prebundles web dist on mid-session rebuild | ✅ | `apps/admin/vite-plugin-invalidate-web-dep.ts` |
+| SdkInstallCard assistant hub chip in live preview | ✅ | Click mock trigger → panel shows Ask when enabled |
+| Product decisions | ✅ | [`SDK-UI-UNIFICATION-DECISIONS.md`](./SDK-UI-UNIFICATION-DECISIONS.md) |
+
+**Verify:** `node scripts/check-design-tokens.mjs`, `pnpm --filter @mushi-mushi/web test`, `pnpm --filter @mushi-mushi/admin lint`, `examples/e2e-dogfood/tests/sdk-widget-a11y.spec.ts` (with dogfood host running).

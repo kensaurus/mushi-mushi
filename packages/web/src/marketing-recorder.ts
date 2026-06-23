@@ -1,7 +1,7 @@
 /**
  * Dev-only Playwright helpers for marketing GIFs. Exposed on
  * `window.__mushiRecorder` when the SDK is initialized with `debug: true`.
- * Drives the closed shadow-DOM widget through the full reporter flow.
+ * Drives the shadow-DOM widget through the full reporter flow.
  */
 
 import type { MushiReportCategory } from '@mushi-mushi/core';
@@ -15,6 +15,11 @@ export interface MushiRecorderCenter {
 export interface MushiMarketingRecorder {
   ready(): boolean;
   getStep(): string;
+  getCategoryStepIA(): {
+    sectionLabel: string;
+    moreToggle: boolean;
+    footerStepIndicators: number;
+  };
   getTriggerCenter(): MushiRecorderCenter | null;
   getCategoryCenter(category: MushiReportCategory): MushiRecorderCenter | null;
   getIntentCenter(label: string): MushiRecorderCenter | null;
@@ -40,6 +45,7 @@ export function exposeMarketingRecorder(widget: MushiWidget): void {
   const api: MushiMarketingRecorder = {
     ready: () => widget.getIsMounted(),
     getStep: () => widget.getRecorderStep(),
+    getCategoryStepIA: () => widget.getRecorderCategoryStepIA(),
     getTriggerCenter: () => centerOf(widget.getRecorderTrigger()),
     getCategoryCenter: (category) => centerOf(widget.getRecorderCategoryButton(category)),
     getIntentCenter: (label) => centerOf(widget.getRecorderIntentButton(label)),

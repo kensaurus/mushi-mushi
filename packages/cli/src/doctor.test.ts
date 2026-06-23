@@ -207,21 +207,21 @@ describe('runDoctor', () => {
 // ── formatDoctorResult ───────────────────────────────────────────────────────
 
 describe('formatDoctorResult', () => {
-  it('uses ✓ for passing checks', () => {
+  it('uses OK for passing checks', () => {
     const result = formatDoctorResult({
       ready: true,
       checks: [{ name: 'Test', ok: true, detail: 'All good' }],
     })
-    expect(result).toContain('✓ Test')
+    expect(result).toContain('OK Test')
     expect(result).toContain('All checks passed')
   })
 
-  it('uses ✗ for failing checks', () => {
+  it('uses FAIL for failing checks', () => {
     const result = formatDoctorResult({
       ready: false,
       checks: [{ name: 'Test', ok: false, detail: 'Broken' }],
     })
-    expect(result).toContain('✗ Test')
+    expect(result).toContain('FAIL Test')
     expect(result).toContain('1 check failed')
   })
 
@@ -244,7 +244,7 @@ describe('formatDoctorResult', () => {
     expect(result).toContain('ECONNREFUSED')
   })
 
-  it('uses ⚠ for advisory warnings and does not count them as failures', () => {
+  it('uses WARN for advisory warnings and does not count them as failures', () => {
     const result = formatDoctorResult({
       ready: true,
       checks: [
@@ -252,8 +252,8 @@ describe('formatDoctorResult', () => {
         { name: '[ingest] SDK heartbeat', ok: true, detail: '2026-06-22T02:55:34' },
       ],
     })
-    expect(result).toContain('⚠ SDK installed in this repo')
-    expect(result).toContain('✓ [ingest] SDK heartbeat')
+    expect(result).toContain('WARN SDK installed in this repo')
+    expect(result).toContain('OK [ingest] SDK heartbeat')
     expect(result).toContain('All checks passed')
     expect(result).toContain('advisory warning')
     expect(result).not.toContain('check failed')

@@ -4,12 +4,19 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { awardPoints } from '../../_shared/reputation.ts';
-import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
-import { normalizeAdminStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts';
+import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts';
+import { normalizeAdminStatus, toStoredStatus } from '../../_shared/report-status.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { resolveExternalIssue } from '../../_shared/integrations.ts';
 import { dispatchPluginEvent } from '../../_shared/plugins.ts';
-import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds, parseUuidParam } from '../shared.ts';
+import {
+  dbError,
+  callerProjectIds,
+  canAccessReportProject,
+  resolveOwnedProject,
+  scopedOwnedProjectIds,
+  parseUuidParam,
+} from '../shared.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
 import { composeFixPacket, fixPacketContextFromReport, type FixPacketFile } from '../../_shared/fix-packet.ts';
 import { getRelevantCode } from '../../_shared/rag.ts';
@@ -520,16 +527,15 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const projectIds = await callerProjectIds(c, db, userId);
-
-    const { data, error } = await db
-      .from('reports')
-      .select('*')
-      .eq('id', reportId)
-      .in('project_id', projectIds)
-      .single();
-    if (error || !data)
+    const { data, error } = await db.from('reports').select('*').eq('id', reportId).single();
+    if (error || !data) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const allowed = await canAccessReportProject(c, db, userId, data.project_id as string);
+    if (!allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
 
     // Attach the LLM invocation timeline for this report so the detail page can
     // deep-link to Langfuse traces for each pipeline stage (fast-filter, classify-report,
@@ -803,60 +809,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
           log.error('resolveExternalIssue failed', { reportId, err: String(e) }),
         );
       }
-      if (newStatus === 'fixing') {
-        awardPoints(db, report.project_id, report.reporter_token_hash, {
-          action: 'confirmed',
-        }).catch((e) =>
-          log.error('Reputation award failed', { action: 'confirmed', err: String(e) }),
-        );
-        createNotification(
-          db,
-          report.project_id,
+      if (report.reporter_token_hash) {
+        notifyReportStatusTransition(db, {
+          projectId: report.project_id,
           reportId,
-          report.reporter_token_hash,
-          'confirmed',
-          {
-            message: buildNotificationMessage('confirmed', { points: 50 }),
-            points: 50,
-            reportId,
-          },
-        ).catch((e) => log.error('Notification failed', { type: 'confirmed', err: String(e) }));
-      } else if (isReporterFixedStatus(newStatus)) {
-        awardPoints(db, report.project_id, report.reporter_token_hash, { action: 'fixed' }).catch(
-          (e) => log.error('Reputation award failed', { action: 'fixed', err: String(e) }),
-        );
-        createNotification(db, report.project_id, reportId, report.reporter_token_hash, 'fixed', {
-          message: buildNotificationMessage('fixed', { points: 25 }),
-          points: 25,
-          reportId,
-        }).catch((e) => log.error('Notification failed', { type: 'fixed', err: String(e) }));
-      } else if (newStatus === 'verified') {
-        createNotification(db, report.project_id, reportId, report.reporter_token_hash, 'verified', {
-          message: buildNotificationMessage('verified', {}),
-          reportId,
-        }).catch((e) => log.error('Notification failed', { type: 'verified', err: String(e) }));
-      } else if (newStatus === 'reopened') {
-        createNotification(db, report.project_id, reportId, report.reporter_token_hash, 'reopened', {
-          message: buildNotificationMessage('reopened', {}),
-          reportId,
-        }).catch((e) => log.error('Notification failed', { type: 'reopened', err: String(e) }));
-      } else if (newStatus === 'dismissed') {
-        awardPoints(db, report.project_id, report.reporter_token_hash, {
-          action: 'dismissed',
-        }).catch((e) =>
-          log.error('Reputation award failed', { action: 'dismissed', err: String(e) }),
-        );
-        createNotification(
-          db,
-          report.project_id,
-          reportId,
-          report.reporter_token_hash,
-          'dismissed',
-          {
-            message: buildNotificationMessage('dismissed', {}),
-            reportId,
-          },
-        ).catch((e) => log.error('Notification failed', { type: 'dismissed', err: String(e) }));
+          reporterTokenHash: report.reporter_token_hash,
+          previousStatus: report.status,
+          newStatus,
+        }).catch((e) => log.error('Notification failed', { reportId, err: String(e) }));
       }
     }
 

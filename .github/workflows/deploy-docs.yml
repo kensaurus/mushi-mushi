@@ -30,6 +30,9 @@ on:
     paths:
       - 'apps/docs/**'
       - 'scripts/cloudfront-mushi-docs-*'
+      - 'scripts/cloudfront-mushi-apex-redirect.js'
+      - 'scripts/cloudfront-mushi-spa-router.js'
+      - 'scripts/aws-attach-apex-redirect.mjs'
   workflow_dispatch:
 
 concurrency:
@@ -203,6 +206,57 @@ jobs:
             --query 'ETag' --output text)
           aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
 
+      - name: Deploy CloudFront apex redirect function
+        run: |
+          FUNC_NAME="mushi-mushi-apex-redirect"
+          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text 2>/dev/null || echo "")
+          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
+            aws cloudfront create-function \
+              --name "$FUNC_NAME" \
+              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --region us-east-1
+          else
+            aws cloudfront update-function \
+              --name "$FUNC_NAME" \
+              --if-match "$EXISTING_ETAG" \
+              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --region us-east-1
+          fi
+          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text)
+          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
+
+      - name: Deploy CloudFront spa router function
+        run: |
+          FUNC_NAME="mushi-mushi-spa-router"
+          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text 2>/dev/null || echo "")
+          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
+            aws cloudfront create-function \
+              --name "$FUNC_NAME" \
+              --function-config '{"Comment":"SPA + docs routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --region us-east-1
+          else
+            aws cloudfront update-function \
+              --name "$FUNC_NAME" \
+              --if-match "$EXISTING_ETAG" \
+              --function-config '{"Comment":"SPA + docs routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --region us-east-1
+          fi
+          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text)
+          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
+
+      - name: Attach apex redirect cache behaviors
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: node scripts/aws-attach-apex-redirect.mjs
+
       - name: Associate CloudFront docs functions with /docs/* behavior
         # `publish-function` only puts the function in the LIVE stage of
         # the Functions service — it does NOT attach the function to any
@@ -222,7 +276,13 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/mushi-mushi/docs/*" \
+            --paths \
+              "/mushi-mushi/docs/*" \
+              "/mushi-mushi/*" \
+              "/quickstart/*" \
+              "/concepts/*" \
+              "/sdks/*" \
+              "/migrations/*" \
             --region us-east-1
 
       - name: Post-deploy health check
@@ -235,3 +295,7 @@ jobs:
           fi
           DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/docs/version.json" | jq -r '.version // "unknown"')
           echo "Deployed docs version: $DEPLOYED"
+          APEX_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://kensaur.us/quickstart/incident-loop" || echo "000")
+          if [ "$APEX_CODE" != "301" ] && [ "$APEX_CODE" != "302" ] && [ "$APEX_CODE" != "308" ]; then
+            echo "::warning::Apex redirect health check returned HTTP $APEX_CODE (expected 301) — CloudFront may still be propagating"
+          fi

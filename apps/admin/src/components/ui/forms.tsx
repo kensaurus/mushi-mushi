@@ -533,18 +533,18 @@ interface EmptyStateProps {
  */
 export function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-center border-dashed">
+    <Card className="p-6 text-left border-dashed">
       {icon && (
         <div
           aria-hidden="true"
-          className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-sm border border-brand/30 bg-brand/10 font-mono text-brand shadow-[inset_0_-3px_0_var(--color-brand)]"
+          className="mb-3 grid h-11 w-11 place-items-center rounded-sm border border-brand/30 bg-brand/10 font-mono text-brand shadow-[inset_0_-3px_0_var(--color-brand)]"
         >
           {icon}
         </div>
       )}
       <p className="font-serif text-xl leading-tight tracking-[-0.03em] text-fg">{title}</p>
       {description && (
-        <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
+        <p className="text-fg-muted text-xs mt-2 max-w-prose leading-relaxed text-pretty wrap-break-word">
           {description}
         </p>
       )}
@@ -572,10 +572,10 @@ export function EditorialEmptyState({ title, description, action, hints, icon }:
  */
 function CompactEmptyState({ title, description, action, hints }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-center border-dashed">
+    <Card className="p-6 text-left border-dashed">
       <p className="text-fg-muted text-sm">{title}</p>
       {description && (
-        <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
+        <p className="text-fg-muted text-xs mt-2 max-w-prose leading-relaxed text-pretty wrap-break-word">
           {description}
         </p>
       )}

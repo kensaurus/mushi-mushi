@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { requireConfig, API_TIMEOUT_MS } from '../cli-shared.js';
+import { requireConfig, probeEndpointHealth } from '../cli-shared.js';
 
 export function registerDeployCommands(program: Command): void {
 // ─── deploy ───────────────────────────────────────────────────────────────────
@@ -11,24 +11,16 @@ deploy
   .option('--json', 'Machine-readable JSON output')
   .action(async (opts: { json?: boolean }) => {
     const config = requireConfig()
-    const t0 = Date.now()
     try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
-      const res = await fetch(`${config.endpoint}/health`, { signal: controller.signal })
-      clearTimeout(timer)
-      const latency = Date.now() - t0
-      const body: Record<string, unknown> = res.headers.get('content-type')?.includes('json')
-        ? await res.json().catch(() => ({}))
-        : {}
+      const probe = await probeEndpointHealth(config.endpoint)
       if (opts.json) {
-        console.log(JSON.stringify({ ok: res.ok, status: res.status, latency_ms: latency, ...body }))
+        console.log(JSON.stringify({ ok: probe.ok, status: probe.status, latency_ms: probe.latencyMs, ...probe.body }))
       } else {
-        console.log(`Health: ${res.status === 200 ? 'OK' : 'FAIL'} (${res.status}) — ${latency}ms`)
-        if (body['version']) console.log(`  Version: ${body['version']}`)
-        if (body['region']) console.log(`  Region:  ${body['region']}`)
+        console.log(`Health: ${probe.status === 200 ? 'OK' : 'FAIL'} (${probe.status}) — ${probe.latencyMs}ms`)
+        if (probe.body['version']) console.log(`  Version: ${probe.body['version']}`)
+        if (probe.body['region']) console.log(`  Region:  ${probe.body['region']}`)
       }
-      if (!res.ok) process.exit(1)
+      if (!probe.ok) process.exit(1)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (opts.json) {

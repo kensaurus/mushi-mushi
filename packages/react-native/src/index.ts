@@ -13,6 +13,10 @@ export type { MushiBottomSheetProps } from './components/MushiBottomSheet'
 export { MushiFloatingButton } from './components/MushiFloatingButton'
 export type { MushiFloatingButtonProps } from './components/MushiFloatingButton'
 
+export { MushiBanner } from './components/MushiBanner'
+export type { MushiBannerProps } from './components/MushiBanner'
+export { MUSHI_BANNER_DEFAULT_HEIGHT } from './components/MushiBanner'
+
 export { MushiTrigger } from './components/MushiTrigger'
 export type { MushiTriggerProps } from './components/MushiTrigger'
 

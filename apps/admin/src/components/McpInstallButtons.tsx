@@ -1,37 +1,25 @@
 /**
  * FILE: apps/admin/src/components/McpInstallButtons.tsx
- * PURPOSE: Reusable "Add to Cursor / VS Code" deeplink buttons extracted from
- *          McpPage so the ConnectPage hub and any future surface can provide
- *          the same one-click MCP install without copy-pasting the logic.
+ * PURPOSE: Back-compat "Add to Cursor / VS Code" buttons used by McpPage.
  *
- * Usage:
+ * OVERVIEW:
+ * - Thin wrapper around ClientConnectButton for the two original clients (Cursor
+ *   and VS Code). Preserved so McpPage keeps working without any import changes.
+ * - New surfaces (ConnectStudio, public docs) should use ClientConnectButton
+ *   directly with the full MCP_CLIENTS registry.
+ *
+ * DEPENDENCIES:
+ * - ClientConnectButton (registry-driven button)
+ * - @mushi-mushi/mcp/clients (getMcpClient)
+ * - apps/admin/src/lib/env (RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL)
+ *
+ * USAGE:
  *   <McpInstallButtons projectId="..." projectName="..." />
  */
 
-import { useState } from 'react'
-import { Btn, Tooltip } from './ui'
-import { apiFetch } from '../lib/supabase'
-import { useToast } from '../lib/toast'
-import { buildCursorDeeplink, buildVsCodeDeeplink, projectServerName } from '../lib/cursorDeeplink'
-import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
-
-const MUSHI_CLOUD_API = RESOLVED_EXTERNAL_API_URL
-
-async function mintMcpKey(
-  scopes: string[],
-  projectId: string,
-): Promise<string | null> {
-  const res = await apiFetch<{ key: string; prefix: string }>(
-    `/v1/admin/projects/${projectId}/keys`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ scopes }),
-      idempotencyKey: crypto.randomUUID(),
-    },
-  )
-  if (!res.ok || !res.data?.key) return null
-  return res.data.key
-}
+import { getMcpClient } from '@mushi-mushi/mcp/clients'
+import { ClientConnectButton } from './ClientConnectButton'
+import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../lib/env'
 
 interface Props {
   projectId: string
@@ -41,65 +29,28 @@ interface Props {
 }
 
 export function McpInstallButtons({ projectId, projectName, compact = false }: Props) {
-  const toast = useToast()
-  const [mintingIde, setMintingIde] = useState<'cursor' | 'vscode' | null>(null)
-
-  async function openDeeplink(ide: 'cursor' | 'vscode', writeScope: boolean) {
-    setMintingIde(ide)
-    try {
-      const key = await mintMcpKey(writeScope ? ['mcp:write'] : ['mcp:read'], projectId)
-      if (!key) {
-        toast.error('Key mint failed', 'Could not mint an MCP key — check your plan limits.')
-        return
-      }
-      const deeplink =
-        ide === 'cursor'
-          ? buildCursorDeeplink(projectId, projectName, key, MUSHI_CLOUD_API)
-          : buildVsCodeDeeplink(projectId, projectName, key, MUSHI_CLOUD_API)
-      window.open(deeplink, '_self')
-      toast.success(
-        `${ide === 'cursor' ? 'Cursor' : 'VS Code'} install launched`,
-        `Server "${projectServerName(projectId, projectName)}" has been configured.`,
-      )
-    } finally {
-      setMintingIde(null)
-    }
-  }
-
   const size = compact ? ('sm' as const) : ('md' as const)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Tooltip
-        content={`Mint a mcp:read key and open Cursor's install dialog — no copy-paste needed`}
-        side="top"
-      >
-        <Btn
-          size={size}
-          variant="primary"
-          loading={mintingIde === 'cursor'}
-          disabled={mintingIde !== null}
-          onClick={() => void openDeeplink('cursor', false)}
-          aria-label="Add MCP server to Cursor"
-        >
-          ⚡ Add to Cursor
-        </Btn>
-      </Tooltip>
-      <Tooltip
-        content="Mint a mcp:read key and open VS Code's MCP extension install dialog"
-        side="top"
-      >
-        <Btn
-          size={size}
-          variant="ghost"
-          loading={mintingIde === 'vscode'}
-          disabled={mintingIde !== null}
-          onClick={() => void openDeeplink('vscode', false)}
-          aria-label="Add MCP server to VS Code"
-        >
-          Add to VS Code
-        </Btn>
-      </Tooltip>
+      <ClientConnectButton
+        client={getMcpClient('cursor')}
+        projectId={projectId}
+        projectName={projectName}
+        endpoint={RESOLVED_EXTERNAL_API_URL}
+        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+        variant="primary"
+        size={size}
+      />
+      <ClientConnectButton
+        client={getMcpClient('vscode')}
+        projectId={projectId}
+        projectName={projectName}
+        endpoint={RESOLVED_EXTERNAL_API_URL}
+        mcpHttpUrl={RESOLVED_MCP_HTTP_URL}
+        variant="ghost"
+        size={size}
+      />
     </div>
   )
 }

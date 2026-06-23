@@ -18,6 +18,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { mushiEnvVarsForProjectSlug, isExpoReporterProject } from '../lib/projectMushiEnv'
 import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotReadout'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
+import { usePublishPageContext } from '../lib/pageContext'
 
 interface ProjectRow {
   id: string
@@ -49,15 +50,15 @@ export function SetupCopilotPage() {
   const [params] = useSearchParams()
   const activeId = useActiveProjectId()
   const projectParam = params.get('project')
-  const setup = useSetupStatus()
+  const initialProjectId = projectParam ?? activeId ?? null
+  const setup = useSetupStatus(initialProjectId)
+  const projectId = initialProjectId ?? setup.activeProject?.project_id ?? null
 
   const {
     data: projectsPayload,
     error: projectsError,
     reload,
   } = usePageData<{ projects: ProjectRow[] }>('/v1/admin/projects')
-
-  const projectId = projectParam ?? activeId ?? setup.activeProject?.project_id ?? null
 
   const projectRow = useMemo(
     () => projectsPayload?.projects?.find((p) => p.id === projectId) ?? null,
@@ -69,6 +70,31 @@ export function SetupCopilotPage() {
 
   const connectCmd =
     'mushi connect --api-key <key> --project-id <uuid> --endpoint <url> --wait'
+
+  const pageSummary = useMemo(() => {
+    if (!projectId) return 'Select a project'
+    const { required_complete, required_total } = setup.selectors
+    const sdkLive = Boolean(
+      projectRow?.api_keys?.some((k) => k.is_active && k.last_seen_at),
+    )
+    const parts: string[] = []
+    if (required_total > 0) {
+      parts.push(`Ingest ${required_complete}/${required_total}`)
+    }
+    parts.push(sdkLive ? 'SDK live' : 'SDK pending')
+    if (projectRow) {
+      const n = projectRow.report_count
+      parts.push(`${n} report${n === 1 ? '' : 's'}`)
+    }
+    return parts.join(' · ')
+  }, [projectId, setup.selectors, projectRow])
+
+  usePublishPageContext({
+    route: '/setup-copilot',
+    title: 'Setup copilot',
+    summary: pageSummary,
+    filters: projectId ? { project_id: projectId } : undefined,
+  })
 
   return (
     <div className="space-y-6 pb-10">
@@ -88,6 +114,23 @@ export function SetupCopilotPage() {
           <Btn variant="ghost" size="sm">← Projects</Btn>
         </Link>
       </PageHeaderBar>
+
+      <nav
+        aria-label="Setup funnel"
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted"
+      >
+        <Link to="/onboarding" className="text-brand hover:underline">
+          Setup wizard
+        </Link>
+        <span aria-hidden="true">·</span>
+        <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-brand hover:underline">
+          Connect hub
+        </Link>
+        <span aria-hidden="true">·</span>
+        <Link to="/inbox" className="text-brand hover:underline">
+          Action Inbox
+        </Link>
+      </nav>
 
       {!projectId && (
         <Card className="p-5">

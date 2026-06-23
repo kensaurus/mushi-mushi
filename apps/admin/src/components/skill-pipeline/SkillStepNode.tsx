@@ -19,7 +19,7 @@ function SkillStepNodeInner({ data }: NodeProps) {
 
   return (
     <div
-      className="relative flex flex-col gap-1.5 p-3 rounded-xl border border-border bg-surface-raised transition-shadow"
+      className="relative flex flex-col gap-1.5 p-3 rounded-xl border border-edge-subtle bg-surface-raised transition-shadow"
       style={{
         boxShadow: node.isCurrent
           ? `0 0 0 2px ${statusColor}, 0 0 16px 4px ${statusColor}33`

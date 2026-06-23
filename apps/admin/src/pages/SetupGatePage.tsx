@@ -81,7 +81,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
                   copiedLabel=".env block copied"
                 />
               </div>
-              <pre className="bg-surface-raised border border-edge-subtle rounded-sm p-3 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
+              <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm p-3 text-2xs font-mono overflow-x-auto whitespace-pre-wrap">
                 {CLOUD_ENV_TEMPLATE}
               </pre>
             </div>
@@ -137,7 +137,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
                     copiedLabel=".env block copied"
                   />
                 </div>
-                <pre className="bg-surface-raised border border-edge-subtle rounded-sm p-3 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
+                <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm p-3 text-2xs font-mono overflow-x-auto whitespace-pre-wrap">
                   {SELF_HOSTED_TEMPLATE}
                 </pre>
               </div>

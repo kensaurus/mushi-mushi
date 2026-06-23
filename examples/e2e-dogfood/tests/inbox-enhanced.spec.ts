@@ -7,6 +7,15 @@ import { resolve } from 'node:path'
 
 const ADMIN_URL = process.env.MUSHI_ADMIN_URL ?? 'http://localhost:6464'
 const PROJECT_ID = '67a6453c-375d-41d7-833a-b33471159442'
+/** glot.it — reproduces the blank Overview regression when stats/cards desync. */
+const GLOT_PROJECT_ID =
+  process.env.MUSHI_INBOX_TEST_PROJECT_ID ?? '542b34e0-019e-41fe-b900-7b637717bb86'
+
+const VIEWPORTS = [
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'tablet', width: 1024, height: 700 },
+  { name: 'narrow', width: 800, height: 700 },
+] as const
 
 function loadEnvFile(relPath: string): Record<string, string> {
   const out: Record<string, string> = {}
@@ -76,6 +85,52 @@ test.describe('Inbox enhanced shell', () => {
       },
     )
   })
+
+  async function seedProject(page: import('@playwright/test').Page, projectId: string) {
+    await page.addInitScript((pid) => {
+      window.localStorage.setItem('mushi:active_project_id', pid)
+    }, projectId)
+  }
+
+  async function dismissBetaBanner(page: import('@playwright/test').Page) {
+    await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 }).catch(() => {})
+  }
+
+  test('overview tab body is never blank (default project)', async ({ page }) => {
+    await page.goto(`${ADMIN_URL}/inbox`, { waitUntil: 'networkidle' })
+    await dismissBetaBanner(page)
+    const overview = page.locator('[data-inbox-overview-state]')
+    await expect(overview).toBeVisible()
+    await expect(overview).toHaveAttribute('data-inbox-overview-state', /^(clear|handoff|preview|setup)$/)
+    await expect(overview).not.toBeEmpty()
+    await expect(overview.getByText(/Inbox zero|open action|Setup incomplete|Top priority|Summarized above/i)).toBeVisible()
+  })
+
+  test('overview tab body is never blank (glot.it project)', async ({ page }) => {
+    await seedProject(page, GLOT_PROJECT_ID)
+    await page.goto(
+      `${ADMIN_URL}/inbox?project=${encodeURIComponent(GLOT_PROJECT_ID)}`,
+      { waitUntil: 'networkidle' },
+    )
+    await dismissBetaBanner(page)
+    const overview = page.locator('[data-inbox-overview-state]')
+    await expect(overview).toBeVisible()
+    await expect(overview).not.toBeEmpty()
+  })
+
+  for (const viewport of VIEWPORTS) {
+    test(`overview renders at ${viewport.name} (${viewport.width}px)`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await page.goto(`${ADMIN_URL}/inbox`, { waitUntil: 'networkidle' })
+      await dismissBetaBanner(page)
+      const overview = page.locator('[data-inbox-overview-state]')
+      await expect(overview).toBeVisible()
+      await page.screenshot({
+        path: `apps/admin/.playwright-mcp/inbox-overview-${viewport.name}.png`,
+        fullPage: false,
+      })
+    })
+  }
 
   test('overview loads banner, KPI strip, and tabs', async ({ page }) => {
     await page.goto(`${ADMIN_URL}/inbox`, { waitUntil: 'networkidle' })

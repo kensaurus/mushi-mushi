@@ -12,6 +12,32 @@ export default [
         'warn',
         { pageFilesOnly: true, pagePattern: 'Page\\.tsx$' },
       ],
+      'mushi-mushi/no-legacy-shadcn-tokens': 'error',
+      'mushi-mushi/no-accent-for-selection': 'warn',
+      'mushi-mushi/no-card-elevated-outside-allowlist': [
+        'warn',
+        {
+          pagePattern: 'Page\\.tsx$',
+          allowlist: [
+            'PageHero.tsx',
+            'QuickstartMegaCta.tsx',
+            'OnboardingModeIntroCard.tsx',
+            'BetaBanner.tsx',
+            '/illustrations/',
+            '/onboarding/',
+            '/report-detail/',
+            '/tester/',
+            'Tester',
+            'PublicHomePage.tsx',
+            'SetupGatePage.tsx',
+            'LoginPage.tsx',
+            'CliAuthPage.tsx',
+            'ReportDetailPage.tsx',
+          ],
+        },
+      ],
+      // Brand marks (Slack #4A154B, Discord #5865F2, Teams #6264A7) require exact hex in SVG paths.
+      // mushi-mushi-allowlist: third-party brand icon fill
       'mushi-mushi/no-missing-page-posture': [
         'warn',
         {
@@ -38,6 +64,12 @@ export default [
           ],
         },
       ],
+    },
+  },
+  {
+    files: ['src/components/connect/**/*.tsx'],
+    rules: {
+      'mushi-mushi/no-hand-rolled-tablist': ['warn', { pageFilesOnly: false }],
     },
   },
 ];

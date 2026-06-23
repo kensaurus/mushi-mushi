@@ -13,7 +13,7 @@ const BULLETS = [
 export function OssTrustStrip() {
   return (
     <div
-      className="not-prose grid gap-3 sm:grid-cols-2 border border-[var(--docs-rule)] rounded-md p-4 bg-[var(--docs-paper)]"
+      className="not-prose grid gap-3 sm:grid-cols-2 border border-[var(--mushi-rule)] rounded-md p-4 bg-[var(--mushi-paper)]"
       role="list"
       aria-label="Open source trust"
     >
@@ -21,7 +21,7 @@ export function OssTrustStrip() {
       {BULLETS.map((b) => (
         <div key={b.label} role="listitem" className="text-sm">
           <span className="font-medium">{b.label}: </span>
-          <span className="text-[var(--docs-ink-muted)]">{b.text}</span>
+          <span className="text-[var(--mushi-ink-muted)]">{b.text}</span>
         </div>
       ))}
     </div>

@@ -11,22 +11,29 @@ import { ErrorAlert,
   FreshnessPill,
   AgeChip,
   SegmentedControl,
-  Badge,
-  Card, } from '../components/ui'
+  Badge, } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { reportDetailPath } from '../lib/reportUrl'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
 import { InboxSnapshotStrip } from '../components/inbox/InboxSnapshotStrip'
 import { InboxPdcaGuide } from '../components/inbox/InboxPdcaGuide'
+import { InboxOverviewBody } from '../components/inbox/InboxOverviewBody'
+import {
+  ClearChip,
+  GROUP_LABEL,
+  GROUP_LONG_LABEL,
+  OpenInboxCard,
+} from '../components/inbox/inbox-card-parts'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
-import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
+import { buildInboxCards, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
 import {
   ActionPill,
@@ -63,38 +70,6 @@ const INBOX_TABS: Array<{ id: InboxTabId; label: string; description: string }> 
   },
 ]
 
-const GROUP_LABEL: Record<Group, string> = {
-  plan: 'Plan',
-  do: 'Do',
-  check: 'Check',
-  act: 'Act',
-  ops: 'Ops',
-}
-
-const GROUP_LONG_LABEL: Record<Group, string> = {
-  plan: 'Plan — classify + triage',
-  do: 'Do — dispatch + land fixes',
-  check: 'Check — verify quality',
-  act: 'Act — connections + config',
-  ops: 'Ops — health + compliance',
-}
-
-const GROUP_TONE: Record<Group, { chip: string; chipText: string; ring: string }> = {
-  plan: { chip: 'bg-info-muted', chipText: 'text-info', ring: 'border-info/30' },
-  do: { chip: 'bg-brand/15', chipText: 'text-brand', ring: 'border-brand/30' },
-  check: { chip: 'bg-warn-muted', chipText: 'text-warn', ring: 'border-warn/30' },
-  act: { chip: 'bg-ok-muted', chipText: 'text-ok', ring: 'border-ok/30' },
-  ops: { chip: 'bg-surface-overlay', chipText: 'text-fg-muted', ring: 'border-edge' },
-}
-
-const TONE_RING: Record<PageAction['tone'], string> = {
-  plan: 'border-info/40 bg-info-muted',
-  do: 'border-brand/40 bg-brand-subtle',
-  check: 'border-info/40 bg-info-muted',
-  act: 'border-ok/40 bg-ok-muted',
-  idle: 'border-edge bg-surface-overlay',
-}
-
 type FilterValue = 'all' | 'open' | 'clear' | Group
 
 function isInboxTab(value: string | null): value is InboxTabId {
@@ -122,7 +97,14 @@ export function InboxPage() {
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } =
     usePageData<DashboardData>('/v1/admin/dashboard')
-  const cards = useMemo(() => buildInboxCards(data ?? undefined), [data])
+  const cards = useMemo(
+    () =>
+      buildInboxCards(data ?? undefined, {
+        judgeStale: stats.judgeStale,
+        judgeStaleHours: stats.judgeStaleHours,
+      }),
+    [data, stats.judgeStale, stats.judgeStaleHours],
+  )
   const [filter, setFilter] = useState<FilterValue>('all')
 
   const reloadAll = useCallback(() => {
@@ -209,6 +191,7 @@ export function InboxPage() {
   })
 
   const openStages = Math.max(0, stats.totalSurfaces - stats.clearStages)
+  const openActionCount = openCards.length
 
   const tabOptions = useMemo(
     () => [
@@ -216,7 +199,7 @@ export function InboxPage() {
       {
         id: 'actions' as const,
         label: copy?.tabLabels?.actions ?? 'Actions',
-        count: stats.openActions > 0 ? stats.openActions : undefined,
+        count: openActionCount > 0 ? openActionCount : undefined,
       },
       {
         id: 'stages' as const,
@@ -225,7 +208,7 @@ export function InboxPage() {
       },
       { id: 'activity' as const, label: copy?.tabLabels?.activity ?? 'Activity' },
     ],
-    [stats, copy?.tabLabels, openStages],
+    [copy?.tabLabels, openActionCount, openStages],
   )
 
   if ((loading && !data) || (statsLoading && !statsData)) {
@@ -348,48 +331,16 @@ export function InboxPage() {
       )}
 
       {activeTab === 'overview' && (
-        <>
-          {stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 && !isInboxStatusBannerCritical(stats) ? (
-            <Card className="border-danger/30 bg-danger-muted p-4">
-              <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                <SignalChip tone="danger">Top priority</SignalChip>
-                {stats.topPriorityStage ? (
-                  <SignalChip tone="info">
-                    {GROUP_LABEL[stats.topPriorityStage as Group] ?? stats.topPriorityStage} stage
-                  </SignalChip>
-                ) : (
-                  <SignalChip tone="neutral">Highest-severity open action</SignalChip>
-                )}
-              </div>
-              <ContainedBlock tone="warn" label="Next action">
-                <p className="text-sm font-medium leading-snug text-fg">{stats.topPriorityTitle}</p>
-              </ContainedBlock>
-              <ActionPillRow className="mt-3">
-                <ActionPill to={stats.topPriorityTo} tone="brand">
-                  {copy?.actionLabels?.takeAction ?? 'Take action'} →
-                </ActionPill>
-                <ActionPill tone="neutral" onClick={() => setActiveTab('actions')}>
-                  {copy?.actionLabels?.queue ?? 'View full queue'}
-                </ActionPill>
-              </ActionPillRow>
-            </Card>
-          ) : null}
-
-          {openCards.length === 0 && clearCards.length > 0 ? (
-            <section aria-label="Cleared stages preview">
-              <header className="mb-2">
-                <h2 className="text-sm font-semibold text-fg-secondary">All stages clear</h2>
-              </header>
-              <ul className="flex flex-wrap gap-1.5">
-                {clearCards.map((card) => (
-                  <li key={card.id}>
-                    <ClearChip card={card} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </>
+        <InboxOverviewBody
+          stats={stats}
+          openCards={openCards}
+          clearCards={clearCards}
+          hideOverviewChrome={ux.hideOverviewChrome}
+          snapshotVisible={!ux.hideInboxSnapshot}
+          onTab={setActiveTab}
+          copy={copy ?? undefined}
+          activityAtByGroup={activityAtByGroup}
+        />
       )}
 
       {activeTab === 'actions' && (
@@ -607,29 +558,9 @@ function FilterChip({
   )
 }
 
-function ClearChip({ card }: { card: InboxCard }) {
-  const groupTone = GROUP_TONE[card.group]
-  return (
-    <Link
-      data-inbox-card={card.id}
-      data-inbox-state="clear"
-      to={card.pageTo}
-      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-      title={`${card.pageLabel} — all clear. Click to open.`}
-    >
-      <SignalChip tone="ok">✓</SignalChip>
-      <span
-        className={`rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
-      >
-        {GROUP_LABEL[card.group]}
-      </span>
-      <span className="text-fg-secondary group-hover:text-fg">{card.pageLabel}</span>
-    </Link>
-  )
-}
-
 function ActivityFeedRow({ item }: { item: ActivityItem }) {
-  const to = item.kind === 'report' ? `/reports/${item.id}` : `/fixes`
+  const activeProjectId = useActiveProjectId()
+  const to = item.kind === 'report' ? reportDetailPath(item.id, activeProjectId) : `/fixes`
   return (
     <li>
       <Link
@@ -646,69 +577,5 @@ function ActivityFeedRow({ item }: { item: ActivityItem }) {
         <AgeChip at={item.at} />
       </Link>
     </li>
-  )
-}
-
-function OpenInboxCard({
-  card,
-  priority,
-  isFirst,
-  activityAt,
-}: {
-  card: InboxCard
-  priority: number
-  isFirst?: boolean
-  activityAt?: string
-}) {
-  const action = card.action
-  if (!action) return null
-  const groupTone = GROUP_TONE[card.group]
-  return (
-    <article
-      data-inbox-card={card.id}
-      data-inbox-state="open"
-      className={`rounded-lg border p-4 ${TONE_RING[action.tone]}${isFirst ? ' md:col-span-2' : ''}`}
-    >
-      <header className="mb-2 flex flex-wrap items-center gap-1.5">
-        <SignalChip tone="neutral">#{priority}</SignalChip>
-        <span
-          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
-        >
-          {GROUP_LABEL[card.group]}
-        </span>
-        <MetaChip label="Page">{card.pageLabel}</MetaChip>
-        {isFirst && !activityAt ? (
-          <SignalChip tone="brand">Start here ↑</SignalChip>
-        ) : null}
-        {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
-      </header>
-      <ContainedBlock tone="info" label="Action">
-        <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>
-      </ContainedBlock>
-      {action.reason ? (
-        <ContainedBlock tone="muted" className="mt-2">
-          <p className="text-xs leading-snug text-fg-muted">{action.reason}</p>
-        </ContainedBlock>
-      ) : null}
-      <ActionPillRow className="mt-3">
-        {action.primary && action.primary.kind === 'link' ? (
-          <ActionPill to={action.primary.to} tone="brand" className="px-3 py-1.5 text-xs">
-            {action.primary.label} →
-          </ActionPill>
-        ) : null}
-        {action.primary && action.primary.kind === 'button' ? (
-          <Btn size="sm" variant="primary" onClick={action.primary.onClick} data-inbox-primary>
-            {action.primary.label}
-          </Btn>
-        ) : null}
-        {action.secondary?.slice(0, 1).map((s, i) =>
-          s.kind === 'link' ? (
-            <ActionPill key={i} to={s.to} tone="neutral">
-              {s.label}
-            </ActionPill>
-          ) : null,
-        )}
-      </ActionPillRow>
-    </article>
   )
 }
