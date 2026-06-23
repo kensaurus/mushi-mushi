@@ -1,5 +1,6 @@
 # `@mushi-mushi/node`
 
+> **Your AI wrote it. Mushi tells you why it broke.**
 
 Server-side SDK for [Mushi Mushi](https://mushimushi.dev). The browser SDKs
 report user-observed bugs; this package reports **server-observed** ones —

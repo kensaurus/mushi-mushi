@@ -1,5 +1,7 @@
 # @mushi-mushi/cli
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
 Set up the Mushi SDK, wire Cursor MCP, and triage reports from your terminal.
 
 Positioning and product overview: [docs site](https://github.com/kensaurus/mushi-mushi/blob/master/apps/docs/content/quickstart/index.mdx) · [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md)

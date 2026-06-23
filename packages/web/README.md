@@ -1,5 +1,6 @@
 # @mushi-mushi/web
 
+> **Your AI wrote it. Mushi tells you why it broke.**
 
 Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM isolation.
 
@@ -87,7 +88,7 @@ Each trigger respects its config flag — set `rageClick: false` to disable rage
 
 ## Bundle Size
 
-~7 KB brotli, enforced at **74 KB gzipped** (105 KB uncompressed) via `size-limit` in CI — budget raised for the 2026 editorial widget refresh + screenshot preview/consent surface + verified-identity display and `screenshotProvider` hook. Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
+~7 KB brotli, enforced at **80 KB gzipped** (105 KB uncompressed) via `size-limit` in CI — budget raised for the 2026 editorial widget refresh + screenshot preview/consent surface + verified-identity display, `screenshotProvider` hook, and the widget theme-token unification (`getWidgetThemeVars` / `build-widget-theme`). Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
 
 ## Quick Start
 

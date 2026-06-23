@@ -1,5 +1,6 @@
 # @mushi-mushi/vue
 
+> **Your AI wrote it. Mushi tells you why it broke.**
 
 Vue 3 plugin for Mushi Mushi bug reporting. **API-only** — captures errors and submits reports but does not include the widget UI. Add `@mushi-mushi/web` alongside this package for the full Shadow DOM widget experience.
 

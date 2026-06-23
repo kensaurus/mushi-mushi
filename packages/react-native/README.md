@@ -1,5 +1,6 @@
 # @mushi-mushi/react-native
 
+> **Your AI wrote it. Mushi tells you why it broke.**
 
 React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — shake-to-report widget, offline queue, and the closed-loop lesson layer for iOS + Android.
 

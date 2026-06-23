@@ -1,5 +1,6 @@
 # @mushi-mushi/capacitor
 
+> **Your AI wrote it. Mushi tells you why it broke.**
 
 Capacitor plugin for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.

@@ -1,5 +1,6 @@
 # @mushi-mushi/react
 
+> **Your AI wrote it. Mushi tells you why it broke.**
 
 React / Next.js SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — the closed-loop bug intelligence layer that turns every user-felt friction point into institutional memory.
 
