@@ -1,5 +1,13 @@
 # @mushi-mushi/node
 
+## 1.1.1
+
+### Patch Changes
+
+- 90bc9d5: Refresh the published README for the rewards webhook receiver (`createMushiRewardsHandler`) with the current Express + Web-standard `fetch` usage examples.
+- Updated dependencies [90bc9d5]
+  - @mushi-mushi/core@1.21.0
+
 ## 1.1.0
 
 ### Minor Changes
