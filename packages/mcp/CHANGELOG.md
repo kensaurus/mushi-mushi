@@ -1,5 +1,16 @@
 # @mushi-mushi/mcp
 
+## 0.17.0
+
+### Minor Changes
+
+- 90bc9d5: Add the shared `@mushi-mushi/mcp/clients` registry — a single source of truth for the supported AI clients (Cursor, VS Code, Windsurf, Cline, Claude Code, Claude Desktop, Zed, …) and how to install the Mushi MCP server into each. Consumed by both the admin console one-click connect flow and the public docs `/connect` landing so the two never drift.
+
+### Patch Changes
+
+- Updated dependencies [90bc9d5]
+  - @mushi-mushi/core@1.21.0
+
 ## 0.16.2
 
 ### Patch Changes
