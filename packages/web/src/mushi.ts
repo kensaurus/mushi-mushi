@@ -40,7 +40,6 @@ import { MushiWidget } from './widget';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
   initRewards,
-  updateRewardsUser,
   enqueue as enqueueActivity,
   getTier as getRewardsTier,
   fetchLeaderboard,
@@ -66,6 +65,17 @@ import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version';
+
+/** Resolve `reports.app_version` from SDK config and captured environment. */
+export function resolveReportAppVersion(
+  config: MushiConfig,
+  environment?: { buildId?: string },
+): string | undefined {
+  if (config.appVersion) return config.appVersion;
+  const vercelId = config.integrations?.vercel?.analyticsId;
+  if (vercelId) return vercelId;
+  return environment?.buildId;
+}
 
 let instance: MushiSDKInstance | null = null;
 
@@ -116,6 +126,8 @@ export class Mushi {
 
 function createInstance(config: MushiConfig): MushiSDKInstance {
   const bootstrapConfig = applyPresetConfig(config);
+  const projectId = bootstrapConfig.projectId;
+  const reporterTokenForProject = () => getReporterToken(projectId);
   let activeConfig: MushiConfig = bootstrapConfig;
   const log = (config.debug ?? false)
     ? createLogger({ scope: 'mushi', level: 'debug', format: 'pretty' })
@@ -387,6 +399,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let pendingElement: { tagName: string; id?: string; className?: string; xpath?: string } | null = null;
   let pendingProactiveTrigger: string | null = null;
   let runtimeConfigLoaded = false;
+  let reporterNotificationsEnabled = true;
+  let reporterPollTimer: ReturnType<typeof setInterval> | null = null;
+  let reporterPollVisibleHandler: (() => void) | null = null;
   let userInfo: { id: string; email?: string; name?: string } | null = null;
   const customMetadata: Record<string, unknown> = {};
   // Sticky tags applied to every subsequent report. Cleared by
@@ -415,6 +430,74 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // Reentrance guard: prevents a user tapping the camera icon while
   // autoCaptureScreenshot is already mid-capture from double-hiding the panel.
   let screenshotCaptureInFlight = false;
+
+  function syncReporterInboxQuiet(): void {
+    void widget.refreshReporterInboxQuiet();
+  }
+
+  function stopReporterInboxPolling(): void {
+    if (reporterPollTimer) clearInterval(reporterPollTimer);
+    reporterPollTimer = null;
+    if (reporterPollVisibleHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', reporterPollVisibleHandler);
+    }
+    reporterPollVisibleHandler = null;
+  }
+
+  function startReporterInboxPolling(): void {
+    stopReporterInboxPolling();
+    if (!reporterNotificationsEnabled) return;
+    const POLL_MS = 60_000;
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      syncReporterInboxQuiet();
+    };
+    reporterPollTimer = setInterval(tick, POLL_MS);
+    if (typeof document !== 'undefined') {
+      reporterPollVisibleHandler = () => {
+        if (document.visibilityState === 'visible') syncReporterInboxQuiet();
+      };
+      document.addEventListener('visibilitychange', reporterPollVisibleHandler);
+    }
+    syncReporterInboxQuiet();
+  }
+
+  function wireRewardsForIdentifiedUser(
+    userId: string,
+    traits?: { email?: string; name?: string; provider?: string },
+  ): void {
+    if (!activeConfig.rewards?.enabled) return;
+    const rewardsCtx: RewardsContext = {
+      client: apiClient,
+      config: activeConfig.rewards,
+      projectId,
+      userId,
+      traits,
+      reporterToken: reporterTokenForProject(),
+    };
+    initRewards(rewardsCtx);
+    if (activeConfig.rewards.showInWidget !== false) {
+      void apiClient.getMyPoints(userId).then((res) => {
+        if (!res.ok) return;
+        const d = res.data as {
+          total_points?: number;
+          tier?: { slug?: string; display_name?: string; points_threshold?: number } | null;
+          next_tier?: { display_name?: string; points_threshold?: number } | null;
+          report_submit_pts?: number;
+        };
+        widget.setRewardsState({
+          tier: d.tier
+            ? { slug: d.tier.slug ?? 'free', displayName: d.tier.display_name ?? 'Free', pointsThreshold: d.tier.points_threshold ?? 0 }
+            : null,
+          nextTier: d.next_tier
+            ? { displayName: d.next_tier.display_name ?? '', pointsThreshold: d.next_tier.points_threshold ?? 0 }
+            : null,
+          totalPoints: d.total_points ?? 0,
+          pointsForReport: d.report_submit_pts ?? 50,
+        });
+      }).catch(() => { /* non-fatal */ });
+    }
+  }
 
   async function takeScreenshotWithoutChrome(): Promise<string | null> {
     if (screenshotCaptureInFlight) return null;
@@ -597,36 +680,36 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       }
     },
     async onReporterReportsRequest() {
-      const result = await apiClient.listReporterReports(getReporterToken());
+      const result = await apiClient.listReporterReports(getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load reports');
       return result.data?.reports ?? [];
     },
     async onReporterCommentsRequest(reportId) {
-      const result = await apiClient.listReporterComments(reportId, getReporterToken());
+      const result = await apiClient.listReporterComments(reportId, getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load thread');
       return result.data?.comments ?? [];
     },
     async onReporterReply(reportId, body) {
-      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), body);
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(projectId), body);
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not send reply');
     },
     async onReporterFeedback(reportId, signal, note) {
-      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), note ?? '', signal);
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(projectId), note ?? '', signal);
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not send feedback');
       return result.data?.feedback ?? null;
     },
     async onReporterReopen(reportId, note) {
-      const result = await apiClient.reopenReporterReport(reportId, getReporterToken(), note);
+      const result = await apiClient.reopenReporterReport(reportId, getReporterToken(projectId), note);
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not reopen report');
       return result.data?.outcome ?? null;
     },
     async onFeatureBoardRequest() {
-      const result = await apiClient.listReporterFeatureBoard(getReporterToken());
+      const result = await apiClient.listReporterFeatureBoard(getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not load community ideas');
       return result.data?.tickets ?? [];
     },
     async onFeatureBoardVote(requestId) {
-      const result = await apiClient.voteReporterFeatureBoard(requestId, getReporterToken());
+      const result = await apiClient.voteReporterFeatureBoard(requestId, getReporterToken(projectId));
       if (!result.ok) throw new Error(result.error?.message ?? 'Could not vote');
       return result.data ?? { voted: true, action: 'added' };
     },
@@ -787,17 +870,21 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
+    reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
     if (runtime.enabled === false) {
       activeConfig = bootstrapConfig;
       clearCachedRuntimeConfig(config.projectId);
       syncCaptureModules();
       widget.updateConfig(activeConfig.widget);
+      stopReporterInboxPolling();
       log.debug('Runtime SDK config disabled; using bootstrap config', { version: runtime.version });
       return;
     }
     activeConfig = mergeRuntimeConfig(activeConfig, runtime);
     syncCaptureModules();
     if (runtime.widget) widget.updateConfig(activeConfig.widget);
+    if (reporterNotificationsEnabled) startReporterInboxPolling();
+    else stopReporterInboxPolling();
     log.debug('Applied runtime SDK config', { version: runtime.version });
   }
 
@@ -822,6 +909,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   }
 
   void checkSdkFreshness();
+  startReporterInboxPolling();
 
   log.info('Initialized', { projectId: config.projectId });
 
@@ -937,6 +1025,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       log.warn('Screenshot dropped — could not compress under wire budget');
     }
 
+    const capturedEnvironment = captureEnvironment();
+
     const report: MushiReport = {
       id: newUuid(),
       projectId: config.projectId,
@@ -944,7 +1034,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       ...(userCategory ? { userCategory } : {}),
       description: scrubbedDescription,
       userIntent: intent,
-      environment: captureEnvironment(),
+      environment: capturedEnvironment,
       consoleLogs,
       networkLogs,
       performanceMetrics: activeConfig.capture?.performance === false ? undefined : perfCap?.getMetrics(),
@@ -960,9 +1050,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         ...(sentryCtx?.release ? { sentryRelease: sentryCtx.release } : {}),
       },
       sessionId: getSessionId(),
-      reporterToken: getReporterToken(),
+      reporterToken: getReporterToken(projectId),
       ...(fingerprintHash ? { fingerprintHash } : {}),
-      appVersion: config.integrations?.vercel?.analyticsId,
+      appVersion: resolveReportAppVersion(activeConfig, capturedEnvironment),
       sdkPackage: MUSHI_SDK_PACKAGE,
       sdkVersion: MUSHI_SDK_VERSION,
       proactiveTrigger: pendingProactiveTrigger ?? undefined,
@@ -1065,6 +1155,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
+      syncReporterInboxQuiet();
       // If the server response includes a Cursor agent dispatch (classify-report
       // triggered a cursor_cloud fix via the autofix_agent setting), emit
       // `report:dispatched` so the host page can show a toast notification.
@@ -1233,6 +1324,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       replayCap?.destroy();
       replayCap = null;
       offlineQueue.stopAutoSync();
+      stopReporterInboxPolling();
       detachAutoBreadcrumbs?.();
       detachAutoBreadcrumbs = null;
       breadcrumbs.clear();
@@ -1274,12 +1366,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             ...(sentryCtx.tags ? { tags: scrubTagsForWire(sentryCtx.tags) } : {}),
           }
         : undefined;
+      const capturedEnvironment = captureEnvironment();
       const report: MushiReport = {
         id: newUuid(),
         projectId: config.projectId,
         category,
         description,
-        environment: captureEnvironment(),
+        environment: capturedEnvironment,
         timeline: timelineCap.getEntries(),
         metadata: {
           ...(input.metadata ?? {}),
@@ -1293,20 +1386,39 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         ...(mergedTags && Object.keys(mergedTags).length > 0 ? { tags: mergedTags } : {}),
         ...(sentryCtxScrubbed ? { sentryContext: sentryCtxScrubbed } : {}),
         sessionId: getSessionId(),
-        reporterToken: getReporterToken(),
+        reporterToken: getReporterToken(projectId),
+        appVersion: resolveReportAppVersion(activeConfig, capturedEnvironment),
         sdkPackage: MUSHI_SDK_PACKAGE,
         sdkVersion: MUSHI_SDK_VERSION,
         sentryEventId: sentryCtx?.eventId,
         sentryReplayId: sentryCtx?.replayId,
         createdAt: new Date().toISOString(),
       };
-      emit('report:submitted', { reportId: report.id });
+      let finalReport: MushiReport = report;
+      if (activeConfig.beforeSendFeedback) {
+        try {
+          const hookResult = await Promise.race([
+            Promise.resolve(activeConfig.beforeSendFeedback(report)),
+            new Promise<MushiReport>((resolve) => setTimeout(() => resolve(report), 2000)),
+          ]);
+          if (hookResult === null) {
+            log.info('captureEvent dropped by beforeSendFeedback hook', { reportId: report.id });
+            return null;
+          }
+          finalReport = hookResult;
+        } catch (err) {
+          log.warn('captureEvent beforeSendFeedback threw — sending unmodified report', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      emit('report:submitted', { reportId: finalReport.id });
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        await offlineQueue.enqueue(report);
-        emit('report:queued', { reportId: report.id });
+        await offlineQueue.enqueue(finalReport);
+        emit('report:queued', { reportId: finalReport.id });
         return null;
       }
-      const res = await apiClient.submitReport(report);
+      const res = await apiClient.submitReport(finalReport);
       if (res.ok) {
         emit('report:sent', { reportId: res.data?.reportId });
         try {
@@ -1316,8 +1428,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         }
         return res.data?.reportId ?? null;
       }
-      await offlineQueue.enqueue(report);
-      emit('report:failed', { reportId: report.id, error: res.error });
+      await offlineQueue.enqueue(finalReport);
+      emit('report:failed', { reportId: finalReport.id, error: res.error });
       return null;
     },
 
@@ -1373,48 +1485,16 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       });
 
       // Wire rewards program when enabled
-      if (activeConfig.rewards?.enabled) {
-        const rewardsCtx: RewardsContext = {
-          client: apiClient,
-          config: activeConfig.rewards,
-          projectId: bootstrapConfig.projectId,
-          userId,
-          traits: traits
-            ? { email: traits.email as string | undefined, name: traits.name as string | undefined, provider: traits.provider as string | undefined }
-            : undefined,
-        };
-        if (userInfo.id === userId) {
-          // First identify → full init
-          initRewards(rewardsCtx);
-        } else {
-          // Already initialized; just update user context
-          updateRewardsUser(userId, rewardsCtx.traits);
-        }
-
-        // Fetch reputation to hydrate the in-widget rewards nudge and success
-        // points display. Fire-and-forget: never blocks the identify call.
-        if (activeConfig.rewards.showInWidget !== false) {
-          void apiClient.getMyPoints(userId).then((res) => {
-            if (!res.ok) return;
-            const d = res.data as {
-              total_points?: number;
-              tier?: { slug?: string; display_name?: string; points_threshold?: number } | null;
-              next_tier?: { display_name?: string; points_threshold?: number } | null;
-              report_submit_pts?: number;
-            };
-            widget.setRewardsState({
-              tier: d.tier
-                ? { slug: d.tier.slug ?? 'free', displayName: d.tier.display_name ?? 'Free', pointsThreshold: d.tier.points_threshold ?? 0 }
-                : null,
-              nextTier: d.next_tier
-                ? { displayName: d.next_tier.display_name ?? '', pointsThreshold: d.next_tier.points_threshold ?? 0 }
-                : null,
-              totalPoints: d.total_points ?? 0,
-              pointsForReport: d.report_submit_pts ?? 50,
-            });
-          }).catch(() => { /* non-fatal */ });
-        }
-      }
+      wireRewardsForIdentifiedUser(
+        userId,
+        traits
+          ? {
+              email: traits.email as string | undefined,
+              name: traits.name as string | undefined,
+              provider: traits.provider as string | undefined,
+            }
+          : undefined,
+      );
     },
 
     identifyWithToken(token) {
@@ -1432,6 +1512,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           widget.setIdentifiedUser(
             (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
           );
+          wireRewardsForIdentifiedUser(userInfo.id, {
+            email: userInfo.email,
+            name: userInfo.name,
+          });
         }
         breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken()' });
       } else {
@@ -1513,31 +1597,31 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     // ─── Reporter API (cross-platform) ────────────────────────────────
 
     async listMyReports(): Promise<MushiReporterReport[]> {
-      const result = await apiClient.listReporterReports(getReporterToken());
+      const result = await apiClient.listReporterReports(getReporterToken(projectId));
       if (!result.ok) return [];
       return result.data?.reports ?? [];
     },
 
     async listMyComments(reportId: string): Promise<MushiReporterComment[]> {
-      const result = await apiClient.listReporterComments(reportId, getReporterToken());
+      const result = await apiClient.listReporterComments(reportId, getReporterToken(projectId));
       if (!result.ok) return [];
       return result.data?.comments ?? [];
     },
 
     async replyToReport(reportId: string, body: string): Promise<MushiReporterComment | null> {
-      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), body);
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(projectId), body);
       if (!result.ok) return null;
       return result.data?.comment ?? null;
     },
 
     async submitFeedbackSignal(reportId: string, signal: string, note?: string): Promise<Record<string, unknown> | null> {
-      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(), note ?? '', signal);
+      const result = await apiClient.replyToReporterReport(reportId, getReporterToken(projectId), note ?? '', signal);
       if (!result.ok) return null;
       return result.data?.feedback ?? null;
     },
 
     async reopenReport(reportId: string, note?: string): Promise<Record<string, unknown> | null> {
-      const result = await apiClient.reopenReporterReport(reportId, getReporterToken(), note);
+      const result = await apiClient.reopenReporterReport(reportId, getReporterToken(projectId), note);
       if (!result.ok) return null;
       return result.data?.outcome ?? null;
     },

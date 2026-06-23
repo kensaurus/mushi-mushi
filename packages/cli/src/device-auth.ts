@@ -1,34 +1,6 @@
 /**
  * FILE: packages/cli/src/device-auth.ts
- * PURPOSE: Reusable RFC 8628 (OAuth 2.0 Device Authorization Grant) client for
- *          zero-copy-paste browser sign-in. Shared by `mushi login`,
- *          `mushi init` / `npx mushi-mushi`, and `mushi project create` so the
- *          "sign in with your browser" path is implemented exactly once.
- *
- * OVERVIEW:
- * - `startDeviceAuth()`   — POST /v1/cli/auth/device/start → device + user codes.
- * - `pollDeviceToken()`   — single poll; returns a discriminated outcome.
- * - `waitForCliToken()`   — poll loop that resolves the one-time CLI token.
- * - `listProjects()`      — GET  /v1/cli/projects (CLI-token auth).
- * - `createProject()`     — POST /v1/cli/projects (auto-mints a report:write key).
- * - `mintProjectKey()`    — POST /v1/cli/projects/:id/keys for an existing project.
- *
- * DEPENDENCIES:
- * - The Mushi backend `cli-auth.ts` routes (already deployed to Mushi Cloud).
- *
- * USAGE:
- * - Each command keeps its own terminal UI (clack for the wizard, readline for
- *   `mushi login`) and calls these typed primitives for the network layer.
- *
- * TECHNICAL DETAILS:
- * - The device_code is the secret the CLI polls with; the user_code is the
- *   short code shown in both the terminal and the browser approval page.
- * - The token endpoint returns the raw CLI token exactly once (RFC 8628 §3.5);
- *   callers must persist anything derived from it immediately.
- *
- * NOTES:
- * - Every request carries a 15 s timeout so a hung network never wedges setup.
- * - `waitForCliToken` accepts injectable `sleep`/`now` for deterministic tests.
+ * PURPOSE: RFC 8628 device-auth client for zero-copy-paste browser sign-in and project/key minting.
  */
 
 const DEVICE_FETCH_TIMEOUT_MS = 15_000

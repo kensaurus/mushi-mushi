@@ -65,6 +65,7 @@ import { markJudgeBatchSeen } from '../lib/judgeFreshness'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
+import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 
 interface LlmRecent {
   function_name: string
@@ -165,6 +166,14 @@ function resolveHealthTab(value: string | null): HealthTabId {
 }
 
 export function HealthPage() {
+  const [hubParams] = useSearchParams()
+  if (hubParams.get('hub') === 'check') {
+    return <CheckVerificationHub />
+  }
+  return <HealthPageContent />
+}
+
+function HealthPageContent() {
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)

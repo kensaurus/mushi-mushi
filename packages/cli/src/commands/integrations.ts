@@ -35,7 +35,7 @@ integrations
     console.log('\nIntegrations:\n')
     for (const row of rows) {
       const icon = icons[row.kind] ?? '🔌'
-      const statusIcon = row.status === 'ok' ? '✅' : row.status === 'error' ? '❌' : '⚪'
+      const statusIcon = row.status === 'ok' ? 'OK' : row.status === 'error' ? 'FAIL' : 'SKIP'
       console.log(`  ${icon}  ${row.kind.padEnd(20)} ${statusIcon}  ${row.detail ?? ''}`)
     }
     console.log()
@@ -60,8 +60,8 @@ integrations
     if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
     const probeOk = result.data?.status === 'ok'
     console.log(probeOk
-      ? `✅  ${kind} integration is healthy${result.data.detail ? ': ' + result.data.detail : ''}`
-      : `❌  ${kind} integration check failed${result.data.detail ? ': ' + result.data.detail : ''}`,
+      ? `OK   ${kind} integration is healthy${result.data.detail ? ': ' + result.data.detail : ''}`
+      : `FAIL ${kind} integration check failed${result.data.detail ? ': ' + result.data.detail : ''}`,
     )
     if (!probeOk) process.exit(1)
   })
@@ -86,11 +86,11 @@ slack
     if (!result.ok) { console.error('Request failed:', result.error); process.exit(1) }
     if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
     if (result.data?.status === 'ok') {
-      console.log('✅  Slack connected')
+      console.log('OK   Slack connected')
       if (result.data.detail) console.log(`    ${result.data.detail}`)
       console.log('\n    To change the channel or notification prefs, visit /integrations in the Mushi console.')
     } else {
-      console.log('⚪  Slack not connected')
+      console.log('SKIP Slack not connected')
       console.log('    Visit /integrations in the Mushi console and click "Add to Slack".')
     }
   })
@@ -111,9 +111,9 @@ slack
     if (!result.ok) { console.error('Request failed:', result.error); process.exit(1) }
     if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
     if (result.data?.ok) {
-      console.log('✅  Test message sent! Check your Slack channel.')
+      console.log('OK   Test message sent. Check your Slack channel.')
     } else {
-      console.error('❌  Test failed:', result.data?.error ?? 'unknown error')
+      console.error('FAIL Test failed:', result.data?.error ?? 'unknown error')
       process.exit(1)
     }
   })

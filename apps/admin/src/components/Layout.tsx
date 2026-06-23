@@ -7,18 +7,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode, ComponentType } from 'react'
-import type { FeatureFlag } from '../lib/useEntitlements'
+import type { ReactNode } from 'react'
 import {
-  IconDashboard, IconReports, IconStory, IconGraph, IconJudge, IconQuery,
-  IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
-  IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
-  IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
-  IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconEye, IconGit,
-  // unique glyphs for the closed-loop + workspace sections
-  IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
-  IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
-  IconInbox, IconGauge, IconUser, IconExplore, IconChat, IconSkills, IconBolt,
+  IconMenu, IconClose,
+  IconSignOut, IconHealth, IconBell, IconEye,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { renderNavBadge } from '../lib/navBadges'
@@ -31,14 +23,16 @@ import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher, useActiveProjectId } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
+import { buildOperatorNav, CHECK_SUB_GROUPS, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
+import { CHECK_HUB_PATH } from '../lib/navRegistry'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { Tooltip } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { NextBestAction } from './NextBestAction'
-import { PipelineStatusRibbon } from './PipelineStatusRibbon'
 import { DavChromeCoachmark } from './DavChromeCoachmark'
-import { QuickstartMegaCta } from './QuickstartMegaCta'
+import { GlobalStatusStrip } from './GlobalStatusStrip'
+import { ChromeBreadcrumb } from './ChromeBreadcrumb'
 import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
@@ -58,7 +52,6 @@ import { useAskMushiPanel } from '../lib/useAskMushiPanel'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { shouldShowLayoutPageHero } from '../lib/chromeLayers'
-import { shouldShowPipelineRibbonChrome } from '../lib/chromePosture'
 import { resolveLayoutHero } from '../lib/layoutHeroFromStats'
 import { usePageHeroSnapshot } from '../lib/pageHeroSnapshot'
 import { useFaviconBadge } from '../lib/favicon'
@@ -69,185 +62,14 @@ import { RoutePageHelp } from './RoutePageHelp'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
 import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 
-interface NavItem {
-  label: string
-  path: string
-  icon: ComponentType<{ className?: string }>
-  /** Quickstart mode label override. Quickstart hides PDCA jargon
-   *  entirely and uses verb-led labels ("Bugs to fix" instead of
-   *  "Reports"). When omitted, the route is hidden from the Quickstart
-   *  sidebar regardless of `beginner` / advanced status. */
-  quickstartLabel?: string
-  /** When true, the item is visible in beginner mode. Beginner mode shows a
-   *  curated 9-page loop; everything else is hidden until the user opts
-   *  into Advanced mode. Routes still resolve in either mode — only the
-   *  sidebar is filtered, so deep links + bookmarks survive. */
-  beginner?: boolean
-  /** When true, the item is gated on `useEntitlements().isSuperAdmin`.
-   *  Operator-only routes like /users are hidden from the sidebar for
-   *  non-operators (the route itself ALSO refuses to render — the
-   *  sidebar gate is just to avoid teasing it). */
-  superAdmin?: boolean
-  /** Plan feature flag — hidden until `useEntitlements().has(flag)` (unless super-admin). */
-  requiresFeature?: FeatureFlag
-  /** When true, this item is also gated on Advanced mode being active in addition to any
-   *  plan flag. Aligns with the README's "gated behind Advanced mode" language for Inventory. */
-  requiresAdvancedMode?: boolean
+interface NavItem extends BuiltNavItem {}
+
+interface NavSection extends Omit<BuiltNavSection, 'id'> {
+  id: BuiltNavSection['id'] | 'quick'
 }
 
-interface NavSection {
-  /** Section title shown in the sidebar header. */
-  title: string
-  /** Single-character PDCA stage badge (P / D / C / A). Omit to hide. */
-  stage?: 'P' | 'D' | 'C' | 'A'
-  /** Hover tooltip explaining what this stage does in the loop. */
-  hint?: string
-  /** Stable id used for collapse persistence. */
-  id: string
-  /** When true, the section starts collapsed and the user must opt in to
-   *  see the items. Used for "Workspace" so first-run users see the loop
-   *  pages first instead of 8 admin destinations. */
-  defaultCollapsed?: boolean
-  items: NavItem[]
-}
-
-// Sidebar is reshaped around the README's PDCA loop instead of jargon
-// buckets (Overview / Pipeline / Operations / Configuration). New users see
-// where each tab lives in the loop and where the bottleneck typically sits.
-// Keep route paths identical — only labels and grouping change so muscle
-// memory + bookmarks survive.
-// Quickstart mode shows the 3-page minimal loop:
-//   Bugs to fix       (/reports)  — verb-led label, no PDCA section
-//   Fixes ready       (/fixes)
-//   Setup             (/onboarding)
-// Beginner mode shows the 9-page linear loop:
-//   Start    → Dashboard, Get started
-//   Plan     → Reports, Graph
-//   Do       → Fixes
-//   Check    → Judge, Health
-//   Act      → Integrations
-//   Workspace→ Settings (collapsed; surfaces only when the user opens it)
-// Advanced mode shows everything below.
-const NAV: NavSection[] = [
-  {
-    id: 'start',
-    title: 'Start here',
-    // Advanced-mode users already know the basics; collapse so the 4 PDCA
-    // groups dominate the sidebar. Beginner/Quickstart still show it first
-    // because the mode-specific NAV projection (see below) overrides this.
-    defaultCollapsed: true,
-    items: [
-      // 2026-05-07 reorder — Get started is the entry point for any operator
-      // who hasn't fully wired the SDK + repo + judge. Until that's done the
-      // dashboard / inbox both just stare back with empty PDCA tiles, so we
-      // pin Get started at the top of the rail. Once setup is complete the
-      // checklist itself collapses to a "Setup complete" hero, and Dashboard
-      // / Inbox become the obvious next stops.
-      { label: 'Get started', path: '/onboarding', icon: IconBolt,        beginner: true, quickstartLabel: 'Setup' },
-      { label: 'Connect & Update', path: '/connect', icon: IconBolt, beginner: true, quickstartLabel: 'Connect' },
-      { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true, quickstartLabel: 'Home' },
-      // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
-      // "what should I do next?" across the whole PDCA surface. Pinned above
-      // the PDCA sections so Advanced users land on it the same way beginner
-      // users land on the Dashboard.
-      { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'Support',         path: '/feedback',      icon: IconChat,      beginner: true, quickstartLabel: 'Support' },
-      { label: 'Feature board',  path: '/feature-board', icon: IconInbox,     beginner: false },
-    ],
-  },
-  {
-    id: 'plan',
-    title: 'Plan — capture & classify',
-    stage: 'P',
-    hint: 'Inbound user-felt bugs land here, get classified, deduped, and prioritised.',
-    items: [
-      { label: 'Reports',     path: '/reports',     icon: IconReports, beginner: true, quickstartLabel: 'Bugs to fix' },
-      { label: 'Content QA',  path: '/content',     icon: IconQaCoverage },
-      {
-        label: 'User stories',
-        path: '/inventory',
-        icon: IconStory,
-        beginner: true,
-        quickstartLabel: 'User stories',
-        requiresFeature: 'inventory_v2',
-        requiresAdvancedMode: true,
-      },
-      { label: 'Graph',       path: '/graph',       icon: IconGraph,   beginner: true },
-      { label: 'Explore',     path: '/explore',     icon: IconExplore, beginner: true },
-      { label: 'Queue',       path: '/queue',       icon: IconQueue },
-      { label: 'Anti-Gaming', path: '/anti-gaming', icon: IconShield },
-    ],
-  },
-  {
-    id: 'do',
-    title: 'Do — dispatch fixes',
-    stage: 'D',
-    hint: 'Turn classified reports into draft pull requests. Tune the prompt that does it.',
-    items: [
-      { label: 'Fixes',      path: '/fixes',      icon: IconFixes,       beginner: true, quickstartLabel: 'Fixes ready' },
-      { label: 'Repo',       path: '/repo',       icon: IconGit },
-      { label: 'Prompt Lab', path: '/prompt-lab', icon: IconFineTuning },
-    ],
-  },
-  {
-    id: 'check',
-    title: 'Check — verify quality',
-    stage: 'C',
-    hint: 'Independently grade the LLM\u2019s work and the system\u2019s own health.',
-    items: [
-      { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
-      { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
-      { label: 'Full-Stack Audit', path: '/fullstack-audit', icon: IconAudit,  beginner: true },
-      { label: 'Code Health',  path: '/code-health',  icon: IconGauge,        beginner: true, quickstartLabel: 'Code health' },
-      { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconQaCoverage,   beginner: true },
-      { label: 'Lessons',      path: '/lessons',      icon: IconLessons,      beginner: true },
-      { label: 'Drift',        path: '/drift',        icon: IconDrift,        beginner: true },
-      { label: 'Experiments',  path: '/experiments',  icon: IconExperiments },
-      { label: 'Anomalies',    path: '/anomalies',    icon: IconAnomalies,    beginner: true },
-      { label: 'Releases',     path: '/releases',     icon: IconReleases },
-      { label: 'Intelligence', path: '/intelligence', icon: IconIntelligence },
-      { label: 'Research',     path: '/research',     icon: IconGlobe },
-    ],
-  },
-  {
-    id: 'act',
-    title: 'Act — integrate & scale',
-    stage: 'A',
-    hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
-    items: [
-      { label: 'Iterate',       path: '/iterate',       icon: IconIterate,      beginner: true },
-      { label: 'Skill Pipelines', path: '/skills',     icon: IconSkills,       beginner: true, quickstartLabel: 'Skill catalog' },
-      { label: 'Integrations',  path: '/integrations/config',  icon: IconIntegrations, beginner: true },
-      { label: 'MCP',           path: '/mcp',           icon: IconMcp,          beginner: true, quickstartLabel: 'Agent help' },
-      { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
-      { label: 'Notifications', path: '/notifications', icon: IconBell },
-    ],
-  },
-  {
-    id: 'workspace',
-    title: 'Workspace',
-    hint: 'Account, identity, and admin tools — outside the bug-fix loop.',
-    defaultCollapsed: true,
-    items: [
-      { label: 'Projects',   path: '/projects',   icon: IconProjects },
-      { label: 'Members',    path: '/organization/members', icon: IconMembers, requiresFeature: 'teams' },
-      { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
-      { label: 'Rewards',    path: '/rewards',    icon: IconRewards },
-      { label: 'LLM Cost',   path: '/cost',       icon: IconGauge },
-      { label: 'Billing',    path: '/billing',    icon: IconBilling },
-      { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
-      { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
-      { label: 'Audit Log',  path: '/audit',      icon: IconAudit, requiresFeature: 'audit_log' },
-      { label: 'Storage',    path: '/storage',    icon: IconStorage },
-      { label: 'Query',      path: '/query',      icon: IconQuery },
-      // Phase 2c (2026-04-27) — operator-only directory. Hidden from
-      // the sidebar for everyone except super-admins (kensaurus@…).
-      // The page itself re-checks the role + the gateway returns 404
-      // for non-operators, so this is just a usability gate.
-      { label: 'Users',      path: '/users',      icon: IconUser, superAdmin: true },
-    ],
-  },
-]
+// Sidebar is reshaped around the README's PDCA loop — metadata from navRegistry.ts.
+const NAV: NavSection[] = buildOperatorNav()
 
 interface PageHeroFallback {
   title: string
@@ -911,7 +733,14 @@ export function Layout({ children }: { children: ReactNode }) {
       .map(s => ({
         ...s,
         defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
-        items: s.items.filter(visibleByRole).filter(visibleByFeature).filter(i => i.beginner),
+        items: s.items
+          .filter(visibleByRole)
+          .filter(visibleByFeature)
+          .filter(i => {
+            if (s.id === 'check') return i.checkBeginnerCore === true
+            if (s.id === 'plan') return i.beginner === true && !i.requiresAdvancedMode
+            return i.beginner === true
+          }),
       }))
       .filter(s => s.items.length > 0)
   } else {
@@ -962,6 +791,32 @@ export function Layout({ children }: { children: ReactNode }) {
       writeCollapsedState(next)
       return next
     })
+  }
+
+  const CHECK_SUB_GROUP_ORDER = ['quality-gates', 'system-health', 'release-intel'] as const
+
+  function renderNavLink(item: NavItem, compact: boolean) {
+    const { label, path, icon: Icon, requiresFeature } = item
+    const active = isActive(pathname, path)
+    const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
+    return (
+      <Link
+        key={path}
+        to={path}
+        onClick={() => setMobileOpen(false)}
+        aria-current={active ? 'page' : undefined}
+        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
+        title={compact ? label : undefined}
+        aria-label={compact ? label : undefined}
+      >
+        <Icon className="nav-link-icon" />
+        {!compact && <span>{label}</span>}
+        {!compact && gated && requiresFeature && (
+          <UpgradePill flag={requiresFeature} className="ml-auto" />
+        )}
+        {renderNavBadge(path, navCounts, { criticalReports30d })}
+      </Link>
+    )
   }
 
   // `compact` collapses the sidebar to an icon rail (~48px wide) — same
@@ -1035,43 +890,34 @@ export function Layout({ children }: { children: ReactNode }) {
               )}
               {itemsVisible && (
                 <div className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}>
-                  {section.items.map(({ label, path, icon: Icon, requiresFeature }) => {
-                    const active = isActive(pathname, path)
-                    // Treat the item as gated when it declares a feature
-                    // flag, the user's plan does NOT have it, and the user
-                    // isn't a super-admin (super-admins see everything).
-                    // The pill links to /billing with the feature focused
-                    // — clicking the row itself still goes to the page,
-                    // which renders its own UpgradePrompt.
-                    const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
-                    return (
-                      <Link
-                        key={path}
-                        to={path}
-                        onClick={() => setMobileOpen(false)}
-                        aria-current={active ? 'page' : undefined}
-                        // In compact mode, force the label off and let the
-                        // browser native `title` tooltip surface it on hover —
-                        // matches the Linear collapsed-sidebar pattern. The
-                        // base `.nav-link` styles still drive the active
-                        // indicator + hover bg + focus ring so we don't
-                        // double-define them here.
-                        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
-                        title={compact ? label : undefined}
-                        aria-label={compact ? label : undefined}
-                      >
-                        <Icon className="nav-link-icon" />
-                        {!compact && <span>{label}</span>}
-                        {!compact && gated && requiresFeature && (
-                          <UpgradePill
-                            flag={requiresFeature}
-                            className="ml-auto"
-                          />
-                        )}
-                        {renderNavBadge(path, navCounts, { criticalReports30d })}
-                      </Link>
-                    )
-                  })}
+                  {section.id === 'check' && isAdvanced && !compact
+                    ? CHECK_SUB_GROUP_ORDER.map((subId) => {
+                        const subItems = section.items.filter((i) => i.checkSubGroup === subId)
+                        if (subItems.length === 0) return null
+                        const sub = CHECK_SUB_GROUPS[subId]
+                        return (
+                          <div key={subId} className="space-y-0.5">
+                            <p
+                              className="px-2 pt-1.5 pb-0.5 text-3xs font-medium uppercase tracking-wide text-fg-faint"
+                              title={sub.hint}
+                            >
+                              {sub.title}
+                            </p>
+                            {subItems.map((item) => renderNavLink(item, compact))}
+                          </div>
+                        )
+                      })
+                    : section.items.map((item) => renderNavLink(item, compact))}
+                  {section.id === 'check' && isBeginner && !compact ? (
+                    <Link
+                      to={CHECK_HUB_PATH}
+                      onClick={() => setMobileOpen(false)}
+                      className="nav-link text-fg-muted hover:text-fg-secondary"
+                    >
+                      <IconHealth className="nav-link-icon opacity-70" />
+                      <span>More verification tools →</span>
+                    </Link>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -1238,6 +1084,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
         {/* Desktop sub-header — search left; controls + switchers right */}
         {!focusMode && <header className={`hidden md:flex items-center gap-3 px-5 py-1.5 border-b border-edge/40 ${appChromeHeaderClass}`}>
+          <ChromeBreadcrumb />
           <div className="min-w-0 shrink-0">
             <SearchButton />
           </div>
@@ -1292,15 +1139,8 @@ export function Layout({ children }: { children: ReactNode }) {
               className={`${PAGE_SHELL_CLASS[pageShellWidth]} motion-safe:transition-[max-width,padding] motion-safe:duration-base`}
               data-page-width={pageShellWidth}
             >
-              {!focusMode && <QuickstartMegaCta />}
-              {!focusMode && (
-                <>
-                  {shouldShowPipelineRibbonChrome(isAdvanced, pathname) ? (
-                    <PipelineStatusRibbon />
-                  ) : null}
-                  <DavChromeCoachmark />
-                </>
-              )}
+              {!focusMode && <GlobalStatusStrip />}
+              {!focusMode && <DavChromeCoachmark />}
               {!focusMode && <NextBestAction />}
               <ScrollToHashAnchor />
               {!focusMode && <RoutePageHelp />}

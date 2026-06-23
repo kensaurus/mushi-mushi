@@ -26,6 +26,10 @@ interface FilterChipProps {
   hint?: string
   /** Icon rendered left of the label. */
   icon?: ReactNode
+  /** `lg` — 44px touch target + rounded-lg (Connect client picker). */
+  size?: 'sm' | 'lg'
+  /** Use radio semantics inside a `role="group"` picker rail. */
+  selectionRole?: 'toggle' | 'radio'
 }
 
 const CHIP_ACTIVE: Record<FilterChipTone, string> = {
@@ -56,15 +60,34 @@ const CHIP_IDLE: Record<FilterChipTone, string> = {
  * the chip into the tone colour so the user always sees which filter
  * is on, even at a glance.
  */
-export function FilterChip({ label, count, active, onClick, tone = 'default', hint, icon }: FilterChipProps) {
+export function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+  tone = 'default',
+  hint,
+  icon,
+  size = 'sm',
+  selectionRole = 'toggle',
+}: FilterChipProps) {
   const classes = active ? CHIP_ACTIVE[tone] : CHIP_IDLE[tone]
+  const sizeClasses =
+    size === 'lg'
+      ? 'min-h-[44px] rounded-lg px-3 py-2 text-xs'
+      : 'rounded-full px-2.5 py-1 text-2xs'
+  const ariaProps =
+    selectionRole === 'radio'
+      ? { role: 'radio' as const, 'aria-checked': active }
+      : { 'aria-pressed': active }
+
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-pressed={active}
+      {...ariaProps}
       title={hint}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${classes}`}
+      className={`inline-flex min-w-0 items-center gap-1.5 border font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${sizeClasses} ${classes}`}
     >
       {icon && <span aria-hidden className="inline-flex items-center">{icon}</span>}
       <span>{label}</span>
@@ -79,6 +102,68 @@ export function FilterChip({ label, count, active, onClick, tone = 'default', hi
         </span>
       )}
     </button>
+  )
+}
+
+/* ── DisclosurePanel ────────────────────────────────────────────────────── */
+
+interface DisclosurePanelProps {
+  title: ReactNode
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: ReactNode
+  /** Trailing affordance beside the title (status dots, badges). */
+  trailing?: ReactNode
+}
+
+/**
+ * Collapsible chrome shell — rounded-md border, brand focus ring, chevron icons.
+ * Used by Connect hub endpoint-mismatch detail and similar compact readouts.
+ */
+export function DisclosurePanel({
+  title,
+  defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
+  children,
+  trailing,
+}: DisclosurePanelProps) {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next)
+    onOpenChange?.(next)
+  }
+
+  return (
+    <div className="rounded-md border border-edge-subtle bg-surface">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between gap-3 rounded-md px-4 py-3 text-sm font-medium text-fg hover:bg-surface-hover motion-safe:transition-colors focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {title}
+          {trailing}
+        </span>
+        <span className="shrink-0 text-fg-muted" aria-hidden>
+          {open ? (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M2.5 7.5L6 4l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M2.5 4.5L6 8l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-edge-subtle px-4 pb-4 pt-3">{children}</div>
+      )}
+    </div>
   )
 }
 

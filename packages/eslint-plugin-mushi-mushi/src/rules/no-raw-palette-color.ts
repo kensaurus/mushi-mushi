@@ -113,6 +113,7 @@ const rule: Rule.RuleModule = {
       filename.includes('apps/admin/src') ||
       filename.includes('packages/marketing-ui/src') ||
       filename.includes('apps/docs/components') ||
+      filename.includes('apps/docs/app/connect') ||
       filename.includes('apps/testers')
     if (!isGuarded) return {}
 

@@ -92,8 +92,9 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
   const heroIsBacklog = counts.openBacklog > 0
 
   return (
-    <MetricStrip cols={4} ariaLabel="Dashboard key metrics" className="mb-3" stagger>
+    <MetricStrip cols={4} ariaLabel="Dashboard key metrics" className="mb-3" stagger panel>
       <KpiTile
+        density="flat"
         label="Triage backlog"
         value={counts.openBacklog}
         sublabel="open > 1h"
@@ -107,6 +108,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         variant={heroIsBacklog ? 'primary' : 'default'}
       />
       <KpiTile
+        density="flat"
         label="Reports (14d)"
         value={counts.reports14d}
         sublabel="all severities"
@@ -120,6 +122,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         variant={heroIsBacklog ? 'default' : 'primary'}
       />
       <KpiTile
+        density="flat"
         label="Auto-fix PRs"
         value={counts.openPrs}
         sublabel={`${fixSummary.inProgress} in progress · ${fixSummary.failed} failed`}
@@ -132,6 +135,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay, llmByDay = [], pdcaSt
         meaning="Open PRs Mushi has dispatched on your behalf. The sparkline shows how many fixes were dispatched each day."
       />
       <KpiTile
+        density="flat"
         label="LLM tokens (14d)"
         value={formatTokens(counts.llmTokens14d)}
         sublabel={`${counts.llmCalls14d} calls · ${counts.llmFailures14d} failed`}

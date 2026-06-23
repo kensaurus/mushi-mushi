@@ -615,7 +615,7 @@ export function InventoryPage() {
                 Ingest selected file
               </Btn>
             </div>
-            <pre className="text-2xs bg-surface-overlay/50 p-3 rounded-md overflow-auto max-h-[32rem] font-mono">
+            <pre className="mushi-code-block mushi-code-body text-2xs p-3 rounded-md overflow-auto max-h-[32rem] font-mono">
               {yamlDraft ?? snapshot?.raw_yaml ?? '—'}
             </pre>
             {snapshot?.validation_errors && Array.isArray(snapshot.validation_errors) && snapshot.validation_errors.length > 0 && (

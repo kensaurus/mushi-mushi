@@ -93,7 +93,7 @@ export const COPY: CopyRegistry = {
     '/dashboard': {
       title: 'Home',
       description: 'What needs your attention right now — waiting bugs, fixes in progress, and setup steps left.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         backlog: 'Waiting',
         reports: 'Bugs this week',
@@ -113,7 +113,7 @@ export const COPY: CopyRegistry = {
       help: {
         title: 'About your home screen',
         whatIsIt:
-          'A single place to see whether bugs are waiting, fixes are running, or setup still needs a step — before you dive into Reports or Fixes.',
+          'A single place to see whether bugs are waiting, fixes are running, or setup still needs a step — before opening Reports or Fixes.',
         useCases: [
           'Start every session here to see what actually needs you',
           'Jump straight to the worst backlog or failed fix',
@@ -125,8 +125,8 @@ export const COPY: CopyRegistry = {
     },
     '/inbox': {
       title: 'Inbox',
-      description: 'Everything waiting for your attention right now. Start here each session.',
-      sections: { snapshot: 'At a glance' },
+      description: 'Open items across Plan, Do, Check, and Act — start here each session.',
+      sections: { snapshot: 'Summary' },
       statLabels: {
         open: 'Waiting',
         clear: 'Done',
@@ -191,7 +191,7 @@ export const COPY: CopyRegistry = {
     '/onboarding': {
       title: 'Setup',
       description: 'Three steps: create your app, send a test bug, paste the widget snippet.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         required: 'Progress',
         sdk: 'Widget',
@@ -219,7 +219,7 @@ export const COPY: CopyRegistry = {
     '/inbox': {
       title: 'Your to-do list',
       description: 'Start here every session — banner shows what needs you before you open the queue.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         open: 'Open',
         clear: 'Clear',
@@ -301,7 +301,7 @@ export const COPY: CopyRegistry = {
       title: 'Map your app screens',
       description:
         'Banner + INVENTORY SNAPSHOT first — Summary for posture, User stories, Gates, Discovery, or Yaml tabs.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         verified: 'Verified',
         regressed: 'Regressed',
@@ -358,7 +358,7 @@ export const COPY: CopyRegistry = {
       title: 'Look up fixes online',
       description:
         'Banner + RESEARCH SNAPSHOT first — Summary for posture, Search to query Firecrawl, History for sessions.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         sessions: 'Sessions',
         snippets: 'Snippets',
@@ -397,7 +397,7 @@ export const COPY: CopyRegistry = {
       title: 'Your GitHub branches',
       description:
         'Banner + REPO SNAPSHOT first — Summary for connection health, Branches for PR status, Activity for the live event log.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         branches: 'Branches',
         prOpen: 'PRs open',
@@ -479,7 +479,7 @@ export const COPY: CopyRegistry = {
       title: 'Your weekly bug summary',
       description:
         'Banner + INTELLIGENCE SNAPSHOT first — Summary for posture, Reports for digests, Pipeline for jobs and findings.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         digests: 'Digests',
         activeJobs: 'Active jobs',
@@ -547,7 +547,7 @@ export const COPY: CopyRegistry = {
       title: 'Add webhook plugins',
       description:
         'Banner + MARKETPLACE SNAPSHOT first — Summary for posture, Browse to install, Deliveries to debug webhooks.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         catalog: 'Catalog',
         installed: 'Installed',
@@ -585,7 +585,7 @@ export const COPY: CopyRegistry = {
       title: 'Connect your AI editor',
       description:
         'Banner + MCP SNAPSHOT first — Summary for posture, Setup for snippet, Catalog for tools and resources.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         activeKeys: 'Active keys',
         mcpRead: 'MCP read',
@@ -623,7 +623,7 @@ export const COPY: CopyRegistry = {
       title: 'Catch bugs before users do',
       description:
         'Banner + QA SNAPSHOT first — Summary for posture, Stories for all tests, Failing for sub-80% pass rate.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         stories: 'Stories',
         passing: 'Passing',
@@ -689,7 +689,7 @@ export const COPY: CopyRegistry = {
       title: 'Learn from past bugs',
       description:
         'Banner + LESSONS SNAPSHOT first — Summary for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         activeLessons: 'Active lessons',
         critical: 'Critical',
@@ -727,7 +727,7 @@ export const COPY: CopyRegistry = {
       title: 'Tell users what shipped',
       description:
         'Banner + RELEASES SNAPSHOT first — Summary for posture, Drafts/Published to manage, Draft to generate with AI.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         drafts: 'Drafts',
         published: 'Published',
@@ -766,7 +766,7 @@ export const COPY: CopyRegistry = {
       title: 'Auto-improve pages',
       description:
         'Banner + PDCA SNAPSHOT first — Summary for posture, Runs to trigger loops, New Run to queue.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         total: 'Total runs',
         active: 'Active',
@@ -803,7 +803,7 @@ export const COPY: CopyRegistry = {
       title: 'Catch contract drift',
       description:
         'Banner + DRIFT SNAPSHOT first — Summary for posture, Findings to triage, Snapshots for history, Scanner to run walker.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         openFindings: 'Open findings',
         critical: 'Critical',
@@ -842,7 +842,7 @@ export const COPY: CopyRegistry = {
       title: 'Run A/B tests',
       description:
         'Banner + EXPERIMENTS SNAPSHOT first — Summary for posture, Experiments to launch/monitor, New to create variants.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         total: 'Total',
         running: 'Running',
@@ -880,7 +880,7 @@ export const COPY: CopyRegistry = {
       title: 'Catch metric spikes',
       description:
         'Banner + ANOMALIES SNAPSHOT first — Summary for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         open: 'Open',
         releaseRegressions: 'Release regressions',
@@ -918,7 +918,7 @@ export const COPY: CopyRegistry = {
       title: 'What AI calls cost',
       description:
         'Banner + SPEND SNAPSHOT first — Summary for trend, Breakdown by model, Raw log to audit individual calls.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         total: 'Total logged',
         day24h: 'Last 24 hours',
@@ -956,7 +956,7 @@ export const COPY: CopyRegistry = {
       title: 'Updates for bug reporters',
       description:
         'Banner + NOTIFICATIONS SNAPSHOT first — Summary for posture, Inbox to debug payloads, Setup for pipeline checklist.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         total: 'Total',
         unread: 'Unread',
@@ -992,7 +992,7 @@ export const COPY: CopyRegistry = {
       title: 'Your plan & usage',
       description:
         'Banner + BILLING SNAPSHOT first — Summary for usage + invoices, Plans to compare tiers, Support for billing tickets.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         plan: 'Plan',
         reports: 'Reports · period',
@@ -1042,7 +1042,7 @@ export const COPY: CopyRegistry = {
       title: 'Map your codebase',
       description:
         'Banner + EXPLORE SNAPSHOT first — Summary for posture, Understand (Ask/Tour/Domains/Knowledge), Map (Graph/Layers), Search, Index for debug.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         files: 'Files',
         uiLayer: 'UI layer',
@@ -1174,7 +1174,7 @@ export const COPY: CopyRegistry = {
     '/dashboard': {
       title: 'Your bug-fix loop',
       description: 'Live workspace snapshot — banner and KPI strip tell you what needs action before you drill into loop, metrics, or health.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         backlog: 'Backlog',
         reports: 'Reports 14d',
@@ -1214,7 +1214,7 @@ export const COPY: CopyRegistry = {
       title: 'Bugs your users felt',
       description:
         'Banner + TRIAGE SNAPSHOT first — then Overview for posture, Queue to triage, Severity for 14d trends.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         total14d: 'Last 14 days',
         untriaged: 'Needs review',
@@ -1251,7 +1251,7 @@ export const COPY: CopyRegistry = {
     '/graph': {
       title: 'How bugs connect',
       description: 'See where bugs cluster — red banner means a hotspot needs attention.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         nodes: 'Spots',
         edges: 'Links',
@@ -1288,7 +1288,7 @@ export const COPY: CopyRegistry = {
       title: 'Fixes ready to review',
       description:
         'Banner + FIXES SNAPSHOT first — Summary for posture, Pipeline for in-flight dispatches, Attempts for draft PRs.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         totalAttempts: 'Fixes (30 days)',
         completed: 'Completed',
@@ -1329,7 +1329,7 @@ export const COPY: CopyRegistry = {
       title: 'Is the classifier getting smarter?',
       description:
         'Banner + JUDGE SNAPSHOT first — then Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         week: 'This week',
         total: 'Total graded',
@@ -1370,7 +1370,7 @@ export const COPY: CopyRegistry = {
       title: 'Is the AI brain healthy?',
       description:
         'Banner + HEALTH SNAPSHOT first — then Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         calls: 'AI calls',
         errors: 'Error rate',
@@ -1465,7 +1465,7 @@ export const COPY: CopyRegistry = {
       title: 'Tune your project',
       description:
         'Banner + SETTINGS SNAPSHOT first — General for classifier knobs, LLM keys for BYOK, Health for pipeline smoke test.',
-      sections: { snapshot: 'At a glance' },
+      sections: { snapshot: 'Summary' },
       statLabels: {
         byok: 'API keys',
         sdk: 'Reporter widget',

@@ -1,25 +1,6 @@
 /**
  * FILE: packages/cli/src/auth-ui.ts
- * PURPOSE: Shared browser sign-in UX helpers for the anti-paste auth banner.
- *
- * OVERVIEW:
- *   Centralizes the CLI-side messaging for the RFC 8628 device-auth flow so
- *   that `mushi init`, `mushi login`, and `mushi project create` all show the
- *   same clear, numbered instructions — including an explicit "do NOT type in
- *   terminal" guard that prevents the most common user mistake (pasting the
- *   verification code into the shell as a command).
- *
- * USAGE:
- *   import { printAuthBanner, printAuthApproved } from './auth-ui.js'
- *   printAuthBanner(session.user_code, session.verification_uri)
- *   // ... wait for token ...
- *   printAuthApproved()
- *
- * TECHNICAL DETAILS:
- *   - Works with both @clack/prompts surfaces (init wizard) and raw console
- *     surfaces (mushi login, mushi project create).
- *   - Uses box-drawing characters that render on Windows cmd, PowerShell,
- *     Git Bash, and POSIX terminals.
+ * PURPOSE: Shared browser sign-in UX helpers for the RFC 8628 device-auth anti-paste banner.
  */
 
 /** Character-safe box top/bottom line (58 chars wide). */

@@ -124,7 +124,7 @@ export function renderNudgeSnippet(opts: NudgeSnippetOptions): string {
     widgetLines.push(`    betaMode: {`)
     widgetLines.push(`      enabled: true,`)
     widgetLines.push(`      label: 'BETA',`)
-    widgetLines.push(`      // changelogItems: [{ version: 'v0.42', date: '${new Date().toISOString().slice(0, 10)}', items: ['…'] }],`)
+    widgetLines.push(`      // changelogItems: [{ version: '1.0.0', date: '${new Date().toISOString().slice(0, 10)}', items: ['Fixed login timeout on slow networks'] }],`)
     widgetLines.push(`    },`)
   }
 

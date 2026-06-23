@@ -3,6 +3,10 @@
  * PURPOSE: Top-of-app strip that sets expectations for beta users and
  *          gives them a one-click way to file a bug or request a feature
  *          via the in-app feedback modal (POST /v1/support/contact).
+ *
+ * Cross-surface note (Option B): admin lime chrome is intentional — it is
+ * operator-console beta signalling, not customer SDK `MushiBannerConfig`.
+ * See docs/admin/SDK-UI-UNIFICATION-DECISIONS.md §2.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -93,23 +97,20 @@ export function BetaBanner() {
 
   return (
     <>
-      {/* Lime-green beta strip: vivid colour so it reads as "live & rough-edged"
-          even against dark or light themes. Height is intentionally tight (py-0.5)
-          so it steals minimal vertical space while still being unmissably loud. */}
       <div
         id={BETA_BANNER_ID}
         ref={bannerRef}
         role="region"
         aria-label="Beta announcement"
-        className="sticky top-0 z-[100] shrink-0 border-b border-lime/40 bg-lime-muted"
+        className="sticky top-0 z-[100] shrink-0 border-b border-edge-subtle bg-surface-raised/95"
       >
-        <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4 sm:py-0.5">
+        <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4">
           <span className="flex min-w-0 items-start gap-2 sm:flex-1 sm:items-center">
-            <span className="inline-flex shrink-0 items-center rounded border border-lime/60 bg-lime/20 px-1.5 py-px font-mono text-3xs font-bold uppercase tracking-[0.18em] text-lime">
+            <span className="inline-flex shrink-0 items-center rounded border border-edge bg-surface-overlay px-1.5 py-px font-mono text-2xs font-medium text-fg-muted">
               Beta
             </span>
-            <span className="min-w-0 truncate text-xs font-medium leading-snug text-lime/80">
-              Mushi-mushi is in active beta — expect rough edges and the occasional rebuild.
+            <span className="min-w-0 truncate text-xs leading-snug text-fg-secondary">
+              Mushi is in active beta — expect rough edges and occasional rebuilds.
             </span>
           </span>
           <nav
@@ -119,33 +120,33 @@ export function BetaBanner() {
             <button
               type="button"
               onClick={() => openFeedback('bug')}
-              className="px-2 py-0.5 font-medium text-lime/90 hover:text-lime transition-colors"
+              className="px-2 py-0.5 font-medium text-fg-secondary hover:text-fg transition-colors"
             >
-              🐛 Report a bug
+              Report a bug
             </button>
-            <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
+            <span aria-hidden="true" className="hidden text-fg-faint select-none sm:inline">|</span>
             <button
               type="button"
               onClick={() => openFeedback('feature')}
-              className="px-2 py-0.5 font-medium text-lime/70 hover:text-lime transition-colors"
+              className="px-2 py-0.5 font-medium text-fg-muted hover:text-fg transition-colors"
             >
               Feature request
             </button>
-            <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
+            <span aria-hidden="true" className="hidden text-fg-faint select-none sm:inline">|</span>
             <Link
               to="/feedback"
-              className="px-2 py-0.5 font-medium text-lime/70 hover:text-lime transition-colors"
+              className="px-2 py-0.5 font-medium text-fg-muted hover:text-fg transition-colors"
             >
               My submissions
             </Link>
-            <span aria-hidden="true" className="hidden text-lime/25 select-none sm:inline">|</span>
+            <span aria-hidden="true" className="hidden text-fg-faint select-none sm:inline">|</span>
             <button
               type="button"
               onClick={handleDismiss}
               aria-label="Dismiss beta banner"
-              className="px-2 py-0.5 font-medium text-lime/50 hover:text-lime/80 transition-colors"
+              className="px-2 py-0.5 font-medium text-fg-faint hover:text-fg-muted transition-colors"
             >
-              ✕
+              Dismiss
             </button>
           </nav>
         </div>

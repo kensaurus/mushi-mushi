@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { loadConfig } from '../config.js';
 import { apiCall } from '../cli-shared.js';
+import { resolveConsoleUrlSync } from '../console-url.js';
 import type { QaStoryRow, QaRunRow } from '../cli-types.js';
 
 export function registerQaCommands(program: Command): void {
@@ -30,10 +31,10 @@ qa
     }
     console.log(`\nQA Stories (${stories.length}):\n`)
     for (const s of stories) {
-      const statusIcon = s.last_run_status === 'passed' ? '✅'
-        : s.last_run_status === 'failed' ? '❌'
-        : s.last_run_status === 'error' ? '🚨'
-        : '⚪'
+      const statusIcon = s.last_run_status === 'passed' ? 'PASS'
+        : s.last_run_status === 'failed' ? 'FAIL'
+        : s.last_run_status === 'error' ? 'ERROR'
+        : 'SKIP'
       const enabled = s.enabled ? '' : ' [disabled]'
       const sid = s.story_id ?? s.id ?? '—'
       console.log(`  ${statusIcon}  ${s.name.slice(0, 50).padEnd(52)}  ${sid}${enabled}`)
@@ -65,7 +66,7 @@ qa
     }
     console.log(`\nRecent runs for story ${storyId.slice(0, 8)}…:\n`)
     for (const r of runs) {
-      const statusIcon = r.status === 'passed' ? '✅' : r.status === 'failed' ? '❌' : r.status === 'error' ? '🚨' : '⏳'
+      const statusIcon = r.status === 'passed' ? 'PASS' : r.status === 'failed' ? 'FAIL' : r.status === 'error' ? 'ERROR' : 'PEND'
       const ts = r.created_at ? new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ') : '—'
       const latency = r.latency_ms ? ` (${(r.latency_ms / 1000).toFixed(1)}s)` : ''
       console.log(`  ${statusIcon}  ${ts}${latency}  ${r.id.slice(0, 8)}`)
@@ -78,7 +79,7 @@ qa
         }
       }
     }
-    const consoleUrl = config.consoleUrl ?? 'https://app.mushi.ai'
+    const consoleUrl = config.consoleUrl ?? resolveConsoleUrlSync()
     console.log(`\n   Open in console: ${consoleUrl}/qa-coverage?story=${storyId}`)
     console.log(`   Tip: run 'mushi config consoleUrl <url>' to override (e.g. http://localhost:6464 for local dev)`)
     console.log()
@@ -101,10 +102,10 @@ qa
     if (opts.json) { console.log(JSON.stringify(result.data, null, 2)); return }
     const runId = result.data?.run_id
     if (runId) {
-      console.log(`▶  Run triggered: ${runId.slice(0, 8)}…`)
-      console.log(`   Check results: mushi qa runs ${storyId}`)
+      console.log(`RUN  Triggered: ${runId.slice(0, 8)}…`)
+      console.log(`     Check results: mushi qa runs ${storyId}`)
     } else {
-      console.error('❌  Trigger failed: no run_id in response', JSON.stringify(result.data))
+      console.error('FAIL Trigger failed: no run_id in response', JSON.stringify(result.data))
       process.exit(1)
     }
   })

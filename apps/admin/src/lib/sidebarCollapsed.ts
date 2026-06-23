@@ -29,8 +29,11 @@ import { useEffect, useState } from 'react'
 const KEY = 'mushi:sidebarCollapsed:v1'
 
 function readSidebarCollapsed(): boolean {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(KEY) === '1'
+  if (typeof window === 'undefined') return true
+  const stored = window.localStorage.getItem(KEY)
+  if (stored === '1') return true
+  if (stored === '0') return false
+  return true
 }
 
 export function useSidebarCollapsed(): [

@@ -103,7 +103,7 @@ export function ClaudeCodeSetupPanel({ configured }: Props) {
             {copied === 'yaml' ? 'Copied' : 'Copy workflow'}
           </Btn>
         </div>
-        <pre className="max-h-40 overflow-auto rounded-sm border border-edge-subtle bg-surface p-2 text-2xs font-mono text-fg-muted">
+        <pre className="mushi-code-block mushi-code-body max-h-40 overflow-auto rounded-sm border border-code-surface-border p-2 text-2xs font-mono">
           {data.workflowYaml.slice(0, 1200)}
           {data.workflowYaml.length > 1200 ? '\n…' : ''}
         </pre>

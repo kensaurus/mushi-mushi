@@ -22,6 +22,7 @@ export default defineConfig([
       server: 'src/server.ts',
       branding: 'src/branding.ts',
       'feature-groups': 'src/feature-groups.ts',
+      clients: 'src/clients.ts',
     },
     format: ['esm'],
     dts: true,

@@ -31,6 +31,16 @@ export { PersonaTrack } from './PersonaTrack'
 export type { PersonaCard } from './PersonaTrack'
 export { PrivacyPosture } from './PrivacyPosture'
 
+export { ConnectLanePicker } from './connect/ConnectLanePicker'
+export type { ConnectLanePickerProps } from './connect/ConnectLanePicker'
+export { useConnectSelection } from './connect/useConnectSelection'
+export type { UseConnectSelectionOptions } from './connect/useConnectSelection'
+export { CONNECT_LANE_OPTIONS } from './connect/types'
+export type { ConnectLane } from './connect/types'
+export { getConnectClientEmoji } from './connect/clientEmoji'
+export { ConnectClientIcon, renderConnectClientIcon } from './connect/clientIcons'
+export type { ConnectClientIconProps } from './connect/clientIcons'
+
 export { MushiCanvas } from './canvas/MushiCanvas'
 export {
   reportSample,

@@ -1101,5 +1101,5 @@ function suggestionsFor(route: string): string[] {
       'Is the auto-fix pipeline healthy today?',
     ]
   }
-  return ['What is this page for?', 'How do I get started here?']
+  return ['Summarize this page', 'What should I do next here?']
 }

@@ -1,9 +1,16 @@
 # @mushi-mushi/cli
 
 > **Your AI wrote it. Mushi tells you why it broke.**
-> Plain-English diagnosis + a paste-ready fix, right inside Cursor. MIT-licensed SDKs · self-hostable · no second LLM key.
 
-CLI for Mushi Mushi — set up the SDK in one command, wire Cursor MCP, then triage reports and monitor the pipeline from your terminal.
+Set up the Mushi SDK, wire Cursor MCP, and triage reports from your terminal.
+
+Positioning and product overview: [docs site](https://github.com/kensaurus/mushi-mushi/blob/master/apps/docs/content/quickstart/index.mdx) · [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md)
+
+## Quick start
+
+```bash
+npx @mushi-mushi/cli init
+```
 
 ## Console ↔ CLI loop
 
@@ -320,7 +327,7 @@ mushi tdd improve
 mushi qa stories
 mushi qa runs <storyId>
 mushi qa run <storyId>
-mushi qa audit
+mushi audit
 ```
 
 ---
@@ -368,7 +375,7 @@ Config file: `~/.config/mushi/config.json` (Unix mode `0o600`; legacy `~/.mushir
 - `~/.config/mushi/config.json` is written with mode `0o600` on Unix. Legacy configs with looser permissions are tightened on load.
 - `--endpoint` values are parsed through `new URL()` and required to use `https://` except for `localhost` / `127.0.0.1` / `*.local`.
 - The `--api-key` flag leaks into `ps -ef` — prefer the interactive prompt on shared machines.
-- Full stack traces on error: `DEBUG=mushi mushi init`.
+- Full stack traces on error: `MUSHI_DEBUG=1 mushi init`.
 
 ## Programmatic imports
 
@@ -383,9 +390,3 @@ The CLI is also importable for tooling (used by `create-mushi-mushi`):
 ## License
 
 MIT
-
-
-<!-- mushi-readme-stats-footer -->
----
-
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

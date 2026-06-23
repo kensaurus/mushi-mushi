@@ -255,8 +255,14 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
 
     // Resolve the set of project IDs in scope for this caller.
     let accessibleIds: string[]
-    if (authMethod === 'apiKey' && apiKeyProjectId) {
-      accessibleIds = [apiKeyProjectId]
+    if (authMethod === 'apiKey') {
+      if (apiKeyProjectId) {
+        accessibleIds = [apiKeyProjectId]
+      } else if (c.get('isOrgScopedKey')) {
+        accessibleIds = userId ? await ownedProjectIds(db, userId) : []
+      } else {
+        accessibleIds = []
+      }
     } else if (userId) {
       accessibleIds = await enumerateAccessibleProjectIds(c, db, userId)
     } else {

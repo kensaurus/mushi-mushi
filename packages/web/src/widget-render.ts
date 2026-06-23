@@ -109,6 +109,8 @@ export interface WidgetRenderCtx {
   assistantError: string | null;
   // ─── Progressive disclosure ──────────────────────────────────────
   showAllCategories: boolean;
+  /** Secondary hub links (inbox, assistant, community) collapsed under "More". */
+  showMoreNav: boolean;
   /** Host page favicon — shown in header during report flow when available. */
   pageFaviconHref: string | null;
 }
@@ -136,8 +138,9 @@ export function renderStep(ctx: WidgetRenderCtx): string {
  * suggestions come from the assistant config (console-overridable).
  */
 export function renderAssistantStep(ctx: WidgetRenderCtx): string {
-  const label = ctx.callbacks.assistantLabel || 'Ask';
-  const greeting = ctx.callbacks.assistantGreeting || 'Ask me anything about this app.';
+  const t = ctx.locale;
+  const label = ctx.callbacks.assistantLabel || t.assistant.defaultLabel;
+  const greeting = ctx.callbacks.assistantGreeting || t.assistant.defaultGreeting;
   const suggestions = ctx.callbacks.assistantSuggestions ?? [];
   const empty = ctx.assistantTurns.length === 0;
 
@@ -159,7 +162,7 @@ export function renderAssistantStep(ctx: WidgetRenderCtx): string {
         .join('');
 
   const thinking = ctx.assistantSending
-    ? `<div class="mushi-assistant-msg mushi-assistant-msg-bot mushi-assistant-thinking">…</div>`
+    ? `<div class="mushi-assistant-msg mushi-assistant-msg-bot mushi-assistant-thinking" role="status" aria-live="polite">${escapeHtml(t.assistant.thinking)}</div>`
     : '';
   const error = ctx.assistantError
     ? `<div class="mushi-assistant-error" role="alert">${escapeHtml(ctx.assistantError)}</div>`
@@ -177,10 +180,10 @@ export function renderAssistantStep(ctx: WidgetRenderCtx): string {
         <textarea
           class="mushi-assistant-input"
           rows="1"
-          placeholder="Type your question…"
+          placeholder="${escapeHtml(t.assistant.inputPlaceholder)}"
           ${ctx.assistantSending ? 'disabled' : ''}
         ></textarea>
-        <button type="submit" class="mushi-assistant-submit" ${ctx.assistantSending ? 'disabled' : ''} aria-label="Send">\u2191</button>
+        <button type="submit" class="mushi-assistant-submit" ${ctx.assistantSending ? 'disabled' : ''} aria-label="${escapeHtml(t.assistant.sendAriaLabel)}">\u2191</button>
       </form>
     </div>
   `;
@@ -200,7 +203,7 @@ export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
   }
 export function renderBrandFooter(ctx: WidgetRenderCtx): string {
     if (ctx.config.brandFooter === false) return '';
-    return `<div class="mushi-brand-footer">Powered by Mushi v${escapeHtml(ctx.sdkVersion)}</div>`;
+    return `<div class="mushi-brand-footer">${escapeHtml(ctx.locale.flows.poweredBy.replace('{version}', ctx.sdkVersion))}</div>`;
   }
 
   /**
@@ -264,6 +267,97 @@ export function renderStepIndicator(_ctx: WidgetRenderCtx, currentStep: number):
     }
     return `<div class="mushi-step-indicator" aria-hidden="true">${segments.join('')}</div>`;
   }
+
+/**
+ * Secondary hub destinations (inbox, roadmap, assistant, account) live behind
+ * a single "More" disclosure so the report path stays visually primary.
+ */
+function countMoreNavItems(ctx: WidgetRenderCtx): number {
+  let n = 1; // Your reports — always present
+  if (ctx.callbacks.onFeatureBoardRequest) n += 1;
+  if (ctx.callbacks.assistantEnabled) n += 1;
+  if (ctx.rewardsState) n += 1; // leaderboard
+  n += 1; // account / community
+  return n;
+}
+
+function renderMoreNavSection(ctx: WidgetRenderCtx): string {
+  const t = ctx.locale;
+  const mn = t.step1.moreNav;
+  const count = countMoreNavItems(ctx);
+  const toggleLabel = `${t.step1.moreNavLabel} (${count})`;
+  const unread = ctx.unreadCount();
+  const reportsLabel = unread
+    ? `${mn.yourReports} (${unread} ${mn.unreadNew})`
+    : mn.yourReports;
+
+  const panelItems: string[] = [
+    `<button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
+      <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
+      <div class="mushi-option-text">
+        <span class="mushi-option-label">${escapeHtml(reportsLabel)}</span>
+        <span class="mushi-option-desc">${escapeHtml(mn.yourReportsDesc)}</span>
+      </div>
+      <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+    </button>`,
+  ];
+
+  if (ctx.callbacks.onFeatureBoardRequest) {
+    panelItems.push(`
+      <button type="button" class="mushi-option-btn" data-action="roadmap">
+        <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDDF3\uFE0F</span>
+        <div class="mushi-option-text">
+          <span class="mushi-option-label">${escapeHtml(mn.communityIdeas)}</span>
+          <span class="mushi-option-desc">${escapeHtml(mn.communityIdeasDesc)}</span>
+        </div>
+        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+      </button>`);
+  }
+
+  if (ctx.callbacks.assistantEnabled) {
+    panelItems.push(`
+      <button type="button" class="mushi-option-btn" data-action="assistant">
+        <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCAC</span>
+        <div class="mushi-option-text">
+          <span class="mushi-option-label">${escapeHtml(ctx.callbacks.assistantLabel || t.assistant.defaultLabel)}</span>
+          <span class="mushi-option-desc">${escapeHtml(t.assistant.hubDescription)}</span>
+        </div>
+        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+      </button>`);
+  }
+
+  if (ctx.rewardsState) {
+    panelItems.push(`
+      <button type="button" class="mushi-link-btn mushi-more-nav-link" data-action="open-leaderboard">\uD83C\uDFC6 ${escapeHtml(mn.leaderboard)}</button>`);
+  }
+
+  panelItems.push(`
+    <button type="button" class="mushi-link-btn mushi-more-nav-link" data-action="open-account">
+      ${ctx.testerInfo
+        ? `\uD83D\uDC64 ${escapeHtml(ctx.testerInfo.public_handle ?? ctx.testerInfo.display_name ?? mn.myAccount)}`
+        : `\uD83C\uDF10 ${escapeHtml(mn.joinCommunity)}`}
+    </button>`);
+
+  const panelHtml = ctx.showMoreNav
+    ? `<div class="mushi-more-nav-panel">${panelItems.join('')}</div>`
+    : '';
+
+  return `
+    <div class="mushi-more-nav">
+      <button
+        type="button"
+        class="mushi-more-toggle mushi-more-nav-toggle"
+        data-action="toggle-more-nav"
+        aria-expanded="${ctx.showMoreNav ? 'true' : 'false'}"
+      >
+        <span class="mushi-more-toggle-text">${escapeHtml(toggleLabel)}</span>
+        <span class="mushi-more-toggle-arrow" aria-hidden="true">${ctx.showMoreNav ? '\u25BE' : '\u25B8'}</span>
+      </button>
+      ${panelHtml}
+    </div>
+  `;
+}
+
 export function renderCategoryStep(ctx: WidgetRenderCtx): string {
     const t = ctx.locale;
     // When the host supplies custom categories, render those instead of the
@@ -321,62 +415,22 @@ export function renderCategoryStep(ctx: WidgetRenderCtx): string {
       ${renderHeader(ctx, { title: t.step1.heading, step: STEP_NUMBER.category })}
       ${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}
       <div class="mushi-body" role="radiogroup" aria-label="${escapeHtml(t.step1.heading)}">
-        <button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
-          <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
-          <div class="mushi-option-text">
-            <span class="mushi-option-label">Your reports${ctx.unreadCount() ? ` (${ctx.unreadCount()} new)` : ''}</span>
-            <span class="mushi-option-desc">See status, developer replies, and respond</span>
-          </div>
-          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-        </button>
+        <p class="mushi-section-label">${escapeHtml(t.step1.reportSectionLabel)}</p>
         ${renderFeatureRequestEntry(ctx)}
-        ${ctx.callbacks.onFeatureBoardRequest ? `
-        <button type="button" class="mushi-option-btn" data-action="roadmap">
-          <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDDF3\uFE0F</span>
-          <div class="mushi-option-text">
-            <span class="mushi-option-label">Community ideas</span>
-            <span class="mushi-option-desc">Vote on features and see what shipped</span>
-          </div>
-          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
-        </button>` : ''}
         ${primaryCategories}
         ${secondaryHtml}
         ${ctx.rewardsState ? renderRewardsNudge(ctx) : ''}
-        <div class="mushi-community-footer">
-          <button type="button" class="mushi-link-btn mushi-community-btn" data-action="open-account">
-            ${ctx.testerInfo
-              ? `👤 ${escapeHtml(ctx.testerInfo.public_handle ?? ctx.testerInfo.display_name ?? 'My account')}`
-              : '🌐 Join community · Track reports across apps'}
-          </button>
-          ${ctx.rewardsState
-            ? `<button type="button" class="mushi-link-btn" data-action="open-leaderboard">🏆 Leaderboard</button>`
-            : ''}
-        </div>
+        ${renderMoreNavSection(ctx)}
       </div>
-      ${renderStepIndicator(ctx, STEP_NUMBER.category)}
     `;
   }
 
-  /**
-   * First-class "Feature request" entry rendered at the top of the
-   * category step. Beta apps consistently get more useful signal when
-   * the user has a no-friction path to say "I wish this did X" — burying
-   * it as an intent under the "Other" category drops feature submissions
-   * by ~40% in industry studies (Userpilot, Usersnap 2025).
-   *
-   * Wire format: still routes through the standard `other` category with
-   * a `user_category = 'Feature request'` stamp, so we don't need a DB
-   * migration. The admin console filters on that string to surface the
-   * Feature-request swimlane.
-   */
 export function renderFeatureRequestEntry(ctx: WidgetRenderCtx): string {
     const enabled = ctx.config.featureRequestCard !== false;
     if (!enabled) return '';
-    // Use `||` (not `??`) so a normalized empty string still falls back to the
-    // default copy — an empty label would render an icon-only row with no text.
-    const label = ctx.config.featureRequestLabel || 'Feature request';
-    const desc = ctx.config.featureRequestDescription
-      || 'Suggest something new — even rough ideas help us prioritise';
+    const f = ctx.locale.flows.featureRequest;
+    const label = ctx.config.featureRequestLabel || f.label;
+    const desc = ctx.config.featureRequestDescription || f.description;
     return `
       <button
         type="button"
@@ -421,7 +475,7 @@ export function renderBetaStrip(ctx: WidgetRenderCtx): string {
     const appName = escapeHtml(beta.appName ?? 'This app');
     const message = beta.message
       ? escapeHtml(beta.message)
-      : `${appName} is in early development — updates ship weekly`;
+      : `${appName} is in early development`;
     const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
     const perks = beta.perks ?? [];
 
@@ -442,6 +496,7 @@ export function renderBetaStrip(ctx: WidgetRenderCtx): string {
     `;
   }
 export function renderReportsStep(ctx: WidgetRenderCtx): string {
+    const f = ctx.locale.flows;
     const reports = ctx.reporterReports.map((report) => {
       const title = report.summary ?? report.description ?? `Report ${report.id.slice(0, 8)}`;
       const tone = reporterStatusTone(report.status);
@@ -463,52 +518,55 @@ export function renderReportsStep(ctx: WidgetRenderCtx): string {
       </button>`;
     }).join('');
     const leaderboardBtn = ctx.rewardsState
-      ? `<button type="button" class="mushi-leaderboard-link" data-action="open-leaderboard">🏆 Leaderboard</button>`
+      ? `<button type="button" class="mushi-leaderboard-link" data-action="open-leaderboard">\uD83C\uDFC6 ${escapeHtml(f.reports.leaderboardLink)}</button>`
       : '';
     return `
-      ${renderHeader(ctx, { title: 'Your reports', showBack: true, eyebrow: 'Mushi · Inbox' })}
+      ${renderHeader(ctx, { title: f.reports.title, showBack: true, eyebrow: f.eyebrows.inbox })}
       <div class="mushi-body">
-        ${ctx.reporterLoading ? '<p class="mushi-muted">Loading reports…</p>' : ''}
+        ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.loading)}</p>` : ''}
         ${ctx.reporterError ? `<p class="mushi-error-inline">${escapeHtml(ctx.reporterError)}</p>` : ''}
-        ${reports || (!ctx.reporterLoading ? '<p class="mushi-muted">No reports from this browser yet.</p>' : '')}
+        ${reports || (!ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.reports.empty)}</p>` : '')}
         ${leaderboardBtn}
       </div>
     `;
   }
 export function renderRoadmapStep(ctx: WidgetRenderCtx): string {
+    const f = ctx.locale.flows;
     const rows = ctx.featureBoard.map((ticket) => {
       const id = String(ticket.id ?? '');
-      const subject = escapeHtml(String(ticket.subject ?? 'Untitled idea'));
+      const subject = escapeHtml(String(ticket.subject ?? f.roadmap.untitled));
       const votes = Number(ticket.vote_count ?? 0);
       const shipped = Boolean(ticket.shipped_at);
       const voted = Boolean(ticket.my_vote);
-      const status = shipped ? 'Shipped' : String(ticket.status_label ?? ticket.status ?? 'open');
+      const status = shipped ? f.roadmap.shipped : String(ticket.status_label ?? ticket.status ?? 'open');
+      const voteLabel = f.roadmap.voteCount.replace('{n}', String(votes));
       return `
         <div class="mushi-report-row mushi-roadmap-row">
           <div class="mushi-report-main">
             <span class="mushi-report-title">${subject}</span>
             <span class="mushi-report-meta">
               <span class="mushi-report-status">${escapeHtml(status)}</span>
-              <span class="mushi-report-when">${votes} vote${votes === 1 ? '' : 's'}</span>
+              <span class="mushi-report-when">${escapeHtml(voteLabel)}</span>
             </span>
           </div>
           ${ctx.callbacks.onFeatureBoardVote ? `
             <button type="button" class="mushi-vote-btn" data-vote-id="${escapeHtml(id)}" aria-pressed="${voted}">
-              ${voted ? 'Voted' : 'Vote'}
+              ${voted ? escapeHtml(f.roadmap.voted) : escapeHtml(f.roadmap.vote)}
             </button>` : ''}
         </div>`;
     }).join('');
 
     return `
-      ${renderHeader(ctx, { title: 'Community ideas', showBack: true, eyebrow: 'Mushi · Roadmap' })}
+      ${renderHeader(ctx, { title: f.roadmap.title, showBack: true, eyebrow: f.eyebrows.roadmap })}
       <div class="mushi-body">
-        ${ctx.reporterLoading ? '<p class="mushi-muted">Loading ideas…</p>' : ''}
+        ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.loading)}</p>` : ''}
         ${ctx.reporterError ? `<p class="mushi-error-inline">${escapeHtml(ctx.reporterError)}</p>` : ''}
-        ${rows || (!ctx.reporterLoading ? '<p class="mushi-muted">No community ideas yet. Be the first to suggest one.</p>' : '')}
+        ${rows || (!ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.roadmap.empty)}</p>` : '')}
       </div>
     `;
   }
 export function renderLeaderboardStep(ctx: WidgetRenderCtx): string {
+    const f = ctx.locale.flows;
     // Show global leaderboard (cross-app) when available, fall back to org scope
     const isGlobal = ctx.globalLeaderboard !== null || ctx.globalLeaderboardLoading;
     const entries = isGlobal
@@ -532,50 +590,56 @@ export function renderLeaderboardStep(ctx: WidgetRenderCtx): string {
       return `
         <div class="mushi-lb-row ${rank === 1 ? 'mushi-lb-top' : ''}${isMe ? ' mushi-lb-me' : ''}">
           <span class="mushi-lb-rank">#${rank}</span>
-          <span class="mushi-lb-name">${escapeHtml((e as MushiLeaderboardEntry).public_handle ?? e.display_name ?? 'Anon')}</span>
+          <span class="mushi-lb-name">${escapeHtml((e as MushiLeaderboardEntry).public_handle ?? e.display_name ?? f.leaderboard.anon)}</span>
           <span class="mushi-lb-pts">${(e.points_30d ?? e.total_points).toLocaleString()} pts</span>
         </div>
       `;
     }).join('');
 
     const myRankBadge = myRank
-      ? `<div class="mushi-lb-myrank">You are ranked <strong>#${myRank}</strong> this month</div>`
-      : (!ctx.testerJwt ? `<button type="button" class="mushi-link-btn" data-action="open-account">Sign in to see your rank →</button>` : '');
+      ? `<div class="mushi-lb-myrank">${escapeHtml(f.leaderboard.myRank.replace('{rank}', String(myRank)))}</div>`
+      : (!ctx.testerJwt ? `<button type="button" class="mushi-link-btn" data-action="open-account">${escapeHtml(f.leaderboard.signInPrompt)}</button>` : '');
 
     return `
-      ${renderHeader(ctx, { title: '🏆 Global Leaderboard', showBack: true, eyebrow: 'Mushi · Community' })}
+      ${renderHeader(ctx, { title: f.leaderboard.title, showBack: true, eyebrow: f.eyebrows.community })}
       <div class="mushi-body">
-        ${loading ? '<p class="mushi-muted">Loading leaderboard…</p>' : ''}
-        ${!loading && !entries.length ? '<p class="mushi-muted">No contributors yet — be the first!</p>' : ''}
+        ${loading ? `<p class="mushi-muted">${escapeHtml(f.leaderboard.loading)}</p>` : ''}
+        ${!loading && !entries.length ? `<p class="mushi-muted">${escapeHtml(f.leaderboard.empty)}</p>` : ''}
         <div class="mushi-lb-list">${rows}</div>
         ${myRankBadge}
-        <p class="mushi-lb-note">Global contributors this month · Points refresh monthly</p>
+        <p class="mushi-lb-note">${escapeHtml(f.leaderboard.footer)}</p>
       </div>
     `;
   }
 export function renderAccountStep(ctx: WidgetRenderCtx): string {
+    const f = ctx.locale.flows;
     const tester = ctx.testerInfo;
     if (tester) {
       // Signed in — show account info + cross-app link
-      const handle = tester.public_handle ?? tester.display_name ?? 'Tester';
+      const handle = tester.public_handle ?? tester.display_name ?? f.leaderboard.anon;
       const rep = ctx.testerReputation;
+      const rankLine = rep
+        ? f.account.rankSummary
+            .replace('{rank}', String(rep.rank ?? '—'))
+            .replace('{points}', (rep.points_30d ?? 0).toLocaleString())
+        : '';
       return `
-        ${renderHeader(ctx, { title: '虫 Mushi Account', showBack: true, eyebrow: 'Mushi · Identity' })}
+        ${renderHeader(ctx, { title: f.account.title, showBack: true, eyebrow: f.eyebrows.identity })}
         <div class="mushi-body">
           <div class="mushi-account-card">
             <div class="mushi-account-avatar">${escapeHtml(handle.charAt(0).toUpperCase())}</div>
             <div class="mushi-account-info">
               <strong>${escapeHtml(handle)}</strong>
-              ${rep ? `<span class="mushi-account-rank">Rank #${rep.rank ?? '—'} · ${(rep.points_30d ?? 0).toLocaleString()} pts this month</span>` : ''}
+              ${rep ? `<span class="mushi-account-rank">${escapeHtml(rankLine)}</span>` : ''}
             </div>
           </div>
           <button type="button" class="mushi-nav-item" data-action="open-cross-app-reports">
-            My reports across all apps →
+            ${escapeHtml(f.account.crossAppReports)}
           </button>
           <button type="button" class="mushi-nav-item" data-action="open-global-leaderboard">
-            View global leaderboard →
+            ${escapeHtml(f.account.viewLeaderboard)}
           </button>
-          <button type="button" class="mushi-link-btn" data-action="sign-out-tester">Sign out</button>
+          <button type="button" class="mushi-link-btn" data-action="sign-out-tester">${escapeHtml(f.account.signOut)}</button>
         </div>
       `;
     }
@@ -583,45 +647,46 @@ export function renderAccountStep(ctx: WidgetRenderCtx): string {
     // Not signed in — magic-link form
     if (ctx.magicLinkSent) {
       return `
-        ${renderHeader(ctx, { title: '虫 Check your email', showBack: true, eyebrow: 'Mushi · Sign in' })}
+        ${renderHeader(ctx, { title: f.account.checkEmailTitle, showBack: true, eyebrow: f.eyebrows.signIn })}
         <div class="mushi-body">
-          <p class="mushi-muted">We sent a sign-in link to <strong>${escapeHtml(ctx.magicLinkEmail)}</strong>. Click it to connect your reports across apps and join the community.</p>
-          <button type="button" class="mushi-link-btn" data-action="resend-magic-link">Resend email</button>
+          <p class="mushi-muted">${escapeHtml(f.account.magicLinkSent.replace('{email}', ctx.magicLinkEmail))}</p>
+          <button type="button" class="mushi-link-btn" data-action="resend-magic-link">${escapeHtml(f.account.resendEmail)}</button>
           ${ctx.magicLinkError ? `<p class="mushi-error">${escapeHtml(ctx.magicLinkError)}</p>` : ''}
         </div>
       `;
     }
 
     return `
-      ${renderHeader(ctx, { title: '虫 Join the community', showBack: true, eyebrow: 'Mushi · Sign in' })}
+      ${renderHeader(ctx, { title: f.account.joinTitle, showBack: true, eyebrow: f.eyebrows.signIn })}
       <div class="mushi-body">
-        <p class="mushi-muted">Sign in to see your reports across all apps and climb the global leaderboard. No password needed.</p>
-        <label class="mushi-label" for="mushi-email-input">Email address</label>
+        <p class="mushi-muted">${escapeHtml(f.account.signInPrompt)}</p>
+        <label class="mushi-label" for="mushi-email-input">${escapeHtml(f.account.emailLabel)}</label>
         <input
           id="mushi-email-input"
           type="email"
           class="mushi-textarea"
           data-role="magic-link-email"
-          placeholder="you@example.com"
+          placeholder="${escapeHtml(f.account.emailPlaceholder)}"
           autocomplete="email"
           value="${escapeHtml(ctx.magicLinkEmail)}"
           style="padding: 10px 12px; height: auto; resize: none;"
         />
         ${ctx.magicLinkError ? `<p class="mushi-error">${escapeHtml(ctx.magicLinkError)}</p>` : ''}
         <button type="button" class="mushi-submit" data-action="send-magic-link"${ctx.magicLinkSending ? ' disabled aria-disabled="true"' : ''}>
-          <span>${ctx.magicLinkSending ? 'Sending…' : 'Send sign-in link'}</span><span class="mushi-submit-arrow" aria-hidden="true">→</span>
+          <span>${ctx.magicLinkSending ? escapeHtml(f.account.sending) : escapeHtml(f.account.sendLink)}</span><span class="mushi-submit-arrow" aria-hidden="true">→</span>
         </button>
       </div>
     `;
   }
 export function renderCrossAppReportsStep(ctx: WidgetRenderCtx): string {
+    const f = ctx.locale.flows;
     const reports = ctx.crossAppReports ?? [];
     const grouped = new Map<string, { name: string; slug: string | null; domain: string | null; reports: MushiCrossAppReport[] }>();
     for (const r of reports) {
       const key = r.project_id ?? 'unknown';
       if (!grouped.has(key)) {
         grouped.set(key, {
-          name: r.app_name ?? 'Unknown App',
+          name: r.app_name ?? f.crossApp.unknownApp,
           slug: r.app_slug ?? null,
           domain: r.app_domain ?? null,
           reports: [],
@@ -658,15 +723,16 @@ export function renderCrossAppReportsStep(ctx: WidgetRenderCtx): string {
     }).join('');
 
     return `
-      ${renderHeader(ctx, { title: 'My reports', showBack: true, eyebrow: 'Mushi · All apps' })}
+      ${renderHeader(ctx, { title: f.crossApp.title, showBack: true, eyebrow: f.eyebrows.allApps })}
       <div class="mushi-body">
-        ${ctx.crossAppLoading ? '<p class="mushi-muted">Loading your reports…</p>' : ''}
-        ${!ctx.crossAppLoading && !reports.length ? '<p class="mushi-muted">No reports filed yet.</p>' : ''}
+        ${ctx.crossAppLoading ? `<p class="mushi-muted">${escapeHtml(f.crossApp.loading)}</p>` : ''}
+        ${!ctx.crossAppLoading && !reports.length ? `<p class="mushi-muted">${escapeHtml(f.crossApp.empty)}</p>` : ''}
         ${rows}
       </div>
     `;
   }
 export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
+    const f = ctx.locale.flows;
     const report = ctx.reporterReports.find((r) => r.id === ctx.selectedReportId);
     const status = report?.status ?? 'unknown';
     const tone = reporterStatusTone(status);
@@ -678,7 +744,7 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
       </div>
     `).join('');
     return `
-      ${renderHeader(ctx, { title: 'Report thread', showBack: true, eyebrow: 'Mushi · Inbox' })}
+      ${renderHeader(ctx, { title: f.thread.title, showBack: true, eyebrow: f.eyebrows.thread })}
       <div class="mushi-body">
         <div class="mushi-thread-summary">
           <div class="mushi-thread-summary-meta">
@@ -688,12 +754,12 @@ export function renderReportDetailStep(ctx: WidgetRenderCtx): string {
           <p>${escapeHtml(report?.summary ?? report?.description ?? 'Report details')}</p>
         </div>
         <div class="mushi-thread">
-          ${ctx.reporterLoading ? '<p class="mushi-muted">Loading thread…</p>' : comments || '<p class="mushi-muted">No developer replies yet.</p>'}
+          ${ctx.reporterLoading ? `<p class="mushi-muted">${escapeHtml(f.thread.loading)}</p>` : comments || `<p class="mushi-muted">${escapeHtml(f.thread.empty)}</p>`}
         </div>
         ${['fixed', 'resolved', 'verified'].includes(status) ? `
           <div class="mushi-verify-actions" role="group" aria-label="Fix verification">
-            <button type="button" class="mushi-intent-btn" data-action="reporter-confirms">Yes, fixed for me</button>
-            <button type="button" class="mushi-intent-btn" data-action="reporter-not-fixed">Not fixed yet</button>
+            <button type="button" class="mushi-option-btn" data-action="reporter-confirms">${escapeHtml(f.thread.confirmFixed)}</button>
+            <button type="button" class="mushi-option-btn" data-action="reporter-not-fixed">${escapeHtml(f.thread.notFixed)}</button>
           </div>
         ` : ''}
         <textarea class="mushi-textarea" data-role="reporter-reply" rows="3" placeholder="Reply to the developer…"></textarea>
@@ -713,8 +779,9 @@ export function renderIntentStep(ctx: WidgetRenderCtx): string {
       ?? (t.step2.intents[catId as MushiReportCategory] || []);
 
     const options = intents.map((intent) => `
-      <button type="button" class="mushi-intent-btn" data-intent="${escapeHtml(intent)}">
-        ${escapeHtml(intent)}
+      <button type="button" class="mushi-option-btn" data-intent="${escapeHtml(intent)}">
+        <span class="mushi-option-text"><span class="mushi-option-label">${escapeHtml(intent)}</span></span>
+        <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
       </button>
     `).join('');
 
@@ -732,7 +799,6 @@ export function renderIntentStep(ctx: WidgetRenderCtx): string {
           ${options}
         </div>
       </div>
-      ${renderStepIndicator(ctx, STEP_NUMBER.intent)}
     `;
   }
 
@@ -831,7 +897,6 @@ export function renderDetailsStep(ctx: WidgetRenderCtx): string {
           <span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
         </button>
       </div>
-      ${renderStepIndicator(ctx, STEP_NUMBER.details)}
     `;
   }
 
@@ -862,7 +927,7 @@ export function renderSuccessStep(ctx: WidgetRenderCtx): string {
           ${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}
           ${ctx.config.betaMode?.enabled ? renderBetaSuccessFooter(ctx) : ''}
           <button type="button" class="mushi-link-btn mushi-success-my-reports" data-action="view-my-reports">
-            📬 Track this report &rsaquo;
+            ${escapeHtml(ctx.locale.flows.success.trackReport)}
           </button>
         </div>
       </div>
@@ -881,12 +946,13 @@ export function renderSuccessStep(ctx: WidgetRenderCtx): string {
    * pretending everything is fine.
    */
 export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
+    const s = ctx.locale.flows.success;
     if (ctx.lastSubmitQueuedOffline) {
       return `
         <div class="mushi-success-receipt" role="status">
           <div class="mushi-success-receipt-row mushi-success-receipt-warn">
-            <span class="mushi-success-receipt-label">Queued offline</span>
-            <span class="mushi-success-receipt-hint">We&rsquo;ll send it the moment you&rsquo;re back online.</span>
+            <span class="mushi-success-receipt-label">${escapeHtml(s.queuedOffline)}</span>
+            <span class="mushi-success-receipt-hint">${escapeHtml(s.queuedHint)}</span>
           </div>
         </div>
       `;
@@ -897,7 +963,7 @@ export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
         <div class="mushi-success-receipt" role="status">
           <div class="mushi-success-receipt-row">
             <span class="mushi-success-receipt-spinner" aria-hidden="true"></span>
-            <span class="mushi-success-receipt-hint">Delivering to the team\u2026</span>
+            <span class="mushi-success-receipt-hint">${escapeHtml(s.delivering)}</span>
           </div>
           ${renderSlaLine(ctx)}
         </div>
@@ -911,7 +977,7 @@ export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
     return `
       <div class="mushi-success-receipt" role="status">
         <div class="mushi-success-receipt-row">
-          <span class="mushi-success-receipt-label">Receipt</span>
+          <span class="mushi-success-receipt-label">${escapeHtml(s.receipt)}</span>
           <button
             type="button"
             class="mushi-success-receipt-id"
@@ -927,7 +993,7 @@ export function renderSuccessReceipt(ctx: WidgetRenderCtx): string {
             href="${escapeHtml(trackHref)}"
             target="_blank"
             rel="noopener noreferrer"
-          >Track on Mushi <span aria-hidden="true">\u2197</span></a>
+          >${escapeHtml(s.trackOnMushi)} <span aria-hidden="true">\u2197</span></a>
         ` : ''}
         ${renderSlaLine(ctx)}
       </div>
@@ -938,9 +1004,7 @@ export function renderSlaLine(ctx: WidgetRenderCtx): string {
     if (sla) {
       return `<div class="mushi-success-sla">${escapeHtml(sla)}</div>`;
     }
-    // Default copy is intentionally vague but reassuring -- under-promise,
-    // over-deliver. Hosts that want a hard SLA set it via responseSlaLabel.
-    return `<div class="mushi-success-sla mushi-success-sla-default">A human will look at this within a working day.</div>`;
+    return `<div class="mushi-success-sla mushi-success-sla-default">${escapeHtml(ctx.locale.flows.success.slaDefault)}</div>`;
   }
 
   /**
@@ -959,7 +1023,6 @@ export function renderBetaSuccessFooter(ctx: WidgetRenderCtx): string {
           ? `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${email}</div>`
           : `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${appName}</div>`
         }
-        <div class="mushi-beta-success-line mushi-beta-success-dim">We aim to review within 48h · thank you for helping build this</div>
       </div>
     `;
   }

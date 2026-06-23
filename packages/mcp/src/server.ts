@@ -170,7 +170,19 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
    * need to specify which of several projects to target.
    */
   async function resolveProjectId(explicitId?: string | null): Promise<string> {
-    if (explicitId) return explicitId
+    if (explicitId) {
+      if (projectId && explicitId !== projectId) {
+        throw new MushiApiError(
+          400,
+          'PROJECT_SCOPE_MISMATCH',
+          `This MCP entry is bound to project ${projectId}. ` +
+            `Either pass projectId="${projectId}", add a second MCP server entry for ${explicitId} ` +
+            `(Console → Connect → Add to Cursor while that project is selected), ` +
+            'or run `mushi setup --all-projects --ide cursor` for one entry per repo.',
+        )
+      }
+      return explicitId
+    }
     if (projectId) return projectId
     // Account mode: probe the API to find accessible projects.
     try {
@@ -203,6 +215,16 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         'projectId is required. Set MUSHI_PROJECT_ID in .cursor/mcp.json or pass it explicitly.',
       )
     }
+  }
+
+  /** Resolve project scope and return optional X-Mushi-Project-Id header. */
+  async function projectScopeHeaders(explicitId?: string | null): Promise<{
+    projectId: string
+    headers: Record<string, string>
+  }> {
+    const pid = await resolveProjectId(explicitId ?? undefined)
+    const headers: Record<string, string> = { 'X-Mushi-Project-Id': pid }
+    return { projectId: pid, headers }
   }
 
   /** Format any value as an MCP text block containing pretty-printed JSON. */
@@ -315,11 +337,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_report_detail'),
       description: descOf('get_report_detail'),
       annotations: annotationsFor('get_report_detail'),
-      inputSchema: { reportId: z.string().describe('The report UUID') },
+      inputSchema: {
+        reportId: z.string().describe('The report UUID'),
+        project_id: z
+          .string()
+          .optional()
+          .describe('Project UUID — required for org-scoped keys with multiple projects.'),
+      },
       outputSchema: { report: z.unknown() },
     },
     async (args) => {
-      const data = await apiCall(`/v1/admin/reports/${args.reportId}`)
+      const { headers } = await projectScopeHeaders(args.project_id)
+      const data = await apiCall(`/v1/admin/reports/${args.reportId}`, { headers })
       const res = jsonResult({ report: data })
       return {
         ...res,
@@ -415,7 +444,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_fix_context'),
       description: descOf('get_fix_context'),
       annotations: annotationsFor('get_fix_context'),
-      inputSchema: { reportId: z.string().describe('The report UUID to fix') },
+      inputSchema: {
+        reportId: z.string().describe('The report UUID to fix'),
+        project_id: z
+          .string()
+          .optional()
+          .describe('Project UUID — required for org-scoped keys with multiple projects.'),
+      },
       outputSchema: {
         report: z.unknown(),
         fixPrompt: z.unknown(),
@@ -426,7 +461,10 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       },
     },
     async (args) => {
-      const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`)
+      const { headers } = await projectScopeHeaders(args.project_id)
+      const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`, {
+        headers,
+      })
       return jsonResult({
         report,
         // Paste-ready fix prompt composed server-side by composeFixPacket()
@@ -447,9 +485,18 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_fix_timeline'),
       description: descOf('get_fix_timeline'),
       annotations: annotationsFor('get_fix_timeline'),
-      inputSchema: { fixId: z.string().describe('fix_attempt UUID') },
+      inputSchema: {
+        fixId: z.string().describe('fix_attempt UUID'),
+        project_id: z
+          .string()
+          .optional()
+          .describe('Project UUID — required for org-scoped keys with multiple projects.'),
+      },
     },
-    async (args) => jsonText(await apiCall(`/v1/admin/fixes/${args.fixId}/timeline`)),
+    async (args) => {
+      const { headers } = await projectScopeHeaders(args.project_id)
+      return jsonText(await apiCall(`/v1/admin/fixes/${args.fixId}/timeline`, { headers }))
+    },
   )
 
   server.registerTool(
@@ -1227,20 +1274,21 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       },
     },
     async (args) => {
-      const pid = args.project_id ?? projectId
+      const { projectId: pid, headers } = await projectScopeHeaders(args.project_id)
       const includeLogs = args.include_logs !== false
 
       const [reportRes, evidenceRes, similarRes, fixCtxRes, blastRes, logsRes] = await Promise.allSettled([
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}`),
-        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}/timeline`),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}`, { headers }),
+        apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.report_id}/timeline`, { headers }),
         apiCall<unknown>(`/v1/admin/reports/similarity`, {
           method: 'POST',
+          headers,
           body: JSON.stringify({ report_id: args.report_id }),
         }).catch(() => null),
-        pid ? apiCall<unknown>(`/v1/admin/reports/${args.report_id}/fix-context`).catch(() => null) : Promise.resolve(null),
-        pid ? apiCall<unknown>(`/v1/admin/reports/${args.report_id}/blast-radius`).catch(() => null) : Promise.resolve(null),
-        includeLogs && pid
-          ? apiCall<unknown>(`/v1/admin/mcp/logs/${pid}?limit=20&level=warn`).catch(() => null)
+        apiCall<unknown>(`/v1/admin/reports/${args.report_id}/fix-context`, { headers }).catch(() => null),
+        apiCall<unknown>(`/v1/admin/reports/${args.report_id}/blast-radius`, { headers }).catch(() => null),
+        includeLogs
+          ? apiCall<unknown>(`/v1/admin/mcp/logs/${pid}?limit=20&level=warn`, { headers }).catch(() => null)
           : Promise.resolve(null),
       ])
 

@@ -3,6 +3,7 @@
  *
  * Requires: MUSHI_ADMIN_URL, Supabase auth env (same as dashboard-enhanced.spec.ts).
  * Caps: quickstart/beginner ≤ 2 rows · advanced ≤ 3 rows (PagePosture.tsx).
+ * Themes: light, dark, and system (default) via mushi:theme:v1 localStorage.
  */
 
 import { test, expect, type Page } from '@playwright/test'
@@ -55,7 +56,16 @@ const MODE_BUDGET: Record<'beginner' | 'advanced', number> = {
   advanced: 3,
 }
 
-async function seedSession(page: Page, mode: 'beginner' | 'advanced', request: import('@playwright/test').APIRequestContext) {
+const THEME_PREFS = ['light', 'dark', 'system'] as const
+type ThemePref = (typeof THEME_PREFS)[number]
+const THEME_STORAGE_KEY = 'mushi:theme:v1'
+
+async function seedSession(
+  page: Page,
+  mode: 'beginner' | 'advanced',
+  theme: ThemePref,
+  request: import('@playwright/test').APIRequestContext,
+) {
   const res = await request.post(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
     data: { email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD },
@@ -70,7 +80,7 @@ async function seedSession(page: Page, mode: 'beginner' | 'advanced', request: i
     user: Record<string, unknown>
   }
   await page.addInitScript(
-    ({ key, sessionPayload, projectId, adminMode }) => {
+    ({ key, sessionPayload, projectId, adminMode, themeKey, themePref }) => {
       const expiresAt =
         sessionPayload.expires_at ??
         Math.floor(Date.now() / 1000) + (sessionPayload.expires_in ?? 3600)
@@ -83,12 +93,23 @@ async function seedSession(page: Page, mode: 'beginner' | 'advanced', request: i
       )
       window.localStorage.setItem('mushi:active_project_id', projectId)
       window.localStorage.setItem('mushi:mode', adminMode)
+      window.localStorage.setItem(themeKey, themePref)
+      const resolved =
+        themePref === 'system'
+          ? window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light'
+            : 'dark'
+          : themePref
+      document.documentElement.setAttribute('data-theme', resolved)
+      document.documentElement.style.colorScheme = resolved
     },
     {
       key: storageKey,
       sessionPayload: session,
       projectId: PROJECT_ID,
       adminMode: mode,
+      themeKey: THEME_STORAGE_KEY,
+      themePref: theme,
     },
   )
 }
@@ -99,24 +120,41 @@ async function countPostureRows(page: Page): Promise<number> {
   return posture.locator(':scope > *').count()
 }
 
+async function assertResolvedTheme(page: Page, theme: ThemePref) {
+  const resolved = await page.evaluate(({ themePref }) => {
+    if (themePref === 'system') {
+      return document.documentElement.getAttribute('data-theme')
+    }
+    return themePref
+  }, { themePref: theme })
+  if (theme !== 'system') {
+    expect(resolved).toBe(theme)
+  } else {
+    expect(resolved === 'light' || resolved === 'dark').toBeTruthy()
+  }
+}
+
 test.describe('Admin chrome budget (PagePosture)', () => {
   test.skip(
     !SUPABASE_URL || !SUPABASE_ANON_KEY || !TEST_USER_EMAIL || !TEST_USER_PASSWORD,
     'Requires Supabase + test user env',
   )
 
-  for (const mode of ['beginner', 'advanced'] as const) {
-    test(`${mode} mode — posture rows ≤ ${MODE_BUDGET[mode]} on core routes`, async ({ page, request }) => {
-      await seedSession(page, mode, request)
-      const cap = MODE_BUDGET[mode]
+  for (const theme of THEME_PREFS) {
+    for (const mode of ['beginner', 'advanced'] as const) {
+      test(`${mode} + ${theme} — posture rows ≤ ${MODE_BUDGET[mode]} on core routes`, async ({ page, request }) => {
+        await seedSession(page, mode, theme, request)
+        const cap = MODE_BUDGET[mode]
 
-      for (const route of CHROME_ROUTES) {
-        await page.goto(`${ADMIN_URL}${route}`, { waitUntil: 'domcontentloaded' })
-        await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 }).catch(() => {})
-        await page.waitForTimeout(500)
-        const rows = await countPostureRows(page)
-        expect(rows, `${route} should expose ≤ ${cap} posture rows in ${mode} mode`).toBeLessThanOrEqual(cap)
-      }
-    })
+        for (const route of CHROME_ROUTES) {
+          await page.goto(`${ADMIN_URL}${route}`, { waitUntil: 'domcontentloaded' })
+          await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 }).catch(() => {})
+          await page.waitForTimeout(500)
+          await assertResolvedTheme(page, theme)
+          const rows = await countPostureRows(page)
+          expect(rows, `${route} (${mode}, ${theme}) should expose ≤ ${cap} posture rows`).toBeLessThanOrEqual(cap)
+        }
+      })
+    }
   }
 })

@@ -208,7 +208,7 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
         '## Before writing a fix',
         '',
         '1. Call `get_fix_context` (MCP) for the report — get root cause + blast radius first.',
-        '2. Call `lessons.query` (MCP) or read .mushi/lessons.json — apply every matching rule.',
+        '2. Call `list_lessons` (MCP) or read .mushi/lessons.json — apply every matching rule.',
         '3. Prefer the smallest change that makes the test pass. Don\'t refactor unrelated code.',
         '',
         '## After writing a fix',

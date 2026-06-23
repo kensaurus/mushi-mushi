@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
-import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { TesterLayout } from './components/tester/TesterLayout'
@@ -20,15 +19,18 @@ import { BetaBanner } from './components/BetaBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
 
-// Wrap Routes ONCE, at the level where the real (parametrized) route
-// definitions live — i.e. the inner Routes mounted under the auth gate.
-// The outer Routes only sees `/login`, `/reset-password`, `/*`, so wrapping
-// it would clobber every authenticated transaction with `/*` (React commits
-// child effects before parent effects, so the parent wrapper overwrites the
-// child's correctly-parametrized name on every navigation). Sentry's docs
-// are explicit: this wrapper is "only needed at the top level of your app."
-// See: https://docs.sentry.io/platforms/javascript/guides/react/features/react-router/v7/
-const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes)
+// SentryRoutes = Routes (no wrapper).
+//
+// withSentryReactRouterV7Routing(Routes) causes a React hooks-order violation
+// in React 19 + StrictMode (double-render): "Previous useContext, Next useRef".
+// This triggers "Internal React error: Expected static flag was missing" and
+// random SPA navigations (the component tree re-mounts mid-session).
+//
+// Route-transaction names are parameterised via reactRouterV7BrowserTracingIntegration
+// (createRoutesFromChildren + matchRoutes) in lib/sentry.ts. Full parametrised
+// naming via createBrowserRouter is deferred — the Sentry wrapper triggers a
+// React 19 StrictMode hooks-order violation with the current Routes setup.
+const SentryRoutes = Routes
 
 const envStatus = checkEnv()
 
@@ -59,6 +61,7 @@ const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => (
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
 const ConnectPage = lazy(() => import('./pages/ConnectPage').then(m => ({ default: m.ConnectPage })))
+const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const SetupCopilotPage = lazy(() => import('./pages/SetupCopilotPage').then(m => ({ default: m.SetupCopilotPage })))
 const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
@@ -160,6 +163,14 @@ function NotFoundPage() {
   )
 }
 
+/**
+ * McpManualRedirect — legacy alias from Connect unification; canonical MCP
+ * console lives at /mcp (sidebar "Agent help").
+ */
+function McpManualRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/mcp${search}`} replace />
+}
 /**
  * QaCoverageRedirect — handles legacy Slack notification URLs that used the
  * old path format `/projects/:pid/qa-coverage/:storyId`. Slack notifications
@@ -357,7 +368,8 @@ export function App() {
                   <Route path="/storage" element={<StoragePage />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
-                  <Route path="/mcp" element={<Navigate to="/connect?section=mcp" replace />} />
+                  <Route path="/mcp" element={<McpPage />} />
+                  <Route path="/mcp/manual" element={<McpManualRedirect />} />
                   <Route path="/connect" element={<ConnectPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route

@@ -381,9 +381,9 @@ export function CodeHealthPage() {
     }
 
     const MOBILE_ACCENTS: Record<string, string> = {
-      combined: 'bg-violet-500',
-      ios: 'bg-sky-500',
-      android: 'bg-emerald-500',
+      combined: 'bg-accent',
+      ios: 'bg-info',
+      android: 'bg-ok',
     }
     for (const [dim, points] of Object.entries(codeHealth.trends.mobile)) {
       series.push({

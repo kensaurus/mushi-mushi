@@ -334,19 +334,21 @@ if (subFloorHits.length > 0) {
   )
 }
 
-// ── Raw palette check (apps/testers marketplace only) ────────────────────
-const TESTERS_SRC = resolve(ROOT, 'apps/testers')
+// ── Raw palette check (docs components + testers marketplace) ───────────
+const DOCS_COMPONENTS = resolve(ROOT, 'apps/docs/components')
 const paletteHits = []
-try {
-  for (const file of walkForTypeFloor(TESTERS_SRC)) {
-    if (!/\.tsx?$/.test(file)) continue
-    const src = readFileSync(file, 'utf8')
-    for (const hit of extractRawPaletteHits(src, file)) {
-      paletteHits.push({ ...hit, line: extractLineNumber(src, hit.index) })
+for (const scanRoot of [DOCS_COMPONENTS, resolve(ROOT, 'apps/testers')]) {
+  try {
+    for (const file of walkForTypeFloor(scanRoot)) {
+      if (!/\.tsx?$/.test(file)) continue
+      const src = readFileSync(file, 'utf8')
+      for (const hit of extractRawPaletteHits(src, file)) {
+        paletteHits.push({ ...hit, line: extractLineNumber(src, hit.index) })
+      }
     }
+  } catch {
+    // directory may not exist in some checkouts
   }
-} catch {
-  // testers app may not exist in some checkouts
 }
 
 if (paletteHits.length > 0) {
@@ -359,6 +361,29 @@ if (paletteHits.length > 0) {
     `\nFix: use --mushi-* CSS variables (bg-[var(--mushi-paper)], text-[var(--mushi-ink-muted)], etc.)\n` +
     `or admin @theme tokens on console pages. Allowlist with // mushi-mushi-allowlist: <reason>\n`,
   )
+}
+
+// ── Docs token alias drift (--docs-* is retired; use --mushi-*) ───────────
+const docsAliasHits = []
+try {
+  for (const file of walkForTypeFloor(DOCS_COMPONENTS)) {
+    if (!/\.tsx?$/.test(file)) continue
+    const src = readFileSync(file, 'utf8')
+    for (const m of src.matchAll(/--docs-[a-z0-9-]+/g)) {
+      docsAliasHits.push({ token: m[0], file, line: extractLineNumber(src, m.index ?? 0) })
+    }
+  }
+} catch {
+  // docs components dir missing
+}
+
+if (docsAliasHits.length > 0) {
+  console.error(`\n[docs-alias] Retired --docs-* CSS variables in apps/docs/components:\n`)
+  for (const hit of docsAliasHits) {
+    const rel = relative(ROOT, hit.file).replace(/\\/g, '/')
+    console.error(`  ${rel}:${hit.line}  ${hit.token}`)
+  }
+  console.error(`\nFix: rename to the matching --mushi-* token (see docs/docs-site/TOKEN-CONTRACT.md).\n`)
 }
 
 // ── Page hero duplication guard ───────────────────────────────────────────
@@ -389,6 +414,43 @@ if (heroDupHits.length > 0) {
   console.error(
     `\nFix: pass withPageHero on PageHeaderBar when the page renders PageHero, ` +
     `or gate PageHero to advanced-only mode.\n`,
+  )
+}
+
+// ── Widget SDK hex guard ────────────────────────────────────────────────
+// After buildWidgetStyles migration, packages/web/src/styles.ts must not
+// contain raw hex — palette values live in @mushi-mushi/core/design-tokens.
+const WIDGET_STYLES = resolve(ROOT, 'packages/web/src/styles.ts')
+const WIDGET_THEME_VARS = resolve(ROOT, 'packages/web/src/build-widget-theme.ts')
+const widgetHexHits = []
+
+function scanWidgetHex(file) {
+  const widgetHexRe = /#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\b/g
+  if (!statSync(file, { throwIfNoEntry: false }).isFile()) return
+  const src = readFileSync(file, 'utf8')
+  const lines = src.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
+    if (/mushi-mushi-allowlist:/i.test(line)) continue
+    const stripped = line.replace(/\/\*[\s\S]*?\*\//g, '')
+    for (const match of stripped.matchAll(widgetHexRe)) {
+      widgetHexHits.push({ file, line: i + 1, token: match[0] })
+    }
+  }
+}
+
+scanWidgetHex(WIDGET_STYLES)
+scanWidgetHex(WIDGET_THEME_VARS)
+
+if (widgetHexHits.length > 0) {
+  console.error(`\n[widget-hex] Raw hex in SDK widget styles — use build-widget-theme.ts + @mushi-mushi/core:\n`)
+  for (const hit of widgetHexHits) {
+    const rel = relative(ROOT, hit.file).replace(/\\/g, '/')
+    console.error(`  ${rel}:${hit.line}  ${hit.token}`)
+  }
+  console.error(
+    `\nFix: resolve colours via mushiPalette() in packages/web/src/build-widget-theme.ts.\n`,
   )
 }
 
@@ -461,7 +523,45 @@ if (themePairMissing.length > 0) {
   console.error(`\nFix: add each token under html[data-theme="light"] { … } in apps/admin/src/index.css\n`)
 }
 
-if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0 || paletteHits.length > 0 || heroDupHits.length > 0 || hexHits.length > 0 || themePairMissing.length > 0) process.exit(1)
+// ── Diet chrome: elevated cards on operational pages ─────────────────────
+const PAGE_ELEVATED_ALLOWLIST = [
+  'ReportDetailPage.tsx',
+  'PublicHomePage.tsx',
+  'SetupGatePage.tsx',
+  'LoginPage.tsx',
+  'CliAuthPage.tsx',
+  'Tester',
+]
+
+function isPageElevatedAllowlisted(relPath) {
+  return PAGE_ELEVATED_ALLOWLIST.some((entry) => relPath.includes(entry))
+}
+
+const pageElevatedHits = []
+for (const file of files.filter((f) => /Page\.tsx$/.test(f))) {
+  const rel = relative(ROOT, file).replace(/\\/g, '/')
+  if (isPageElevatedAllowlisted(rel)) continue
+  const src = readFileSync(file, 'utf8')
+  const lines = src.split('\n')
+  lines.forEach((line, i) => {
+    if (/mushi-mushi-allowlist:/i.test(line)) return
+    if (/\bcard-elevated\b/.test(line) || /\belevated(?:=\{true\}|(?==\s*true))/.test(line) || /variant=["']elevated["']/.test(line)) {
+      pageElevatedHits.push({ file: rel, line: i + 1, snippet: line.trim().slice(0, 120) })
+    }
+  })
+}
+
+if (pageElevatedHits.length > 0) {
+  console.error(`\n[diet-chrome] Elevated cards on operational pages — use Panel / Card variant="flat":\n`)
+  for (const hit of pageElevatedHits) {
+    console.error(`  ${hit.file}:${hit.line}  ${hit.snippet}`)
+  }
+  console.error(
+    `\nFix: migrate to <Panel>, <PanelRow>, or <Card variant="flat">. Allowlist editorial pages in PAGE_ELEVATED_ALLOWLIST.\n`,
+  )
+}
+
+if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0 || paletteHits.length > 0 || docsAliasHits.length > 0 || heroDupHits.length > 0 || hexHits.length > 0 || widgetHexHits.length > 0 || themePairMissing.length > 0 || pageElevatedHits.length > 0) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
-console.log(`[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). Type floor: clean across ${totalTypeFloorFiles} files. Palette guard: clean on apps/testers. Hex guard: clean.`)
+console.log(`[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). Type floor: clean across ${totalTypeFloorFiles} files. Palette guard: clean on apps/testers. Hex guard: clean. Widget hex guard: clean.`)

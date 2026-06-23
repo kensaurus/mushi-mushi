@@ -213,7 +213,7 @@ function LessonsTab() {
                     </span>
                   )}
                   {lesson.retired_at && (
-                    <Badge className="bg-muted text-muted-foreground">retired</Badge>
+                    <Badge className="bg-surface-raised text-fg-muted">retired</Badge>
                   )}
                 </div>
                 <p className="text-sm font-medium text-fg line-clamp-2">
@@ -259,7 +259,7 @@ function LessonsTab() {
             </div>
             <div>
               <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Rule</h3>
-              <pre className="text-sm bg-surface-overlay p-3 rounded-lg whitespace-pre-wrap border border-edge">
+              <pre className="mushi-code-block mushi-code-body text-sm p-3 rounded-lg whitespace-pre-wrap border border-edge">
                 {selectedLesson.rule_text}
               </pre>
             </div>

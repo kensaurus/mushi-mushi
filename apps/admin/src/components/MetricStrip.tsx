@@ -7,11 +7,12 @@ import { Children, cloneElement, isValidElement, type CSSProperties, type ReactN
 import { useStaggeredAppear } from '../lib/useStaggeredAppear'
 
 const COLS_CLASS: Record<3 | 4 | 5 | 6 | 7, string> = {
-  3: 'grid-cols-2 md:grid-cols-3',
-  4: 'grid-cols-2 md:grid-cols-4',
-  5: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5',
-  6: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
-  7: 'grid-cols-2 md:grid-cols-4 lg:grid-cols-7',
+  3: 'grid-cols-2 sm:grid-cols-3',
+  /** Equal quarters from sm+ so four KPI sparklines stay on one row. */
+  4: 'grid-cols-2 sm:grid-cols-4',
+  5: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5',
+  6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
+  7: 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7',
 }
 
 export interface MetricStripProps {
@@ -23,6 +24,8 @@ export interface MetricStripProps {
   className?: string
   /** Staggered fade-in for child tiles (dashboard / reports KPI rows). */
   stagger?: boolean
+  /** Wrap metrics in a single bordered panel (Supabase diet dashboard). */
+  panel?: boolean
 }
 
 /**
@@ -35,6 +38,7 @@ export function MetricStrip({
   ariaLabel = 'Key metrics',
   className = '',
   stagger = false,
+  panel = false,
 }: MetricStripProps) {
   const safeCols = Math.min(7, Math.max(3, cols)) as 3 | 4 | 5 | 6 | 7
   const staggerStyle = useStaggeredAppear({ stepMs: 40, max: 8 })
@@ -50,12 +54,14 @@ export function MetricStrip({
     : children
 
   return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      className={`grid ${COLS_CLASS[safeCols]} gap-2 ${className}`}
-    >
-      {body}
+    <div className={panel ? `panel panel--metrics ${className}`.trim() : className}>
+      <div
+        role="group"
+        aria-label={ariaLabel}
+        className={`grid ${COLS_CLASS[safeCols]} ${panel ? 'gap-0' : 'gap-2'} [&>*]:min-w-0`}
+      >
+        {body}
+      </div>
     </div>
   )
 }

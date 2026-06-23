@@ -8,9 +8,9 @@
  *          components/integrations/* so each provider can evolve in isolation.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { Section, ErrorAlert } from '../components/ui'
+import { ErrorAlert, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -21,12 +21,15 @@ import { SetupNudge } from '../components/SetupNudge'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
 import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
 import { DryRunPanel } from '../components/integrations/DryRunPanel'
 import { DeploymentReadinessCard } from '../components/integrations/DeploymentReadinessCard'
 import { SlackIntegrationCard } from '../components/integrations/SlackIntegrationCard'
+import { DiscordIntegrationCard } from '../components/integrations/DiscordIntegrationCard'
+import { TeamsIntegrationCard } from '../components/integrations/TeamsIntegrationCard'
 import { NotificationPrefsMatrix } from '../components/integrations/NotificationPrefsMatrix'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
@@ -49,6 +52,12 @@ import { usePageCopy } from '../lib/copy'
 export function IntegrationsPage() {
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
+  // Sync the resolved project (URL param takes priority via useActiveProjectId) to
+  // localStorage so that apiFetch mutation calls in child components send the correct
+  // X-Mushi-Project-Id header even when the page is reached directly via URL.
+  useEffect(() => {
+    if (activeProjectId) setActiveProjectIdSnapshot(activeProjectId)
+  }, [activeProjectId])
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/integrations')
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
@@ -56,9 +65,13 @@ export function IntegrationsPage() {
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
   // /v1/admin/settings returns raw project_settings rows (no slackConfigured
   // computed field). Stats endpoint derives webhook/channel/bot truth.
-  const settingsQuery = usePageData<{ slackConfigured?: boolean; slackTeamName?: string | null; slackChannelId?: string | null }>(
-    '/v1/admin/settings/stats',
-  )
+  const settingsQuery = usePageData<{
+    slackConfigured?: boolean
+    slackTeamName?: string | null
+    slackChannelId?: string | null
+    discordConfigured?: boolean
+    teamsConfigured?: boolean
+  }>('/v1/admin/settings/stats')
   const statsQuery = usePageData<IntegrationStats>('/v1/admin/integrations/stats')
   const stats = statsQuery.data ?? EMPTY_INTEGRATION_STATS
 
@@ -409,32 +422,49 @@ export function IntegrationsPage() {
         />
       )}
 
-      <Section title="Slack notifications">
-        <SlackIntegrationCard
-          projectId={activeProjectId ?? null}
-          slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
-          teamName={settingsQuery.data?.slackTeamName ?? null}
-          channelId={settingsQuery.data?.slackChannelId ?? null}
-          latestProbe={latestByKind['slack']}
-          sparkline={sparklineByKind['slack'] ?? []}
-        />
+      <PanelSectionLabel>Notification channels</PanelSectionLabel>
+      <Panel className="mb-6">
+        <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
+          Connect one or more channels to receive real-time alerts when a report is triaged, a QA story fails, or a fix is merged.
+        </p>
+        <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-panel-border">
+          <SlackIntegrationCard
+            projectId={activeProjectId ?? null}
+            slackConfigured={Boolean(settingsQuery.data?.slackConfigured)}
+            teamName={settingsQuery.data?.slackTeamName ?? null}
+            channelId={settingsQuery.data?.slackChannelId ?? null}
+            latestProbe={latestByKind['slack']}
+            sparkline={sparklineByKind['slack'] ?? []}
+          />
+          <DiscordIntegrationCard
+            projectId={activeProjectId ?? null}
+            discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
+            latestProbe={latestByKind['discord']}
+            sparkline={sparklineByKind['discord'] ?? []}
+          />
+          <TeamsIntegrationCard
+            projectId={activeProjectId ?? null}
+            teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
+          />
+        </div>
+
         {activeProjectId && (
-          <div className="mt-4 border-t border-edge-subtle pt-4">
+          <div className="border-t border-panel-border px-4 py-4">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
               Notification events
             </h4>
             <p className="text-2xs text-fg-muted mb-3 leading-snug">
-              Choose which events trigger a Slack (or Discord) message for this project.
+              Choose which events trigger an alert across all connected channels for this project.
             </p>
             <NotificationPrefsMatrix projectId={activeProjectId} />
           </div>
         )}
-      </Section>
+      </Panel>
 
-      <Section title="Core platform">
-        <div className="space-y-4" data-dav-anchor="integrations:decide">
+      <PanelSectionLabel>Core platform</PanelSectionLabel>
+      <Panel className="mb-6 divide-y divide-panel-border" data-dav-anchor="integrations:decide">
           {/* Required sub-group — connect all three */}
-          <div>
+          <div className="p-4">
             <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
               Connect all three to close the full loop: Sentry surfaces error context, Langfuse traces every LLM call, and GitHub lets the fix-worker open draft PRs.
             </p>
@@ -469,7 +499,7 @@ export function IntegrationsPage() {
           </div>
 
           {/* Fix-agent sub-group — pick one */}
-          <div>
+          <div className="p-4 border-t border-panel-border">
             <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
               Pick one AI fix agent. Both can be configured — Mushi will use the one set in Settings → Autofix.
             </p>
@@ -507,35 +537,38 @@ export function IntegrationsPage() {
           </div>
 
           {activeProjectId && (
-            <div data-dav-anchor="integrations:verify">
+            <div className="p-4 border-t border-panel-border" data-dav-anchor="integrations:verify">
               <CodebaseIndexCard projectId={activeProjectId} />
               <DryRunPanel projectId={activeProjectId} />
             </div>
           )}
-        </div>
-      </Section>
+      </Panel>
 
-      <Section title="Deployment readiness">
-        <p className="text-2xs text-fg-secondary mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+      <PanelSectionLabel>Deployment readiness</PanelSectionLabel>
+      <Panel className="mb-6">
+        <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
           Close the loop between &ldquo;Mushi just dispatched a fix&rdquo; and
           &ldquo;the fix shipped safely&rdquo;. Each item below is a one-click
           deep link into the host platform settings so your branch-protection
           rules, preview deploys, and production gates stay aligned with the
           auto-fix workflow.
         </p>
+        <div className="p-4">
         <DeploymentReadinessCard
           projectId={activeProjectId ?? null}
           githubAppInstalled={Boolean(platform?.github?.has_credentials)}
           vercelProjectSlug={vercelSlug}
         />
-      </Section>
+        </div>
+      </Panel>
 
-      <Section title="Routing destinations">
-        <p className="text-2xs text-fg-secondary mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
+      <PanelSectionLabel>Routing destinations</PanelSectionLabel>
+      <Panel className="mb-6">
+        <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
           Forward triaged reports to your ticketing or paging system. Each provider has its own
           credentials; severity + category routing lives in Settings → Routing.
         </p>
-        <div className="space-y-2" data-dav-anchor="integrations:act">
+        <div className="divide-y divide-panel-border" data-dav-anchor="integrations:act">
           {ROUTING_PROVIDERS.map((provider) => {
             const existing = routing.find((r) => r.integration_type === provider.type)
             return (
@@ -565,7 +598,7 @@ export function IntegrationsPage() {
             )
           })}
         </div>
-      </Section>
+      </Panel>
 
       {pendingDeleteRouting && (
         <ConfirmDialog

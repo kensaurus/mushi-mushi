@@ -26,14 +26,15 @@ const baseChip =
 const effortStyles: Record<EffortLevel, string> = {
   Hours:
     'border-[var(--mushi-jade)]/40 bg-[var(--mushi-jade-wash)] text-[var(--mushi-jade)]',
-  Days: 'border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200',
+  Days:
+    'border-[var(--mushi-viz-warn)]/40 bg-[var(--mushi-viz-wash-warn)] text-[var(--mushi-viz-warn)]',
   Weeks:
     'border-[var(--mushi-vermillion)]/40 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion-ink)]',
 }
 
 const riskStyles: Record<RiskLevel, string> = {
   Low: 'border-[var(--mushi-jade)]/40 bg-[var(--mushi-jade-wash)] text-[var(--mushi-jade)]',
-  Med: 'border-amber-300/70 bg-amber-50 text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200',
+  Med: 'border-[var(--mushi-viz-warn)]/40 bg-[var(--mushi-viz-wash-warn)] text-[var(--mushi-viz-warn)]',
   High: 'border-[var(--mushi-vermillion)]/40 bg-[var(--mushi-vermillion-wash)] text-[var(--mushi-vermillion-ink)]',
 }
 

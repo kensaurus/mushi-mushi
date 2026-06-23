@@ -406,7 +406,7 @@ export function BillingPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Billing'}
         projectScope={stats.projectName ?? activeProject?.project_name}
-        description={copy?.description ?? 'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'}
+        description={copy?.description ?? 'Plan, usage, invoices, and quota.'}
         helpTitle={copy?.help?.title ?? 'About Billing'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??

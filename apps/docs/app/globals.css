@@ -35,8 +35,24 @@
 @import 'tailwindcss';
 @import 'nextra-theme-docs/style.css';
 @import '@mushi-mushi/brand/editorial.css';
+@import '@mushi-mushi/marketing-ui/styles.css';
 
 @variant dark (&:where(.dark *));
+
+/* Semantic Tailwind utilities — map editorial tokens to color-* classes.
+   Prefer `text-mushi-ink` over `text-[var(--mushi-ink)]` in new components. */
+@theme inline {
+  --color-mushi-paper: var(--mushi-paper);
+  --color-mushi-paper-wash: var(--mushi-paper-wash);
+  --color-mushi-ink: var(--mushi-ink);
+  --color-mushi-ink-muted: var(--mushi-ink-muted);
+  --color-mushi-vermillion: var(--mushi-vermillion);
+  --color-mushi-rule: var(--mushi-rule);
+  --color-mushi-accent: var(--mushi-viz-accent);
+  --color-mushi-positive: var(--mushi-viz-positive);
+  --color-mushi-warn: var(--mushi-viz-warn);
+  --color-mushi-danger: var(--mushi-viz-danger);
+}
 
 @source "../components/**/*.{ts,tsx}";
 @source "../content/**/*.{md,mdx}";
@@ -977,5 +993,49 @@ main :not(pre) > code {
 .docs-screenshot-lightbox__footer {
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--mushi-rule);
+}
+
+/* Pricing estimator pill toggles — visible keyboard focus (WCAG 2.4.7) */
+.docs-pricing-toggle {
+  min-height: 2rem;
+  min-width: 2rem;
+  cursor: pointer;
+}
+
+.docs-pricing-toggle:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 2px;
+}
+
+.docs-pricing-toggle--cta:focus-visible {
+  outline-color: var(--mushi-paper);
+  outline-offset: 3px;
+}
+
+/* Landing media strip — animated tour + dogfood + theme-aware stills */
+.docs-media-showcase {
+  display: grid;
+  gap: 1.25rem;
+  margin: 1.5rem 0 2rem;
+}
+
+@media (min-width: 768px) {
+  .docs-media-showcase {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .docs-media-showcase__static {
+    display: grid;
+    gap: 1.25rem;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .docs-media-showcase__static {
+    display: grid;
+    gap: 1.25rem;
+  }
 }
 

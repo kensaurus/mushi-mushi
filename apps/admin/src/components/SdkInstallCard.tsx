@@ -53,6 +53,7 @@ import {
   type WidgetTheme,
   type WidgetTrigger,
 } from '../lib/sdkSnippets'
+import { getWidgetPreviewTokens, getLocale } from '@mushi-mushi/web'
 import { resolveDefaultSdkFramework } from '../lib/sdkInstallDefaults'
 
 interface Props {
@@ -90,6 +91,13 @@ const SCREENSHOT_LABEL: Record<ScreenshotMode, string> = {
   'on-report': 'When report opens',
   auto: 'Always',
   off: 'Never',
+}
+
+/** Subset of assistant config used by the live widget preview mock. */
+interface AssistantPreviewState {
+  enabled: boolean
+  label: string
+  greeting: string
 }
 
 interface RemoteSdkConfig {
@@ -193,6 +201,11 @@ export function SdkInstallCard({
   const [loadingConfig, setLoadingConfig] = useState(false)
   const [savingConfig, setSavingConfig] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [assistantPreview, setAssistantPreview] = useState<AssistantPreviewState>({
+    enabled: false,
+    label: 'Ask',
+    greeting: '',
+  })
 
   const [fetchedPrefixes, setFetchedPrefixes] = useState<string[]>([])
   const [rotating, setRotating] = useState(false)
@@ -261,6 +274,25 @@ export function SdkInstallCard({
       }
     }).finally(() => {
       if (!cancelled) setLoadingConfig(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    let cancelled = false
+    void apiFetch<{
+      enabled?: boolean
+      label?: string
+      greeting?: string | null
+    }>(`/v1/admin/projects/${projectId}/assistant`).then((res) => {
+      if (cancelled || !res.ok || !res.data) return
+      setAssistantPreview({
+        enabled: res.data.enabled === true,
+        label: (res.data.label ?? 'Ask').trim() || 'Ask',
+        greeting: (res.data.greeting ?? '').trim(),
+      })
     })
     return () => {
       cancelled = true
@@ -431,7 +463,7 @@ export function SdkInstallCard({
                 </button>
               )}
             </div>
-            <WidgetPreview config={config} />
+            <WidgetPreview config={config} assistant={assistantPreview} />
           </div>
 
           <ConfiguratorPanel config={config} enabled={enabled} framework={framework} onEnabledChange={setEnabled} onChange={setConfig} />
@@ -528,11 +560,11 @@ export function SdkInstallCard({
                   Every report carries the breadcrumb buffer, sticky tags, and (when
                   Sentry is installed) the active trace + replay + user. After a
                   successful submit the SDK also tags Sentry's scope with
-                  <code className="mx-1 px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">mushi.report_id</code>
+                  <code className="mushi-code-inline mx-1 font-mono">mushi.report_id</code>
                   so subsequent Sentry events backlink — the admin can pivot via
                   Sentry MCP without a manual paste.
                 </p>
-                <pre className="mushi-code-block mushi-code-body px-2.5 py-2 rounded-sm border border-edge-subtle overflow-x-auto whitespace-pre-wrap">{`// Identity — sticky across every subsequent report
+                <pre className="mushi-code-block mushi-code-body px-2.5 py-2 rounded-sm border border-code-surface-border overflow-x-auto whitespace-pre-wrap">{`// Identity — sticky across every subsequent report
 Mushi.getInstance()?.identify(user.id, { email: user.email, name: user.name })
 
 // Tags — short scalar key/values, surfaced to the Triage LLM
@@ -604,32 +636,25 @@ const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
  * widget keeps the preview honest; if the visual drifts, users will report
  * "the actual widget doesn't look like the preview".
  */
-function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
+function WidgetPreview({
+  config,
+  assistant,
+}: {
+  config: SdkPreviewConfig
+  assistant: AssistantPreviewState
+}) {
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [moreNavOpen, setMoreNavOpen] = useState(false)
+  const t = useMemo(() => getLocale('en'), [])
+  const moreNavCount = 2 + (assistant.enabled ? 1 : 0)
+  const moreNavToggle = `${t.step1.moreNavLabel} (${moreNavCount})`
   // mushi-mushi-allowlist: mirrors packages/web widget tokens — hex must match shipped SDK preview
   const isDark =
     config.theme === 'dark' ||
     (config.theme === 'auto' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
 
-  // Mirror the named tokens from packages/web/src/styles.ts so the preview
-  // and the real widget share a single colour story by intent, not by
-  // copy-pasted hex values.
-  const tokens = isDark
-    ? {
-        paper: '#0F0E0C',
-        ink: '#F2EBDD',
-        inkMuted: '#928B7E',
-        rule: 'rgba(242,235,221,0.12)',
-        vermillion: '#FF5A47',
-        vermillionShadow: '#7A1F15',
-      }
-    : {
-        paper: '#F8F4ED',
-        ink: '#0E0D0B',
-        inkMuted: '#5C5852',
-        rule: 'rgba(14,13,11,0.12)',
-        vermillion: '#E03C2C',
-        vermillionShadow: '#9A2A1E',
-      }
+  // Single source: @mushi-mushi/core palette via web build-widget-theme helper.
+  const tokens = getWidgetPreviewTokens(isDark ? 'dark' : 'light')
 
   const cornerPos: Record<WidgetPosition, React.CSSProperties> = {
     'top-left': { top: 10, left: 10 },
@@ -650,7 +675,7 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
           ? 'radial-gradient(circle at 20% 10%, rgba(255,255,255,0.02) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.015) 0%, transparent 40%)'
           : 'radial-gradient(circle at 20% 10%, rgba(0,0,0,0.015) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(0,0,0,0.02) 0%, transparent 40%)',
       }}
-      aria-label="Live preview of the bug-capture widget in your app"
+      aria-label="Live preview of the issue-report widget in your app"
     >
       {/* Faux browser chrome — kept minimal so the eye lands on the widget */}
       {/* mushi-mushi-allowlist: macOS traffic-light mock chrome in SDK widget preview */}
@@ -697,13 +722,13 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
             fontSize: 11,
             fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
             background: config.bannerVariant === 'neon'
-              ? '#0FFF50'
+              ? tokens.neonBannerBg
               : config.bannerVariant === 'subtle'
-                ? (isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.04)')
+                ? tokens.accentWash
                 : tokens.vermillion,
-            color: config.bannerVariant === 'neon' ? '#0a1a0a' : config.bannerVariant === 'subtle' ? tokens.inkMuted : '#fff',
-            borderBottom: config.bannerPosition !== 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? '#00C43A' : config.bannerVariant === 'subtle' ? tokens.rule : '#B52F1F'}` : 'none',
-            borderTop: config.bannerPosition === 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? '#00C43A' : config.bannerVariant === 'subtle' ? tokens.rule : '#B52F1F'}` : 'none',
+            color: config.bannerVariant === 'neon' ? tokens.neonBannerFg : config.bannerVariant === 'subtle' ? tokens.inkMuted : tokens.onAccent,
+            borderBottom: config.bannerPosition !== 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? tokens.neonBannerBorder : config.bannerVariant === 'subtle' ? tokens.rule : tokens.brandBannerBorder}` : 'none',
+            borderTop: config.bannerPosition === 'bottom' ? `1px solid ${config.bannerVariant === 'neon' ? tokens.neonBannerBorder : config.bannerVariant === 'subtle' ? tokens.rule : tokens.brandBannerBorder}` : 'none',
           }}
         >
           {config.bannerMessage.trim() ? (
@@ -719,7 +744,23 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
                 </span>
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 11 }}>
-                <span style={{ cursor: 'pointer', opacity: 0.9 }}>{config.bannerBugCta.trim() || '🐛 Report a bug'}</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  style={{ cursor: 'pointer', opacity: 0.9 }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setPanelOpen(true)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setPanelOpen(true)
+                    }
+                  }}
+                >
+                  {config.bannerBugCta.trim() || '🐛 Report a bug'}
+                </span>
                 {config.bannerFeatureCta && (
                   <>
                     <span style={{ opacity: 0.25 }}>|</span>
@@ -731,7 +772,21 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
             </>
           ) : (
             <>
-              <span style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.14)', cursor: 'pointer' }}>
+              <span
+                role="button"
+                tabIndex={0}
+                style={{ padding: '1px 6px', borderRadius: 2, background: 'rgba(0,0,0,0.14)', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  setPanelOpen(true)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setPanelOpen(true)
+                  }
+                }}
+              >
                 {config.bannerBugCta.trim() || '🐛 Report a bug'}
               </span>
               {config.bannerFeatureCta && (
@@ -776,9 +831,11 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
               ? `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset -3px 0 0 ${tokens.vermillion}`
               : `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset 0 -3px 0 ${tokens.vermillion}`,
           }}
-          aria-label="Mock bug-capture trigger button"
-          // Pure visual mock — clicking does nothing on purpose.
-          onClick={(e) => e.preventDefault()}
+          aria-label="Mock bug-capture trigger button — click to preview panel"
+          onClick={(e) => {
+            e.preventDefault()
+            setPanelOpen((open) => !open)
+          }}
         >
         {/* Trim BEFORE falling back, not after. Bare `||` would treat `"   "`
             as truthy and render three invisible spaces — a blank trigger button
@@ -811,6 +868,99 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
           }}
         />
         </button>
+      )}
+
+      {panelOpen && config.trigger !== 'manual' && config.trigger !== 'hidden' && config.trigger !== 'attach' && (
+        <div
+          className="absolute rounded-sm border shadow-lg overflow-hidden"
+          style={{
+            bottom: 8,
+            right: 8,
+            width: '62%',
+            maxHeight: '72%',
+            background: tokens.paperRaised,
+            borderColor: tokens.rule,
+            color: tokens.ink,
+            fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+            fontSize: 11,
+            zIndex: 2,
+          }}
+          role="presentation"
+        >
+          <div
+            className="px-2 py-1 border-b text-3xs font-medium flex items-center justify-between gap-1"
+            style={{ borderColor: tokens.rule, color: tokens.inkMuted }}
+          >
+            <span>{t.step1.heading}</span>
+            <button
+              type="button"
+              className="text-3xs"
+              style={{ color: tokens.inkMuted, cursor: 'pointer' }}
+              aria-label={t.widget.close}
+              onClick={() => setPanelOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-2 space-y-1">
+            <p
+              className="text-3xs font-medium"
+              style={{
+                color: tokens.inkMuted,
+                fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
+                fontSize: 11,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                margin: 0,
+              }}
+            >
+              {t.step1.reportSectionLabel}
+            </p>
+            <div
+              className="rounded-sm px-2 py-1 border"
+              style={{ borderColor: tokens.rule, background: tokens.paper }}
+            >
+              <span style={{ color: tokens.vermillion }} aria-hidden="true">🐛</span>{' '}
+              {t.step1.categoryDescriptions.bug}
+            </div>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                className="w-full rounded-sm px-2 py-1 border text-left flex items-center justify-between gap-1"
+                style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted, cursor: 'pointer' }}
+                aria-expanded={moreNavOpen}
+                onClick={() => setMoreNavOpen((open) => !open)}
+              >
+                <span>{moreNavToggle}</span>
+                <span aria-hidden="true">{moreNavOpen ? '▾' : '▸'}</span>
+              </button>
+              {moreNavOpen && (
+                <div className="space-y-0.5 pl-1">
+                  <div
+                    className="rounded-sm px-2 py-0.5 border text-3xs"
+                    style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted }}
+                  >
+                    📬 {t.step1.moreNav.yourReports}
+                  </div>
+                  {assistant.enabled && (
+                    <div
+                      className="rounded-sm px-2 py-0.5 border text-3xs"
+                      style={{ borderColor: tokens.rule, background: tokens.paper, color: tokens.inkMuted }}
+                    >
+                      💬 {assistant.label || t.assistant.defaultLabel}
+                    </div>
+                  )}
+                  <div
+                    className="rounded-sm px-2 py-0.5 text-3xs"
+                    style={{ color: tokens.inkMuted }}
+                  >
+                    🌐 {t.step1.moreNav.joinCommunity.split(' · ')[0]}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

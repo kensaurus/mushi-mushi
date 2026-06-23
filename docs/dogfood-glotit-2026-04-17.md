@@ -136,3 +136,64 @@ glot.it/
 | **Cloud sign-up + Stripe billing + plugin marketplace** | 🟡 | Marketplace + Storage + SSO + Compliance pages render in admin nav, but billing flow not exercised |
 
 PDCA + billing exercise → next round.
+
+---
+
+## Reporter pipeline remediation (Jun 2026)
+
+Follow-up to the RT-TEST E2E audit. Fixes shipped in `mushi-mushi` + `glot.it` to close SDK → console → MCP → My Reports propagation gaps.
+
+### glot.it project
+
+| Field | Value |
+|-------|-------|
+| Project ID | `542b34e0-019e-41fe-b900-7b637717bb86` |
+| Host | `kensaur.us/glot-it` (local: `:3847`) |
+| Widget trigger | `banner` (not FAB) |
+
+### Multi-project MCP (kensaurus@gmail.com)
+
+If Cursor MCP is pinned to a **different** project than the host app SDK, `get_recent_reports` returns empty while ingest still works.
+
+**Fix (pick one):**
+
+1. Admin console → select glot.it project → **Connect** → **Add to Cursor** (mints a key scoped to `542b34e0-…`).
+2. CLI: `mushi setup --all-projects --ide cursor` after `mushi login` — writes one MCP entry per linked project. Restart Cursor MCP.
+
+The MCP server now returns `PROJECT_SCOPE_MISMATCH` when a tool passes a `projectId` that differs from the entry's `MUSHI_PROJECT_ID` (instead of silent empty results).
+
+### SDK changes (`@mushi-mushi/core` + `@mushi-mushi/web`)
+
+- **Project-scoped reporter token:** `localStorage` key `mushi:reporter-token:${projectId}`; legacy `mushi_reporter_token` migrates on first use.
+- **Rewards + `identifyWithToken`:** glot.it identity JWT path now initializes rewards with the same reporter token.
+- **Notification polling:** 60s + `visibilitychange`, gated by `reporterNotificationsEnabled` from `GET /v1/sdk/config`.
+
+### Backend changes (edge functions)
+
+Shared [`report-status-notify.ts`](../packages/server/supabase/functions/_shared/report-status-notify.ts):
+
+| Transition | Reporter notification |
+|------------|---------------------|
+| → `fixing` | `confirmed` (+50 pts) |
+| → `fixed` | `fixed` (+25 pts) |
+| → `verified` / `reopened` / `dismissed` | matching type |
+
+Wired into admin PATCH, `fix-worker` (after PR opened), and `finalizeFixMerge`. All paths respect `project_settings.reporter_notifications_enabled`.
+
+### Proper fix closure (do **not** use SQL shortcuts)
+
+**Forbidden:** `UPDATE reports SET status = 'fixed'` in SQL for audit closure.
+
+**Canonical path:**
+
+```
+fix-worker opens draft PR → status fixing → reporter confirmed notification
+→ console Merge / mushi fixes merge → finalizeFixMerge → fixed notification
+→ My Reports shows Fixed — confirm?
+```
+
+### E2E harness
+
+- `examples/e2e-dogfood/tests/sdk-widget-features.spec.ts` — `MUSHI_WIDGET_TRIGGER=banner|fab`
+- `examples/e2e-dogfood/tests/reporter-inbox.spec.ts` — token scoping + My Reports list
+

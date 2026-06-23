@@ -204,7 +204,7 @@ export function ActionDetailDrawer({
           <summary className="text-2xs text-fg-faint cursor-pointer hover:text-fg-muted">
             Raw metadata
           </summary>
-          <pre className="text-2xs bg-surface-overlay/50 p-2 rounded-sm overflow-auto max-h-48 mt-1 font-mono">
+          <pre className="mushi-code-block mushi-code-body text-2xs p-2 rounded-sm overflow-auto max-h-48 mt-1 font-mono">
             {JSON.stringify(meta ?? {}, null, 2)}
           </pre>
         </details>

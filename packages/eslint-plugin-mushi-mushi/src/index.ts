@@ -36,6 +36,10 @@ import noText3xsOnInteractive from './rules/no-text-3xs-on-interactive.js'
 import noHandRolledDialog from './rules/no-hand-rolled-dialog.js'
 import noHandRolledTablist from './rules/no-hand-rolled-tablist.js'
 import noMissingPagePosture from './rules/no-missing-page-posture.js'
+import noLegacyShadcnTokens from './rules/no-legacy-shadcn-tokens.js'
+import noAccentForSelection from './rules/no-accent-for-selection.js'
+import noRawHexInWidget from './rules/no-raw-hex-in-widget.js'
+import noCardElevatedOutsideAllowlist from './rules/no-card-elevated-outside-allowlist.js'
 
 const PLUGIN_NAME = 'mushi-mushi'
 
@@ -47,6 +51,10 @@ const rules: Record<string, Rule.RuleModule> = {
   'no-hand-rolled-dialog': noHandRolledDialog,
   'no-hand-rolled-tablist': noHandRolledTablist,
   'no-missing-page-posture': noMissingPagePosture,
+  'no-legacy-shadcn-tokens': noLegacyShadcnTokens,
+  'no-accent-for-selection': noAccentForSelection,
+  'no-raw-hex-in-widget': noRawHexInWidget,
+  'no-card-elevated-outside-allowlist': noCardElevatedOutsideAllowlist,
 }
 
 const recommendedRules: Linter.RulesRecord = {

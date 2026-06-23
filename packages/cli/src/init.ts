@@ -76,7 +76,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   ensureInteractiveOrBailOut(options)
 
-  p.intro('🐛 Mushi Mushi setup wizard')
+  p.intro('Mushi setup')
 
   await printFreshnessHint()
   warnIfWorkspaceRoot(cwd)
@@ -125,7 +125,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   await maybeOfferConnect(credentials, options, consoleBase)
 
-  p.outro('Setup complete. Happy bug squashing 🐛')
+  p.outro('Setup complete.')
 }
 
 /**

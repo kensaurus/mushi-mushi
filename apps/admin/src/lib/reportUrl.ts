@@ -17,23 +17,36 @@
  * always correct regardless of deployment prefix.
  *
  * USAGE
- *   import { reportPermalink } from '@/lib/reportUrl'
- *   navigator.clipboard.writeText(reportPermalink(report.id))
+ *   import { reportPermalink, reportDetailPath } from '@/lib/reportUrl'
+ *   navigate(reportDetailPath(report.id, activeProjectId))
+ *   navigator.clipboard.writeText(reportPermalink(report.id, activeProjectId))
  */
+
+import { isValidProjectId } from './activeProject'
+import { scopedHref } from './humanPageHints'
+
+/** In-app router path for a report detail view, preserving project scope. */
+export function reportDetailPath(reportId: string, projectId?: string | null): string {
+  const base = `/reports/${encodeURIComponent(reportId)}`
+  if (projectId && isValidProjectId(projectId)) return scopedHref(base, projectId)
+  return base
+}
 
 /**
  * Returns the fully-qualified shareable URL for a given report ID.
  * Safe to copy-to-clipboard or embed in Slack / Discord notifications.
- *
- * Examples (production, BASE_URL = "/mushi-mushi/admin/"):
- *   reportPermalink("abc-123")
- *   → "https://kensaur.us/mushi-mushi/admin/reports/abc-123"
- *
- * Examples (local dev, BASE_URL = "/"):
- *   reportPermalink("abc-123")
- *   → "http://localhost:6464/reports/abc-123"
  */
-export function reportPermalink(reportId: string): string {
+export function reportPermalink(reportId: string, projectId?: string | null): string {
   const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '')
-  return `${window.location.origin}${base}/reports/${encodeURIComponent(reportId)}`
+  const path = reportDetailPath(reportId, projectId)
+  return `${window.location.origin}${base}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+/**
+ * Returns the fully-qualified URL for the current admin view, including
+ * filters in the query string and any hash anchor.
+ */
+export function currentAdminViewUrl(): string {
+  if (typeof window === 'undefined') return ''
+  return window.location.href
 }

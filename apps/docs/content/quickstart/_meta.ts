@@ -1,6 +1,7 @@
 export default {
   index: 'Choose your stack',
   'incident-loop': 'Incident loop (start here)',
+  'cli-console-loop': 'CLI ↔ console loop',
   mcp: 'MCP server',
   react: 'React',
   web: 'Vanilla JS',
