@@ -216,6 +216,14 @@ export class MushiWidget {
   }
 
   updateConfig(config: MushiWidgetConfig = {}): void {
+    // Capture pre-merge state so we can detect a meaningful banner change from
+    // the async runtime/dashboard config. Without this, a console operator who
+    // turns the banner back on (trigger → 'banner') or pushes new banner copy
+    // would be silently ignored if the user had dismissed an earlier banner
+    // this session (bannerDismissed stays true), and renderBanner() early-exits.
+    const prevTrigger = this.config.trigger;
+    const prevBannerConfig = JSON.stringify(this.config.bannerConfig ?? null);
+
     this.config = {
       ...this.config,
       ...(config.position ? { position: config.position } : {}),
@@ -253,6 +261,15 @@ export class MushiWidget {
       ...(config.categories !== undefined ? { categories: config.categories } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
+    // If the trigger was (re-)set to 'banner' from something else, or the
+    // banner copy/link actually changed, clear a stale session dismissal so the
+    // new/restored banner renders. Gated on real change so a config tick that
+    // doesn't touch the banner never resurrects a banner the user dismissed.
+    const triggerBecameBanner = this.config.trigger === 'banner' && prevTrigger !== 'banner';
+    const bannerConfigChanged = JSON.stringify(this.config.bannerConfig ?? null) !== prevBannerConfig;
+    if (triggerBecameBanner || bannerConfigChanged) {
+      this.bannerDismissed = false;
+    }
     // Re-sync host chrome in case zIndex changed.
     if (this.host.isConnected) this.syncHostChromeState();
     this.syncAttachedLaunchers();
