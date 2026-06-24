@@ -1,0 +1,52 @@
+##
+# FILE: deploy-hosted-mcp.yml
+# PURPOSE: Wire kensaur.us/mushi-mushi/hosted-mcp → Supabase MCP (Smithery PRM).
+# Trigger manually after merging script changes — no admin/docs build required.
+##
+
+name: Deploy Hosted MCP Proxy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/cloudfront-mushi-hosted-mcp-*'
+      - 'scripts/aws-setup-hosted-mcp.mjs'
+      - 'scripts/hosted-mcp-oauth-metadata.json'
+      - 'scripts/verify-hosted-mcp.mjs'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+
+      - name: Setup hosted MCP on CloudFront
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: node scripts/aws-setup-hosted-mcp.mjs
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths \
+              "/mushi-mushi/hosted-mcp*" \
+              "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" \
+            --region us-east-1
+
+      - name: Wait and smoke test
+        run: |
+          sleep 90
+          node scripts/verify-hosted-mcp.mjs

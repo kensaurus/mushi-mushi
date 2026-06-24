@@ -19,8 +19,9 @@ function loadHandler(filename) {
   return new Function('event', `${src}\nreturn handler(event);`)
 }
 
-function req(uri, querystring = '') {
-  return { request: { uri, querystring } }
+function req(uri, querystring = '', method = 'GET', accept = '') {
+  const headers = accept ? { accept: { value: accept } } : {}
+  return { request: { uri, querystring, method, headers } }
 }
 
 describe('cloudfront-mushi-apex-redirect', () => {
@@ -83,5 +84,34 @@ describe('cloudfront-mushi-spa-router', () => {
     const out = spa(req('/mushi-mushi/login'))
     assert.equal(out.statusCode, 302)
     assert.equal(out.headers.location.value, '/mushi-mushi/admin/login')
+  })
+})
+
+describe('cloudfront-mushi-hosted-mcp', () => {
+  const router = loadHandler('cloudfront-mushi-hosted-mcp-router.js')
+  const wellknown = loadHandler('cloudfront-mushi-hosted-mcp-wellknown.js')
+
+  it('returns kensaur.us PRM on resource GET', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/', '', 'GET'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /kensaur\.us\/mushi-mushi\/hosted-mcp/)
+  })
+
+  it('returns AS metadata on oauth-authorization-server', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/.well-known/oauth-authorization-server', '', 'GET'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /token_endpoint/)
+  })
+
+  it('rewrites POST to Supabase path prefix', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp', '', 'POST', 'application/json, text/event-stream'))
+    assert.equal(out.uri, '/')
+    assert.equal(out.statusCode, undefined)
+  })
+
+  it('serves origin PRM at well-known path', () => {
+    const out = wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp', '', 'GET'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /authorization_servers/)
   })
 })

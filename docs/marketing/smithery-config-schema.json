@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "mushiApiKey": {
+      "type": "string",
+      "title": "Mushi API key",
+      "description": "Mint at kensaur.us/mushi-mushi/docs/connect (mcp:read scope)",
+      "x-from": { "header": "x-mushi-api-key" }
+    },
+    "mushiProjectId": {
+      "type": "string",
+      "title": "Project ID",
+      "description": "Optional when your key is single-project",
+      "x-from": { "header": "x-mushi-project-id" },
+      "x-to": { "header": "X-Mushi-Project-Id" }
+    }
+  },
+  "required": ["mushiApiKey"]
+}

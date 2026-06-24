@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+/**
+ * Smoke-test hosted MCP on kensaur.us + optional Smithery setup POST.
+ * Usage: node scripts/verify-hosted-mcp.mjs
+ */
+
+const HOSTED = 'https://kensaur.us/mushi-mushi/hosted-mcp'
+const ORIGIN_PRM =
+  'https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp'
+
+const checks = [
+  ['origin PRM', ORIGIN_PRM],
+  ['resource PRM', `${HOSTED}/`],
+  ['AS metadata', `${HOSTED}/.well-known/oauth-authorization-server`],
+  ['server-card', `${HOSTED}/.well-known/mcp/server-card.json`],
+]
+
+let failed = 0
+for (const [label, url] of checks) {
+  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  const text = await res.text()
+  const ok = res.ok && (text.includes('authorization_servers') || text.includes('serverInfo'))
+  console.log(`${ok ? '✓' : '✗'} ${label} ${res.status} ${url}`)
+  if (!ok) {
+    failed++
+    console.log(`  ${text.slice(0, 200)}`)
+  }
+}
+
+const init = await fetch(`${HOSTED}`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    'User-Agent': 'SmitheryBot/1.0',
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'verify-hosted-mcp', version: '1.0' },
+    },
+  }),
+})
+const initText = await init.text()
+const initOk = init.ok && initText.includes('protocolVersion')
+console.log(`${initOk ? '✓' : '✗'} SmitheryBot initialize ${init.status}`)
+if (!initOk) {
+  failed++
+  console.log(`  ${initText.slice(0, 200)}`)
+}
+
+process.exit(failed ? 1 : 0)
