@@ -259,3 +259,75 @@ describe('side-effect cleanup', () => {
     expect(existsSync(dir)).toBe(false)
   })
 })
+
+describe('detectFramework — Remix / Astro / Solid / CRA', () => {
+  let dir: string
+  beforeEach(() => { dir = makeTmp() })
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+
+  it('detects Remix and wins over the bundled react dep', () => {
+    writePkg(dir, { '@remix-run/react': '^2.0.0', react: '^18.0.0' })
+    expect(detectFramework(dir, readPackageJson(dir)).id).toBe('remix')
+  })
+
+  it('detects Astro and wins over react islands', () => {
+    writePkg(dir, { astro: '^4.0.0', react: '^18.0.0' })
+    expect(detectFramework(dir, readPackageJson(dir)).id).toBe('astro')
+  })
+
+  it('detects SolidStart and plain Solid', () => {
+    writePkg(dir, { '@solidjs/start': '^1.0.0', 'solid-js': '^1.8.0' })
+    expect(detectFramework(dir, readPackageJson(dir)).id).toBe('solid')
+    const dir2 = makeTmp()
+    try {
+      writePkg(dir2, { 'solid-js': '^1.8.0' })
+      expect(detectFramework(dir2, readPackageJson(dir2)).id).toBe('solid')
+    } finally {
+      rmSync(dir2, { recursive: true, force: true })
+    }
+  })
+
+  it('detects Create React App (react-scripts) over plain react', () => {
+    writePkg(dir, { react: '^18.0.0', 'react-scripts': '5.0.1' })
+    expect(detectFramework(dir, readPackageJson(dir)).id).toBe('cra')
+  })
+
+  it('plain react (Vite) is still react, not cra', () => {
+    writePkg(dir, { react: '^18.0.0' })
+    expect(detectFramework(dir, readPackageJson(dir)).id).toBe('react')
+  })
+
+  it('detects Remix and Astro from config files', () => {
+    writePkg(dir, {})
+    writeFileSync(join(dir, 'astro.config.mjs'), 'export default {}')
+    expect(detectFramework(dir, readPackageJson(dir)).id).toBe('astro')
+  })
+})
+
+describe('envVarsToWrite — new framework prefixes', () => {
+  const key = 'mushi_test_key_abcdefghijklmnop'
+  const pid = '00000000-0000-0000-0000-000000000001'
+
+  it('CRA uses REACT_APP_ prefix', () => {
+    const out = envVarsToWrite(key, pid, FRAMEWORKS.cra)
+    expect(out).toContain(`REACT_APP_MUSHI_PROJECT_ID=${pid}`)
+    expect(out).toContain(`REACT_APP_MUSHI_API_KEY=${key}`)
+  })
+
+  it('Astro uses PUBLIC_ prefix', () => {
+    const out = envVarsToWrite(key, pid, FRAMEWORKS.astro)
+    expect(out).toContain(`PUBLIC_MUSHI_PROJECT_ID=${pid}`)
+  })
+
+  it('Solid uses VITE_ prefix', () => {
+    const out = envVarsToWrite(key, pid, FRAMEWORKS.solid)
+    expect(out).toContain(`VITE_MUSHI_PROJECT_ID=${pid}`)
+  })
+
+  it('Remix uses bare MUSHI_ names (runtime window.ENV)', () => {
+    const out = envVarsToWrite(key, pid, FRAMEWORKS.remix)
+    expect(out).toContain(`MUSHI_PROJECT_ID=${pid}`)
+    expect(out).not.toContain('VITE_')
+    expect(out).not.toContain('PUBLIC_')
+  })
+})
