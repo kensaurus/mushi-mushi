@@ -124,8 +124,8 @@ if (!mushiBehavior) {
 }
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
-/** Forwards all viewer headers — custom origins only (not S3). */
-const ALL_VIEWER_ORP = '216adef6-5c7f-47e4-b989-5492eafa07d3'
+/** Forwards viewer headers except Host — required so Supabase sees its own hostname. */
+const ALL_VIEWER_EXCEPT_HOST_ORP = 'b689b0a8-53d5-40f8-bc2b-ae2c5b4f8b9a'
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
 function cloneBehavior(source) {
@@ -165,15 +165,15 @@ if (!existing.has(WELLKNOWN_PATTERN)) {
 
 if (!existing.has(HOSTED_MCP_PATTERN)) {
   toAdd.push(
-    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, ALL_VIEWER_ORP),
+    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, ALL_VIEWER_EXCEPT_HOST_ORP),
   )
 } else {
   const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === HOSTED_MCP_PATTERN)
-  if (row?.OriginRequestPolicyId !== ALL_VIEWER_ORP) {
-    row.OriginRequestPolicyId = ALL_VIEWER_ORP
+  if (row?.OriginRequestPolicyId !== ALL_VIEWER_EXCEPT_HOST_ORP) {
+    row.OriginRequestPolicyId = ALL_VIEWER_EXCEPT_HOST_ORP
     row.CachePolicyId = CACHING_DISABLED
     needsUpdate = true
-    console.log(`Patching ${HOSTED_MCP_PATTERN} → AllViewer origin request policy`)
+    console.log(`Patching ${HOSTED_MCP_PATTERN} → AllViewerExceptHost origin request policy`)
   }
 }
 
