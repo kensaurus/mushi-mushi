@@ -5,10 +5,66 @@
  * (MCP_PUBLIC_BASE_URL) so HEAD responses include a JSON body — required by
  * Smithery RFC 8414 discovery. CloudFront Functions omit bodies on synthetic HEAD.
  *
+ * OAuth authorize GET is handled here (viewer has querystring; UserAgentReferer ORP
+ * does not forward query strings to Supabase).
+ *
  * POST/DELETE/OPTIONS/SSE GET → rewrite URI and forward to custom origin.
  */
 
 var PREFIX = '/mushi-mushi/hosted-mcp'
+
+function qsValue(qs, key) {
+  if (!qs) return ''
+  var entry = qs[key]
+  if (!entry) return ''
+  if (entry.value !== undefined) return entry.value
+  if (entry.multiValue && entry.multiValue.length) return entry.multiValue[0].value
+  return ''
+}
+
+function isSmitheryRedirect(uri) {
+  return uri.indexOf('https://smithery.run/') === 0 || uri.indexOf('https://smithery.ai/') === 0
+}
+
+function oauthAuthorizeResponse(request) {
+  var redirectUri = qsValue(request.querystring, 'redirect_uri')
+  var state = qsValue(request.querystring, 'state')
+  var responseType = qsValue(request.querystring, 'response_type')
+
+  if (responseType && responseType !== 'code') {
+    return {
+      statusCode: 400,
+      statusDescription: 'Bad Request',
+      headers: { 'content-type': { value: 'application/json' } },
+      body: '{"error":"unsupported_response_type"}',
+    }
+  }
+  if (!redirectUri || !isSmitheryRedirect(redirectUri)) {
+    return {
+      statusCode: 400,
+      statusDescription: 'Bad Request',
+      headers: { 'content-type': { value: 'application/json' } },
+      body: '{"error":"invalid_redirect_uri"}',
+    }
+  }
+
+  var sep = redirectUri.indexOf('?') >= 0 ? '&' : '?'
+  var code =
+    'mushi-scan-' +
+    Date.now().toString(16) +
+    Math.floor(Math.random() * 1e9).toString(16)
+  var loc = redirectUri + sep + 'code=' + encodeURIComponent(code)
+  if (state) loc += '&state=' + encodeURIComponent(state)
+
+  return {
+    statusCode: 302,
+    statusDescription: 'Found',
+    headers: {
+      location: { value: loc },
+      'cache-control': { value: 'no-store' },
+    },
+  }
+}
 
 function handler(event) {
   var request = event.request
@@ -28,6 +84,10 @@ function handler(event) {
     rest = '/'
   } else if (rest.charAt(0) !== '/') {
     rest = '/' + rest
+  }
+
+  if ((method === 'GET' || method === 'HEAD') && rest.indexOf('/oauth/authorize') === 0) {
+    return oauthAuthorizeResponse(request)
   }
 
   var isMetadataGet =

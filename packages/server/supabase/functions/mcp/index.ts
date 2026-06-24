@@ -84,6 +84,10 @@ import {
   MCP_OAUTH_AS_METADATA_HEADERS,
   MCP_OAUTH_METADATA_HEADERS,
 } from '../_shared/mcp-oauth-metadata.ts'
+import {
+  buildSmitheryAuthorizeRedirect,
+  buildSmitheryTokenResponse,
+} from '../_shared/mcp-oauth-smithery-stub.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -1596,6 +1600,7 @@ function jsonResponse(
 }
 
 function oauthOperationalPath(pathname: string): boolean {
+  if (pathname.includes('/oauth/authorize')) return false
   return (
     pathname.includes('/oauth/') &&
     !pathname.includes('oauth-authorization-server') &&
@@ -1655,6 +1660,8 @@ async function handler(req: Request): Promise<Response> {
       const metadata = buildOAuthAuthorizationServerMetadata(url)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
+    const authorizeRedirect = buildSmitheryAuthorizeRedirect(url)
+    if (authorizeRedirect) return authorizeRedirect
     if (oauthOperationalPath(url.pathname)) {
       return jsonResponse(
         JSON.stringify({
@@ -1795,6 +1802,13 @@ async function handler(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url)
+  const tokenResponse = await buildSmitheryTokenResponse(req, url)
+  if (tokenResponse) {
+    return new Response(tokenResponse.body, {
+      status: tokenResponse.status,
+      headers: { ...Object.fromEntries(tokenResponse.headers), ...CORS_HEADERS },
+    })
+  }
   // RFC 7591 — Smithery publisher scan POSTs dynamic client registration here.
   if (url.pathname.includes('/oauth/register')) {
     return new Response(
@@ -1802,8 +1816,8 @@ async function handler(req: Request): Promise<Response> {
         client_id: 'mushi-hosted-mcp-smithery',
         token_endpoint_auth_method: 'none',
         client_id_issued_at: Math.floor(Date.now() / 1000),
-        grant_types: ['client_credentials'],
-        response_types: ['token'],
+        grant_types: ['authorization_code', 'client_credentials'],
+        response_types: ['code'],
       }),
       { status: 201, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
     )

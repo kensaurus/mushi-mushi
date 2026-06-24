@@ -48,12 +48,12 @@ export function buildOAuthAuthorizationServerMetadata(url: URL): string {
   const { issuer } = mcpIssuerBase(url)
   return JSON.stringify({
     issuer,
-    authorization_endpoint: 'https://kensaur.us/mushi-mushi/docs/connect',
+    authorization_endpoint: `${issuer}/oauth/authorize`,
     token_endpoint: `${issuer}/oauth/token`,
     registration_endpoint: `${issuer}/oauth/register`,
     scopes_supported: ['mcp:read', 'mcp:write'],
-    response_types_supported: ['token'],
-    grant_types_supported: ['client_credentials'],
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code', 'client_credentials'],
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
     code_challenge_methods_supported: ['S256'],
   })

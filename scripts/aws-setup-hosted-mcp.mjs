@@ -124,7 +124,9 @@ if (!mushiBehavior) {
 }
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
-/** Forwards User-Agent (+ Referer) — enough for SmitheryBot without breaking Host. */
+/** Forwards query strings + headers except Host (OAuth authorize needs querystring at origin). */
+const ALL_VIEWER_EXCEPT_HOST_ORP = '216adef6-5c54-4fe5-8490-502b675d6a07'
+/** Legacy: User-Agent only — query strings not forwarded (authorize handled in CF Function). */
 const USER_AGENT_REFERER_ORP = 'acba4595-bd28-49b8-b9fe-13317c0390fa'
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */

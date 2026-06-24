@@ -24,6 +24,14 @@ function req(uri, querystring = '', method = 'GET', accept = '') {
   return { request: { uri, querystring, method, headers } }
 }
 
+function reqWithQs(uri, params, method = 'GET', accept = '') {
+  const querystring = {}
+  for (const [k, v] of Object.entries(params)) {
+    querystring[k] = { value: v }
+  }
+  return req(uri, querystring, method, accept)
+}
+
 describe('cloudfront-mushi-apex-redirect', () => {
   const apex = loadHandler('cloudfront-mushi-apex-redirect.js')
 
@@ -113,6 +121,19 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     const out = router(req('/mushi-mushi/hosted-mcp', '', 'POST', 'application/json, text/event-stream'))
     assert.equal(out.uri, '/')
     assert.equal(out.statusCode, undefined)
+  })
+
+  it('302 OAuth authorize to Smithery callback at edge', () => {
+    const out = router(
+      reqWithQs('/mushi-mushi/hosted-mcp/oauth/authorize', {
+        response_type: 'code',
+        redirect_uri: 'https://smithery.run/oauth/callback',
+        state: 'scan',
+      }),
+    )
+    assert.equal(out.statusCode, 302)
+    assert.match(out.headers.location.value, /^https:\/\/smithery\.run\/oauth\/callback\?code=mushi-scan-/)
+    assert.match(out.headers.location.value, /state=scan/)
   })
 
   it('serves origin PRM at well-known path', () => {

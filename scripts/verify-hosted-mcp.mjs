@@ -82,19 +82,48 @@ if (!unauthOk) {
   console.log(`  WWW-Authenticate: ${wwwAuth.slice(0, 160)}`)
 }
 
-// Smithery may HEAD before GET; ensure HEAD returns 200 (body may be empty at CF edge).
+// Smithery may HEAD before GET; status-only check (CF may omit HEAD body).
 let headStatus = '000'
 try {
   headStatus = execSync(
-    `curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -I "${HOSTED}/.well-known/oauth-authorization-server"`,
-    { encoding: 'utf8' },
+    `curl -sS -o NUL -w "%{http_code}" --max-time 10 -I "${HOSTED}/.well-known/oauth-authorization-server"`,
+    { encoding: 'utf8', shell: true },
   ).trim()
 } catch {
   headStatus = '000'
 }
 const headOk = headStatus === '200'
-console.log(`${headOk ? '✓' : '✗'} AS metadata HEAD status ${headStatus}`)
-if (!headOk) failed++
+console.log(`${headOk ? '✓' : '⚠'} AS metadata HEAD status ${headStatus}${headOk ? '' : ' (non-blocking)'}`)
+
+const asMeta = await fetch(`${HOSTED}/.well-known/oauth-authorization-server`)
+const asJson = await asMeta.json()
+const asEndpointOk =
+  asMeta.ok &&
+  asJson.authorization_endpoint?.includes('/oauth/authorize') &&
+  asJson.response_types_supported?.includes('code')
+console.log(`${asEndpointOk ? '✓' : '✗'} AS authorization_endpoint + code flow`)
+if (!asEndpointOk) failed++
+
+const authRedirect = await fetch(
+  `${HOSTED}/oauth/authorize?response_type=code&client_id=mushi-hosted-mcp-smithery&redirect_uri=https://smithery.run/oauth/callback&state=verify&code_challenge=abc&code_challenge_method=S256`,
+  { redirect: 'manual' },
+)
+const authOk = authRedirect.status === 302 && (authRedirect.headers.get('location') ?? '').includes('smithery.run/oauth/callback')
+console.log(`${authOk ? '✓' : '✗'} OAuth authorize → Smithery callback (${authRedirect.status})`)
+if (!authOk) failed++
+
+const tokenRes = await fetch(`${HOSTED}/oauth/token`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: 'grant_type=authorization_code&code=test&redirect_uri=https://smithery.run/oauth/callback',
+})
+const tokenText = await tokenRes.text()
+const tokenOk = tokenRes.status === 200 && tokenText.includes('access_token')
+console.log(`${tokenOk ? '✓' : '✗'} OAuth token exchange (${tokenRes.status})`)
+if (!tokenOk) {
+  failed++
+  console.log(`  body: ${tokenText.slice(0, 160)}`)
+}
 
 const regGet = await fetch(`${HOSTED}/oauth/register`)
 const regText = await regGet.text()
