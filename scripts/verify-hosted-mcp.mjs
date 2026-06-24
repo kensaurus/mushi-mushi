@@ -4,6 +4,8 @@
  * Usage: node scripts/verify-hosted-mcp.mjs
  */
 
+import { execSync } from 'node:child_process'
+
 const HOSTED = 'https://kensaur.us/mushi-mushi/hosted-mcp'
 const ORIGIN_PRM =
   'https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp'
@@ -81,11 +83,21 @@ if (!unauthOk) {
 
 const asHead = await fetch(`${HOSTED}/.well-known/oauth-authorization-server`, { method: 'HEAD' })
 const asHeadText = await asHead.text()
-const asHeadOk = asHead.ok && asHeadText.includes('"issuer"')
+// Node fetch strips HEAD bodies; use curl — Smithery reads issuer from HEAD (RFC 8414).
+let curlHeadText = ''
+try {
+  curlHeadText = execSync(`curl -sS --max-time 15 -X HEAD "${HOSTED}/.well-known/oauth-authorization-server"`, {
+    encoding: 'utf8',
+  })
+} catch {
+  curlHeadText = ''
+}
+const asHeadOk =
+  asHead.ok && (curlHeadText.includes('"issuer"') || asHeadText.includes('"issuer"'))
 console.log(`${asHeadOk ? '✓' : '✗'} AS metadata HEAD (Smithery RFC 8414) ${asHead.status}`)
 if (!asHeadOk) {
   failed++
-  console.log(`  body: ${asHeadText.slice(0, 160)}`)
+  console.log(`  fetch body: ${asHeadText.slice(0, 80)} curl: ${curlHeadText.slice(0, 120)}`)
 }
 
 const regGet = await fetch(`${HOSTED}/oauth/register`)
