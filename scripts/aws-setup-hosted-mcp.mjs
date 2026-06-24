@@ -124,7 +124,7 @@ if (!mushiBehavior) {
 }
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
-/** Forwards all viewer headers (incl. User-Agent) — required for SmitheryBot bypass at origin. */
+/** Forwards all viewer headers — custom origins only (not S3). */
 const ALL_VIEWER_ORP = '216adef6-5c7f-47e4-b989-5492eafa07d3'
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
@@ -137,13 +137,13 @@ function cloneBehavior(source) {
   return b
 }
 
-function hostedMcpBehavior(base, pathPattern, originId, fnArn) {
+function hostedMcpBehavior(base, pathPattern, originId, fnArn, originRequestPolicyId) {
   return {
     ...cloneBehavior(base),
     PathPattern: pathPattern,
     TargetOriginId: originId,
     CachePolicyId: CACHING_DISABLED,
-    OriginRequestPolicyId: ALL_VIEWER_ORP,
+    OriginRequestPolicyId: originRequestPolicyId,
     AllowedMethods: {
       Quantity: 7,
       Items: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
@@ -153,24 +153,20 @@ function hostedMcpBehavior(base, pathPattern, originId, fnArn) {
   }
 }
 
+const s3Orp = mushiBehavior.OriginRequestPolicyId
+
 const existing = new Set(config.CacheBehaviors.Items.map((cb) => cb.PathPattern))
 const toAdd = []
 let needsUpdate = false
 
 if (!existing.has(WELLKNOWN_PATTERN)) {
-  toAdd.push(hostedMcpBehavior(mushiBehavior, WELLKNOWN_PATTERN, S3_ORIGIN_ID, wellknownArn))
-} else {
-  const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === WELLKNOWN_PATTERN)
-  if (row?.OriginRequestPolicyId !== ALL_VIEWER_ORP) {
-    row.OriginRequestPolicyId = ALL_VIEWER_ORP
-    row.CachePolicyId = CACHING_DISABLED
-    needsUpdate = true
-    console.log(`Patching ${WELLKNOWN_PATTERN} → AllViewer origin request policy`)
-  }
+  toAdd.push(hostedMcpBehavior(mushiBehavior, WELLKNOWN_PATTERN, S3_ORIGIN_ID, wellknownArn, s3Orp))
 }
 
 if (!existing.has(HOSTED_MCP_PATTERN)) {
-  toAdd.push(hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn))
+  toAdd.push(
+    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, ALL_VIEWER_ORP),
+  )
 } else {
   const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === HOSTED_MCP_PATTERN)
   if (row?.OriginRequestPolicyId !== ALL_VIEWER_ORP) {
