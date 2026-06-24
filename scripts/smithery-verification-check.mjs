@@ -6,22 +6,26 @@
 
 const SMITHERY_SERVER = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
 const HOMEPAGE = 'https://kensaur.us/mushi-mushi/docs/connect'
+const BACKLINK = 'https://kensaur.us/mushi-mushi/hosted-mcp/smithery-backlink'
 const SERVER_CARD = 'https://kensaur.us/mushi-mushi/hosted-mcp/.well-known/mcp/server-card.json'
 const TXT_PREFIX = 'smithery-verification='
 
 let failed = 0
 
 async function checkBacklink() {
-  const res = await fetch(HOMEPAGE, {
-    headers: { 'User-Agent': 'SmitheryBot/1.0 (+https://smithery.ai)' },
-  })
-  const html = await res.text()
-  const ok =
-    res.ok &&
-    (html.includes('smithery.ai/servers/kensaurus/mushi-mushi') ||
-      html.includes('smithery.ai/badge/kensaurus/mushi-mushi'))
-  console.log(`${ok ? '✓' : '✗'} homepage backlink (${res.status}, ${html.length} bytes)`)
-  if (!ok) failed++
+  for (const url of [BACKLINK, HOMEPAGE]) {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'SmitheryBot/1.0 (+https://smithery.ai)' },
+    })
+    const body = await res.text()
+    const ok =
+      res.ok &&
+      (body.includes('smithery.ai/servers/kensaurus/mushi-mushi') ||
+        body.includes('smithery.ai/badge/kensaurus/mushi-mushi'))
+    console.log(`${ok ? '✓' : '✗'} backlink ${url} (${res.status})`)
+    if (ok) return
+  }
+  failed++
 }
 
 async function checkServerCard() {

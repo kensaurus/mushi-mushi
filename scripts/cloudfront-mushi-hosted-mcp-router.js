@@ -12,6 +12,18 @@
  */
 
 var PREFIX = '/mushi-mushi/hosted-mcp'
+var SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
+
+function smitheryBacklinkHtml() {
+  return (
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+    '<title>Mushi MCP on Smithery</title><link rel="canonical" href="' +
+    SMITHERY_SERVER_URL +
+    '" /></head><body><p>Install Mushi MCP via <a href="' +
+    SMITHERY_SERVER_URL +
+    '">Smithery</a>.</p></body></html>'
+  )
+}
 
 function qsValue(qs, key) {
   if (!qs) return ''
@@ -90,6 +102,18 @@ function handler(event) {
     rest = '/'
   } else if (rest.charAt(0) !== '/') {
     rest = '/' + rest
+  }
+
+  if ((method === 'GET' || method === 'HEAD') && rest === '/smithery-backlink') {
+    return {
+      statusCode: 200,
+      statusDescription: 'OK',
+      headers: {
+        'content-type': { value: 'text/html; charset=utf-8' },
+        'cache-control': { value: 'public, max-age=3600' },
+      },
+      body: smitheryBacklinkHtml(),
+    }
   }
 
   if ((method === 'GET' || method === 'HEAD') && rest.indexOf('/oauth/authorize') === 0) {

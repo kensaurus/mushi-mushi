@@ -123,6 +123,12 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.equal(out.statusCode, undefined)
   })
 
+  it('serves Smithery backlink HTML at edge', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/smithery-backlink', '', 'GET'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /smithery\.ai\/servers\/kensaurus\/mushi-mushi/)
+  })
+
   it('302 OAuth authorize to Smithery callback at edge', () => {
     const out = router(
       reqWithQs('/mushi-mushi/hosted-mcp/oauth/authorize', {
