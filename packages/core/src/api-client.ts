@@ -60,6 +60,15 @@ export interface ApiClientOptions {
   apiEndpoint?: string;
   timeout?: number;
   maxRetries?: number;
+  /**
+   * Circuit breaker for the endpoint. After `threshold` consecutive
+   * unreachable failures (network errors / exhausted 5xx) the client
+   * fast-fails for `cooldownMs` instead of hammering a down endpoint, then
+   * half-opens (one trial request). Fast-failed requests return a transient
+   * error so the offline queue still captures the report. Set
+   * `enabled: false` to opt out. Defaults: enabled, threshold 4, cooldown 30s.
+   */
+  circuitBreaker?: { enabled?: boolean; threshold?: number; cooldownMs?: number };
   /** When set, sent on every request so heartbeats record the running SDK version. */
   sdkPackage?: string;
   sdkVersion?: string;
@@ -79,8 +88,10 @@ export const MUSHI_INTERNAL_INIT_MARKER = '__mushiInternal';
 
 export type MushiInternalRequestKind = 'sdk-config' | 'report-submit' | 'report-status' | 'reporter-poll' | 'diagnose' | 'discovery' | 'community';
 
-const DEFAULT_TIMEOUT = 10_000;
-const DEFAULT_MAX_RETRIES = 2;
+export const DEFAULT_TIMEOUT = 10_000;
+export const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_CIRCUIT_THRESHOLD = 4;
+const DEFAULT_CIRCUIT_COOLDOWN_MS = 30_000;
 
 export function createApiClient(options: ApiClientOptions): MushiApiClient {
   const {
@@ -92,9 +103,25 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     getUserToken,
     sdkPackage,
     sdkVersion,
+    circuitBreaker,
   } = options;
 
   let baseUrl = apiEndpoint.replace(/\/$/, '');
+
+  // Circuit breaker state (per client). Trips after consecutive unreachable
+  // failures so a down endpoint isn't hammered; half-opens after a cooldown.
+  const cbEnabled = circuitBreaker?.enabled !== false;
+  const cbThreshold = Math.max(1, circuitBreaker?.threshold ?? DEFAULT_CIRCUIT_THRESHOLD);
+  const cbCooldownMs = Math.max(1_000, circuitBreaker?.cooldownMs ?? DEFAULT_CIRCUIT_COOLDOWN_MS);
+  let cbFailures = 0;
+  let cbOpenUntil = 0;
+  const cbIsOpen = (): boolean => cbEnabled && cbOpenUntil > Date.now();
+  const cbRecordReachable = (): void => { cbFailures = 0; cbOpenUntil = 0; };
+  const cbRecordUnreachable = (): void => {
+    if (!cbEnabled) return;
+    cbFailures += 1;
+    if (cbFailures >= cbThreshold) cbOpenUntil = Date.now() + cbCooldownMs;
+  };
 
   async function request<T>(
     method: string,
@@ -104,6 +131,12 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     internalKind?: MushiInternalRequestKind,
     extraHeaders?: Record<string, string>,
   ): Promise<MushiApiResponse<T>> {
+    // Fast-fail while the circuit is open (cooldown not elapsed). Returns a
+    // transient error so callers (e.g. the offline queue) capture the report
+    // instead of blocking on a known-down endpoint.
+    if (cbIsOpen()) {
+      return { ok: false, error: { code: 'CIRCUIT_OPEN', message: 'Endpoint temporarily unavailable; retrying later.' } };
+    }
     const url = `${baseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
@@ -171,6 +204,10 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           await sleep(getBackoffDelay(maxRetries - retries));
           return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);
         }
+        // A 5xx that survived all retries means the endpoint is effectively
+        // down; a 4xx means it's reachable (app-level error) — reset the circuit.
+        if (response.status >= 500) cbRecordUnreachable();
+        else cbRecordReachable();
         return {
           ok: false,
           error: {
@@ -189,6 +226,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       const data = payload && typeof payload === 'object' && 'ok' in payload && 'data' in payload
         ? (payload as { data: T }).data
         : payload as T;
+      cbRecordReachable();
       return { ok: true, data };
     } catch (error) {
       clearTimeout(timer);
@@ -198,6 +236,9 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         return request<T>(method, path, body, retries - 1, internalKind);
       }
 
+      // Network error (timeout / DNS / refused) that exhausted retries —
+      // count it toward tripping the circuit.
+      cbRecordUnreachable();
       return {
         ok: false,
         error: {
