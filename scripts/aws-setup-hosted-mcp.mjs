@@ -124,8 +124,8 @@ if (!mushiBehavior) {
 }
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
-/** Forwards viewer headers except Host — required so Supabase sees its own hostname. */
-const ALL_VIEWER_EXCEPT_HOST_ORP = 'b689b0a8-53d5-40f8-bc2b-ae2c5b4f8b9a'
+/** Forwards User-Agent (+ Referer) — enough for SmitheryBot without breaking Host. */
+const USER_AGENT_REFERER_ORP = 'acba4595-bd28-49b8-b9fe-13317c0390fa'
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
 function cloneBehavior(source) {
@@ -165,15 +165,15 @@ if (!existing.has(WELLKNOWN_PATTERN)) {
 
 if (!existing.has(HOSTED_MCP_PATTERN)) {
   toAdd.push(
-    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, ALL_VIEWER_EXCEPT_HOST_ORP),
+    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, USER_AGENT_REFERER_ORP),
   )
 } else {
   const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === HOSTED_MCP_PATTERN)
-  if (row?.OriginRequestPolicyId !== ALL_VIEWER_EXCEPT_HOST_ORP) {
-    row.OriginRequestPolicyId = ALL_VIEWER_EXCEPT_HOST_ORP
+  if (row?.OriginRequestPolicyId !== USER_AGENT_REFERER_ORP) {
+    row.OriginRequestPolicyId = USER_AGENT_REFERER_ORP
     row.CachePolicyId = CACHING_DISABLED
     needsUpdate = true
-    console.log(`Patching ${HOSTED_MCP_PATTERN} → AllViewerExceptHost origin request policy`)
+    console.log(`Patching ${HOSTED_MCP_PATTERN} → UserAgentReferer origin request policy`)
   }
 }
 
