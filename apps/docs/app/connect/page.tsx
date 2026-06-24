@@ -36,6 +36,40 @@ const PLACEHOLDER_INPUT: McpBuildInput = {
   mcpHttpUrl: PLACEHOLDER_MCP_HTTP,
 }
 
+/**
+ * Keyless "try it" demo. When the build is configured with a public,
+ * read-only demo key (an `mcp:read` key bound to a seeded demo project),
+ * the picker installs against it directly — no signup. We lock it down two
+ * ways: `mcp:read` scope (server rejects every write tool) and `readOnly`
+ * (`?read_only=1` on the hosted URL hides write tools), and we expose only a
+ * safe, read-only feature subset. The key is intentionally public and
+ * rotatable; it never grants access to real user data (the project holds only
+ * synthetic seeded reports).
+ *
+ * Set these `NEXT_PUBLIC_MUSHI_DEMO_*` vars at docs build time (see
+ * apps/docs/.env.example). When unset, the page falls back to placeholder keys
+ * + the "sign in to mint" flow — exactly its previous behaviour.
+ */
+const DEMO_FEATURES = ['triage', 'docs'] as const
+const DEMO_API_KEY = process.env.NEXT_PUBLIC_MUSHI_DEMO_API_KEY ?? ''
+const DEMO_ENDPOINT = process.env.NEXT_PUBLIC_MUSHI_DEMO_API_ENDPOINT ?? ''
+const DEMO_MCP_HTTP = process.env.NEXT_PUBLIC_MUSHI_DEMO_MCP_HTTP ?? ''
+const DEMO_PROJECT_ID = process.env.NEXT_PUBLIC_MUSHI_DEMO_PROJECT_ID ?? ''
+const DEMO_PROJECT_NAME = process.env.NEXT_PUBLIC_MUSHI_DEMO_PROJECT_NAME ?? 'mushi-demo'
+
+const DEMO_INPUT: McpBuildInput | null =
+  DEMO_API_KEY && DEMO_ENDPOINT && DEMO_MCP_HTTP
+    ? {
+        projectId: DEMO_PROJECT_ID || undefined,
+        projectName: DEMO_PROJECT_NAME,
+        apiKey: DEMO_API_KEY,
+        endpoint: DEMO_ENDPOINT,
+        mcpHttpUrl: DEMO_MCP_HTTP,
+        features: DEMO_FEATURES,
+        readOnly: true,
+      }
+    : null
+
 function CopyBlock({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -64,24 +98,34 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
   )
 }
 
-function McpLane({ client }: { client: McpClientDef }) {
+function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBuildInput; isDemo: boolean }) {
   let result
   try {
-    result = client.build(PLACEHOLDER_INPUT)
+    result = client.build(input)
   } catch {
     return <p className="text-sm text-[var(--mushi-vermillion)]">Failed to build config for this client.</p>
   }
 
   return (
     <div className="space-y-4">
-      <div className="mushi-connect-callout">
-        <strong>Placeholder key:</strong> Replace{' '}
-        <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">{PLACEHOLDER_KEY}</code>{' '}
-        with your real key.{' '}
-        <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
-          Sign in to auto-fill &amp; one-click install →
-        </a>
-      </div>
+      {isDemo ? (
+        <div className="mushi-connect-callout">
+          <strong>Live demo — no signup.</strong> Installs <strong>read-only</strong> access to a
+          seeded Mushi project so you can try the tools right now.{' '}
+          <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
+            Connect your own project →
+          </a>
+        </div>
+      ) : (
+        <div className="mushi-connect-callout">
+          <strong>Placeholder key:</strong> Replace{' '}
+          <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">{PLACEHOLDER_KEY}</code>{' '}
+          with your real key.{' '}
+          <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
+            Sign in to auto-fill &amp; one-click install →
+          </a>
+        </div>
+      )}
 
       <p className="text-sm text-[var(--mushi-ink-muted)]">
         <strong className="text-[var(--mushi-ink)]">{client.description}</strong>
@@ -98,7 +142,9 @@ function McpLane({ client }: { client: McpClientDef }) {
             Open {client.label} install dialog ↗
           </a>
           <p className="text-xs text-[var(--mushi-ink-muted)]">
-            This deeplink uses a placeholder key. Sign in to inject your real key automatically.
+            {isDemo
+              ? 'Installs the read-only demo — no signup. Connect your own project to use your data and write tools.'
+              : 'This deeplink uses a placeholder key. Sign in to inject your real key automatically.'}
           </p>
           <details className="group">
             <summary className="cursor-pointer text-xs text-[var(--mushi-ink-muted)] hover:text-[var(--mushi-ink)]">
@@ -210,10 +256,14 @@ export default function ConnectPage() {
     selectClient,
   } = useConnectSelection({ storageKey: PUBLIC_STORAGE_KEY })
 
+  const [mode, setMode] = useState<'demo' | 'own'>(DEMO_INPUT ? 'demo' : 'own')
+  const isDemo = mode === 'demo' && DEMO_INPUT != null
+  const activeInput = isDemo && DEMO_INPUT ? DEMO_INPUT : PLACEHOLDER_INPUT
+
   function renderLane(lane: ConnectLane, client: McpClientDef) {
     if (lane === 'cli') return <CliLane client={client} />
     if (lane === 'skills') return <SkillsLane client={client} />
-    return <McpLane client={client} />
+    return <McpLane client={client} input={activeInput} isDemo={isDemo} />
   }
 
   return (
@@ -244,6 +294,27 @@ export default function ConnectPage() {
             </a>
           </div>
         </div>
+
+        {DEMO_INPUT ? (
+          <div className="mb-6 flex flex-wrap items-center justify-center gap-2" aria-label="Install mode">
+            <button
+              type="button"
+              onClick={() => setMode('demo')}
+              aria-pressed={mode === 'demo'}
+              className={mode === 'demo' ? 'mushi-connect-primary-btn' : 'mushi-connect-secondary-btn'}
+            >
+              Try the demo · no signup
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('own')}
+              aria-pressed={mode === 'own'}
+              className={mode === 'own' ? 'mushi-connect-primary-btn' : 'mushi-connect-secondary-btn'}
+            >
+              Use my project
+            </button>
+          </div>
+        ) : null}
 
         <div className="mb-8">
           <ConnectLanePicker
@@ -282,6 +353,18 @@ export default function ConnectPage() {
             Sign in &amp; connect →
           </a>
         </div>
+
+        <p className="mt-10 text-center text-xs text-[var(--mushi-ink-muted)]">
+          Also on{' '}
+          <a
+            href="https://smithery.ai/servers/kensaurus/mushi-mushi"
+            className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]"
+            rel="noopener noreferrer"
+          >
+            Smithery
+          </a>
+          {' '}— one-click MCP install for Cursor, VS Code, and Claude Code.
+        </p>
       </div>
     </div>
   )
