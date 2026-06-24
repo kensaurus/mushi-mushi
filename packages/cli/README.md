@@ -51,7 +51,7 @@ npx mushi-mushi
 The wizard:
 
 1. **Prerequisite step** (unless flags/config already present): open console to create a project, paste existing credentials, or exit to run `mushi login` first.
-2. Detects your framework (Next.js, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, or vanilla JS) from `package.json` and config files.
+2. Detects your framework (Next.js, Remix, Astro, Nuxt, SvelteKit, Angular, Expo, Capacitor, Create React App, Solid/SolidStart, plain React/Vue/Svelte, Express/Fastify/Hono, or vanilla JS) from `package.json` and config files — and writes the correct client env-var prefix for each (`NEXT_PUBLIC_`, `VITE_`, `PUBLIC_`, `REACT_APP_`, `EXPO_PUBLIC_`, or bare `MUSHI_*`).
 3. Calls **`GET /v1/sync/whoami`** to verify Project ID + API key before installing anything.
 4. Picks the right SDK package (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) plus `@mushi-mushi/web` when the framework SDK is API-only.
 5. Detects your package manager (npm / pnpm / yarn / bun) from your lockfile and installs with that — `shell: false`, with Windows `.cmd` shim resolution.
