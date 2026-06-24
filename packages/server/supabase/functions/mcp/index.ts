@@ -1648,7 +1648,10 @@ async function handler(req: Request): Promise<Response> {
       const metadata = buildOAuthProtectedResourceMetadata(url)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
-    if (url.pathname.includes('oauth-authorization-server')) {
+    if (
+      url.pathname.includes('oauth-authorization-server') ||
+      url.pathname.includes('openid-configuration')
+    ) {
       const metadata = buildOAuthAuthorizationServerMetadata(url)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }

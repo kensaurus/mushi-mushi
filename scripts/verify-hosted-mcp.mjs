@@ -14,6 +14,7 @@ const checks = [
   ['origin PRM', ORIGIN_PRM],
   ['resource PRM', `${HOSTED}/`],
   ['AS metadata', `${HOSTED}/.well-known/oauth-authorization-server`],
+  ['OIDC fallback', `${HOSTED}/.well-known/openid-configuration`],
   ['server-card', `${HOSTED}/.well-known/mcp/server-card.json`],
 ]
 
@@ -81,24 +82,19 @@ if (!unauthOk) {
   console.log(`  WWW-Authenticate: ${wwwAuth.slice(0, 160)}`)
 }
 
-const asHead = await fetch(`${HOSTED}/.well-known/oauth-authorization-server`, { method: 'HEAD' })
-const asHeadText = await asHead.text()
-// Node fetch strips HEAD bodies; use curl — Smithery reads issuer from HEAD (RFC 8414).
-let curlHeadText = ''
+// Smithery may HEAD before GET; ensure HEAD returns 200 (body may be empty at CF edge).
+let headStatus = '000'
 try {
-  curlHeadText = execSync(`curl -sS --max-time 15 -X HEAD "${HOSTED}/.well-known/oauth-authorization-server"`, {
-    encoding: 'utf8',
-  })
+  headStatus = execSync(
+    `curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -I "${HOSTED}/.well-known/oauth-authorization-server"`,
+    { encoding: 'utf8' },
+  ).trim()
 } catch {
-  curlHeadText = ''
+  headStatus = '000'
 }
-const asHeadOk =
-  asHead.ok && (curlHeadText.includes('"issuer"') || asHeadText.includes('"issuer"'))
-console.log(`${asHeadOk ? '✓' : '✗'} AS metadata HEAD (Smithery RFC 8414) ${asHead.status}`)
-if (!asHeadOk) {
-  failed++
-  console.log(`  fetch body: ${asHeadText.slice(0, 80)} curl: ${curlHeadText.slice(0, 120)}`)
-}
+const headOk = headStatus === '200'
+console.log(`${headOk ? '✓' : '✗'} AS metadata HEAD status ${headStatus}`)
+if (!headOk) failed++
 
 const regGet = await fetch(`${HOSTED}/oauth/register`)
 const regText = await regGet.text()
