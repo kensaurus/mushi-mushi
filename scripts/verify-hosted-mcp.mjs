@@ -105,7 +105,7 @@ console.log(`${asEndpointOk ? '✓' : '✗'} AS authorization_endpoint + code fl
 if (!asEndpointOk) failed++
 
 const authRedirect = await fetch(
-  `${HOSTED}/oauth/authorize?response_type=code&client_id=mushi-hosted-mcp-smithery&redirect_uri=https://smithery.run/oauth/callback&state=verify&code_challenge=abc&code_challenge_method=S256`,
+  `${HOSTED}/oauth/authorize?response_type=code&client_id=mushi-hosted-mcp-smithery&redirect_uri=${encodeURIComponent('https://smithery.run/oauth/callback')}&state=verify&code_challenge=abc&code_challenge_method=S256`,
   { redirect: 'manual' },
 )
 const authOk = authRedirect.status === 302 && (authRedirect.headers.get('location') ?? '').includes('smithery.run/oauth/callback')

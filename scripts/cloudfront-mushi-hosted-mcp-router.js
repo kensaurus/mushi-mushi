@@ -17,9 +17,15 @@ function qsValue(qs, key) {
   if (!qs) return ''
   var entry = qs[key]
   if (!entry) return ''
-  if (entry.value !== undefined) return entry.value
-  if (entry.multiValue && entry.multiValue.length) return entry.multiValue[0].value
-  return ''
+  var raw = ''
+  if (entry.value !== undefined) raw = entry.value
+  else if (entry.multiValue && entry.multiValue.length) raw = entry.multiValue[0].value
+  if (!raw) return ''
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, ' '))
+  } catch (e) {
+    return raw
+  }
 }
 
 function isSmitheryRedirect(uri) {

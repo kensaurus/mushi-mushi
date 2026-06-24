@@ -127,7 +127,7 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     const out = router(
       reqWithQs('/mushi-mushi/hosted-mcp/oauth/authorize', {
         response_type: 'code',
-        redirect_uri: 'https://smithery.run/oauth/callback',
+        redirect_uri: 'https%3A%2F%2Fsmithery.run%2Foauth%2Fcallback',
         state: 'scan',
       }),
     )
