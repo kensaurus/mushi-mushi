@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kensaurus/mushi-mushi",
   "title": "Mushi Mushi",
-  "description": "Bug translation for vibe coders — pull a plain-English diagnosis and a paste-ready fix prompt for any user-felt bug, plus evidence (screenshots, console, network), blast radius, and fix dispatch, all from your AI coding agent. No second LLM key.",
+  "description": "Bug translation for vibe coders: plain-English diagnosis + paste-ready fix in your AI coding agent",
   "version": "0.17.0",
   "icons": [
     {
