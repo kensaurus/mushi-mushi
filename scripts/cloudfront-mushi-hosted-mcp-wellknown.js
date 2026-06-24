@@ -12,18 +12,8 @@ var PRM =
   '{"resource":"https://kensaur.us/mushi-mushi/hosted-mcp/","authorization_servers":["https://kensaur.us/mushi-mushi/hosted-mcp"],"bearer_methods_supported":["header"],"scopes_supported":["mcp:read","mcp:write"],"resource_documentation":"https://kensaur.us/mushi-mushi/docs/quickstart/mcp"}';
 
 function handler(event) {
-  var request = event.request;
-  if (request.method === 'HEAD') {
-    return {
-      statusCode: 200,
-      statusDescription: 'OK',
-      headers: {
-        'content-type': { value: 'application/json' },
-        'cache-control': { value: 'public, max-age=3600' },
-        'access-control-allow-origin': { value: '*' },
-      },
-    };
-  }
+  var request = event.request
+  // Smithery OAuth discovery uses HEAD — include JSON body (RFC 8414 issuer parse).
   return {
     statusCode: 200,
     statusDescription: 'OK',
@@ -33,5 +23,5 @@ function handler(event) {
       'access-control-allow-origin': { value: '*' },
     },
     body: PRM,
-  };
+  }
 }

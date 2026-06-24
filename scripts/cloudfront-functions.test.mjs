@@ -103,6 +103,18 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.match(out.body, /token_endpoint/)
   })
 
+  it('returns AS metadata body on HEAD (Smithery RFC 8414)', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/.well-known/oauth-authorization-server', '', 'HEAD'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /"issuer":"https:\/\/kensaur\.us\/mushi-mushi\/hosted-mcp"/)
+  })
+
+  it('returns origin PRM body on HEAD', () => {
+    const out = wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp', '', 'HEAD'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /authorization_servers/)
+  })
+
   it('rewrites POST to Supabase path prefix', () => {
     const out = router(req('/mushi-mushi/hosted-mcp', '', 'POST', 'application/json, text/event-stream'))
     assert.equal(out.uri, '/')

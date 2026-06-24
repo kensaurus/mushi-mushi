@@ -1591,7 +1591,16 @@ function jsonResponse(
   headers: Record<string, string>,
   method: string,
 ): Response {
-  return new Response(method === 'HEAD' ? null : body, { status, headers })
+  // Smithery publisher scan uses HEAD for RFC 8414 AS discovery — include JSON body.
+  return new Response(body, { status, headers })
+}
+
+function oauthOperationalPath(pathname: string): boolean {
+  return (
+    pathname.includes('/oauth/') &&
+    !pathname.includes('oauth-authorization-server') &&
+    !pathname.includes('oauth-protected-resource')
+  )
 }
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -1642,6 +1651,17 @@ async function handler(req: Request): Promise<Response> {
     if (url.pathname.includes('oauth-authorization-server')) {
       const metadata = buildOAuthAuthorizationServerMetadata(url)
       return jsonResponse(metadata, 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
+    }
+    if (oauthOperationalPath(url.pathname)) {
+      return jsonResponse(
+        JSON.stringify({
+          error: 'method_not_allowed',
+          error_description: 'OAuth register/token endpoints require POST',
+        }),
+        405,
+        { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        req.method,
+      )
     }
     const iconParam = url.searchParams.get('icon')
     if (iconParam === '1' || iconParam === 'svg') {

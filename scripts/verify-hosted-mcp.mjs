@@ -79,4 +79,22 @@ if (!unauthOk) {
   console.log(`  WWW-Authenticate: ${wwwAuth.slice(0, 160)}`)
 }
 
+const asHead = await fetch(`${HOSTED}/.well-known/oauth-authorization-server`, { method: 'HEAD' })
+const asHeadText = await asHead.text()
+const asHeadOk = asHead.ok && asHeadText.includes('"issuer"')
+console.log(`${asHeadOk ? '✓' : '✗'} AS metadata HEAD (Smithery RFC 8414) ${asHead.status}`)
+if (!asHeadOk) {
+  failed++
+  console.log(`  body: ${asHeadText.slice(0, 160)}`)
+}
+
+const regGet = await fetch(`${HOSTED}/oauth/register`)
+const regText = await regGet.text()
+const regOk = regGet.status === 405 || !regText.includes('"resource"')
+console.log(`${regOk ? '✓' : '✗'} GET /oauth/register not PRM (${regGet.status})`)
+if (!regOk) {
+  failed++
+  console.log(`  body: ${regText.slice(0, 160)}`)
+}
+
 process.exit(failed ? 1 : 0)

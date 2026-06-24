@@ -15,27 +15,18 @@ var AS =
   '{"issuer":"https://kensaur.us/mushi-mushi/hosted-mcp","authorization_endpoint":"https://kensaur.us/mushi-mushi/docs/connect","token_endpoint":"https://kensaur.us/mushi-mushi/hosted-mcp/oauth/token","registration_endpoint":"https://kensaur.us/mushi-mushi/hosted-mcp/oauth/register","scopes_supported":["mcp:read","mcp:write"],"response_types_supported":["token"],"grant_types_supported":["client_credentials"],"token_endpoint_auth_methods_supported":["client_secret_post","none"]}';
 
 function jsonResponse(body, method) {
-  if (method === 'HEAD') {
-    return {
-      statusCode: 200,
-      statusDescription: 'OK',
-      headers: {
-        'content-type': { value: 'application/json' },
-        'cache-control': { value: 'public, max-age=3600' },
-        'access-control-allow-origin': { value: '*' },
-      },
-    };
+  var headers = {
+    'content-type': { value: 'application/json' },
+    'cache-control': { value: 'public, max-age=3600' },
+    'access-control-allow-origin': { value: '*' },
   }
+  // Smithery OAuth discovery uses HEAD (RFC 8414) — body required for issuer parse.
   return {
     statusCode: 200,
     statusDescription: 'OK',
-    headers: {
-      'content-type': { value: 'application/json' },
-      'cache-control': { value: 'public, max-age=3600' },
-      'access-control-allow-origin': { value: '*' },
-    },
+    headers: headers,
     body: body,
-  };
+  }
 }
 
 function handler(event) {
