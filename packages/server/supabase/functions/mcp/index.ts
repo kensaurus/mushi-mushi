@@ -1794,6 +1794,21 @@ async function handler(req: Request): Promise<Response> {
     )
   }
 
+  const url = new URL(req.url)
+  // RFC 7591 — Smithery publisher scan POSTs dynamic client registration here.
+  if (url.pathname.includes('/oauth/register')) {
+    return new Response(
+      JSON.stringify({
+        client_id: 'mushi-hosted-mcp-smithery',
+        token_endpoint_auth_method: 'none',
+        client_id_issued_at: Math.floor(Date.now() / 1000),
+        grant_types: ['client_credentials'],
+        response_types: ['token'],
+      }),
+      { status: 201, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+    )
+  }
+
   let payload: unknown
   try {
     payload = await req.json()

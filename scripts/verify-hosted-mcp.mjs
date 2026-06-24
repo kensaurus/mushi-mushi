@@ -105,4 +105,17 @@ if (!regOk) {
   console.log(`  body: ${regText.slice(0, 160)}`)
 }
 
+const regPost = await fetch(`${HOSTED}/oauth/register`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ client_name: 'verify-hosted-mcp' }),
+})
+const regPostText = await regPost.text()
+const regPostOk = regPost.status === 201 && regPostText.includes('client_id')
+console.log(`${regPostOk ? '✓' : '✗'} POST /oauth/register DCR (${regPost.status})`)
+if (!regPostOk) {
+  failed++
+  console.log(`  body: ${regPostText.slice(0, 160)}`)
+}
+
 process.exit(failed ? 1 : 0)

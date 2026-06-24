@@ -55,6 +55,7 @@ export function buildOAuthAuthorizationServerMetadata(url: URL): string {
     response_types_supported: ['token'],
     grant_types_supported: ['client_credentials'],
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+    code_challenge_methods_supported: ['S256'],
   })
 }
 
