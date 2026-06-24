@@ -123,29 +123,37 @@ if (!mushiBehavior) {
   process.exit(1)
 }
 
+const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
+
+/** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
+function cloneBehavior(source) {
+  const b = JSON.parse(JSON.stringify(source))
+  delete b.MinTTL
+  delete b.DefaultTTL
+  delete b.MaxTTL
+  delete b.ForwardedValues
+  return b
+}
+
 const existing = new Set(config.CacheBehaviors.Items.map((cb) => cb.PathPattern))
 const toAdd = []
 
 if (!existing.has(WELLKNOWN_PATTERN)) {
   toAdd.push({
-    ...JSON.parse(JSON.stringify(mushiBehavior)),
+    ...cloneBehavior(mushiBehavior),
     PathPattern: WELLKNOWN_PATTERN,
     TargetOriginId: S3_ORIGIN_ID,
-    MinTTL: 0,
-    DefaultTTL: 0,
-    MaxTTL: 86400,
+    CachePolicyId: CACHING_DISABLED,
     FunctionAssociations: fnAssoc(wellknownArn),
   })
 }
 
 if (!existing.has(HOSTED_MCP_PATTERN)) {
   toAdd.push({
-    ...JSON.parse(JSON.stringify(mushiBehavior)),
+    ...cloneBehavior(mushiBehavior),
     PathPattern: HOSTED_MCP_PATTERN,
     TargetOriginId: SUPABASE_ORIGIN_ID,
-    MinTTL: 0,
-    DefaultTTL: 0,
-    MaxTTL: 0,
+    CachePolicyId: CACHING_DISABLED,
     AllowedMethods: {
       Quantity: 7,
       Items: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
