@@ -362,6 +362,18 @@ jobs:
               "/connect/*" \
             --region us-east-1
 
+      - name: Verify hosted MCP (Smithery / RFC 9728)
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if node scripts/verify-hosted-mcp.mjs; then
+              exit 0
+            fi
+            echo "Hosted MCP not ready yet (attempt $i/6) — waiting 30s for CloudFront…"
+            sleep 30
+          done
+          echo "::error::Hosted MCP verification failed after 6 attempts"
+          exit 1
+
       - name: Post-deploy health check
         run: |
           sleep 10

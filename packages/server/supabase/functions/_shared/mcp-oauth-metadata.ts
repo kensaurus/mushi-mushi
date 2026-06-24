@@ -1,12 +1,32 @@
 /**
  * RFC 9728 Protected Resource Metadata for hosted MCP (Smithery / MCP OAuth clients).
  * Smithery requires non-empty authorization_servers even for API-key configSchema auth.
+ *
+ * When `MCP_PUBLIC_BASE_URL` is set (e.g. https://kensaur.us/mushi-mushi/hosted-mcp),
+ * OAuth discovery URLs match the CloudFront proxy — not the raw Supabase origin.
  */
 
+function normalizeMcpFnPath(pathname: string): string {
+  let path = pathname.split('/.well-known')[0] || '/functions/v1/mcp'
+  path = path.replace(/\/index\.html$/i, '')
+  const match = path.match(/(.*\/functions\/v1\/mcp)/i)
+  return match ? match[1] : '/functions/v1/mcp'
+}
+
+function publicBaseFromEnv(): string | null {
+  const raw = Deno.env.get('MCP_PUBLIC_BASE_URL')?.trim()
+  if (!raw) return null
+  return raw.replace(/\/+$/, '')
+}
+
 function mcpIssuerBase(url: URL): { issuer: string; fnPath: string } {
-  const fnPath = url.pathname.split('/.well-known')[0] || '/mcp'
-  const supabaseOrigin = Deno.env.get('SUPABASE_URL') ?? url.origin
-  const issuer = `${supabaseOrigin.replace(/\/+$/, '')}/functions/v1${fnPath.replace(/\/+$/, '') || '/mcp'}`
+  const publicBase = publicBaseFromEnv()
+  if (publicBase) {
+    return { issuer: publicBase, fnPath: '/mcp' }
+  }
+  const fnPath = normalizeMcpFnPath(url.pathname)
+  const supabaseOrigin = (Deno.env.get('SUPABASE_URL') ?? url.origin).replace(/\/+$/, '')
+  const issuer = `${supabaseOrigin}/functions/v1${fnPath.replace(/\/+$/, '') || '/mcp'}`
   return { issuer, fnPath }
 }
 
@@ -50,6 +70,10 @@ export const MCP_OAUTH_AS_METADATA_HEADERS: Record<string, string> = {
 
 /** RFC 9728 Protected Resource Metadata document URL for this MCP deployment. */
 export function mcpProtectedResourceMetadataUrl(url: URL): string {
+  const publicBase = publicBaseFromEnv()
+  if (publicBase) {
+    return `${publicBase}/.well-known/oauth-protected-resource`
+  }
   const { issuer } = mcpIssuerBase(url)
   return `${issuer}/.well-known/oauth-protected-resource`
 }

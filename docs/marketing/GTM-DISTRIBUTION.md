@@ -36,7 +36,7 @@ thing and point to the same install flow.
 | **awesome-remote-mcp-servers** | PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) | 📬 Open |
 | **cursor.directory** | Repo already registered | ✅ Duplicate on re-submit confirms live listing |
 | **mcp.so** | Web submit at `/submit` | ✅ Live — [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi). Description + Overview + Server Config on canonical URLs — see [`mcp-so-listing.md`](./mcp-so-listing.md) |
-| **smithery.ai** | `kensaurus/mushi-mushi` | ⚠️ Listed — CLI connect works; publisher deploy after `aws-setup-hosted-mcp.mjs`. See [Smithery](#smithery). |
+| **smithery.ai** | `kensaurus/mushi-mushi` | ✅ Hosted MCP on kensaur.us — publisher deploy via CLI; OAuth authorize on Releases. See [Smithery](#smithery). |
 
 Paste fields for remaining manual surfaces: [`STOREFRONTS.md` §7](./STOREFRONTS.md#7-mcp-registry--directory-listings-diagnoses-era).
 Canonical hosts: [`canonical-urls.md`](./canonical-urls.md) — **do not** use `api.mushimushi.dev` or `docs.mushimushi.dev` in listings until DNS is verified (503 as of Jun 2026).
@@ -54,7 +54,8 @@ scores. Full URL table: [`canonical-urls.md`](./canonical-urls.md).
 | Registry name | `io.github.kensaurus/mushi-mushi` |
 | npm install | `npx -y @mushi-mushi/mcp@latest` |
 | Setup wizard | `npx mushi-mushi setup --ide cursor` |
-| Hosted HTTP MCP | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` |
+| Hosted HTTP MCP (direct) | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` |
+| Smithery / directory upstream | `https://kensaur.us/mushi-mushi/hosted-mcp/` |
 | API endpoint (`MUSHI_API_ENDPOINT`) | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` |
 | Repo | `https://github.com/kensaurus/mushi-mushi` |
 | Homepage | `https://kensaur.us/mushi-mushi` |
@@ -298,9 +299,15 @@ Config schema: [`smithery-config-schema.json`](./smithery-config-schema.json)
 Paste bundle: [`smithery-external-publish.json`](./smithery-external-publish.json)
 
 After deploy, open **Releases → AUTHORIZE → Connect** (paste `MUSHI_API_KEY` from
-`.env.local`). If setup returns `oauth/resource_metadata_process_failed`, Smithery
-could not read PRM from the **Supabase origin** — deploy the Cloudflare worker
-(see below), republish, then re-run verification.
+`.env.local`). If setup returns `oauth/resource_metadata_process_failed`, confirm
+origin PRM is live:
+
+```bash
+curl -sS https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp
+node scripts/verify-hosted-mcp.mjs
+```
+
+Then republish with the kensaur.us upstream URL (not raw `*.supabase.co`).
 
 ### Hosted MCP auth surfaces (Jun 2026)
 

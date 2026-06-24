@@ -57,4 +57,26 @@ if (!initOk) {
   console.log(`  ${initText.slice(0, 200)}`)
 }
 
+// Smithery spec: unauthenticated POST must return 401 (not 403) with PRM hint (RFC 9728).
+const unauth = await fetch(`${HOSTED}/`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'initialize',
+    params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+  }),
+})
+const wwwAuth = unauth.headers.get('www-authenticate') ?? ''
+const unauthOk =
+  unauth.status === 401 &&
+  wwwAuth.includes('resource_metadata') &&
+  wwwAuth.includes('kensaur.us/mushi-mushi/hosted-mcp')
+console.log(`${unauthOk ? '✓' : '✗'} unauthenticated POST → 401 + kensaur.us PRM hint (${unauth.status})`)
+if (!unauthOk) {
+  failed++
+  console.log(`  WWW-Authenticate: ${wwwAuth.slice(0, 160)}`)
+}
+
 process.exit(failed ? 1 : 0)
