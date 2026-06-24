@@ -1,0 +1,299 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": [
+    "kensaurus"
+  ],
+  "name": "mushi-mushi",
+  "description": "Bug-report triage and fix-dispatch MCP for vibe coders. Ask your AI coding agent for a plain-English diagnosis of any user-reported bug — with evidence, blast radius, and a paste-ready fix prompt — then dispatch an automated GitHub fix PR without a second LLM key. 72 tools, Supabase-backed, MIT SDK. npx @mushi-mushi/mcp",
+  "license": "MIT",
+  "tools": [
+    {
+      "name": "get_recent_reports",
+      "description": "List recent bug reports with optional filters (status / category / severity). Use this to survey what the triage queue looks like right now."
+    },
+    {
+      "name": "get_report_detail",
+      "description": "Full payload for a single report — description, console logs, network requests, screenshot URL, classification, fix history."
+    },
+    {
+      "name": "get_report_timeline",
+      "description": "Ordered timeline merging reporter comments, fix events, QA runs, skill pipeline steps, and Ask Mushi turns for one report."
+    },
+    {
+      "name": "search_reports",
+      "description": "Semantic + keyword search over reports. Uses pgvector similarity server-side — falls back to description/summary substring only if embeddings are unavailable for the project."
+    },
+    {
+      "name": "get_similar_bugs",
+      "description": "Find bugs related to a component, page, or description via pgvector nearest-neighbour search. Same backend as search_reports but tuned for \"have we seen this before?\"."
+    },
+    {
+      "name": "get_fix_context",
+      "description": "Bundle the full context an agent needs to fix a bug: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, reproduction steps, component, root cause, and ontology tags. One call instead of several. No second LLM key needed."
+    },
+    {
+      "name": "get_fix_timeline",
+      "description": "Ordered timeline of a fix attempt — dispatched → started → branch → commit → PR opened → CI → completed/failed. Use this to debug \"why did this fix fail?\"."
+    },
+    {
+      "name": "get_blast_radius",
+      "description": "Graph traversal showing other components / pages a bug group touches. Use before dispatching a fix so the agent can scope its changes."
+    },
+    {
+      "name": "get_knowledge_graph",
+      "description": "Traverse the knowledge graph from a seed component or page. Returns nodes + edges within a depth budget (max 4 hops)."
+    },
+    {
+      "name": "run_nl_query",
+      "description": "Natural-language question → SQL query run against your project data. Read-only, 60/hour rate-limited, no privileged schemas."
+    },
+    {
+      "name": "inventory_get",
+      "description": "Current inventory.yaml snapshot for a project (latest ingest, validation errors, per-action status summary). Requires inventory_v2 on the project plan."
+    },
+    {
+      "name": "inventory_diff",
+      "description": "Diff two ingested inventory commits (fromSha → toSha) — added/removed nodes and edges. Use before merging a PR that touches inventory.yaml."
+    },
+    {
+      "name": "inventory_findings",
+      "description": "Latest gate runs + findings (dead-handler, mock-leak, crawl, status-claim, …). Filter by gate name or severity."
+    },
+    {
+      "name": "graph_neighborhood",
+      "description": "BFS neighborhood around a graph node id or label — nodes + edges within a depth budget (max 4). Same backend as knowledge-graph traversal, tuned for \"what touches this action?\"."
+    },
+    {
+      "name": "graph_node_status",
+      "description": "Fetch a single graph node row (label, type, metadata — includes v2 derived status on Action nodes)."
+    },
+    {
+      "name": "fix_suggest",
+      "description": "Read-only slice of a report focused on Stage 2 suggested fix + root cause + reproduction — faster than pulling the full blob when you only need the human-readable hint."
+    },
+    {
+      "name": "setup_check",
+      "description": "[Deprecated — use diagnose_setup with mode=dispatch or diagnose_connection.] Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status (GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). Also returns the target repo URL when GitHub is connected."
+    },
+    {
+      "name": "ingest_setup_check",
+      "description": "[Deprecated — use diagnose_setup with mode=ingest or diagnose_connection.] Run the 4 **required ingest** checks for the project tied to this API key: project exists, active API key, SDK heartbeat (or real report), and at least one ingested report."
+    },
+    {
+      "name": "diagnose_setup",
+      "description": "Single entry point for setup health. mode=full (default) runs ingest + dispatch checks and returns the best next action; mode=ingest runs SDK ingest checks only; mode=dispatch runs fix-dispatch preflight only. Prefer this over setup_check, ingest_setup_check, or diagnose_connection alone."
+    },
+    {
+      "name": "diagnose_connection",
+      "description": "Validate MCP credentials, ping /health, run ingest-setup and dispatch preflight, return the single best next action. For mode-specific checks prefer diagnose_setup. Use when the user asks \"why aren't my reports showing up?\"."
+    },
+    {
+      "name": "search_mushi_docs",
+      "description": "Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked page titles, URLs, and excerpts — use before guessing API shapes or RPC names."
+    },
+    {
+      "name": "submit_fix_result",
+      "description": "Record a fix outcome (branch, PR, files, lines) from an external agent. Creates a fix_attempt then patches it to completed."
+    },
+    {
+      "name": "dispatch_fix",
+      "description": "Dispatch the Mushi agentic fix orchestrator for a classified report. Set agent=\"cursor_cloud\" to dispatch a Cursor Cloud Agent that opens a signed draft PR. Returns a fix_attempt id; poll get_fix_timeline for progress."
+    },
+    {
+      "name": "trigger_judge",
+      "description": "Run the Sonnet-as-Judge over a batch of classified reports. Returns a batch id; results land in judge_results."
+    },
+    {
+      "name": "test_gen_from_report",
+      "description": "POST to inventory test-gen: uses the project BYOK LLM to author a Playwright spec from a classified report and opens a draft PR (internal service orchestration). Requires inventory_v2 + GitHub + LLM keys."
+    },
+    {
+      "name": "transition_status",
+      "description": "Move a report between workflow states (new → classified → grouped → fixing → fixed → verified → reopened → dismissed). Enforces the same transition rules as the admin UI."
+    },
+    {
+      "name": "merge_fix",
+      "description": "Squash-merge a fix attempt PR and mark the linked report fixed."
+    },
+    {
+      "name": "refresh_ci",
+      "description": "Pull the latest GitHub check-run status for a fix attempt."
+    },
+    {
+      "name": "reopen_report",
+      "description": "Move a report to reopened for regression triage."
+    },
+    {
+      "name": "list_top_contributors",
+      "description": "Return the top N contributors for the organization, ranked by points in a time window (30d | 90d | all). Each row includes display name, tier, total points, report count, and anti-fraud flag. Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus."
+    },
+    {
+      "name": "award_bonus_points",
+      "description": "Award ad-hoc bonus points to a contributor by their external user id (as passed to Mushi.identify()). Points are applied server-side, audit-logged, and trigger tier re-evaluation. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign."
+    },
+    {
+      "name": "set_tier",
+      "description": "Override a contributor's tier by tier slug (e.g. \"champion\"). This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds. The override is logged in end_user_activity with action=tier_override_manual. Requires mcp:write scope."
+    },
+    {
+      "name": "setup_repo_for_mushi",
+      "description": "Writes the three Mushi bootstrap files into the current repo root: `.cursorrules` (Cursor evolution-loop coding rules), `.mushi/lessons.json` (initial empty lesson cache), and `MUSHI.md` (one-page project contract for agents). Idempotent — safe to re-run after lessons sync. Requires mcp:write scope. Call this once after connecting the repo; subsequently use `mushi sync-lessons` from CI to keep lessons current."
+    },
+    {
+      "name": "list_projects",
+      "description": "List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys returns every project owned by this account. Call this first when you need to discover available project IDs, then pass the target project_id explicitly to any tool that accepts it. With an org-scoped key (no MUSHI_PROJECT_ID in config) you can reach all your projects from a single MCP server entry — no separate entry per project needed."
+    },
+    {
+      "name": "get_account_overview",
+      "description": "Return an enriched summary of every Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself."
+    },
+    {
+      "name": "get_project_context",
+      "description": "Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, BYOK LLM config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a triage session to orient themselves."
+    },
+    {
+      "name": "get_pipeline_logs",
+      "description": "Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts project_id, service, since (ISO-8601), limit (max 200), and level (info | warn | error | fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent."
+    },
+    {
+      "name": "get_report_evidence",
+      "description": "Return the full evidence package for a single bug report: screenshot URL, console logs, network excerpts, browser environment (user agent, URL, viewport, SDK version), user replay link if available, breadcrumb trail, and the reporter's own comments thread. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately."
+    },
+    {
+      "name": "triage_issue",
+      "description": "Read-only orchestration tool: combines report detail, evidence, similar bugs, fix context, blast radius, and recent pipeline logs for a report into a single structured triage packet. Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). Equivalent to a Sentry \"Analyze with Seer\" flow grounded in user-felt reports. Pass report_id to kick off triage. Call this before dispatch_fix."
+    },
+    {
+      "name": "query_lessons",
+      "description": "Token-budget retrieval of relevant learning rules (lessons) for a given code diff or PR context. Returns ranked lessons packed within max_tokens using bi-encoder retrieval + severity-weighted scoring. Use this before opening a PR, writing a fix, or asking \"what mistakes should I avoid in this area of code?\""
+    },
+    {
+      "name": "list_lessons",
+      "description": "List promoted learning rules (lessons) for the current project. Each lesson represents a named pattern of mistakes that has been encoded from bug reports. Use this to understand what systemic issues have been identified and encoded as heuristics."
+    },
+    {
+      "name": "map_user_stories",
+      "description": "Crawl a live application URL with Firecrawl/Browserbase and ask Claude to draft an inventory.yaml with pages and user stories. Creates a story_map_run row for progress tracking, then writes an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns { runId, status: \"pending\" } immediately — poll get_map_run_status for progress."
+    },
+    {
+      "name": "get_map_run_status",
+      "description": "Get the status and results of a story_map_run (pending → running → completed/failed). Returns pages_crawled, proposal_id (once done), and cursor_pr_url if Cursor Cloud refined the draft."
+    },
+    {
+      "name": "generate_tdd_from_story",
+      "description": "Given a user story id (from the accepted inventory), ask Claude to write a full Playwright TypeScript test. Inserts a qa_stories row (source=test_gen_from_story) with approval_status driven by automation_mode. Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }."
+    },
+    {
+      "name": "improve_qa_story",
+      "description": "Trigger the PDCA improver for a specific project. Finds recently failed qa_story_runs and uses Claude to write improved test scripts. New tests are created with source=pdca and approval gated by the original story's automation_mode."
+    },
+    {
+      "name": "run_qa_story",
+      "description": "Queue a manual run for an enabled + approved qa_story. Returns the run id immediately; poll qa_story_runs or use get_report_detail for progress. Equivalent to \"Run now\" in the console."
+    },
+    {
+      "name": "list_byok_keys",
+      "description": "List all BYOK API keys for the project, grouped by provider. Shows label, priority, status, and cooldown. Never returns the raw key value — only metadata. Use this to see which keys are active or exhausted."
+    },
+    {
+      "name": "add_byok_key",
+      "description": "Add a new API key to the project's BYOK pool for a given provider (anthropic, openai, firecrawl, browserbase, cursor). Specify label and priority for ordering. The key is stored encrypted in Supabase Vault."
+    },
+    {
+      "name": "list_pending_review_stories",
+      "description": "Get the queue of TDD tests that were auto-generated and are waiting for human approval before they run in the QA schedule."
+    },
+    {
+      "name": "approve_qa_story",
+      "description": "Approve or reject a qa_story that is in pending_review. Approved stories are enabled in the QA schedule immediately."
+    },
+    {
+      "name": "reply_to_reporter",
+      "description": "Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE."
+    },
+    {
+      "name": "get_two_way_comms_health",
+      "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget."
+    },
+    {
+      "name": "list_qa_story_runs",
+      "description": "Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed."
+    },
+    {
+      "name": "get_qa_story_run",
+      "description": "Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app."
+    },
+    {
+      "name": "test_notification_channel",
+      "description": "Send a test notification to a configured notification channel for the project. Supported channel kinds: \"slack\" (posts a test Block Kit message to the configured channel), \"discord\" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials."
+    },
+    {
+      "name": "get_usage",
+      "description": "Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer \"how many diagnoses do I have left?\" or \"am I close to my spend cap?\"."
+    },
+    {
+      "name": "list_skills",
+      "description": "List the agent skills available in the catalog, optionally filtered by category. Returns slug, title, description, category, and chain_slugs for each skill. Use before start_skill_pipeline to find the right skill slug for a given type of work."
+    },
+    {
+      "name": "get_skill",
+      "description": "Fetch the full detail for a single agent skill by slug, including the complete SKILL.md body and resolved chain. Use before executing a step to understand what the skill expects you to do."
+    },
+    {
+      "name": "start_skill_pipeline",
+      "description": "Start a new skill pipeline run for a report. Pass root_skill_slug and optionally report_id. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live."
+    },
+    {
+      "name": "get_pipeline_run",
+      "description": "Fetch the full detail for a skill pipeline run: status, context_packet, and all step statuses. Call to retrieve the context_packet after a pipeline was started from the console or another agent."
+    },
+    {
+      "name": "checkin_pipeline_step",
+      "description": "Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress."
+    },
+    {
+      "name": "get_activation_status",
+      "description": "[Deprecated — use activation_status resource or tool on hosted MCP.] Unified setup posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action."
+    },
+    {
+      "name": "get_reporter_thread",
+      "description": "[Deprecated — use get_report_timeline instead.] Fetch the unified timeline for a report — reporter comments plus fix, QA, and status lanes."
+    },
+    {
+      "name": "run_fullstack_audit",
+      "description": "Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Requires the project to have a Supabase PAT configured (Settings → API Keys, slug: supabase) and supabase_project_ref set in project settings for backend analysis. The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today."
+    },
+    {
+      "name": "get_backend_health",
+      "description": "Return the current backend health state for a linked Supabase project: table list (with RLS enabled status), recent API and Postgres error logs, and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. Returns { tables, logs, advisors, projectRef } when the backend is linked, or { reason: \"no_supabase_pat\" | \"no_project_ref\" } when it is not configured. This is the read-only fast path — use run_fullstack_audit for the full scorecard including gate results."
+    },
+    {
+      "name": "ask_codebase",
+      "description": "Ask a plain-English question about the connected repo. Grounds on pgvector retrieval over project_codebase_files and returns an answer with file:line citations. Requires codebase indexing enabled and an Anthropic or OpenAI BYOK key."
+    },
+    {
+      "name": "get_file_summary",
+      "description": "Lazy-generate (or return cached) plain-English summary for an indexed file or symbol. Cache invalidates when content_hash changes after re-index."
+    },
+    {
+      "name": "get_codebase_tour",
+      "description": "Return a dependency-ordered guided tour (~6–10 stops) for onboarding — each stop lists node ids, file paths, layer, and rationale. Cached per index fingerprint."
+    },
+    {
+      "name": "search_codebase",
+      "description": "Search indexed files by plain-English meaning via embeddings. Returns top-k file chunks with similarity scores."
+    },
+    {
+      "name": "get_codebase_domains",
+      "description": "Extract business domains, flows, and steps mapped to file paths. Cached per index fingerprint."
+    },
+    {
+      "name": "analyze_codebase_impact",
+      "description": "Find files that depend on changed paths (reverse import graph). Supports manual paths, last push, GitHub compare, or fix PR files."
+    },
+    {
+      "name": "analyze_wiki_knowledge",
+      "description": "Return wiki/docs knowledge graph nodes and sources for the project. Use include_wiki on ask_codebase for RAG merge."
+    }
+  ]
+}

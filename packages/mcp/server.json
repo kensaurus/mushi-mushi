@@ -1,8 +1,15 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kensaurus/mushi-mushi",
+  "title": "Mushi Mushi",
   "description": "Bug translation for vibe coders — pull a plain-English diagnosis and a paste-ready fix prompt for any user-felt bug, plus evidence (screenshots, console, network), blast radius, and fix dispatch, all from your AI coding agent. No second LLM key.",
-  "version": "0.16.0",
+  "version": "0.17.0",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/packages/brand/src/logo-mark-512.png",
+      "mimeType": "image/png"
+    }
+  ],
   "repository": {
     "url": "https://github.com/kensaurus/mushi-mushi",
     "source": "github",
@@ -14,7 +21,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mushi-mushi/mcp",
-      "version": "0.16.0",
+      "version": "0.17.0",
       "transport": {
         "type": "stdio"
       },
