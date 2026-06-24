@@ -125,7 +125,7 @@ if (!mushiBehavior) {
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
 /** Forwards all viewer headers (incl. User-Agent) — required for SmitheryBot bypass at origin. */
-const ALL_VIEWER_ORP = '216adef6-3840-4338-8155-13614ca596875'
+const ALL_VIEWER_ORP = '216adef6-5c7f-47e4-b989-5492eafa07d3'
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
 function cloneBehavior(source) {
