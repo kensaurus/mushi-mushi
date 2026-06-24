@@ -332,15 +332,16 @@ jobs:
             --if-match "$ETAG" \
             --region us-east-1
 
-      - name: Attach apex redirect cache behaviors
-        env:
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-        run: node scripts/aws-attach-apex-redirect.mjs
-
       - name: Setup hosted MCP proxy (Smithery / kensaur.us)
         env:
           CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
         run: node scripts/aws-setup-hosted-mcp.mjs
+
+      - name: Attach apex redirect cache behaviors
+        continue-on-error: true
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: node scripts/aws-attach-apex-redirect.mjs
 
       - name: Invalidate CloudFront cache
         # Invalidate /mushi-mushi/* (spa-router) and apex docs prefixes (apex-redirect).
