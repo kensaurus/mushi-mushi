@@ -19,7 +19,11 @@ let failed = 0
 for (const [label, url] of checks) {
   const res = await fetch(url, { headers: { Accept: 'application/json' } })
   const text = await res.text()
-  const ok = res.ok && (text.includes('authorization_servers') || text.includes('serverInfo'))
+  const ok =
+    res.ok &&
+    (text.includes('authorization_servers') ||
+      text.includes('serverInfo') ||
+      text.includes('"issuer"'))
   console.log(`${ok ? '✓' : '✗'} ${label} ${res.status} ${url}`)
   if (!ok) {
     failed++

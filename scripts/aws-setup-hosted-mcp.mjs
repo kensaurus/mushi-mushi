@@ -124,6 +124,8 @@ if (!mushiBehavior) {
 }
 
 const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
+/** Forwards all viewer headers (incl. User-Agent) — required for SmitheryBot bypass at origin. */
+const ALL_VIEWER_ORP = '216adef6-3840-4338-8155-13614ca596875'
 
 /** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
 function cloneBehavior(source) {
@@ -135,35 +137,51 @@ function cloneBehavior(source) {
   return b
 }
 
-const existing = new Set(config.CacheBehaviors.Items.map((cb) => cb.PathPattern))
-const toAdd = []
-
-if (!existing.has(WELLKNOWN_PATTERN)) {
-  toAdd.push({
-    ...cloneBehavior(mushiBehavior),
-    PathPattern: WELLKNOWN_PATTERN,
-    TargetOriginId: S3_ORIGIN_ID,
+function hostedMcpBehavior(base, pathPattern, originId, fnArn) {
+  return {
+    ...cloneBehavior(base),
+    PathPattern: pathPattern,
+    TargetOriginId: originId,
     CachePolicyId: CACHING_DISABLED,
-    FunctionAssociations: fnAssoc(wellknownArn),
-  })
-}
-
-if (!existing.has(HOSTED_MCP_PATTERN)) {
-  toAdd.push({
-    ...cloneBehavior(mushiBehavior),
-    PathPattern: HOSTED_MCP_PATTERN,
-    TargetOriginId: SUPABASE_ORIGIN_ID,
-    CachePolicyId: CACHING_DISABLED,
+    OriginRequestPolicyId: ALL_VIEWER_ORP,
     AllowedMethods: {
       Quantity: 7,
       Items: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
       CachedMethods: { Quantity: 2, Items: ['GET', 'HEAD'] },
     },
-    FunctionAssociations: fnAssoc(routerArn),
-  })
+    FunctionAssociations: fnAssoc(fnArn),
+  }
 }
 
-if (toAdd.length === 0) {
+const existing = new Set(config.CacheBehaviors.Items.map((cb) => cb.PathPattern))
+const toAdd = []
+let needsUpdate = false
+
+if (!existing.has(WELLKNOWN_PATTERN)) {
+  toAdd.push(hostedMcpBehavior(mushiBehavior, WELLKNOWN_PATTERN, S3_ORIGIN_ID, wellknownArn))
+} else {
+  const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === WELLKNOWN_PATTERN)
+  if (row?.OriginRequestPolicyId !== ALL_VIEWER_ORP) {
+    row.OriginRequestPolicyId = ALL_VIEWER_ORP
+    row.CachePolicyId = CACHING_DISABLED
+    needsUpdate = true
+    console.log(`Patching ${WELLKNOWN_PATTERN} → AllViewer origin request policy`)
+  }
+}
+
+if (!existing.has(HOSTED_MCP_PATTERN)) {
+  toAdd.push(hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn))
+} else {
+  const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === HOSTED_MCP_PATTERN)
+  if (row?.OriginRequestPolicyId !== ALL_VIEWER_ORP) {
+    row.OriginRequestPolicyId = ALL_VIEWER_ORP
+    row.CachePolicyId = CACHING_DISABLED
+    needsUpdate = true
+    console.log(`Patching ${HOSTED_MCP_PATTERN} → AllViewer origin request policy`)
+  }
+}
+
+if (toAdd.length === 0 && !needsUpdate) {
   console.log('Hosted MCP cache behaviors already present. Done.')
   process.exit(0)
 }
