@@ -1560,9 +1560,6 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
             ...(claims.email ? { email: claims.email } : {}),
             ...(claims.name ? { name: claims.name } : {}),
           };
-          // Keep identify() dedupe coherent so a follow-up identify() for the
-          // same user is also skipped.
-          lastIdentifySig = `${userInfo.id}::token`;
           widget.setIdentifiedUser(
             (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
           );
@@ -1775,20 +1772,29 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         const value = Reflect.get(target, prop, receiver);
         if (typeof value !== 'function') return value;
         const method = String(prop);
+        // Resolve the fallback lazily so the only non-void method not in the
+        // static map — diagnose() — returns a structurally-valid
+        // MushiDiagnosticsResult (via diagnoseWithoutInstance) instead of
+        // `undefined`, which a host doing `(await diagnose()).ok` would choke on.
+        const resolveFallback = (): unknown =>
+          method === 'diagnose'
+            ? diagnoseWithoutInstance()
+            : method in PUBLIC_API_FALLBACKS
+              ? PUBLIC_API_FALLBACKS[method]
+              : undefined;
         return (...args: unknown[]): unknown => {
-          const fallback = method in PUBLIC_API_FALLBACKS ? PUBLIC_API_FALLBACKS[method] : undefined;
           try {
             const result = (value as (...a: unknown[]) => unknown).apply(target, args);
             if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
               return (result as Promise<unknown>).catch((err) => {
                 noteSdkError(method, err);
-                return fallback;
+                return resolveFallback();
               });
             }
             return result;
           } catch (err) {
             noteSdkError(method, err);
-            return fallback;
+            return resolveFallback();
           }
         };
       },

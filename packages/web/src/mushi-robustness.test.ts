@@ -94,4 +94,13 @@ describe('Mushi public API error isolation', () => {
     expect(unsub).toBeTypeOf('function');
     expect(() => unsub()).not.toThrow();
   });
+
+  it('diagnose() resolves to a structurally-valid result (never undefined)', async () => {
+    const sdk = Mushi.init(CONFIG);
+    const result = await sdk.diagnose();
+    // The isolation layer must hand back a real MushiDiagnosticsResult even on
+    // the error path — not `undefined`, which a host would choke on.
+    expect(result).toBeTypeOf('object');
+    expect(result).not.toBeNull();
+  });
 });
