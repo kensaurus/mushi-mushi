@@ -3,7 +3,8 @@
  * PURPOSE: Tiny helper that returns a `style` prop for each item in a list
  *          so consecutive children fade in with a small stagger. Used by
  *          dashboard rows and tables that previously popped in all at once
- * when fresh data arrived
+ * when fresh data arrived. Shared by Reports (`ReportRowView`) and Fixes
+ * (`FixRowView`) at 18ms step / max index 12.
  *
  *          Usage:
  *            const stagger = useStaggeredAppear({ stepMs: 40, max: 12 })

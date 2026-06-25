@@ -248,6 +248,14 @@ export function semanticBannerTone(tone: SemanticBannerTone): string {
   return SEMANTIC_BANNER_TONE[tone]
 }
 
+/** WCAG-safe operator beta strip — bg-lime-muted + text-lime-foreground (not text-lime-fg). */
+export const BETA_BANNER_TONE =
+  'border-lime/30 bg-lime-muted text-lime-foreground'
+
+export function betaBannerTone(): string {
+  return BETA_BANNER_TONE
+}
+
 /** Primary billing upgrade CTA — `bg-brand text-brand-fg` (never `bg-fg text-bg`). */
 export const BILLING_CTA_LINK_CLASS =
   'inline-flex items-center justify-center rounded-full bg-brand px-3 py-1 text-2xs font-semibold text-brand-fg shadow-sm hover:bg-brand-hover motion-safe:transition-opacity shrink-0'

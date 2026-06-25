@@ -55,8 +55,8 @@ import {
   SelectField,
   Sparkline,
   DetailRows,
-  SegmentedControl,
 } from '../components/ui'
+import { MotionSegmentedControl } from '../components/motion/MotionSegmentedControl'
 import {
   ActionPill,
   ActionPillRow,
@@ -476,11 +476,12 @@ export function BillingPage() {
       )}
 
       {!ux.hideTabs && (
-      <SegmentedControl
+      <MotionSegmentedControl
         value={activeTab}
         onChange={setActiveTab}
         options={tabOptions}
         ariaLabel="Billing sections"
+        trackId="billing-section-tabs"
         size="sm"
       />
       )}

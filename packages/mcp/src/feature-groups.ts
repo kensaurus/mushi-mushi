@@ -17,7 +17,7 @@ export const FEATURE_GROUPS = [
   'audit',
   'docs',
   'usage',
-  'usage',
+  'codebase',
   /** Deprecated aliases kept for one release — hidden unless `legacy` or `all`. */
   'legacy',
 ] as const
@@ -54,23 +54,18 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   triage_issue: 'triage',
   query_lessons: 'triage',
   list_lessons: 'triage',
-  fix_suggest: 'triage',
-  graph_neighborhood: 'triage',
-  graph_node_status: 'triage',
-  get_reporter_thread: 'legacy',
+  suggest_fix: 'triage',
+  get_graph_neighborhood: 'triage',
+  get_graph_node: 'triage',
 
   // inventory
-  inventory_get: 'inventory',
-  inventory_diff: 'inventory',
-  inventory_findings: 'inventory',
+  get_inventory: 'inventory',
+  diff_inventory: 'inventory',
+  list_gate_findings: 'inventory',
   inventory_current: 'admin',
 
   // setup
-  diagnose_connection: 'setup',
   diagnose_setup: 'setup',
-  setup_check: 'legacy',
-  ingest_setup_check: 'legacy',
-  get_activation_status: 'legacy',
   activation_status: 'setup',
   project_integration_health: 'setup',
   setup_repo_for_mushi: 'setup',
@@ -131,16 +126,40 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   run_fullstack_audit: 'audit',
   get_backend_health: 'audit',
 
+  // codebase understand
+  ask_codebase: 'codebase',
+  get_file_summary: 'codebase',
+  get_codebase_tour: 'codebase',
+  search_codebase: 'codebase',
+  get_codebase_domains: 'codebase',
+  analyze_codebase_impact: 'codebase',
+  analyze_wiki_knowledge: 'codebase',
+
   // docs
   search_mushi_docs: 'docs',
 }
 
-/** Tools superseded by another — still registered when legacy/all enabled. */
+/**
+ * Tools that were renamed or removed. The old name maps to its successor so
+ * callers / docs can resolve the new tool, and a one-release deprecation
+ * window keeps old agent configs from silently breaking. These names are NOT
+ * registered as tools; the map exists so the CLI, docs, and helpful-error
+ * paths can point users at the replacement.
+ */
 export const DEPRECATED_TOOL_ALIASES: Record<string, string> = {
+  // Removed deprecated tools → successor.
   setup_check: 'diagnose_setup',
   ingest_setup_check: 'diagnose_setup',
+  diagnose_connection: 'diagnose_setup',
   get_activation_status: 'activation_status',
   get_reporter_thread: 'get_report_timeline',
+  // Renamed to verb_object → new name.
+  fix_suggest: 'suggest_fix',
+  inventory_get: 'get_inventory',
+  inventory_diff: 'diff_inventory',
+  inventory_findings: 'list_gate_findings',
+  graph_neighborhood: 'get_graph_neighborhood',
+  graph_node_status: 'get_graph_node',
 }
 
 export type FeatureFilter = 'all' | readonly FeatureGroup[]
@@ -154,7 +173,15 @@ export function parseFeaturesParam(raw: string | null | undefined): FeatureFilte
     .map((s) => s.trim())
     .filter(Boolean) as FeatureGroup[]
   const valid = groups.filter((g) => (FEATURE_GROUPS as readonly string[]).includes(g))
-  if (valid.length === 0) return 'all'
+  if (valid.length === 0) {
+    // Unknown/typo group — fall back to the lean default instead of silently
+    // exposing the full tool surface. Warn so the operator can correct the env.
+    console.warn(
+      `[mushi-mcp] MUSHI_FEATURES="${raw}" contains no recognised groups; ` +
+        `falling back to DEFAULT_FEATURE_GROUPS. Valid groups: ${FEATURE_GROUPS.join(', ')}`,
+    )
+    return DEFAULT_FEATURE_GROUPS
+  }
   // `legacy` implies nothing extra unless explicitly listed; `all` handled above.
   return valid
 }

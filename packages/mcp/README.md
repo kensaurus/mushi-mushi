@@ -146,14 +146,24 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 
 ### Feature groups (`?features=` / `MUSHI_FEATURES`)
 
-Full catalog is **71 tools**. New installs default to a lean set via:
+Full catalog is **67 tools**. New installs now default to the lean
+`triage,fixes,inventory,setup,docs` set automatically (stdio: when
+`MUSHI_FEATURES` is unset; HTTP: pass the same `?features=` on the URL). To
+change the surface:
 
-- **Stdio:** `MUSHI_FEATURES=triage,fixes,inventory,setup,docs`
-- **HTTP:** `?features=triage,fixes,inventory,setup,docs` on the MCP URL
+- **Stdio:** `MUSHI_FEATURES=all` for the full catalog, or a CSV like `MUSHI_FEATURES=triage,qa,skills`
+- **HTTP:** `?features=all` or `?features=triage,qa,skills` on the MCP URL
 
-Append `legacy` to keep deprecated aliases (`setup_check`, `ingest_setup_check`, …). Use `features=all` for the full catalog.
+Renamed tools (`inventory_get` → `get_inventory`, `inventory_diff` →
+`diff_inventory`, `inventory_findings` → `list_gate_findings`, `fix_suggest` →
+`suggest_fix`, `graph_neighborhood` → `get_graph_neighborhood`,
+`graph_node_status` → `get_graph_node`) and the consolidated setup tooling
+(`setup_check` / `ingest_setup_check` / `diagnose_connection` → `diagnose_setup`;
+`get_activation_status` → `activation_status`; `get_reporter_thread` →
+`get_report_timeline`) are documented in the changelog — update calls to the new
+names.
 
-New unified tools: `diagnose_setup` (replaces setup trilogy), `search_mushi_docs` (keyword doc search).
+New unified tools: `diagnose_setup` (replaces the setup trilogy), `search_mushi_docs` (keyword doc search).
 
 Append `?read_only=1` to the URL to hide write tools (Supabase-parity mode).
 
@@ -199,10 +209,9 @@ The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text
 | `get_fix_timeline` | Ordered timeline of a fix attempt (dispatched → started → branch → commit → PR → CI → completed/failed) |
 | `get_blast_radius` | Graph traversal showing other components a bug group touches |
 | `get_knowledge_graph` | Traverse the knowledge graph from a seed component or page |
-| `setup_check` | The 4 **dispatch-readiness** checks (GitHub repo, codebase indexed, Anthropic key, autofix enabled) — run before `dispatch_fix` |
-| `ingest_setup_check` | The 4 **required ingest** checks (project, active API key, SDK heartbeat, first report) + `last_sdk_seen_at` diagnostics — run after wiring env vars to confirm the SDK is reporting |
-| `get_activation_status` | Unified setup posture for the active project — required steps, SDK heartbeat, dispatch preflight, and the next best action. Run first when a user says setup is broken |
-| `get_reporter_thread` | Unified report timeline — the reporter/admin comment thread (including verify/reopen signals) plus fix, QA, and status lanes. Use when triaging whether an end user still sees a bug as unfixed |
+| `diagnose_setup` | Setup health in one call — `mode=full` (default) runs ingest + dispatch preflight, `mode=ingest` / `mode=dispatch` narrow it. Returns the single best next action. Run first when a user says setup is broken |
+| `activation_status` | Unified activation posture for the active project — required steps, SDK heartbeat, dispatch preflight, and the next best action |
+| `get_report_timeline` | Ordered report timeline — the reporter/admin comment thread (including verify/reopen signals) plus fix, QA, and status lanes. Use when triaging whether an end user still sees a bug as unfixed |
 | `list_projects` | Discover all Mushi projects accessible to this API key. Returns project id, name, and created date |
 | `get_project_context` | Rich context snapshot: SDK heartbeat, ingest status, autofix readiness, and open report counts |
 | `get_pipeline_logs` | Recent log entries from fix-worker, pipeline, and QA story runner — filterable by service, level, time, and limit |

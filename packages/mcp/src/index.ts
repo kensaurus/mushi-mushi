@@ -30,7 +30,7 @@ console.log = _writeStderr
 console.warn = _writeStderr
 /* eslint-enable no-console */
 import { ALL_SCOPES, type McpScope } from './catalog.js'
-import { parseFeaturesCsv } from './feature-groups.js'
+import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer } from './server.js'
 import * as Sentry from '@sentry/node'
 
@@ -66,7 +66,16 @@ const parsedScopes = SCOPES_RAW
 const SCOPES: readonly McpScope[] =
   SCOPES_RAW && parsedScopes.length === 0 ? ALL_SCOPES : parsedScopes
 
-const FEATURES = parseFeaturesCsv(process.env.MUSHI_FEATURES)
+/**
+ * Tool surface to expose. When `MUSHI_FEATURES` is unset we default to the
+ * lean `DEFAULT_FEATURE_GROUPS` (triage + fixes + inventory + setup + docs)
+ * rather than the full catalog, so a fresh install presents a focused,
+ * easy-to-reason-about toolset. Set `MUSHI_FEATURES=all` (or a CSV of groups,
+ * e.g. `triage,qa,skills`) to widen the surface.
+ */
+const FEATURES = process.env.MUSHI_FEATURES?.trim()
+  ? parseFeaturesCsv(process.env.MUSHI_FEATURES)
+  : DEFAULT_FEATURE_GROUPS
 
 const MCP_SENTRY_DSN = process.env.MUSHI_MCP_SENTRY_DSN?.trim()
 if (MCP_SENTRY_DSN) {

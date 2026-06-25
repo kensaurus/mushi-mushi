@@ -11,7 +11,10 @@
 
 import { useEffect, useRef } from 'react'
 import type { ReactNode, MouseEvent } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { drawerBelowAppChromeClass } from '../lib/appChrome'
+import { overlayTween } from '../lib/motion-tokens'
+import { useDrawerVariants, useMotionTransition, useOverlayVariants } from '../lib/useMotionTransition'
 
 type DrawerWidth = 'sm' | 'md' | 'lg'
 
@@ -127,7 +130,9 @@ export function Drawer({
     }
   }, [open, dismissible, dimmed])
 
-  if (!open) return null
+  const { backdrop } = useOverlayVariants()
+  const drawerPanel = useDrawerVariants()
+  const overlayTransition = useMotionTransition(overlayTween)
 
   // When `dimmed`, the backdrop `<div>` covers the outer wrapper with
   // `absolute inset-0` — clicks on the dim area land on the backdrop itself,
@@ -140,26 +145,40 @@ export function Drawer({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={typeof title === 'string' ? title : ariaLabel}
-      className={containerClassName ?? drawerBelowAppChromeClass}
-      onClick={onBackdropClick}
-    >
-      {dimmed && (
-        <div
-          aria-hidden="true"
-          onClick={dismissible ? onClose : undefined}
-          className="absolute inset-0 bg-overlay backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
-        />
-      )}
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        data-surface={surface}
-        className={`relative h-full ${WIDTH_CLASS[width]} bg-surface-root border-l border-edge/60 shadow-raised flex flex-col motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200 focus-visible:outline-none${panelClassName ? ` ${panelClassName}` : ''}`}
-      >
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          key="drawer-shell"
+          role="dialog"
+          aria-modal="true"
+          aria-label={typeof title === 'string' ? title : ariaLabel}
+          className={containerClassName ?? drawerBelowAppChromeClass}
+          onClick={onBackdropClick}
+          initial={false}
+        >
+          {dimmed && (
+            <motion.div
+              aria-hidden="true"
+              onClick={dismissible ? onClose : undefined}
+              className="absolute inset-0 bg-overlay backdrop-blur-sm"
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              variants={backdrop}
+              transition={overlayTransition}
+            />
+          )}
+          <motion.div
+            ref={panelRef}
+            tabIndex={-1}
+            data-surface={surface}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={drawerPanel}
+            transition={overlayTransition}
+            className={`relative h-full ${WIDTH_CLASS[width]} bg-surface-root border-l border-edge/60 shadow-raised flex flex-col focus-visible:outline-none${panelClassName ? ` ${panelClassName}` : ''}`}
+          >
         {(title || headerAction) && (
           <header className="flex items-center gap-3 px-4 py-2.5 border-b border-edge/60">
             <div className="min-w-0 flex-1">
@@ -184,7 +203,9 @@ export function Drawer({
         )}
         <div className="flex-1 min-h-0 overflow-y-auto">{children}</div>
         {footer && <div className="border-t border-edge/60 px-4 py-2.5">{footer}</div>}
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }

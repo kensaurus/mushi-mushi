@@ -66,7 +66,7 @@ const ROUTES = {
     body: (a, ctx) => ({ query: a.query, k: Math.min(Number(a.limit ?? 5), 20), threshold: 0.3, projectId: ctx.projectIdHint }),
     args: ['query'],
   },
-  inventory_diff: {
+  diff_inventory: {
     method: 'GET',
     path: (a, ctx) => {
       const pid = a.projectId ?? ctx.projectIdHint
@@ -74,13 +74,12 @@ const ROUTES = {
     },
     args: ['fromSha', 'toSha'],
   },
-  graph_neighborhood: {
+  get_graph_neighborhood: {
     method: 'GET',
     path: (a) => `/v1/admin/graph/traverse?seed=${encodeURIComponent(a.seed)}&depth=${Math.min(Number(a.depth ?? 2), 4)}`,
     args: ['seed'],
   },
-  fix_suggest: { method: 'GET', path: (a) => `/v1/admin/reports/${a.reportId}`, args: ['reportId'], transform: 'fix_suggest' },
-  diagnose_connection: { method: 'GET', path: () => '/v1/sync/ingest-setup', transform: 'diagnose' },
+  suggest_fix: { method: 'GET', path: (a) => `/v1/admin/reports/${a.reportId}`, args: ['reportId'], transform: 'fix_suggest' },
   submit_fix_result: {
     method: 'POST',
     path: () => '/v1/admin/fixes',
@@ -248,19 +247,6 @@ const ROUTES = {
     path: (a) => `/v1/admin/skills/pipelines/${a.run_id}/steps/${a.step_index}/checkin`,
     body: (a) => ({ status: a.status, notes: a.notes, pr_url: a.pr_url, agent_ref: a.agent_ref }),
     args: ['run_id', 'step_index', 'status'],
-  },
-  get_activation_status: {
-    method: 'GET',
-    path: (a, ctx) => {
-      const pid = a.project_id ?? ctx.projectIdHint
-      return pid ? `/v1/admin/activation?project_id=${encodeURIComponent(pid)}` : '/v1/admin/activation'
-    },
-    args: [],
-  },
-  get_reporter_thread: {
-    method: 'GET',
-    path: (a) => `/v1/admin/reports/${a.reportId}/timeline`,
-    args: ['reportId'],
   },
   run_fullstack_audit: {
     method: 'POST',

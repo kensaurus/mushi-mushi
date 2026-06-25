@@ -1,4 +1,6 @@
 import { motion } from 'framer-motion'
+import { bannerEnterSpring } from '../../lib/motion-tokens'
+import { useMotionTransition } from '../../lib/useMotionTransition'
 import { Badge } from '../ui'
 import { InventoryStatusPill } from './InventoryStatusPill'
 
@@ -70,6 +72,8 @@ function actionIntent(a: StoryAction): string | null {
 }
 
 export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGatesForStory, onRunCrawlerForStory }: Props) {
+  const enterTransition = useMotionTransition(bannerEnterSpring)
+
   if (!stories.length) {
     return (
       <div className="rounded-md border border-dashed border-edge-subtle p-6 text-center">
@@ -102,7 +106,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
             key={story.id}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: si * 0.04 }}
+            transition={{ ...enterTransition, delay: si * 0.04 }}
             className="rounded-lg border border-edge-subtle bg-gradient-to-br from-surface-raised/80 to-surface-overlay/30 p-4 shadow-sm"
           >
             <header className="mb-3 space-y-2">
@@ -212,7 +216,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                     type="button"
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: si * 0.04 + ai * 0.02 }}
+                    transition={{ ...enterTransition, delay: si * 0.04 + ai * 0.02 }}
                     whileHover={{ y: -1 }}
                     onClick={() => onSelectAction?.(a)}
                     className="text-left rounded-md border border-edge-subtle bg-surface-raised/60 p-3 hover:bg-surface-overlay/70 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"

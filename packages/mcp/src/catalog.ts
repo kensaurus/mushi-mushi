@@ -58,7 +58,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_recent_reports',
     title: 'Recent bug reports',
     description:
-      'List recent bug reports with optional filters (status / category / severity). Use this to see what is waiting in your reports inbox right now.',
+      'List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What landed in my bug queue today?',
@@ -67,7 +67,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_report_detail',
     title: 'Report detail',
     description:
-      'Full payload for a single report — description, console logs, network requests, screenshot URL, classification, fix history.',
+      'Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), and fix history. Returns { report }. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me everything you know about this report.',
@@ -76,7 +76,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_report_timeline',
     title: 'Unified report timeline',
     description:
-      'Ordered timeline merging reporter comments, fix events, QA runs, skill pipeline steps, and Ask Mushi turns for one report.',
+      'Return the ordered activity timeline for one report (oldest to newest), merging reporter comments, fix events, QA runs, skill-pipeline steps, and Ask Mushi turns into one lane. Returns { events: [{ ts, kind, actor, summary }] }. Read-only. Use to see what happened end-to-end on a report thread; use get_report_detail for the static record or get_fix_timeline to debug one fix attempt.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What happened on this report thread end-to-end?',
@@ -85,7 +85,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'search_reports',
     title: 'Search reports',
     description:
-      'Semantic + keyword search over reports. Uses pgvector similarity server-side — falls back to description/summary substring only if embeddings are unavailable for the project.',
+      'Search reports by meaning and keyword (pgvector similarity server-side; falls back to summary/description substring if embeddings are unavailable). Returns ranked { results: [{ id, summary, similarity }] }. Read-only. Use to find reports by free text ("checkout flakiness"); use get_similar_bugs to dedupe a known component/bug, or get_recent_reports to list without a query.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Find reports mentioning "checkout flakiness".',
@@ -94,7 +94,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_similar_bugs',
     title: 'Similar bugs',
     description:
-      'Find bugs related to a component, page, or description via pgvector nearest-neighbour search. Same backend as search_reports but tuned for "have we seen this before?".',
+      'Find existing bugs similar to a component, page, or description via pgvector nearest-neighbour search (same backend as search_reports, tuned for "have we seen this before?"). Returns ranked { reports: [{ id, summary, similarity }] }. Read-only. Use to dedupe before filing or group regressions; use search_reports for general free-text search.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Have we seen a bug like this before?',
@@ -103,7 +103,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_context',
     title: 'Fix context bundle',
     description:
-      'Bundle the full context an agent needs to fix a bug: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, reproduction steps, component, root cause, and ontology tags. One call instead of several. No second LLM key needed.',
+      'Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, and ontology tags. Returns { fixPrompt, report, reproduction, component, rootCause, tags }. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Give me everything I need to fix this in one payload.',
@@ -112,7 +112,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_fix_timeline',
     title: 'Fix timeline',
     description:
-      'Ordered timeline of a fix attempt — dispatched → started → branch → commit → PR opened → CI → completed/failed. Use this to debug "why did this fix fail?".',
+      'Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, completed/failed, with timestamps and the PR URL. Returns { events: [{ ts, stage, detail }] }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Why did this fix attempt fail — show me every step.',
@@ -121,7 +121,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_blast_radius',
     title: 'Blast radius',
     description:
-      'Graph traversal showing other components / pages a bug group touches. Use before dispatching a fix so the agent can scope its changes.',
+      'Return the other components/pages a bug group touches, via knowledge-graph traversal from the report node. Returns { nodes: [{ id, label, type }], edges }. Read-only. Use before dispatch_fix to scope a change safely; use get_knowledge_graph to traverse from an arbitrary seed, or analyze_codebase_impact for file-level import impact.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What else might break if I change this component?',
@@ -130,7 +130,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_knowledge_graph',
     title: 'Knowledge graph traversal',
     description:
-      'Traverse the knowledge graph from a seed component or page. Returns nodes + edges within a depth budget (max 4 hops).',
+      'Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, type }], edges } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug\'s impact area, or get_graph_neighborhood for a tighter BFS around one node.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me how this component connects to the rest of the app.',
@@ -139,117 +139,81 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'run_nl_query',
     title: 'Ask your data (NL → SQL)',
     description:
-      'Natural-language question → SQL query run against your project data. Read-only, 60/hour rate-limited, no privileged schemas.',
+      'Answer a natural-language question about your project data by generating and running a read-only SQL query (no privileged schemas, rate-limited to 60/hour). Returns { sql, rows }. Use for ad-hoc analytics ("which components had the most critical bugs this week?"); use get_recent_reports/search_reports for plain report lookups, or search_mushi_docs for documentation questions.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which components had the most critical bugs this week?',
   },
   // --- Inventory v2 (whitepaper §6.8) -------------------------------------
   {
-    name: 'inventory_get',
+    name: 'get_inventory',
     title: 'Inventory snapshot',
     description:
-      'Current inventory.yaml snapshot for a project (latest ingest, validation errors, per-action status summary). Requires inventory_v2 on the project plan.',
+      'Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Returns { snapshot, validationErrors, actions: [{ id, status }] }. Requires the inventory_v2 plan. Read-only. Use for the full current state; use diff_inventory to compare two commits, or list_gate_findings for the latest gate results.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What does the live inventory claim for this repo right now?',
   },
   {
-    name: 'inventory_diff',
+    name: 'diff_inventory',
     title: 'Inventory diff',
     description:
-      'Diff two ingested inventory commits (fromSha → toSha) — added/removed nodes and edges. Use before merging a PR that touches inventory.yaml.',
+      'Diff two ingested inventory commits (fromSha to toSha): added/removed nodes and edges. Returns { added, removed, changed }. Requires inventory_v2. Read-only. Use before merging a PR that touches inventory.yaml to see what changed; use get_inventory for the current snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What changed in inventory between these two SHAs?',
   },
   {
-    name: 'inventory_findings',
+    name: 'list_gate_findings',
     title: 'Gate findings',
     description:
-      'Latest gate runs + findings (dead-handler, mock-leak, crawl, status-claim, …). Filter by gate name or severity.',
+      'List the most recent inventory gate findings for a project, newest run first. Returns rows of { gate, severity, status, message, node_ref }; "latest" = the most recent run per gate by created_at. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me what CI gates failed on the last run.',
   },
   {
-    name: 'graph_neighborhood',
+    name: 'get_graph_neighborhood',
     title: 'Graph neighborhood',
     description:
-      'BFS neighborhood around a graph node id or label — nodes + edges within a depth budget (max 4). Same backend as knowledge-graph traversal, tuned for "what touches this action?".',
+      'Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, type }], edges } within a depth budget (default 2, max 4). Read-only. Tuned for "what touches this action?"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node\'s row.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What nodes connect to this inventory Action within 2 hops?',
   },
   {
-    name: 'graph_node_status',
+    name: 'get_graph_node',
     title: 'Graph node detail',
     description:
-      'Fetch a single graph node row (label, type, metadata — includes v2 derived status on Action nodes).',
+      'Fetch one knowledge-graph node row by id: { id, label, type, metadata } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node\'s status; use get_graph_neighborhood to see what connects to it.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What status does the graph store on this node id?',
   },
   {
-    name: 'fix_suggest',
+    name: 'suggest_fix',
     title: 'Suggested fix (from triage)',
     description:
-      'Read-only slice of a report focused on Stage 2 suggested fix + root cause + reproduction — faster than pulling the full blob when you only need the human-readable hint.',
+      'Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns { reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick "what should we try?"; use get_fix_context for the full paste-ready bundle.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What did Stage 2 say we should try for this report?',
   },
   // --- Setup / admin -------------------------------------------------------
   {
-    name: 'setup_check',
-    title: 'Dispatch preflight check',
-    description:
-      '[Deprecated — use diagnose_setup with mode=dispatch or diagnose_connection.] ' +
-      'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
-      '(GitHub repo connected, codebase indexed, your Anthropic API key present, autofix enabled). ' +
-      'Also returns the target repo URL when GitHub is connected.',
-    scope: 'mcp:read',
-    hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'Is this project ready to auto-fix bugs? What is blocking dispatch?',
-  },
-  {
-    name: 'ingest_setup_check',
-    title: 'Ingest setup check',
-    description:
-      '[Deprecated — use diagnose_setup with mode=ingest or diagnose_connection.] ' +
-      'Run the 4 **required ingest** checks for the project tied to this API key: ' +
-      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report.',
-    scope: 'mcp:read',
-    hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'Is the SDK installed and ingesting reports? Why is my banner still missing?',
-  },
-  {
     name: 'diagnose_setup',
     title: 'Unified setup diagnose',
     description:
-      'Single entry point for setup health. mode=full (default) runs ingest + dispatch checks and returns the best next action; ' +
-      'mode=ingest runs SDK ingest checks only; mode=dispatch runs fix-dispatch preflight only. ' +
-      'Prefer this over setup_check, ingest_setup_check, or diagnose_connection alone.',
+      'Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns { ready, steps: [{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Why is Mushi setup broken — one call, clear next step.',
   },
   {
-    name: 'diagnose_connection',
-    title: 'Connection diagnose (CLI + MCP + SDK)',
-    description:
-      'Validate MCP credentials, ping /health, run ingest-setup and dispatch preflight, return the single best next action. ' +
-      'For mode-specific checks prefer diagnose_setup. Use when the user asks "why aren\'t my reports showing up?".',
-    scope: 'mcp:read',
-    hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'Why is my Mushi setup broken — what exact step should I fix next?',
-  },
-  {
     name: 'search_mushi_docs',
     title: 'Search Mushi documentation',
     description:
-      'Search official Mushi docs (guides, MCP setup, inventory, QA, skills) by keyword. ' +
-      'Returns ranked page titles, URLs, and excerpts — use before guessing API shapes or RPC names.',
+      'Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword. Returns ranked { results: [{ title, url, excerpt }] }. Read-only. Use before guessing API shapes, tool names, or RPC names; use run_nl_query for questions about your own project data, not the docs.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: false },
     useCase: 'How do I configure MCP scopes / dispatch a fix / wire QA stories?',
@@ -259,7 +223,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'submit_fix_result',
     title: 'Record a fix outcome',
     description:
-      'Record a fix outcome (branch, PR, files, lines) from an external agent. Creates a fix_attempt then patches it to completed.',
+      'Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns { fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green.',
     scope: 'mcp:write',
     // Not idempotent: re-running creates a second fix_attempt row.
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
@@ -269,7 +233,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'dispatch_fix',
     title: 'Dispatch Mushi fix agent',
     description:
-      'Start the Mushi fix agent for a classified report. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent that opens a signed draft PR. Returns a fix_attempt id; poll get_fix_timeline for progress.',
+      'Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns { fixAttemptId }; poll get_fix_timeline for progress and merge_fix when CI is green. Write; NOT idempotent — each call starts a new attempt. Report must be classified — run triage_issue if not.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Let the in-repo agent attempt this fix for me (or: dispatch a Cursor Cloud Agent).',
@@ -278,7 +242,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'trigger_judge',
     title: 'Run Sonnet-as-Judge',
     description:
-      'Run the Sonnet-as-Judge over a batch of classified reports. Returns a batch id; results land in judge_results.',
+      'Queue the Sonnet-as-Judge to grade the quality of recent fixes across a batch of classified reports. Returns { batchId }; graded scores land asynchronously in the judge_results table (read them back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window — re-running for the same batch re-grades rather than duplicating. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Grade the latest batch of fixes before I ship.',
@@ -287,7 +251,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'test_gen_from_report',
     title: 'Generate Playwright test from report',
     description:
-      'Generate a Playwright spec from a classified report using your project LLM key and open a draft PR. Requires inventory_v2 + GitHub + LLM keys.',
+      'Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns { qaStoryId, prUrl }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Turn this regression report into an E2E test PR.',
@@ -296,7 +260,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'transition_status',
     title: 'Move report between states',
     description:
-      'Move a report between workflow states (new → classified → grouped → fixing → fixed → verified → reopened → dismissed). Enforces the same transition rules as the admin UI.',
+      'Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. Returns { report } with the updated status. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Dismiss this duplicate / mark it fixed.',
@@ -304,7 +268,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
   {
     name: 'merge_fix',
     title: 'Merge fix PR',
-    description: 'Squash-merge a fix attempt PR and mark the linked report fixed.',
+    description:
+      'Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns { merged, reportStatus }. Write; destructive (mutates the target repo\'s default branch); idempotent — re-running an already-merged attempt is a safe no-op. Prerequisite: CI green (check with refresh_ci). Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Merge the draft PR and notify the reporter.',
@@ -312,7 +277,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
   {
     name: 'refresh_ci',
     title: 'Refresh fix CI status',
-    description: 'Pull the latest GitHub check-run status for a fix attempt.',
+    description:
+      'Re-poll GitHub for the latest check-run status of a fix attempt\'s PR and persist it. Returns { ciStatus: pending|success|failure|neutral, checks: [{ name, conclusion }] }. Read-only (mutates nothing on GitHub). Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Check whether CI is green before merging.',
@@ -320,7 +286,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
   {
     name: 'reopen_report',
     title: 'Reopen report (operator)',
-    description: 'Move a report to reopened for regression review.',
+    description:
+      'Move a previously fixed/verified/dismissed report back to the reopened state for regression review, recording an operator note. Returns { report } with status=reopened. Write; idempotent — reopening an already-reopened report is a no-op. Use when a reporter says "still broken" after a fix shipped; use transition_status for any other state change.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Reopen a regression the reporter flagged as not fixed.',
@@ -457,9 +424,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'query_lessons',
     title: 'Query lessons for diff context',
     description:
-      'Token-budget retrieval of relevant learning rules (lessons) for a given code diff or PR context. ' +
-      'Returns ranked lessons packed within max_tokens using bi-encoder retrieval + severity-weighted scoring. ' +
-      'Use this before opening a PR, writing a fix, or asking "what mistakes should I avoid in this area of code?"',
+      'Retrieve the learning rules ("lessons") most relevant to a given code diff or PR context, packed within a token budget. Uses bi-encoder retrieval + severity-weighted scoring; pass the diff/description as the query and max_tokens (default 2000). Returns ranked { lessons: [{ title, rule, severity }] }. Read-only. Use before writing a fix or opening a PR; use list_lessons to browse all lessons unfiltered.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What past mistakes should I avoid when making this change?',
@@ -468,12 +433,22 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_lessons',
     title: 'List project lessons',
     description:
-      'List promoted learning rules (lessons) for the current project. Each lesson represents a named pattern ' +
-      'of mistakes that has been encoded from bug reports. Use this to understand what systemic issues have ' +
-      'been identified and encoded as heuristics.',
+      'List the promoted learning rules ("lessons") for the current project, newest first. Each lesson is a named pattern of mistakes encoded from past bug reports. Returns { lessons: [{ id, title, rule, severity, source_report_ids }] }. Read-only. Use to see the full catalog of encoded heuristics; use query_lessons to retrieve only the lessons relevant to a specific diff or PR within a token budget.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What systemic patterns has Mushi identified for this project?',
+  },
+  {
+    name: 'activation_status',
+    title: 'Activation cockpit status',
+    description:
+      'Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. ' +
+      'Read this before guessing which onboarding step is blocking the user. ' +
+      'Also available as the mushi://activation resource for resource-reader clients. ' +
+      'Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Is Mushi fully set up and active for this project?',
   },
 ]
 
@@ -603,10 +578,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'map_user_stories',
     title: 'Map user stories from live app',
     description:
-      'Crawl a live application URL with Firecrawl/Browserbase and ask Claude to draft an inventory.yaml with pages and user stories. ' +
-      'Creates a story_map_run row for progress tracking, then writes an inventory_proposals row (source=live_crawl). ' +
-      'Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. ' +
-      'Returns { runId, status: "pending" } immediately — poll get_map_run_status for progress.',
+      'Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns { runId, status: "pending" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Map the user stories in my live app automatically without writing YAML by hand.',
@@ -615,8 +587,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_map_run_status',
     title: 'Story map run status',
     description:
-      'Get the status and results of a story_map_run (pending → running → completed/failed). ' +
-      'Returns pages_crawled, proposal_id (once done), and cursor_pr_url if Cursor Cloud refined the draft.',
+      'Poll the status and results of a story_map_run started by map_user_stories. Returns { status: pending|running|completed|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Is my story mapping crawl done yet?',
@@ -625,9 +596,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'generate_tdd_from_story',
     title: 'Generate TDD test from user story',
     description:
-      'Given a user story id (from the accepted inventory), ask Claude to write a full Playwright TypeScript test. ' +
-      'Inserts a qa_stories row (source=test_gen_from_story) with approval_status driven by automation_mode. ' +
-      'Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }.',
+      'Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns { qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Generate a Playwright test for this user story.',
@@ -636,8 +605,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'improve_qa_story',
     title: 'Auto-improve a failing QA story',
     description:
-      'Find recently failed qa_story_runs and use Claude to write improved test scripts. ' +
-      'New tests are created with source=pdca and approval gated by the original story\'s automation_mode.',
+      'Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story\'s automation_mode. Returns { improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Fix my failing QA tests automatically.',
@@ -646,8 +614,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'run_qa_story',
     title: 'Trigger a manual QA story run',
     description:
-      'Queue a manual run for an enabled + approved qa_story. Returns the run id immediately; ' +
-      'poll qa_story_runs or use get_report_detail for progress. Equivalent to "Run now" in the console.',
+      'Queue an immediate manual run for an enabled + approved qa_story (equivalent to "Run now" in the console). Returns { runId } right away; poll list_qa_story_runs or get_qa_story_run for progress and results. Write; NOT idempotent — each call creates a new run; returns 409 if the story is disabled or pending review. Use to verify a flow on demand; use improve_qa_story to repair a failing story.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Run the login flow test right now.',
@@ -656,8 +623,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'list_byok_keys',
     title: 'List your API key pool',
     description:
-      'List all project API keys, grouped by provider. Shows label, priority, status, and cooldown. ' +
-      'Never returns the raw key value — only metadata. Use this to see which keys are active or exhausted.',
+      'List the project\'s BYOK API keys grouped by provider (anthropic | openai | firecrawl | browserbase | cursor). Returns { keys: [{ id, provider, label, priority, status, cooldownUntil }] } — metadata only, never the raw secret. Read-only. Use to see which keys are active vs rate-limited/exhausted; use add_byok_key to add one.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which API keys are active and which are rate-limited?',
@@ -666,8 +632,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'add_byok_key',
     title: 'Add an API key',
     description:
-      'Add a new API key to the project pool for a given provider (anthropic, openai, firecrawl, browserbase, cursor). ' +
-      'Specify label and priority for ordering. The key is stored encrypted in Supabase Vault.',
+      'Add a BYOK API key to the project pool for a provider (anthropic | openai | firecrawl | browserbase | cursor), with a label and priority for failover ordering. The raw key is stored encrypted in Supabase Vault and never returned. Returns { id, provider, label }. Write; NOT idempotent — adds a new row each call. Use to register a backup/rotated key; use list_byok_keys to review the pool.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Add a backup Anthropic key to the pool.',
@@ -676,7 +641,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'list_pending_review_stories',
     title: 'List QA stories pending review',
     description:
-      'Get the queue of TDD tests that were auto-generated and are waiting for human approval before they run in the QA schedule.',
+      'List auto-generated QA/TDD stories in approval_status=pending_review — the queue waiting for human sign-off before they run on schedule. Returns { stories: [{ id, title, source, target_url, created_at }] }. Read-only. Use to find what needs review today; then approve_qa_story to approve or reject each.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What TDD tests need my approval today?',
@@ -685,7 +650,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'approve_qa_story',
     title: 'Approve or reject a pending QA story',
     description:
-      'Approve or reject a qa_story that is in pending_review. Approved stories are enabled in the QA schedule immediately.',
+      'Approve or reject a qa_story currently in pending_review (pass approve=true|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns { id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Approve this auto-generated test.',
@@ -765,9 +730,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'list_skills',
     title: 'List agent skills',
     description:
-      'List the agent skills available in the catalog, optionally filtered by category. ' +
-      'Returns slug, title, description, category, and chain_slugs for each skill. ' +
-      'Use before start_skill_pipeline to find the right skill slug for a given type of work.',
+      'List the agent skills in the catalog, optionally filtered by category or search text. Returns { skills: [{ slug, title, description, category, chain_slugs }] }. Read-only. Use to find the right skill slug before start_skill_pipeline; use get_skill to read one skill\'s full instructions.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What skills are available for debugging production errors?',
@@ -776,8 +739,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_skill',
     title: 'Get skill detail',
     description:
-      'Fetch the full detail for a single agent skill by slug, including the complete SKILL.md body and resolved chain. ' +
-      'Use before executing a step to understand what the skill expects you to do.',
+      'Fetch one agent skill by slug, including the complete SKILL.md body and the resolved chain of sub-skills. Returns { slug, title, body, chain: [{ slug, title }] }. Read-only. Use to read what a skill instructs before executing a pipeline step; use list_skills to discover slugs.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What does workflow-fix-and-ship actually instruct me to do?',
@@ -798,8 +760,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_pipeline_run',
     title: 'Get pipeline run detail',
     description:
-      'Fetch the full detail for a skill pipeline run: status, context_packet, and all step statuses. ' +
-      'Call to retrieve the context_packet after a pipeline was started from the console or another agent.',
+      'Fetch a skill pipeline run by id: { status, context_packet, steps: [{ index, slug, status }] }. Read-only. Use to retrieve the context_packet when a pipeline was started from the console or another agent; then checkin_pipeline_step as you complete each step. Use start_skill_pipeline to begin a new run.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Give me the context packet and step status for this pipeline run.',
@@ -814,27 +775,6 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'I just opened the PR — mark step 2 as passed and link the PR.',
-  },
-
-  {
-    name: 'get_activation_status',
-    title: 'Activation cockpit status',
-    description:
-      '[Deprecated — use activation_status resource or tool on hosted MCP.] ' +
-      'Unified setup posture for the active project: required steps, SDK heartbeat, dispatch preflight, and the next best action.',
-    scope: 'mcp:read',
-    hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'What is blocking this project from going live?',
-  },
-  {
-    name: 'get_reporter_thread',
-    title: 'Reporter feedback thread',
-    description:
-      '[Deprecated — use get_report_timeline instead.] ' +
-      'Fetch the unified timeline for a report — reporter comments plus fix, QA, and status lanes.',
-    scope: 'mcp:read',
-    hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'What did the reporter say after we marked this fixed?',
   },
 
   // ── Full-Stack Audit tools (Phase 5) ────────────────────────────────────────
@@ -882,9 +822,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'ask_codebase',
     title: 'Ask about the indexed codebase',
     description:
-      'Ask a plain-English question about the connected repo. Grounds on pgvector retrieval over ' +
-      'project_codebase_files and returns an answer with file:line citations. Requires codebase ' +
-      'indexing enabled and your Anthropic or OpenAI API key.',
+      'Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns { answer, citations: [{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for "how does X work?"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'How does authentication work in this repo?',
@@ -893,8 +831,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_file_summary',
     title: 'Plain-English file summary',
     description:
-      'Lazy-generate (or return cached) plain-English summary for an indexed file or symbol. ' +
-      'Cache invalidates when content_hash changes after re-index.',
+      'Return a plain-English summary of one indexed file or symbol (lazily generated on first call, then cached until content_hash changes on re-index). Returns { path, summary, symbols }. Requires codebase indexing. Read-only. Use to understand a single file fast; use ask_codebase for cross-file questions, or get_codebase_tour for an onboarding walkthrough.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Explain what lib/auth.ts does in plain English.',
@@ -903,8 +840,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_codebase_tour',
     title: 'Guided codebase tour',
     description:
-      'Return a dependency-ordered guided tour (~6–10 stops) for onboarding — each stop lists ' +
-      'node ids, file paths, layer, and rationale. Cached per index fingerprint.',
+      'Return a dependency-ordered onboarding tour of the repo (~6-10 stops); each stop lists node ids, file paths, architectural layer, and why it matters. Returns { stops: [{ title, paths, layer, rationale }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to get oriented in an unfamiliar repo; use get_codebase_domains for a business-domain map, or get_file_summary for one file.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Give me an onboarding walkthrough of this codebase.',
@@ -913,7 +849,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'search_codebase',
     title: 'Semantic codebase search',
     description:
-      'Search indexed files by plain-English meaning via embeddings. Returns top-k file chunks with similarity scores.',
+      'Search the indexed repo by plain-English meaning via embeddings. Returns top-k { results: [{ path, startLine, endLine, snippet, similarity }] } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives ("where do we verify webhooks?"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Find files related to authentication or payment handling.',
@@ -922,7 +858,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_codebase_domains',
     title: 'Business domain map',
     description:
-      'Extract business domains, flows, and steps mapped to file paths. Cached per index fingerprint.',
+      'Extract the business domains, flows, and steps in the repo, each mapped to the file paths that implement it. Returns { domains: [{ name, flows: [{ name, steps, paths }] }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to see what the app does at a product level; use get_codebase_tour for a dependency-ordered code walkthrough instead.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What business domains does this codebase implement?',
@@ -931,7 +867,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'analyze_codebase_impact',
     title: 'Diff impact analysis',
     description:
-      'Find files that depend on changed paths (reverse import graph). Supports manual paths, last push, GitHub compare, or fix PR files.',
+      'Find the files that depend on a set of changed paths by walking the reverse import graph. Source the paths from: manual list, the last push, a GitHub compare range, or a fix PR\'s files. Returns { impacted: [{ path, importedBy }], depth }. Requires codebase indexing. Read-only. Use to gauge a diff\'s blast radius before merging; use get_blast_radius for a bug\'s component impact, or search_codebase to locate files.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What breaks if I change lib/auth.ts?',
@@ -940,7 +876,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'analyze_wiki_knowledge',
     title: 'Wiki knowledge graph',
     description:
-      'Return wiki/docs knowledge graph nodes and sources for the project. Use include_wiki on ask_codebase for RAG merge.',
+      'Return the wiki/docs knowledge-graph nodes and their sources for the project. Returns { nodes: [{ id, label, source_url }], sources }. Read-only. Use to see what doc entities exist; pass include_wiki=true to ask_codebase to merge this corpus into a grounded answer.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What docs entities exist for onboarding?',

@@ -14,33 +14,26 @@
     "required": ["query"],
     "body": { "query": "{query}", "k": "{limit|5}", "threshold": 0.3, "projectId": "{projectIdHint}" }
   },
-  "inventory_diff": {
+  "diff_inventory": {
     "scope": "mcp:read",
-    "description": "Diff two inventory commits.",
+    "description": "Diff two ingested inventory commits (fromSha to toSha): added/removed nodes and edges. Use get_inventory for the current snapshot.",
     "method": "GET",
     "path": "/v1/admin/inventory/{projectId}/diff?from={fromSha}&to={toSha}",
     "required": ["fromSha", "toSha"]
   },
-  "graph_neighborhood": {
+  "get_graph_neighborhood": {
     "scope": "mcp:read",
-    "description": "BFS graph neighborhood around a node.",
+    "description": "BFS neighborhood around one graph node by id or label (depth default 2, max 4). Use get_knowledge_graph to traverse from a component seed.",
     "method": "GET",
     "path": "/v1/admin/graph/traverse?seed={seed}&depth={depth|2}"
   },
-  "fix_suggest": {
+  "suggest_fix": {
     "scope": "mcp:read",
-    "description": "Stage-2 suggested fix slice for a report.",
+    "description": "Return the Stage-2 suggested-fix slice for one report (root cause, suggested fix, repro, summary, component). Use get_fix_context for the full bundle.",
     "method": "GET",
     "path": "/v1/admin/reports/{reportId}",
     "required": ["reportId"],
     "transform": "fix_suggest"
-  },
-  "diagnose_connection": {
-    "scope": "mcp:read",
-    "description": "Validate MCP credentials and ingest/dispatch readiness.",
-    "method": "GET",
-    "path": "/v1/sync/ingest-setup",
-    "transform": "diagnose_connection"
   },
   "submit_fix_result": {
     "scope": "mcp:write",
@@ -305,19 +298,6 @@
     "path": "/v1/admin/skills/pipelines/{run_id}/steps/{step_index}/checkin",
     "required": ["run_id", "step_index", "status"],
     "bodyPassthrough": true
-  },
-  "get_activation_status": {
-    "scope": "mcp:read",
-    "description": "Unified activation cockpit.",
-    "method": "GET",
-    "path": "/v1/admin/activation?project_id={project_id}"
-  },
-  "get_reporter_thread": {
-    "scope": "mcp:read",
-    "description": "Reporter comment thread timeline.",
-    "method": "GET",
-    "path": "/v1/admin/reports/{reportId}/timeline",
-    "required": ["reportId"]
   },
   "run_fullstack_audit": {
     "scope": "mcp:write",

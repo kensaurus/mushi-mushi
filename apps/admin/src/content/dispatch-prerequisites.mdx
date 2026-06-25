@@ -9,8 +9,8 @@ for the project.  The admin console surfaces these as the **Dispatch Preflight**
 ## The four checks
 
 > **Wire format:** the canonical REST shape uses `{ key, ready, label, hint, fixHref }`.
-> The MCP `setup_check` tool renames fields for agent ergonomics
-> (`key → check`, `ready → passed`, `fixHref → fixPath`).
+> The MCP `diagnose_setup` tool (`mode=dispatch`) renames fields for agent
+> ergonomics (`key → check`, `ready → passed`, `fixHref → fixPath`).
 > Throughout this guide we refer to checks by their `key`.
 
 ### 1. GitHub connected (`key: 'github'`)
@@ -89,10 +89,10 @@ machine-readable output suitable for CI gates.
 
 ### MCP
 
-AI agents (Claude, Cursor) can call the `mushi.setup_check` tool:
+AI agents (Claude, Cursor) can call the `diagnose_setup` tool:
 
 ```
-mushi.setup_check({ projectId: "proj_..." })
+diagnose_setup({ mode: "dispatch", projectId: "proj_..." })
 ```
 
 Returns (MCP-flavoured shape — `check`/`passed`/`fixPath` rather than the
