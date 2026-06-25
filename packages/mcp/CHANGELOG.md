@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.17.1
+
+### Patch Changes
+
+- 58cadc6: - **ReDoS fix in MCP branding**: `mcpIconUrl()` now trims trailing slashes with a linear character scan instead of the `/\/+$/` regex, which degraded to quadratic backtracking on a long all-slash input (CodeQL `js/polynomial-redos`). The returned icon URL is unchanged.
+- Updated dependencies [58cadc6]
+  - @mushi-mushi/core@1.22.1
+
 ## 0.17.0
 
 ### Minor Changes
