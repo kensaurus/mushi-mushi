@@ -181,8 +181,7 @@ class Mushi {
   // Added: network-aware delivery (Phase 2.4)
   void _startConnectivityListener() {
     _connectivitySub?.cancel();
-    _connectivitySub =
-        Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
       if (results.any((r) => r != ConnectivityResult.none)) {
         unawaited(_api?.flushQueue() ?? Future<void>.value());
       }

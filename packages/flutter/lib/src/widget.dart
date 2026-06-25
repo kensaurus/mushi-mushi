@@ -75,7 +75,8 @@ class _MushiReportSheetState extends State<MushiReportSheet> {
     final isDark = cfg.theme.resolvedDark(context);
     final textColor = isDark ? Colors.white : Colors.black87;
     final subColor = isDark ? const Color(0xFF8E8E93) : const Color(0xFF8E8E93);
-    final cardColor = isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7);
+    final cardColor =
+        isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -105,9 +106,10 @@ class _MushiReportSheetState extends State<MushiReportSheet> {
               children: _categories.map((c) {
                 final selected = c == _category;
                 return ChoiceChip(
-                  label: Text(c, style: TextStyle(
-                    color: selected ? Colors.white : textColor,
-                  )),
+                  label: Text(c,
+                      style: TextStyle(
+                        color: selected ? Colors.white : textColor,
+                      )),
                   selected: selected,
                   selectedColor: accent,
                   backgroundColor: cardColor,
