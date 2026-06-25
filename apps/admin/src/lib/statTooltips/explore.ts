@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Explore EXPLORE SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { ExploreStats } from '../../components/explore/ExploreStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

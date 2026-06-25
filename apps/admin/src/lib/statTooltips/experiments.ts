@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Experiments EXPERIMENTS SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { ExperimentsStats } from '../../components/experiments/ExperimentsStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

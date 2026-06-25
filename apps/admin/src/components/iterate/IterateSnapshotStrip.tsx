@@ -21,6 +21,7 @@ import {
   iterationsDetail,
 } from '../../lib/statTooltips/iterate'
 import { iterateLinks } from '../../lib/statCardLinks'
+import { usePlainStatTooltips } from '../../lib/usePlainStatTooltips'
 
 interface Props {
   stats: IterateStats
@@ -39,23 +40,26 @@ export function IterateSnapshotStrip({
   hint,
   statLabels,
 }: Props) {
+  const plainOpts = usePlainStatTooltips()
+  const sectionLabel = plainOpts.plainLanguage ? 'Improvement loop snapshot' : 'PDCA snapshot'
+
   return (
     <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
       {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <MetricStrip cols={6} ariaLabel="PDCA snapshot">
+      <MetricStrip cols={6} ariaLabel={sectionLabel}>
         <StatCard
           label={statLabels?.total ?? 'Total runs'}
           value={stats.total}
           accent={stats.total > 0 ? 'text-brand' : undefined}
-          tooltip={totalRunsTooltip(stats)}
-          detail={totalRunsDetail()}
+          tooltip={totalRunsTooltip(stats, plainOpts)}
+          detail={totalRunsDetail(plainOpts)}
           to={iterateLinks.total}
         />
         <StatCard
           label={statLabels?.active ?? 'Active'}
           value={stats.running + stats.queued}
           accent={stats.running + stats.queued > 0 ? 'text-warn' : undefined}
-          tooltip={activeRunsTooltip(stats)}
+          tooltip={activeRunsTooltip(stats, plainOpts)}
           detail={activeRunsDetail(stats)}
           to={iterateLinks.active}
         />
@@ -63,7 +67,7 @@ export function IterateSnapshotStrip({
           label={statLabels?.succeeded ?? 'Succeeded'}
           value={stats.succeeded}
           accent={stats.succeeded > 0 ? 'text-ok' : undefined}
-          tooltip={succeededRunsTooltip(stats)}
+          tooltip={succeededRunsTooltip(stats, plainOpts)}
           detail={succeededRunsDetail()}
           to={iterateLinks.succeeded}
         />
@@ -71,7 +75,7 @@ export function IterateSnapshotStrip({
           label={statLabels?.failed ?? 'Failed'}
           value={stats.failed}
           accent={stats.failed > 0 ? 'text-danger' : undefined}
-          tooltip={failedRunsTooltip(stats)}
+          tooltip={failedRunsTooltip(stats, plainOpts)}
           detail={failedRunsDetail()}
           to={iterateLinks.failed}
         />
@@ -93,7 +97,7 @@ export function IterateSnapshotStrip({
           label={statLabels?.iterations ?? 'Iterations'}
           value={stats.totalIterations}
           accent={stats.totalIterations > 0 ? 'text-info' : undefined}
-          tooltip={iterationsTooltip(stats)}
+          tooltip={iterationsTooltip(stats, plainOpts)}
           detail={iterationsDetail()}
           to={iterateLinks.iterations}
         />

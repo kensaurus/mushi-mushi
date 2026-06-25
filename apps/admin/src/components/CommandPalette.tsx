@@ -405,7 +405,7 @@ export function CommandPalette() {
             value={query}
             onValueChange={setQuery}
             placeholder="Search or ask: how do I triage fixes… (@page /reports)"
-            className="flex-1 bg-transparent text-sm text-fg placeholder:text-fg-muted focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-fg placeholder:text-fg-muted focus-visible:outline-none"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter' && showNavigateAffordance && !activeToken) {

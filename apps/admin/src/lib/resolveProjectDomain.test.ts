@@ -91,13 +91,13 @@ describe('heartbeat helpers', () => {
           diagnostic: {
             last_sdk_seen_at: new Date().toISOString(),
             last_sdk_origin: 'https://kensaur.us/glot-it/',
-            last_sdk_endpoint_host: 'api.mushimushi.dev',
+            last_sdk_endpoint_host: 'dxptnwrhwsqckaftyymj.supabase.co',
             last_sdk_user_agent: null,
           },
         },
       ],
     } as unknown as SetupProject
-    const summary = summarizeProjectHeartbeat(project, 'api.mushimushi.dev')
+    const summary = summarizeProjectHeartbeat(project, 'dxptnwrhwsqckaftyymj.supabase.co')
     expect(summary.tone).toBe('live')
     expect(summary.origin).toBe('kensaur.us/glot-it/')
     expect(summary.ago).toBe('just now')

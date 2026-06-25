@@ -16,9 +16,12 @@ export const ONBOARDING_REQUIRED_STEPS: OnboardingStepDefinition[] = [
     plain: 'Name the app Mushi should watch — one project per mobile app, web app, or environment.',
   },
   {
-    id: 'api_key',
+    // Canonical live setup-step IDs (see useSetupStatus / SetupChecklist):
+    // keep these in lock-step so this guide can be matched against DB step
+    // state without silent drift.
+    id: 'api_key_generated',
     label: 'Mint API key',
-    plain: 'Copy the report:write key into your app env — without it the SDK cannot send bugs.',
+    plain: 'Copy the report key into your app env — without it the SDK cannot send bugs.',
   },
   {
     id: 'sdk_installed',
@@ -26,9 +29,9 @@ export const ONBOARDING_REQUIRED_STEPS: OnboardingStepDefinition[] = [
     plain: 'Install @mushi-mushi/react (or your stack SDK) and confirm a heartbeat appears here.',
   },
   {
-    id: 'first_report',
+    id: 'first_report_received',
     label: 'First report',
-    plain: 'Send a test bug from the widget or the “Send test report” button to prove ingest works.',
+    plain: 'Send a test bug from the widget or the “Send test report” button to confirm reports arrive.',
   },
 ]
 
@@ -42,7 +45,7 @@ export const ONBOARDING_OPTIONAL_STEPS: OnboardingStepDefinition[] = [
   {
     id: 'slack',
     label: 'Slack routing',
-    plain: 'Post triage alerts to a channel.',
+    plain: 'Post new-bug alerts to a channel.',
     optional: true,
   },
   {
@@ -54,7 +57,7 @@ export const ONBOARDING_OPTIONAL_STEPS: OnboardingStepDefinition[] = [
   {
     id: 'mcp',
     label: 'MCP in Cursor',
-    plain: 'Let agents triage from the IDE.',
+    plain: 'Let your editor read reports and fix briefs.',
     optional: true,
   },
 ]

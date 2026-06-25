@@ -274,7 +274,7 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              className="h-56 w-full resize-y rounded-lg border border-edge-subtle bg-surface px-3 py-2 font-mono text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/50"
+              className="h-56 w-full resize-y rounded-lg border border-edge-subtle bg-surface px-3 py-2 font-mono text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             />
           </div>
         )}

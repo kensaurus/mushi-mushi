@@ -258,7 +258,7 @@ export function deriveRecommendation(
         actions: [
           {
             label: 'View plan options \u2192',
-            href: 'https://mushi-mushi.dev/pricing',
+            href: 'https://kensaur.us/mushi-mushi/docs/pricing',
             tone: 'primary',
           },
         ],

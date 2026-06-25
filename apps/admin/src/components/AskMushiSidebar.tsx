@@ -29,6 +29,7 @@ import { usePageContext, contextFilterChips, type PageContext } from '../lib/pag
 import { formatLlmCost } from '../lib/format'
 import { langfuseTraceUrl, RESOLVED_API_URL, RESOLVED_SUPABASE_ANON_KEY } from '../lib/env'
 import { debugLog, debugError } from '../lib/debug'
+import { Sentry } from '../lib/sentry'
 import { AskMushiComposer } from './AskMushiComposer'
 import { SLASH_COMMANDS, type SlashCommand } from '../lib/askMushiCommands'
 import { ClarifyChips } from './ClarifyChips'
@@ -318,6 +319,11 @@ export function AskMushiSidebar({ open, onClose, route, seedMessage, seedThreadI
           // Drop the half-rendered assistant bubble and fall back to POST.
           setMessages((prev) => prev.filter((m) => m.id !== assistantId))
           console.warn('Ask Mushi stream init failed, falling back to POST', err)
+          Sentry.captureMessage('Ask Mushi stream init failed, falling back to POST', {
+            level: 'warning',
+            tags: { route: 'ask-mushi', fallback: 'post' },
+            extra: { err: err instanceof Error ? err.message : String(err) },
+          })
         }
       }
 

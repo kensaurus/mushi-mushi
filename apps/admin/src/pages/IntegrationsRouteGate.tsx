@@ -17,7 +17,7 @@ export function IntegrationsRouteGate() {
   const location = useLocation()
 
   if (loading) {
-    return <Loading text="Loading..." />
+    return <Loading text="Loading…" />
   }
 
   if (session) {
@@ -30,7 +30,7 @@ export function IntegrationsRouteGate() {
   }
 
   return (
-    <Suspense fallback={<Loading text="Loading..." />}>
+    <Suspense fallback={<Loading text="Loading…" />}>
       <PublicIntegrationsPage />
     </Suspense>
   )

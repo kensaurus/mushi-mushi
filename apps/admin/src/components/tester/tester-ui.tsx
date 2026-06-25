@@ -203,7 +203,7 @@ export function TesterProgressTrack({
   return (
     <div className="relative h-2 overflow-hidden rounded-full bg-surface-overlay">
       <div
-        className={`h-full rounded-full motion-safe:transition-all ${barClassName}`}
+        className={`h-full rounded-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${barClassName}`}
         style={{ width: `${pct}%` }}
       />
       {markerPct != null && (

@@ -222,7 +222,7 @@ export function CliAuthPage() {
               onChange={(e) => setManualCode(e.target.value.toUpperCase())}
               placeholder="XXXX-XXXX"
               maxLength={9}
-              className="w-full rounded-lg border border-edge-subtle bg-surface px-3 py-2 font-mono text-sm uppercase tracking-widest text-fg placeholder:text-fg-muted/40 focus:outline-none focus:ring-2 focus:ring-brand"
+              className="w-full rounded-lg border border-edge-subtle bg-surface px-3 py-2 font-mono text-sm uppercase tracking-widest text-fg placeholder:text-fg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               autoComplete="off"
               autoFocus
             />

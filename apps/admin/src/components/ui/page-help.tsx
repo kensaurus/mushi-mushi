@@ -142,7 +142,7 @@ export function PageRelatedLinks({ links, className = '' }: { links: PageFlowLin
             key={link.to + link.label}
             to={link.to}
             title={blurb ? `${link.label} — ${blurb}` : link.label}
-            className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-chrome-border bg-chrome px-3 py-2 motion-safe:transition-all motion-safe:duration-150 hover:border-brand/35 hover:bg-surface-overlay hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
+            className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-chrome-border bg-chrome px-3 py-2 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 hover:border-brand/35 hover:bg-surface-overlay hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
           >
             {NavIcon ? (
               <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-surface-overlay text-fg-muted motion-safe:transition-colors group-hover/link:text-brand" aria-hidden="true">
@@ -261,7 +261,7 @@ export function PageHelpBanner({
       onToggle={handleToggle}
       className={`group mb-3 w-full min-w-0 rounded-md border motion-safe:transition-colors motion-safe:duration-150 ${surfaceClass}`}
     >
-      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER}`}>
+      <summary className={`flex w-full cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs text-fg-muted motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ok/40 ${PAGE_HELP_BANNER_SUMMARY_HOVER}`}>
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"

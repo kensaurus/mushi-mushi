@@ -143,7 +143,7 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
               </p>
             </div>
             <select
-              className="w-full sm:w-auto shrink-0 bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors"
+              className="w-full sm:w-auto shrink-0 bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-colors"
               value={prefs.report_severity_min}
               onChange={(e) =>
                 setPrefs((p) => ({

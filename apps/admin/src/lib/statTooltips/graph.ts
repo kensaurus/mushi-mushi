@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Graph GRAPH SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { GraphStats } from '../../components/graph/GraphStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

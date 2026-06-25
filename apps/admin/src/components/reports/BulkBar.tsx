@@ -70,7 +70,7 @@ function BulkSelect({ label, options, disabled, onPick }: BulkSelectProps) {
         onPick(v)
         e.currentTarget.value = ''
       }}
-      className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand/40"
+      className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
     >
       <option value="">{label}…</option>
       {options.map((o) => (

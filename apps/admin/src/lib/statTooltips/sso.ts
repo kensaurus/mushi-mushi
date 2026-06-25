@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the SSO Identity snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { SsoStats } from '../../components/sso/types'
 import { metricTip } from '../metricTooltipBuilder'

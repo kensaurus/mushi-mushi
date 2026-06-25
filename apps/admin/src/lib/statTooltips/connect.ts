@@ -3,6 +3,8 @@
  * PURPOSE: StatCard tooltips for the Connect hub snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { McpStats } from '../../components/mcp/types'
 import type { SdkStatus } from '../../components/SdkVersionBadge'

@@ -1,7 +1,6 @@
 /**
  * FILE: apps/admin/src/pages/DocsBridgePage.tsx
- * PURPOSE: Cross-origin auth bridge for docs.mushimushi.dev's Migration Hub
- *          checklist sync.
+ * PURPOSE: Cross-origin auth bridge for the docs Migration Hub checklist sync.
  *
  * FLOW (matches apps/docs/lib/migrationProgress.ts → openAdminAuthBridge):
  *   1. Docs opens this route in a popup with `?nonce=...&returnOrigin=...`.
@@ -47,7 +46,6 @@ type BridgeStatus = 'pending' | 'sent' | 'invalid_origin' | 'missing_opener' | '
  *   VITE_DOCS_ORIGIN_ALLOWLIST="https://docs.example.com,https://staging.example.com"
  * Defaults are unchanged so existing deployments keep working untouched. */
 const DEFAULT_DOCS_ORIGINS = [
-  'https://docs.mushimushi.dev',
   'https://kensaur.us',
   'https://www.kensaur.us',
   'http://localhost:3000',
@@ -187,12 +185,12 @@ export function DocsBridgePage() {
     <div className="min-h-screen bg-surface p-6 space-y-4">
       <PageHeaderBar
         title="Docs bridge"
-        description="Connects your Mushi admin session to docs.mushimushi.dev for migration checklist sync."
+        description="Connects your Mushi admin session to the docs Migration Hub for checklist sync."
         helpTitle="About the docs bridge"
         helpWhatIsIt="Cross-origin auth bridge opened by the docs Migration Hub — posts your Supabase access token to the docs origin after login."
         helpUseCases={[
           'Sync migration checklist progress from docs to admin',
-          'Authenticate docs.mushimushi.dev without re-entering credentials',
+          'Authenticate the docs site without re-entering credentials',
         ]}
         helpHowToUse="Opened automatically from docs — sign in if prompted, then this window closes once the token is delivered."
         showCopyLink={false}

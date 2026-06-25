@@ -123,7 +123,7 @@ export function PromptDialog({
               if (validationError) setValidationError(null)
             }}
             disabled={loading}
-            className="mt-1 w-full bg-surface-overlay border border-edge-subtle rounded-sm px-2 py-1.5 text-xs text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-60"
+            className="mt-1 w-full bg-surface-overlay border border-edge-subtle rounded-sm px-2 py-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 disabled:opacity-60"
           />
         </label>
         {validationError && (

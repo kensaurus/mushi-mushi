@@ -102,6 +102,22 @@
   --color-rose: oklch(0.72 0.18 0);
   --color-rose-muted: oklch(0.30 0.07 0);
 
+  /* ── Third-party brand marks (SVG logos only — not for general UI chrome) ─ */
+  --color-brand-slack-pink: #E01E5A;
+  --color-brand-slack-blue: #36C5F0;
+  --color-brand-slack-green: #2EB67D;
+  --color-brand-slack-yellow: #ECB22E;
+  --color-brand-teams-primary: #5059C9;
+  --color-brand-teams-accent: #7B83EB;
+  --color-brand-discord-blurple: #5865F2;
+  /* macOS traffic-light mock in SdkInstallCard widget preview */
+  --color-preview-traffic-red: #E06C5A;
+  --color-preview-traffic-yellow: #D4B158;
+  --color-preview-traffic-green: #7BA476;
+  /* Mobile browser chrome — synced by useTheme.ts */
+  --color-meta-theme-dark: #09090b;
+  --color-meta-theme-light: #fafafa;
+
   /* ── Aliases — older code references these names. Keep them mapped to
        the canonical tokens above so stale class names still render the
        right colour instead of silently dropping out. */
@@ -1298,6 +1314,11 @@ select, input, textarea {
 
 /* Tabular numbers for data */
 .tabular { font-variant-numeric: tabular-nums; }
+
+/* Anchor targets under sticky chrome (Connect section nav, page headers) */
+.scroll-mt-chrome {
+  scroll-margin-top: 4.5rem;
+}
 
 /* ---------------------------------------------------------------------------
    NAVIGATION

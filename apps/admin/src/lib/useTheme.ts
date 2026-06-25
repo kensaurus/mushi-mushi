@@ -47,6 +47,13 @@ function applyToDom(theme: Theme) {
   const resolved = resolve(theme)
   document.documentElement.setAttribute('data-theme', resolved)
   document.documentElement.style.colorScheme = resolved
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]')
+  if (themeColorMeta) {
+    const root = getComputedStyle(document.documentElement)
+    const token =
+      resolved === 'light' ? '--color-meta-theme-light' : '--color-meta-theme-dark'
+    themeColorMeta.setAttribute('content', root.getPropertyValue(token).trim())
+  }
 }
 
 export function useTheme(): {

@@ -908,7 +908,7 @@ export function OrganizationSettingsPage() {
                 <button
                   type="button"
                   onClick={() => setNoteOpen(true)}
-                  className="text-xs text-brand hover:text-brand-hover focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
+                  className="text-xs text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded"
                 >
                   + Add a personal note
                 </button>
@@ -930,7 +930,7 @@ export function OrganizationSettingsPage() {
                     onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX_LEN))}
                     rows={2}
                     placeholder="Hey — we're shipping the audit work next week, would love your eyes on it."
-                    className="w-full rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40"
+                    className="w-full rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 text-sm text-fg placeholder:text-fg-faint focus-visible:border-brand focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
                   />
                   <p className="mt-1 text-2xs text-fg-faint">
                     Shown in the invite email and the preview screen the recipient sees before accepting.{' '}
@@ -1118,7 +1118,7 @@ export function OrganizationSettingsPage() {
                 type="checkbox"
                 checked={showInactiveOnly}
                 onChange={(e) => setShowInactiveOnly(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-edge-subtle bg-surface-raised text-brand focus:ring-1 focus:ring-brand/40"
+                className="h-3.5 w-3.5 rounded border-edge-subtle bg-surface-raised text-brand focus-visible:ring-1 focus-visible:ring-brand/40"
               />
               <span className="text-2xs text-fg-muted">Show inactive only</span>
               <Tooltip content="Hides anyone seen in the last 30 days. Pairs with sort-by-activity so coasting paid seats surface fast.">

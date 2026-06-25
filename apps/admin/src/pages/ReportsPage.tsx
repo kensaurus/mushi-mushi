@@ -668,13 +668,13 @@ export function ReportsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Reports'}
         projectScope={projectName}
-        description={copy?.description ?? 'User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise.'}
+        description={copy?.description ?? 'User-felt friction reports waiting for review. Sort by severity, dispatch fixes, or dismiss noise.'}
         helpTitle={copy?.help?.title ?? 'About Reports'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Every bug your end-users flagged, grouped and ranked by how many people are affected. Confirm severity, then send to auto-fix or dismiss noise.'}
         helpUseCases={copy?.help?.useCases ?? [
-          'Triage incoming reports — sort by severity, filter by status',
+          'Review incoming reports — sort by severity, filter by status',
           'Bulk-dismiss noise or escalate a batch of regressions in one click',
-          'Drill into a single report for the original payload, screenshots, and pipeline timeline',
+          'Drill into a single report for the original payload, screenshots, and timeline',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
       >

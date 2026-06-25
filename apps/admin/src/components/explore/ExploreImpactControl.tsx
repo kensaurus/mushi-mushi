@@ -115,7 +115,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
             onChange={(e) => setPathsInput(e.target.value)}
             placeholder="Paste changed paths (comma or newline)…"
             rows={2}
-            className="w-full text-3xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand/40 resize-none"
+            className="w-full text-3xs font-mono rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 resize-none"
             aria-label="Changed file paths for impact analysis"
           />
           <Btn size="sm" variant="ghost" onClick={() => void runManualImpact()} loading={loading} disabled={!pathsInput.trim()}>

@@ -299,7 +299,7 @@ function RecommendedSkillsSection({ report }: { report: ReportDetail }) {
     <Section title="Recommended skills" icon={<IconSkills />}>
       <div className="flex flex-col gap-2">
         <p className="text-xs text-fg-muted">
-          Skills matched to this report by AI triage. Start a pipeline to guide a Cursor agent through the fix.
+          Skills matched to this report during classification. Start a skill run to guide a Cursor agent through the fix.
         </p>
 
         <div className="flex gap-2 items-center mb-1">
