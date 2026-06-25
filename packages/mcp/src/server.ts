@@ -23,6 +23,9 @@ import { MUSHI_SERVER_METADATA } from './branding.js'
 import { toolMatchesFeatures, type FeatureFilter } from './feature-groups.js'
 import { searchMushiDocs } from './docs-index.js'
 
+/** Explicit schema for no-argument MCP tools (avoids ambiguous empty `{}`). */
+const NO_ARG_INPUT: Record<string, never> = {}
+
 /**
  * Every admin endpoint returns `{ ok: boolean; data?: T; error?: { code, message } }`.
  * We unwrap that here so each tool body gets `T` directly and error surfacing
@@ -376,7 +379,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_two_way_comms_health'),
       description: descOf('get_two_way_comms_health'),
       annotations: annotationsFor('get_two_way_comms_health'),
-      inputSchema: {},
+      inputSchema: NO_ARG_INPUT,
     },
     async () => jsonText(await apiCall('/v1/sync/two-way-health')),
   )
@@ -714,7 +717,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('ingest_setup_check'),
       description: descOf('ingest_setup_check'),
       annotations: annotationsFor('ingest_setup_check'),
-      inputSchema: {},
+      inputSchema: NO_ARG_INPUT,
     },
     async () => {
       const data = await apiCall<{
@@ -854,9 +857,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             const failed = preflight.checks.filter((c) => !c.ready)
             dispatchBlock = failed[0]?.hint
           }
-        } catch {
+        } catch (err) {
           dispatchReady = false
-          dispatchBlock = 'Could not run dispatch preflight — verify project_id and API key scope.'
+          const detail = err instanceof Error ? err.message : String(err)
+          dispatchBlock = `Could not run dispatch preflight — ${detail}`
+          apiLog.warn('diagnose_setup dispatch preflight failed', { error: detail })
         }
       }
       const ingestFailed = ingest.steps.filter((s) => s.required && !s.complete)
@@ -889,7 +894,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('diagnose_connection'),
       description: descOf('diagnose_connection'),
       annotations: annotationsFor('diagnose_connection'),
-      inputSchema: {},
+      inputSchema: NO_ARG_INPUT,
       outputSchema: {
         ready: z.boolean(),
         healthOk: z.boolean(),
@@ -1075,7 +1080,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('list_projects'),
       description: descOf('list_projects'),
       annotations: annotationsFor('list_projects'),
-      inputSchema: {},
+      inputSchema: NO_ARG_INPUT,
       outputSchema: {
         projects: z.array(z.unknown()),
         total: z.number().optional(),
@@ -1101,7 +1106,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       title: titleOf('get_account_overview'),
       description: descOf('get_account_overview'),
       annotations: annotationsFor('get_account_overview'),
-      inputSchema: {},
+      inputSchema: NO_ARG_INPUT,
       outputSchema: {
         projects: z.array(z.unknown()),
         total: z.number(),
@@ -1254,7 +1259,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('triage_issue'),
       annotations: annotationsFor('triage_issue'),
       inputSchema: {
-        report_id: z.string().describe('Report UUID to triage.'),
+        report_id: z.string().uuid().describe('Report UUID to triage.'),
         project_id: z.string().optional().describe('Project UUID. Defaults to configured project.'),
         include_logs: z.boolean().optional().describe('Include recent pipeline logs in triage packet (default: true).'),
       },
@@ -1323,11 +1328,32 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         })
       }
 
+      const partial_errors: string[] = []
+      if (reportRes.status === 'rejected') {
+        partial_errors.push(`report: ${String(reportRes.reason)}`)
+      }
+      if (evidenceRes.status === 'rejected') {
+        partial_errors.push(`timeline: ${String(evidenceRes.reason)}`)
+      }
+      if (similarRes.status === 'rejected') {
+        partial_errors.push(`similarity: ${String(similarRes.reason)}`)
+      }
+      if (fixCtxRes.status === 'rejected') {
+        partial_errors.push(`fix_context: ${String(fixCtxRes.reason)}`)
+      }
+      if (blastRes.status === 'rejected') {
+        partial_errors.push(`blast_radius: ${String(blastRes.reason)}`)
+      }
+      if (includeLogs && logsRes.status === 'rejected') {
+        partial_errors.push(`recent_logs: ${String(logsRes.reason)}`)
+      }
+
       const result = {
         report_id: args.report_id,
         severity,
         category,
         status,
+        partial_errors,
         report: reportRes.status === 'fulfilled' ? reportRes.value : { error: String(reportRes.reason) },
         reporter_thread: evidenceRes.status === 'fulfilled' ? evidenceRes.value : null,
         similar_bugs: similarRes.status === 'fulfilled' ? similarRes.value : null,
@@ -1398,7 +1424,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       description: descOf('dispatch_fix'),
       annotations: annotationsFor('dispatch_fix'),
       inputSchema: {
-        reportId: z.string().describe('Report UUID to fix'),
+        reportId: z.string().uuid().describe('Report UUID to fix'),
         agent: z.enum(['claude_code', 'codex', 'rest_worker', 'mcp']).optional().describe('Override the agent adapter'),
         idempotencyKey: z.string().uuid().optional().describe('Optional RFC 4122 UUID. Resend the same key to safely retry without dispatching a duplicate fix job (Idempotency-Key IETF draft).'),
         inventoryActionNodeId: z.string().uuid().optional().describe('Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.'),

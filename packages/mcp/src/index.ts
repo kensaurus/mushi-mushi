@@ -32,6 +32,7 @@ console.warn = _writeStderr
 import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer } from './server.js'
+import * as Sentry from '@sentry/node'
 
 const require = createRequire(import.meta.url)
 const VERSION = (require('../package.json') as { version: string }).version
@@ -46,6 +47,10 @@ const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
  * tools whose catalog scope is in the list — `tools/list` will hide write
  * tools entirely for read-only keys, instead of letting the LLM call them
  * and burn round-trips on `INSUFFICIENT_SCOPE` errors.
+ *
+ * Optional env for observability correlation with host Sentry:
+ *   MUSHI_MCP_SENTRY_DSN — when your IDE host runs Sentry, correlate MCP
+ *   api.failed log lines (they include requestId) with host-side events.
  *
  * Examples:
  *   MUSHI_SCOPES=mcp:read              # read-only key
@@ -62,6 +67,15 @@ const SCOPES: readonly McpScope[] =
   SCOPES_RAW && parsedScopes.length === 0 ? ALL_SCOPES : parsedScopes
 
 const FEATURES = parseFeaturesCsv(process.env.MUSHI_FEATURES)
+
+const MCP_SENTRY_DSN = process.env.MUSHI_MCP_SENTRY_DSN?.trim()
+if (MCP_SENTRY_DSN) {
+  Sentry.init({
+    dsn: MCP_SENTRY_DSN,
+    environment: process.env.MUSHI_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: 0,
+  })
+}
 
 async function main() {
   if (!API_KEY) {
@@ -139,8 +153,8 @@ async function main() {
           }
           lastInventoryAt = updatedAt
         }
-      } catch {
-        // Polling errors are silent — we never want the notification loop to crash the server.
+      } catch (pollErr) {
+        log.debug('inventory poll failed', { err: String(pollErr) })
       }
     }
 

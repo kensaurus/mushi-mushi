@@ -58,10 +58,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_recent_reports',
     title: 'Recent bug reports',
     description:
-      'List recent bug reports with optional filters (status / category / severity). Use this to survey what the triage queue looks like right now.',
+      'List recent bug reports with optional filters (status / category / severity). Use this to see what is waiting in your reports inbox right now.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'What landed in my triage queue today?',
+    useCase: 'What landed in my bug queue today?',
   },
   {
     name: 'get_report_detail',
@@ -206,7 +206,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     description:
       '[Deprecated — use diagnose_setup with mode=dispatch or diagnose_connection.] ' +
       'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
-      '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
+      '(GitHub repo connected, codebase indexed, your Anthropic API key present, autofix enabled). ' +
       'Also returns the target repo URL when GitHub is connected.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
@@ -269,7 +269,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'dispatch_fix',
     title: 'Dispatch Mushi fix agent',
     description:
-      'Dispatch the Mushi agentic fix orchestrator for a classified report. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent that opens a signed draft PR. Returns a fix_attempt id; poll get_fix_timeline for progress.',
+      'Start the Mushi fix agent for a classified report. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent that opens a signed draft PR. Returns a fix_attempt id; poll get_fix_timeline for progress.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Let the in-repo agent attempt this fix for me (or: dispatch a Cursor Cloud Agent).',
@@ -287,7 +287,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'test_gen_from_report',
     title: 'Generate Playwright test from report',
     description:
-      'POST to inventory test-gen: uses the project BYOK LLM to author a Playwright spec from a classified report and opens a draft PR (internal service orchestration). Requires inventory_v2 + GitHub + LLM keys.',
+      'Generate a Playwright spec from a classified report using your project LLM key and open a draft PR. Requires inventory_v2 + GitHub + LLM keys.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'Turn this regression report into an E2E test PR.',
@@ -320,7 +320,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
   {
     name: 'reopen_report',
     title: 'Reopen report (operator)',
-    description: 'Move a report to reopened for regression triage.',
+    description: 'Move a report to reopened for regression review.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Reopen a regression the reporter flagged as not fixed.',
@@ -406,12 +406,12 @@ export const TOOL_CATALOG: ToolSpec[] = [
     title: 'Project context snapshot',
     description:
       'Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, ' +
-      'open report count, autofix readiness, BYOK LLM config, plan tier, and active integration health. ' +
+      'open report count, autofix readiness, your LLM key config, plan tier, and active integration health. ' +
       'Equivalent to a merged preflight + activation + settings read. ' +
-      'Agents should call this at the start of a triage session to orient themselves.',
+      'Agents should call this at the start of a review session to orient themselves.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
-    useCase: 'Give me a status overview of this project before I start triaging.',
+    useCase: 'Give me a status overview of this project before I start reviewing bugs.',
   },
   {
     name: 'get_pipeline_logs',
@@ -443,11 +443,11 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'triage_issue',
     title: 'Triage issue end-to-end',
     description:
-      'Read-only orchestration tool: combines report detail, evidence, similar bugs, fix context, blast radius, ' +
-      'and recent pipeline logs for a report into a single structured triage packet. ' +
+      'Read-only combined tool: merges report detail, evidence, similar bugs, fix context, blast radius, ' +
+      'and recent pipeline logs for a report into a single structured review packet. ' +
       'Returns a prioritised list of recommended next actions (investigate, dispatch_fix, group_with, dismiss). ' +
       'Equivalent to a Sentry "Analyze with Seer" flow grounded in user-felt reports. ' +
-      'Pass report_id to kick off triage. Call this before dispatch_fix.',
+      'Pass report_id to kick off review. Call this before dispatch_fix.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Analyze this bug report end-to-end and tell me what to do.',
@@ -489,8 +489,8 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
   {
     name: 'project_dashboard',
     uri: 'project://dashboard',
-    title: 'PDCA dashboard snapshot',
-    description: 'PDCA health snapshot — stage counts, bottleneck, recent activity (same payload the admin console polls).',
+    title: 'Loop dashboard snapshot',
+    description: 'Loop health snapshot — stage counts, bottleneck, recent activity (same payload the admin console polls).',
     scope: 'mcp:read',
   },
   {
@@ -512,7 +512,7 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
     uri: 'privacy://status',
     title: 'Privacy posture',
     description:
-      'Returns the privacy posture for this project: storage region, LLM provider, whether BYOK is configured, ' +
+      'Returns the privacy posture for this project: storage region, LLM provider, whether your own LLM key is configured, ' +
       'data retention window, and last audit timestamp. ' +
       'Agents should read this before dispatching a fix to confirm that client data stays within the expected boundary. ' +
       'Reads as project data does not leave the project\'s own LLM account when byok_configured=true.',
@@ -525,7 +525,7 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
     description:
       'Returns the project\'s last 30 days of judge scores, prompt promotions, fixed-bug count, and lesson inductions. ' +
       'Agents can read this to see whether the loop is converging (rising judge scores, falling recurrence) ' +
-      'or stalling (flat scores, same bugs re-appearing). Use before triage to understand which bug classes ' +
+      'or stalling (flat scores, same bugs re-appearing). Use before review to understand which bug classes ' +
       'the loop has already learned to handle, and which still need human attention.',
     scope: 'mcp:read',
   },
@@ -543,8 +543,8 @@ export const RESOURCE_CATALOG: ResourceSpec[] = [
     uri: 'project://integration-health',
     title: 'Integration health',
     description:
-      'Live health status of every configured BYOK channel (Sentry, GitHub, LangFuse, PagerDuty, …). ' +
-      'Orchestrators should check this before dispatching a fix to fail-fast on broken channels ' +
+      'Live health status of every configured integration channel (Sentry, GitHub, LangFuse, PagerDuty, …). ' +
+      'Check this before dispatching a fix to fail-fast on broken channels ' +
       'rather than burning LLM budget and discovering the failure mid-run.',
     scope: 'mcp:read',
   },
@@ -634,9 +634,9 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
   },
   {
     name: 'improve_qa_story',
-    title: 'PDCA auto-improve a failing QA story',
+    title: 'Auto-improve a failing QA story',
     description:
-      'Trigger the PDCA improver for a specific project. Finds recently failed qa_story_runs and uses Claude to write improved test scripts. ' +
+      'Find recently failed qa_story_runs and use Claude to write improved test scripts. ' +
       'New tests are created with source=pdca and approval gated by the original story\'s automation_mode.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
@@ -654,9 +654,9 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
   },
   {
     name: 'list_byok_keys',
-    title: 'List BYOK API key pool',
+    title: 'List your API key pool',
     description:
-      'List all BYOK API keys for the project, grouped by provider. Shows label, priority, status, and cooldown. ' +
+      'List all project API keys, grouped by provider. Shows label, priority, status, and cooldown. ' +
       'Never returns the raw key value — only metadata. Use this to see which keys are active or exhausted.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
@@ -664,9 +664,9 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
   },
   {
     name: 'add_byok_key',
-    title: 'Add a BYOK API key',
+    title: 'Add an API key',
     description:
-      'Add a new API key to the project\'s BYOK pool for a given provider (anthropic, openai, firecrawl, browserbase, cursor). ' +
+      'Add a new API key to the project pool for a given provider (anthropic, openai, firecrawl, browserbase, cursor). ' +
       'Specify label and priority for ordering. The key is stored encrypted in Supabase Vault.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
@@ -884,7 +884,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     description:
       'Ask a plain-English question about the connected repo. Grounds on pgvector retrieval over ' +
       'project_codebase_files and returns an answer with file:line citations. Requires codebase ' +
-      'indexing enabled and an Anthropic or OpenAI BYOK key.',
+      'indexing enabled and your Anthropic or OpenAI API key.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     useCase: 'How does authentication work in this repo?',

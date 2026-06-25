@@ -61,7 +61,7 @@ describe('CursorCloudAgent.generateFix', () => {
         expect(body.source.repository).toBe('https://github.com/example/repo')
         expect(body.source.ref).toBe('main')
         expect(body.target.autoCreatePr).toBe(false)
-        expect(body.target.branchName).toContain('mushi/cursor-cloud-')
+        expect(body.target.branchName).toBe('bugfix/MUSHI-report-12345678-cursor-cloud')
         expect(body.prompt.text).toContain('Broken login')
         return new Response(JSON.stringify({ id: 'bc_test', status: 'FINISHED', target: {} }), {
           status: 201,
