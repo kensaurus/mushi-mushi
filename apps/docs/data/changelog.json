@@ -1,26 +1,12 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.22",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.22.0"
+    ],
     "highlights": [
-      {
-        "title": "Create React App",
-        "description": "(`react-scripts`) → `@mushi-mushi/react` with the `REACT_APP_` env prefix (previously mis-detected as plain React and given the wrong `VITE_` prefix)."
-      },
-      {
-        "title": "Remix",
-        "description": "(`@remix-run/*`) → `@mushi-mushi/react` using the runtime `window.ENV` root-loader pattern with bare `MUSHI_*` server env (Remix doesn't inline client env at build time)."
-      },
-      {
-        "title": "Astro",
-        "description": "(`astro`) → `@mushi-mushi/web` with the `PUBLIC_` prefix."
-      },
-      {
-        "title": "Solid / SolidStart",
-        "description": "(`@solidjs/start`, `solid-js`) → `@mushi-mushi/web` with the `VITE_` prefix."
-      },
       {
         "title": "SSR / non-DOM safety:",
         "description": "`Mushi.init()` returns a no-op instance when `document`/`window` are unavailable (Next.js / Remix / Nuxt server components, plain Node SSR) instead of throwing when the widget constructs DOM nodes. A stray server-side init no longer takes down the host page."
@@ -58,7 +44,16 @@
         "description": "best-effort `capacitor` / `cordova` / `reactNative` flags on `MushiEnvironment.native` (SSR-guarded) so triage can distinguish native-WebView reports from browser ones."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.22.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.22.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.21",
@@ -822,6 +817,38 @@
       {
         "name": "@mushi-mushi/web",
         "version": "1.0.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.23",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.23.0"
+    ],
+    "highlights": [
+      {
+        "title": "Create React App",
+        "description": "(`react-scripts`) → `@mushi-mushi/react` with the `REACT_APP_` env prefix (previously mis-detected as plain React and given the wrong `VITE_` prefix)."
+      },
+      {
+        "title": "Remix",
+        "description": "(`@remix-run/*`) → `@mushi-mushi/react` using the runtime `window.ENV` root-loader pattern with bare `MUSHI_*` server env (Remix doesn't inline client env at build time)."
+      },
+      {
+        "title": "Astro",
+        "description": "(`astro`) → `@mushi-mushi/web` with the `PUBLIC_` prefix."
+      },
+      {
+        "title": "Solid / SolidStart",
+        "description": "(`@solidjs/start`, `solid-js`) → `@mushi-mushi/web` with the `VITE_` prefix."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.23.0"
       }
     ]
   },
@@ -1642,6 +1669,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.7.15",
       "0.7.14",
       "0.7.13",
       "0.7.12",
@@ -1755,7 +1783,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.14"
+        "version": "0.7.15"
       }
     ]
   },
@@ -1857,6 +1885,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.20",
       "0.5.19",
       "0.5.18",
       "0.5.17",
@@ -1955,7 +1984,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-cursor-cloud",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -1971,7 +2000,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.19"
+        "version": "0.5.20"
       },
       {
         "name": "mushi-mushi",
@@ -2056,7 +2085,7 @@
       },
       {
         "name": "@mushi-mushi/inventory-schema",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       {
         "name": "@mushi-mushi/mcp",
@@ -2220,7 +2249,7 @@
       },
       {
         "name": "eslint-plugin-mushi-mushi",
-        "version": "0.3.0"
+        "version": "0.3.1"
       }
     ]
   },
@@ -2412,7 +2441,7 @@
       },
       {
         "name": "@mushi-mushi/inventory-auth-runner",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/mcp",
