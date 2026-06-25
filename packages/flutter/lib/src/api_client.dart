@@ -51,7 +51,7 @@ class ApiClient {
       payload['breadcrumbs'] = (payload['breadcrumbs'] as List).map((c) {
         if (c is Map && c['message'] is String) {
           return <String, dynamic>{
-            ...Map<String, dynamic>.from(c as Map),
+            ...Map<String, dynamic>.from(c),
             'message': _scrubPii(c['message'] as String),
           };
         }
