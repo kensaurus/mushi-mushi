@@ -43,6 +43,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inventory.ts'
 import { resolveStoryExternalId } from '../_shared/inventory-story-scope.ts'
@@ -495,10 +496,7 @@ async function handler(req: Request): Promise<Response> {
     )
   } catch (err) {
     rlog.error('crawl failed', { project_id: body.project_id, err: String(err) })
-    return new Response(
-      JSON.stringify({ ok: false, error: { code: 'CRAWL_FAILED', message: String(err) } }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    return safeErrorResponse({ code: 'CRAWL_FAILED', status: 500 })
   }
 }
 
