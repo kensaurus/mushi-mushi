@@ -276,6 +276,28 @@ export function IconGauge(p: IconProps) {
   </>)
 }
 
+/** Token spend — stacked chips + usage bars (distinct from IconGauge dial and IconBilling card). */
+export function IconCost(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2.5" y="9" width="2.5" height="4.5" rx="0.4" />
+    <rect x="6.5" y="6.5" width="2.5" height="7" rx="0.4" />
+    <rect x="10.5" y="4" width="2.5" height="9.5" rx="0.4" />
+    <circle cx="4.5" cy="3.5" r="1.3" />
+    <circle cx="8" cy="2.5" r="1.3" />
+    <circle cx="11.5" cy="3.5" r="1.3" />
+  </>)
+}
+
+/** 2×2 grid — skill catalog / browse tiles. */
+export function IconCatalog(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2" y="2" width="5" height="5" rx="0.6" />
+    <rect x="9" y="2" width="5" height="5" rx="0.6" />
+    <rect x="2" y="9" width="5" height="5" rx="0.6" />
+    <rect x="9" y="9" width="5" height="5" rx="0.6" />
+  </>)
+}
+
 /** Circle-i glyph for metric help triggers (StatCard, InfoHint). */
 export function IconInfo(p: IconProps) {
   return wrap(p, <>

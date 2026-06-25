@@ -10,9 +10,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
-import { useMotionTransition } from '../lib/useMotionTransition'
+import { useMotionTransition, usePrefersReducedMotion } from '../lib/useMotionTransition'
 import { microTapScale } from '../lib/motion-tokens'
-import { useReducedMotion } from 'framer-motion'
 
 const FilterRailContext = createContext<string>('')
 
@@ -53,7 +52,7 @@ export function FilterChipCell({
 }) {
   const trackId = useContext(FilterRailContext)
   const layoutTransition = useMotionTransition()
-  const reduceMotion = useReducedMotion()
+  const reduceMotion = usePrefersReducedMotion()
 
   return (
     <div className="relative pb-0.5">

@@ -134,7 +134,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
   const criticalCount = counts.critical
 
   return (
-    <MetricStrip cols={4} ariaLabel="Reports severity breakdown" className="gap-2.5 mb-3" stagger>
+    <MetricStrip cols={4} panel ariaLabel="Reports severity breakdown" className="mb-3" stagger>
       {tiles.map((tile) => {
         const isActive = activeSeverity === tile.key
         const total = data?.total ?? 0
@@ -152,11 +152,12 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
                 ? `Clear ${tile.label} filter`
                 : `Filter to ${tile.label} severity reports`
             }
-            className={`relative overflow-hidden text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
+            className={`relative block w-full min-w-0 overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
               isActive ? 'ring-2 ring-brand/60' : ''
             }`}
           >
             <KpiTile
+              density="flat"
               label={tile.label}
               value={loading ? '…' : count}
               sublabel={

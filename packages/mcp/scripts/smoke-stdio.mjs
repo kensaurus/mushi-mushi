@@ -43,6 +43,10 @@ const transport = new StdioClientTransport({
     MUSHI_API_KEY: 'smoke-test-key',
     MUSHI_PROJECT_ID: 'smoke-test-project',
     MUSHI_API_ENDPOINT: 'http://127.0.0.1:1/offline',
+    // Validate the FULL catalog surface. A fresh install defaults to the lean
+    // DEFAULT_FEATURE_GROUPS; `all` opts into every tool so this gate can
+    // assert catalog parity (every catalog tool is advertised).
+    MUSHI_FEATURES: 'all',
   },
 })
 

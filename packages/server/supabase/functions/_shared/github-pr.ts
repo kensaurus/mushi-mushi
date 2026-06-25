@@ -434,7 +434,14 @@ export function generateFixBranchName(
   try {
     validateFixBranchName(fromTemplate)
     return fromTemplate
-  } catch {
+  } catch (templateErr) {
+    // The stored fix_branch_template produced an invalid branch name. Fall back to the safe
+    // default so the fix-worker can continue, but surface the bad template so it gets cleaned up.
+    console.warn(
+      `[fix-worker] fix_branch_template "${effectiveTemplate}" produced invalid branch name` +
+        ` "${fromTemplate}" — falling back to default "${defaultName}".` +
+        ` Template error: ${(templateErr as Error).message}`,
+    )
     validateFixBranchName(defaultName)
     return defaultName
   }

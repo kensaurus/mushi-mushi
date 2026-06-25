@@ -6,10 +6,7 @@
  *
  * PRIVACY:
  *   - sendDefaultPii: false — never auto-attach IPs, cookies, or request bodies
- *   - replays are errors-only (replaysSessionSampleRate: 0) — we only capture
- *     the seconds before a crash, never normal browsing
- *   - replay masks ALL text + blocks media — admin console handles bug reports
- *     that may contain user PII
+ *   - replays disabled — org free-tier quota (errors-only capture retained)
  *   - beforeSend strips token-like query params from URLs before transport
  *
  * INSTRUMENTATION:
@@ -102,15 +99,7 @@ export function initSentry(): void {
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_RELEASE,
     sendDefaultPii: false,
-    tracesSampleRate: 0.1,
-    replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: 1.0,
-    // PERF-4 (audit 2026-04-21): enable INP (Interaction to Next Paint) Web
-    // Vitals tracking. INP replaces FID as Google's responsiveness metric
-    // and is the one most admins actually feel — our graph/prompt-lab
-    // interactions were producing >300ms INP on P75 but weren't surfaced in
-    // Sentry because the default browser profiler rate was 0.
-    profilesSampleRate: 0.1,
+    tracesSampleRate: 0.05,
     transport: makeCircuitBreakingTransport,
     integrations: [
       Sentry.reactRouterV7BrowserTracingIntegration({
@@ -119,14 +108,7 @@ export function initSentry(): void {
         useNavigationType,
         createRoutesFromChildren,
         matchRoutes,
-        // Capture the full INP attribution (target element, nav type) so
-        // the Sentry "slow INP" tab can point at the specific component.
         enableInp: true,
-      }),
-      Sentry.replayIntegration({
-        maskAllText: true,
-        maskAllInputs: true,
-        blockAllMedia: true,
       }),
     ],
     denyUrls: [

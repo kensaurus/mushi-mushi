@@ -551,7 +551,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // API-key view of the four **required ingest** steps (key → SDK heartbeat →
   // first report). Distinct from GET /v1/admin/projects/:id/preflight which
   // covers dispatch readiness (GitHub, codebase, BYOK, autofix). Powers
-  // `mushi connect --wait`, `mushi doctor --ingest`, and MCP ingest_setup_check.
+  // `mushi connect --wait`, `mushi doctor --ingest`, and MCP diagnose_setup (mode=ingest).
   app.get('/v1/sync/ingest-setup', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string

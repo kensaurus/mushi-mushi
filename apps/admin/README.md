@@ -576,7 +576,22 @@ Async UX & reliability:
 - `HealthPill` is shared across `Dashboard`, `Judge`, `Queue`, `Fixes`, `Prompt Lab`, **and now both core platform integrations + routing destinations on `/integrations`**
 - `FixesPage` polling pauses while the tab is hidden and guards against overlapping in-flight requests
 - `usePageData` is the standard data-load hook for `Dashboard`, `Reports`, `ReportDetail`, `Queue`, `DLQ`, `Audit`, `AntiGaming`, `Health`, `Sso`, `Settings`, `Marketplace`, `Integrations`, and `Billing`. `useToast` is the standard mutation-feedback channel for the same set
-- Motion utilities in `src/index.css` (`animate-mushi-fade-in` 160ms, `animate-mushi-modal-in` 220ms scale-in, `animate-mushi-toast-in` 180ms slide-from-right, `animate-mushi-toast-out` 140ms slide-back, **`animate-mushi-toast-progress`** 100→0% drain, **`animate-mushi-success-pulse`** 650ms ring glow, **`animate-mushi-confetti-fall`** for the first-fix burst) — all gated by `motion-safe:` so users with `prefers-reduced-motion` see no animation. Toasts (`useToast`) animate in / out via a `closing` flag + `setTimeout` on dismiss. Modal scrims fade-in and inner panels scale-in. Reports rows stagger-fade in 18ms apart (capped at 12 rows). `<PlatformIntegrationCard>` pulses on a fresh successful probe (initial-mount guarded so cold loads don't false-pulse).
+- Motion utilities in `src/index.css` (`animate-mushi-fade-in` 160ms, `animate-mushi-modal-in` 220ms scale-in, `animate-mushi-toast-in` 180ms slide-from-right, `animate-mushi-toast-out` 140ms slide-back, **`animate-mushi-toast-progress`** 100→0% drain, **`animate-mushi-success-pulse`** 650ms ring glow, **`animate-mushi-confetti-fall`** for the first-fix burst) — all gated by `motion-safe:` so users with `prefers-reduced-motion` see no animation. Toasts (`useToast`) animate in / out via a `closing` flag + `setTimeout` on dismiss. Modal and command-palette overlays use Framer `AnimatePresence` + `useOverlayVariants()` (enter/exit); legacy CSS modal keyframes remain as reduced-motion fallbacks in `index.css`. Reports and Fixes table rows stagger-fade via `useStaggeredAppear({ stepMs: 18, max: 12 })` + `motion-safe:animate-mushi-fade-in`. `<PlatformIntegrationCard>` pulses on a fresh successful probe (initial-mount guarded so cold loads don't false-pulse).
+
+#### Motion decision tree (CSS vs Framer)
+
+| Need | Use | Gate |
+|------|-----|------|
+| Hover / press color, chevron rotate, width on sidebar | CSS `motion-safe:transition-[property]` + `--duration-*` tokens | `motion-safe:` |
+| Mount fade, toast slide, row flash, drawer slide | CSS `animate-mushi-*` keyframes | `motion-safe:` |
+| List entrance (>7 rows) | `useStaggeredAppear` + `animate-mushi-fade-in` | cap index (default 12) |
+| KPI tile stagger (≤7 tiles) | Framer stagger on `MetricStrip` | `useMotionTransition` |
+| Sliding pill / layoutId indicator | `MicroSegmentedTrack` or `MotionSegmentedControl` | `MotionProvider` + hook |
+| Accordion / disclosure height | `AnimatedDisclosure` (grid `0fr→1fr`, not `height:auto` spring) | `useDisclosureVariants()` |
+| Modal / palette / drawer exit | `AnimatePresence` + `useOverlayVariants()` / `useDrawerVariants()` | `useMotionTransition(overlayTween)` |
+| Banner / posture row enter | `SpringChromeEnter` | `useMotionTransition(chromeEnterSpring)` |
+
+**Rules:** never import raw `motion.*` without `useMotionTransition` / variant helpers; never spring `height: auto`; prefer explicit property lists over `transition-all` (baseline grep: 0 hits in `apps/admin/src` as of 2026-06).
 - `SettingsPage` tablist uses an absolutely-positioned underline that translates between active tabs in 200ms via `useLayoutEffect` measurement, instead of jumping per-button border styles — full a11y preserved (`role="tab"`, `aria-selected`, `aria-controls`, focus-visible ring)
 - Pre-setup dashboard gate: when any `setup.checklist` item is incomplete, `DashboardPage` renders only `SetupChecklist + HeroIntro` with a "Show full dashboard" reveal, so brand-new admins aren't drowned by 9 KPI tiles before they've even sent a test report
 - **Layout-shaped skeletons** (`src/components/skeletons/`): `DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`, **`GraphSkeleton`**, **`HealthSkeleton`**, **`OnboardingSkeleton`**, **`QuerySkeleton`**, **`ResearchSkeleton`**— every page now first-paints into the shape it'll fill, not into a centered spinner
@@ -586,7 +601,8 @@ Async UX & reliability:
 
 Global preferences that affect every page are surfaced in the sidebar footer so they're one click away without hiding in a Settings subtree:
 
-- **`MicroSegmentedTrack`** (`src/components/sidebar/MicroSegmentedTrack.tsx`) + **`SidebarMicroChrome`** (`src/components/sidebar/SidebarMicroChrome.ts`) + **`motion-tokens.ts`** — shared sliding-pill segmented control used across the sidebar brand row, footer, and table density toolbar. Framer Motion `layoutId` drives the active indicator; `MotionProvider` (`src/components/providers/MotionProvider.tsx`) wraps the app with `reducedMotion="user"`. CSS tokens live under `.sidebar-micro-*` in `index.css`. Press feedback uses Framer `whileTap` on motion-capable devices and falls back to CSS `:active` scale only when `prefers-reduced-motion: reduce`.
+- **`MicroSegmentedTrack`** (`src/components/sidebar/MicroSegmentedTrack.tsx`) + **`MotionSegmentedControl`** (`src/components/motion/MotionSegmentedControl.tsx`) + **`SidebarMicroChrome`** (`src/components/sidebar/SidebarMicroChrome.ts`) + **`motion-tokens.ts`** — shared sliding-pill segmented control used across the sidebar brand row, footer, table density toolbar, and high-traffic page tab strips (e.g. Billing). Framer Motion `layoutId` drives the active indicator; `MotionProvider` (`src/components/providers/MotionProvider.tsx`) wraps the app with `reducedMotion="user"`. CSS tokens live under `.sidebar-micro-*` in `index.css`. Press feedback uses Framer `whileTap` on motion-capable devices and falls back to CSS `:active` scale only when `prefers-reduced-motion: reduce`.
+- **`AnimatedDisclosure`**, **`SpringChromeEnter`**, **`NavSectionStagger`**, **`MotionOverlay`** (`src/components/motion/`) — layout-shared Framer primitives; all presets live in `motion-tokens.ts` and must go through `useMotionTransition` / variant helpers.
 - **`<SidebarBrandToggles>`** — portal (Admin / Tester icons) + mode (Quick / Beginner / Advanced words) under the wordmark. Props: `compact` hides the mode row; `showMode={false}` for the tester portal.
 - **`<SidebarFooterControls>`** — density row (stacked-row glyphs) + theme row (moon / sun) + focus toggle. Props: `showDensity` / `showFocus` trim rows for the tester portal footer.
 - **`useTheme()`** (`src/lib/useTheme.ts`) — binary dark / light theme (Auto option removed; stored `system` still resolves via `useTheme().resolved`). Persisted in `localStorage:'mushi:theme:v1'`, applied as `data-theme="<resolved>"` on `<html>` (`hydrateTheme()` in `main.tsx`).
@@ -707,8 +723,8 @@ Response shape (canonical — matches `useDispatchPreflight.ts` and the
 }
 ```
 
-The MCP `setup_check` tool wraps this and renames the fields for agent
-ergonomics: `key → check`, `ready → passed`, `fixHref → fixPath`. See
+The MCP `diagnose_setup` tool (`mode=dispatch`) wraps this and renames the
+fields for agent ergonomics: `key → check`, `ready → passed`, `fixHref → fixPath`. See
 `packages/mcp/src/server.ts` for the mapping.
 
 ### Skipped fix-attempt recovery
@@ -750,6 +766,7 @@ When changing admin console UI (`apps/admin/src`), verify:
 - [ ] Form controls have a visible `<label>`, `htmlFor`, or `aria-label`
 - [ ] Interactive elements use `focus-visible:ring-*` (not bare `focus:outline-none`)
 - [ ] Animations use explicit property lists (not `transition-all`); honor `motion-safe:`
+- [ ] New Framer surfaces use `useMotionTransition` + presets from `motion-tokens.ts` (no raw transition objects); overlays/disclosures use `AnimatedDisclosure` / `useOverlayVariants` / `SpringChromeEnter` where applicable
 - [ ] Loading/saving copy uses Unicode ellipsis (`Loading…`, not `Loading...`)
 - [ ] `<img>` tags include explicit `width`/`height` or a fixed aspect-ratio wrapper
 - [ ] Icon-only buttons include `aria-label`; decorative icons use `aria-hidden="true"`

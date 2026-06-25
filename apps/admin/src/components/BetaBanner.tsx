@@ -15,6 +15,7 @@ import { FeedbackModal } from './FeedbackModal'
 import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
 import { Link } from 'react-router-dom'
 import { BETA_BANNER_ID, setBetaBannerOffset } from '../lib/appChrome'
+import { betaBannerTone } from '../lib/tokens'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DISMISS_KEY = 'mushi-mushi:beta-banner-dismissed-at'
@@ -102,49 +103,49 @@ export function BetaBanner() {
         ref={bannerRef}
         role="region"
         aria-label="Beta announcement"
-        className="sticky top-0 z-[100] shrink-0 border-b border-edge-subtle bg-surface-raised/95"
+        className={`shrink-0 z-[100] border-b ${betaBannerTone()}`}
       >
         <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-1 px-3 py-1.5 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1 sm:px-4">
           <span className="flex min-w-0 items-start gap-2 sm:flex-1 sm:items-center">
-            <span className="inline-flex shrink-0 items-center rounded border border-edge bg-surface-overlay px-1.5 py-px font-mono text-2xs font-medium text-fg-muted">
+            <span className="inline-flex shrink-0 items-center rounded border border-lime/40 bg-lime/15 px-1.5 py-px font-mono text-2xs font-medium text-lime-foreground">
               Beta
             </span>
-            <span className="min-w-0 truncate text-xs leading-snug text-fg-secondary">
+            <span className="min-w-0 truncate text-xs leading-snug text-lime-foreground">
               Mushi is in active beta — expect rough edges and occasional rebuilds.
             </span>
           </span>
           <nav
             aria-label="Beta banner actions"
-            className="flex shrink-0 flex-wrap items-center gap-x-0 gap-y-0.5 text-2xs sm:justify-end"
+            className="flex shrink-0 flex-wrap items-center gap-x-0 gap-y-0.5 text-2xs text-lime-foreground/75 sm:justify-end"
           >
             <button
               type="button"
               onClick={() => openFeedback('bug')}
-              className="px-2 py-0.5 font-medium text-fg-secondary hover:text-fg transition-colors"
+              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
             >
               Report a bug
             </button>
-            <span aria-hidden="true" className="hidden text-fg-faint select-none sm:inline">|</span>
+            <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
             <button
               type="button"
               onClick={() => openFeedback('feature')}
-              className="px-2 py-0.5 font-medium text-fg-muted hover:text-fg transition-colors"
+              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
             >
               Feature request
             </button>
-            <span aria-hidden="true" className="hidden text-fg-faint select-none sm:inline">|</span>
+            <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
             <Link
               to="/feedback"
-              className="px-2 py-0.5 font-medium text-fg-muted hover:text-fg transition-colors"
+              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
             >
               My submissions
             </Link>
-            <span aria-hidden="true" className="hidden text-fg-faint select-none sm:inline">|</span>
+            <span aria-hidden="true" className="hidden select-none text-lime-foreground/40 sm:inline">|</span>
             <button
               type="button"
               onClick={handleDismiss}
               aria-label="Dismiss beta banner"
-              className="px-2 py-0.5 font-medium text-fg-faint hover:text-fg-muted transition-colors"
+              className="px-2 py-0.5 font-medium transition-colors hover:text-lime-foreground"
             >
               Dismiss
             </button>

@@ -433,7 +433,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
 
   // Skip the heartbeat stamp for the ingest-setup diagnostic route: its
   // pollers (`mushi connect --wait`, `mushi doctor --ingest`, MCP
-  // ingest_setup_check) authenticate with the same SDK key but are NOT the
+  // diagnose_setup mode=ingest) authenticate with the same SDK key but are NOT the
   // SDK — stamping last_seen_at here would make the route's own
   // "SDK heartbeat" step self-satisfy from the second poll onward.
   if (!c.req.path.endsWith('/ingest-setup')) {

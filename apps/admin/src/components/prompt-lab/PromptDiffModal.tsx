@@ -1,4 +1,5 @@
-import { Card, Btn, RelativeTime } from '../ui'
+import { Btn, RelativeTime } from '../ui'
+import { Modal } from '../Modal'
 import { formatLlmCost } from '../../lib/format'
 import type { PromptVersion } from './types'
 import { lineDiff } from './lineDiff'
@@ -12,90 +13,73 @@ interface PromptDiffModalProps {
 export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProps) {
   const lines = parent ? lineDiff(parent.prompt_template, prompt.prompt_template) : []
   const meta = prompt.auto_generation_metadata
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
-      onClick={onClose}
+    <Modal
+      open
+      size="xl"
+      onClose={onClose}
+      title={`Diff · ${prompt.stage} / ${prompt.version} vs ${parent?.version ?? 'parent'}`}
+      footer={<Btn variant="cancel" onClick={onClose}>Close</Btn>}
+      bodyClassName="space-y-2"
     >
-      <Card
-        elevated
-        className="w-full max-w-5xl p-4 space-y-2 max-h-[90vh] flex flex-col motion-safe:animate-mushi-modal-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-fg">
-            Diff · {prompt.stage} / {prompt.version} vs {parent?.version ?? 'parent'}
-          </h3>
-          <button
-            type="button"
-            className="text-fg-muted hover:text-fg text-lg leading-none w-6 h-6 flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-        {meta && (
-          <div className="text-2xs text-fg-muted space-y-1 border border-edge-subtle rounded-sm p-2 bg-surface-overlay">
-            {meta.changeSummary && (
-              <p className="text-fg-secondary">
-                <span className="text-fg-faint">Why: </span>
-                {meta.changeSummary}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 font-mono">
-              {meta.failureCount != null && <span>failures: {meta.failureCount}</span>}
-              {meta.model && <span>model: {meta.model}</span>}
-              {meta.generatedAt && <span>generated: <RelativeTime value={meta.generatedAt} /></span>}
-            </div>
-            {meta.topBuckets && meta.topBuckets.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 font-mono">
-                <span className="text-fg-faint">buckets:</span>
-                {meta.topBuckets.map((b) => (
-                  <span key={b.reason} className="px-1 rounded-sm bg-fg-faint/10">
-                    {b.reason} ×{b.count}
-                  </span>
-                ))}
-              </div>
+      {meta && (
+        <div className="text-2xs text-fg-muted space-y-1 border border-edge-subtle rounded-sm p-2 bg-surface-overlay">
+          {meta.changeSummary && (
+            <p className="text-fg-secondary">
+              <span className="text-fg-faint">Why: </span>
+              {meta.changeSummary}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2 font-mono">
+            {meta.failureCount != null && <span>failures: {meta.failureCount}</span>}
+            {meta.model && <span>model: {meta.model}</span>}
+            {meta.generatedAt && (
+              <span>
+                generated: <RelativeTime value={meta.generatedAt} />
+              </span>
             )}
           </div>
-        )}
-        {!parent ? (
-          <p className="text-2xs text-fg-faint">Parent prompt not found (it may have been deleted).</p>
-        ) : (
-          <pre className="mushi-code-block mushi-code-body flex-1 overflow-auto border border-code-surface-border rounded-sm p-2 text-2xs font-mono leading-snug">
-            {lines.map((l, idx) => (
-              <div
-                key={idx}
-                className={
-                  l.kind === 'add'
-                    ? 'bg-ok-muted/50 text-ok-foreground'
-                    : l.kind === 'del'
-                      ? 'bg-danger-muted/50 text-danger-foreground'
-                      : 'text-fg-muted'
-                }
-              >
-                <span className="select-none mr-2 text-fg-faint">
-                  {l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : ' '}
+          {meta.topBuckets && meta.topBuckets.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 font-mono">
+              <span className="text-fg-faint">buckets:</span>
+              {meta.topBuckets.map((b) => (
+                <span key={b.reason} className="px-1 rounded-sm bg-fg-faint/10">
+                  {b.reason} ×{b.count}
                 </span>
-                {l.text || '\u00A0'}
-              </div>
-            ))}
-          </pre>
-        )}
-        {parent && <PerfStrip parent={parent} candidate={prompt} />}
-        <div className="flex justify-end gap-1.5">
-          <Btn variant="cancel" onClick={onClose}>Close</Btn>
+              ))}
+            </div>
+          )}
         </div>
-      </Card>
-    </div>
+      )}
+      {!parent ? (
+        <p className="text-2xs text-fg-faint">Parent prompt not found (it may have been deleted).</p>
+      ) : (
+        <pre className="mushi-code-block mushi-code-body flex-1 overflow-auto border border-code-surface-border rounded-sm p-2 text-2xs font-mono leading-snug max-h-[min(50dvh,28rem)]">
+          {lines.map((l, idx) => (
+            <div
+              key={idx}
+              className={
+                l.kind === 'add'
+                  ? 'bg-ok-muted/50 text-ok-foreground'
+                  : l.kind === 'del'
+                    ? 'bg-danger-muted/50 text-danger-foreground'
+                    : 'text-fg-muted'
+              }
+            >
+              <span className="select-none mr-2 text-fg-faint">
+                {l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : ' '}
+              </span>
+              {l.text || '\u00A0'}
+            </div>
+          ))}
+        </pre>
+      )}
+      {parent && <PerfStrip parent={parent} candidate={prompt} />}
+    </Modal>
   )
 }
 
-// Performance vs baseline strip. §3 — `Avg $ / eval` now reads real
-// cost data from llm_invocations.cost_usd via /v1/admin/prompt-lab. The
-// 3-cell layout lets ops see "did the candidate get more accurate AND
-// cheaper?" without leaving the diff.
 function PerfStrip({ parent, candidate }: { parent: PromptVersion; candidate: PromptVersion }) {
   const cells = [
     {
@@ -114,8 +98,6 @@ function PerfStrip({ parent, candidate }: { parent: PromptVersion; candidate: Pr
       label: 'Avg $ / eval',
       parent: formatLlmCost(parent.avg_cost_usd),
       candidate: formatLlmCost(candidate.avg_cost_usd),
-      // For cost, lower is BETTER — invert the tone so a cheaper candidate
-      // reads green and a more expensive one reads red.
       delta: numericDelta(parent.avg_cost_usd, candidate.avg_cost_usd, 'lower-is-up'),
     },
   ]
