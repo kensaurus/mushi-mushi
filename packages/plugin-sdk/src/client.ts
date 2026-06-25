@@ -10,7 +10,7 @@
 export interface MushiPluginClientOptions {
   apiKey: string
   projectId: string
-  /** Defaults to `https://api.mushimushi.dev`. Override for self-host or staging. */
+  /** Defaults to Mushi Cloud Supabase API. Override for self-host or staging. */
   baseUrl?: string
   /** Custom fetch (e.g., undici); defaults to `globalThis.fetch`. */
   fetchImpl?: typeof fetch
@@ -24,7 +24,7 @@ export interface MushiPluginClient {
 }
 
 export function createMushiClient(opts: MushiPluginClientOptions): MushiPluginClient {
-  const baseUrl = (opts.baseUrl ?? 'https://api.mushimushi.dev').replace(/\/$/, '')
+  const baseUrl = (opts.baseUrl ?? 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api').replace(/\/$/, '')
   const f = opts.fetchImpl ?? fetch
 
   async function call(method: string, path: string, body?: unknown): Promise<unknown> {

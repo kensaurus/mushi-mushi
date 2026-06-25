@@ -1,5 +1,10 @@
 # @mushi-mushi/verify
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Preflight checks for SDK env vars and ingest health.
+
+
 Playwright-based fix verification for Mushi Mushi — runs automated smoke tests on generated fixes and compares screenshots.
 
 ## How It Works

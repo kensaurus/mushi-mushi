@@ -1,0 +1,125 @@
+{
+  "name": "mushi-mushi-vscode",
+  "private": true,
+  "publisher": "mushimushi",
+  "displayName": "Mushi Mushi",
+  "description": "Your AI wrote it. Mushi tells you why it broke. One-click MCP server for bug triage, evidence, blast radius, and fix dispatch — right inside VS Code agent mode.",
+  "version": "0.17.0",
+  "license": "MIT",
+  "icon": "icon.png",
+  "homepage": "https://kensaur.us/mushi-mushi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "bug-triage",
+    "ai-debugging",
+    "vibe-coding",
+    "cursor",
+    "copilot",
+    "agent"
+  ],
+  "galleryBanner": {
+    "color": "#0A0A0A",
+    "theme": "dark"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "mushiMushi",
+        "label": "Mushi Mushi"
+      }
+    ],
+    "commands": [
+      {
+        "command": "mushiMushi.setApiKey",
+        "title": "Mushi Mushi: Set API key",
+        "category": "Mushi Mushi"
+      },
+      {
+        "command": "mushiMushi.clearApiKey",
+        "title": "Mushi Mushi: Clear API key",
+        "category": "Mushi Mushi"
+      },
+      {
+        "command": "mushiMushi.useDemo",
+        "title": "Mushi Mushi: Use the read-only demo (no signup)",
+        "category": "Mushi Mushi"
+      }
+    ],
+    "configuration": {
+      "title": "Mushi Mushi",
+      "properties": {
+        "mushiMushi.transport": {
+          "type": "string",
+          "enum": ["stdio", "http"],
+          "default": "stdio",
+          "markdownDescription": "Which MCP transport to register. `stdio` runs `npx @mushi-mushi/mcp` locally; `http` connects to the hosted Streamable HTTP endpoint."
+        },
+        "mushiMushi.endpoint": {
+          "type": "string",
+          "default": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
+          "markdownDescription": "Mushi API base URL (`MUSHI_API_ENDPOINT`) used by the stdio transport. Point this at your self-hosted Supabase edge functions if you are not on Mushi Cloud."
+        },
+        "mushiMushi.mcpHttpUrl": {
+          "type": "string",
+          "default": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+          "markdownDescription": "Hosted Streamable HTTP MCP URL used by the `http` transport."
+        },
+        "mushiMushi.projectId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional Mushi project UUID. Sent as `MUSHI_PROJECT_ID` (stdio) or `X-Mushi-Project-Id` (http)."
+        },
+        "mushiMushi.features": {
+          "type": "string",
+          "default": "triage,fixes,inventory,setup,docs",
+          "markdownDescription": "Comma-separated MCP feature groups to expose (lean default mirrors the Mushi CLI). Use `all` for every tool."
+        },
+        "mushiMushi.useDemo": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Use the public, read-only demo project (no signup). Forces `?read_only=1` and a safe feature subset. Set `mushiMushi.demoApiKey` to the published demo key."
+        },
+        "mushiMushi.demoApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Public `mcp:read` demo key used when **Use demo** is enabled. Intentionally public and rotatable; never grants access to real user data."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "tsc -p ./",
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "typecheck": "tsc --noEmit -p ./",
+    "package": "tsc -p ./ && pnpm dlx @vscode/vsce@latest package --no-dependencies",
+    "publish:vsce": "pnpm dlx @vscode/vsce@latest publish --no-dependencies",
+    "publish:ovsx": "pnpm dlx ovsx@latest publish --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "@types/vscode": "^1.101.0",
+    "typescript": "^6.0.3"
+  }
+}

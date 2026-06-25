@@ -28,7 +28,7 @@ const SLUG_DOMAIN_HINTS: Record<string, string> = {
   'glot-it': 'glot.it',
   glotit: 'glot.it',
   'solo-boss-cloud': 'sbc-front.vercel.app',
-  'mushi-mushi': 'mushimushi.dev',
+  'mushi-mushi': 'kensaur.us',
 };
 
 /**

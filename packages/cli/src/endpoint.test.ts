@@ -3,11 +3,11 @@ import { assertEndpoint, normalizeEndpoint } from './endpoint.js'
 
 describe('assertEndpoint', () => {
   it('accepts https URLs', () => {
-    expect(assertEndpoint('https://api.mushimushi.dev')).toBe('https://api.mushimushi.dev')
+    expect(assertEndpoint('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api')).toBe('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api')
   })
 
   it('strips trailing path slashes', () => {
-    expect(assertEndpoint('https://api.mushimushi.dev/')).toBe('https://api.mushimushi.dev')
+    expect(assertEndpoint('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/')).toBe('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api')
   })
 
   it('preserves non-root pathnames', () => {

@@ -123,6 +123,17 @@ export function printAndExit(err: unknown, asJson = false): never {
     process.stderr.write(`error [${cliErr.code}]: ${cliErr.message}\n`)
     if (cliErr.hint) process.stderr.write(`  → fix: ${cliErr.hint}\n`)
   }
+  if (process.env.MUSHI_CLI_JSON_LOG === '1' || process.env.CI === 'true') {
+    process.stderr.write(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'error',
+        scope: 'mushi:cli',
+        ...cliErr.toJSON(),
+        exitCode: cliErr.exitCode,
+      }) + '\n',
+    )
+  }
   process.exit(cliErr.exitCode)
 }
 

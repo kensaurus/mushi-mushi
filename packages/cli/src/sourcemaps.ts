@@ -109,7 +109,7 @@ export async function runSourcemapsUpload(
   opts: SourcemapsUploadOptions,
 ): Promise<void> {
   // Phase 2.1: no dead-host fallback. The previous default
-  // ('https://api.mushimushi.dev') pointed at a host that does not exist —
+  // ('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api') pointed at a host that does not exist —
   // uploads against it silently failed at the TCP level. Force the operator
   // to be explicit so misconfiguration surfaces immediately.
   const endpoint = opts.endpoint ?? process.env['MUSHI_API_ENDPOINT'] ?? ''

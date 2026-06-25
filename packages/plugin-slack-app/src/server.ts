@@ -60,7 +60,7 @@ export interface SlackPluginConfig {
   /** Slack Incoming Webhook URL for posting event notifications. */
   webhookUrl: string
   /**
-   * Admin panel base URL, e.g. `https://admin.mushimushi.dev`.
+   * Admin panel base URL, e.g. `https://kensaur.us/mushi-mushi/admin`.
    * When provided, "Triage →" and "Dispatch fix" buttons are added to report
    * blocks. Omit or leave empty to degrade to plain link sections.
    */

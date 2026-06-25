@@ -1,5 +1,10 @@
 # Mushi Mushi — Cursor Plugin
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Cursor marketplace plugin manifest and install deeplinks.
+
+
 > Bug triage, evidence, and fix dispatch — powered by real user reports, right inside Cursor.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/mcp)](https://www.npmjs.com/package/@mushi-mushi/mcp)

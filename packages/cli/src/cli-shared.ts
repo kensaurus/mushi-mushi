@@ -12,6 +12,18 @@ import { CLOUD_API_ENDPOINT } from './endpoint.js'
 import { resolveConsoleUrlSync, consoleUrl } from './console-url.js'
 import { MushiCliError, printAndExit } from './errors.js'
 
+const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** Reject malformed IDs before destructive API calls. */
+export function requireUuid(value: string, label = 'id'): string {
+  if (UUID_RX.test(value)) return value
+  throw new MushiCliError(
+    'E_INVALID_INPUT',
+    `${label} must be a valid UUID`,
+    'copy the full id from `mushi reports list` or the console URL',
+  )
+}
+
 // ─── API client ─────────────────────────────────────────────────────────────
 
 export const API_TIMEOUT_MS = 15_000

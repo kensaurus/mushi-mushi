@@ -22,7 +22,7 @@ npm install @mushi-mushi/vue @mushi-mushi/web
 | Vite / Vue CLI | `VITE_MUSHI_PROJECT_ID` | `VITE_MUSHI_API_KEY` |
 | Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` | `NUXT_PUBLIC_MUSHI_API_KEY` |
 
-See [Project ID & API keys](https://docs.mushimushi.dev/concepts/credentials).
+See [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials).
 
 ## Usage
 

@@ -1,5 +1,10 @@
 # @mushi-mushi/marketing-ui
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Shared landing and connect-page React components.
+
+
 Shared editorial marketing components used by `apps/cloud` (Next.js) and
 `apps/admin` (Vite + react-router). Components are framework-agnostic: they
 get their `Link` component and URL helpers from a `<MarketingProvider>` so

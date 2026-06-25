@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path'
 import type { CliConfig } from './config.js'
 import { CONFIG_PATH, saveConfig } from './config.js'
 import { assertEndpoint } from './endpoint.js'
+import { requireUuid } from './cli-shared.js'
 import { detectFramework, envVarsToWrite, readPackageJson } from './detect.js'
 import { waitForIngestReady } from './heartbeat-wait.js'
 import { buildMcpServerBlock, buildMcpServerName, writeMcpServerEntry } from './mcp-config.js'
@@ -82,12 +83,13 @@ export async function runConnect(
 ): Promise<ConnectResult> {
   const cwd = resolve(opts.cwd ?? process.cwd())
   const endpoint = assertEndpoint(opts.endpoint)
+  const projectId = requireUuid(opts.projectId, 'projectId')
   const messages: string[] = []
 
   const config: CliConfig = {
     ...baseConfig,
     apiKey: opts.apiKey,
-    projectId: opts.projectId,
+    projectId,
     endpoint,
   }
   saveConfig(config)
@@ -97,7 +99,7 @@ export async function runConnect(
   if (opts.writeEnv !== false) {
     const pkg = readPackageJson(cwd)
     const framework = detectFramework(cwd, pkg)
-    const lines = envVarsToWrite(opts.apiKey, opts.projectId, framework).split('\n')
+    const lines = envVarsToWrite(opts.apiKey, projectId, framework).split('\n')
     envPath = join(cwd, '.env.local')
     const wrote = await mergeEnvFile(envPath, lines)
     messages.push(
@@ -118,10 +120,10 @@ export async function runConnect(
   if (opts.wireIde !== false) {
     const mcpDir = join(cwd, '.cursor')
     mcpPath = join(mcpDir, 'mcp.json')
-    const serverName = buildMcpServerName({ projectId: opts.projectId })
+    const serverName = buildMcpServerName({ projectId })
     const serverBlock = buildMcpServerBlock({
       endpoint,
-      projectId: opts.projectId,
+      projectId,
       apiKey: opts.apiKey,
     })
     await writeMcpServerEntry({ configPath: mcpPath, serverName, serverBlock })
@@ -137,7 +139,7 @@ export async function runConnect(
     heartbeat = await waitForIngestReady({
       endpoint,
       apiKey: opts.apiKey,
-      projectId: opts.projectId,
+      projectId,
       maxAttempts,
       onPoll: (payload, attempt) => {
         if (!opts.json && attempt % 3 === 0) {

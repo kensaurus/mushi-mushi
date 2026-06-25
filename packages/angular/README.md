@@ -24,7 +24,7 @@ The wizard writes `VITE_MUSHI_*` for Angular CLI / Vite-based apps:
 | `VITE_MUSHI_PROJECT_ID` | Project slug (`proj_…`) or UUID from Admin → Projects |
 | `VITE_MUSHI_API_KEY` | Ingest key (`mushi_…`) |
 
-See [Project ID & API keys](https://docs.mushimushi.dev/concepts/credentials) for format details.
+See [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials) for format details.
 
 ## Usage
 

@@ -2,7 +2,7 @@
  * Stand-alone Node HTTPS entry point for the Discord plugin. Usage:
  *
  *   MUSHI_PLUGIN_SECRET=... DISCORD_WEBHOOK_URL=... \
- *   ADMIN_BASE_URL=https://admin.mushimushi.dev PORT=3000 \
+ *   ADMIN_BASE_URL=https://kensaur.us/mushi-mushi/admin PORT=3000 \
  *     npx mushi-plugin-discord
  */
 

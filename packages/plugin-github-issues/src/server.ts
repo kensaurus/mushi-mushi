@@ -3,7 +3,7 @@
  *
  *   MUSHI_PLUGIN_SECRET=... GITHUB_TOKEN=... \
  *   GITHUB_OWNER=acme GITHUB_REPO=my-app \
- *   ADMIN_BASE_URL=https://admin.mushimushi.dev PORT=3000 \
+ *   ADMIN_BASE_URL=https://kensaur.us/mushi-mushi/admin PORT=3000 \
  *     npx mushi-plugin-github-issues
  */
 

@@ -1,7 +1,7 @@
 /**
  * FILE: packages/cli/src/migrate.ts
  * PURPOSE: `mushi migrate` — read the project's package.json and suggest
- *          the most relevant migration guide(s) on docs.mushimushi.dev.
+ *          the most relevant migration guide(s) on kensaur.us/mushi-mushi/docs.
  *
  * DETECTION
  *   - Competitor SDKs (the GTM win): Instabug/Luciq, Shake, LogRocket,
@@ -34,13 +34,13 @@
 
 import { readPackageJson } from './detect.js'
 
-const DOCS_BASE = 'https://docs.mushimushi.dev'
+const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
 
 export type MigrateCategory = 'mobile' | 'web' | 'competitor' | 'sdk-upgrade'
 export type MigrateStatus = 'published' | 'draft'
 
 export interface MigrateGuide {
-  /** URL slug — `/migrations/<slug>` on docs.mushimushi.dev. */
+  /** URL slug — `/migrations/<slug>` under the docs site. */
   slug: string
   title: string
   summary: string

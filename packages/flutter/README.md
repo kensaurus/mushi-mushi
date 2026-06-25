@@ -1,8 +1,13 @@
 # mushi_mushi
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Flutter SDK for Mushi bug reporting.
+
+
 [![pub package](https://img.shields.io/pub/v/mushi_mushi.svg)](https://pub.dev/packages/mushi_mushi)
 
-Flutter SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
+Flutter SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
 > **Status**: V0.3.0 Surface stable; minor changes still possible
@@ -107,7 +112,7 @@ Mushi.instance.onReportSubmitted = (payload) async {
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID from Mushi admin |
 | `apiKey`               | _required_                           | Public ingest key (`mush_pk_...`) |
-| `endpoint`             | `https://api.mushimushi.dev`         | Override for self-hosting |
+| `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`          | `shake`                              | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`    | `true`                               | Requires a `RepaintBoundary` boundary key |
 | `minDescriptionLength` | `20`                                 | Matches the web SDK contract |

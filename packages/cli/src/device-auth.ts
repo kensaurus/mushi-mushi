@@ -227,8 +227,11 @@ export async function listProjects(endpoint: string, cliToken: string): Promise<
       data?: { projects?: DeviceProject[] }
     } | null
     if (res.ok && json?.ok) return json.data?.projects ?? []
-  } catch {
-    // non-fatal — caller can still create a new project
+  } catch (err) {
+    console.error(
+      '[mushi] Failed to list projects:',
+      err instanceof Error ? err.message : err,
+    )
   }
   return []
 }
