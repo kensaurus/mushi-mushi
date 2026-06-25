@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kensaur.us/mushi-mushi/schemas/sandbox-provider-2.0.json",
+  "title": "Mushi Mushi SandboxProvider contract",
+  "description": "A pluggable sandbox provider — first-party Mushi ships e2b / modal / cloudflare / local-noop; third parties may register any string id via @mushi-mushi/agents#registerSandboxProvider.",
+  "type": "object",
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "examples": [
+        "e2b",
+        "modal",
+        "cloudflare",
+        "local-noop"
+      ]
+    }
+  }
+}

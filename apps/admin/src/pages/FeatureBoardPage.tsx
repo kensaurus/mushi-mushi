@@ -94,7 +94,7 @@ const SORT_OPTIONS: { id: SortKey; label: string }[] = [
 
 const FIELD_BASE =
   'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
-  'placeholder:text-fg-faint hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 ' +
+  'placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 ' +
   'motion-safe:transition-colors motion-safe:duration-150'
 
 // ── Comment thread ────────────────────────────────────────────────────────────
@@ -589,7 +589,7 @@ export function FeatureBoardPage() {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
-                className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
+                className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
               >
                 {SORT_OPTIONS.map((opt) => (
                   <option key={opt.id} value={opt.id}>

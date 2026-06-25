@@ -172,7 +172,7 @@ export function GroupsPanel() {
               <select
                 value={mergeTarget}
                 onChange={(e) => setMergeTarget(e.target.value)}
-                className="w-full bg-surface-overlay border border-edge-subtle rounded-sm px-2 py-1.5 text-2xs text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand/40"
+                className="w-full bg-surface-overlay border border-edge-subtle rounded-sm px-2 py-1.5 text-2xs text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
               >
                 <option value="">— select group —</option>
                 {mergeCandidates.map((c) => (

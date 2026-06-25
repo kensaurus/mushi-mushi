@@ -19,6 +19,8 @@ import { FixAttemptFlow } from './FixAttemptFlow';
 import { MergeFixPreflight } from './MergeFixPreflight';
 import { canMergeFix, getMergeBlockerReason, isFixMerged } from '../../lib/mergeFix';
 import { apiFetch } from '../../lib/supabase';
+import { useToast } from '../../lib/toast';
+import * as Sentry from '@sentry/react';
 import { EndpointCodeRow } from '../readout';
 
 interface InventoryActionSummary {
@@ -51,6 +53,7 @@ interface Props {
 }
 
 export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, onMerged, onRefreshed, inventoryAction, selectable = false, selected = false, onSelectChange }: Props) {
+  const toast = useToast();
   const ci = ciBadge(fix);
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0);
   // Spec-traceability soft warnings (e.g. "diff didn't touch the contract's
@@ -100,8 +103,12 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, on
     try {
       await apiFetch(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' });
       onRefreshed?.();
-    } catch {
-      // best-effort — UI will reflect stale data until next realtime event
+    } catch (err) {
+      toast.error('Could not refresh CI status from GitHub');
+      Sentry.captureMessage('fix refresh-ci failed', {
+        level: 'warning',
+        extra: { fixId: fix.id, error: err instanceof Error ? err.message : String(err) },
+      });
     } finally {
       setCiRefreshing(false);
     }

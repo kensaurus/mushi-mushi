@@ -8,17 +8,17 @@ const PERSONAS = [
   {
     id: 'vibe' as const,
     label: 'Vibe coder',
-    lead: 'You ship fast with AI. When prod breaks, Mushi tells you why — in plain English — and hands Cursor a paste-ready fix prompt. No log archaeology.',
+    lead: 'You ship fast with AI. When prod breaks, Mushi tells you why — in plain English — and hands Cursor a paste-ready fix. No log archaeology.',
   },
   {
     id: 'team' as const,
     label: 'AI-native team',
-    lead: 'Your agents write the code. Mushi closes the loop — triage, fix briefs, optional draft PRs, and lessons so the next run starts smarter.',
+    lead: 'Your agents write the code. Mushi closes the loop — plain reads, fix briefs, optional draft PRs, and lessons so the next run starts smarter.',
   },
   {
     id: 'pm' as const,
     label: 'PM / founder',
-    lead: 'Bug signal straight from users, not a support queue. The cheap ones get a diagnosis in Cursor; the hard ones graduate to your team.',
+    lead: 'Bug signal straight from users, not a support queue. The easy ones get a plain read in Cursor; the hard ones graduate to your team.',
   },
 ] as const
 
@@ -87,13 +87,11 @@ export function Hero() {
           </div>
 
           <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)]">
-            <li>MCP-first · Cursor + Claude</li>
+            <li>Editor-first · Cursor + Claude</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
             <li>50 free diagnoses / mo</li>
             <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
             <li>MIT-licensed · self-hostable</li>
-            <li aria-hidden="true" className="text-[var(--mushi-ink-faint)] opacity-50">／</li>
-            <li>No second LLM key</li>
           </ul>
         </div>
 

@@ -125,8 +125,8 @@ describe('submitReport fetch contract', () => {
   })
 
   it('uses /v1/reports path', () => {
-    const endpoint = 'https://api.mushimushi.dev'
-    expect(`${endpoint}/v1/reports`).toBe('https://api.mushimushi.dev/v1/reports')
+    const endpoint = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+    expect(`${endpoint}/v1/reports`).toBe('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports')
   })
 })
 

@@ -12,6 +12,7 @@ import { relTime, type FixSummary, type TriageItem } from './types'
 import { ActionPill, SignalChip } from '../report-detail/ReportSurface'
 import { EmptySectionMessage } from '../report-detail/ReportClassification'
 import { FixPipelineMeter } from './FixPipelineMeter'
+import { useAdminMode } from '../../lib/mode'
 
 interface Props {
   triageQueue: TriageItem[]
@@ -19,13 +20,15 @@ interface Props {
 }
 
 export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
+  const { isAdvanced } = useAdminMode()
   const hasCritical = triageQueue.some((r) => r.severity === 'critical' || r.severity === 'high')
+  const queueTitle = isAdvanced ? 'Triage queue' : 'Bug queue'
 
   return (
     <div className="mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-3">
       <Card className="min-w-0 p-3 lg:col-span-2">
         <PanelHeader
-          title="Triage queue"
+          title={queueTitle}
           action={
             <div className="flex min-w-0 items-center gap-2">
               {hasCritical && (
@@ -41,8 +44,8 @@ export function TriageAndFixRow({ triageQueue, fixSummary }: Props) {
         />
         {triageQueue.length === 0 ? (
           <EmptySectionMessage
-            text="All caught up — no untriaged reports."
-            hint="New bugs land here within seconds of SDK ingest."
+            text="All caught up — no bugs waiting for review."
+            hint="New bugs land here within seconds of the SDK sending a report."
           />
         ) : (
           <div className="space-y-1.5">

@@ -28,6 +28,7 @@ import { apiKeyAuth } from '../../_shared/auth.ts'
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts'
 import { normalizeSyncStatus, isReporterFixedStatus, toStoredStatus } from '../../_shared/report-status.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
+import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -431,66 +432,8 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
     const { message, author_name } = parsed.data
 
-    // Verify report belongs to this project and fetch the reporter token for the notification.
-    const { data: report, error: fetchErr } = await db
-      .from('reports')
-      .select('id, status, reporter_token_hash')
-      .eq('id', id)
-      .eq('project_id', projectId)
-      .maybeSingle()
-
-    if (fetchErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: fetchErr.message } }, 500)
-    if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: `Report ${id} not found` } }, 404)
-
-    // API-key replies have no JWT caller — satisfy report_comments_author_well_formed
-    // by attributing the comment to the project owner (same as a signed-in admin).
-    const { data: project, error: projectErr } = await db
-      .from('projects')
-      .select('owner_id')
-      .eq('id', projectId)
-      .maybeSingle()
-
-    if (projectErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: projectErr.message } }, 500)
-    if (!project?.owner_id) {
-      return c.json({
-        ok: false,
-        error: { code: 'MISCONFIGURED', message: 'Project has no owner_id — cannot post admin reply via API key' },
-      }, 500)
-    }
-
-    const { data: comment, error: insertErr } = await db
-      .from('report_comments')
-      .insert({
-        report_id: id,
-        project_id: projectId,
-        author_kind: 'admin',
-        author_user_id: project.owner_id,
-        author_name,
-        body: message,
-        visible_to_reporter: true,
-        created_at: new Date().toISOString(),
-      })
-      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
-      .single()
-
-    if (insertErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: insertErr.message } }, 500)
-
-    // Update last_admin_reply_at on the report — best effort.
-    db.from('reports')
-      .update({ last_admin_reply_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('project_id', projectId)
-      .then(() => null, () => null)
-
-    // Notify the reporter widget so they see the unread badge.
-    if (report.reporter_token_hash) {
-      createNotification(db, projectId, id, report.reporter_token_hash, 'comment_reply', {
-        message: buildNotificationMessage('comment_reply', {}),
-        reportId: id,
-      }).catch(() => null)
-    }
-
-    return c.json({ ok: true, data: { comment } }, 201)
+    const result = await postReporterReply(db, { projectId, reportId: id, message, authorName: author_name })
+    return c.json(result.body, result.status)
   })
 
   // ── GET /v1/sync/lessons/:id ──────────────────────────────────────────────
@@ -743,41 +686,6 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   app.get('/v1/sync/two-way-health', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-
-    const [keysRes, unreadRes, repliesRes] = await Promise.all([
-      db
-        .from('project_api_keys')
-        .select('last_seen_at, last_seen_user_agent')
-        .eq('project_id', projectId)
-        .eq('is_active', true)
-        .order('last_seen_at', { ascending: false, nullsFirst: false })
-        .limit(1),
-      // Reporter read-state lives on `reporter_notifications` (read_at), which is
-      // raised on admin replies + status changes — there is no per-comment read
-      // flag. Unread notifications are the proxy for "updates the reporter hasn't seen".
-      db
-        .from('reporter_notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .is('read_at', null),
-      db
-        .from('report_comments')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .eq('author_kind', 'admin')
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-    ])
-
-    const heartbeat = keysRes.data?.[0]
-    return c.json({
-      ok: true,
-      data: {
-        last_sdk_heartbeat_at: heartbeat?.last_seen_at ?? null,
-        last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
-        unread_admin_replies: unreadRes.count ?? 0,
-        admin_replies_7d: repliesRes.count ?? 0,
-        healthy: Boolean(heartbeat?.last_seen_at),
-      },
-    })
+    return c.json({ ok: true, data: await computeTwoWayHealth(db, projectId) })
   })
 }

@@ -44,10 +44,19 @@ packages (see §1.3).
    branch and commit `apps/docs/content/sdks/index.mdx`.
 4. **Merge the version PR.** This is what publishes to npm.
 5. **Dispatch the release if it does not auto-start within ~2 minutes** — squash
-   merges attributed to `github-actions[bot]` usually suppress the `push` trigger:
+   merges attributed to `github-actions[bot]` usually suppress the `push` trigger;
+   version-PR squash commits that include `[skip ci]` suppress it too:
    ```bash
    gh workflow run release.yml --ref master
    ```
+6. **If the version PR shows "Required status check Build & Test is expected"**,
+   push an empty commit to `changeset-release/master` with a user/PAT token (the
+   bot branch does not trigger CI), wait for green, then merge.
+
+> **Post-release incident log (Jun 2026):** Critical SDK fixes shipped after the
+> pipeline release (`cli@0.22.1`, `web@1.21.1`, `react-native@0.20.1`) — env merge,
+> rewards listener idempotency, RN i18n types, Teams SSRF guards. Full write-up:
+> [`docs/audit-2026-06-23/post-release-critical-fixes.md`](./audit-2026-06-23/post-release-critical-fixes.md).
 
 ### 1.2 What the publish job enforces
 
@@ -63,6 +72,10 @@ packages (see §1.3).
   `npm audit signatures` (with CDN-propagation retry), `changelog:aggregate`
   commit, and `sync-sdk-versions.mjs` (upserts versions into the `sdk_versions`
   table powering console freshness chips).
+- **Signature audit flake:** if the job fails on `npm audit signatures` with
+  `ETARGET` / "No matching version" immediately after publish, confirm packages
+  are live (`npm view @mushi-mushi/cli version`) and GitHub releases exist — the
+  failure is often CDN propagation, not a missed publish.
 
 ### 1.3 Adding a brand-new publishable package
 
@@ -124,9 +137,28 @@ then deleted from `dist` so the public bucket never serves them.
 
 ### Required secrets (admin)
 
-`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `CLOUDFRONT_DISTRIBUTION_ID`,
-`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SENTRY_DSN`,
+`AWS_ROLE_ARN` — GitHub OIDC role (no long-lived IAM keys in this repo):
+
+```
+arn:aws:iam::590715976857:role/github-actions-mushi-mushi-deploy
+```
+
+Trust: GitHub OIDC provider `token.actions.githubusercontent.com`, audience
+`sts.amazonaws.com`, subject `repo:kensaurus/mushi-mushi:*`. Permissions:
+customer-managed policy `GitHubActionsS3CloudFrontDeploy` (S3 bucket
+`kensaur.us-mushi-mushi`, CloudFront distribution `E246VQ1C9QYZVB`, CloudFront
+Functions).
+
+Also required: `CLOUDFRONT_DISTRIBUTION_ID`, `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_ANON_KEY`, `VITE_CLOUD_SUPABASE_ANON_KEY` (cloud anon JWT for
+`apps/admin/src/lib/env.ts` — CI fails the build if unset), `VITE_SENTRY_DSN`,
 `SENTRY_AUTH_TOKEN`.
+
+> **Other repos:** The IAM user `github-actions-deploy` and its access key still
+> exist in AWS for other `kensaurus/*` repositories. Only `mushi-mushi` migrated
+> to OIDC; deleting the IAM user would break those repos.
+
+One-time setup script (for additional repos): `scripts/setup-aws-github-oidc.mjs`.
 
 ---
 
@@ -136,6 +168,10 @@ then deleted from `dist` so the public bucket never serves them.
 and syncs it to the same S3 bucket under the `mushi-mushi/docs` prefix. The
 CloudFront Functions for clean-URL routing are created on first run and updated
 idempotently on every subsequent run.
+
+### Required secrets (docs)
+
+`AWS_ROLE_ARN` (same OIDC role as admin — see §3), `CLOUDFRONT_DISTRIBUTION_ID`.
 
 > The docs build is also a gate in `release.yml` (`pnpm build`). If you change the
 > MCP catalog, regenerate the reference and commit it:
@@ -159,6 +195,55 @@ findings before declaring the deploy done.
 
 ---
 
+## 6. Backup, PITR, and data-integrity runbook
+
+### 6.1 Point-in-Time Recovery (PITR)
+
+Supabase Pro projects include **7-day PITR** by default. Verify it is active
+before any data-destructive operation (retention sweeps, schema drops, large
+deletes):
+
+1. Open **Supabase Dashboard → Project → Settings → Database → Point in Time
+   Recovery**.
+2. Confirm PITR shows as **Enabled** with a recovery window of ≥ 7 days.
+3. If PITR is disabled: upgrade the project to Pro or enable it under Add-ons.
+
+> **D1 gate (SOC 2 retention cron):** The `mushi-soc2-retention-sweep` pg_cron
+> job (installed by migration `20260418001300_soc2_readiness.sql`) permanently
+> deletes `reports` and `audit_logs` rows according to `project_retention_policies`.
+> **PITR must be confirmed active before this cron runs in production.** If PITR
+> is not enabled, a runaway retention window could cause irrecoverable data loss
+> within a single cron cycle (daily at 03:30 UTC).
+>
+> To verify the cron is scheduled: `SELECT jobname, schedule FROM cron.job WHERE jobname = 'mushi-soc2-retention-sweep';`
+> To unschedule (pause): `SELECT cron.unschedule('mushi-soc2-retention-sweep');`
+> To re-schedule after PITR is confirmed: `SELECT cron.schedule('mushi-soc2-retention-sweep', '30 3 * * *', $$SELECT public.mushi_apply_retention();$$);`
+
+### 6.2 Restore procedure (PITR)
+
+To restore to a point in time using Supabase PITR:
+
+1. Open **Dashboard → Settings → Database → Point in Time Recovery**.
+2. Choose **Restore to a specific point in time** and select the target
+   timestamp (UTC). Allow up to 30 minutes for the restore to complete.
+3. After restore, run `supabase db push` to re-apply any migrations that
+   were pushed after the restore point (PITR restores data, not new DDL).
+4. Verify the restored state with `information_schema` queries or
+   `select_advisors(type: 'error')` via the Supabase MCP.
+
+### 6.3 Migration safety policy
+
+- **Never** write `DELETE FROM <table>` or `TRUNCATE <table>` without a
+  `WHERE` clause in a migration file. CI enforces this via
+  `scripts/check-destructive-migrations.mjs`.
+- Run `npm run check:destructive-migrations` (backend) or
+  `node scripts/check-destructive-migrations.mjs` (this repo) before merging
+  any PR that touches `supabase/migrations/`.
+- Confirm PITR window before running any migration that installs a retention
+  cron or bulk-deletes data.
+
+---
+
 ## Pre-release checklist
 
 - [ ] `pnpm build && pnpm typecheck && pnpm lint && pnpm test` green locally.
@@ -167,3 +252,5 @@ findings before declaring the deploy done.
 - [ ] Any new/changed SQL migration has been applied to the target project and
       verified.
 - [ ] `pnpm changelog:check` is in sync.
+- [ ] **If the migration adds a retention cron or bulk delete:** confirm
+      PITR is active (§6.1) before enabling the cron in production.

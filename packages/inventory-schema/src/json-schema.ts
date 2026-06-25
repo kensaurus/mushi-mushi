@@ -17,7 +17,7 @@
 
 export const inventoryJsonSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://mushimushi.dev/schemas/inventory-2.0.json',
+  $id: 'https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json',
   title: 'Mushi Mushi inventory.yaml (v2.0)',
   type: 'object',
   required: ['schema_version', 'app', 'pages'],

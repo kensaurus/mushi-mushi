@@ -1,16 +1,16 @@
 ---
-title: Fix orchestrator
+title: Fix drafts & PRs
 ---
 
 import { Callout } from 'nextra/components'
 
 <AdminDocHero page="fixes" />
 
-# Fix orchestrator
+# Fix drafts & PRs
 
-The Fixes page is the live view of every agent run Mushi has dispatched — from the
-moment the orchestrator picks up the report to the moment a PR is open (or the run
-fails). It also shows coordination rows for [multi-repo fixes](/concepts/multi-repo-fixes).
+The Fixes page shows every draft pull request Mushi opened from a real bug — from
+the moment a fix run starts to when a PR is ready to review (or the run fails).
+Multi-repo coordination rows appear when one report spans several repos.
 
 ---
 
@@ -201,6 +201,6 @@ mushi fixes merge <fixId> --method squash
 
 ## See also
 
-- [Concepts → Agentic fix orchestrator](/concepts/fix-orchestrator) — how the orchestrator works internally.
+- [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) — how auto-fix works internally.
 - [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes) — coordinated multi-repo runs.
 - [Connecting your orchestrator](/concepts/orchestrator-interop) — dispatch via MCP, A2A, or REST.

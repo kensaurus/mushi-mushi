@@ -1,0 +1,493 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json",
+  "title": "Mushi Mushi inventory.yaml (v2.0)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "app",
+    "pages"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^2(\\.\\d+)*$",
+      "description": "Inventory schema version. Must start with \"2.\" for the v2 admin to consume it."
+    },
+    "app": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "base_url"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "preview_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "staging_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "auth": {
+          "type": "object",
+          "required": [
+            "type",
+            "config"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "cookie",
+                "bearer",
+                "oauth",
+                "scripted"
+              ]
+            },
+            "config": {
+              "type": "object"
+            }
+          }
+        },
+        "extensions": {
+          "type": "object"
+        }
+      }
+    },
+    "user_stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "persona": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "user_story": {
+            "type": "string"
+          },
+          "auth_required": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "elements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "type",
+                "action"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "button",
+                    "link",
+                    "form",
+                    "input",
+                    "list",
+                    "toggle",
+                    "menu",
+                    "image",
+                    "media",
+                    "other"
+                  ]
+                },
+                "action": {
+                  "type": "string"
+                },
+                "backend": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "method",
+                      "path"
+                    ],
+                    "properties": {
+                      "method": {
+                        "enum": [
+                          "GET",
+                          "POST",
+                          "PATCH",
+                          "PUT",
+                          "DELETE"
+                        ]
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "db_writes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "table"
+                    ],
+                    "properties": {
+                      "table": {
+                        "type": "string"
+                      },
+                      "schema": {
+                        "type": "string"
+                      },
+                      "operation": {
+                        "enum": [
+                          "insert",
+                          "update",
+                          "delete",
+                          "upsert",
+                          "select"
+                        ]
+                      },
+                      "rpc": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "db_reads": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "table"
+                    ],
+                    "properties": {
+                      "table": {
+                        "type": "string"
+                      },
+                      "schema": {
+                        "type": "string"
+                      },
+                      "operation": {
+                        "enum": [
+                          "insert",
+                          "update",
+                          "delete",
+                          "upsert",
+                          "select"
+                        ]
+                      },
+                      "rpc": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "crud": {
+                  "enum": [
+                    "C",
+                    "R",
+                    "U",
+                    "D",
+                    "none"
+                  ]
+                },
+                "verified_by": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "file",
+                      "name"
+                    ],
+                    "properties": {
+                      "file": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "framework": {
+                        "enum": [
+                          "playwright",
+                          "vitest",
+                          "jest",
+                          "cypress",
+                          "other"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "user_story": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "stub",
+                    "mocked",
+                    "wired",
+                    "verified",
+                    "regressed",
+                    "unknown"
+                  ]
+                },
+                "last_verified": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "expected_outcome": {
+                  "type": "object",
+                  "description": "Machine-readable success contract — asserted by the synthetic monitor and threaded into the fix-worker LLM prompt for spec-traceable autofix (whitepaper §2.10).",
+                  "properties": {
+                    "summary": {
+                      "type": "string"
+                    },
+                    "response": {
+                      "type": "object",
+                      "properties": {
+                        "status_in": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "maximum": 599
+                          }
+                        },
+                        "json_path": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "path",
+                              "op"
+                            ],
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "op": {
+                                "enum": [
+                                  "exists",
+                                  "equals",
+                                  "not_equals",
+                                  "contains",
+                                  "gt",
+                                  "gte",
+                                  "lt",
+                                  "lte",
+                                  "matches"
+                                ]
+                              },
+                              "value": {}
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "database": {
+                      "type": "object",
+                      "required": [
+                        "table"
+                      ],
+                      "properties": {
+                        "table": {
+                          "type": "string"
+                        },
+                        "schema": {
+                          "type": "string"
+                        },
+                        "where": {
+                          "type": "object"
+                        },
+                        "expect": {
+                          "enum": [
+                            "row_exists",
+                            "row_absent",
+                            "row_count_at_least"
+                          ]
+                        },
+                        "min_count": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
+                    },
+                    "ui": {
+                      "type": "object",
+                      "properties": {
+                        "visible_text": {
+                          "type": "string"
+                        },
+                        "route_change_to": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "extensions": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "notes": {
+                  "type": "string"
+                },
+                "owner_team": {
+                  "type": "string"
+                },
+                "testid": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "properties": {
+        "apis": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "method",
+              "path"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "method": {
+                "enum": [
+                  "GET",
+                  "POST",
+                  "PATCH",
+                  "PUT",
+                  "DELETE"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "schema_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "owner_team": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "type"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "postgres",
+                  "mysql",
+                  "mongodb",
+                  "firestore",
+                  "supabase",
+                  "sqlite",
+                  "other"
+                ]
+              },
+              "schema_introspection_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "adapter": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  }
+}

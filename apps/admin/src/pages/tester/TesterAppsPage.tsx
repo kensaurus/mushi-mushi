@@ -397,7 +397,7 @@ export function TesterAppsPage() {
               placeholder="Search apps…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full rounded-md border border-edge-subtle bg-surface-raised py-2 pl-8 pr-3 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+              className="w-full rounded-md border border-edge-subtle bg-surface-raised py-2 pl-8 pr-3 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             />
           </div>
           <SegmentedControl

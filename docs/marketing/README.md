@@ -12,6 +12,7 @@ If any line in this folder could have been written by a generic B2B company, del
 | File | Use it when |
 | --- | --- |
 | [`VOICE.md`](./VOICE.md) | Writing anything. Every post, tweet, reply, and commit-blurb starts here. |
+| [`GTM-DISTRIBUTION.md`](./GTM-DISTRIBUTION.md) | MCP registry, Glama, Connect, cursor.directory, VS Code / Cursor marketplace — what shipped and how to maintain it on each release. |
 | [`STOREFRONTS.md`](./STOREFRONTS.md) | The one-time polish pass on README / npm / GitHub / live demo. Do this before outreach. |
 | [`snippets.md`](./snippets.md) | Reusable hooks, Show HN bodies, Reddit openers, Bluesky threads. Never start from a blank page. |
 | [`launch-week.md`](./launch-week.md) | The 5-day coordinated launch runbook. Hour-by-hour for Mon–Fri. |

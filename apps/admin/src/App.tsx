@@ -206,7 +206,7 @@ function PasswordRecoveryGate({ children }: { children: ReactNode }) {
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   const location = useLocation()
-  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading..." /></div>
+  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading…" /></div>
   if (!session) return <Navigate to={loginPathForLocation(location)} replace state={{ from: location }} />
   return <>{children}</>
 }
@@ -220,7 +220,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 function TesterRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   const location = useLocation()
-  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading..." /></div>
+  if (loading) return <div className="flex h-full min-h-0 items-center justify-center"><Loading text="Loading…" /></div>
   // Wave 9 self-host gate: marketplace is cloud-only.
   if (envStatus.mode === 'self-hosted') {
     return (
@@ -339,7 +339,7 @@ export function App() {
             <ProtectedRoute>
               <Layout>
                 <ErrorBoundary source="protected-route">
-                <Suspense fallback={<Loading text="Loading..." />}>
+                <Suspense fallback={<Loading text="Loading…" />}>
                 <SentryRoutes>
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
@@ -375,7 +375,7 @@ export function App() {
                   <Route
                     path="/cli-auth"
                     element={
-                      <Suspense fallback={<Loading text="Loading..." />}>
+                      <Suspense fallback={<Loading text="Loading…" />}>
                         <CliAuthPage />
                       </Suspense>
                     }

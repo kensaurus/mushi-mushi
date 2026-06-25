@@ -32,7 +32,7 @@ const STEPS = [
   {
     n: 2,
     title: 'Generate an API key',
-    body: 'Mint a report:write key on the Verify tab. Copy it immediately — shown once.',
+    body: 'Generate a report key on the Verify tab. Copy it immediately — shown once.',
     to: '/onboarding?tab=verify',
   },
   {

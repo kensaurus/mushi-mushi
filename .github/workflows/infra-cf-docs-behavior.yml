@@ -35,6 +35,9 @@ on:
 
 permissions:
   contents: read
+  # Required for the GitHub OIDC token exchanged for short-lived AWS creds
+  # (see "Configure AWS credentials" step). No long-lived AWS keys.
+  id-token: write
 
 concurrency:
   group: infra-cf-docs-behavior
@@ -58,11 +61,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Configure AWS credentials
+      # OIDC, not long-lived AWS keys. Requires a one-time AWS setup:
+      #   1. An IAM OIDC identity provider for token.actions.githubusercontent.com
+      #   2. An IAM role whose trust policy allows this repo's OIDC subject
+      #      (e.g. repo:kensaurus/mushi-mushi:ref:refs/heads/master) to
+      #      sts:AssumeRoleWithWebIdentity, scoped to the CloudFront
+      #      Get/UpdateDistribution actions this workflow needs.
+      #   3. The role ARN stored as the AWS_OIDC_ROLE_ARN repo secret.
+      # Once set, the stale AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY secrets
+      # can be deleted from the repo.
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df  # v4.2.1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Install jq

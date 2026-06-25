@@ -81,7 +81,7 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
             value={form.goal}
             onChange={(e) => set('goal', e.target.value)}
             rows={3}
-            className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-fg-muted focus:outline-none focus:ring-2 focus:ring-brand/50"
+            className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           />
         </label>
 
@@ -111,7 +111,7 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
             <select
               value={form.primary_model}
               onChange={(e) => set('primary_model', e.target.value)}
-              className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
+              className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               {MODEL_OPTIONS.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -123,7 +123,7 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
             <select
               value={form.judge_model}
               onChange={(e) => set('judge_model', e.target.value)}
-              className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
+              className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               {MODEL_OPTIONS.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -137,7 +137,7 @@ export function NewRunForm({ projectId, projectName, onCreated }: Props) {
           <select
             value={form.persona}
             onChange={(e) => set('persona', e.target.value)}
-            className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
+            className="block w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             {PERSONA_OPTIONS.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>

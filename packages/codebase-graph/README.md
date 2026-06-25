@@ -1,5 +1,10 @@
 # @mushi-mushi/codebase-graph
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Symbol graph builder for the codebase explorer.
+
+
 Node-side helpers for building Understand-Anything–shaped knowledge graphs from indexed codebase files.
 
 ## Attribution

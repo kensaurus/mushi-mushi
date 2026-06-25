@@ -1,5 +1,10 @@
 # @mushi-mushi/brand
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Shared taglines and brand tokens for docs, npm, and the admin console.
+
+
 Shared Mushi Mushi editorial design tokens: washi paper, sumi ink,
 vermillion stamp accents, serif display typography, and mono ledger captions.
 

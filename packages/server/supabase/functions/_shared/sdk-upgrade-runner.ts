@@ -24,7 +24,10 @@ import { UPGRADE_BRANCH_PREFIX } from './sdk-upgrade-gates.ts'
 
 const log = rootLog.child('sdk-upgrade-runner')
 
-const PKG_PATH_CANDIDATES = [
+// Always-scanned paths (the common layouts). Discovery below augments these so
+// repos that keep @mushi-mushi/* deps elsewhere (packages/*, frontend/, client/,
+// monorepos) no longer get a false "already up to date" / completed_no_pr.
+const FIXED_PKG_PATH_CANDIDATES = [
   'package.json',
   'apps/web/package.json',
   'apps/mobile/package.json',
@@ -32,7 +35,14 @@ const PKG_PATH_CANDIDATES = [
   'src/package.json',
 ]
 
-const MAX_PKG_FILES = 5
+// Upper bound on package.json files read + bumped per run. Raised from the
+// original 5 now that we discover dynamically — still bounded so a pathological
+// repo can't fan out into hundreds of contents-API calls.
+const MAX_PKG_FILES = 25
+
+// Dependency/build/vendor dirs whose package.json files must never be bumped.
+const PKG_PATH_IGNORE_RE =
+  /(^|\/)(node_modules|dist|build|out|\.next|\.turbo|\.output|coverage|vendor|\.git)\//
 
 interface ScanResult {
   allBumps: BumpEntry[]
@@ -135,14 +145,38 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
 
     const latestVersions = await fetchAllLatestVersions()
 
+    // Discover every package.json in the repo via one recursive Git Trees call,
+    // filtering out dependency/build dirs. Falls back silently to the fixed
+    // candidates if the tree can't be fetched (huge/truncated tree, 409 empty
+    // repo, permission edge cases) so discovery can only ever add coverage,
+    // never remove it.
+    const discoverPackageJsonPaths = async (ref: string): Promise<string[]> => {
+      const treeRes = await ghFetchOptional(
+        `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
+        { headers: baseHeaders },
+      )
+      if (!treeRes || typeof treeRes !== 'object') return []
+      const tree = (treeRes as { tree?: Array<{ path?: string; type?: string }> }).tree
+      if (!Array.isArray(tree)) return []
+      return tree
+        .filter((e) => e?.type === 'blob' && typeof e.path === 'string')
+        .map((e) => e.path as string)
+        .filter((p) => /(^|\/)package\.json$/.test(p) && !PKG_PATH_IGNORE_RE.test(p))
+    }
+
     // Scan every candidate package.json on a given ref and compute the bumps
     // needed to reach the latest npm versions. Reused for both the default
     // branch (the canonical plan) and an existing upgrade branch (to decide
-    // whether that branch needs refreshing).
+    // whether that branch needs refreshing). Fixed candidates stay first so the
+    // root package.json remains the primary observation bump.
     const scanForBumps = async (ref: string): Promise<ScanResult> => {
       const allBumps: BumpEntry[] = []
       const filesToCommit: FileChange[] = []
-      for (const pkgPath of PKG_PATH_CANDIDATES.slice(0, MAX_PKG_FILES)) {
+      const discovered = await discoverPackageJsonPaths(ref)
+      const pkgPaths = Array.from(
+        new Set([...FIXED_PKG_PATH_CANDIDATES, ...discovered]),
+      ).slice(0, MAX_PKG_FILES)
+      for (const pkgPath of pkgPaths) {
         const fileRes = await ghFetchOptional(
           `https://api.github.com/repos/${owner}/${repo}/contents/${pkgPath}?ref=${encodeURIComponent(ref)}`,
           { headers: baseHeaders },

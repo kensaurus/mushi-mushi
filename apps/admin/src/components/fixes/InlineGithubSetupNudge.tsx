@@ -39,7 +39,7 @@ export function InlineGithubSetupNudge({ isGithubMissing }: Props) {
       <button
         type="button"
         onClick={() => setDismissed(true)}
-        className="shrink-0 rounded-sm px-1 text-danger hover:bg-danger-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/50"
+        className="shrink-0 rounded-sm px-1 text-danger hover:bg-danger-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50"
         aria-label="Dismiss GitHub setup nudge"
       >
         ✕

@@ -42,7 +42,7 @@ const HEADERS: Record<string, string> = {
 
 const EXPECTED_OUTCOME_JSON_SCHEMA = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://mushimushi.dev/schemas/expected-outcome-2.0.json',
+  $id: 'https://kensaur.us/mushi-mushi/schemas/expected-outcome-2.0.json',
   title: 'Mushi Mushi Expected Outcome (whitepaper §2.10)',
   type: 'object',
   description:
@@ -94,7 +94,7 @@ const EXPECTED_OUTCOME_JSON_SCHEMA = {
 
 const FIX_CONTEXT_JSON_SCHEMA = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://mushimushi.dev/schemas/fix-context-2.0.json',
+  $id: 'https://kensaur.us/mushi-mushi/schemas/fix-context-2.0.json',
   title: 'Mushi Mushi FixContext',
   type: 'object',
   required: ['reportId', 'projectId', 'report', 'reproductionSteps', 'relevantCode', 'config'],
@@ -175,7 +175,7 @@ const FIX_CONTEXT_JSON_SCHEMA = {
         pageId: { type: 'string' },
         storyId: { type: 'string' },
         storyTitle: { type: 'string' },
-        expectedOutcome: { $ref: 'https://mushimushi.dev/schemas/expected-outcome-2.0.json' },
+        expectedOutcome: { $ref: 'https://kensaur.us/mushi-mushi/schemas/expected-outcome-2.0.json' },
       },
     },
     config: {
@@ -192,7 +192,7 @@ const FIX_CONTEXT_JSON_SCHEMA = {
 
 const FIX_RESULT_JSON_SCHEMA = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://mushimushi.dev/schemas/fix-result-2.0.json',
+  $id: 'https://kensaur.us/mushi-mushi/schemas/fix-result-2.0.json',
   title: 'Mushi Mushi FixResult',
   type: 'object',
   required: ['success', 'branch', 'filesChanged', 'linesChanged', 'summary'],
@@ -209,7 +209,7 @@ const FIX_RESULT_JSON_SCHEMA = {
 
 const SANDBOX_PROVIDER_JSON_SCHEMA = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://mushimushi.dev/schemas/sandbox-provider-2.0.json',
+  $id: 'https://kensaur.us/mushi-mushi/schemas/sandbox-provider-2.0.json',
   title: 'Mushi Mushi SandboxProvider contract',
   description:
     'A pluggable sandbox provider — first-party Mushi ships e2b / modal / cloudflare / local-noop; third parties may register any string id via @mushi-mushi/agents#registerSandboxProvider.',

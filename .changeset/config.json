@@ -15,6 +15,9 @@
     "@mushi-mushi/admin",
     "@mushi-mushi/docs",
     "@mushi-mushi/testers",
-    "@mushi-mushi/e2e-dogfood"
+    "@mushi-mushi/e2e-dogfood",
+    "@mushi-mushi/marketing-ui",
+    "@mushi-mushi/codebase-graph",
+    "mushi-mushi-vscode"
   ]
 }

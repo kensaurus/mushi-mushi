@@ -1,0 +1,202 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kensaur.us/mushi-mushi/schemas/fix-context-2.0.json",
+  "title": "Mushi Mushi FixContext",
+  "type": "object",
+  "required": [
+    "reportId",
+    "projectId",
+    "report",
+    "reproductionSteps",
+    "relevantCode",
+    "config"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "projectId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "report": {
+      "type": "object",
+      "required": [
+        "description",
+        "category",
+        "severity"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "component": {
+          "type": "string"
+        },
+        "rootCause": {
+          "type": "string"
+        },
+        "bugOntologyTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reproductionSteps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "relevantCode": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "componentTag": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sentryAnalysis": {
+      "type": "object",
+      "properties": {
+        "issueUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "rootCause": {
+          "type": "string"
+        }
+      }
+    },
+    "graphContext": {
+      "type": "object",
+      "properties": {
+        "relatedBugs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "summary",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "blastRadius": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "nodeType",
+              "label"
+            ],
+            "properties": {
+              "nodeType": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "inventoryAction": {
+      "type": "object",
+      "description": "Spec-traceability anchor recovered from the reports_against graph edge. Whitepaper §2.10.",
+      "required": [
+        "actionNodeId",
+        "actionLabel"
+      ],
+      "properties": {
+        "actionNodeId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "actionLabel": {
+          "type": "string"
+        },
+        "actionDescription": {
+          "type": "string"
+        },
+        "pagePath": {
+          "type": "string"
+        },
+        "pageId": {
+          "type": "string"
+        },
+        "storyId": {
+          "type": "string"
+        },
+        "storyTitle": {
+          "type": "string"
+        },
+        "expectedOutcome": {
+          "$ref": "https://kensaur.us/mushi-mushi/schemas/expected-outcome-2.0.json"
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": [
+        "maxLines",
+        "scopeRestriction",
+        "repoUrl"
+      ],
+      "properties": {
+        "maxLines": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scopeRestriction": {
+          "type": "string",
+          "enum": [
+            "component",
+            "directory",
+            "none"
+          ]
+        },
+        "repoUrl": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

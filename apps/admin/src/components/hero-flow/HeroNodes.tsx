@@ -291,7 +291,7 @@ function NodeShell({
             }}
             aria-expanded={expanded}
             aria-label={expanded ? `Collapse ${kindLabel}` : `Expand ${kindLabel} for more detail`}
-            className="nodrag ml-auto inline-flex h-4 w-4 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay motion-safe:transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="nodrag ml-auto inline-flex h-4 w-4 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           >
             <span aria-hidden className={`inline-block text-xs motion-safe:transition-transform ${expanded ? 'rotate-180' : ''}`}>
               ▾
@@ -463,7 +463,7 @@ function VerifyInner({ data }: NodeProps) {
             data-hero-verify
             to={node.verify.to}
             onClick={(e) => e.stopPropagation()}
-            className="hero-proof-link nodrag inline-flex w-full items-center justify-center gap-1 rounded-sm border border-ok/40 bg-surface-overlay px-2.5 py-1 text-2xs font-semibold text-ok hover:bg-ok-muted motion-safe:transition-all"
+            className="hero-proof-link nodrag inline-flex w-full items-center justify-center gap-1 rounded-sm border border-ok/40 bg-surface-overlay px-2.5 py-1 text-2xs font-semibold text-ok hover:bg-ok-muted motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]"
           >
             View proof <IconArrowRight size={11} aria-hidden className="motion-safe:transition-transform group-hover/hero:translate-x-0.5" />
           </Link>
@@ -502,7 +502,7 @@ function HeroCta({
           {...testHook}
           to={cta.to}
           onClick={stop}
-          className={`hero-cta-primary nodrag items-center gap-1.5 rounded-sm px-3 py-1.5 text-2xs font-bold motion-safe:transition-all hover:gap-2 ${widthClass} ${ctaPrimaryClass(tone, actionTitle ?? cta.label)}`}
+          className={`hero-cta-primary nodrag items-center gap-1.5 rounded-sm px-3 py-1.5 text-2xs font-bold motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] hover:gap-2 ${widthClass} ${ctaPrimaryClass(tone, actionTitle ?? cta.label)}`}
         >
           <span className="truncate">{cta.label}</span>
           <IconArrowRight size={12} aria-hidden className="shrink-0 motion-safe:transition-transform group-hover:translate-x-0.5" />

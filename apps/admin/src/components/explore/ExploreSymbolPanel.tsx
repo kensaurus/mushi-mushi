@@ -243,7 +243,7 @@ export function ExploreSymbolPanel({
               </span>
               <div className="flex-1 h-1 rounded-full bg-surface-overlay overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-all"
+                  className="h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity]"
                   style={{ width: `${complexity.pct}%`, backgroundColor: complexity.color }}
                 />
               </div>

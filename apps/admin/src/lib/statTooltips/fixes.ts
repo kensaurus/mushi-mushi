@@ -6,16 +6,22 @@
 import type { MetricTooltipData } from '../../components/ui'
 import type { FixesStats } from '../../components/fixes/FixesStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'
+import type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
+type Opts = PlainStatTooltipOpts
 
 function inFlightCount(stats: FixesStats): number {
   return stats.inProgress + stats.inflightDispatches
 }
 
-export function totalAttemptsTooltip(stats: FixesStats): MetricTooltipData {
+export function totalAttemptsTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltipData {
+  const plain = opts.plainLanguage ?? false
   const takeaway =
     stats.totalAttempts > 0
       ? `${stats.totalAttempts} fix attempt${stats.totalAttempts === 1 ? '' : 's'} dispatched in 30d.${stats.successRatePct != null ? ` Success rate: ${stats.successRatePct}%.` : ''} Open Pipeline for stage breakdown.`
-      : 'No fix attempts in the last 30 days — dispatch from a triaged report once GitHub and codebase index are wired.'
+      : plain
+        ? 'No fix attempts in the last 30 days — dispatch from a reviewed report once GitHub and codebase index are wired.'
+        : 'No fix attempts in the last 30 days — dispatch from a triaged report once GitHub and codebase index are wired.'
 
   return metricTip(
     'All fix-worker dispatches in the rolling last 30 days.',
@@ -51,7 +57,8 @@ export function completedDetail(stats: FixesStats): string {
   return stats.successRatePct != null ? `${stats.successRatePct}% success` : 'no finished runs'
 }
 
-export function failedTooltip(stats: FixesStats): MetricTooltipData {
+export function failedTooltip(stats: FixesStats, opts: Opts = {}): MetricTooltipData {
+  const plain = opts.plainLanguage ?? false
   const top =
     stats.topFailureCategory && stats.topFailureCount > 0
       ? `Most common: ${stats.topFailureCategory} (${stats.topFailureCount}×).`
@@ -60,7 +67,9 @@ export function failedTooltip(stats: FixesStats): MetricTooltipData {
   const takeaway =
     stats.failed > 0
       ? `${stats.failed} attempt${stats.failed === 1 ? '' : 's'} failed in 30d. ${top} Inspect the timeline and retry after fixing root cause.`
-      : 'No failed fix attempts in 30d — the pipeline is clean or has not run yet.'
+      : plain
+        ? 'No failed fix attempts in 30d — fix drafts are clean or have not run yet.'
+        : 'No failed fix attempts in 30d — the pipeline is clean or has not run yet.'
 
   return metricTip(
     'Fix attempts that ended in failed status in the last 30 days.',

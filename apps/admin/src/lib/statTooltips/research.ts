@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Research RESEARCH SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { ResearchStats } from '../../components/research/ResearchStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

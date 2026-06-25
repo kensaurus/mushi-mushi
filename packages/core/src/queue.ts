@@ -482,7 +482,9 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
 
     const tryFlush = () => {
       if (navigator.onLine) {
-        flush(client).catch(() => {});
+        flush(client).catch((err) => {
+          queueLog.warn('Offline queue auto-flush failed', { err: String(err) });
+        });
       }
     };
 

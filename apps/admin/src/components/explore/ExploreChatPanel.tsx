@@ -311,7 +311,7 @@ export function ExploreChatPanel({
                   autoFocus
                   value={renameDraft}
                   onChange={(e) => setRenameDraft(e.target.value)}
-                  className="flex-1 min-w-0 text-2xs rounded border border-edge-subtle bg-surface-raised px-1.5 py-1 text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+                  className="flex-1 min-w-0 text-2xs rounded border border-edge-subtle bg-surface-raised px-1.5 py-1 text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
                   maxLength={200}
                 />
                 <button
@@ -440,7 +440,7 @@ export function ExploreChatPanel({
               placeholder="Ask about auth, API routes, tests…"
               rows={2}
               disabled={loading}
-              className="flex-1 text-sm rounded-md border border-edge-subtle bg-surface-root px-3 py-2 text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 resize-none min-h-[44px]"
+              className="flex-1 text-sm rounded-md border border-edge-subtle bg-surface-root px-3 py-2 text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 resize-none min-h-[44px]"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()

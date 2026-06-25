@@ -1,6 +1,11 @@
 # mushi-android
 
-Native Android (Kotlin) SDK for [Mushi Mushi](https://mushimushi.dev) — the
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Android native bridge for Capacitor and React Native hosts.
+
+
+Native Android (Kotlin) SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the
 open-source, LLM-driven bug intake, classification, and autofix platform.
 
 > **Status**: V0.4.0 Feature parity with the web SDK.
@@ -115,7 +120,7 @@ window, and shake detection uses sensors that don't require user consent.
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID from Mushi admin |
 | `apiKey`               | _required_                           | Public ingest key (`mush_pk_...`) |
-| `endpoint`             | `https://api.mushimushi.dev`         | Override for self-hosting |
+| `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`          | `SHAKE`                              | `SHAKE` / `BUTTON` / `BOTH` / `NONE` |
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |
 | `captureBreadcrumbs`   | `true`                               | Hooked when Sentry bridge is installed |

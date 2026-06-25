@@ -303,7 +303,7 @@ export function AskMushiComposer({
         rows={2}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full resize-none bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40 disabled:opacity-60"
+        className="w-full resize-none bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 focus-visible:border-brand/40 disabled:opacity-60"
       />
     </div>
   )

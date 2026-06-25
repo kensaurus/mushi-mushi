@@ -125,6 +125,26 @@ export const MUSHI_TAGLINE = {
  * surface that needs to say "this is genuinely open." Keep the claims true —
  * if the self-host path or license split changes, change it here first.
  */
+/**
+ * Verified production URLs — single source of truth for listings, SDK defaults,
+ * docs generators, and CI guards. Do not point cold discovery at unverified
+ * `*.mushimushi.dev` hosts. See docs/marketing/canonical-urls.md.
+ */
+export const MUSHI_CANONICAL_URLS = {
+  home: 'https://kensaur.us/mushi-mushi',
+  docs: 'https://kensaur.us/mushi-mushi/docs',
+  admin: 'https://kensaur.us/mushi-mushi/admin',
+  connect: 'https://kensaur.us/mushi-mushi/docs/connect',
+  mcpQuickstart: 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp',
+  api: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  mcp: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp',
+  mcpLean:
+    'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs',
+  hostedMcp: 'https://kensaur.us/mushi-mushi/hosted-mcp/',
+  schemaBase: 'https://kensaur.us/mushi-mushi/schemas',
+  repo: 'https://github.com/kensaurus/mushi-mushi',
+}
+
 export const MUSHI_OSS = {
   /** Trust strip — one line, README/landing/docs. */
   trustStrip: 'MIT-licensed SDKs · self-hostable · no second LLM key',

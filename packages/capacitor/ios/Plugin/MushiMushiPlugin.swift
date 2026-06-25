@@ -20,7 +20,7 @@ public class MushiMushiPlugin: CAPPlugin {
             return
         }
 
-        let endpoint = call.getString("endpoint") ?? "https://api.mushimushi.dev"
+        let endpoint = call.getString("endpoint") ?? "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api"
         let captureScreenshot = call.getBool("captureScreenshot") ?? true
         let minDescriptionLength = call.getInt("minDescriptionLength") ?? 20
         let triggerStr = call.getString("triggerMode") ?? "shake"

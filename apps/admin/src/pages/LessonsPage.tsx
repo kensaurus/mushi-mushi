@@ -464,7 +464,7 @@ function QuerySimTab() {
           value={diffText}
           onChange={(e) => setDiffText(e.target.value)}
           placeholder="Paste a PR diff, file contents, or description of the change..."
-          className="w-full h-40 px-3 py-2 text-sm font-mono border border-edge rounded-lg bg-surface-root text-fg resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+          className="w-full h-40 px-3 py-2 text-sm font-mono border border-edge rounded-lg bg-surface-root text-fg resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         />
       </div>
 
@@ -477,7 +477,7 @@ function QuerySimTab() {
             type="number"
             value={maxTokens}
             onChange={(e) => setMaxTokens(Math.min(8000, Math.max(100, parseInt(e.target.value) || 3000)))}
-            className="w-24 px-2 py-1 text-sm border border-edge rounded bg-surface-root text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="w-24 px-2 py-1 text-sm border border-edge rounded bg-surface-root text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           />
         </div>
         <Btn loading={loading} onClick={handleQuery}>

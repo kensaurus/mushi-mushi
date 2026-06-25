@@ -92,7 +92,7 @@ export function StageDrawer({
         type="button"
         aria-label="Close drawer"
         onClick={onClose}
-        className="absolute inset-0 bg-overlay/70 backdrop-blur-[2px] focus:outline-none"
+        className="absolute inset-0 bg-overlay/70 backdrop-blur-[2px] focus-visible:outline-none"
       />
       <aside
         ref={panelRef}

@@ -5,7 +5,7 @@
  */
 
 import type { ReactNode, RefObject } from 'react'
-import { FilterSelect } from '../ui'
+import { FilterSelect, Input, FILTER_SELECT_CLASS } from '../ui'
 import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
 import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
 
@@ -101,14 +101,16 @@ export function ReportsFilterBar({
   return (
     <div className="mb-3 space-y-2">
       <div className="flex flex-wrap gap-2 items-center">
-        <input
+        <Input
           ref={searchInputRef}
-          type="text"
+          type="search"
           placeholder="Search summary or description… (/)"
           value={searchInput}
           onChange={(e) => onSearchInputChange(e.target.value)}
+          name="reports-search"
+          autoComplete="off"
           aria-label="Search reports"
-          className="w-64 bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
+          className="w-64"
         />
         <FilterSelect
           label="Status"
@@ -128,31 +130,37 @@ export function ReportsFilterBar({
           options={FILTER_OPTIONS.severities}
           onChange={(e) => onSetFilter('severity', e.currentTarget.value)}
         />
-        <select
-          value={platform}
-          onChange={(e) => onSetFilter('platform', e.currentTarget.value)}
-          aria-label="Filter by platform"
-          className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
-        >
-          <option value="">All platforms</option>
-          <option value="ios">iOS</option>
-          <option value="android">Android</option>
-          <option value="web">Web</option>
-          <option value="macos">macOS</option>
-          <option value="windows">Windows</option>
-        </select>
-        <select
-          value={sdkPackage}
-          onChange={(e) => onSetFilter('sdkPackage', e.currentTarget.value)}
-          aria-label="Filter by SDK"
-          className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
-        >
-          <option value="">All SDKs</option>
-          <option value="@mushi-mushi/web">Web</option>
-          <option value="@mushi-mushi/react">React</option>
-          <option value="@mushi-mushi/react-native">React Native</option>
-          <option value="@mushi-mushi/capacitor">Capacitor</option>
-        </select>
+        <label className="inline-flex flex-col gap-0.5">
+          <span className="sr-only">Platform</span>
+          <select
+            value={platform}
+            onChange={(e) => onSetFilter('platform', e.currentTarget.value)}
+            aria-label="Filter by platform"
+            className={FILTER_SELECT_CLASS}
+          >
+            <option value="">All platforms</option>
+            <option value="ios">iOS</option>
+            <option value="android">Android</option>
+            <option value="web">Web</option>
+            <option value="macos">macOS</option>
+            <option value="windows">Windows</option>
+          </select>
+        </label>
+        <label className="inline-flex flex-col gap-0.5">
+          <span className="sr-only">SDK</span>
+          <select
+            value={sdkPackage}
+            onChange={(e) => onSetFilter('sdkPackage', e.currentTarget.value)}
+            aria-label="Filter by SDK"
+            className={FILTER_SELECT_CLASS}
+          >
+            <option value="">All SDKs</option>
+            <option value="@mushi-mushi/web">Web</option>
+            <option value="@mushi-mushi/react">React</option>
+            <option value="@mushi-mushi/react-native">React Native</option>
+            <option value="@mushi-mushi/capacitor">Capacitor</option>
+          </select>
+        </label>
         {savedViews ? (
           <div className="flex flex-wrap items-center gap-1 min-w-0">{savedViews}</div>
         ) : null}

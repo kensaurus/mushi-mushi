@@ -75,8 +75,6 @@ const ALLOWED_ADMIN_ORIGINS = new Set<string>(
     DEFAULT_ADMIN_ORIGIN,
     'https://kensaur.us',
     'https://www.kensaur.us',
-    'https://admin.mushimushi.dev',
-    'https://app.mushimushi.dev',
     'http://localhost:6464',
     'http://127.0.0.1:6464',
     'http://localhost:5173',

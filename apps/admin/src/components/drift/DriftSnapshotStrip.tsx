@@ -21,6 +21,7 @@ import {
   warnOpenTooltip,
 } from '../../lib/statTooltips/drift'
 import { driftLinks } from '../../lib/statCardLinks'
+import { usePlainStatTooltips } from '../../lib/usePlainStatTooltips'
 
 interface Props {
   stats: DriftStats
@@ -39,6 +40,8 @@ export function DriftSnapshotStrip({
   hint,
   statLabels,
 }: Props) {
+  const plainOpts = usePlainStatTooltips()
+
   return (
     <Section title={sectionTitle} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
       {hint ? <SnapshotSectionHint text={hint} /> : null}
@@ -47,7 +50,7 @@ export function DriftSnapshotStrip({
           label={statLabels?.openFindings ?? 'Open findings'}
           value={stats.openFindings}
           accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'}
-          tooltip={openFindingsTooltip(stats)}
+          tooltip={openFindingsTooltip(stats, plainOpts)}
           detail={openFindingsDetail(stats)}
           to={driftLinks.openFindings}
         />
@@ -55,8 +58,8 @@ export function DriftSnapshotStrip({
           label={statLabels?.critical ?? 'Critical'}
           value={stats.criticalOpen}
           accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'}
-          tooltip={criticalOpenTooltip(stats)}
-          detail={criticalOpenDetail()}
+          tooltip={criticalOpenTooltip(stats, plainOpts)}
+          detail={criticalOpenDetail(plainOpts)}
           to={driftLinks.critical}
         />
         <StatCard

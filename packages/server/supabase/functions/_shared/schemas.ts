@@ -99,7 +99,10 @@ export const reportSubmissionSchema = z.object({
     payload: z.record(z.unknown()),
   })).optional(),
 
-  screenshotDataUrl: z.string().optional(),
+  screenshotDataUrl: z
+    .string()
+    .max(2_100_000, 'Screenshot data URL exceeds maximum size (~1.5 MB decoded)')
+    .optional(),
   selectedElement: z.any().optional(),
   /** rrweb / lite rolling-buffer events (compressed server-side). */
   replayEvents: z.array(z.record(z.unknown())).max(500).optional(),

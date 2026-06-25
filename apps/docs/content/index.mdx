@@ -3,7 +3,16 @@ title: Mushi Mushi — know why your AI-built app broke, with the fix ready
 description: Your AI shipped it. Mushi tells you why it broke — a plain-English diagnosis and a ready-to-apply fix, right in your editor. Standalone, open source, Sentry optional.
 ---
 
-import { Callout } from 'nextra/components'
+import {
+  LANDING_HERO,
+  LANDING_SIXTY_SECOND,
+  LANDING_MEDIA_INTRO,
+  LANDING_WHAT_THIS_IS,
+  LANDING_WHERE_TO_START_INTRO,
+  LANDING_QUICKSTART_INTRO,
+  LANDING_COMPARISON_ROWS,
+  LANDING_OPERATOR,
+} from '@/lib/landing-copy'
 
 {/* The EditorialHero IS the page H1 — do NOT add a markdown `# Mushi Mushi`
     above it or we ship two competing page titles (NN/g #4 + screen-reader
@@ -14,9 +23,9 @@ import { Callout } from 'nextra/components'
     it must stay indexable and carry north-star copy in the prerendered HTML. */}
 
 <EditorialHero
-  eyebrow="The comprehension layer for AI-built apps"
+  eyebrow={LANDING_HERO.eyebrow}
   title={<>Your AI wrote it. Mushi tells you <em>why it broke.</em></>}
-  lead={<>Plain-English diagnosis + a ready-to-apply fix, right inside Cursor and Claude Code — so a bug costs you five minutes, not your whole afternoon. Standalone. No Sentry required.</>}
+  lead={LANDING_HERO.lead}
 />
 
 <OssTrustStrip />
@@ -27,37 +36,33 @@ import { Callout } from 'nextra/components'
 npx mushi-mushi
 ```
 
-The wizard auto-detects your framework, installs the right SDK, writes env vars, and prints the snippet. When something breaks: the bug lands in your queue, Mushi produces **the diagnosis** (plain-English root cause + fix), and you pull it into your editor over MCP.
+{LANDING_SIXTY_SECOND.intro} {LANDING_SIXTY_SECOND.afterBreak}
 
 ```bash
 npx mushi-mushi setup --ide cursor    # then ask Cursor: "what's broken in prod?"
 ```
 
-**No monitoring stack required.** Self-host in under five minutes, or use the free hosted tier — 50 diagnoses / month, no card.
+**{LANDING_SIXTY_SECOND.pricing}**
 
 ## See it in action
 
-Admin console tour, SDK dogfood on glot.it, and theme-aware stills — click any frame to open the live surface.
+{LANDING_MEDIA_INTRO}
 
 <DocsMediaShowcase />
 
 ## What this is (and is not)
 
-- **Built for the solo vibe coder** who ships fast with AI and loses afternoons when prod breaks in code they did not fully write.
-- **Editor-native.** The answer comes to Cursor / Claude Code over MCP — not another dashboard to go read.
-- **Not an enterprise monitoring stack.** Standalone first; Sentry enrichment is the upgrade reveal, never the front door.
+{LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
 ## Where to start
 
-Pick the path that matches what you are doing right now — each card links to the right next step.
+{LANDING_WHERE_TO_START_INTRO}
 
 <WhereToStartGrid />
 
-## Try it — incident loop first
+## Try it
 
-<Callout type="info">
-  **Today:** classification in seconds + MCP fix brief. **Target:** sub-10-second diagnosis. See the [incident loop quickstart](/quickstart/incident-loop).
-</Callout>
+{LANDING_QUICKSTART_INTRO}
 
 <QuickstartGrid />
 
@@ -65,16 +70,7 @@ Pick the path that matches what you are doing right now — each card links to t
 
 <ComparisonTable
   foil="Sentry alone"
-  rows={[
-    { label: 'What it sees',            foil: 'Errors your code throws',                mushi: 'Friction your users feel' },
-    { label: 'What lands in your queue',foil: 'A stack trace',                          mushi: 'A short user note plus the screenshot they were looking at' },
-    { label: 'Repeat bugs',             foil: 'Each one shows up as a new issue',       mushi: 'The same broken button collapses to one row' },
-    { label: 'Institutional memory',    foil: 'None — the next dev repeats the mistake',mushi: 'Rules encoded in .mushi/lessons.json and injected into every PR' },
-    { label: 'Closing the loop',        foil: 'Assign a ticket and remember to update', mushi: 'An optional draft PR you can merge or ignore' },
-    { label: 'Reporter attribution',    foil: 'Anonymous',                              mushi: '"Fixed by Kenji" in the changelog; SDK toast on next session' },
-    { label: 'From your IDE',           foil: 'Copy the issue ID into Cursor',          mushi: 'Cursor reads the report + relevant lessons and proposes the diff' },
-    { label: 'Where it runs',           foil: 'Their cloud',                            mushi: 'Yours, ours, or both' },
-  ]}
+  rows={LANDING_COMPARISON_ROWS}
 />
 
 ## What happens after a user reports something
@@ -84,8 +80,6 @@ Pick the path that matches what you are doing right now — each card links to t
 See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
 sequence diagram and component-by-component spec.
 
-## Running this for a team?
+## {LANDING_OPERATOR.question}
 
-Operator-grade depth — adapters, plugins, inventory gates, SSO, audit — lives in
-**[docs/operators](https://github.com/kensaurus/mushi-mushi/tree/master/docs/operators)** on GitHub.
-The front door stays on the wedge; the platform story never leads.
+Deeper setup (SSO, audit, adapters) lives in **[docs/operators](https://github.com/kensaurus/mushi-mushi/tree/master/docs/operators)** on GitHub — the landing page stays on the solo-founder wedge.

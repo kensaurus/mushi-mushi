@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_104 configuration knobs across 19 sections · last regenerated 2026-06-24._
+_104 configuration knobs across 19 sections · last regenerated 2026-06-25._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -55,15 +55,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.general.slack_webhook_url`
 
-**Summary** — Mushi posts new high-severity reports and weekly digests to this Slack webhook.
+**Summary** — Posts new high-severity reports and weekly digests to this Slack webhook.
 
-**How it works** — When a report exits triage at severity ≥ high (or via the weekly summary cron), the notifier fires a single POST against this URL with a formatted Slack Block Kit payload. Leave blank to disable Slack delivery without affecting in-app notifications.
+**How it works** — When a report is classified at high severity or above (or via the weekly summary cron), Mushi sends a formatted Slack message to this URL. Leave blank to disable Slack delivery without affecting in-app notifications.
 
 **Default** — `unset (Slack disabled)`
 
 **Where it lives** — table `project_settings.slack_webhook_url` · endpoint `PATCH /v1/admin/settings` · read by `notify-slack edge function`
 
-**When to change** — Set this on day 1 if your team triages from Slack. Rotate it whenever the channel owner changes — webhooks don't expire, so a stale URL keeps posting until you replace it.
+**When to change** — Set this on day 1 if your team reviews bugs from Slack. Rotate it whenever the channel owner changes — webhooks don't expire, so a stale URL keeps posting until you replace it.
 
 ### Sentry DSN
 
@@ -113,13 +113,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Turn off temporarily when piloting Sentry on a noisy public app — re-enable once you're happy with the volume and your routing rules are in place.
 
-### Stage 2 Model
+### Classification model
 
 <a id="settings-general-stage2-model"></a>
 
 `settings.general.stage2_model`
 
-**Summary** — The LLM that classifies reports after Stage 1 fast-filter passes them through.
+**Summary** — Which LLM writes the plain-English read on each report after noise is filtered out.
 
 **How it works** — Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 4.6 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.
 
@@ -131,13 +131,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
-### Stage 1 Confidence Threshold
+### Noise filter confidence
 
 <a id="settings-general-stage1-confidence-threshold"></a>
 
 `settings.general.stage1_confidence_threshold`
 
-**Summary** — How sure the fast-filter must be that a report is junk before it auto-rejects it.
+**Summary** — How confident Mushi must be that a report is spam or test noise before dropping it.
 
 **How it works** — Every inbound report runs through Stage 1 (Haiku 4.5). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).
 
@@ -171,9 +171,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.general.fix_branch_template`
 
-**Summary** — Naming pattern for the Git branch the fix-worker creates when it opens a draft PR.
+**Summary** — Branch name pattern when Mushi opens a draft fix PR on GitHub.
 
-**How it works** — When the fix orchestrator opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.
+**How it works** — When auto-fix opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.
 
 **Default** — `mushi/fix/{date}-{category}-{shortId}`
 
@@ -191,9 +191,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.byok.anthropic_key`
 
-**Summary** — BYOK key powering Stage 1 fast-filter, Stage 2 classifier, vision analysis, and the LLM fix agent.
+**Summary** — Your Anthropic key — used to read bugs in plain English and draft fixes. Stored encrypted; only a vault reference is saved in settings.
 
-**How it works** — Stored in Supabase Vault — only a `vault://<id>` reference lives in `project_settings`. Every LLM call resolves the key at request time, so rotation is instant. When unset, the pipeline falls back to the platform default (if your plan includes one).
+**How it works** — When set, bug reading and fix drafting bill your Anthropic account instead of platform credits. The key is stored encrypted in Supabase Vault — rotation is instant. When unset, Mushi falls back to the platform default (if your plan includes one). Powers fast-filter, classify-report, and fix-worker.
 
 **Default** — `unset (uses platform default)`
 
@@ -209,9 +209,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.byok.openai_key`
 
-**Summary** — BYOK key for the OpenAI-compatible fallback path (and OpenRouter / Together / Fireworks gateways).
+**Summary** — Your OpenAI-compatible key — backup when Anthropic is down, and for judge scoring. Works with OpenRouter and other gateways via Base URL.
 
-**How it works** — Used as the automatic failover when Anthropic 5xxs, and as the judge fallback in the autofix loop. Pair with the Base URL preset chips below to route the same key through any OpenAI-compatible gateway without code changes.
+**How it works** — Used as automatic failover when Anthropic returns 5xx, and as the judge fallback in the autofix loop. Pair with the Base URL preset chips below to route the same key through any OpenAI-compatible gateway without code changes.
 
 **Default** — `unset (failover disabled)`
 
@@ -245,9 +245,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `settings.firecrawl.api_key`
 
-**Summary** — BYOK key for the optional web-research provider. Used by Research, fix-augmentation, and the library modernizer.
+**Summary** — Your Firecrawl key — lets Mushi look up docs and release notes while reviewing a bug or drafting a fix.
 
-**How it works** — Stored in Supabase Vault. When set, three flows light up: the Research page can crawl arbitrary URLs during triage; the fix-worker pulls the top-3 web snippets when local RAG is sparse; a weekly cron scrapes release notes for outdated dependencies and files modernization reports.
+**How it works** — When set, Research can crawl URLs during review; auto-fix pulls web snippets when local context is thin; a weekly cron checks dependency release notes. Stored encrypted in Vault. Leave unset to skip web research entirely.
 
 **Default** — `unset (web research disabled)`
 
@@ -333,7 +333,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — The UUID your SDK and CLI use as MUSHI_PROJECT_ID — copy from the chip or the post-create success panel.
 
-**How it works** — Every ingest and MCP call scopes to this id. The CLI wizard accepts UUID or proj_* slug form; the console always displays the UUID. Click the chip on Projects to copy — paste into `mushi init`, `mushi connect`, or `.env.local`.
+**How it works** — Every report send and MCP call scopes to this id. The CLI wizard accepts UUID or proj_* slug form; the console always displays the UUID. Click the chip on Projects to copy — paste into `mushi init`, `mushi connect`, or `.env.local`.
 
 **Default** — `auto-generated on create`
 
@@ -359,23 +359,23 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `projects.api_key_scope`
 
-**Summary** — Picks the capability bundle a freshly minted API key gets — SDK ingest, MCP read, or MCP read + write.
+**Summary** — Chooses what a new API key can do — send bugs from your app, read reports in your editor, or both read and write.
 
-**How it works** — Each preset maps to one or more raw scopes stored on `project_api_keys.scopes`. Edge functions check the scope before serving the call, so a leaked SDK key can't suddenly start mutating state. Mirror of the check constraint in migration `20260421003000_api_key_scopes.sql`.
+**How it works** — Each preset maps to scopes stored on the key — edge functions check scope before serving the call, so a leaked SDK key can't mutate state. SDK send-only = report submission. MCP read = browse reports in Cursor. MCP read + write = dispatch fixes from the editor.
 
-**Default** — `SDK ingest (report:write only)`
+**Default** — `SDK send-only (report:write only)`
 
 **Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `report-ingest edge function`, `mcp server (@mushi-mushi/mcp)`
 
-**When to change** — Pick `SDK ingest` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse triage. Only pick `MCP read + write` for trusted local clients with an audit trail.
+**When to change** — Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.
 
-### Key scope: report:write
+### Key scope: report submission
 
 <a id="projects-key-scope-report-write"></a>
 
 `projects.key_scope.report_write`
 
-**Summary** — Allows the API key to ingest new reports via the public report endpoint.
+**Summary** — Lets the API key send new bug reports from your app.
 
 **How it works** — Required for the SDK to submit user-reported bugs. Without this scope, `POST /v1/reports` returns 403. Safe to ship in browser bundles — the Edge Function rate-limits per IP and validates payload shape before storing anything.
 
@@ -399,7 +399,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `project_api_keys.scopes (jsonb)` · endpoint `POST /v1/admin/projects/{id}/keys` · read by `mcp server (@mushi-mushi/mcp)`
 
-**When to change** — Grant on keys you paste into Claude Desktop / Cursor / Cline so the LLM can read your triage queue. Pair with `mcp:write` only if you want the LLM to mutate state.
+**When to change** — Grant on keys you paste into Claude Desktop / Cursor / Cline so the LLM can read your reports inbox. Pair with `mcp:write` only if you want the LLM to mutate state.
 
 ### Key scope: mcp:write
 
@@ -431,7 +431,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `auth.users / user_profile.active_project_id` · endpoint `PATCH /v1/admin/me/active-project` · read by `every admin API endpoint`
 
-**When to change** — Switch when triaging across multiple apps. For SSO orgs, ask the workspace owner to scope your invite so the picker only shows projects you should see.
+**When to change** — Switch when reviewing bugs across multiple apps. For SSO orgs, ask the workspace owner to scope your invite so the picker only shows projects you should see.
 
 ## Integrations
 
@@ -547,7 +547,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `platform_integrations.config.github_repo_url` · endpoint `PUT /v1/admin/integrations/github` · read by `fix-worker edge function`
 
-**When to change** — Set when you graduate from "triage only" to "Mushi opens PRs". Typically the production repo, not a sandbox.
+**When to change** — Set when you graduate from "review only" to "Mushi opens PRs". Typically the production repo, not a sandbox.
 
 ### GitHub default branch
 
@@ -707,7 +707,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `routing_destinations.config.token` · endpoint `POST /v1/admin/routing` · read by `route-to-github-issues edge function`
 
-**When to change** — Use when you want a public-facing changelog of triaged bugs without exposing your code repo.
+**When to change** — Use when you want a public-facing changelog of reviewed bugs without exposing your code repo.
 
 ### GitHub Issues owner
 
@@ -981,7 +981,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `compliance.retention.events_days`
 
-**Summary** — How long pipeline events (LLM calls, ingest spans, fix attempts) are retained for analytics.
+**Summary** — How long AI step events (LLM calls, report spans, fix attempts) are retained for analytics.
 
 **How it works** — Drives the rollup tables that power the Health page. Events older than this window are dropped; aggregated rollups (hourly/daily) survive longer because they're much smaller.
 
@@ -1101,7 +1101,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `prompt-lab.stage`
 
-**Summary** — Picks which step of the LLM pipeline you're editing prompts for — Stage 1 fast-filter, Stage 2 classifier, fix-worker, or judge.
+**Summary** — Picks which AI step you're editing prompts for — fast-filter, classifier, fix-worker, or judge.
 
 **How it works** — Each stage has its own active prompt id. Switching tabs scopes every action below (create new version, set traffic split, replay) to that stage's prompts only — they don't cross-pollinate.
 
@@ -1229,7 +1229,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `all`
 
-**When to change** — Switch to "flagged only" when investigating a suspected attack pattern. Switch back when you're reviewing the regular triage queue.
+**When to change** — Switch to "flagged only" when investigating a suspected attack pattern. Switch back when you're reviewing the regular bug queue.
 
 ### Aggregate identical reports
 
@@ -1259,7 +1259,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Where it lives** — table `reports.flag_reason` · endpoint `PATCH /v1/admin/reports/{id}/flag` · read by `anti-gaming dashboard`, `audit log`
 
-**When to change** — Always fill it in — "flagged with no reason" is the ticket the next person on rotation can't triage.
+**When to change** — Always fill it in — "flagged with no reason" is the ticket the next person on rotation can't review.
 
 ## Notifications
 
@@ -1277,7 +1277,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `unread`
 
-**When to change** — Stay on `unread` for daily triage. Flip to `all` when looking for a specific notification you saw last week.
+**When to change** — Stay on `unread` for daily review. Flip to `all` when looking for a specific notification you saw last week.
 
 ### Type filter
 
@@ -1373,7 +1373,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — One-line summary of your support request — appears as the email subject line.
 
-**How it works** — Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so triage doesn't bounce it back asking for clarification.
+**How it works** — Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn't bounce it back asking for clarification.
 
 **Default** — `empty`
 
@@ -1387,7 +1387,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `billing.support_category`
 
-**Summary** — Triage hint that routes the ticket to the right team — billing, plan change, refund, technical, other.
+**Summary** — Category that routes your support ticket to the right team — billing, plan change, refund, technical, or other.
 
 **How it works** — The category is appended to the ticket body and used by the support inbox's automation to assign the right responder. Wrong category just means a slower first response, not a lost ticket.
 
@@ -1661,7 +1661,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `react`
 
-**When to change** — Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://docs.mushimushi.dev/migrations/capacitor-to-react-native.
+**When to change** — Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native.
 
 ## Settings → Page-aware assistant
 
@@ -1675,7 +1675,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Adds an "Ask" tab to the SDK widget so users get answers about your app, grounded only in the page they're on and the knowledge you author.
 
-**How it works** — When on, GET /v1/sdk/config returns the assistant block and the widget renders the tab. Each question hits POST /v1/sdk/assistant, which grounds the LLM in the published page context plus your knowledge corpus — it never reads user rows, source, or env. Uses your project BYOK key (Anthropic primary, OpenAI fallback) and logs every turn.
+**How it works** — Turns on an Ask tab in the widget when enabled. Each question hits POST /v1/sdk/assistant, which grounds answers in the published page context plus your knowledge corpus — it never reads user rows, source, or env. Uses your project LLM key (Anthropic primary, OpenAI fallback) and logs every turn.
 
 **Default** — `false (off)`
 

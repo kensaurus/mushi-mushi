@@ -382,9 +382,9 @@ export const stripeFromEnv = (): StripeConfig => ({
   fixesMeterEventName: Deno.env.get('STRIPE_METER_FIXES_EVENT_NAME') ?? 'mushi_fixes_succeeded',
   diagnosesMeterEventName: Deno.env.get('STRIPE_METER_DIAGNOSES_EVENT_NAME') ?? 'mushi_diagnoses',
   defaultPriceId: Deno.env.get('STRIPE_DEFAULT_PRICE_ID') ?? Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? '',
-  successUrl: Deno.env.get('STRIPE_SUCCESS_URL') ?? 'https://app.mushimushi.dev/billing/success',
-  cancelUrl: Deno.env.get('STRIPE_CANCEL_URL') ?? 'https://app.mushimushi.dev/billing/cancel',
-  portalReturnUrl: Deno.env.get('STRIPE_PORTAL_RETURN_URL') ?? 'https://app.mushimushi.dev/settings/billing',
+  successUrl: Deno.env.get('STRIPE_SUCCESS_URL') ?? 'https://kensaur.us/mushi-mushi/admin/billing/success',
+  cancelUrl: Deno.env.get('STRIPE_CANCEL_URL') ?? 'https://kensaur.us/mushi-mushi/admin/billing/cancel',
+  portalReturnUrl: Deno.env.get('STRIPE_PORTAL_RETURN_URL') ?? 'https://kensaur.us/mushi-mushi/admin/settings/billing',
 })
 
 // ----------------------------------------------------------------

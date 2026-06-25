@@ -175,7 +175,7 @@ function hintBadges(spec: ToolSpec) {
     chips.push({
       label: 'destructive',
       tone: 'bg-danger-muted text-danger border border-danger/30',
-      title: 'Can remove data from triage queues. Confirm every call.',
+      title: 'Can remove data from report queues. Confirm every call.',
     })
   }
   if (spec.hints.idempotent) {
@@ -706,7 +706,7 @@ export function McpPage() {
           title={copy?.title ?? 'MCP'}
           description={
             copy?.description ??
-            'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue.'
+            'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live bug queue.'
           }
           helpTitle={copy?.help?.title ?? 'About MCP'}
           helpWhatIsIt={
@@ -1180,7 +1180,7 @@ export function McpPage() {
                       value={detectText}
                       onChange={(e) => setDetectText(e.target.value)}
                       placeholder={'{\n  "workspaces": ["apps/*", "packages/*"],\n  ...\n}'}
-                      className="w-full h-28 font-mono text-2xs bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand resize-y placeholder:text-fg-faint"
+                      className="w-full h-28 font-mono text-2xs bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand resize-y placeholder:text-fg-faint"
                       spellCheck={false}
                     />
                     <div className="flex gap-2">
@@ -1360,7 +1360,7 @@ export function McpPage() {
                   </Btn>
                 </div>
                 <textarea
-                  className="w-full min-h-32 rounded-sm border border-edge-subtle bg-surface px-3 py-2 font-mono text-2xs text-fg-secondary outline-none focus:border-brand"
+                  className="w-full min-h-32 rounded-sm border border-edge-subtle bg-surface px-3 py-2 font-mono text-2xs text-fg-secondary outline-none focus-visible:border-brand"
                   value={mcpJsonDraft}
                   onChange={(event) => setMcpJsonDraft(event.target.value)}
                   placeholder="Paste your ~/.cursor/mcp.json block here..."
@@ -1486,7 +1486,7 @@ export function McpPage() {
                   <ContainedBlock tone="muted" className="mt-2">
                     <p className="text-xs text-fg-muted leading-relaxed">
                       The MCP connects <em>your coding agent</em> to Mushi. The SDK connects
-                      <em> real users in your app</em> so their bug reports flow into the triage queue.
+                      <em> real users in your app</em> so their bug reports flow into your reports inbox.
                       Use a <strong>report:write</strong> key for the SDK — never your MCP key.
                     </p>
                   </ContainedBlock>

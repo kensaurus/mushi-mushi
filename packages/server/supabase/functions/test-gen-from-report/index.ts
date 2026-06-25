@@ -17,6 +17,8 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
 import { STAGE2_FALLBACK, STAGE2_MODEL } from '../_shared/models.ts'
 import { logAudit } from '../_shared/audit.ts'
+import { createTrace } from '../_shared/observability.ts'
+import { tagLangfuseTrace } from '../_shared/sentry.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -384,6 +386,9 @@ async function handler(req: Request): Promise<Response> {
       : STAGE2_MODEL
 
   let generated: TestGenOutput
+  const trace = createTrace('test-gen-from-report', { projectId, reportId })
+  tagLangfuseTrace(trace.id)
+  const llmSpan = trace.span('generate-test')
   try {
     const { result } = await withAnthropicOrOpenAi(
       db,
@@ -415,7 +420,11 @@ async function handler(req: Request): Promise<Response> {
       },
     )
     generated = result
+    llmSpan.end({ model: modelId })
+    await trace.end()
   } catch (err) {
+    llmSpan.end({ model: modelId, error: err instanceof Error ? err.message : String(err) })
+    await trace.end().catch(() => {})
     // Capture the raw error for the logs, but return a static, non-revealing
     // message to the client (CodeQL js/stack-trace-exposure).
     const detail = err instanceof Error ? err.message : String(err)

@@ -47,6 +47,7 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../../_shared/mcp-server-card.ts';
 
 export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variables }>): void {
   app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', region: currentRegion() }));
@@ -94,8 +95,8 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
         'LLM-driven bug intake, classification, and autofix agent. Accepts user-reported bugs, ' +
         'classifies them via a two-stage pipeline, and ships fixes through sandboxed agentic workflows.',
       version: '2.0.0',
-      publisher: { name: 'Mushi Mushi', url: 'https://mushimushi.dev' },
-      documentation: 'https://docs.mushimushi.dev/api/agent-card',
+      publisher: { name: 'Mushi Mushi', url: 'https://kensaur.us/mushi-mushi' },
+      documentation: 'https://kensaur.us/mushi-mushi/docs/api/agent-card',
       capabilities: {
         streaming: {
           protocol: 'agui',
@@ -166,7 +167,7 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
         fixResult: `${apiBase}/v1/schemas/fix-result.json`,
         sandboxProvider: `${apiBase}/v1/schemas/sandbox-provider.json`,
         expectedOutcome: `${apiBase}/v1/schemas/expected-outcome.json`,
-        inventory: 'https://mushimushi.dev/schemas/inventory-2.0.json',
+        inventory: 'https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json',
       },
       contact: {
         email: 'kensaurus@gmail.com',
@@ -187,6 +188,15 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
     return new Response(JSON.stringify(buildAgentCard(c.req.raw), null, 2), {
       status: 200,
       headers: AGENT_CARD_HEADERS,
+    });
+  });
+
+  // Smithery / SEP-1649 static metadata when hosted MCP scan is blocked by auth.
+  app.get('/.well-known/mcp/server-card.json', (c) => {
+    void c;
+    return new Response(JSON.stringify(buildMcpServerCard(), null, 2), {
+      status: 200,
+      headers: MCP_SERVER_CARD_HEADERS,
     });
   });
 
@@ -234,7 +244,7 @@ export function registerPostRegionDiscoveryRoutes(app: Hono<{ Variables: Variabl
           scopes: ['ingest:reports'],
         },
       ],
-      documentation: 'https://docs.mushimushi.dev/api/auth',
+      documentation: 'https://kensaur.us/mushi-mushi/docs/api/auth',
       generatedAt: new Date().toISOString(),
     };
     return new Response(JSON.stringify(manifest, null, 2), {

@@ -39,6 +39,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { logLlmInvocation } from '../_shared/telemetry.ts'
+import { createTrace } from '../_shared/observability.ts'
 import { ANTHROPIC_HAIKU } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
@@ -149,6 +150,7 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
   // Resolve the managed system prompt from prompt_versions (stage 'sentinel').
   // Falls back to the hardcoded SENTINEL_SYSTEM_PROMPT constant when no row exists.
   const { promptTemplate: managedSystemPrompt } = await getPromptForStage(db, projectId, 'sentinel')
+  const trace = createTrace('sentinel-audit', { projectId, testFile: test.file, testName: test.name })
 
   try {
     const { object: result, usage } = await generateObject({
@@ -169,6 +171,7 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
       inputTokens: usage?.promptTokens,
       outputTokens: usage?.completionTokens,
       keySource: resolved?.source ?? 'env',
+      langfuseTraceId: trace.id,
     })
 
     await db.from('sentinel_verdicts').upsert({
@@ -199,6 +202,7 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
       errorMessage: String(err),
       latencyMs: Date.now() - start,
       keySource: resolved?.source ?? 'env',
+      langfuseTraceId: trace.id,
     })
     rlog.error('sentinel LLM failed', { test: `${test.file}::${test.name}`, err: String(err) })
     return { verdict: 'rejected', reasoning: 'sentinel-audit failed; defaulting to rejected', cached: false }

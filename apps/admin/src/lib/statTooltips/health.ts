@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Health HEALTH SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { HealthStats } from '../../components/health/HealthStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

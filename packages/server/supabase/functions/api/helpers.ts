@@ -430,6 +430,11 @@ export async function ingestReport(
   let replayPath: string | null = null;
 
   if (report.screenshotDataUrl) {
+    const screenshotBytes = new TextEncoder().encode(report.screenshotDataUrl).length;
+    const MAX_SCREENSHOT_DATA_URL_BYTES = 1_500_000 * 4 / 3 + 100; // align with client 1.5 MB decoded cap
+    if (screenshotBytes > MAX_SCREENSHOT_DATA_URL_BYTES) {
+      return { ok: false, error: 'Screenshot exceeds maximum allowed size' };
+    }
     try {
       const base64Data = report.screenshotDataUrl.split(',')[1];
       if (base64Data) {
@@ -935,7 +940,11 @@ async function checkCircuitBreaker(db: ReturnType<typeof getServiceClient>): Pro
 
     if (!totalCount || totalCount < 5) return true;
     return (failedCount ?? 0) / totalCount < 0.5;
-  } catch {
+  } catch (err) {
+    log.warn('circuit_breaker_check_failed', {
+      err: err instanceof Error ? err.message : String(err),
+      action: 'fail_open',
+    });
     return true;
   }
 }

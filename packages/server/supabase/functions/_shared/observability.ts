@@ -1,6 +1,26 @@
 import { log } from './logger.ts'
+import { reportError } from './sentry.ts'
+import { scrubPii } from './pii-scrubber.ts'
 
 const traceLog = log.child('trace')
+
+function sanitizeTraceMetadata(metadata?: TraceMetadata): TraceMetadata | undefined {
+  if (!metadata) return metadata
+  const out: TraceMetadata = {}
+  for (const [key, value] of Object.entries(metadata)) {
+    out[key] = typeof value === 'string' ? scrubPii(value) : value
+  }
+  return out
+}
+
+function onLangfuseIngestFailure(context: string, err: unknown): void {
+  traceLog.warn('Langfuse ingestion failed', { context, err: String(err) })
+  if (isConfigured()) {
+    reportError(err instanceof Error ? err : new Error(String(err)), {
+      tags: { langfuse: 'ingestion', context },
+    })
+  }
+}
 
 interface TraceMetadata {
   reportId?: string
@@ -67,6 +87,7 @@ async function langfuseApi(path: string, body: Record<string, unknown>): Promise
 export function createTrace(name: string, metadata?: TraceMetadata): Trace {
   const traceId = crypto.randomUUID()
   const startTime = new Date().toISOString()
+  const safeMetadata = sanitizeTraceMetadata(metadata)
 
   if (isConfigured()) {
     langfuseApi('/ingestion', {
@@ -77,11 +98,11 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
         body: {
           id: traceId,
           name,
-          metadata,
+          metadata: safeMetadata,
           timestamp: startTime,
         },
       }],
-    }).catch(() => {})
+    }).catch((err) => onLangfuseIngestFailure('trace-create', err))
   }
 
   function span(spanName: string): Span {
@@ -136,7 +157,9 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
             })
           }
 
-          langfuseApi('/ingestion', { batch: events }).catch(() => {})
+          langfuseApi('/ingestion', { batch: events }).catch((err) =>
+            onLangfuseIngestFailure(`span:${spanName}`, err),
+          )
         }
 
         traceLog.info('Span completed', {
@@ -177,7 +200,7 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
           timestamp: new Date().toISOString(),
           body: {
             id: traceId,
-            metadata: { ...metadata, completedAt: new Date().toISOString() },
+            metadata: { ...safeMetadata, completedAt: new Date().toISOString() },
           },
         }],
       })

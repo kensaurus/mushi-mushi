@@ -76,7 +76,7 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
         <div className="flex flex-col items-stretch gap-1.5 md:items-end shrink-0">
           <Link
             to={focus.cta.to}
-            className="inline-flex items-center justify-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-sm font-semibold text-brand-fg shadow-card hover:bg-brand-hover hover:shadow-raised motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            className="inline-flex items-center justify-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-sm font-semibold text-brand-fg shadow-card hover:bg-brand-hover hover:shadow-raised motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           >
             {focus.cta.label}
             <span aria-hidden="true">→</span>

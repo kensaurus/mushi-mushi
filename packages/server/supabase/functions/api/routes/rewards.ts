@@ -519,7 +519,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       .single()
 
     const cfg = stripeFromEnv()
-    const returnUrl = Deno.env.get('APP_URL') ?? 'https://app.mushimushi.dev'
+    const returnUrl = Deno.env.get('APP_URL') ?? 'https://kensaur.us/mushi-mushi/admin'
 
     let stripeAccountId: string
     let kycStatus: string

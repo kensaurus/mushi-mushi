@@ -598,7 +598,7 @@ export function NotificationsPage() {
                   <Btn size="sm">Open Settings</Btn>
                 </Link>
                 <Btn variant="ghost" size="sm" onClick={() => navigate('/reports')}>
-                  View triage queue
+                  View bug queue
                 </Btn>
               </div>
             </Card>

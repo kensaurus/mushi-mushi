@@ -19,16 +19,16 @@ import type { ExpectedOutcome, FixContext, FixResult } from './types.js'
 describe('Agent JSON Schemas (2026-05-09 audit)', () => {
   it('publishes draft-07 schemas with stable $ids', () => {
     expect(EXPECTED_OUTCOME_JSON_SCHEMA.$id).toBe(
-      'https://mushimushi.dev/schemas/expected-outcome-2.0.json',
+      'https://kensaur.us/mushi-mushi/schemas/expected-outcome-2.0.json',
     )
     expect(FIX_CONTEXT_JSON_SCHEMA.$id).toBe(
-      'https://mushimushi.dev/schemas/fix-context-2.0.json',
+      'https://kensaur.us/mushi-mushi/schemas/fix-context-2.0.json',
     )
     expect(FIX_RESULT_JSON_SCHEMA.$id).toBe(
-      'https://mushimushi.dev/schemas/fix-result-2.0.json',
+      'https://kensaur.us/mushi-mushi/schemas/fix-result-2.0.json',
     )
     expect(SANDBOX_PROVIDER_JSON_SCHEMA.$id).toBe(
-      'https://mushimushi.dev/schemas/sandbox-provider-2.0.json',
+      'https://kensaur.us/mushi-mushi/schemas/sandbox-provider-2.0.json',
     )
   })
 

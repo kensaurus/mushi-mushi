@@ -122,7 +122,12 @@ async function recordUsage(db: SupabaseClient, projectId: string): Promise<void>
 }
 
 function isHostAllowed(url: string, allowedDomains: string[]): boolean {
-  if (allowedDomains.length === 0) return true
+  if (allowedDomains.length === 0) {
+    // Fail-closed in production: require explicit allowlist before crawling.
+    const env = Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production'
+    if (env === 'production') return false
+    return true
+  }
   try {
     const host = new URL(url).hostname.toLowerCase()
     return allowedDomains.some((d) => {

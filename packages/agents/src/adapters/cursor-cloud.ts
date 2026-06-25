@@ -68,7 +68,7 @@ export class CursorCloudAgent implements FixAgent {
   constructor(private readonly cfg: CursorCloudAgentConfig) {}
 
   async generateFix(context: FixContext): Promise<FixResult> {
-    const branch = `mushi/cursor-cloud-${context.reportId.slice(0, 8)}`
+    const branch = `bugfix/MUSHI-${context.reportId}-cursor-cloud`
 
     if (!this.cfg.apiKey) {
       return failedResult(
@@ -233,7 +233,7 @@ function buildPromptFromReport(ctx: FixContext): string {
     ``,
     `## Instructions`,
     `1. Fix only the bug described above. Do NOT refactor, rename, or change unrelated code.`,
-    `2. Create a branch named \`mushi/cursor-cloud-${ctx.reportId.slice(0, 8)}\`.`,
+    `2. Create a branch named \`bugfix/MUSHI-${ctx.reportId}-cursor-cloud\`.`,
     `3. Open a draft PR with the fix. Include a brief description of what changed and why.`,
     `4. Do not add new dependencies unless strictly necessary.`,
   )

@@ -350,7 +350,8 @@ function UpdateCenter({ project, preflight }: { project: ProjectRow; preflight: 
           <Link to="/integrations/config">
             <Btn size="md" variant="ghost" className="gap-2">
               <IconGit className="h-4 w-4" aria-hidden />
-              Connect GitHub
+              Connect GitHub in Integrations
+              <IconArrowRight className="h-4 w-4" aria-hidden />
             </Btn>
           </Link>
         )}
@@ -436,12 +437,43 @@ function GithubConnectionCard({
           <Link to={githubCheck?.fixHref ?? '/integrations/config'}>
             <Btn size="sm" variant="ghost" className="gap-1.5 shrink-0">
               <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
-              Connect
+              Set up in Integrations
+              <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Btn>
           </Link>
         )}
       </div>
     </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sticky in-page section nav — deep-links to anchor IDs below.
+// ---------------------------------------------------------------------------
+const CONNECT_SECTIONS = [
+  { id: 'connect-studio', label: 'Studio' },
+  { id: 'connect-github', label: 'GitHub' },
+  { id: 'connect-sdk', label: 'SDK' },
+  { id: 'connect-native-ci', label: 'Native CI' },
+  { id: 'connect-update', label: 'Update' },
+] as const
+
+function ConnectSectionNav() {
+  return (
+    <nav
+      aria-label="Connect page sections"
+      className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 border-b border-edge-subtle bg-surface/95 px-1 py-2 backdrop-blur-sm supports-[backdrop-filter]:bg-surface/80"
+    >
+      {CONNECT_SECTIONS.map((section) => (
+        <a
+          key={section.id}
+          href={`#${section.id}`}
+          className="rounded-sm px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+        >
+          {section.label}
+        </a>
+      ))}
+    </nav>
   )
 }
 
@@ -631,10 +663,15 @@ export function ConnectPage() {
         ]}
       />
 
+      <ConnectSectionNav />
+
+      <div id="connect-studio" className="scroll-mt-chrome">
       <ConnectStudio
         projectId={project?.id ?? activeProjectId}
         projectName={project?.name}
       />
+
+      </div>
 
       <ConnectRelatedRail projectId={project?.id ?? activeProjectId} />
 
@@ -662,6 +699,7 @@ export function ConnectPage() {
       {/* ---------------------------------------------------------------- */}
       {/* 1. GitHub connect                                                 */}
       {/* ---------------------------------------------------------------- */}
+      <div id="connect-github" className="scroll-mt-chrome">
       <Section
         title="GitHub"
         action={
@@ -682,10 +720,12 @@ export function ConnectPage() {
           fallbackRepoUrl={fallbackGithubRepoUrl}
         />
       </Section>
+      </div>
 
       {/* ---------------------------------------------------------------- */}
       {/* 2. Install SDK                                                    */}
       {/* ---------------------------------------------------------------- */}
+      <div id="connect-sdk" className="scroll-mt-chrome">
       <Section title="Bug capture SDK">
         <SectionDescription>
           Add the Mushi SDK to your app so users can report bugs in one tap.
@@ -720,6 +760,7 @@ export function ConnectPage() {
           <ProjectFallbackNote card pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
         )}
       </Section>
+      </div>
 
       {/* ---------------------------------------------------------------- */}
       {/* 2b. Native CI secrets diagnostic (only for native SDK projects)  */}
@@ -733,6 +774,7 @@ export function ConnectPage() {
         )
         if (!isNativeProject && project) return null
         return (
+          <div id="connect-native-ci" className="scroll-mt-chrome">
           <Section title="Native app CI secrets">
             <SectionDescription>
               For Capacitor, Expo, and React Native builds, Mushi env vars must be baked in at
@@ -748,6 +790,7 @@ export function ConnectPage() {
               <ProjectFallbackNote card pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
             )}
           </Section>
+          </div>
         )
       })()}
 
@@ -759,6 +802,7 @@ export function ConnectPage() {
       {/* ---------------------------------------------------------------- */}
       {/* 5. Update center                                                  */}
       {/* ---------------------------------------------------------------- */}
+      <div id="connect-update" className="scroll-mt-chrome">
       <Section title="Update center">
         <SectionDescription>
           Keep the Mushi SDK up to date in your connected repository. A one-click PR bumps only
@@ -774,6 +818,7 @@ export function ConnectPage() {
           </div>
         </Card>
       </Section>
+      </div>
       </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
+import { assertSafeOutboundUrl } from './inventory-guards.ts'
 
 const pluginLog = log.child('plugins')
 
@@ -590,6 +591,22 @@ async function deliverOne(
   let status: 'ok' | 'error' | 'timeout' = 'error'
   let httpStatus: number | null = null
   let excerpt = ''
+
+  const safeUrl = assertSafeOutboundUrl(plugin.webhook_url, {})
+  if (!safeUrl.ok) {
+    try {
+      await db.from('plugin_dispatch_log').insert({
+        delivery_id: deliveryId,
+        project_id: projectId,
+        plugin_slug: plugin.plugin_slug,
+        event,
+        status: 'error',
+        response_excerpt: (safeUrl.reason ?? 'unsafe_url').slice(0, RESPONSE_EXCERPT_MAX),
+        payload_digest: digest,
+      })
+    } catch { /* dispatch log is best-effort */ }
+    return
+  }
 
   try {
     const controller = new AbortController()

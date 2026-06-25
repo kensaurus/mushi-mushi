@@ -2,7 +2,17 @@
 title: React Native quickstart
 ---
 
+import { Callout } from 'nextra/components'
+import { QUICKSTART_ONE_KEY_CALLOUT } from '@/lib/public-copy'
+
 # React Native quickstart
+
+Add a shake-to-report button to your iOS or Android app — same API key powers
+the widget and your editor tools.
+
+<Callout type="info">
+  {QUICKSTART_ONE_KEY_CALLOUT}
+</Callout>
 
 Works for **bare React Native CLI** apps and **Expo** apps (managed-with-dev-client
 or bare). Targets React Native 0.82+ with the New Architecture.
@@ -70,8 +80,6 @@ If nothing arrives:
 - Confirm `<MushiProvider>` is at the **root** of the component tree, above
   any `NavigationContainer`.
 - iOS release builds must use HTTPS for the Mushi endpoint (the default).
-
-import { Callout } from 'nextra/components'
 
 <Callout type="info">
   Pure-native shells should use the [iOS](/quickstart/ios) or

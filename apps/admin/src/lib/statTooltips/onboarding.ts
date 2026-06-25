@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Onboarding setup snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { OnboardingStats } from '../../components/onboarding/types'
 import { metricTip } from '../metricTooltipBuilder'

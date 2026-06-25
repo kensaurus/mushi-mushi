@@ -10,6 +10,10 @@ import { join } from 'node:path'
 export type FrameworkId =
   | 'next'
   | 'react'
+  | 'cra'
+  | 'remix'
+  | 'astro'
+  | 'solid'
   | 'vue'
   | 'nuxt'
   | 'svelte'
@@ -43,6 +47,10 @@ export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 export const FRAMEWORK_IDS: ReadonlyArray<FrameworkId> = [
   'next',
   'react',
+  'cra',
+  'remix',
+  'astro',
+  'solid',
   'vue',
   'nuxt',
   'svelte',
@@ -98,6 +106,90 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </MushiProvider>
 )`,
+  },
+  cra: {
+    id: 'cra',
+    label: 'Create React App',
+    packageName: '@mushi-mushi/react',
+    needsWebPackage: false,
+    // CRA inlines only REACT_APP_*-prefixed vars into process.env at build time.
+    snippet: () => `// src/index.tsx
+import { MushiProvider } from '@mushi-mushi/react'
+
+root.render(
+  <MushiProvider config={{
+    projectId: process.env.REACT_APP_MUSHI_PROJECT_ID,
+    apiKey: process.env.REACT_APP_MUSHI_API_KEY,
+  }}>
+    <App />
+  </MushiProvider>
+)`,
+  },
+  remix: {
+    id: 'remix',
+    label: 'Remix',
+    packageName: '@mushi-mushi/react',
+    needsWebPackage: false,
+    // Remix doesn't inline client env. Expose public values at runtime via the
+    // root loader + window.ENV (works on both the classic compiler and Vite).
+    snippet: () => `// app/root.tsx
+import { MushiProvider } from '@mushi-mushi/react'
+import { useLoaderData } from '@remix-run/react'
+
+export async function loader() {
+  return { ENV: {
+    MUSHI_PROJECT_ID: process.env.MUSHI_PROJECT_ID,
+    MUSHI_API_KEY: process.env.MUSHI_API_KEY,
+  } }
+}
+
+export default function App() {
+  const { ENV } = useLoaderData<typeof loader>()
+  return (
+    <html>
+      <body>
+        <MushiProvider config={{ projectId: ENV.MUSHI_PROJECT_ID, apiKey: ENV.MUSHI_API_KEY }}>
+          <Outlet />
+        </MushiProvider>
+        <Scripts />
+      </body>
+    </html>
+  )
+}`,
+  },
+  astro: {
+    id: 'astro',
+    label: 'Astro',
+    packageName: '@mushi-mushi/web',
+    needsWebPackage: false,
+    // Astro exposes only PUBLIC_*-prefixed vars to client code (Vite-based).
+    snippet: () => `---
+// src/layouts/Layout.astro (add this <script> once, e.g. in your base layout)
+---
+<script>
+  import { Mushi } from '@mushi-mushi/web'
+  Mushi.init({
+    projectId: import.meta.env.PUBLIC_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.PUBLIC_MUSHI_API_KEY,
+  })
+</script>`,
+  },
+  solid: {
+    id: 'solid',
+    label: 'Solid',
+    packageName: '@mushi-mushi/web',
+    needsWebPackage: false,
+    // Solid / SolidStart are Vite-based → VITE_*-prefixed client env.
+    snippet: () => `// src/index.tsx (or src/app.tsx for SolidStart)
+import { onMount } from 'solid-js'
+import { Mushi } from '@mushi-mushi/web'
+
+onMount(() => {
+  Mushi.init({
+    projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+  })
+})`,
   },
   vue: {
     id: 'vue',
@@ -331,10 +423,20 @@ export function detectFramework(cwd: string, pkg: PackageJson | null): Framework
   if (deps.has('@angular/core')) return FRAMEWORKS.angular
   if (deps.has('expo')) return FRAMEWORKS.expo
   if (deps.has('react-native')) return FRAMEWORKS['react-native']
+  // Meta-frameworks that bundle React/Vue/Solid islands — detect before the
+  // bare react/vue/solid deps they ship with.
+  if (deps.has('@remix-run/react') || deps.has('@remix-run/node') || deps.has('@remix-run/serve')) {
+    return FRAMEWORKS.remix
+  }
+  if (deps.has('astro')) return FRAMEWORKS.astro
+  if (deps.has('@solidjs/start') || deps.has('solid-js')) return FRAMEWORKS.solid
   if (deps.has('@capacitor/core') && deps.has('react')) return FRAMEWORKS.react
   if (deps.has('@capacitor/core')) return FRAMEWORKS.capacitor
   if (deps.has('svelte')) return FRAMEWORKS.svelte
   if (deps.has('vue')) return FRAMEWORKS.vue
+  // Create React App ships React + react-scripts and needs the REACT_APP_
+  // env prefix — detect before plain react (which assumes a Vite bundler).
+  if (deps.has('react-scripts')) return FRAMEWORKS.cra
   if (deps.has('react')) return FRAMEWORKS.react
   // Server-side frameworks — detected after client frameworks so a Next.js
   // app that incidentally has `express` in devDependencies (for testing) is
@@ -351,6 +453,12 @@ export function detectFramework(cwd: string, pkg: PackageJson | null): Framework
   }
   if (existsSync(join(cwd, 'svelte.config.js'))) return FRAMEWORKS.svelte
   if (existsSync(join(cwd, 'angular.json'))) return FRAMEWORKS.angular
+  if (existsSync(join(cwd, 'remix.config.js')) || existsSync(join(cwd, 'remix.config.ts'))) {
+    return FRAMEWORKS.remix
+  }
+  if (existsSync(join(cwd, 'astro.config.mjs')) || existsSync(join(cwd, 'astro.config.ts')) || existsSync(join(cwd, 'astro.config.js'))) {
+    return FRAMEWORKS.astro
+  }
 
   return FRAMEWORKS.vanilla
 }
@@ -397,8 +505,10 @@ export function envVarsToWrite(
       endpointLine,
     ].filter(Boolean).join('\n')
   }
-  // React Native bare workflow: bare MUSHI_* names, read via dotenv/babel plugin
-  if (framework.id === 'react-native') {
+  // React Native bare workflow + Remix: bare MUSHI_* names. RN reads them via
+  // dotenv/babel; Remix exposes the public values to the client at runtime via
+  // the root loader + window.ENV (it does not inline a prefixed build-time var).
+  if (framework.id === 'react-native' || framework.id === 'remix') {
     return [
       `MUSHI_PROJECT_ID=${projectId}`,
       `MUSHI_API_KEY=${apiKey}`,
@@ -413,7 +523,16 @@ export function envVarsToWrite(
       endpointLine ? `EXPO_PUBLIC_${endpointLine}` : null,
     ].filter(Boolean).join('\n')
   }
-  const prefix = framework.id === 'next' ? 'NEXT_PUBLIC_' : framework.id === 'nuxt' ? 'NUXT_PUBLIC_' : 'VITE_'
+  // Build-time inlined client env. CRA only exposes REACT_APP_*; Astro only
+  // exposes PUBLIC_* (Vite); Next/Nuxt use their framework prefixes; everything
+  // else Vite-based (React, Vue, Svelte(Kit), Angular, Capacitor, Solid,
+  // vanilla) uses VITE_.
+  const prefix =
+    framework.id === 'next' ? 'NEXT_PUBLIC_'
+    : framework.id === 'nuxt' ? 'NUXT_PUBLIC_'
+    : framework.id === 'cra' ? 'REACT_APP_'
+    : framework.id === 'astro' ? 'PUBLIC_'
+    : 'VITE_'
   return [
     `${prefix}MUSHI_PROJECT_ID=${projectId}`,
     `${prefix}MUSHI_API_KEY=${apiKey}`,

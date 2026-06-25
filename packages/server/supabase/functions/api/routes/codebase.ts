@@ -82,16 +82,27 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
         413,
       );
     }
+    const normalizedPath = body.filePath.replace(/\\/g, '/');
+    if (
+      normalizedPath.includes('\0') ||
+      normalizedPath.startsWith('/') ||
+      normalizedPath.includes('..')
+    ) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PATH', message: 'filePath must be a relative repo path' } },
+        400,
+      );
+    }
 
     const { chunk, shouldIndex, sha256Hex } = await import('../../_shared/code-indexer.ts');
     const { createEmbedding } = await import('../../_shared/embeddings.ts');
 
-    if (!shouldIndex(body.filePath)) {
+    if (!shouldIndex(normalizedPath)) {
       return c.json({ ok: true, chunks: 0, skipped: 'unsupported_extension' });
     }
 
     const db = getServiceClient();
-    const chunks = chunk(body.filePath, body.source);
+    const chunks = chunk(normalizedPath, body.source);
     let inserted = 0;
     for (const ch of chunks) {
       try {

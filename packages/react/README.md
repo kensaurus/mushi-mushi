@@ -2,7 +2,7 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-React / Next.js SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — the closed-loop bug intelligence layer that turns every user-felt friction point into institutional memory.
+React / Next.js SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — the comprehension layer for AI-built apps. When your app breaks, Mushi tells you why in plain English, with the fix ready to paste, right inside your editor.
 
 > **One-command setup:** `npx mushi-mushi` auto-detects React / Next.js and installs this package with the right env vars and prefix (`NEXT_PUBLIC_`, `VITE_`, etc.).
 >
@@ -111,4 +111,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
