@@ -1,26 +1,10 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
-    "highlights": [
-      {
-        "title": "ReDoS fix in MCP branding",
-        "description": "`mcpIconUrl()` now trims trailing slashes with a linear character scan instead of the `/\\/+$/` regex, which degraded to quadratic backtracking on a long all-slash input (CodeQL `js/polynomial-redos`). The returned icon URL is unchanged."
-      },
-      {
-        "title": "Crypto-strong session ids",
-        "description": "the SDK now derives its session correlation id from the WebCrypto capability ladder (CSPRNG) the same way `newUuid()` does, instead of `Math.random()` — falling back to `Math.random` only on runtimes without WebCrypto. Resolves CodeQL `js/insecure-randomness`; a session id is a correlation identifier, not a secret, so behaviour is unchanged. `@mushi-mushi/web` is bumped because its `<script>`-tag global loader inlines `@mushi-mushi/core` and must be rebuilt to ship the fix."
-      }
-    ],
-    "packages": []
-  },
-  {
     "majorMinor": "1.22",
     "headline": null,
     "pending": false,
     "versions": [
+      "1.22.1",
       "1.22.0"
     ],
     "highlights": [
@@ -64,11 +48,11 @@
     "packages": [
       {
         "name": "@mushi-mushi/core",
-        "version": "1.22.0"
+        "version": "1.22.1"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.22.0"
+        "version": "1.22.1"
       }
     ]
   },
@@ -1128,7 +1112,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.17.0"
+        "version": "0.17.1"
       }
     ]
   },
