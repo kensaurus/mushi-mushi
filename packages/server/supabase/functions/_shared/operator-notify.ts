@@ -89,7 +89,10 @@ export async function notifyOperator(args: NotifyArgs): Promise<number> {
 }
 
 async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
-  if (!url.includes(SLACK_HOST)) {
+  // Compare the parsed host, not a substring (js/incomplete-url-substring-
+  // sanitization): `url.includes('hooks.slack.com')` also matches hostile
+  // hosts like `hooks.slack.com.evil.test` or `evil.test/hooks.slack.com`.
+  if (safeHost(url) !== SLACK_HOST) {
     opLog.warn('slack_url_host_mismatch', { host: safeHost(url) })
   }
 
