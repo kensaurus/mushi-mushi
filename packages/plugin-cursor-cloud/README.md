@@ -1,5 +1,10 @@
 # @mushi-mushi/plugin-cursor-cloud
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+
+
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/plugin-cursor-cloud)](https://www.npmjs.com/package/@mushi-mushi/plugin-cursor-cloud)
 [![license](https://img.shields.io/npm/l/@mushi-mushi/plugin-cursor-cloud)](./LICENSE)
 [![types](https://img.shields.io/npm/types/@mushi-mushi/plugin-cursor-cloud)](./src/index.ts)
@@ -143,4 +148,4 @@ MIT — see [LICENSE](./LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

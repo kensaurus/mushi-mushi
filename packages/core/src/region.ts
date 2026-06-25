@@ -16,9 +16,9 @@
 export type MushiRegion = 'us' | 'eu' | 'jp' | 'self';
 
 export const REGION_ENDPOINTS: Record<Exclude<MushiRegion, 'self'>, string> = {
-  us: 'https://api.us.mushimushi.dev/functions/v1/api',
-  eu: 'https://api.eu.mushimushi.dev/functions/v1/api',
-  jp: 'https://api.jp.mushimushi.dev/functions/v1/api',
+  us: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  eu: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  jp: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 };
 
 const ROUTING_CACHE_KEY = 'mushi_region_v1';

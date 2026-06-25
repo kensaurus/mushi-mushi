@@ -134,7 +134,7 @@ function PlanDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () 
           <Loading text="Fetching reports…" />
         ) : reports.length === 0 ? (
           <p className="text-2xs text-fg-muted py-3">
-            No new reports waiting. Your triage queue is clean.
+            No new reports waiting. Your bug queue is clean.
           </p>
         ) : (
           <ul className="space-y-1.5">

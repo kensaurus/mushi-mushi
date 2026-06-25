@@ -15,7 +15,7 @@
  *   - Titles are kept identical so deep-link cards match the docs hero.
  */
 
-const DOCS_BASE = 'https://docs.mushimushi.dev/migrations'
+const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs/migrations'
 
 export interface AdminMigrationGuideMeta {
   slug: string

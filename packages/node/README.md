@@ -2,7 +2,7 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Server-side SDK for [Mushi Mushi](https://mushimushi.dev). The browser SDKs
+Server-side SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi). The browser SDKs
 report user-observed bugs; this package reports **server-observed** ones —
 uncaught exceptions, slow requests, failed integrations — into the same
 `reports` table so classification, knowledge graph, and fix dispatch don't
@@ -189,4 +189,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -1,22 +1,22 @@
 # Admin console
 
-The admin console is a React SPA at `app.mushimushi.dev` (or your
-self-hosted equivalent). It's the primary surface for triage, fix
-orchestration, governance, and real-time collaboration.
+import { ADMIN_INDEX_LEDE } from '@/lib/public-copy'
+
+{ADMIN_INDEX_LEDE}
 
 <AdminDocHero page="index" />
 
 import { Cards } from 'nextra/components'
 
 <Cards>
-  <Cards.Card title="Reports & triage" href="/admin/reports" arrow />
-  <Cards.Card title="Skill Pipelines" href="/admin/skill-pipelines" arrow />
+  <Cards.Card title="Reports inbox" href="/admin/reports" arrow />
+  <Cards.Card title="Skill playbooks" href="/admin/skill-pipelines" arrow />
   <Cards.Card title="Rewards program" href="/admin/rewards" arrow />
   <Cards.Card title="Knowledge graph" href="/admin/graph" arrow />
-  <Cards.Card title="Fix orchestrator" href="/admin/fixes" arrow />
-  <Cards.Card title="Judge dashboard" href="/admin/judge" arrow />
-  <Cards.Card title="Natural-language query" href="/admin/query" arrow />
-  <Cards.Card title="Intelligence reports" href="/admin/intelligence" arrow />
+  <Cards.Card title="Fix drafts & PRs" href="/admin/fixes" arrow />
+  <Cards.Card title="Fix quality scores" href="/admin/judge" arrow />
+  <Cards.Card title="Ask in plain English" href="/admin/query" arrow />
+  <Cards.Card title="Weekly insights" href="/admin/intelligence" arrow />
   <Cards.Card title="Fine-tuning" href="/admin/fine-tuning" arrow />
-  <Cards.Card title="Real-time collaboration" href="/admin/realtime" arrow />
+  <Cards.Card title="Live collaboration" href="/admin/realtime" arrow />
 </Cards>

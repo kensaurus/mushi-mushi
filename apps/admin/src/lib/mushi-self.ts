@@ -20,6 +20,7 @@
  */
 
 import { RESOLVED_API_URL } from './env'
+import { Sentry } from './sentry'
 
 type MushiInitOptions = {
   projectId: string
@@ -157,6 +158,10 @@ export async function initMushiSelf(options?: {
       win[INIT_KEY] = false;
       _initPromise = null;
       console.warn('[mushi-self] init failed', err);
+      Sentry.captureMessage('[mushi-self] init failed', {
+        level: 'warning',
+        extra: { err: err instanceof Error ? err.message : String(err) },
+      });
       return null;
     }
   })();
@@ -171,9 +176,13 @@ export function getMushiSelf(): MushiInstance | null {
 /** Open the Mushi bug-report widget. Falls back to a no-op when disabled. */
 export function reportMushiBug(opts?: { category?: 'bug' | 'slow' | 'visual' | 'confusing' | 'other' }): void {
   if (!_sdk) {
-    void initMushiSelf().then((sdk) => {
-      if (sdk) sdk.report(opts);
-    });
+    void initMushiSelf()
+      .then((sdk) => {
+        if (sdk) sdk.report(opts);
+      })
+      .catch((err) => {
+        Sentry.captureException(err instanceof Error ? err : new Error(String(err)));
+      });
     return;
   }
   _sdk.report(opts);

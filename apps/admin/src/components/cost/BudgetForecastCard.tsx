@@ -129,7 +129,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
                   value={budgetInput}
                   onChange={(e) => setBudgetInput(e.target.value)}
                   placeholder="e.g. 50"
-                  className="w-20 rounded border border-edge px-2 py-0.5 text-2xs text-fg bg-surface focus:outline-none focus:ring-1 focus:ring-brand"
+                  className="w-20 rounded border border-edge px-2 py-0.5 text-2xs text-fg bg-surface focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false) }}
                   autoFocus
                 />
@@ -191,7 +191,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
       {budget !== null && (
         <div className="mt-3 h-1.5 rounded-full bg-surface-raised/30 overflow-hidden">
           <div
-            className={`h-full rounded-full motion-safe:transition-all ${
+            className={`h-full rounded-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
               isOverBudget100 ? 'bg-critical' : isOverBudget80 ? 'bg-warn' : 'bg-ok'
             }`}
             style={{ width: `${Math.min(pctOfBudget ?? 0, 100).toFixed(1)}%` }}

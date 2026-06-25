@@ -2,7 +2,16 @@
 title: Capacitor quickstart
 ---
 
+import { Callout } from 'nextra/components'
+import { QUICKSTART_ONE_KEY_CALLOUT } from '@/lib/public-copy'
+
 # Capacitor quickstart
+
+Ship the same bug-report widget on iOS, Android, and web from one Capacitor shell.
+
+<Callout type="info">
+  {QUICKSTART_ONE_KEY_CALLOUT}
+</Callout>
 
 The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
 and falls back to `@mushi-mushi/core` on the web.
@@ -35,8 +44,6 @@ await Mushi.report({
   category:    'bug',
 })
 ```
-
-import { Callout } from 'nextra/components'
 
 <Callout type="info">
   **Coming from Cordova?** Migrate in place to Capacitor first — the

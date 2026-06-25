@@ -135,6 +135,8 @@ export function RunDetail({ run, projectId, storyId, isDirectFetch }: RunDetailP
                       <img
                         src={ev.signed_url}
                         alt={ev.step_label ?? 'Screenshot'}
+                        width={800}
+                        height={192}
                         className="w-full max-h-48 object-contain bg-surface-overlay"
                         loading="lazy"
                       />

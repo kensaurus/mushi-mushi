@@ -69,7 +69,7 @@ Each tab is one pipeline stage. Start with the stage that's causing your problem
 | Stage | Prompt controls |
 |-------|----------------|
 | **Stage 1 (fast-filter)** | Spam detection — edit if legitimate reports are being dropped |
-| **Stage 2 (classify)** | Category / severity / component — edit if triage labels are wrong |
+| **Stage 2 (classify)** | Category / severity / component — edit if review labels are wrong |
 | **Judge** | Accuracy scoring — edit if judge scores don't match your human assessment |
 | **Fix-worker** | Code patch generation — edit if fixes keep touching the wrong files |
 | **Intelligence digest** | Weekly report format — edit for style or content changes |
@@ -134,7 +134,7 @@ faster, cheaper custom model that you own.
 ### Eval dataset
 Shows total and labelled counts. The **labelled** count matters — only labelled
 examples contribute to judge scoring. Label examples by triaging real reports through
-the normal Reports flow — each triage action generates a labelled example automatically.
+the normal Reports flow — each review action generates a labelled example automatically.
 
 ---
 

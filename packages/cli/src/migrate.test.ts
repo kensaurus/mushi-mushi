@@ -257,7 +257,7 @@ describe('runMigrate (end-to-end with tmp package.json)', () => {
     expect(result.matches.map((m) => m.guide.slug)).toEqual(['instabug-to-mushi'])
     const out = lines.join('\n')
     expect(out).toContain('Instabug')
-    expect(out).toContain('https://docs.mushimushi.dev/migrations/instabug-to-mushi')
+    expect(out).toContain('https://kensaur.us/mushi-mushi/docs/migrations/instabug-to-mushi')
   })
 
   it('emits machine-readable JSON in --json mode', () => {
@@ -268,7 +268,7 @@ describe('runMigrate (end-to-end with tmp package.json)', () => {
     expect(parsed.ok).toBe(true)
     expect(parsed.matches).toHaveLength(1)
     expect(parsed.matches[0].slug).toBe('cra-to-vite')
-    expect(parsed.matches[0].url).toBe('https://docs.mushimushi.dev/migrations/cra-to-vite')
+    expect(parsed.matches[0].url).toBe('https://kensaur.us/mushi-mushi/docs/migrations/cra-to-vite')
   })
 
   it('emits "no suggestions" for an unrelated package.json', () => {

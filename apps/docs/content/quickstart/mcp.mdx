@@ -3,13 +3,24 @@ title: MCP server quickstart
 ---
 
 import { Callout } from 'nextra/components'
+import { TroubleshootingAccordion } from '../../components/TroubleshootingAccordion'
+import { MCP_QUICKSTART_LEDE, PUBLIC_FAQ_MCP } from '@/lib/public-copy'
 
 # MCP server
 
-Wire Mushi into Cursor, Claude Code, Codex CLI, or any
-[Model Context Protocol](https://modelcontextprotocol.io/) client in
-**one command**. The server exposes your Mushi reports as tools so agents
-can triage, query lessons, and dispatch AI fixes without leaving the editor.
+{MCP_QUICKSTART_LEDE}
+
+**Model Context Protocol (MCP)** is how your editor talks to Mushi tools — reports, fix briefs, and optional dispatch without leaving the chat.
+
+[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+
+<Callout type="info">
+  **Fastest path — one click.** Open the [Connect page](https://kensaur.us/mushi-mushi/docs/connect)
+  to pick your client and install in one click, or **try the read-only demo with no signup**.
+  Prefer the terminal? The one-liner below is just as quick.
+</Callout>
 
 ## One-liner setup (recommended)
 
@@ -19,6 +30,14 @@ npx mushi-mushi setup --ide cursor
 ```
 
 This reads CLI config at **`~/.config/mushi/config.json`** (written by `mushi login`; legacy `~/.mushirc` auto-migrates on first load), detects the IDE config path, and writes the `mcpServers` block for you. Restart the IDE and ask the agent: **"list mushi tools"**.
+
+## Smithery (hosted MCP)
+
+Install from the [Smithery registry](https://smithery.ai/servers/kensaurus/mushi-mushi) with
+Streamable HTTP at `https://kensaur.us/mushi-mushi/hosted-mcp/`. The server card at
+`/.well-known/mcp/server-card.json` lists every tool for directory scanners.
+
+[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
 
 <Callout type="info">
   Run `npx mushi-mushi project create` on a brand-new machine to sign up,
@@ -80,7 +99,7 @@ running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator:
 {
   "mcpServers": {
     "mushi-hosted": {
-      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_live_…",
         "X-Mushi-Project-Id": "proj_…"
@@ -98,7 +117,7 @@ running OpenAI Agents SDK, ChatGPT Agent, CrewAI, or any remote orchestrator:
 | `get_report_detail`     | Full detail incl. screenshot + classification |
 | `get_fix_context`       | One-shot fix brief — root cause + blast radius + repro |
 | `search_reports`        | Semantic + keyword search across reports     |
-| `dispatch_fix`          | Hand off to the agentic fix orchestrator     |
+| `dispatch_fix`          | Start the Mushi fix agent for a report       |
 | `triage_next_steps`     | "What should I fix next?" — 5-item plan from the dashboard |
 | `query_knowledge_graph` | Ask "what other reports look like this?"     |
 | `run_nl_query`          | Natural-language → SQL questions about your data |
@@ -122,3 +141,16 @@ This writes a `.cursorrules` file that tells Cursor to call `get_fix_context`
 before writing a fix and `submit_fix_result` after — closing the loop from
 inside the editor. Download the template:
 [cursor.cursorrules](/integrations/cursor.cursorrules)
+
+## Smithery registry
+
+Hosted Streamable HTTP endpoint: `https://kensaur.us/mushi-mushi/hosted-mcp/`
+
+Install from the [Smithery server page](https://smithery.ai/servers/kensaurus/mushi-mushi).
+Tool metadata is also published at `/.well-known/mcp/server-card.json` for directory scanners.
+
+[![smithery badge](https://smithery.ai/badge/kensaurus/mushi-mushi)](https://smithery.ai/servers/kensaurus/mushi-mushi)
+
+## Troubleshooting
+
+<TroubleshootingAccordion items={PUBLIC_FAQ_MCP} />

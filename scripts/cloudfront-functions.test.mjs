@@ -19,8 +19,17 @@ function loadHandler(filename) {
   return new Function('event', `${src}\nreturn handler(event);`)
 }
 
-function req(uri, querystring = '') {
-  return { request: { uri, querystring } }
+function req(uri, querystring = '', method = 'GET', accept = '') {
+  const headers = accept ? { accept: { value: accept } } : {}
+  return { request: { uri, querystring, method, headers } }
+}
+
+function reqWithQs(uri, params, method = 'GET', accept = '') {
+  const querystring = {}
+  for (const [k, v] of Object.entries(params)) {
+    querystring[k] = { value: v }
+  }
+  return req(uri, querystring, method, accept)
 }
 
 describe('cloudfront-mushi-apex-redirect', () => {
@@ -38,8 +47,13 @@ describe('cloudfront-mushi-apex-redirect', () => {
   })
 
   it('preserves query string on docs redirect', () => {
-    const out = apex(req('/quickstart/mcp', 'utm_source=test'))
+    const out = apex(reqWithQs('/quickstart/mcp', { utm_source: 'test' }))
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/mcp?utm_source=test')
+  })
+
+  it('omits empty CloudFront querystring object', () => {
+    const out = apex(req('/quickstart/mcp', {}))
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/mcp')
   })
 
   it('redirects /reports/uuid to admin (regression)', () => {
@@ -65,6 +79,22 @@ describe('cloudfront-mushi-apex-redirect', () => {
   })
 })
 
+describe('cloudfront-kensaur-default-viewer', () => {
+  const combined = loadHandler('cloudfront-kensaur-default-viewer.js')
+
+  it('redirects mushi docs before glot SPA rewrite', () => {
+    const out = combined(req('/quickstart/incident-loop'))
+    assert.equal(out.statusCode, 301)
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/incident-loop')
+  })
+
+  it('still serves glot.it well-known via glot handler', () => {
+    const out = combined(req('/.well-known/assetlinks.json'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /com\.glotit\.app/)
+  })
+})
+
 describe('cloudfront-mushi-spa-router', () => {
   const spa = loadHandler('cloudfront-mushi-spa-router.js')
 
@@ -83,5 +113,59 @@ describe('cloudfront-mushi-spa-router', () => {
     const out = spa(req('/mushi-mushi/login'))
     assert.equal(out.statusCode, 302)
     assert.equal(out.headers.location.value, '/mushi-mushi/admin/login')
+  })
+})
+
+describe('cloudfront-mushi-hosted-mcp', () => {
+  const router = loadHandler('cloudfront-mushi-hosted-mcp-router.js')
+  const wellknown = loadHandler('cloudfront-mushi-hosted-mcp-wellknown.js')
+
+  it('forwards resource PRM GET to Supabase origin', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/', '', 'GET'))
+    assert.equal(out.uri, '/')
+    assert.equal(out.statusCode, undefined)
+  })
+
+  it('forwards AS metadata GET to Supabase origin', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/.well-known/oauth-authorization-server', '', 'GET'))
+    assert.equal(out.uri, '/.well-known/oauth-authorization-server')
+    assert.equal(out.statusCode, undefined)
+  })
+
+  it('forwards AS metadata HEAD to Supabase (Smithery RFC 8414)', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/.well-known/oauth-authorization-server', '', 'HEAD'))
+    assert.equal(out.uri, '/.well-known/oauth-authorization-server')
+    assert.equal(out.statusCode, undefined)
+  })
+
+  it('rewrites POST to Supabase path prefix', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp', '', 'POST', 'application/json, text/event-stream'))
+    assert.equal(out.uri, '/')
+    assert.equal(out.statusCode, undefined)
+  })
+
+  it('serves Smithery backlink HTML at edge', () => {
+    const out = router(req('/mushi-mushi/hosted-mcp/smithery-backlink', '', 'GET'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /smithery\.ai\/servers\/kensaurus\/mushi-mushi/)
+  })
+
+  it('302 OAuth authorize to Smithery callback at edge', () => {
+    const out = router(
+      reqWithQs('/mushi-mushi/hosted-mcp/oauth/authorize', {
+        response_type: 'code',
+        redirect_uri: 'https%3A%2F%2Fsmithery.run%2Foauth%2Fcallback',
+        state: 'scan',
+      }),
+    )
+    assert.equal(out.statusCode, 302)
+    assert.match(out.headers.location.value, /^https:\/\/smithery\.run\/oauth\/callback\?code=mushi-scan-/)
+    assert.match(out.headers.location.value, /state=scan/)
+  })
+
+  it('serves origin PRM at well-known path', () => {
+    const out = wellknown(req('/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp', '', 'GET'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /authorization_servers/)
   })
 })

@@ -21,6 +21,7 @@ import {
   totalAttemptsTooltip,
 } from '../../lib/statTooltips/fixes'
 import { fixesLinks } from '../../lib/statCardLinks'
+import { usePlainStatTooltips } from '../../lib/usePlainStatTooltips'
 
 interface Props {
   stats: FixesStats
@@ -44,6 +45,7 @@ export function FixesSnapshotStrip({
   hideLinks = false,
   compact = false,
 }: Props) {
+  const plainOpts = usePlainStatTooltips()
   const inFlight = stats.inProgress + stats.inflightDispatches
 
   return (
@@ -62,7 +64,7 @@ export function FixesSnapshotStrip({
             label={statLabels?.totalAttempts ?? 'Attempts (30d)'}
             value={stats.totalAttempts}
             accent={stats.totalAttempts > 0 ? 'text-brand' : undefined}
-            tooltip={totalAttemptsTooltip(stats)}
+            tooltip={totalAttemptsTooltip(stats, plainOpts)}
             detail={totalAttemptsDetail(stats)}
             to={fixesLinks.totalAttempts}
           />
@@ -81,7 +83,7 @@ export function FixesSnapshotStrip({
           label={statLabels?.failed ?? 'Failed'}
           value={stats.failed}
           accent={stats.failed > 0 ? 'text-danger' : 'text-ok'}
-          tooltip={failedTooltip(stats)}
+          tooltip={failedTooltip(stats, plainOpts)}
           detail={failedDetail(stats)}
           to={fixesLinks.failed}
         />
@@ -106,7 +108,7 @@ export function FixesSnapshotStrip({
             label={statLabels?.totalAttempts ?? 'Fixes (30 days)'}
             value={stats.totalAttempts}
             accent={stats.totalAttempts > 0 ? 'text-fg' : undefined}
-            tooltip={totalAttemptsTooltip(stats)}
+            tooltip={totalAttemptsTooltip(stats, plainOpts)}
             detail={totalAttemptsDetail(stats)}
             to={fixesLinks.totalAttempts}
           />

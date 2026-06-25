@@ -91,6 +91,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Audit dependencies for known vulnerabilities
+        # Supply-chain gate (P2): fails if any installed package has a
+        # High or Critical advisory. Moderate/Low advisories surface as
+        # warnings via the separate dependency-review job on PRs but do
+        # not block the merge. `--audit-level=high` matches pnpm's own
+        # recommended CI threshold.
+        run: pnpm audit --audit-level=high
+
       - run: pnpm build
 
       - run: pnpm typecheck
@@ -182,6 +190,14 @@ jobs:
         # guard fails the PR if any `_shared/` file or any function dir
         # imports across function boundaries via a relative path.
         run: pnpm check:edge-fn-imports
+
+      - name: Check for destructive migrations
+        # Data-integrity gate (D2): fails if any migration file contains a
+        # bare DELETE FROM or TRUNCATE without a WHERE clause. Such statements
+        # in migrations can cause irrecoverable data loss in production.
+        # Annotate the offending line with `-- migration-check: allow-destructive`
+        # (with a comment explaining why) to bypass the gate intentionally.
+        run: node scripts/check-destructive-migrations.mjs
 
       - name: Check JSX unicode escapes
         # Regression guard for the 2026-04-23 InboxPage bug: a `\uXXXX`

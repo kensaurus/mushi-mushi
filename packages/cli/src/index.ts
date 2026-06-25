@@ -29,6 +29,7 @@ import { registerQaCommands } from './commands/qa.js'
 import { registerAuditCommands } from './commands/audit.js'
 import { registerSkillsCommands } from './commands/skills.js'
 import { registerBillingCommands } from './commands/billing.js'
+import { printAndExit } from './errors.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
 // Long-running commands (`mushi index`, `mushi sourcemaps upload`) can
@@ -87,6 +88,5 @@ registerBillingCommands(program)
 // parseAsync so rejections from async command actions surface as clean
 // one-line errors (plain `parse()` leaves them as unhandled rejections).
 program.parseAsync().catch((err: unknown) => {
-  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`)
-  process.exit(1)
+  printAndExit(err)
 })

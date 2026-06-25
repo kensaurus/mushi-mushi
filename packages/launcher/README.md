@@ -2,6 +2,11 @@
 
 # mushi-mushi 🐛
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Default bug-report launcher UI primitives for web SDKs.
+
+
 **Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports.**
 
 One `npx` command. Works with React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS.
@@ -306,4 +311,4 @@ MIT © [Kenji Sakuramoto](https://github.com/kensaurus). Backend packages (`@mus
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

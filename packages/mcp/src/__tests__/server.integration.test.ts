@@ -246,13 +246,13 @@ describe('tool → REST contract', () => {
     fetchStub.enqueue({ ok: true, data: { fixId: 'fix_123', status: 'queued' } })
     const res = await client.callTool({
       name: 'dispatch_fix',
-      arguments: { reportId: 'rep_abc', agent: 'claude_code' },
+      arguments: { reportId: '11111111-1111-4111-8111-111111111111', agent: 'claude_code' },
     })
     const call = fetchStub.calls[0]
     expect(call.method).toBe('POST')
     expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/fixes/dispatch`)
     expect(call.body).toEqual({
-      reportId: 'rep_abc',
+      reportId: '11111111-1111-4111-8111-111111111111',
       agent: 'claude_code',
       projectId: PROJECT_ID,
     })
@@ -440,7 +440,7 @@ describe('error surfacing', () => {
     )
     const res = await client.callTool({
       name: 'dispatch_fix',
-      arguments: { reportId: 'rep_1' },
+      arguments: { reportId: '11111111-1111-4111-8111-111111111111' },
     })
     expect(res.isError).toBe(true)
     const content = res.content as Array<{ type: string; text: string }>

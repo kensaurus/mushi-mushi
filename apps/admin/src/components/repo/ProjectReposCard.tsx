@@ -280,7 +280,7 @@ function RepoForm({
           value={draft.repoUrl}
           onChange={(e) => set('repoUrl', e.target.value)}
           placeholder="https://github.com/org/repo"
-          className="w-full rounded-sm border border-edge bg-surface-raised text-xs px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand/50"
+          className="w-full rounded-sm border border-edge bg-surface-raised text-xs px-2 py-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/50"
         />
       </div>
       <div className="grid grid-cols-2 gap-2">

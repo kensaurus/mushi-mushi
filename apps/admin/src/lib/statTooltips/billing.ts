@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Billing snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { BillingStats } from '../../components/billing/types'
 import { metricTip } from '../metricTooltipBuilder'

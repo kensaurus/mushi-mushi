@@ -449,7 +449,7 @@ export function PipelineStatusRibbon({ embedded = false }: { embedded?: boolean 
             <Fragment key={tile.stage}>
               <Link
                 to={tile.to}
-                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle border-l-[4px] bg-surface-raised px-2.5 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
+                className={`group relative z-0 flex w-full items-center gap-2.5 rounded-md border border-edge-subtle border-l-[4px] bg-surface-raised px-2.5 py-2.5 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0 md:flex-1 ${STAGE_BORDER[tile.stage]} ${
                   focusRibbonStage === tile.stage
                     ? 'ring-2 ring-brand/40 shadow-sm'
                     : ''

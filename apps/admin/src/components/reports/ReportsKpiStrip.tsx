@@ -11,6 +11,7 @@ import { usePageData } from '../../lib/usePageData'
 import { KpiTile, type KpiDelta } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
+import { useAdminMode } from '../../lib/mode'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
 
@@ -63,7 +64,7 @@ const TONE_SHARE_BAR: Record<Tone, string> = {
   muted: 'bg-fg-faint/40',
 }
 
-const TILES: Array<{
+const TILES_ADVANCED: Array<{
   key: 'critical' | 'high' | 'medium' | 'low'
   label: string
   accent: Tone
@@ -74,12 +75,25 @@ const TILES: Array<{
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'High-severity reports — broken functionality but with a workaround. Schedule a fix before next release.' },
   { key: 'medium', label: 'Medium', accent: 'info',
-    meaning: 'Medium-severity reports — annoyance or polish. Batch-triage at end of week.' },
+    meaning: 'Medium-severity reports — annoyance or polish. Batch-review at end of week.' },
   { key: 'low', label: 'Low', accent: 'muted',
-    meaning: 'Low-severity reports — usually visual nits or confusion. Useful as PDCA signal, low individual urgency.' },
+    meaning: 'Low-severity reports — usually visual nits or confusion. Useful signal, low individual urgency.' },
+]
+
+const TILES_PLAIN: typeof TILES_ADVANCED = [
+  { key: 'critical', label: 'Critical', accent: 'danger',
+    meaning: 'Bugs that block user flow — review these first.' },
+  { key: 'high', label: 'High', accent: 'warn',
+    meaning: 'Broken functionality with a workaround — fix before next release.' },
+  { key: 'medium', label: 'Medium', accent: 'info',
+    meaning: 'Annoyance or polish issues — batch-review at end of week.' },
+  { key: 'low', label: 'Low', accent: 'muted',
+    meaning: 'Visual nits or confusion — low urgency individually.' },
 ]
 
 export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: Props) {
+  const { isAdvanced } = useAdminMode()
+  const tiles = isAdvanced ? TILES_ADVANCED : TILES_PLAIN
   const { data, loading, error, reload } = usePageData<SeverityStats>(
     `/v1/admin/reports/severity-stats?days=${windowDays}`,
     { deps: [windowDays] },
@@ -121,7 +135,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
 
   return (
     <MetricStrip cols={4} ariaLabel="Reports severity breakdown" className="gap-2.5 mb-3" stagger>
-      {TILES.map((tile) => {
+      {tiles.map((tile) => {
         const isActive = activeSeverity === tile.key
         const total = data?.total ?? 0
         const count = counts[tile.key]
@@ -138,7 +152,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
                 ? `Clear ${tile.label} filter`
                 : `Filter to ${tile.label} severity reports`
             }
-            className={`relative overflow-hidden text-left rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-all ${
+            className={`relative overflow-hidden text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
               isActive ? 'ring-2 ring-brand/60' : ''
             }`}
           >

@@ -248,10 +248,10 @@ function PipelineNode({ stage, isActive, isDone, isLast }: NodeProps) {
 
   return (
     <li className="relative">
-      <Card elevated interactive className={`h-full motion-safe:transition-all motion-safe:duration-300 ${ringClass}`}>
+      <Card elevated interactive className={`h-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-300 ${ringClass}`}>
         <Link
           to={cta.to}
-          className="group block rounded-md p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          className="group block rounded-md p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
         >
           <div className="flex items-center gap-2">
             <span

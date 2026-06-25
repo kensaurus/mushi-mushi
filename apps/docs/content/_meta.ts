@@ -1,4 +1,4 @@
-// Sidebar layout for docs.mushimushi.dev. Top-down represents the journey
+// Sidebar layout for kensaur.us/mushi-mushi/docs. Top-down represents the journey
 // from "what is Mushi" → "install" → "operate".
 export default {
   index: {

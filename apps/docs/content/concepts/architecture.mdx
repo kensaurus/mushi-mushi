@@ -5,7 +5,7 @@ title: Architecture
 # Architecture
 
 The whole system is intentionally boring at the seams: a Hono gateway in
-front of Supabase, **47** specialised edge functions behind it, and three
+front of Supabase, **51** specialised edge functions behind it, and three
 data substrates (relational + vector + graph) that mirror each other for
 their respective query shapes. Everything an SDK does is one POST to the
 gateway; everything a contributor adds is either a route or a function.

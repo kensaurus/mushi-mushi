@@ -227,7 +227,7 @@ export function OverviewTab() {
                   <div className="flex-1 min-w-0">
                     <div className="h-1.5 rounded-full bg-surface-overlay overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all ${TIER_BAR[slug.toLowerCase()] ?? 'bg-fg-faint'}`}
+                        className={`h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${TIER_BAR[slug.toLowerCase()] ?? 'bg-fg-faint'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>

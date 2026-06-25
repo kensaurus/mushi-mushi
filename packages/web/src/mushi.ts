@@ -89,6 +89,18 @@ export class Mushi {
       return instance;
     }
 
+    // SSR / non-DOM guard. Importing and calling init() on the server
+    // (Next.js / Remix / Nuxt server components, plain Node SSR) must never
+    // crash: the widget constructs DOM nodes (document.createElement,
+    // attachShadow) that don't exist server-side. Return a no-op instance with
+    // the full API surface; the real widget initialises on the client where
+    // `document` exists. Without this, a single accidental server-side init
+    // (or a "use client" boundary that still evaluates on the server) throws
+    // and takes down the host page.
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      return createNoopInstance();
+    }
+
     // Merge env-var defaults under any explicit config so developers can
     // use zero-config mode: <MushiProvider> with no props reads from
     // NEXT_PUBLIC_MUSHI_* / VITE_MUSHI_* / MUSHI_* automatically.
@@ -143,6 +155,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     projectId: bootstrapConfig.projectId,
     apiKey: bootstrapConfig.apiKey,
     ...(bootstrapConfig.apiEndpoint ? { apiEndpoint: bootstrapConfig.apiEndpoint } : {}),
+    ...(typeof bootstrapConfig.timeout === 'number' ? { timeout: bootstrapConfig.timeout } : {}),
+    ...(typeof bootstrapConfig.maxRetries === 'number' ? { maxRetries: bootstrapConfig.maxRetries } : {}),
+    ...(bootstrapConfig.circuitBreaker ? { circuitBreaker: bootstrapConfig.circuitBreaker } : {}),
     getUserToken: () => userToken,
     sdkPackage: MUSHI_SDK_PACKAGE,
     sdkVersion: MUSHI_SDK_VERSION,
@@ -403,6 +418,11 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let reporterPollTimer: ReturnType<typeof setInterval> | null = null;
   let reporterPollVisibleHandler: (() => void) | null = null;
   let userInfo: { id: string; email?: string; name?: string } | null = null;
+  // Signature of the last applied identify() call (userId + traits). Lets us
+  // skip redundant re-identifies that would re-render the widget and refetch
+  // the rewards/inbox — the common cause of "banner flashing" when a host
+  // calls identify() on every focus / visibilitychange / auth re-check.
+  let lastIdentifySig: string | null = null;
   const customMetadata: Record<string, unknown> = {};
   // Sticky tags applied to every subsequent report. Cleared by
   // `clearTag()` (single key) or `clearTag()` with no args (all keys).
@@ -509,7 +529,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       screenshotCaptureInFlight = true;
       try {
         const result = await provider();
-        return result ?? null;
+        // Only short-circuit when the provider actually produced an image. If
+        // it returns null — e.g. a web build that wired a native-only provider,
+        // or a capture that failed gracefully — fall through to the built-in
+        // DOM capturer instead of silently returning no screenshot. (Setting a
+        // provider used to disable the built-in path entirely, so a null return
+        // meant the "screenshot included automatically" promise broke.)
+        if (result) return result;
       } catch (err) {
         log.warn('screenshotProvider threw, falling back to built-in capturer', {
           error: err instanceof Error ? err.message : String(err),
@@ -824,6 +850,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     proactiveTriggers = setupProactiveTriggers(
       {
         onTrigger: (type, context) => {
+          // Don't force the reporter open while offline. Proactive signals like
+          // api_cascade / rageClick fire precisely during network failures and
+          // error reloads; opening a modal the user can't submit from (and that
+          // re-fires on every retry) is the "panel flashing on reload" bug.
+          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            log.debug('Proactive trigger suppressed: offline', { type });
+            return;
+          }
           if (!proactiveManager!.shouldShow(type)) {
             log.debug('Proactive trigger suppressed by fatigue prevention', { type });
             return;
@@ -1469,6 +1503,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     },
 
     identify(userId, traits) {
+      // Dedupe: re-identifying the same user with the same traits re-renders
+      // the widget and refetches rewards/inbox. Hosts that call identify() on
+      // every focus / visibilitychange / auth re-check would otherwise thrash
+      // the API and flash the banner. Skip when nothing changed.
+      const sig = `${userId}::${traits ? JSON.stringify(traits) : ''}`;
+      if (sig === lastIdentifySig) return;
+      lastIdentifySig = sig;
+
       userInfo = { id: userId, ...(traits?.email ? { email: traits.email } : {}), ...(traits?.name ? { name: traits.name } : {}) };
       widget.setIdentifiedUser(
         (userInfo.name || userInfo.email) ? { name: userInfo.name, email: userInfo.email } : null,
@@ -1502,6 +1544,15 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (userToken) {
         const claims = parseIdentityToken(userToken);
         if (claims?.sub) {
+          // Dedupe: when the same user re-mints a token (e.g. the host
+          // refreshes it on focus / before expiry), keep the fresh token for
+          // server trust (already assigned above) but skip the widget
+          // re-render + rewards refetch that would flash the inbox. This is the
+          // native/Capacitor analogue of the identify() storm.
+          if (userInfo?.id === claims.sub) {
+            breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken() refreshed' });
+            return;
+          }
           // Hydrate display identity from the (unverified) claims so the
           // widget can greet the user; the server re-verifies for trust.
           userInfo = {
@@ -1520,6 +1571,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken()' });
       } else {
         userInfo = null;
+        lastIdentifySig = null;
         widget.setIdentifiedUser(null);
         breadcrumbs.add({ category: 'lifecycle', level: 'info', message: 'Mushi.identifyWithToken(null)' });
       }
@@ -1686,7 +1738,69 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
   }
 
-  return sdk;
+  // Error isolation: a host app must NEVER break because a Mushi call threw
+  // (a malformed build, an unexpected DOM/SDK state, a rejected network call in
+  // a fire-and-forget handler). Wrap every public method so a throw / rejection
+  // is logged + breadcrumbed and swallowed, returning a type-safe fallback.
+  // Non-void methods need a real fallback so the host doesn't choke on
+  // `undefined` (e.g. `.map` over a list); everything else returns void.
+  const PUBLIC_API_FALLBACKS: Record<string, unknown> = {
+    on: () => {}, // returns a no-op unsubscribe
+    isOpen: false,
+    getBreadcrumbs: [],
+    captureEvent: null,
+    captureException: null,
+    getReputation: null,
+    getTier: null,
+    listMyReports: [],
+    listMyComments: [],
+    getHallOfFame: [],
+    replyToReport: null,
+    submitFeedbackSignal: null,
+    reopenReport: null,
+  };
+  const noteSdkError = (method: string, err: unknown): void => {
+    const message = err instanceof Error ? err.message : String(err);
+    log.debug(`Mushi.${method}() failed (swallowed)`, { error: message });
+    try {
+      breadcrumbs.add({ category: 'custom', level: 'warning', message: `mushi.${method}() threw`, data: { error: message } });
+    } catch { /* breadcrumb buffer must never re-throw */ }
+  };
+  const isolatePublicApi = (raw: MushiSDKInstance): MushiSDKInstance =>
+    new Proxy(raw, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== 'function') return value;
+        const method = String(prop);
+        // Resolve the fallback lazily so the only non-void method not in the
+        // static map — diagnose() — returns a structurally-valid
+        // MushiDiagnosticsResult (via diagnoseWithoutInstance) instead of
+        // `undefined`, which a host doing `(await diagnose()).ok` would choke on.
+        const resolveFallback = (): unknown =>
+          method === 'diagnose'
+            ? diagnoseWithoutInstance()
+            : method in PUBLIC_API_FALLBACKS
+              ? PUBLIC_API_FALLBACKS[method]
+              : undefined;
+        return (...args: unknown[]): unknown => {
+          try {
+            const result = (value as (...a: unknown[]) => unknown).apply(target, args);
+            if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+              return (result as Promise<unknown>).catch((err) => {
+                noteSdkError(method, err);
+                return resolveFallback();
+              });
+            }
+            return result;
+          } catch (err) {
+            noteSdkError(method, err);
+            return resolveFallback();
+          }
+        };
+      },
+    });
+
+  return isolatePublicApi(sdk);
 }
 
 function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig): MushiConfig {

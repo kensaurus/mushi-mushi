@@ -108,6 +108,8 @@ function Avatar({ user, className = 'h-7 w-7' }: AvatarProps) {
       <img
         src={url}
         alt=""
+        width={28}
+        height={28}
         className={`${className} rounded-full object-cover ring-1 ring-edge/60`}
         referrerPolicy="no-referrer"
       />

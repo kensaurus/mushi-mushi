@@ -178,7 +178,7 @@ export function DataTable<T>({
                   }
                   className={`border-b border-edge/30 motion-safe:transition-colors ${
                     onRowClick
-                      ? 'cursor-pointer hover:bg-surface-overlay/50 focus:outline-none focus-visible:bg-surface-overlay/70 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand/50'
+                      ? 'cursor-pointer hover:bg-surface-overlay/50 focus-visible:outline-none focus-visible:bg-surface-overlay/70 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand/50'
                       : ''
                   }`}
                 >

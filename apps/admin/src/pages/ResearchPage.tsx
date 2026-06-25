@@ -290,12 +290,12 @@ export function ResearchPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Research'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={copy?.description ?? 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'}
+        description={copy?.description ?? 'Status banner first — Summary for posture, Search to look things up, History for past sessions.'}
         helpTitle={copy?.help?.title ?? 'About web research'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'BYOK Firecrawl-powered web search you run while triaging a report.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Search the web while reviewing a bug — look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Cross-reference an error signature against current upstream docs',
-          'Find a Stack Overflow thread to attach as triage evidence',
+          'Find a Stack Overflow thread to attach as review evidence',
           'Check if a third-party library shipped a fix in the last 24 hours',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}

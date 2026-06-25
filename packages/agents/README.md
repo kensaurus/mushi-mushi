@@ -1,5 +1,10 @@
 # @mushi-mushi/agents
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Cursor Cloud and REST fix-agent adapters.
+
+
 Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-generate fix PRs from classified bug reports.
 
 ## How It Works

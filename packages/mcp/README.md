@@ -2,7 +2,12 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi into Cursor, Claude Code, and any MCP client. Pull fix context, run triage, and dispatch fixes without a second LLM vendor key.
+[![Add to Cursor](https://img.shields.io/badge/Add%20to-Cursor-0098FF)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Add to VS Code](https://img.shields.io/badge/Add%20to-VS%20Code-007ACC?logo=visualstudiocode&logoColor=white)](https://kensaur.us/mushi-mushi/docs/connect)
+[![Try the demo — no signup](https://img.shields.io/badge/Try%20the%20demo-no%20signup-E34234)](https://kensaur.us/mushi-mushi/docs/connect)
+[![npm](https://img.shields.io/npm/v/@mushi-mushi/mcp?color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp)
+
+[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi into Cursor, Claude Code, and any MCP client. Pull fix context, review bugs, and dispatch fixes without a second LLM vendor key.
 
 Wire it into Cursor, Claude Code, or any MCP client in one command:
 
@@ -259,7 +264,7 @@ Named templates the MCP client surfaces in its slash-menu. Each one bakes in the
 |---|---|---|---|
 | `MUSHI_API_KEY` | yes | — | Project API key with `mcp:read` or `mcp:write` scope. Mint one in the admin console → **Projects** (the one-time reveal card has a **Copy as `.env.local`** tab). |
 | `MUSHI_PROJECT_ID` | yes | — | UUID from the admin console URL (`/projects/<uuid>/...`) or the reveal card. |
-| `MUSHI_API_ENDPOINT` | no | `https://api.mushimushi.dev` | Override only if you self-host. Localhost value: `http://localhost:54321/functions/v1/api`. |
+| `MUSHI_API_ENDPOINT` | no | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` | Override only if you self-host. Localhost: `http://localhost:54321/functions/v1/api`. |
 
 ### Storing the key in `.env.local`
 
@@ -269,7 +274,7 @@ The MCP binary reads these three vars from `process.env` on spawn — that means
 
    ```bash
    # Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.
-   MUSHI_API_ENDPOINT=https://api.mushimushi.dev
+   MUSHI_API_ENDPOINT=https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api
    MUSHI_PROJECT_ID=<your-uuid>
    MUSHI_API_KEY=mushi_live_…
    ```
@@ -459,6 +464,7 @@ Both are complementary — use Sentry for exception noise, Mushi for "the user s
 
 ## See also
 
+- [GTM distribution runbook](../../docs/marketing/GTM-DISTRIBUTION.md) — MCP registry, Glama, Connect, cursor.directory, release checklist.
 - [V5.3 whitepaper §2.10](../../MushiMushi_Whitepaper_V5.md) — the agentic fix architecture this server feeds into.
 - [`@mushi-mushi/agents`](../agents/README.md) — orchestrator that consumes MCP-exposed fix workers.
 
@@ -470,4 +476,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

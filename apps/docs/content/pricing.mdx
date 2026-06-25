@@ -4,20 +4,16 @@ title: Pricing
 
 import { Callout } from 'nextra/components'
 import { PricingEstimator } from '../components/PricingEstimator'
+import { PricingTiersTable } from '../components/PricingTiersTable'
+import { PRICING_LEDE } from '@/lib/public-copy'
 
 # Pricing
 
-A **diagnosis** is one completed plain-English root cause — the moment Mushi's Sonnet stage finishes classifying a report and hands Cursor a paste-ready fix prompt. Reports filtered as noise by the fast-filter, or deduplicated to an existing group before the Sonnet call, do not count. You pay for comprehension, not volume.
+{PRICING_LEDE}
 
 ## Plans
 
-| Plan | Monthly | Annual (2 mo free) | Diagnoses | Retention | Seats | What you get |
-|---|---|---|---|---|---|---|
-| **Self-host** | Free forever | — | Unlimited (your own LLM key) | Your choice | Unlimited | Full OSS stack — MIT SDK, AGPLv3 server, BYOK |
-| **Free Cloud** | $0 | — | 50 / mo | 7 days | 1 | Hosted admin, AI triage, **hard stop** at limit |
-| **Indie** | $15 / mo | **$150 / yr** ($12.50/mo) | 500 / mo | 30 days | 1 | Usage alerts at 50% / 80% / 100%, overage $0.03/diagnosis, **$50 spend cap** |
-| **Pro** | $49 / mo | **$490 / yr** ($40.83/mo) | 2,000 / mo | 90 days | 5 | Team seats, integrations, overage $0.025/diagnosis, **$200 spend cap** |
-| **Enterprise** | Contact us | Custom | Custom | Up to 365 days | Unlimited | SAML SSO, SCIM, data residency, priority support |
+<PricingTiersTable />
 
 <Callout type="info">
   **Annual billing saves two months.** Pay for 10 months, get 12 — about 17% off base fees. Overage is still metered monthly. Enable annual checkout from the Billing page after subscribing, or contact us for Enterprise commits.
@@ -33,13 +29,13 @@ A **diagnosis** is one completed plain-English root cause — the moment Mushi's
 
 ## What counts as a diagnosis
 
-One diagnosis = one completed Stage-2 classification. Specifically:
+One diagnosis = one completed classification pass. Specifically:
 
-- The report passes the Haiku fast-filter (not noise).
-- It is not a duplicate of an existing `report_group` signature already classified this period.
-- The Sonnet classifier successfully completes and writes a plain-English root cause + severity + fix hint.
+- The report passes the fast noise filter (not spam or incomplete junk).
+- It is not a duplicate of an existing group already classified this period.
+- The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Classification, deduplication, fix attempts, knowledge-graph writes, and MCP tool calls are **not** counted separately — they are included in the per-diagnosis price.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, fix attempts, knowledge-graph writes, and MCP tool calls are **not** counted separately — they are included in the per-diagnosis price.
 
 **What does NOT count:**
 
@@ -102,9 +98,9 @@ Sentry + Seer is excellent at what it does — code-thrown errors, breadcrumbs, 
 
 ### What happens when I hit my diagnosis limit?
 
-**Free Cloud:** Stage-2 classification pauses until the next calendar month. Reports are still captured.
+**Free Cloud:** New plain-English classifications pause until the next calendar month. Reports are still captured.
 
-**Indie / Pro:** You can keep diagnosing into overage until your **spend cap** stops new Stage-2 runs. Reports are never dropped.
+**Indie / Pro:** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
 ### When does my quota reset?
 
@@ -112,7 +108,7 @@ Cloud plans reset on your **Stripe billing period** (shown on the Billing page a
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Predictability controls** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Indie, $200 Pro).
+Yes. Open **Billing → Spending cap** on your project card. Set any USD cap from $0–100,000 or clear it to use the plan default ($50 Indie, $200 Pro).
 
 ### Who receives usage alert emails?
 
@@ -141,4 +137,4 @@ npx mushi-mushi
 # wizard: detect framework → install SDK → write env vars → connect MCP
 ```
 
-Or [open the console →](https://mushimushi.dev/signup)
+Or [open the console →](https://kensaur.us/mushi-mushi/signup)

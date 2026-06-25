@@ -22,6 +22,7 @@ interface Props {
   statsValidating?: boolean
   description?: string
   statLabels?: Record<string, string>
+  plainLanguage?: boolean
 }
 
 /** Three complementary metrics — avoids duplicating the status banner headline. */
@@ -31,7 +32,9 @@ export function SettingsCompactSnapshot({
   statsValidating,
   description,
   statLabels,
+  plainLanguage = false,
 }: Props) {
+  const tipOpts = { plainLanguage }
   return (
     <Section
       title="Settings at a glance"
@@ -49,7 +52,7 @@ export function SettingsCompactSnapshot({
                 ? 'text-ok'
                 : undefined
           }
-          tooltip={byokTooltip(stats)}
+          tooltip={byokTooltip(stats, tipOpts)}
           detail={byokDetail(stats)}
           to={settingsLinks.byok}
         />
@@ -67,7 +70,7 @@ export function SettingsCompactSnapshot({
             .filter(Boolean)
             .join(' · ') || 'None'}
           accent={stats.slackConfigured || stats.sentryConfigured ? 'text-brand' : undefined}
-          tooltip={routingTooltip(stats)}
+          tooltip={routingTooltip(stats, tipOpts)}
           detail={routingDetail()}
           to={settingsLinks.routing}
         />

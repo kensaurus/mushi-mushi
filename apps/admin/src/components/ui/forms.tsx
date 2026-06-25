@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { Card, LabelHelp } from './layout';
 
@@ -8,19 +8,31 @@ import { Card, LabelHelp } from './layout';
 interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string
   options: readonly string[]
+  /** Override auto-generated id; defaults to filter-{slugified-label}. */
+  id?: string
 }
 
-export function FilterSelect({ label, options, ...rest }: FilterSelectProps) {
+/** Compact filter-bar select chrome — matches FilterSelect. */
+export const FILTER_SELECT_CLASS =
+  'bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150'
+
+export function FilterSelect({ label, options, id, className = '', ...rest }: FilterSelectProps) {
+  const selectId = id ?? `filter-${label.toLowerCase().replace(/\s+/g, '-')}`
   return (
-    <select
-      {...rest}
-      className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
-    >
-      <option value="">All {label}</option>
-      {options.filter(Boolean).map((opt) => (
-        <option key={opt} value={opt}>{opt}</option>
-      ))}
-    </select>
+    <label className="inline-flex flex-col gap-0.5">
+      <span className="sr-only">{label}</span>
+      <select
+        id={selectId}
+        aria-label={label}
+        {...rest}
+        className={`${FILTER_SELECT_CLASS} ${className}`}
+      >
+        <option value="">All {label}</option>
+        {options.filter(Boolean).map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+    </label>
   )
 }
 
@@ -78,7 +90,7 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.id)}
-            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-all motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
+            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-[background-color,color,box-shadow,transform] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
                 ? 'bg-brand text-brand-fg shadow-card'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
@@ -145,7 +157,7 @@ const BTN_BASE =
   'inline-flex items-center justify-center font-medium rounded-sm ' +
   'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
-  'motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.97]'
+  'motion-safe:transition-[background-color,border-color,color,box-shadow,transform] motion-safe:duration-150 motion-safe:active:scale-[0.97]'
 
 const BTN_SIZES = {
   sm: 'px-2 py-1 text-xs gap-1.5',
@@ -212,10 +224,14 @@ function BtnSpinner({ size }: { size: 'sm' | 'md' }) {
  *  default → hover → focus-visible → invalid → disabled, always with the
  *  brand ring at 60% opacity for AAA-friendly contrast on dark surfaces. */
 
+/** Shared focus ring for ad-hoc inputs that bypass `<Input />`. */
+export const FIELD_FOCUS =
+  'focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40'
+
 const FIELD_BASE =
   'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
   'placeholder:text-fg-faint hover:border-edge ' +
-  'focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 ' +
+  `${FIELD_FOCUS} ` +
   'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/40 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed ' +
   'motion-safe:transition-colors motion-safe:duration-150'
@@ -249,7 +265,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
 }
 
-export function Input({ label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, ...rest }: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, ...rest },
+  ref,
+) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
   const [touched, setTouched] = useState(false)
   const [localResult, setLocalResult] = useState<{ message: string; severity?: 'error' | 'warn' } | null>(null)
@@ -287,6 +306,7 @@ export function Input({ label, className = '', id, error, tooltip, helpId, valid
       )}
       <span className={isPassword ? 'relative block' : undefined}>
         <input
+          ref={ref}
           id={inputId}
           type={renderedType}
           aria-invalid={visibleError ? true : undefined}
@@ -336,9 +356,7 @@ export function Input({ label, className = '', id, error, tooltip, helpId, valid
       {visibleWarn && <p className={FIELD_WARN}>{visibleWarn}</p>}
     </label>
   )
-}
-
-/* ── Select (form variant) ──────────────────────────────────────────────── */
+})
 
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string

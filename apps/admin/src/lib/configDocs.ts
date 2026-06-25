@@ -125,9 +125,9 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   {
     id: 'settings.general.slack_webhook_url',
     label: 'Slack Webhook URL',
-    summary: 'Mushi posts new high-severity reports and weekly digests to this Slack webhook.',
+    summary: 'Posts new high-severity reports and weekly digests to this Slack webhook.',
     howItWorks:
-      'When a report exits triage at severity ≥ high (or via the weekly summary cron), the notifier fires a single POST against this URL with a formatted Slack Block Kit payload. Leave blank to disable Slack delivery without affecting in-app notifications.',
+      'When a report is classified at high severity or above (or via the weekly summary cron), Mushi sends a formatted Slack message to this URL. Leave blank to disable Slack delivery without affecting in-app notifications.',
     default: { value: 'unset (Slack disabled)' },
     backend: {
       table: 'project_settings',
@@ -136,7 +136,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       readBy: ['notify-slack edge function'],
     },
     whenToChange:
-      "Set this on day 1 if your team triages from Slack. Rotate it whenever the channel owner changes — webhooks don't expire, so a stale URL keeps posting until you replace it.",
+      "Set this on day 1 if your team reviews bugs from Slack. Rotate it whenever the channel owner changes — webhooks don't expire, so a stale URL keeps posting until you replace it.",
   },
   {
     id: 'settings.general.sentry_dsn',
@@ -189,8 +189,8 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   },
   {
     id: 'settings.general.stage2_model',
-    label: 'Stage 2 Model',
-    summary: 'The LLM that classifies reports after Stage 1 fast-filter passes them through.',
+    label: 'Classification model',
+    summary: 'Which LLM writes the plain-English read on each report after noise is filtered out.',
     howItWorks:
       'Stage 2 is the deep classifier — it labels severity, category, intent, dedup hints, and reproduction steps. The choice trades cost vs depth: Sonnet 4.6 is the recommended default; Opus is slow but catches subtle cases; Haiku is cheap but rougher. The selected model is read on every report, so changes apply immediately to new traffic.',
     default: { value: 'claude-sonnet-4-6' },
@@ -209,8 +209,8 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   },
   {
     id: 'settings.general.stage1_confidence_threshold',
-    label: 'Stage 1 Confidence Threshold',
-    summary: 'How sure the fast-filter must be that a report is junk before it auto-rejects it.',
+    label: 'Noise filter confidence',
+    summary: 'How confident Mushi must be that a report is spam or test noise before dropping it.',
     howItWorks:
       'Every inbound report runs through Stage 1 (Haiku 4.5). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).',
     default: { value: '0.85', range: '0.50 – 0.99' },
@@ -248,9 +248,9 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     id: 'settings.general.fix_branch_template',
     label: 'Fix Branch Template',
     summary:
-      'Naming pattern for the Git branch the fix-worker creates when it opens a draft PR.',
+      'Branch name pattern when Mushi opens a draft fix PR on GitHub.',
     howItWorks:
-      'When the fix orchestrator opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.',
+      'When auto-fix opens a PR, it derives the branch name from this template. Supported tokens are substituted per report: `{date}` → `YYYY-MM-DD` (UTC), `{category}` → the report category slug, `{shortId}` → the first 8 characters of the report UUID. Leave empty to fall back to the legacy scheme `mushi/fix-<shortId>-<timestamp36>`.',
     default: { value: 'mushi/fix/{date}-{category}-{shortId}' },
     backend: {
       table: 'project_settings',
@@ -268,9 +268,9 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     id: 'settings.byok.anthropic_key',
     label: 'Anthropic (Claude) API Key',
     summary:
-      'BYOK key powering Stage 1 fast-filter, Stage 2 classifier, vision analysis, and the LLM fix agent.',
+      'Your Anthropic key — used to read bugs in plain English and draft fixes. Stored encrypted; only a vault reference is saved in settings.',
     howItWorks:
-      'Stored in Supabase Vault — only a `vault://<id>` reference lives in `project_settings`. Every LLM call resolves the key at request time, so rotation is instant. When unset, the pipeline falls back to the platform default (if your plan includes one).',
+      'When set, bug reading and fix drafting bill your Anthropic account instead of platform credits. The key is stored encrypted in Supabase Vault — rotation is instant. When unset, Mushi falls back to the platform default (if your plan includes one). Powers fast-filter, classify-report, and fix-worker.',
     default: { value: 'unset (uses platform default)' },
     backend: {
       table: 'project_settings',
@@ -289,9 +289,9 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     id: 'settings.byok.openai_key',
     label: 'OpenAI / OpenRouter API Key',
     summary:
-      'BYOK key for the OpenAI-compatible fallback path (and OpenRouter / Together / Fireworks gateways).',
+      'Your OpenAI-compatible key — backup when Anthropic is down, and for judge scoring. Works with OpenRouter and other gateways via Base URL.',
     howItWorks:
-      'Used as the automatic failover when Anthropic 5xxs, and as the judge fallback in the autofix loop. Pair with the Base URL preset chips below to route the same key through any OpenAI-compatible gateway without code changes.',
+      'Used as automatic failover when Anthropic returns 5xx, and as the judge fallback in the autofix loop. Pair with the Base URL preset chips below to route the same key through any OpenAI-compatible gateway without code changes.',
     default: { value: 'unset (failover disabled)' },
     backend: {
       table: 'project_settings',
@@ -326,9 +326,9 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     id: 'settings.firecrawl.api_key',
     label: 'Firecrawl API Key',
     summary:
-      'BYOK key for the optional web-research provider. Used by Research, fix-augmentation, and the library modernizer.',
+      'Your Firecrawl key — lets Mushi look up docs and release notes while reviewing a bug or drafting a fix.',
     howItWorks:
-      'Stored in Supabase Vault. When set, three flows light up: the Research page can crawl arbitrary URLs during triage; the fix-worker pulls the top-3 web snippets when local RAG is sparse; a weekly cron scrapes release notes for outdated dependencies and files modernization reports.',
+      'When set, Research can crawl URLs during review; auto-fix pulls web snippets when local context is thin; a weekly cron checks dependency release notes. Stored encrypted in Vault. Leave unset to skip web research entirely.',
     default: { value: 'unset (web research disabled)' },
     backend: {
       table: 'project_settings',
@@ -410,7 +410,7 @@ const PROJECTS: ConfigDoc[] = [
     label: 'Project ID (UUID)',
     summary: 'The UUID your SDK and CLI use as MUSHI_PROJECT_ID — copy from the chip or the post-create success panel.',
     howItWorks:
-      'Every ingest and MCP call scopes to this id. The CLI wizard accepts UUID or proj_* slug form; the console always displays the UUID. Click the chip on Projects to copy — paste into `mushi init`, `mushi connect`, or `.env.local`.',
+      'Every report send and MCP call scopes to this id. The CLI wizard accepts UUID or proj_* slug form; the console always displays the UUID. Click the chip on Projects to copy — paste into `mushi init`, `mushi connect`, or `.env.local`.',
     default: { value: 'auto-generated on create' },
     whenToChange: 'Rarely — create a new project instead of reusing IDs across unrelated apps.',
   },
@@ -427,10 +427,10 @@ const PROJECTS: ConfigDoc[] = [
     id: 'projects.api_key_scope',
     label: 'API key scope preset',
     summary:
-      'Picks the capability bundle a freshly minted API key gets — SDK ingest, MCP read, or MCP read + write.',
+      'Chooses what a new API key can do — send bugs from your app, read reports in your editor, or both read and write.',
     howItWorks:
-      "Each preset maps to one or more raw scopes stored on `project_api_keys.scopes`. Edge functions check the scope before serving the call, so a leaked SDK key can't suddenly start mutating state. Mirror of the check constraint in migration `20260421003000_api_key_scopes.sql`.",
-    default: { value: 'SDK ingest (report:write only)' },
+      "Each preset maps to scopes stored on the key — edge functions check scope before serving the call, so a leaked SDK key can't mutate state. SDK send-only = report submission. MCP read = browse reports in Cursor. MCP read + write = dispatch fixes from the editor.",
+    default: { value: 'SDK send-only (report:write only)' },
     backend: {
       table: 'project_api_keys',
       column: 'scopes (jsonb)',
@@ -438,12 +438,12 @@ const PROJECTS: ConfigDoc[] = [
       readBy: ['report-ingest edge function', 'mcp server (@mushi-mushi/mcp)'],
     },
     whenToChange:
-      'Pick `SDK ingest` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse triage. Only pick `MCP read + write` for trusted local clients with an audit trail.',
+      'Pick `SDK send-only` for keys you ship inside a browser bundle. Pick `MCP read-only` for safely letting an agent browse reports. Only pick `MCP read + write` for trusted local clients with an audit trail.',
   },
   {
     id: 'projects.key_scope.report_write',
-    label: 'Key scope: report:write',
-    summary: 'Allows the API key to ingest new reports via the public report endpoint.',
+    label: 'Key scope: report submission',
+    summary: 'Lets the API key send new bug reports from your app.',
     howItWorks:
       'Required for the SDK to submit user-reported bugs. Without this scope, `POST /v1/reports` returns 403. Safe to ship in browser bundles — the Edge Function rate-limits per IP and validates payload shape before storing anything.',
     default: { value: 'enabled by default for new keys' },
@@ -471,7 +471,7 @@ const PROJECTS: ConfigDoc[] = [
       readBy: ['mcp server (@mushi-mushi/mcp)'],
     },
     whenToChange:
-      'Grant on keys you paste into Claude Desktop / Cursor / Cline so the LLM can read your triage queue. Pair with `mcp:write` only if you want the LLM to mutate state.',
+      'Grant on keys you paste into Claude Desktop / Cursor / Cline so the LLM can read your reports inbox. Pair with `mcp:write` only if you want the LLM to mutate state.',
   },
   {
     id: 'projects.key_scope.mcp_write',
@@ -504,7 +504,7 @@ const PROJECTS: ConfigDoc[] = [
       readBy: ['every admin API endpoint'],
     },
     whenToChange:
-      'Switch when triaging across multiple apps. For SSO orgs, ask the workspace owner to scope your invite so the picker only shows projects you should see.',
+      'Switch when reviewing bugs across multiple apps. For SSO orgs, ask the workspace owner to scope your invite so the picker only shows projects you should see.',
   },
 ];
 
@@ -618,7 +618,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       readBy: ['fix-worker edge function'],
     },
     whenToChange:
-      'Set when you graduate from "triage only" to "Mushi opens PRs". Typically the production repo, not a sandbox.',
+      'Set when you graduate from "review only" to "Mushi opens PRs". Typically the production repo, not a sandbox.',
   },
   {
     id: 'integrations.github.default_branch',
@@ -779,7 +779,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       readBy: ['route-to-github-issues edge function'],
     },
     whenToChange:
-      'Use when you want a public-facing changelog of triaged bugs without exposing your code repo.',
+      'Use when you want a public-facing changelog of reviewed bugs without exposing your code repo.',
   },
   {
     id: 'integrations.routing.github_issues.owner',
@@ -1059,7 +1059,7 @@ const COMPLIANCE: ConfigDoc[] = [
     id: 'compliance.retention.events_days',
     label: 'Events retention (days)',
     summary:
-      'How long pipeline events (LLM calls, ingest spans, fix attempts) are retained for analytics.',
+      'How long AI step events (LLM calls, report spans, fix attempts) are retained for analytics.',
     howItWorks:
       "Drives the rollup tables that power the Health page. Events older than this window are dropped; aggregated rollups (hourly/daily) survive longer because they're much smaller.",
     default: { value: '90' },
@@ -1181,7 +1181,7 @@ const PROMPT_LAB: ConfigDoc[] = [
     id: 'prompt-lab.stage',
     label: 'Pipeline stage',
     summary:
-      "Picks which step of the LLM pipeline you're editing prompts for — Stage 1 fast-filter, Stage 2 classifier, fix-worker, or judge.",
+      "Picks which AI step you're editing prompts for — fast-filter, classifier, fix-worker, or judge.",
     howItWorks:
       "Each stage has its own active prompt id. Switching tabs scopes every action below (create new version, set traffic split, replay) to that stage's prompts only — they don't cross-pollinate.",
     default: { value: 'classifier (most-used)' },
@@ -1311,7 +1311,7 @@ const ANTI_GAMING: ConfigDoc[] = [
       "Drives the `?flagged=true|false` query param on the reports listing. Pure UI filter — doesn't change underlying data, doesn't mark anything reviewed.",
     default: { value: 'all' },
     whenToChange:
-      'Switch to "flagged only" when investigating a suspected attack pattern. Switch back when you\'re reviewing the regular triage queue.',
+      'Switch to "flagged only" when investigating a suspected attack pattern. Switch back when you\'re reviewing the regular bug queue.',
   },
   {
     id: 'anti-gaming.aggregate_identical',
@@ -1339,7 +1339,7 @@ const ANTI_GAMING: ConfigDoc[] = [
       readBy: ['anti-gaming dashboard', 'audit log'],
     },
     whenToChange:
-      'Always fill it in — "flagged with no reason" is the ticket the next person on rotation can\'t triage.',
+      'Always fill it in — "flagged with no reason" is the ticket the next person on rotation can\'t review.',
   },
 ];
 
@@ -1353,7 +1353,7 @@ const NOTIFICATIONS: ConfigDoc[] = [
       'Pure UI filter. Doesn\'t mark anything as read; doesn\'t mute future notifications. Persists in the URL so a deep link to "unread severities high+" survives a reload.',
     default: { value: 'unread' },
     whenToChange:
-      'Stay on `unread` for daily triage. Flip to `all` when looking for a specific notification you saw last week.',
+      'Stay on `unread` for daily review. Flip to `all` when looking for a specific notification you saw last week.',
   },
   {
     id: 'notifications.type_filter',
@@ -1444,7 +1444,7 @@ const BILLING: ConfigDoc[] = [
     label: 'Support subject',
     summary: 'One-line summary of your support request — appears as the email subject line.',
     howItWorks:
-      'Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so triage doesn\'t bounce it back asking for clarification.',
+      'Submitted to the billing-support edge function which files a Zendesk-style ticket. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn\'t bounce it back asking for clarification.',
     default: { value: 'empty' },
     backend: {
       table: 'support_requests',
@@ -1459,7 +1459,7 @@ const BILLING: ConfigDoc[] = [
     id: 'billing.support_category',
     label: 'Support category',
     summary:
-      'Triage hint that routes the ticket to the right team — billing, plan change, refund, technical, other.',
+      'Category that routes your support ticket to the right team — billing, plan change, refund, technical, or other.',
     howItWorks:
       "The category is appended to the ticket body and used by the support inbox's automation to assign the right responder. Wrong category just means a slower first response, not a lost ticket.",
     default: { value: 'billing' },
@@ -1703,7 +1703,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       'Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from `@mushi-mushi/web` via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.',
     default: { value: 'react' },
     whenToChange:
-      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://docs.mushimushi.dev/migrations/capacitor-to-react-native.',
+      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://kensaur.us/mushi-mushi/docs/migrations/capacitor-to-react-native.',
   },
 ];
 
@@ -1714,7 +1714,7 @@ const ASSISTANT: ConfigDoc[] = [
     summary:
       'Adds an "Ask" tab to the SDK widget so users get answers about your app, grounded only in the page they\'re on and the knowledge you author.',
     howItWorks:
-      'When on, GET /v1/sdk/config returns the assistant block and the widget renders the tab. Each question hits POST /v1/sdk/assistant, which grounds the LLM in the published page context plus your knowledge corpus — it never reads user rows, source, or env. Uses your project BYOK key (Anthropic primary, OpenAI fallback) and logs every turn.',
+      'Turns on an Ask tab in the widget when enabled. Each question hits POST /v1/sdk/assistant, which grounds answers in the published page context plus your knowledge corpus — it never reads user rows, source, or env. Uses your project LLM key (Anthropic primary, OpenAI fallback) and logs every turn.',
     default: { value: 'false (off)' },
     backend: {
       table: 'project_settings',

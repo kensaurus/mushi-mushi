@@ -1,7 +1,7 @@
 {
   "name": "MushiMushi",
   "description": "User-friction intelligence layer for software teams. Captures, classifies, and auto-fixes bugs reported by users.",
-  "url": "https://api.mushimushi.dev/.well-known/agent.json",
+  "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/.well-known/agent.json",
   "version": "0.3.0",
   "capabilities": {
     "classify_bug": {
@@ -31,7 +31,7 @@
       "package": "@mushi-mushi/mcp"
     },
     "rest": {
-      "baseUrl": "https://api.mushimushi.dev/v1",
+      "baseUrl": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
       "auth": "X-Mushi-Api-Key header"
     }
   }

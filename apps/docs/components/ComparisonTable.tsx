@@ -56,7 +56,7 @@ export function ComparisonTable({ foil, rows }: ComparisonTableProps) {
     <table data-compare="2">
       <thead>
         <tr>
-          <th scope="col">Layer</th>
+          <th scope="col">Question</th>
           <th scope="col">{foil}</th>
           <th scope="col">Mushi</th>
         </tr>

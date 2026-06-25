@@ -1,5 +1,10 @@
 # @mushi-mushi/server
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Supabase edge functions and admin API — self-host the comprehension layer.
+
+
 Backend for Mushi Mushi — Supabase Edge Functions powering the LLM pipeline, knowledge graph, and admin API.
 
 <sub>Scale (June 2026): <b>43</b> edge functions · <b>234</b> SQL migrations · <b>14</b> pipeline agents — run <code>pnpm docs-stats</code> in the monorepo for live counts. See <a href="../../docs/stats.md">docs/stats.md</a>.</sub>

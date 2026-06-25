@@ -15,6 +15,8 @@ import { formatTokens } from '../charts'
 import type { FixAttempt } from './types'
 import { RelativeTime } from '../ui'
 import { apiFetch } from '../../lib/supabase'
+import { useToast } from '../../lib/toast'
+import * as Sentry from '@sentry/react'
 
 interface InventoryActionSummary {
   actionNodeId: string
@@ -45,6 +47,7 @@ export function FixDetailPanel({
   isInFlight = false,
   inventoryAction,
 }: Props) {
+  const toast = useToast()
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0)
   const specWarnings = fix.spec_validation_warnings ?? []
 
@@ -55,8 +58,12 @@ export function FixDetailPanel({
     try {
       await apiFetch(`/v1/admin/fixes/${fix.id}/refresh-ci`, { method: 'POST' })
       onRefreshed?.()
-    } catch {
-      // best-effort
+    } catch (err) {
+      toast.error('Could not refresh CI status from GitHub')
+      Sentry.captureMessage('fix refresh-ci failed', {
+        level: 'warning',
+        extra: { fixId: fix.id, error: err instanceof Error ? err.message : String(err) },
+      })
     } finally {
       setCiRefreshing(false)
     }

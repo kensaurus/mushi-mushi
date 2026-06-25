@@ -120,13 +120,13 @@ The request appears in the DSAR table with status `pending`.
 
 | Status | Action | When |
 |--------|--------|------|
-| `pending` | **Start triage** | Within 24 hours of receipt |
+| `pending` | **Start review** | Within 24 hours of receipt |
 | `in_progress` | **Complete** | When data export/deletion is done |
 | `in_progress` | **Reject** | Only with a valid legal basis — you must provide a written reason |
 
 **SLA badge** — an **overdue** badge appears if the request is > 30 days old without
 resolution. An **at-risk** badge appears at 25 days. Both are surfaced in the **At risk**
-filter chip for quick triage.
+filter chip for quick review.
 
 ---
 
@@ -140,7 +140,7 @@ filter chip for quick triage.
 
 ### Responding to a deletion request (GDPR Article 17)
 1. **File DSAR** → type: `deletion`, enter subject email → **File**.
-2. **Start triage** immediately.
+2. **Start review** immediately.
 3. Manually delete the user's reports from your database (or use the DSAR export to identify them).
 4. Mark as **Complete** with a note of when deletion was performed.
 5. Archive the DSAR row as your compliance record.

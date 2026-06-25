@@ -499,29 +499,31 @@ export function SdkInstallCard({
               "React Native" on a single line when wrapping kicks in
               (otherwise it splits into "React" / "Native" on adjacent
               lines, which the eye reads as two separate tabs). */}
-          <div role="tablist" aria-label="Framework" className="flex flex-wrap items-center gap-1 border-b border-edge-subtle pb-2">
+          <div className="flex flex-wrap items-center gap-1 border-b border-edge-subtle pb-2">
+            <div role="tablist" aria-label="Framework" className="flex flex-wrap items-center gap-1">
+              {FRAMEWORKS.map((fw) => (
+                <button
+                  key={fw}
+                  type="button"
+                  role="tab"
+                  aria-selected={framework === fw}
+                  onClick={() => {
+                    autoFrameworkApplied.current = true
+                    setFramework(fw)
+                    setSnippetCopied(false)
+                    setInstallCopied(false)
+                  }}
+                  className={`px-2.5 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
+                    framework === fw
+                      ? 'bg-brand text-brand-fg font-medium'
+                      : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
+                  }`}
+                >
+                  {frameworkLabel(fw)}
+                </button>
+              ))}
+            </div>
             <ConfigHelp helpId="sdk-install.framework" />
-            {FRAMEWORKS.map((fw) => (
-              <button
-                key={fw}
-                type="button"
-                role="tab"
-                aria-selected={framework === fw}
-                onClick={() => {
-                  autoFrameworkApplied.current = true
-                  setFramework(fw)
-                  setSnippetCopied(false)
-                  setInstallCopied(false)
-                }}
-                className={`px-2.5 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
-                  framework === fw
-                    ? 'bg-brand text-brand-fg font-medium'
-                    : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
-                }`}
-              >
-                {frameworkLabel(fw)}
-              </button>
-            ))}
           </div>
 
           <CodePanel
@@ -686,9 +688,9 @@ function WidgetPreview({
           borderColor: tokens.rule,
         }}
       >
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#E06C5A' }} />
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#D4B158' }} />
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#7BA476' }} />
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-red)]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-yellow)]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-preview-traffic-green)]" />
         <span
           className="ml-2 text-3xs"
           style={{ color: tokens.inkMuted, fontFamily: 'ui-monospace, SF Mono, Menlo, monospace' }}
@@ -1128,7 +1130,7 @@ function ConfiguratorPanel({
                   value={config.bannerMessage}
                   onChange={(e) => onChange({ ...config, bannerMessage: e.target.value })}
                   placeholder="Your app is in active beta — expect rough edges."
-                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand text-2xs"
+                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
                 />
               </label>
               <label className="block">
@@ -1138,7 +1140,7 @@ function ConfiguratorPanel({
                   value={config.bannerLabel}
                   onChange={(e) => onChange({ ...config, bannerLabel: e.target.value })}
                   placeholder="Beta"
-                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand text-2xs"
+                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
                 />
               </label>
               {/* Bug CTA label */}
@@ -1149,7 +1151,7 @@ function ConfiguratorPanel({
                   value={config.bannerBugCta}
                   onChange={(e) => onChange({ ...config, bannerBugCta: e.target.value })}
                   placeholder="🐛 Report a bug"
-                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand text-2xs"
+                  className="mt-0.5 w-full px-2 py-1 bg-surface-overlay border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand text-2xs"
                 />
               </label>
               {/* Feature CTA toggle */}
@@ -1172,7 +1174,7 @@ function ConfiguratorPanel({
                 value={config.attachToSelector}
                 onChange={(e) => update('attachToSelector', e.target.value)}
                 placeholder="#report-button"
-                className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand font-mono text-2xs"
+                className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand font-mono text-2xs"
               />
               <p className="text-fg-faint text-3xs mt-0.5">Leave blank to set programmatically via <code>sdk.attachTo(el)</code>.</p>
             </label>
@@ -1221,7 +1223,7 @@ function ConfiguratorPanel({
             value={config.triggerText}
             onChange={(e) => update('triggerText', e.target.value.slice(0, 12))}
             maxLength={12}
-            className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+            className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
             placeholder="\u{1F41B}"
             aria-label="Trigger button text or emoji"
           />
@@ -1265,7 +1267,7 @@ function ConfiguratorPanel({
           <select
             value={config.capture.screenshot}
             onChange={(e) => updateCapture('screenshot', e.target.value as ScreenshotMode)}
-            className="ml-2 px-2 py-0.5 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+            className="ml-2 px-2 py-0.5 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
           >
             {SCREENSHOT_MODES.map((m) => (
               <option key={m} value={m}>{SCREENSHOT_LABEL[m]}</option>
@@ -1302,7 +1304,7 @@ function ConfiguratorPanel({
                 value={typeof config.screenshotSensitiveHint === 'string' ? config.screenshotSensitiveHint : ''}
                 placeholder="Default: warn not to share passwords or personal info"
                 onChange={(e) => update('screenshotSensitiveHint', e.target.value ? e.target.value : true)}
-                className="mt-1.5 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand"
+                className="mt-1.5 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
               />
             )}
           </div>
@@ -1319,7 +1321,7 @@ function ConfiguratorPanel({
             <select
               value={config.native.triggerMode}
               onChange={(e) => updateNative('triggerMode', e.target.value as SdkPreviewConfig['native']['triggerMode'])}
-              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
             >
               {NATIVE_TRIGGER_MODES.map((mode) => (
                 <option key={mode} value={mode}>{mode}</option>
@@ -1334,7 +1336,7 @@ function ConfiguratorPanel({
               max={1000}
               value={config.native.minDescriptionLength}
               onChange={(e) => updateNative('minDescriptionLength', Number(e.target.value))}
-              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
             />
           </label>
         </div>

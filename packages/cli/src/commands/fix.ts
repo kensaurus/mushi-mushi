@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { loadConfig } from '../config.js';
-import { apiCall } from '../cli-shared.js';
+import { apiCall, requireUuid } from '../cli-shared.js';
 
 export function registerFixCommands(program: Command): void {
 // ─── mushi fix ───────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ Examples:
     apiKey?: string
     projectId?: string
   }) => {
+    requireUuid(reportId, 'reportId')
     const cfg = loadConfig()
     if (opts.endpoint) cfg.endpoint = opts.endpoint
     if (opts.apiKey) cfg.apiKey = opts.apiKey

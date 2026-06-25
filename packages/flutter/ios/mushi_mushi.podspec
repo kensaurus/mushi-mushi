@@ -6,7 +6,7 @@ Pod::Spec.new do |s|
     Mushi Mushi Flutter SDK — bottom-sheet bug reporter, shake-to-report,
     offline queue, and device context capture for Flutter apps on iOS.
   DESC
-  s.homepage         = 'https://mushimushi.dev'
+  s.homepage         = 'https://kensaur.us/mushi-mushi'
   s.license          = { :type => 'MIT', :file => '../LICENSE' }
   s.author           = { 'Mushi Mushi' => 'kensaurus@gmail.com' }
   s.source           = { :path => '.' }

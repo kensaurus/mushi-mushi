@@ -1305,7 +1305,7 @@ export function ProjectsPage() {
                       <select
                         id={`key-scope-${project.id}`}
                         data-testid={`key-scope-${project.id}`}
-                        className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand"
                         value={keyScopePreset[project.id] ?? 'sdk'}
                         onChange={(e) =>
                           setKeyScopePreset((prev) => ({

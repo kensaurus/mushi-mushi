@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Releases snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { ReleasesStats } from '../../components/releases/ReleasesStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

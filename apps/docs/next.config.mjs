@@ -9,8 +9,7 @@
 // `MUSHI_BASE_PATH` and `MUSHI_ASSET_PREFIX` flip the prefix at build time so
 // the same source builds:
 //   * local dev               → http://localhost:3001/
-//   * docs.mushimushi.dev     → / (subdomain, no prefix)
-//   * kensaur.us/mushi-mushi/docs → /mushi-mushi/docs (subpath under unified domain)
+//   * kensaur.us/mushi-mushi/docs → /mushi-mushi/docs (production subpath)
 // =============================================================================
 
 import nextra from 'nextra'

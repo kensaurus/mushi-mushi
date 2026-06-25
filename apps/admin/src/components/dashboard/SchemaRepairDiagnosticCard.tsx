@@ -188,7 +188,7 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
             <button
               type="button"
               onClick={() => setDismissed(true)}
-              className="shrink-0 mt-0.5 text-danger hover:bg-danger-muted/40 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/50"
+              className="shrink-0 mt-0.5 text-danger hover:bg-danger-muted/40 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/50"
               aria-label="Dismiss schema repair alert"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -228,7 +228,7 @@ export function SchemaRepairDiagnosticCard({ projectId }: Props) {
         <div className="rounded-md border border-info/30 bg-info-muted/20 px-3.5 py-3">
           <button
             type="button"
-            className="w-full flex items-start justify-between gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-info/50 rounded"
+            className="w-full flex items-start justify-between gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/50 rounded"
             onClick={() => setAdvisorsExpanded((v) => !v)}
             aria-expanded={advisorsExpanded}
           >

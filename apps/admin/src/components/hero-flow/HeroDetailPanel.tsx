@@ -223,7 +223,7 @@ function DetailCta({
       ? (
         <Link
           to={cta.to}
-          className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-2xs font-bold text-brand-fg hover:bg-brand-hover shadow-sm shadow-brand/25 motion-safe:transition-all"
+          className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-2xs font-bold text-brand-fg hover:bg-brand-hover shadow-sm shadow-brand/25 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]"
           data-dav-action="follow-cta"
         >
           {cta.label} <span aria-hidden>→</span>

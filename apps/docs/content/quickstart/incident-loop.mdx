@@ -3,10 +3,12 @@ title: Incident loop — bug to fix prompt
 ---
 
 import { Callout } from 'nextra/components'
+import { TroubleshootingAccordion } from '../../components/TroubleshootingAccordion'
+import { INCIDENT_LOOP_LEDE } from '@/lib/public-copy'
 
 # Incident loop
 
-The vibe-coder path: something broke in prod → plain-English diagnosis → paste-ready fix prompt in Cursor. **This is the 20-second demo loop.**
+{INCIDENT_LOOP_LEDE}
 
 {/* TODO(loop-video): drop the recorded asset in and uncomment. Path is the
     canonical slot shared with the README hero + Launch Week thumbnail.
@@ -58,11 +60,7 @@ Copy the agent's output into a new Cursor chat (or continue in the same thread) 
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| No tools listed | Restart IDE after MCP install; run `diagnose_setup` |
-| Empty reports | Check SDK heartbeat; verify `report:write` key in `.env.local` |
-| MCP auth errors | Use an `mcp:read` or `mcp:write` key — not the SDK ingest key only |
+<TroubleshootingAccordion />
 
 ## See also
 

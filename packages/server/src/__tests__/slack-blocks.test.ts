@@ -27,7 +27,7 @@ let slack: SlackModule
 const envBackup = { ...process.env }
 
 beforeEach(async () => {
-  process.env.ADMIN_BASE_URL = 'https://admin.mushimushi.dev'
+  process.env.ADMIN_BASE_URL = 'https://kensaur.us/mushi-mushi/admin'
   ;(globalThis as typeof globalThis & { Deno?: { env: { get: (k: string) => string | undefined } } }).Deno = {
     env: { get: (key: string) => process.env[key] },
   }

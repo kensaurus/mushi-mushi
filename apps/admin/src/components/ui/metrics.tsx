@@ -721,7 +721,7 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
         <Link
           to={to}
           aria-label={`${label} — go to ${destination}`}
-          className="group/stat relative z-[1] block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          className="group/stat relative z-[1] block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
         >
           {inner}
         </Link>

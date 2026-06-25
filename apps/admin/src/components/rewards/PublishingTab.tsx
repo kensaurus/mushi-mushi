@@ -491,7 +491,7 @@ export function PublishingTab() {
               <label className="block text-xs font-medium text-fg-muted mb-1">Description</label>
               <textarea
                 className="w-full rounded-md border border-edge-subtle bg-surface px-3 py-2 text-sm text-fg
-                           placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-brand/60
+                           placeholder:text-fg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60
                            min-h-[100px] resize-y"
                 value={description}
                 onChange={e => { setDesc(e.target.value); setFormReady(false) }}

@@ -23,7 +23,10 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withLlmFailover } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
+import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
+import { createTrace } from '../_shared/observability.ts'
+import { tagLangfuseTrace } from '../_shared/sentry.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -189,6 +192,19 @@ Deno.serve(
       )
     }
 
+    const safeUrl = assertSafeOutboundUrl(base_url, {})
+    if (!safeUrl.ok) {
+      await db.from('story_map_runs').update({
+        status: 'failed',
+        error: safeUrl.reason ?? 'URL is not allowed for crawling',
+        completed_at: new Date().toISOString(),
+      }).eq('id', run_id)
+      return new Response(
+        JSON.stringify({ ok: false, error: { code: 'UNSAFE_URL', message: safeUrl.reason ?? 'URL is not allowed for crawling' } }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
     // Mark run as running
     await db.from('story_map_runs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', run_id)
 
@@ -234,6 +250,10 @@ Deno.serve(
       const appName = (project?.name as string | undefined) ?? 'App'
       const prompt = buildProposerPrompt(pages, appName, base_url)
 
+      const trace = createTrace('story-mapper', { run_id, project_id, base_url })
+      tagLangfuseTrace(trace.id)
+      const llmSpan = trace.span('propose-inventory')
+
       let proposerOutput: ProposerOutput | null = null
       let lastIssues = ''
       let attempt = 0
@@ -276,8 +296,13 @@ Deno.serve(
       }
 
       if (!proposerOutput) {
+        llmSpan.end({ model: ANTHROPIC_SONNET, error: lastIssues.slice(0, 500) })
+        await trace.end()
         throw new Error(`Claude could not produce a valid inventory.yaml after ${attempt} attempts. Last issues: ${lastIssues}`)
       }
+
+      llmSpan.end({ model: ANTHROPIC_SONNET })
+      await trace.end()
 
       // === Persist as inventory_proposals (source='live_crawl') ===
       // The inventory_proposals table requires proposed_yaml + proposed_parsed

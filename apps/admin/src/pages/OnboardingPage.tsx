@@ -307,7 +307,7 @@ export function OnboardingPage() {
     setGeneratingKey(false)
     if (res.ok && res.data) {
       setApiKey(res.data)
-      toast.success('API key generated', 'Copy it now \u2014 it will not be shown again. Then submit a test report below to verify the pipeline.')
+      toast.success('API key generated', 'Copy it now \u2014 it will not be shown again. Then submit a test report below to verify everything works.')
       setup.reload()
     } else {
       const msg = res.error?.message ?? 'Failed to generate API key'
@@ -433,13 +433,13 @@ export function OnboardingPage() {
         title={copy?.title ?? 'Setup'}
         projectScope={stats.projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
-        description={copy?.description ?? 'Create a project, mint an ingest key, install the SDK, and watch your first report become a plain-English diagnosis — target: under 2 minutes.'}
+        description={copy?.description ?? 'Create a project, generate a report key, install the SDK, and watch your first bug get a plain-English read — target: under 2 minutes.'}
         helpTitle={copy?.help?.title ?? 'About this wizard'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A guided checklist that creates your first project, generates an API key, sends a test report, and shows the SDK snippet. Progress saves across devices.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Create the project that will receive bug reports from your app',
           'Generate and copy the API key that authenticates SDK requests',
-          'Confirm the ingest pipeline is reachable before shipping any code',
+          'Confirm reports arrive before shipping any code',
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings.'}
       >
@@ -1065,7 +1065,7 @@ export function OnboardingPage() {
           <div className="grid grid-cols-5 gap-1 pt-1">
             {[
               { stage: 'Capture', desc: 'screenshot + logs', done: true },
-              { stage: 'Classify', desc: 'AI triage', done: testStatus === 'pass' },
+              { stage: 'Classify', desc: 'Plain-English read', done: testStatus === 'pass' },
               { stage: 'Fix', desc: 'draft PR', done: false },
               { stage: 'Verify', desc: 'QA stories', done: false },
               { stage: 'Remember', desc: 'lesson library', done: false },
@@ -1086,18 +1086,48 @@ export function OnboardingPage() {
 
       {effectiveTab === 'sdk' && (
         <>
-      {project && !setup.isStepIncomplete('api_key_generated') ? (
+      {!project ? (
+        <Card className="p-4 border border-info/30 bg-info/5">
+          <p className="text-xs text-fg-muted">Create a project on the Steps tab first — the install snippet needs a project to bind to.</p>
+          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('steps')}>Go to Steps</Btn>
+        </Card>
+      ) : (
         <div className="space-y-3">
+          {/* Snippet is always reachable: SdkInstallCard renders a `mushi_…`
+              placeholder when no real key is passed, so a user can see and copy
+              the install code immediately. When the key step is still
+              incomplete we offer minting inline here instead of bouncing them
+              to the Verify tab (the old ping-pong friction). */}
+          {setup.isStepIncomplete('api_key_generated') && (
+            <Card className="p-4 border border-info/30 bg-info/5 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-fg">Mint your API key</h3>
+                <p className="mt-1 text-xs text-fg-muted">
+                  The snippet below shows a <code className="font-mono">mushi_…</code> placeholder so you can
+                  see the install code right now. Generate your real key here to drop straight in — no need to
+                  leave this tab. It is shown <strong>once</strong>; copy it before navigating away.
+                </p>
+              </div>
+              {!apiKey ? (
+                <>
+                  <div className="inline-flex items-center gap-1">
+                    <Btn onClick={generateKey} loading={generatingKey} disabled={generatingKey}>
+                      Generate API key
+                    </Btn>
+                    <ConfigHelp helpId="onboarding.first_key_label" />
+                  </div>
+                  {error && <p className="text-xs text-danger">{error}</p>}
+                </>
+              ) : (
+                <KeyReveal apiKey={apiKey} copied={keyCopied} onCopy={() => copyToClipboard(apiKey.key, setKeyCopied)} />
+              )}
+            </Card>
+          )}
           <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={apiKey?.key} showConnectionStatus />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>
         </div>
-      ) : (
-        <Card className="p-4 border border-info/30 bg-info/5">
-          <p className="text-xs text-fg-muted">Mint an API key on Verify before copying the install snippet.</p>
-          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('verify')}>Go to Verify</Btn>
-        </Card>
       )}
         </>
       )}
@@ -1164,7 +1194,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
       <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
         <div className="flex items-baseline justify-between gap-3">
           <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Time to first diagnosis</p>
+            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
             <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
               {formatDiagnosisDuration(ms)}
             </p>
@@ -1174,7 +1204,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
           </span>
         </div>
         <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-          From minting your ingest key to your first plain-English diagnosis. This is the one number worth
+          From generating your report key to your first plain-English read. This is the one number worth
           protecting — the faster a fresh install gets an answer, the more the loop earns its place.
         </p>
       </Card>
@@ -1183,7 +1213,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey }: { hasApiKey: boolean }) {
 
   return (
     <Card className="p-5 border border-edge-subtle">
-      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Time to first diagnosis</p>
+      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
       <p className="mt-0.5 text-sm text-fg-secondary">Waiting on your first classified report.</p>
       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
         Send a test report below (or trigger one from your app). Target: a plain-English diagnosis in under

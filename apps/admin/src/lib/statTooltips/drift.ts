@@ -6,8 +6,12 @@
 import type { MetricTooltipData } from '../../components/ui'
 import type { DriftStats } from '../../components/drift/DriftStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'
+import type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
 
-export function openFindingsTooltip(stats: DriftStats): MetricTooltipData {
+type Opts = PlainStatTooltipOpts
+
+export function openFindingsTooltip(stats: DriftStats, opts: Opts = {}): MetricTooltipData {
+  const plain = opts.plainLanguage ?? false
   const takeaway =
     stats.openFindings > 0
       ? `${stats.openFindings} open drift finding${stats.openFindings === 1 ? '' : 's'} (${stats.dismissedFindings} dismissed). Scan Findings tab for contract/API gaps.`
@@ -20,7 +24,12 @@ export function openFindingsTooltip(stats: DriftStats): MetricTooltipData {
     'Counts drift_findings rows with status open for the active project. dismissedFindings is the all-time dismissed subset.',
     takeaway,
     stats.openFindings > 0
-      ? { tone: 'warn', text: `${stats.openFindings} open finding${stats.openFindings === 1 ? '' : 's'} — triage before the next deploy.` }
+      ? {
+          tone: 'warn',
+          text: plain
+            ? `${stats.openFindings} open finding${stats.openFindings === 1 ? '' : 's'} — review before the next deploy.`
+            : `${stats.openFindings} open finding${stats.openFindings === 1 ? '' : 's'} — triage before the next deploy.`,
+        }
       : undefined,
   )
 }
@@ -29,10 +38,13 @@ export function openFindingsDetail(stats: DriftStats): string {
   return `${stats.dismissedFindings} dismissed`
 }
 
-export function criticalOpenTooltip(stats: DriftStats): MetricTooltipData {
+export function criticalOpenTooltip(stats: DriftStats, opts: Opts = {}): MetricTooltipData {
+  const plain = opts.plainLanguage ?? false
   const takeaway =
     stats.criticalOpen > 0
-      ? `${stats.criticalOpen} critical open finding${stats.criticalOpen === 1 ? '' : 's'} — breaking contract changes need immediate triage.`
+      ? plain
+        ? `${stats.criticalOpen} critical open finding${stats.criticalOpen === 1 ? '' : 's'} — breaking contract changes need immediate review.`
+        : `${stats.criticalOpen} critical open finding${stats.criticalOpen === 1 ? '' : 's'} — breaking contract changes need immediate triage.`
       : 'No critical open drift findings.'
 
   return metricTip(
@@ -40,13 +52,19 @@ export function criticalOpenTooltip(stats: DriftStats): MetricTooltipData {
     'Counts open drift_findings where severity = critical for the active project.',
     takeaway,
     stats.criticalOpen > 0
-      ? { tone: 'warn', text: `${stats.criticalOpen} critical finding${stats.criticalOpen === 1 ? '' : 's'} — needs triage.` }
+      ? {
+          tone: 'warn',
+          text: plain
+            ? `${stats.criticalOpen} critical finding${stats.criticalOpen === 1 ? '' : 's'} — needs review.`
+            : `${stats.criticalOpen} critical finding${stats.criticalOpen === 1 ? '' : 's'} — needs triage.`,
+        }
       : undefined,
   )
 }
 
-export function criticalOpenDetail(): string {
-  return 'Needs triage'
+export function criticalOpenDetail(opts: Opts = {}): string {
+  const plain = opts.plainLanguage ?? false
+  return plain ? 'Needs review' : 'Needs triage'
 }
 
 export function warnOpenTooltip(stats: DriftStats): MetricTooltipData {

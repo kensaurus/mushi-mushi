@@ -34,6 +34,8 @@ import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
 import { estimateCallCostUsd } from '../../_shared/pricing.ts'
 import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts'
 import { logLlmInvocation } from '../../_shared/telemetry.ts'
+import { createTrace } from '../../_shared/observability.ts'
+import { tagLangfuseTrace } from '../../_shared/sentry.ts'
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
 import { verifyEndUserToken, MUSHI_USER_TOKEN_HEADER } from '../../_shared/end-user-identity.ts'
 import { canManageProjectSdkConfig } from '../helpers.ts'
@@ -236,6 +238,10 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     let usedModel = ASSIST_MODEL
     let fallbackUsed = false
 
+    const trace = createTrace('sdk-assistant', { projectId, threadId, route })
+    tagLangfuseTrace(trace.id)
+    const llmSpan = trace.span('generate')
+
     try {
       const { result, usedProvider } = await withAnthropicOrOpenAi(
         db,
@@ -273,6 +279,14 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
       const latencyMs = Date.now() - started
       const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0)
 
+      llmSpan.end({
+        model: usedModel,
+        inputTokens,
+        outputTokens,
+        latencyMs,
+      })
+      await trace.end()
+
       void logLlmInvocation(db, {
         projectId,
         functionName: 'sdk-assistant',
@@ -285,6 +299,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         latencyMs,
         inputTokens,
         outputTokens,
+        langfuseTraceId: trace.id,
       })
 
       const assistantContent = reply.kind === 'answer' ? String(reply.text ?? '') : String(reply.question ?? '')
@@ -301,6 +316,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         output_tokens: outputTokens ?? null,
         cost_usd: costUsd,
         latency_ms: latencyMs,
+        langfuse_trace_id: trace.id,
         meta: { kind: reply.kind },
       }).then(({ error }) => { if (error) log.warn('assistant_turn_insert_failed', { error: error.message }) })
 
@@ -308,6 +324,8 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       const latencyMs = Date.now() - started
+      llmSpan.end({ model: usedModel, error: msg, latencyMs })
+      await trace.end().catch(() => {})
       void logLlmInvocation(db, {
         projectId,
         functionName: 'sdk-assistant',
@@ -319,6 +337,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         status: 'error',
         errorMessage: msg,
         latencyMs,
+        langfuseTraceId: trace.id,
       })
       log.error('sdk_assistant_llm_error', { projectId, error: msg })
       return c.json({ ok: false, error: { code: 'ASSISTANT_ERROR', message: 'The assistant is temporarily unavailable.' } }, 502)

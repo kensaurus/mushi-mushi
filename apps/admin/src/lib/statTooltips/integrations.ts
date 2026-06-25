@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Integrations snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { IntegrationStats } from '../../components/integrations/types'
 import { metricTip } from '../metricTooltipBuilder'

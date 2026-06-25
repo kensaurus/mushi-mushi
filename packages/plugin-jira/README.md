@@ -1,5 +1,10 @@
 # `@mushi-mushi/plugin-jira`
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Part of the Mushi Mushi monorepo — plain-English bug comprehension for vibe coders.
+
+
 Bidirectional sync between Mushi Mushi reports and Jira Cloud issues.
 Creates issues on `report.created`, updates them on `report.classified`,
 transitions status on `report.status_changed`, and comments fix summaries on
@@ -92,4 +97,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

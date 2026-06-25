@@ -29,7 +29,13 @@ export function useOnboardingUx(): OnboardingUxFlags {
     isBeginner,
     isAdvanced,
     hideOverviewTab: isQuickstart,
-    hideOverviewChrome: !isAdvanced,
+    // Only Quickstart hides the orienting hero + "how Mushi closes the loop"
+    // explainer (and it hides the whole Overview tab anyway). Beginner mode is
+    // "all the options, with tooltips" — orientation is the entire point — so
+    // it must SEE the explainer, not have it hidden like Advanced power users
+    // who don't need hand-holding. (Previously `!isAdvanced` hid it from exactly
+    // the beginners who needed it most.)
+    hideOverviewChrome: isQuickstart,
     plainBanner: !isAdvanced,
     hideOptionalStat: isQuickstart,
     hideFooterLinks: isQuickstart,

@@ -3,7 +3,7 @@
     "scope": "mcp:read",
     "description": "Ordered timeline for a report (comments, fixes, QA, status).",
     "method": "GET",
-    "path": "/v1/sync/reports/{reportId}/timeline",
+    "path": "/v1/admin/reports/{reportId}/timeline",
     "required": ["reportId"]
   },
   "get_similar_bugs": {
@@ -238,7 +238,7 @@
     "scope": "mcp:write",
     "description": "Reply to bug reporter.",
     "method": "POST",
-    "path": "/v1/sync/reports/{reportId}/reply",
+    "path": "/v1/admin/reports/{reportId}/reply",
     "required": ["reportId", "message"],
     "body": { "message": "{message}", "author_name": "{authorName}" }
   },
@@ -246,7 +246,7 @@
     "scope": "mcp:read",
     "description": "Two-way reporter communication health.",
     "method": "GET",
-    "path": "/v1/sync/two-way-health"
+    "path": "/v1/admin/two-way-health?project_id={project_id}"
   },
   "list_qa_story_runs": {
     "scope": "mcp:read",

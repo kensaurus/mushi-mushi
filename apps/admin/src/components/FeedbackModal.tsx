@@ -269,7 +269,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                   value={subject}
                   onChange={(e) => setSubject(e.target.value.slice(0, MAX_SUBJECT))}
                   placeholder={config.subjectPlaceholder}
-                  className="w-full rounded-sm border border-edge bg-surface-raised px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"
+                  className="w-full rounded-sm border border-edge bg-surface-raised px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:border-brand"
                   maxLength={MAX_SUBJECT}
                   required
                 />
@@ -292,7 +292,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                   onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
                   placeholder={config.bodyPlaceholder}
                   rows={4}
-                  className="w-full rounded-sm border border-edge bg-surface-raised px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand resize-y leading-relaxed"
+                  className="w-full rounded-sm border border-edge bg-surface-raised px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:border-brand resize-y leading-relaxed"
                   maxLength={MAX_BODY}
                 />
                 {bodyNearLimit && (

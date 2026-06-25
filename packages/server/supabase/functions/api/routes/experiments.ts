@@ -20,13 +20,37 @@
 // Phase 5 — Mushi closed-loop evolution
 
 import { Hono } from 'npm:hono@4'
+import { z } from 'npm:zod@3'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
+import { dbError } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
+
+const experimentPatchSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    description: z.string().max(5000).nullable().optional(),
+    hypothesis: z.string().max(5000).nullable().optional(),
+    traffic_split: z.number().min(0).max(100).optional(),
+    bandit_enabled: z.boolean().optional(),
+    status: z.enum(['draft', 'running', 'stopped', 'completed']).optional(),
+  })
+  .strict()
+
+const variantPatchSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    description: z.string().max(5000).nullable().optional(),
+    config: z.record(z.unknown()).optional(),
+    traffic_weight: z.number().min(0).max(100).optional(),
+    bandit_alpha: z.number().positive().optional(),
+    bandit_beta: z.number().positive().optional(),
+  })
+  .strict()
 
 export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>) {
   // GET /v1/admin/experiments/stats — posture banner + EXPERIMENTS SNAPSHOT.
@@ -208,7 +232,7 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       .order('created_at', { ascending: false })
     if (status) q = q.eq('status', status)
     const { data, error, count } = await q
-    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    if (error) return dbError(c, error)
     return c.json({ ok: true, data, total: count })
   })
 
@@ -217,7 +241,7 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     const { project_id, name, description, hypothesis, traffic_split, bandit_enabled } = body
     if (!project_id || !name) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id and name required' } }, 400)
     const { data, error } = await db().from('experiments').insert({ project_id, name, description, hypothesis, traffic_split, bandit_enabled }).select().single()
-    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    if (error) return dbError(c, error)
     return c.json({ ok: true, data }, 201)
   })
 
@@ -229,8 +253,15 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
 
   admin.patch('/:id', async (c) => {
     const body = await c.req.json()
-    const { error } = await db().from('experiments').update(body).eq('id', c.req.param('id')!)
-    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    const parsed = experimentPatchSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.message } }, 400)
+    }
+    if (Object.keys(parsed.data).length === 0) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'No valid fields to update' } }, 400)
+    }
+    const { error } = await db().from('experiments').update(parsed.data).eq('id', c.req.param('id')!)
+    if (error) return dbError(c, error)
     return c.json({ ok: true })
   })
 
@@ -243,14 +274,21 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     const body = await c.req.json()
     const { name, description, config, traffic_weight } = body
     const { data, error } = await db().from('experiment_variants').insert({ experiment_id: c.req.param('id')!, name, description, config, traffic_weight }).select().single()
-    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    if (error) return dbError(c, error)
     return c.json({ ok: true, data }, 201)
   })
 
   admin.patch('/:id/variants/:vid', async (c) => {
     const body = await c.req.json()
-    const { error } = await db().from('experiment_variants').update(body).eq('id', c.req.param('vid')!).eq('experiment_id', c.req.param('id')!)
-    if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    const parsed = variantPatchSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.message } }, 400)
+    }
+    if (Object.keys(parsed.data).length === 0) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'No valid fields to update' } }, 400)
+    }
+    const { error } = await db().from('experiment_variants').update(parsed.data).eq('id', c.req.param('vid')!).eq('experiment_id', c.req.param('id')!)
+    if (error) return dbError(c, error)
     return c.json({ ok: true })
   })
 

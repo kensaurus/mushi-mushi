@@ -17,7 +17,7 @@ Pod::Spec.new do |s|
     :git => 'https://github.com/kensaurus/mushi-mushi.git',
     :tag => "ios-v#{s.version}"
   }
-  s.documentation_url = 'https://docs.mushimushi.dev/sdks/ios'
+  s.documentation_url = 'https://kensaur.us/mushi-mushi/docs/sdks/ios'
 
   s.ios.deployment_target  = '15.0'
   s.tvos.deployment_target = '15.0'

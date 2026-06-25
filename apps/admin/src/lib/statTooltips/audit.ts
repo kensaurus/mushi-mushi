@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Audit snapshot and breakdown strips.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { AuditStats } from '../../components/audit/types'
 import { metricTip } from '../metricTooltipBuilder'

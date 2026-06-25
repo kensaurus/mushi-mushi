@@ -2,7 +2,7 @@
  * Stand-alone Node HTTPS entry point for the Bugsnag plugin. Usage:
  *
  *   MUSHI_PLUGIN_SECRET=... BUGSNAG_API_KEY=... BUGSNAG_PROJECT_SLUG=... \
- *   ADMIN_BASE_URL=https://admin.mushimushi.dev PORT=3000 \
+ *   ADMIN_BASE_URL=https://kensaur.us/mushi-mushi/admin PORT=3000 \
  *     npx mushi-plugin-bugsnag
  */
 
