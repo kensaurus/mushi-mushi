@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Version aligned with the Mushi Mushi 1.21 SDK release wave.
+- Tooling hygiene: sources now pass `dart format` and a clean `dart analyze`
+  (removed an unnecessary cast in `api_client.dart` and an unused `dart:math`
+  import in `overlay.dart`) to restore pub.dev static-analysis scoring.
+
 ## 0.2.0
 
 - Initial pub.dev release as part of Mushi Mushi C3.
