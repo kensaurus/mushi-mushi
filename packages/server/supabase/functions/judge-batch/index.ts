@@ -14,6 +14,7 @@ import { dispatchPluginEvent } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
 import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
+import { safeErrorResponse } from '../_shared/safe-error.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -539,6 +540,8 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
         })
       }
     } catch { /* best-effort */ }
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500 })
+    // Never echo the raw error to the client (js/stack-trace-exposure). The
+    // full error is logged above and recorded on cron_runs.
+    return safeErrorResponse()
   }
 }))

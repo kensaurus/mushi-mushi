@@ -557,7 +557,14 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
     } else {
       lines.push(`| ID | Severity | Status | Summary |`, `| -- | -------- | ------ | ------- |`)
       for (const r of (openReports ?? []).slice(0, 50)) {
-        const summary = (r.summary ?? '(no summary)').replace(/\|/g, '\\|').slice(0, 80)
+        // Escape for a Markdown table cell. Backslash must be escaped FIRST
+        // (js/incomplete-sanitization: escaping only `|` lets `\|` break out),
+        // then pipes; newlines are collapsed since a cell can't span rows.
+        const summary = (r.summary ?? '(no summary)')
+          .slice(0, 80)
+          .replace(/[\r\n]+/g, ' ')
+          .replace(/\\/g, '\\\\')
+          .replace(/\|/g, '\\|')
         lines.push(`| \`${r.id.slice(0, 8)}\` | ${r.severity ?? '-'} | ${r.status} | ${summary} |`)
       }
     }
