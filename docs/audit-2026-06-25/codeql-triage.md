@@ -12,9 +12,9 @@ are low-real-risk in tests / build tooling / CLI file-IO.
 
 | Disposition | Count | Notes |
 |---|---|---|
-| Fixed in code (PR #242) | 20 | Auto-close on the next CodeQL scan after merge |
+| Fixed in code (PR #242) | 20 | Auto-closed on the post-merge CodeQL scan |
+| Fixed in code (PR #245) | 11 | Section-3 runtime follow-ups + 2 extra stack-trace sites — **confirmed fixed** on the post-merge scan |
 | Dismissed — documented | 114 | 80 "won't fix", 27 "used in tests", 6 "false positive", 1 probe |
-| Kept open — needs review | 9 | Genuine runtime findings; recommended follow-up (below) |
 | OpenSSF Scorecard (repo hygiene) | 11 | Repo settings / Dockerfile pinning (below) |
 
 ## 1. Fixed in code — PR #242 (`fix/codeql-runtime-hardening`)
@@ -43,22 +43,25 @@ Top dismissed rules: `js/file-access-to-http` (42), `js/insecure-temporary-file`
 (25), `js/file-system-race` (11), `js/polynomial-redos` (9, all CLI/tooling),
 `js/indirect-command-line-injection` (8), `js/insecure-randomness` (6, admin).
 
-## 3. Kept open — recommended follow-up (9)
+## 3. Resolved — PR #245 (`fix/codeql-section3-hardening`)
 
-These are genuine **runtime** findings beyond the approved targeted scope of
-PR #242. They were deliberately **not** dismissed and **not** rushed — each
-deserves a careful, dedicated fix.
+The genuine **runtime** findings deferred from PR #242's targeted scope were
+fixed in a dedicated pass (researched, not rushed) and **confirmed `fixed`** by
+the post-merge CodeQL scan on `master`. The pass also closed two additional
+`js/stack-trace-exposure` sites (#17, #19) that were open outside the original
+9-alert follow-up list.
 
-| # | Sev | Rule | File | Note |
+| # | Sev | Rule | File | Fix |
 |---|---|---|---|---|
-| 246, 247 | high | `js/incomplete-multi-character-sanitization` | `_shared/html-sanitize.ts` | **Highest priority.** Regex HTML sanitizer for LLM-generated admin content is bypassable (e.g. nested `<scr<script>ipt>`). Recommend replacing regex sanitization with a real sanitizer or guaranteeing the output is never rendered as HTML. |
-| 248 | high | `js/bad-tag-filter` | `_shared/html-sanitize.ts` | Same sanitizer; `<script>` regex misses malformed tags. |
-| 249 | high | `js/incomplete-url-scheme-check` | `_shared/html-sanitize.ts` | `javascript:` strip is defeatable (embedded chars / entity encoding). |
-| 112 | high | `js/incomplete-sanitization` | `api/routes/inventory.ts` | Review the sanitization on this runtime route. |
-| 20 | high | `js/incomplete-url-substring-sanitization` | `_shared/operator-notify.ts` | Same class as the admin fix; apply hostname parsing. |
-| 74 | high | `js/polynomial-redos` | `marketing-ui/src/StatusPill.tsx` | Shipped UI; same class as the mcp fix. |
-| 81 | medium | `js/missing-origin-check` | `apps/docs/lib/migrationProgress.ts` | `postMessage` handler missing an `event.origin` check. |
-| 82 | medium | `js/client-side-request-forgery` | `apps/docs/lib/migrationProgress.ts` | Request target derived from untrusted input. |
+| 246, 247 | high | `js/incomplete-multi-character-sanitization` | `_shared/html-sanitize.ts` | Replaced the bypassable regex blocklist with a deny-by-default allowlist tokenizer (no tag-matching regex). Backed by 13 Deno tests. The sole producer (`renderIntelligenceHtml`) is already safe-by-construction and the serving route sends a strict CSP; this is defense-in-depth without a new dependency. |
+| 248 | high | `js/bad-tag-filter` | `_shared/html-sanitize.ts` | Same tokenizer — handles `</script >`, uppercase, and spaced/malformed end tags. |
+| 249 | high | `js/incomplete-url-scheme-check` | `_shared/html-sanitize.ts` | URL-bearing attributes are dropped wholesale, so `javascript:`/`data:`/`vbscript:` cannot survive. Serving-route CSP also hardened (`object`/`frame`/`form-action`/`base-uri 'none'`). |
+| 112 | high | `js/incomplete-sanitization` | `api/routes/inventory.ts` | Escape `\` before `\|` and collapse newlines in the Markdown table cell. |
+| 20 | high | `js/incomplete-url-substring-sanitization` | `_shared/operator-notify.ts` | Parsed-host compare (`safeHost(url) !== SLACK_HOST`), mirroring `postDiscord`. |
+| 74 | high | `js/polynomial-redos` | `marketing-ui/src/StatusPill.tsx` | Linear trailing-slash trim, mirroring the `mcp/src/branding.ts` fix. |
+| 81 | medium | `js/missing-origin-check` | `apps/docs/lib/migrationProgress.ts` | Direct `event.origin` equality check as the first guard in the `postMessage` handler. |
+| 82 | medium | `js/client-side-request-forgery` | `apps/docs/lib/migrationProgress.ts` | Fetch base pinned to the build-time `DEFAULT_API_URL` constant instead of `session.apiUrl`. |
+| 17, 19 | medium | `js/stack-trace-exposure` | `fast-filter`, `judge-batch` | Return `safeErrorResponse()` instead of `String(err)`; full error still logged server-side. |
 
 ## 4. OpenSSF Scorecard (11) — repo settings, not code
 
@@ -74,7 +77,8 @@ fixes:
 ## Reproduce / audit
 
 ```bash
-# remaining open after this triage (should be: 20 fixed-pending-rescan + 11 scorecard + 9 review)
+# after PR #242 + #245 merged & re-scanned, the remaining code-scanning open
+# alerts are the 11 OpenSSF Scorecard / repo-hygiene items (no open code findings).
 gh api --paginate "repos/:owner/:repo/code-scanning/alerts?state=open&per_page=100" | jq length
 
 # see a dismissed alert's reason + comment
