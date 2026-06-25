@@ -92,6 +92,33 @@ function git(cwd, ...args) {
   return result.stdout.trim()
 }
 
+function ghLogin() {
+  return gh(['api', 'user', '--jq', '.login'])
+}
+
+/** Commit with GitHub noreply identity — fresh clones often lack user.name/email. */
+function gitCommit(cwd, message) {
+  const login = ghLogin()
+  git(
+    cwd,
+    '-c',
+    `user.name=${login}`,
+    '-c',
+    `user.email=${login}@users.noreply.github.com`,
+    'commit',
+    '-m',
+    message,
+  )
+}
+
+function ensureUpstreamRemote(cwd) {
+  const remotes = git(cwd, 'remote')
+  if (!remotes.split(/\r?\n/).includes('upstream')) {
+    git(cwd, 'remote', 'add', 'upstream', `https://github.com/${UPSTREAM}.git`)
+  }
+  git(cwd, 'fetch', 'upstream')
+}
+
 // Insert ENTRY into the README inside the named section, alphabetically.
 // Returns { content, inserted: true|false }. If the section doesn't exist
 // returns { inserted: false } so the caller can bail with a clear error.
@@ -175,7 +202,8 @@ if (!args.dry) {
   if (existsSync(CLONE_DIR)) {
     step(`Refreshing existing clone at ${CLONE_DIR}`)
     git(CLONE_DIR, 'fetch', '--all', '--prune')
-    // Reset to upstream master/main so we're not stacking on stale history.
+    ensureUpstreamRemote(CLONE_DIR)
+    // Reset to upstream default branch so we're not stacking on stale history.
     const defaultBranch = gh([
       'repo',
       'view',
@@ -252,7 +280,7 @@ if (!status) {
   process.exit(0)
 }
 
-git(CLONE_DIR, 'commit', '-m', PR_TITLE)
+gitCommit(CLONE_DIR, PR_TITLE)
 step('Pushing branch to fork...')
 git(CLONE_DIR, 'push', '--set-upstream', 'origin', BRANCH, '--force-with-lease')
 

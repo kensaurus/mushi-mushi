@@ -54,7 +54,7 @@ node scripts/marketing/propose-awesome-pr.mjs \
 
 - [ ] `@mushi-mushi/mcp` published to npm and the official MCP registry (auto via release CI).
 - [ ] Verify the server appears at `registry.modelcontextprotocol.io` and on Glama / PulseMCP.
-- [ ] PR to `punkpeye/awesome-mcp-servers` opened.
+- [x] PR to `punkpeye/awesome-mcp-servers` opened ([#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625)).
 - [x] PR to `awesome-remote-mcp-servers` re-opened ([#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431), supersedes closed #428).
 - [ ] README first paragraph is the v2 hero (awesome-list scrapers read it) — enforced by `scripts/check-tagline-consistency.mjs`.
 - [ ] `mcp` GitHub topic present (applied by `scripts/marketing/setup-github.mjs`).
