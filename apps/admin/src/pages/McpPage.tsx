@@ -137,7 +137,7 @@ const USE_CASES: UseCase[] = [
   {
     title: 'New project check-in',
     ask: 'Is the SDK sending data? Any critical issues?',
-    calls: ['list_projects', 'get_project_context', 'ingest_setup_check'],
+    calls: ['list_projects', 'get_project_context', 'diagnose_setup'],
   },
 ]
 
@@ -379,7 +379,7 @@ function validateMcpJsonSyntax(raw: string): McpJsonCheck {
   return {
     ok,
     title: ok ? 'Syntax looks valid.' : 'Config needs changes.',
-    details: details.length > 0 ? details : ['Restart Cursor MCP after saving the file, then run diagnose_connection.'],
+    details: details.length > 0 ? details : ['Restart Cursor MCP after saving the file, then run diagnose_setup.'],
   }
 }
 
@@ -661,7 +661,7 @@ export function McpPage() {
     },
     {
       label: 'Query production data',
-      tools: ['run_nl_query', 'get_similar_bugs', 'list_projects', 'get_project_context', 'ingest_setup_check'],
+      tools: ['run_nl_query', 'get_similar_bugs', 'list_projects', 'get_project_context', 'diagnose_setup'],
       description: 'Query report data from your editor.',
     },
   ]

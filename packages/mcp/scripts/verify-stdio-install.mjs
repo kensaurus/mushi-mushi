@@ -80,10 +80,6 @@ try {
     console.log('   get_recent_reports (live API): OK')
   }
 
-  const conn = await client.callTool({ name: 'diagnose_connection', arguments: {} })
-  if (conn.isError) fail('diagnose_connection failed')
-  else console.log('   diagnose_connection: OK')
-
   if (failed === 0) {
     console.log('\nOK — stdio install verified (' + tools.length + ' tools, ' + resources.length + ' resources)')
   } else {

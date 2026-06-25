@@ -2,7 +2,7 @@
 /**
  * FILE: scripts/check-activation-contract.mjs
  * PURPOSE: Contract gate — activation route registered, MCP catalog has
- *          get_activation_status + mushi://activation, feature flag default on.
+ *          activation_status + mushi://activation, feature flag default on.
  */
 
 import { readFileSync } from 'node:fs'
@@ -31,7 +31,7 @@ const activationRoute = read('packages/server/supabase/functions/api/routes/acti
 assert(activationRoute.includes("app.get('/v1/admin/activation'"), 'GET /v1/admin/activation exists')
 
 const mcpCatalog = read('packages/mcp/src/catalog.ts')
-assert(mcpCatalog.includes('get_activation_status'), 'MCP catalog lists get_activation_status')
+assert(/\bactivation_status\b/.test(mcpCatalog), 'MCP catalog lists activation_status')
 assert(mcpCatalog.includes('mushi://activation'), 'MCP catalog lists mushi://activation')
 assert(mcpCatalog.includes('mushi_setup'), 'MCP catalog lists mushi_setup prompt')
 

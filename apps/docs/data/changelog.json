@@ -1,5 +1,30 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Rewrote every tool description",
+        "description": "to a consistent template — front-loaded verb + object, explicit return shape, side-effects/idempotency, usage guidance with sibling cross-references, and an example. All four annotation hints (`readOnly`, `destructive`, `idempotent`, `openWorld`) are now explicit per tool."
+      },
+      {
+        "title": "Renamed off-pattern tools to `verb_object`",
+        "description": "(old names still resolve for one release via the deprecated-alias map): `fix_suggest` → `suggest_fix`, `inventory_get` → `get_inventory`, `inventory_diff` → `diff_inventory`, `inventory_findings` → `list_gate_findings`, `graph_neighborhood` → `get_graph_neighborhood`, `graph_node_status` → `get_graph_node`."
+      },
+      {
+        "title": "Removed deprecated tools",
+        "description": "superseded by a single entry point: `setup_check`, `ingest_setup_check`, and `diagnose_connection` are replaced by `diagnose_setup` (`mode=full|ingest|dispatch`); `get_activation_status` → the `activation_status` tool/resource; `get_reporter_thread` → `get_report_timeline`."
+      },
+      {
+        "title": "Lean default tool surface.",
+        "description": "When `MUSHI_FEATURES` is unset, the stdio server now exposes the focused `DEFAULT_FEATURE_GROUPS` (triage + fixes + inventory + setup + docs) instead of the full catalog. Set `MUSHI_FEATURES=all` (or a CSV of groups, e.g. `triage,qa,skills`) to widen the surface. The CODEBASE tools are now grouped under `codebase`."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.22",
     "headline": null,
     "pending": false,

@@ -41,7 +41,7 @@ mushi connect --wait
 # writes ~/.config/mushi/config.json + .env.local + .cursor/mcp.json
 ```
 
-In your IDE agent, call **`diagnose_setup`** (or MCP `get_activation_status`) if reports don't appear — it returns the exact next fix.
+In your IDE agent, call **`diagnose_setup`** if reports don't appear — it returns the exact next fix.
 
 **Hosted MCP (no local subprocess):** point Cursor at `https://<ref>.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` with `X-Mushi-Api-Key` + `X-Mushi-Project-Id` headers. Full catalog: `?features=all`.
 
@@ -79,7 +79,7 @@ You don't need the SDK. After a developer wires ingest:
 |---------|-----|
 | Test report skipped during wizard | Re-run `npx mushi-mushi init` — cloud endpoint is auto-filled |
 | `mushi doctor` fails ingest | Paste SDK snippet, start dev server, submit one report; or use **Connect & Update** test-report CTA |
-| Banner never appears | `mushi doctor` or MCP `diagnose_setup` / `get_activation_status` |
+| Banner never appears | `mushi doctor` or MCP `diagnose_setup` |
 | MCP tools missing in Cursor | Use global `~/.cursor/mcp.json` only; restart Cursor; check `pnpm check:catalog-sync` if tool names drift |
 | Screenshot reports fail silently | SDK compresses screenshots; check console for payload warnings |
 | Upgrade PR fails | Connect GitHub on **Connect & Update** first; repo must contain `@mushi-mushi/*` in `package.json` |

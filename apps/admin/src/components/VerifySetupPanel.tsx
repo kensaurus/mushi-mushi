@@ -97,8 +97,8 @@ export function VerifySetupPanel({ projectId, projectName, adminHost, compact = 
 
   const cliIngest = 'mushi doctor --ingest'
   const cliDispatch = 'mushi doctor --server'
-  const mcpIngest = 'ingest_setup_check'
-  const mcpDispatch = 'setup_check'
+  const mcpIngest = 'diagnose_setup (mode=ingest)'
+  const mcpDispatch = 'diagnose_setup (mode=dispatch)'
 
   if (!project && setup.loading) {
     return (

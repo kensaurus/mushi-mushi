@@ -41,8 +41,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: 'Cursor MCP troubleshooting',
     path: docPath('/guides/mcp-setup'),
-    keywords: ['cursor', 'mcp.json', 'red badge', 'transport error', 'stdout', 'stderr', 'json-rpc', 'INVALID_TOKEN', 'syntax helper', 'diagnose_connection'],
-    excerpt: 'Cursor stdio MCP requires stdout to contain only JSON-RPC. Use the console syntax helper, restart Cursor MCP, then run diagnose_connection.',
+    keywords: ['cursor', 'mcp.json', 'red badge', 'transport error', 'stdout', 'stderr', 'json-rpc', 'INVALID_TOKEN', 'syntax helper', 'diagnose_setup'],
+    excerpt: 'Cursor stdio MCP requires stdout to contain only JSON-RPC. Use the console syntax helper, restart Cursor MCP, then run diagnose_setup.',
   },
   {
     title: 'Judge loop',

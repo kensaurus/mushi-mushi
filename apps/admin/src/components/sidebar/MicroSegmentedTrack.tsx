@@ -8,7 +8,7 @@
  * - Child control keeps `MICRO_SEG` + `microSegActive(active)` classes.
  */
 
-import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
+import { LayoutGroup, motion } from 'framer-motion'
 import {
   createContext,
   useContext,
@@ -16,7 +16,7 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from 'react'
-import { useMotionTransition } from '../../lib/useMotionTransition'
+import { useMotionTransition, usePrefersReducedMotion } from '../../lib/useMotionTransition'
 import { microTapScale } from '../../lib/motion-tokens'
 import {
   MICRO_SEG_CELL,
@@ -84,7 +84,7 @@ export function MicroSegmentCell({
 }) {
   const trackId = useContext(MicroTrackContext)
   const layoutTransition = useMotionTransition()
-  const reduceMotion = useReducedMotion()
+  const reduceMotion = usePrefersReducedMotion()
 
   return (
     <div className={cx(MICRO_SEG_CELL, className)}>

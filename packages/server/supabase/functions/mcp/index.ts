@@ -73,7 +73,7 @@ import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
 import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
-import { parseFeaturesParam, toolMatchesFeatures, type FeatureFilter } from './feature-groups.ts'
+import { parseFeaturesParam, toolMatchesFeatures, DEPRECATED_TOOL_ALIASES, type FeatureFilter } from './feature-groups.ts'
 import { searchMushiDocs } from './docs-index.ts'
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
 import {
@@ -297,10 +297,10 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       })
     },
   },
-  inventory_get: {
+  get_inventory: {
     scope: 'mcp:read',
     description:
-      'Current inventory.yaml snapshot for a project (latest ingest, validation errors, per-action status summary).',
+      'Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Use diff_inventory to compare two commits or list_gate_findings for the latest gate results.',
     inputSchema: {
       type: 'object',
       properties: { projectId: { type: 'string' } },
@@ -308,14 +308,14 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
-      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for inventory_get')
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_inventory')
       return apiCall(`/v1/admin/inventory/${encodeURIComponent(pid)}`, { headers: ctx.authHeaders })
     },
   },
-  inventory_findings: {
+  list_gate_findings: {
     scope: 'mcp:read',
     description:
-      'Latest gate runs + findings (dead-handler, mock-leak, crawl, status-claim, agentic-failure). Filter by gate name or severity.',
+      'List the most recent inventory gate findings for a project, newest run first (dead-handler, mock-leak, crawl, status-claim, agentic-failure). Filter by gate name or minimum severity. Use diff_inventory to compare commits or get_inventory for the full snapshot.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -327,7 +327,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
       const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
-      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for inventory_findings')
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for list_gate_findings')
       const q = new URLSearchParams()
       if (typeof args.gate === 'string') q.set('gate', args.gate)
       if (typeof args.severity === 'string') q.set('severity', args.severity)
@@ -337,9 +337,9 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       })
     },
   },
-  graph_node_status: {
+  get_graph_node: {
     scope: 'mcp:read',
-    description: 'Fetch a single graph node row (label, type, metadata — includes derived status).',
+    description: 'Fetch one knowledge-graph node row by id (label, type, metadata — includes the derived status on Action nodes). Use get_graph_neighborhood to see what connects to it.',
     inputSchema: {
       type: 'object',
       required: ['nodeId'],
@@ -562,140 +562,34 @@ const BASE_TOOLS: Record<string, ToolDef> = {
     },
   },
 
-  // Setup / admin — mirror of packages/mcp/src/server.ts (setup_check +
-  // ingest_setup_check). Keep both transports in lock-step.
-  setup_check: {
+  // activation_status — thin wrapper matching the npm package's tool (the
+  // resource mushi://activation is HTTP-only; this entry exposes the same
+  // data as a callable MCP tool so both tool-callers and resource-readers work).
+  activation_status: {
     scope: 'mcp:read',
     description:
-      'Run the 4 **dispatch-readiness** checks for a project and return their pass/fail status ' +
-      '(GitHub repo connected, codebase indexed, Anthropic BYOK key present, autofix enabled). ' +
-      'Also returns the target repo URL when GitHub is connected. ' +
-      'Use this before calling dispatch_fix to understand why a dispatch might fail. ' +
-      'For SDK ingest health (API key → heartbeat → first report), call ingest_setup_check instead.',
+      'Return the unified activation posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. Returns the same payload as the activation_status resource.',
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Project UUID to check. Defaults to the API key\'s project when omitted.',
-        },
+        project_id: { type: 'string', description: 'Project UUID (defaults to key-bound project).' },
       },
-    },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        ready: { type: 'boolean' },
-        repoUrl: { type: ['string', 'null'] },
-        checks: { type: 'array', items: { type: 'object', additionalProperties: true } },
-        summary: { type: 'string' },
-      },
-      required: ['ready', 'checks', 'summary'],
     },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
-      const projectId = (args.projectId as string | undefined) ?? ctx.projectIdHint
-      if (!projectId) {
-        throw new McpError(
-          ERR_INVALID_PARAMS,
-          'projectId is required for setup_check when no API-key project context is available',
-        )
-      }
-      const data = await apiCall<{
-        ready: boolean
-        checks: Array<{ key: string; ready: boolean; label: string; hint: string; fixHref: string }>
-        repoUrl: string | null
-      }>(`/v1/admin/projects/${encodeURIComponent(projectId)}/preflight`, {
-        headers: ctx.authHeaders,
-      })
-      const checks = data.checks.map((c) => ({
-        check: c.key,
-        label: c.label,
-        passed: c.ready,
-        hint: c.hint,
-        fixPath: c.fixHref,
-      }))
-      const failed = checks.filter((c) => !c.passed)
-      return {
-        ready: data.ready,
-        repoUrl: data.repoUrl ?? null,
-        checks,
-        summary: data.ready
-          ? `Project ${projectId} is ready to dispatch auto-fixes${data.repoUrl ? ` (target: ${data.repoUrl})` : ''}.`
-          : `Project ${projectId} cannot dispatch yet — ${failed.map((c) => c.label).join(', ')}.`,
-      }
-    },
-  },
-  ingest_setup_check: {
-    scope: 'mcp:read',
-    description:
-      'Run the 4 **required ingest** checks for the project tied to this API key: ' +
-      'project exists, active API key, SDK heartbeat (or real report), and at least one ingested report. ' +
-      'Returns per-step pass/fail plus last_sdk_seen_at and endpoint host diagnostics. ' +
-      'Use after wiring env vars or pasting the SDK snippet to confirm the banner will work.',
-    inputSchema: { type: 'object', properties: {} },
-    outputSchema: {
-      type: 'object',
-      properties: {
-        ready: { type: 'boolean' },
-        projectId: { type: 'string' },
-        projectName: { type: 'string' },
-        requiredComplete: { type: 'number' },
-        requiredTotal: { type: 'number' },
-        steps: { type: 'array', items: { type: 'object', additionalProperties: true } },
-        diagnostic: { type: ['object', 'null'], additionalProperties: true },
-        summary: { type: 'string' },
-      },
-      required: ['ready', 'projectId', 'projectName', 'requiredComplete', 'requiredTotal', 'steps', 'summary'],
-    },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-    handler: async (_args, ctx) => {
-      if (!ctx.projectIdHint) {
-        throw new McpError(
-          ERR_INVALID_PARAMS,
-          'ingest_setup_check requires API-key auth (X-Mushi-Api-Key) — JWT sessions should use setup_check',
-        )
-      }
-      const data = await apiCall<{
-        ready: boolean
-        required_complete: number
-        required_total: number
-        project_id: string
-        project_name: string
-        steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
-        diagnostic?: {
-          last_sdk_seen_at: string | null
-          last_sdk_endpoint_host: string | null
-          admin_endpoint_host: string | null
-        }
-      }>('/v1/sync/ingest-setup', { headers: ctx.authHeaders })
-      const failed = data.steps.filter((s) => s.required && !s.complete)
-      return {
-        ready: data.ready,
-        projectId: data.project_id,
-        projectName: data.project_name,
-        requiredComplete: data.required_complete,
-        requiredTotal: data.required_total,
-        steps: data.steps.map((s) => ({
-          id: s.id,
-          label: s.label,
-          passed: s.complete,
-          required: s.required,
-          hint: s.hint,
-        })),
-        diagnostic: data.diagnostic ?? null,
-        summary: data.ready
-          ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
-          : `Ingest incomplete (${data.required_complete}/${data.required_total}) — still need: ${failed.map((s) => s.label).join(', ')}.`,
-      }
+      const pid = (args.project_id as string | undefined) ?? ctx.projectIdHint
+      const qs = pid ? `?project_id=${encodeURIComponent(pid)}` : ''
+      return apiCall<unknown>(`/v1/admin/activation${qs}`, { headers: ctx.authHeaders })
     },
   },
 
+  // Setup / admin — mirror of packages/mcp/src/server.ts. The single
+  // diagnose_setup entry point covers ingest + dispatch readiness; keep both
+  // transports in lock-step.
   diagnose_setup: {
     scope: 'mcp:read',
     description:
-      'Single entry point for setup health. mode=full (default) runs ingest + dispatch checks; ' +
-      'mode=ingest runs SDK ingest checks only; mode=dispatch runs fix-dispatch preflight only. ' +
-      'Prefer this over setup_check, ingest_setup_check, or diagnose_connection alone.',
+      'Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only; mode=dispatch runs dispatch readiness only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -711,6 +605,7 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         ready: { type: 'boolean' },
         summary: { type: 'string' },
         nextAction: { type: 'string' },
+        connection: { type: ['object', 'null'], additionalProperties: true },
         ingest: { type: 'object', additionalProperties: true },
         dispatch: { type: ['object', 'null'], additionalProperties: true },
       },
@@ -766,6 +661,64 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         }
       }
 
+      // ── Connection probes (restored from diagnose_connection) ──────────────
+      // These catch INVALID_TOKEN / endpoint / no-projects issues before the
+      // ingest/dispatch calls which would surface them as cryptic 401s.
+      const connIssues: Array<{ check: string; detail: string; fix: string }> = []
+      const apiEndpoint = ctx.authHeaders['X-Mushi-Api-Endpoint'] ?? ''
+      const apiKey = ctx.authHeaders['X-Mushi-Api-Key'] ?? ctx.authHeaders['Authorization']?.replace(/^Bearer /, '') ?? ''
+
+      if (!apiKey.startsWith('mushi_')) {
+        connIssues.push({
+          check: 'mcp_api_key',
+          detail: 'MCP server API key missing or malformed (expected prefix: mushi_)',
+          fix: 'Run `mushi connect` or set MUSHI_API_KEY to a valid key in your MCP config.',
+        })
+      }
+
+      let healthOk = false
+      if (apiEndpoint) {
+        try {
+          const healthRes = await fetch(`${apiEndpoint.replace(/\/$/, '')}/health`, {
+            signal: AbortSignal.timeout(5000),
+          })
+          healthOk = healthRes.status === 200
+          if (!healthOk) {
+            connIssues.push({
+              check: 'endpoint_health',
+              detail: `GET /health → HTTP ${healthRes.status}`,
+              fix: 'Verify MUSHI_API_ENDPOINT and that the Supabase edge function is deployed.',
+            })
+          }
+        } catch (err) {
+          connIssues.push({
+            check: 'endpoint_health',
+            detail: err instanceof Error ? err.message : String(err),
+            fix: 'Check network connectivity and MUSHI_API_ENDPOINT in your MCP config.',
+          })
+        }
+      }
+
+      let accessibleProjectCount: number | null = null
+      if (!resolvedId && healthOk) {
+        try {
+          const overview = await apiCall<{ projects: Array<{ id: string }>; total: number }>(
+            '/v1/admin/mcp/account-overview',
+            { headers: ctx.authHeaders },
+          )
+          accessibleProjectCount = overview.total
+          if (overview.total === 0) {
+            connIssues.push({
+              check: 'no_accessible_projects',
+              detail: 'API key has no accessible projects',
+              fix: 'Mint an API key on a project (console → Projects → API Keys) or add MUSHI_PROJECT_ID.',
+            })
+          }
+        } catch {
+          // Best-effort; health check above already covers connectivity issues.
+        }
+      }
+
       const ingest = await apiCall<{
         ready: boolean
         steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>
@@ -790,8 +743,11 @@ const BASE_TOOLS: Record<string, ToolDef> = {
         }
       }
       const ingestFailed = ingest.steps.filter((s) => s.required && !s.complete)
-      const ready = ingest.ready && dispatchReady
-      const nextAction = !ingest.ready
+      const connOk = connIssues.length === 0
+      const ready = connOk && ingest.ready && dispatchReady
+      const nextAction = !connOk
+        ? (connIssues[0]?.fix ?? 'Fix the connection issue above.')
+        : !ingest.ready
         ? (ingestFailed[0]?.hint ?? 'Complete SDK ingest setup.')
         : !dispatchReady
         ? (dispatchBlock ?? 'Complete dispatch preflight in Settings → Integrations.')
@@ -799,8 +755,19 @@ const BASE_TOOLS: Record<string, ToolDef> = {
       return {
         mode: 'full',
         ready,
-        summary: ready ? 'Ingest and dispatch setup look healthy.' : 'Setup incomplete — see nextAction.',
+        summary: ready
+          ? 'Mushi connection, ingest, and dispatch setup look healthy.'
+          : !connOk
+          ? `Connection issue — ${connIssues[0]?.check}: ${connIssues[0]?.detail}`
+          : 'Setup incomplete — see nextAction.',
         nextAction,
+        connection: {
+          healthOk,
+          endpoint: apiEndpoint || null,
+          projectId: resolvedId ?? null,
+          accessibleProjectCount,
+          issues: connIssues,
+        },
         ingest,
         dispatch: resolvedId ? dispatchPayload : null,
       }
@@ -1434,6 +1401,32 @@ TOOLS = {
     McpError,
     ERR_INVALID_PARAMS,
   }),
+}
+
+// ── Deprecated-alias backward-compatibility shims ──────────────────────────
+// Old tool names resolve for ONE release so existing agent configs don't break
+// silently on upgrade. Shims are hidden from tools/list filtering — handled by
+// toolMatchesFeatures returning true (unknown names pass through) — and they
+// are callable but inject a deprecation notice into the response.
+for (const [oldName, newName] of Object.entries(DEPRECATED_TOOL_ALIASES)) {
+  const target = TOOLS[newName]
+  if (!target) continue // target may not be in this transport build
+  TOOLS[oldName] = {
+    ...target,
+    description:
+      `⚠️ DEPRECATED — use \`${newName}\` instead. This alias will be removed in the next release.\n\n${target.description}`,
+    handler: async (args, ctx) => {
+      const data = await target.handler(args, ctx)
+      // If the result is an object, inject a deprecation key so callers notice.
+      if (data != null && typeof data === 'object' && !Array.isArray(data)) {
+        return {
+          _deprecated: `Tool \`${oldName}\` was renamed to \`${newName}\`. Update your agent config — alias removed next release.`,
+          ...(data as Record<string, unknown>),
+        }
+      }
+      return data
+    },
+  }
 }
 
 // ----------------------------------------------------------------------------

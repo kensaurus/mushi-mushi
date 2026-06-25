@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { PAGE_STACK } from '../lib/pageLayout'
+import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
 export interface PagePostureSlot {
   /**
@@ -65,8 +66,10 @@ export function PagePosture({ slots, maxRows, className }: PagePostureProps) {
 
   return (
     <div className={className ?? PAGE_STACK} data-page-posture="">
-      {visible.map((slot) => (
-        <div key={slot.id ?? slot.priority}>{slot.children}</div>
+      {visible.map((slot, idx) => (
+        <SpringChromeEnter key={slot.id ?? slot.priority} delay={idx * 0.04}>
+          {slot.children}
+        </SpringChromeEnter>
       ))}
     </div>
   )

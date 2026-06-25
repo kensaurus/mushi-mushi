@@ -9,6 +9,7 @@ import { Badge, RelativeTime, Tooltip, PipelineStrip, Btn } from '../ui'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
 import { isGithubUrl } from '../../lib/githubUrl'
 import { useRowFlash } from '../../lib/useRowFlash'
+import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { CursorAgentBadge } from './CursorAgentBadge'
 import { ClaudeAgentBadge } from './ClaudeAgentBadge'
 import { buildFixPipelineStages, fixStatusStripeClass } from './fixPipelineStages'
@@ -77,7 +78,7 @@ function FixRowViewInner({
     toneFor: flashToneFor,
   })
 
-  const staggerDelayMs = Math.min(index, 12) * 18
+  const stagger = useStaggeredAppear({ stepMs: 18, max: 12 })
 
   const labels = {
     openPr: actionLabels?.openPr ?? 'PR',
@@ -89,8 +90,8 @@ function FixRowViewInner({
   return (
     <>
       <tr
-        className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-colors cursor-pointer ${flash.className}`}
-        style={{ ...flash.style, animationDelay: `${staggerDelayMs}ms` }}
+        className={`group border-t border-edge-subtle hover:bg-surface-overlay/50 motion-safe:transition-colors cursor-pointer motion-safe:animate-mushi-fade-in ${flash.className}`}
+        style={{ ...stagger(index), ...flash.style }}
         onAnimationEnd={flash.onAnimationEnd}
         onClick={onToggle}
         data-testid={index === 0 ? 'fix-row' : undefined}
