@@ -1,5 +1,11 @@
 # @mushi-mushi/inventory-auth-runner
 
+## 0.1.2
+
+### Patch Changes
+
+- 8544e22: Publish these packages with npm provenance attestations. They were the last four published packages still missing `publishConfig.provenance: true`, so their tarballs shipped without the Sigstore build-provenance signature every other `@mushi-mushi/*` package carries. Adding it brings them in line with the rest of the workspace and lets consumers verify them via `npm audit signatures`. No runtime or API changes.
+
 ## 0.1.1
 
 ### Patch Changes
