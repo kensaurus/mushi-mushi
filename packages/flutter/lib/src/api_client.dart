@@ -51,7 +51,7 @@ class ApiClient {
       payload['breadcrumbs'] = (payload['breadcrumbs'] as List).map((c) {
         if (c is Map && c['message'] is String) {
           return <String, dynamic>{
-            ...Map<String, dynamic>.from(c as Map),
+            ...Map<String, dynamic>.from(c),
             'message': _scrubPii(c['message'] as String),
           };
         }
@@ -95,8 +95,7 @@ class ApiClient {
     if ((response.statusCode == 429 || response.statusCode >= 500) &&
         attempt < 3) {
       final delay = Duration(
-        milliseconds:
-            min(1000 * (1 << attempt) + Random().nextInt(500), 10000),
+        milliseconds: min(1000 * (1 << attempt) + Random().nextInt(500), 10000),
       );
       await Future<void>.delayed(delay);
       await _sendWithRetry(data, attempt: attempt + 1);
@@ -121,7 +120,9 @@ class ApiClient {
     MapEntry(RegExp(r'\b(?:AKIA|ASIA)[0-9A-Z]{16}\b'), '[REDACTED_AWS_KEY]'),
     MapEntry(
       RegExp(
-        r'(?:aws_secret_access_key|secret_access_key)["' "'" r'\s:=]+[A-Za-z0-9/+=]{40}\b',
+        r'(?:aws_secret_access_key|secret_access_key)["'
+        "'"
+        r'\s:=]+[A-Za-z0-9/+=]{40}\b',
         caseSensitive: false,
       ),
       'aws_secret_access_key=[REDACTED_AWS_SECRET]',
@@ -130,21 +131,19 @@ class ApiClient {
         '[REDACTED_STRIPE_KEY]'),
     MapEntry(RegExp(r'\bpk_(?:live|test)_[A-Za-z0-9]{24,}\b'),
         '[REDACTED_STRIPE_PK]'),
-    MapEntry(RegExp(r'\bxox[abpor]-[A-Za-z0-9-]{10,}\b'),
-        '[REDACTED_SLACK_TOKEN]'),
+    MapEntry(
+        RegExp(r'\bxox[abpor]-[A-Za-z0-9-]{10,}\b'), '[REDACTED_SLACK_TOKEN]'),
     MapEntry(RegExp(r'\bghp_[A-Za-z0-9]{36}\b'), '[REDACTED_GITHUB_PAT]'),
-    MapEntry(RegExp(r'\bgithub_pat_[A-Za-z0-9_]{80,}\b'),
-        '[REDACTED_GITHUB_PAT]'),
+    MapEntry(
+        RegExp(r'\bgithub_pat_[A-Za-z0-9_]{80,}\b'), '[REDACTED_GITHUB_PAT]'),
     MapEntry(RegExp(r'\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b'),
         '[REDACTED_OPENAI_KEY]'),
     MapEntry(
         RegExp(r'\bsk-ant-[A-Za-z0-9_-]{20,}\b'), '[REDACTED_ANTHROPIC_KEY]'),
     MapEntry(RegExp(r'\bAIza[0-9A-Za-z_-]{35}\b'), '[REDACTED_GOOGLE_KEY]'),
-    MapEntry(
-        RegExp(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b'),
+    MapEntry(RegExp(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b'),
         '[REDACTED_JWT]'),
-    MapEntry(
-        RegExp(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'),
+    MapEntry(RegExp(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'),
         '[REDACTED_EMAIL]'),
     MapEntry(
         RegExp(
