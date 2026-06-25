@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kensaurus/mushi-mushi",
   "title": "Mushi Mushi",
-  "description": "Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.",
+  "description": "Bug translation for vibe coders: plain-English diagnosis + paste-ready fix in your AI coding agent",
   "version": "0.17.0",
   "icons": [
     {
