@@ -140,7 +140,7 @@ function buildHeaders(auth: AuthConfig | null): Record<string, string> {
   const base: Record<string, string> = {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'User-Agent':
-      'MushiMushiCrawler/1.0 (+https://mushimushi.dev/docs/crawler -- opt-in via robots.txt)',
+      'MushiMushiCrawler/1.0 (+https://kensaur.us/mushi-mushi/docs/crawler -- opt-in via robots.txt)',
   }
   if (!auth) return base
   if (auth.type === 'cookie') {

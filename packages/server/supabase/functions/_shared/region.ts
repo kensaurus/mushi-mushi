@@ -1,21 +1,9 @@
 /**
  * C7: Data residency.
  *
- * The Mushi cloud runs three regional Supabase projects:
- *   - us  → api.us.mushimushi.dev  (legacy / default)
- *   - eu  → api.eu.mushimushi.dev
- *   - jp  → api.jp.mushimushi.dev
- *
- * Each cluster runs the *same* Edge Function code; the difference is which
- * Postgres they talk to and which `MUSHI_CLUSTER_REGION` env var they were
- * deployed with. The gateway middleware below transparently 307-redirects
- * any request whose project is pinned to a different region — without ever
- * touching that project's data on the wrong cluster.
- *
- * The legacy (`dxptn…`) project remains the *catalog of record* for the
- * `region_routing` table so that:
- *   1. New SDKs pointing at the legacy host still get redirected.
- *   2. Existing customers' data never moves silently.
+ * The Mushi cloud currently runs on a single Supabase project (`dxptnwrhwsqckaftyymj`).
+ * Regional hostnames (us/eu/jp) are reserved for future multi-cluster routing;
+ * until then all regions resolve to the same API origin.
  */
 
 import type { Context, Next } from 'npm:hono@4'
@@ -24,9 +12,9 @@ import { getServiceClient } from './db.ts'
 export type MushiRegion = 'us' | 'eu' | 'jp' | 'self'
 
 const REGION_HOSTS: Record<Exclude<MushiRegion, 'self'>, string> = {
-  us: 'https://api.us.mushimushi.dev/functions/v1/api',
-  eu: 'https://api.eu.mushimushi.dev/functions/v1/api',
-  jp: 'https://api.jp.mushimushi.dev/functions/v1/api',
+  us: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  eu: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
+  jp: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 }
 
 let cachedRegion: MushiRegion | null = null

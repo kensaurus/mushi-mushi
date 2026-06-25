@@ -71,6 +71,12 @@ export function reportMessage(
   Sentry.captureMessage(msg, { level, ...ctx })
 }
 
+/** Correlate Sentry issues with Langfuse traces for LLM routes. */
+export function tagLangfuseTrace(traceId: string): void {
+  if (!inited || !traceId) return
+  Sentry.setTag('langfuse.trace_id', traceId)
+}
+
 /**
  * Drop-in handler for `app.onError(sentryHonoErrorHandler)` on a Hono app.
  *

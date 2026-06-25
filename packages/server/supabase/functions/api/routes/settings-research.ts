@@ -13,6 +13,7 @@ import {
   normalizeSdkConfig,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 
 // ── Slack OAuth state signing ────────────────────────────────────────────────
 // The OAuth `state` parameter is round-tripped through the user's browser and
@@ -368,6 +369,21 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       if (cap !== undefined) {
         if (typeof value === 'string') {
           const trimmed = value.trim();
+          if (key === 'fix_branch_template' && trimmed) {
+            try {
+              validateFixBranchTemplate(trimmed);
+            } catch (err) {
+              return c.json(
+                {
+                  error: {
+                    code: 'INVALID_BRANCH_TEMPLATE',
+                    message: err instanceof Error ? err.message : String(err),
+                  },
+                },
+                400,
+              );
+            }
+          }
           updates[key] = trimmed ? trimmed.slice(0, cap) : null;
         } else if (value === null) {
           updates[key] = null;

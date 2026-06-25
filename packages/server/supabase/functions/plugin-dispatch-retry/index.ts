@@ -292,7 +292,7 @@ async function handler(req: Request): Promise<Response> {
     // exhausted retries this tick. Best-effort — Slack/Discord outages
     // must not 500 the cron and force pg_cron into back-off.
     if (exhaustedPairs.size > 0) {
-      const ADMIN_BASE = Deno.env.get('MUSHI_ADMIN_BASE_URL') ?? 'https://app.mushimushi.dev';
+      const ADMIN_BASE = Deno.env.get('MUSHI_ADMIN_BASE_URL') ?? 'https://kensaur.us/mushi-mushi/admin';
       for (const pair of exhaustedPairs.values()) {
         try {
           await notifyOperator({

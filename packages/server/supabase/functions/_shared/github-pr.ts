@@ -54,6 +54,10 @@ export interface CreatePrOptions {
   body: string
   files: FileChange[]
   labels?: string[]
+  /** Report UUID for conventional commit scope (fix(MUSHI-<id>)). */
+  reportId?: string
+  /** Report category for commit type prefix mapping. */
+  category?: string | null
 }
 
 export interface PrResult {
@@ -83,7 +87,19 @@ export async function createPrFromFiles(
   opts: CreatePrOptions,
   log: SimpleLogger = noopLog,
 ): Promise<PrResult> {
-  const { token, owner, repo, defaultBranch, branch, title, body, files, labels = [] } = opts
+  const {
+    token,
+    owner,
+    repo,
+    defaultBranch,
+    branch,
+    title,
+    body,
+    files,
+    labels = [],
+    reportId,
+    category,
+  } = opts
 
   const baseHeaders = {
     Authorization: `Bearer ${token}`,
@@ -94,11 +110,33 @@ export async function createPrFromFiles(
   }
 
   // Fetch the SHA of the default branch tip so we can branch from it.
-  const refRes = await ghFetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
-    { headers: baseHeaders },
-  )
-  const baseSha = (refRes as { object: { sha: string } }).object.sha
+  // If the stored defaultBranch doesn't exist (stale DB value or repo renamed
+  // from 'master' → 'main'), resolve the live default branch from the GitHub
+  // API and use that instead. This prevents silent branch-from-wrong-base errors.
+  let resolvedBase = defaultBranch
+  let baseSha: string
+  try {
+    const refRes = await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
+      { headers: baseHeaders },
+    )
+    baseSha = (refRes as { object: { sha: string } }).object.sha
+  } catch {
+    // Stored defaultBranch not found — resolve live from GitHub API.
+    log.warn('github-pr: stored defaultBranch not found, resolving from GitHub API', {
+      storedBranch: defaultBranch,
+    })
+    const repoInfo = await ghFetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: baseHeaders,
+    })
+    resolvedBase = (repoInfo as { default_branch: string }).default_branch
+    const refRes = await ghFetch(
+      `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${resolvedBase}`,
+      { headers: baseHeaders },
+    )
+    baseSha = (refRes as { object: { sha: string } }).object.sha
+    log.info('github-pr: resolved live default branch', { resolvedBase })
+  }
 
   // Create the new branch (idempotent — retry-safe).
   try {
@@ -132,7 +170,7 @@ export async function createPrFromFiles(
         method: 'PUT',
         headers: baseHeaders,
         body: JSON.stringify({
-          message: `mushi: ${file.reason}`,
+          message: formatFixCommitMessage(file.reason, reportId, category),
           content: btoa(unescape(encodeURIComponent(file.contents))),
           branch,
           ...(existingSha ? { sha: existingSha } : {}),
@@ -142,11 +180,11 @@ export async function createPrFromFiles(
     lastCommitSha = putRes.commit.sha
   }
 
-  // Open the draft PR.
+  // Open the draft PR targeting the resolved base (may differ from stored defaultBranch).
   const prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
     headers: baseHeaders,
-    body: JSON.stringify({ title, head: branch, base: defaultBranch, draft: true, body }),
+    body: JSON.stringify({ title, head: branch, base: resolvedBase, draft: true, body }),
   })) as { number: number; html_url: string }
 
   // Lift draft gate so CI runs and the console merge API works.
@@ -253,6 +291,8 @@ export async function commitFilesToBranch(
   branch: string,
   files: FileChange[],
   log: SimpleLogger = noopLog,
+  reportId?: string,
+  category?: string | null,
 ): Promise<string> {
   const baseHeaders = ghHeaders(token)
   let lastCommitSha = ''
@@ -272,7 +312,7 @@ export async function commitFilesToBranch(
         method: 'PUT',
         headers: baseHeaders,
         body: JSON.stringify({
-          message: `mushi: ${file.reason}`,
+          message: formatFixCommitMessage(file.reason, reportId, category),
           content: btoa(unescape(encodeURIComponent(file.contents))),
           branch,
           ...(existingSha ? { sha: existingSha } : {}),
@@ -285,29 +325,124 @@ export async function commitFilesToBranch(
   return lastCommitSha
 }
 
+/** Conventional branch prefix regex (GitFlow-style). */
+export const FIX_BRANCH_REGEX =
+  /^(feature|bugfix|hotfix|refactor|chore|docs|test|ci)\/[a-z0-9][a-z0-9-]*$/
+
+/** Branch names must include the full report id for traceability. */
+export const FIX_BRANCH_MUSHI_ID_REGEX =
+  /^(feature|bugfix|hotfix|refactor|chore|docs|test|ci)\/MUSHI-[a-f0-9-]+-[a-z0-9][a-z0-9-]*$/
+
+function categoryToBranchPrefix(category?: string | null): string {
+  const c = (category ?? 'bug').toLowerCase()
+  if (c === 'slow') return 'bugfix'
+  if (c === 'visual' || c === 'confusing') return 'bugfix'
+  if (c === 'other') return 'chore'
+  if (
+    c === 'feature' ||
+    c === 'bugfix' ||
+    c === 'hotfix' ||
+    c === 'refactor' ||
+    c === 'chore' ||
+    c === 'docs' ||
+    c === 'test' ||
+    c === 'ci'
+  ) {
+    return c
+  }
+  return 'bugfix'
+}
+
+function slugifyDescription(text: string, maxLen = 40): string {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, maxLen)
+    .replace(/-+$/g, '')
+  return slug.length > 0 ? slug : 'fix'
+}
+
+export function validateFixBranchName(name: string): void {
+  if (!FIX_BRANCH_MUSHI_ID_REGEX.test(name)) {
+    throw new Error(
+      `Branch name "${name}" does not match required pattern ${FIX_BRANCH_MUSHI_ID_REGEX.source}`,
+    )
+  }
+}
+
+export function validateFixBranchTemplate(template: string): void {
+  const sample = template
+    .replace('{date}', '2026-06-23')
+    .replace('{category}', 'ui-bug')
+    .replace('{shortId}', 'abc12345')
+    .replace('{reportId}', '00000000-0000-4000-8000-000000000001')
+  if (!FIX_BRANCH_MUSHI_ID_REGEX.test(sample)) {
+    throw new Error(
+      `fix_branch_template must compile to <type>/MUSHI-<reportId>-<slug>; got sample "${sample}"`,
+    )
+  }
+}
+
+export function formatFixCommitMessage(
+  reason: string,
+  reportId?: string,
+  category?: string | null,
+): string {
+  const scope = reportId ? `MUSHI-${reportId}` : 'mushi'
+  const prefix = categoryToBranchPrefix(category)
+  const trimmed = reason.trim().slice(0, 200)
+  return `${prefix}(${scope}): ${trimmed}`
+}
+
+export function formatFixPrTitle(summary: string, reportId: string): string {
+  const trimmed = summary.trim().slice(0, 120)
+  return `fix(MUSHI-${reportId}): ${trimmed}`
+}
+
 /**
- * Generate a branch name for a fix-worker PR from a template or fall back to
- * the legacy `mushi/fix-{shortId}-{ts36}` scheme.
- * Tokens: {date}, {category}, {shortId}.
+ * Generate a spec-compliant branch name: <type>/MUSHI-<reportId>-<slug>.
+ * Optional template tokens: {date}, {category}, {shortId}, {reportId}, {slug}.
  */
 export function generateFixBranchName(
   reportId: string,
   template?: string | null,
   category?: string | null,
+  descriptionSlug?: string | null,
 ): string {
+  const prefix = categoryToBranchPrefix(category)
+  const slug = slugifyDescription(descriptionSlug ?? category ?? 'fix')
+  const defaultName = `${prefix}/MUSHI-${reportId}-${slug}`
+
   const effectiveTemplate = template && template.trim().length > 0 ? template.trim() : null
   if (!effectiveTemplate) {
-    return `mushi/fix-${reportId.slice(0, 8)}-${Date.now().toString(36)}`
+    validateFixBranchName(defaultName)
+    return defaultName
   }
+
   const date = new Date().toISOString().slice(0, 10)
-  const categorySlug = (category ?? 'fix')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 20)
+  const categorySlug = slugifyDescription(category ?? 'fix', 20)
   const shortId = reportId.slice(0, 8)
-  return effectiveTemplate
+  const fromTemplate = effectiveTemplate
     .replace('{date}', date)
     .replace('{category}', categorySlug)
     .replace('{shortId}', shortId)
+    .replace('{reportId}', reportId)
+    .replace('{slug}', slug)
+
+  try {
+    validateFixBranchName(fromTemplate)
+    return fromTemplate
+  } catch {
+    validateFixBranchName(defaultName)
+    return defaultName
+  }
+}
+
+export function generateCursorCloudBranchName(reportId: string, category?: string | null): string {
+  const prefix = categoryToBranchPrefix(category)
+  const name = `${prefix}/MUSHI-${reportId}-cursor-cloud`
+  validateFixBranchName(name)
+  return name
 }

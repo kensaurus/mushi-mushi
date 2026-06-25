@@ -253,7 +253,7 @@ export function registerFineTuningRoutes(app: Hono<{ Variables: Variables }>): v
   // `OPENAI_WEBHOOK_SECRET` is unset, any payload is rejected.
   app.post('/v1/webhooks/fine-tuning/openai', async (c) => {
     const secret = Deno.env.get('OPENAI_WEBHOOK_SECRET');
-    if (!secret) {
+    if (!secret?.trim()) {
       return c.json({ ok: false, error: { code: 'WEBHOOK_NOT_CONFIGURED' } }, 503);
     }
     const given = c.req.header('x-openai-signature') ?? '';

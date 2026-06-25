@@ -53,7 +53,7 @@ import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
 import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
-import { withSentry } from '../_shared/sentry.ts';
+import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts';
 import {
@@ -214,6 +214,7 @@ Deno.serve(
       projectId: dispatch.project_id,
       reportId: dispatch.report_id,
     });
+    tagLangfuseTrace(trace.id);
 
     // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
     // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the
@@ -1177,6 +1178,7 @@ const EXPECTED_FAILURE_CATEGORIES = new Set<string>([
   'spec_violation',
   'no_relevant_code',
   'llm_rate_limit',
+  'branch_naming',
   // Model returned unparseable JSON or failed Zod validation (e.g. literal
   // "placeholder" stubs). Guardrail working as designed — not a server bug.
   'llm_no_object',
@@ -1206,6 +1208,9 @@ function categorizeFailure(err: unknown, msg: string): string {
     if (m.includes('exceeds circuit breaker')) return 'validation_rejected';
     if (m.includes('token-shaped')) return 'spec_violation';
     return 'validation_rejected';
+  }
+  if (m.includes('does not match required pattern') && m.includes('branch name')) {
+    return 'branch_naming';
   }
   // Spec/inventory checker (validateAgainstSpec).
   if (m.includes('spec violation') || m.includes('inventory contract')) return 'spec_violation';

@@ -15,7 +15,7 @@
  */
 
 const DEFAULT_SUPPORT_EMAIL = 'kensaurus@gmail.com'
-const DEFAULT_SUPPORT_URL = 'https://mushimushi.dev/support'
+const DEFAULT_SUPPORT_URL = 'https://kensaur.us/mushi-mushi/docs'
 
 export const SUPPORT_EMAIL =
   (Deno.env.get('SUPPORT_EMAIL') ?? '').trim() || DEFAULT_SUPPORT_EMAIL

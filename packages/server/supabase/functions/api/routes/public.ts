@@ -1667,8 +1667,22 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
     }
 
     let inserted = 0;
+    const MAX_SPAN_BYTES = 8 * 1024;
     for (const raw of spans) {
       const span = scrubSpan(raw as Record<string, unknown>);
+      const spanBytes = new TextEncoder().encode(JSON.stringify(span)).length;
+      if (spanBytes > MAX_SPAN_BYTES) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'SPAN_TOO_LARGE',
+              message: `Each span must be ≤ ${MAX_SPAN_BYTES} bytes (got ${spanBytes}).`,
+            },
+          },
+          413,
+        );
+      }
       const traceId = typeof span.traceId === 'string' ? span.traceId : null;
       if (!traceId || !/^[0-9a-f]{32}$/i.test(traceId)) continue;
 

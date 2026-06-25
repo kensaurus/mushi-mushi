@@ -23,6 +23,8 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
 import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
 import { logAudit } from '../_shared/audit.ts'
+import { createTrace } from '../_shared/observability.ts'
+import { tagLangfuseTrace } from '../_shared/sentry.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -245,6 +247,9 @@ ${story.actions?.length ? `actions: ${story.actions.join(', ')}` : ''}
 Write a comprehensive Playwright TDD test for this user story.`
 
     let output: z.infer<typeof testGenSchema>
+    const trace = createTrace('test-gen-from-story', { project_id, storyId: story.id })
+    tagLangfuseTrace(trace.id)
+    const llmSpan = trace.span('generate-test')
     try {
       // withAnthropicOrOpenAi takes TWO separate callbacks (anthropicFn,
       // openAiFn) and returns { result, usedProvider }. Each callback receives
@@ -274,7 +279,11 @@ Write a comprehensive Playwright TDD test for this user story.`
         },
       )
       output = result
+      llmSpan.end({ model: STAGE2_MODEL })
+      await trace.end()
     } catch (err) {
+      llmSpan.end({ model: STAGE2_MODEL, error: err instanceof Error ? err.message : String(err) })
+      await trace.end().catch(() => {})
       // Log the raw error server-side, but never echo err.message to the
       // client — raw messages can leak internals (CodeQL js/stack-trace-exposure).
       const detail = err instanceof Error ? err.message : String(err)

@@ -22,6 +22,8 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { log } from '../_shared/logger.ts'
 import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { sendBotMessage, sendSlackText } from '../_shared/slack.ts'
+import { createTrace } from '../_shared/observability.ts'
+import { tagLangfuseTrace } from '../_shared/sentry.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -135,6 +137,14 @@ async function runQaStoryImprover(
       .join('\n\n')
 
     try {
+      const trace = createTrace('pdca-runner', {
+        projectId: story.project_id as string,
+        storyId: story.id as string,
+        mode: 'qa_story_improve',
+      })
+      tagLangfuseTrace(trace.id)
+      const llmSpan = trace.span('improve-script')
+
       const { result } = await withAnthropicOrOpenAi(
         db,
         story.project_id as string,
@@ -160,16 +170,25 @@ async function runQaStoryImprover(
         },
       )
 
-      if (result.confidence < 0.3) continue // Skip low-confidence improvements
+      if (result.confidence < 0.3) {
+        llmSpan.end({ model: 'claude-sonnet-4-5', error: 'low_confidence' })
+        await trace.end()
+        continue
+      }
 
       // Never persist/enable an improved script that contains a credential.
       if (hasSecret(result.improved_script)) {
+        llmSpan.end({ model: 'claude-sonnet-4-5', error: 'secret_detected' })
+        await trace.end()
         log.warn('improved script contained a secret — skipped', {
           scope: 'pdca-runner',
           storyId: story.id,
         })
         continue
       }
+
+      llmSpan.end({ model: 'claude-sonnet-4-5' })
+      await trace.end()
 
       const automationMode = story.automation_mode as 'auto' | 'review' | 'approve'
       const approvalStatus = automationMode === 'auto' ? 'approved' : 'pending_review'
