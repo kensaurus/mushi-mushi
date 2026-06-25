@@ -33,14 +33,14 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     image: 'dashboard-dark.png',
     light: 'dashboard-light.png',
     gif: 'dashboard-demo.gif',
-    alt: 'Dashboard — PDCA cockpit with KPI tiles, severity histogram, and triage queue',
+    alt: 'Dashboard — flow canvas with KPI tiles, severity histogram, and inbox queue',
     caption: 'Morning check in 30 seconds — backlog, in-flight fixes, LLM cost',
     route: '/dashboard',
   },
   onboarding: {
     image: 'onboarding-dark.png',
-    alt: 'Plug-n-play onboarding wizard with PDCA storyboard',
-    caption: 'Plan → Do → Check → Act storyboard before the checklist',
+    alt: 'Onboarding wizard with loop storyboard and setup checklist',
+    caption: 'See the full path from report to fix before you wire the SDK',
     route: '/onboarding',
   },
   projects: {
@@ -51,14 +51,14 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   inbox: {
     image: 'inbox-dark.png',
-    alt: 'Action inbox grouped by PDCA stage',
+    alt: 'Action inbox grouped by loop stage',
     caption: 'One primary CTA per stage — what to do next',
     route: '/inbox',
   },
   reports: {
     image: 'reports-dark.png',
     gif: 'glotit-report-flow.gif',
-    alt: 'Reports triage queue with severity stripes and dispatch actions',
+    alt: 'Reports inbox with severity stripes and fix actions',
     caption: 'User-felt bugs from glot.it land here with screenshot + breadcrumbs',
     route: '/reports',
   },
@@ -90,8 +90,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   fixes: {
     image: 'fixes-dark.png',
-    alt: 'Fix orchestrator — per-attempt PDCA cards and PR links',
-    caption: 'Agent runs stream live · Langfuse trace per attempt',
+    alt: 'Fix drafts — per-attempt cards and PR links',
+    caption: 'Agent runs stream live · trace per attempt',
     route: '/fixes',
   },
   repo: {
@@ -114,8 +114,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   judge: {
     image: 'judge-dark.png',
-    alt: 'Judge dashboard — 12-week score trend and prompt leaderboard',
-    caption: 'Decide / Act / Verify hero over classification quality',
+    alt: 'Fix quality scores — 12-week trend and prompt leaderboard',
+    caption: 'Spot slipping reads before they reach your queue',
     route: '/judge',
   },
   health: {
@@ -170,8 +170,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   settings: {
     image: 'settings-dark.png',
-    alt: 'Settings — BYOK keys, SDK config, dedup thresholds',
-    caption: 'Five tabs covering Slack, Sentry, LLM pipeline, dedup',
+    alt: 'Settings — API keys, widget config, notification routing',
+    caption: 'Five tabs covering Slack, Sentry, LLM keys, and dedup',
     route: '/settings',
   },
   storage: {
@@ -194,8 +194,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   mcp: {
     image: 'mcp-dark.png',
-    alt: 'MCP — Model Context Protocol install snippet and lean tool catalog',
-    caption: '71-tool catalog · lean default via MUSHI_FEATURES · Add to Cursor deeplink',
+    alt: 'MCP install — one-click Cursor deeplink and tool catalog',
+    caption: '71 tools · Add to Cursor deeplink · read-only demo mode',
     route: '/mcp',
   },
   notifications: {

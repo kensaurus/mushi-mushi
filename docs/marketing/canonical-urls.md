@@ -26,5 +26,8 @@ Do not point cold discovery at subdomains that are not verified live.
 | `mushimushi.dev` | Not the deployed product home |
 | `app.mushimushi.dev` | Not verified — use `kensaur.us/mushi-mushi/admin` |
 
-Matches `DEFAULT_MUSHI_API_ENDPOINT` in `apps/admin/src/lib/cliSetupCommands.ts` and
-`MUSHI_WEBSITE_URL` in `packages/mcp/src/branding.ts`.
+**Single source of truth:** `MUSHI_CANONICAL_URLS` in `@mushi-mushi/brand`
+(`packages/brand/src/index.js`). Scripts and packages should import from there
+instead of hardcoding. Also matches `DEFAULT_MUSHI_API_ENDPOINT` in
+`apps/admin/src/lib/cliSetupCommands.ts` and `MUSHI_WEBSITE_URL` in
+`packages/mcp/src/branding.ts`.

@@ -6,7 +6,7 @@ export default {
   'trigger-modes': 'Trigger modes',
   classification: 'Classification pipeline',
   'knowledge-graph': 'Knowledge graph',
-  'fix-orchestrator': 'Agentic fix orchestrator',
+  'fix-orchestrator': 'Fix drafts & PRs',
   'multi-repo-fixes': 'Multi-repo coordinated fixes',
   'judge-loop': 'Judge & self-improvement',
   'anti-gaming': 'Anti-gaming & reputation',

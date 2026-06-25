@@ -2,19 +2,21 @@
  * Landing-page media strip — animated admin tour + glot.it SDK dogfood demo.
  */
 
+import { LANDING_MEDIA_CAPTIONS } from '@/lib/landing-copy'
 import { DocScreenshot } from './DocScreenshot'
 import { ADMIN_DEMO_BASE, GLOTIT_DEMO_URL } from '../data/admin-screenshots'
 
 export function DocsMediaShowcase() {
+  const { adminTour, glotit, dashboard, reportDetail } = LANDING_MEDIA_CAPTIONS
+
   return (
     <div className="docs-media-showcase not-prose">
       <DocScreenshot
         src="tour-pdca-loop.gif"
-        alt="Animated guided tour through the Mushi admin console — Plan, Do, Check, Act"
+        alt={adminTour.alt}
         caption={
           <>
-            <strong>Admin console</strong> · logged-in walk through Reports → Fixes → Judge →
-            Integrations
+            <strong>{adminTour.captionStrong}</strong> {adminTour.captionRest}
           </>
         }
         href={`${ADMIN_DEMO_BASE}/dashboard`}
@@ -22,10 +24,10 @@ export function DocsMediaShowcase() {
       />
       <DocScreenshot
         src="glotit-report-flow.gif"
-        alt="glot.it dogfood — user taps the Mushi feedback widget, submits a bug report"
+        alt={glotit.alt}
         caption={
           <>
-            <strong>SDK on glot.it</strong> · shake / tap to report from a real Thai-learning app
+            <strong>{glotit.captionStrong}</strong> {glotit.captionRest}
           </>
         }
         href={GLOTIT_DEMO_URL}
@@ -35,22 +37,22 @@ export function DocsMediaShowcase() {
         <DocScreenshot
           src="dashboard-dark.png"
           lightSrc="dashboard-light.png"
-          alt="Mushi admin dashboard — PDCA cockpit"
+          alt={dashboard.alt}
           caption={
             <>
-              <strong>Dashboard</strong>
-              {' · theme-aware still · swaps with your system theme'}
+              <strong>{dashboard.captionStrong}</strong>
+              {dashboard.captionRest}
             </>
           }
           href={`${ADMIN_DEMO_BASE}/dashboard`}
         />
         <DocScreenshot
           src="report-detail-dark.png"
-          alt="Report detail — PDCA receipt strip and Branch & PR timeline"
+          alt={reportDetail.alt}
           caption={
             <>
-              <strong>Report detail</strong>
-              {' · screenshot + classification + fix timeline'}
+              <strong>{reportDetail.captionStrong}</strong>
+              {reportDetail.captionRest}
             </>
           }
           href={`${ADMIN_DEMO_BASE}/reports`}

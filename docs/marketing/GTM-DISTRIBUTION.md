@@ -33,10 +33,10 @@ thing and point to the same install flow.
 
 | **PulseMCP** | Auto-index from official registry | ⏳ Ingest weekly — no form; verify after ~7 days |
 | **awesome-mcp-servers** | PR [#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625) | 📬 Open |
-| **awesome-remote-mcp-servers** | PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) | 📬 Open |
+| **awesome-remote-mcp-servers** | PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) closed (bad hostname) — **re-open** with Supabase MCP URL | ❌ Re-submit |
 | **cursor.directory** | Repo already registered | ✅ Duplicate on re-submit confirms live listing |
 | **mcp.so** | Web submit at `/submit` | ✅ Live — [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi). Description + Overview + Server Config on canonical URLs — see [`mcp-so-listing.md`](./mcp-so-listing.md) |
-| **smithery.ai** | `kensaurus/mushi-mushi` | ✅ Hosted MCP on kensaur.us — publisher deploy via CLI; OAuth authorize on Releases. See [Smithery](#smithery). |
+| **smithery.ai** | `kensaurus/mushi-mushi` | ⚠️ Republish if listing still shows legacy hostname — see [`smithery-external-publish.json`](./smithery-external-publish.json) |
 
 Paste fields for remaining manual surfaces: [`STOREFRONTS.md` §7](./STOREFRONTS.md#7-mcp-registry--directory-listings-diagnoses-era).
 Canonical hosts: [`canonical-urls.md`](./canonical-urls.md) — **do not** use `api.mushimushi.dev` or `docs.mushimushi.dev` in listings until DNS is verified (503 as of Jun 2026).

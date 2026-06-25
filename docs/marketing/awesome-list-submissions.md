@@ -17,7 +17,7 @@ Add under the relevant category (Developer Tools / Monitoring). Ready-to-paste
 entry (alphabetical insertion — match surrounding format):
 
 ```md
-- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - Bug translation for vibe coders: pull a plain-English diagnosis and a paste-ready fix prompt for any user-felt bug, with evidence, blast radius, and fix dispatch — from your AI coding agent. No second LLM key.
+- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.
 ```
 
 (Legend: 🏎️ = TypeScript/Node, ☁️ = cloud/remote available. Confirm the repo's
@@ -25,21 +25,35 @@ current legend before submitting.)
 
 ## 2. awesome-remote-mcp-servers
 
-Repo: <https://github.com/jaw9c/awesome-remote-mcp-servers> (or the fork the
-ecosystem currently treats as canonical — verify before PR).
+Repo: <https://github.com/jaw9c/awesome-remote-mcp-servers>
+
+PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) was **closed**
+because the MCP endpoint used a non-resolving hostname. Re-submit with the Supabase
+Streamable HTTP URL below (matches `packages/mcp/server.json` `remotes`).
 
 ```md
-| Mushi Mushi | Bug translation for vibe coders — plain-English diagnosis + paste-ready fix from your editor | OAuth / API key | [docs](https://docs.mushimushi.dev/quickstart/mcp) |
+| Mushi Mushi | Debugging / Monitoring | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` | API Key | [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) |
 ```
 
-(Match the table's actual columns; the row above mirrors the common
-name / description / auth / link shape.)
+Re-open via:
+
+```bash
+node scripts/marketing/propose-awesome-pr.mjs \
+  --upstream jaw9c/awesome-remote-mcp-servers \
+  --section "## Remote MCP Server List" \
+  --entry "| Mushi Mushi | Debugging / Monitoring | \`https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs\` | API Key | [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) |" \
+  --branch add-mushi-mushi-mcp \
+  --pr-title "Add Mushi Mushi remote MCP server" \
+  --pr-body "Replaces closed #428 — previous row used a hostname that does not resolve. Hosted Streamable HTTP MCP on Supabase; API key auth. Live demo: https://kensaur.us/mushi-mushi/"
+```
+
+(Verify the README section heading before running — adjust `--section` if the table moved.)
 
 ## Checklist
 
 - [ ] `@mushi-mushi/mcp` published to npm and the official MCP registry (auto via release CI).
 - [ ] Verify the server appears at `registry.modelcontextprotocol.io` and on Glama / PulseMCP.
 - [ ] PR to `punkpeye/awesome-mcp-servers` opened.
-- [ ] PR to the canonical `awesome-remote-mcp-servers` opened.
+- [ ] PR to `awesome-remote-mcp-servers` re-opened (after #428 closed for bad hostname).
 - [ ] README first paragraph is the v2 hero (awesome-list scrapers read it) — enforced by `scripts/check-tagline-consistency.mjs`.
 - [ ] `mcp` GitHub topic present (applied by `scripts/marketing/setup-github.mjs`).

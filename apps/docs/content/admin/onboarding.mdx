@@ -14,8 +14,8 @@ import { Steps, Callout } from 'nextra/components'
 > app into Mushi before your afternoon standup. This page takes you from zero to your
 > first classified report in under 10 minutes.
 
-The Onboarding wizard is the fastest path to a live pipeline. Work through the steps in
-order — each step unlocks the next.
+The onboarding wizard is the fastest path from signup to a live report in your queue.
+Work through the steps in order — each one opens the next.
 
 ---
 
@@ -54,11 +54,10 @@ valid, the classify function ran, and the report appeared in the Reports queue.
 
 Click **Send another** to fire additional test reports.
 
-The **Verify** tab also shows a **Time to first diagnosis** card — the elapsed time
-from when you minted your first API key to when your first report was classified into a
-plain-English diagnosis. The target is **under 2 minutes**; the card reads
-"Under the 2-minute target ✓" once you beat it, or "Target: under 2 minutes" while
-pending. This is Mushi's onboarding north-star metric.
+The **Verify** tab also shows a **First report in your queue** timer — how long from
+minting your first API key to seeing a plain-English diagnosis on a classified report.
+The target is **under 2 minutes**; the card reads "Under the 2-minute target ✓" once
+you beat it, or "Target: under 2 minutes" while pending.
 
 ### Install the SDK
 The **SDK install configurator** shows framework-specific install snippets (React,
@@ -106,11 +105,11 @@ Steps match the [CLI ↔ console loop](/quickstart/cli-console-loop): create →
 
 ---
 
-## PDCA Flow explainer
+## How the loop works
 
-The onboarding page includes a static PDCA Flow diagram (the same diagram as on the
-dashboard, but with outcome copy instead of live counts) so new users understand what
-the four pipeline stages mean before they see live data.
+The onboarding page includes a static flow diagram (the same stages as on the
+dashboard, but with outcome copy instead of live counts) so you know what happens after
+a report lands — classify, fix draft, verify, remember — before you see live numbers.
 
 ---
 
@@ -139,7 +138,7 @@ If the test report shows `fail`:
 
 Once the SDK sends its first real report from your app:
 1. The dashboard **First Report** hero card appears and disappears.
-2. The report is classified and appears in the [Reports & triage](/admin/reports) queue.
+2. The report gets a plain-English read and appears in [Reports](/admin/reports).
 3. The setup checklist on the dashboard marks "First report" as complete.
 
 ---

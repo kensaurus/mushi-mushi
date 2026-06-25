@@ -8,7 +8,7 @@ import { Callout, Steps } from 'nextra/components'
 
 **Route:** `/skills`
 
-Skill Pipelines integrate the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem directly into Mushi triage. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
+Skill Pipelines integrate the [cursor-kenji / skills.sh](https://github.com/kensaurus/cursor-kenji) agent-skill ecosystem directly into Mushi bug review. When a bug report is classified, Mushi recommends the most relevant Cursor agent skills — and you can attach a skill chain to any report, visualize it as a live React Flow pipeline, and execute it either as a handoff to your local Cursor agent or automatically via Cursor Cloud.
 
 ---
 
@@ -53,10 +53,10 @@ Manage the GitHub repos whose SKILL.md files are synced into your project's cata
 
 ## Triage links (`?skill=`)
 
-Share a pre-loaded triage link with any team member:
+Share a pre-loaded review link with any team member:
 
 ```
-https://console.mushimushi.dev/reports/<report-id>?skill=workflow-fix-and-ship
+https://kensaur.us/mushi-mushi/admin/reports/<report-id>?skill=workflow-fix-and-ship
 ```
 
 When opened, the report detail page pre-selects the skill and prompts to start the pipeline. Useful for PMs handing off to devs, or for embedding in Slack/Linear notifications.

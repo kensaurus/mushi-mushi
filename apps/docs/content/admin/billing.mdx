@@ -3,6 +3,7 @@ title: Billing
 ---
 
 import { Callout } from 'nextra/components'
+import { DIAGNOSIS_PLAIN } from '@/lib/public-copy'
 
 <AdminDocHero page="billing" />
 
@@ -12,7 +13,9 @@ import { Callout } from 'nextra/components'
 
 > **Scenario:** It's the 20th of the month. You get an email at 50% of your diagnosis quota, then again at 80%. You want to know when you'll hit the wall, what your projected bill is, and how to cap spend — without logging into Stripe.
 
-Everything you need to manage your subscription is on this page: live **diagnosis** usage with forecast and projected cost, plan comparison, invoices, predictability controls, and in-console support.
+{DIAGNOSIS_PLAIN}
+
+Everything you need to manage your subscription is on this page: live usage with forecast and projected cost, plan comparison, invoices, spend caps, and in-console support.
 
 ---
 
@@ -71,7 +74,7 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 ## Upgrading your plan
 
 1. Click **Upgrade** (or **Change plan**) on the project card.
-2. Browse the plan comparison table — it shows exactly which features each tier unlocks.
+2. Browse the plan comparison table — it shows exactly which features each tier includes.
 3. Click **Select** on the plan you want.
 4. Complete payment in **Stripe Checkout**.
 5. The new plan activates when you return to Mushi.

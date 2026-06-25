@@ -10,7 +10,7 @@ should use v2 hero.
 |------|------|--------|
 | Hero | *"Your AI wrote it. Mushi tells you why it broke."* | README headers, landing H1, docs landing |
 | Sub-hero | *"Plain-English diagnosis + a paste-ready fix, right inside Cursor."* | Lead paragraphs under hero |
-| Category | *"Bug translation for vibe coders"* | Eyebrow, npm, llms.txt |
+| Category | *"The comprehension layer for AI-built apps"* | Eyebrow, npm, llms.txt |
 | Micro CTA | *"Know why. Fix fast."* | og:description, slide headers |
 | Mark | *"虫虫"* | Logo-adjacent, footer whisper |
 

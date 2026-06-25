@@ -4,8 +4,8 @@
   "upstreamUrlSupabaseDirect": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
   "serverCardUrl": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/.well-known/mcp/server-card.json",
   "notes": [
-    "Product home is https://kensaur.us/mushi-mushi — not api.mushimushi.dev.",
-    "Smithery was wrongly published as api.mushimushi.dev/functions/v1 (missing /mcp; domain 503). Delete or republish with upstreamUrl above.",
+    "Product home is https://kensaur.us/mushi-mushi — use Supabase or hosted-mcp URLs for MCP upstream.",
+    "Smithery was wrongly published with a non-resolving legacy API hostname (missing /mcp path). Delete or republish with upstreamUrl above.",
     "Republish: smithery.ai → kensaurus/mushi-mushi → Releases → Publish → paste upstreamUrl → submit (must be signed in as kensaurus).",
     "After publish: Releases → Connect with a mcp:read test key, or rely on server-card.json for tool metadata."
   ],

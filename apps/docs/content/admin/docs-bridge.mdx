@@ -9,7 +9,7 @@ title: Docs bridge
 **Route:** `/docs-bridge`
 
 The docs bridge is a silent authentication relay used by the documentation site
-(`docs.mushimushi.dev`) to access Mushi APIs on behalf of a logged-in user — for
+(`kensaur.us/mushi-mushi/docs`) to access Mushi APIs on behalf of a logged-in user — for
 example, to populate a live code snippet with your real API key, or to show
 project-specific setup instructions.
 
@@ -21,7 +21,7 @@ or iframe, the bridge posts a token back, and the popup closes automatically.
 ## How it works
 
 1. The docs site detects that it needs a Mushi session token.
-2. It opens `app.mushimushi.dev/docs-bridge?nonce=<one-time-nonce>&returnOrigin=<docs-origin>` as a popup.
+2. It opens `kensaur.us/mushi-mushi/admin/docs-bridge?nonce=<one-time-nonce>&returnOrigin=<docs-origin>` as a popup.
 3. The bridge page:
    - Reads the `?nonce=` and `?returnOrigin=` query parameters.
    - Calls `supabase.auth.refreshSession()` to ensure the token is fresh.
@@ -39,7 +39,7 @@ The bridge page shows a minimal status card while running:
 |--------|---------|
 | **Connecting…** | Retrieving session and preparing to post |
 | **Docs sync connected** | Token posted successfully — the popup will close |
-| **Sign in first** | No active Mushi session — log in at `app.mushimushi.dev` first |
+| **Sign in first** | No active Mushi session — log in at `kensaur.us/mushi-mushi/admin` first |
 | **Missing nonce** | The `?nonce=` parameter was absent — the docs site sent a malformed URL |
 | **Invalid origin** | `returnOrigin` is not an allowed docs origin |
 | **Can't talk back to docs window** | The opener window was closed before the token could be posted |

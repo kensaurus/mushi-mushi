@@ -36,7 +36,7 @@ Every action that mutates data produces an audit entry. Examples:
 | `key.revoked` | An API key was revoked |
 | `sso.registered` | An SSO provider was added |
 | `project.deleted` | A project was deleted |
-| `pdca.run.started` | A PDCA run was queued |
+| `pdca.run.started` | An improvement run was queued |
 | `user.invited` | A teammate was invited |
 
 ---
@@ -123,5 +123,5 @@ GET /v1/admin/audit?action=&resource_type=&actor=&actor_type=&since=&q=&limit=50
 ## Related pages
 
 - [Compliance](/admin/compliance) — SOC 2 evidence exports that reference audit data
-- [Fix orchestrator](/admin/fixes) — detailed fix-worker run logs
+- [Fix drafts](/admin/fixes) — detailed fix-worker run logs
 - [Organization members](/admin/teams) — see who has access and can generate entries

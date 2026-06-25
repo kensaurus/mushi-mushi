@@ -14,6 +14,7 @@
 'use client'
 
 import { useState } from 'react'
+import { CONNECT_SKILLS } from '@/lib/public-copy'
 import { MCP_CLIENTS, type McpClientDef, type McpBuildInput } from '@mushi-mushi/mcp/clients'
 import {
   ConnectLanePicker,
@@ -22,7 +23,7 @@ import {
   type ConnectLane,
 } from '@mushi-mushi/marketing-ui'
 
-const CONSOLE_CONNECT_URL = 'https://app.mushimushi.dev/connect'
+const CONSOLE_CONNECT_URL = 'https://kensaur.us/mushi-mushi/admin/connect'
 const PLACEHOLDER_KEY = '<your-mushi-api-key>'
 const PLACEHOLDER_ENDPOINT = 'https://YOUR-PROJECT.supabase.co/functions/v1/api'
 const PLACEHOLDER_MCP_HTTP = 'https://YOUR-PROJECT.supabase.co/functions/v1/mcp'
@@ -215,8 +216,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--mushi-ink-muted)]">
-        Agent skills extend your AI coding agent with task-specific playbooks — bug triage,
-        fix-and-ship, QA, security audit, and more.
+        {CONNECT_SKILLS.intro}
       </p>
       <div className="space-y-2">
         <p className="text-sm font-medium text-[var(--mushi-ink)]">
@@ -230,17 +230,15 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
       </div>
       <div className="rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] p-4">
-        <p className="mb-1 text-sm font-semibold text-[var(--mushi-ink)]">What are skills?</p>
+        <p className="mb-1 text-sm font-semibold text-[var(--mushi-ink)]">{CONNECT_SKILLS.whatAreSkillsTitle}</p>
         <p className="text-sm text-[var(--mushi-ink-muted)]">
-          Skills are SKILL.md playbooks your AI agent can read on demand. They live in GitHub repos
-          and are synced into Mushi&apos;s skill catalog so the triage stage recommends the right
-          playbook for each bug.
+          {CONNECT_SKILLS.whatAreSkillsBody}
         </p>
         <a
-          href="https://kensaur.us/mushi-mushi/docs/sdks/skills"
+          href={CONNECT_SKILLS.learnMoreHref}
           className="mt-2 inline-block text-sm font-medium text-[var(--mushi-vermillion)] hover:underline"
         >
-          Learn about skills →
+          {CONNECT_SKILLS.learnMoreLabel}
         </a>
       </div>
     </div>
@@ -272,10 +270,10 @@ export default function ConnectPage() {
 
         <div className="mb-12 text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] px-3 py-1 text-xs font-medium text-[var(--mushi-ink-muted)]">
-            MCP Integration
+            Editor setup
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-[var(--mushi-ink)] sm:text-5xl">
-            Connect your AI&nbsp;agent
+            Hook Mushi into Cursor (or whatever you use)
           </h1>
           <p className="mt-4 text-lg text-[var(--mushi-ink-muted)]">
             Pick your client. Connect in one click. Start debugging with context in under

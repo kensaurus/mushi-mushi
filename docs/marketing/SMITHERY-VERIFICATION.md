@@ -2,6 +2,8 @@
 
 Registry page: [smithery.ai/servers/kensaurus/mushi-mushi](https://smithery.ai/servers/kensaurus/mushi-mushi)
 
+**Architecture & file index:** [HOSTED-MCP-SMITHERY-IMPLEMENTATION.md](./HOSTED-MCP-SMITHERY-IMPLEMENTATION.md)
+
 ## Automated checks
 
 ```bash

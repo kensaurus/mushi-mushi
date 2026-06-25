@@ -1,39 +1,36 @@
+---
+title: Concepts
+---
+
+import { CONCEPTS_INDEX_LEDE } from '@/lib/public-copy'
+
 # Concepts
 
-Mushi is more than a feedback widget. It's a six-layer system that closes
-the loop from a user feeling friction to a codebase that never makes the same
-mistake twice:
+{CONCEPTS_INDEX_LEDE}
 
-1. **Capture** — SDKs across web, mobile, and AI agents collect structured
-   reports with screenshots, breadcrumbs, and device context.
-2. **Classify** — A two-stage LLM pipeline (`fast-filter` → `classify-report`)
-   tags severity, category, and component, with vision analysis on
-   screenshots when relevant.
-3. **Connect** — Every report is embedded into a knowledge graph
-   (pgvector + Apache AGE) so similar bugs deduplicate and component
-   hot-spots emerge.
-4. **Fix** — Approved triage decisions hand off to `fix-worker`, a sandboxed
-   LLM agent that drafts code and opens a PR via a scoped GitHub App.
-5. **Iterate (PDCA)** — `pdca-runner` runs autonomous Plan→Do→Check→Act cycles:
-   crawl a live URL, find issues, fix them, verify, repeat.
-6. **Drift** — `drift-walker` continuously compares the live app against the
-   stored contract snapshot. Regressions surface before users report them.
+The loop in plain terms:
 
-Every layer is observable (Langfuse + OpenTelemetry), auditable (immutable
-audit log), and self-improving (judge loop with A/B-tested prompts).
+1. **Capture** — users report what felt broken (shake, tap, or widget) with screenshot and context.
+2. **Plain read** — severity, category, and cause in English your team already uses.
+3. **Connect** — similar reports collapse to one row; hot spots emerge from the graph.
+4. **Fix** — optional agent drafts a PR; you merge, edit, or ignore.
+5. **Verify** — automated replay checks the fix before you ship.
+6. **Remember** — past fixes become rules your editor sees on the next PR.
+
+Every step is observable, auditable, and improves over time — details below when you need the wiring diagram.
 
 import { Cards } from 'nextra/components'
 
 <Cards>
   <Cards.Card title="Architecture" href="/concepts/architecture" arrow />
-  <Cards.Card title="Classification pipeline" href="/concepts/classification" arrow />
+  <Cards.Card title="How classification works" href="/concepts/classification" arrow />
   <Cards.Card title="Knowledge graph" href="/concepts/knowledge-graph" arrow />
-  <Cards.Card title="Fix orchestrator" href="/concepts/fix-orchestrator" arrow />
-  <Cards.Card title="Inventory & gates (v2)" href="/concepts/inventory-and-gates" arrow />
-  <Cards.Card title="Connecting your orchestrator" href="/concepts/orchestrator-interop" arrow />
-  <Cards.Card title="Judge & self-improvement" href="/concepts/judge-loop" arrow />
+  <Cards.Card title="How fixes get drafted" href="/concepts/fix-orchestrator" arrow />
+  <Cards.Card title="Inventory & gates" href="/concepts/inventory-and-gates" arrow />
+  <Cards.Card title="Orchestrator hooks" href="/concepts/orchestrator-interop" arrow />
+  <Cards.Card title="Quality scoring" href="/concepts/judge-loop" arrow />
   <Cards.Card title="Anti-gaming & reputation" href="/concepts/anti-gaming" arrow />
   <Cards.Card title="Trigger modes" href="/concepts/trigger-modes" arrow />
   <Cards.Card title="Rewards" href="/concepts/rewards" arrow />
-  <Cards.Card title="Closed-loop evolution — the thesis" href="/concepts/closed-loop" arrow />
+  <Cards.Card title="Closed-loop evolution" href="/concepts/closed-loop" arrow />
 </Cards>

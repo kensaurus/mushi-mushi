@@ -1,18 +1,18 @@
 ---
-title: Iterate (PDCA)
+title: Iterate
 ---
 
 import { Callout, Steps } from 'nextra/components'
 
 <AdminDocHero page="iterate" />
 
-# Iterate (PDCA)
+# Iterate
 
 **Route:** `/iterate`
 
 > **Scenario:** Your app's UX scores have been declining in session recordings. You
 > suspect the onboarding flow has friction but don't know where. Instead of spending
-> a day manually testing every screen, you queue a PDCA run — point it at your live
+> a day manually testing every screen, you queue an improvement run — point it at your live
 > URL, describe the goal, and let the autonomous agent crawl, critique, improve, and
 > score the result. You come back in 20 minutes with a scored report and a list of
 > what changed.
@@ -140,4 +140,4 @@ POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 
 - [Drift scanner](/admin/drift) — check for regressions before starting an iteration loop
 - [Integration health](/admin/health) — verify LLM keys are working before queuing a run
-- [Fix orchestrator](/admin/fixes) — dispatch individual fixes outside the PDCA loop
+- [Fix drafts](/admin/fixes) — dispatch individual fixes outside the PDCA loop

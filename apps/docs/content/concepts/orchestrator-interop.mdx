@@ -69,7 +69,7 @@ your client:
 {
   "mcpServers": {
     "mushi-mushi-hosted": {
-      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_live_…",
         "X-Mushi-Project-Id": "proj_…",
@@ -103,7 +103,7 @@ Google's Agent2Agent v1.0.0 spec (March 2026) requires `tasks/{id}` GET
 
 ```bash
 # Create a Task
-curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks \
+curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks \
   -H "X-Mushi-Api-Key: mushi_live_…" \
   -H "Content-Type: application/json" \
   -d '{
@@ -116,11 +116,11 @@ curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks \
   }'
 
 # Subscribe to live updates
-curl -N https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks/<id>:subscribe \
+curl -N https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:subscribe \
   -H "X-Mushi-Api-Key: mushi_live_…"
 
 # Cancel
-curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks/<id>:cancel \
+curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks/<id>:cancel \
   -H "X-Mushi-Api-Key: mushi_live_…"
 ```
 
@@ -129,7 +129,7 @@ curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks/<id>:cance
 Pull (SSE) is fine for a long-running orchestrator process. If you'd rather receive task updates on a callback URL — webhooks instead of an open connection — pass `configuration.pushNotificationConfig` on create:
 
 ```bash
-curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks \
+curl -X POST https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/a2a/tasks \
   -H "X-Mushi-Api-Key: mushi_live_…" \
   -H "Content-Type: application/json" \
   -d '{
@@ -175,7 +175,7 @@ Every `/v1/admin/*` route is a documented REST endpoint. The
 hand-curated OpenAPI 3.1 specification ships at:
 
 ```
-GET https://api.mushimushi.dev/functions/v1/api/openapi.json
+GET https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/openapi.json
 ```
 
 (alias `/v1/openapi.json` for clients that hard-code the `/v1/` prefix.)
@@ -289,7 +289,7 @@ compose its own prompt around the same contract.
 
 - [Concepts → Inventory and gates](/concepts/inventory-and-gates) — the
   `expected_outcome` contract that spec traceability is built on.
-- [Concepts → Agentic fix orchestrator](/concepts/fix-orchestrator) —
+- [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) —
   what the worker does between dispatch and PR.
 - [`@mushi-mushi/mcp`](/sdks/mcp) — the MCP server (both transports).
 - [`@mushi-mushi/agents`](https://www.npmjs.com/package/@mushi-mushi/agents)
