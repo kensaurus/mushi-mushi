@@ -236,9 +236,13 @@ export function openAdminAuthBridge(
 
     const onMessage = (event: MessageEvent) => {
       if (settled) return
-      const eventOrigin = event.origin?.replace(/\/+$/, '')
-      if (!eventOrigin || !ALLOWED_ADMIN_ORIGINS.has(eventOrigin)) return
-      if (eventOrigin !== adminOrigin) return
+      // Direct origin check on the raw event.origin FIRST
+      // (CodeQL js/missing-origin-check). Browsers serialize an origin without
+      // a trailing slash, so comparing the raw value against the normalized,
+      // allowlisted adminOrigin is exact. The Set membership check is kept as a
+      // belt-and-suspenders guard.
+      if (event.origin !== adminOrigin) return
+      if (!ALLOWED_ADMIN_ORIGINS.has(event.origin)) return
       if (!isBridgeMessage(event.data)) return
       if (event.data.nonce !== nonce) return
 
@@ -308,7 +312,11 @@ async function apiFetch<T>(
     headers.set('X-Mushi-Project-Id', session.projectId)
   }
 
-  const res = await fetch(`${session.apiUrl}${path}`, {
+  // Use the build-time API constant, never session.apiUrl
+  // (CodeQL js/client-side-request-forgery). session.apiUrl is always pinned to
+  // DEFAULT_API_URL at session creation, but reading it here makes the fetch
+  // destination flow from session storage, which CodeQL treats as untrusted.
+  const res = await fetch(`${DEFAULT_API_URL}${path}`, {
     ...init,
     headers,
     credentials: 'include',
