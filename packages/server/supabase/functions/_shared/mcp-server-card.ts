@@ -6,8 +6,8 @@
  * repository/homepage/license links. Keep in sync with hosted-tool-manifest.json.
  */
 
-import manifestRaw from '../mcp/hosted-tool-manifest.json' with { type: 'json' }
-import { SERVER_INFO_EXTENDED } from '../mcp/branding.ts'
+import manifestRaw from './mcp-hosted-tool-manifest.json' with { type: 'json' }
+import { SERVER_INFO_EXTENDED } from './mcp-branding.ts'
 
 const SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
 const PRODUCT_HOMEPAGE = 'https://kensaur.us/mushi-mushi/docs/connect'

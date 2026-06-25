@@ -47,8 +47,13 @@ describe('cloudfront-mushi-apex-redirect', () => {
   })
 
   it('preserves query string on docs redirect', () => {
-    const out = apex(req('/quickstart/mcp', 'utm_source=test'))
+    const out = apex(reqWithQs('/quickstart/mcp', { utm_source: 'test' }))
     assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/mcp?utm_source=test')
+  })
+
+  it('omits empty CloudFront querystring object', () => {
+    const out = apex(req('/quickstart/mcp', {}))
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/mcp')
   })
 
   it('redirects /reports/uuid to admin (regression)', () => {
