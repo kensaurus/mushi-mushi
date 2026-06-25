@@ -50,35 +50,37 @@ jobs:
 
           echo "no_releases=false" >> "$GITHUB_OUTPUT"
 
-          # Build a markdown digest
+          # Build a markdown digest. Every line stays indented inside this YAML
+          # block scalar — a column-0 multiline string (the previous heredoc)
+          # breaks workflow parsing and makes the whole run a startup_failure.
           WEEK_LABEL=$(date '+%b %d')
-          BODY="## 🐛 Mushi Mushi — what shipped this week (${WEEK_LABEL})
-
-Packages published to npm since ${SINCE}:
-
-$(echo "$TAGS" | sed 's/^/- \`/' | sed 's/$/\`/')
-
-### Quick start
-
-\`\`\`bash
-npx mushi-mushi
-\`\`\`
-
-Full changelog: https://kensaur.us/mushi-mushi/docs/changelog
-
-_Mushi-chan keeps the loop running. 虫虫_"
-
-          # Escape for GitHub output (multiline)
-          EOF=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
-          {
-            echo "body<<${EOF}"
-            echo "$BODY"
-            echo "${EOF}"
-          } >> "$GITHUB_OUTPUT"
 
           # Create a digest tag name: weekly-YYYY-WW
           WEEK_TAG="weekly-$(date '+%Y-W%V')"
           echo "week_tag=${WEEK_TAG}" >> "$GITHUB_OUTPUT"
+
+          # Emit the body as a multiline GitHub Actions output. The markdown is
+          # produced by quoted echoes so no leading indentation leaks into it.
+          EOF=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+          {
+            echo "body<<${EOF}"
+            echo "## 🐛 Mushi Mushi — what shipped this week (${WEEK_LABEL})"
+            echo ""
+            echo "Packages published to npm since ${SINCE}:"
+            echo ""
+            echo "$TAGS" | sed 's/^/- `/' | sed 's/$/`/'
+            echo ""
+            echo "### Quick start"
+            echo ""
+            echo '```bash'
+            echo "npx mushi-mushi"
+            echo '```'
+            echo ""
+            echo "Full changelog: https://kensaur.us/mushi-mushi/docs/changelog"
+            echo ""
+            echo "_Mushi-chan keeps the loop running. 虫虫_"
+            echo "${EOF}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release (weekly digest)
         if: steps.digest.outputs.no_releases == 'false' && github.event.inputs.dry_run != 'true'
