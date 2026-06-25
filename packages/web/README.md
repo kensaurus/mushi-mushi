@@ -253,7 +253,7 @@ Screenshot capture uses canvas / SVG `foreignObject` serialization — it does n
 
 ## Bundle size
 
-~7 KB brotli, enforced at 80 KB gzipped in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
+~7 KB brotli, enforced at 80 KB gzipped (105 KB uncompressed) in CI. Requires `@mushi-mushi/core` (installed automatically, not bundled inline). The widget's visual system — washi paper, sumi ink, vermillion 朱 accent, system serif — lives in [`src/styles.ts`](./src/styles.ts).
 
 ## License
 

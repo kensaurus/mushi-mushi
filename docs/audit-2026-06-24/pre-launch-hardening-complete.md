@@ -55,7 +55,7 @@ File: `.github/workflows/nightly-prod-pdca.yml`
 | GitHub secret | `AWS_ROLE_ARN` (set 2026-06-24) |
 | Removed secrets | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (mushi-mushi repo only) |
 
-**Other repos:** IAM user `github-actions-deploy` (`AKIAYTCLKPSM4HQUYJMP`) remains
+**Other repos:** IAM user `github-actions-deploy` (key ID `AKIA…REDACTED`) remains
 in AWS for other `kensaurus/*` repositories. Do not delete that user until each
 repo migrates to its own OIDC role.
 
