@@ -128,6 +128,15 @@ nul
 # include org slugs, project IDs, and issue permalinks; never commit.
 .tmp/
 .tmp-deploy/
+# Ad-hoc scratch workspace: smithery publish logs, throwaway JSON dumps, and
+# one-off setup scripts that read .env.local. Never commit.
+.scratch/
+
+# --- Agent-local settings ----------------------------------------------------
+# Machine-local agent config (proxy base URL, tool-search toggles) and the
+# local burndown scratch state. The shared .claude/settings.json is allowed.
+.claude/settings.local.json
+.cursor/burndown-state.md
 
 # Archive holding-pens for ad-hoc audit screenshots. Kept out of git so they
 # can't grow unbounded; the canonical product screenshots live in

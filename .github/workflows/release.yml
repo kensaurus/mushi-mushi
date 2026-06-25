@@ -337,9 +337,16 @@ jobs:
           set -euo pipefail
           node scripts/sync-server-json-version.mjs
           os=$(uname -s | tr '[:upper:]' '[:lower:]')
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_amd64.tar.gz" | tar xz mcp-publisher
+          arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" | tar xz mcp-publisher
           ./mcp-publisher login github-oidc
-          cd packages/mcp && ../../mcp-publisher publish
+          cd packages/mcp && ../../mcp-publisher publish && cd ../..
+          echo "Verifying registry record (propagation may lag)…"
+          sleep 5
+          curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi" \
+            | grep -q "io.github.kensaurus/mushi-mushi" \
+            && echo "✓ Mushi MCP server is live in the official registry" \
+            || echo "::warning::MCP registry record not visible yet — re-check in a few minutes."
 
       - name: Sync published versions to sdk_versions catalog
         # Keep the console freshness chips accurate without hand-written

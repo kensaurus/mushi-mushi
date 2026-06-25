@@ -37,33 +37,23 @@ permissions:
   issues: write
 
 jobs:
-  pdca:
-    name: Full PDCA against prod
+  # CREDENTIAL ISOLATION: mint-jwt holds E2E auth credentials (email +
+  # password). The pdca job holds the DB service-role key. Splitting these
+  # into separate jobs ensures no single runner context ever holds both —
+  # a compromised action dependency in one job cannot exfiltrate the other.
+  mint-jwt:
+    name: Mint prod admin JWT
     if: ${{ vars.ENABLE_NIGHTLY_PROD_PDCA == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      jwt: ${{ steps.jwt.outputs.jwt }}
     steps:
-      # SUPPLY-CHAIN HARDENING: this job has access to PROD_SUPABASE_*
-      # secrets, so the runner must be hardened. See release.yml for the
-      # full rationale.
       - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browsers
-        run: pnpm --filter @mushi-mushi/e2e-dogfood install-browsers
-
+      # No checkout required — the auth step is pure HTTP via built-in Node.
       - name: Mint admin JWT
         id: jwt
         env:
@@ -85,13 +75,42 @@ jobs:
           echo "::add-mask::$JWT"
           echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
 
+  pdca:
+    name: Full PDCA against prod
+    needs: [mint-jwt]
+    if: ${{ vars.ENABLE_NIGHTLY_PROD_PDCA == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # SUPPLY-CHAIN HARDENING: this job has access to PROD_SUPABASE_*
+      # secrets, so the runner must be hardened. See release.yml for the
+      # full rationale. NOTE: PROD_E2E_TEST_PASSWORD is NOT in scope here —
+      # it was only used in the mint-jwt job above.
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @mushi-mushi/e2e-dogfood install-browsers
+
       - name: Run full-PDCA against prod
         env:
           SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}
           MUSHI_API_URL: ${{ secrets.PROD_SUPABASE_URL }}/functions/v1/api
           MUSHI_ADMIN_URL: ${{ secrets.PROD_SUPABASE_URL }}/functions/v1/api
-          MUSHI_ADMIN_JWT: ${{ steps.jwt.outputs.jwt }}
+          MUSHI_ADMIN_JWT: ${{ needs.mint-jwt.outputs.jwt }}
           MUSHI_PROJECT_ID: ${{ secrets.PROD_MUSHI_PROJECT_ID }}
           MUSHI_API_KEY: ${{ secrets.PROD_MUSHI_API_KEY }}
           # Prod nightly uses mocks for Act to avoid opening a real PR

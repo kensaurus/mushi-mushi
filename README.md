@@ -97,7 +97,7 @@ These are the bugs your monitoring can't see, and the ones you didn't write:
 When a user shakes their phone (or clicks the reporter), four things happen in the order a careful colleague would do them:
 
 1. **Capture.** The widget grabs the screenshot, the route, the user's note, the last few console + network events, and the device context.
-2. **Classify.** A two-stage LLM pipeline (Haiku fast-filter → Sonnet deep + vision) tags severity, category, and a plain-English root-cause hint. A nightly Sonnet judge scores the classifier's own work and feeds a prompt-A/B loop.
+2. **Classify.** A two-stage LLM pipeline tags severity, category, and a plain-English root-cause hint — the screenshot goes through an air-gapped vision pass that can't see the text prompt, so a malicious screenshot can't inject one. A nightly judge scores the classifier's own work and feeds a prompt-A/B loop.
 3. **Connect.** The report embeds into a knowledge graph (Postgres + pgvector). The same broken button reported twenty times shows up as **one** row, not twenty.
 4. **Fix.** _Optional._ Click _Dispatch fix_ (or from Slack / MCP / CI) and an agent in a sandbox tries the change, runs your tests, and opens a **draft** PR. You review it like any other PR — merge, edit, or close.
 
@@ -106,11 +106,11 @@ flowchart LR
     subgraph App["Your app"]
         SDK["mushi-mushi/{react, vue, svelte, angular, …}<br/>shadow-DOM widget · screenshot · console · network"]
     end
-    subgraph Edge["Supabase Edge Functions"]
+    subgraph Edge["Supabase Edge (Hono gateway + ~50 functions)"]
         API["api"]
         FF["fast-filter"]
         CR["classify-report<br/>+ vision + RAG"]
-        ORCH["fix-dispatch"]
+        ORCH["fix-worker"]
     end
     subgraph DB["Postgres + pgvector"]
         REP["reports"]
@@ -254,7 +254,7 @@ Mushi is honest about what's still partial. Skim before you commit:
 
 ## Running this for a team?
 
-The operator-grade depth — 11 inbound adapters, 13 outbound plugins, A2A / AG-UI / MCP interop, the `inventory.yaml` QA-gate system, the synthetic monitor, SSO / audit / retention / region pinning, and the open-standards plumbing — lives in **[`docs/operators/`](./docs/operators/)** so the front door stays on the wedge. Start there if you're wiring Mushi into an existing stack or evaluating it as a platform.
+The platform depth — inbound adapters, outbound plugins, A2A / AG-UI / MCP interop, the `inventory.yaml` QA-gate system, the synthetic monitor, SSO / audit / retention / region pinning, and open-standards plumbing — lives in **[`docs/operators/`](./docs/operators/)** so the front door stays on the wedge. Start there if you're wiring Mushi into an existing stack or evaluating it as a platform.
 
 ---
 
@@ -268,7 +268,7 @@ npx skills add kensaurus/mushi-mushi
 
 Then: `/mushi-setup` (guided SDK install + MCP wiring), `/mushi-debug` (diagnose ingest / MCP / pipeline failures), `/mushi-health` (pass/fail check across CLI, API, edge functions, BYOK keys). The admin **Connect & Update** page (`/connect`) mirrors the same flows with one-click **Add to Cursor** deeplinks.
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~292K TS lines · 1,299 source files · 43 workspace / 36 npm packages · 50 edge functions · 283 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~339K TS lines · 1,610 source files · 44 workspace / 36 npm packages · 51 edge functions · 298 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ---
 

@@ -12,8 +12,8 @@
 # DEPENDENCIES:
 # - S3 bucket: kensaur.us-mushi-mushi (ap-northeast-1)
 # - CloudFront distribution: kensaur.us (E246VQ1C9QYZVB)
-# - GitHub Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
-#   CLOUDFRONT_DISTRIBUTION_ID
+# - GitHub Secrets: AWS_ROLE_ARN (GitHub OIDC role — see deploy-admin.yml
+#   header for the one-time AWS OIDC setup steps), CLOUDFRONT_DISTRIBUTION_ID
 #
 # NOTES:
 # - This workflow is independent of the SDK release pipeline
@@ -53,6 +53,9 @@ jobs:
     name: Build & Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write  # Required for GitHub OIDC → AWS role assumption
 
     steps:
       - name: Harden Runner
@@ -117,11 +120,12 @@ jobs:
             '{version: $version, buildDate: $buildDate, commit: $commit, app: "docs"}' \
             > apps/docs/out/version.json
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
+        # Uses GitHub OIDC to assume the deploy role — no long-lived IAM keys.
+        # See the deploy-admin.yml header for the one-time AWS OIDC setup.
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.2.1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Sync immutable assets to S3 (JS)

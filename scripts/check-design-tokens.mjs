@@ -561,7 +561,108 @@ if (pageElevatedHits.length > 0) {
   )
 }
 
-if (denied.length > 0 || unknown.length > 0 || subFloorHits.length > 0 || paletteHits.length > 0 || docsAliasHits.length > 0 || heroDupHits.length > 0 || hexHits.length > 0 || widgetHexHits.length > 0 || themePairMissing.length > 0 || pageElevatedHits.length > 0) process.exit(1)
+// ── Web interface guard: transition-all ───────────────────────────────────
+// Prefer explicit property lists (background-color, box-shadow, transform).
+// Exempt canvas/diagram components where transition-all is layout-bound.
+const TRANSITION_ALL_EXEMPT_RE = /(Diagram|Flow|Pipeline|Chart|Sparkline|HeroNodes|LayerLane)\.tsx?$/
+const transitionAllHits = []
+
+for (const file of files.filter((f) => /\.tsx$/.test(f))) {
+  if (TRANSITION_ALL_EXEMPT_RE.test(file)) continue
+  const src = readFileSync(file, 'utf8')
+  for (const m of src.matchAll(/\b(?:motion-safe:)?transition-all\b/g)) {
+    const index = m.index ?? 0
+    const lineStart = src.lastIndexOf('\n', index) + 1
+    const linePrefix = src.slice(lineStart, index)
+    if (/mushi-mushi-allowlist:/i.test(linePrefix)) continue
+    transitionAllHits.push({ file, line: extractLineNumber(src, index), token: m[0] })
+  }
+}
+
+if (transitionAllHits.length > 0) {
+  console.error(`\n[transition-all] Use explicit transition properties (not transition-all):\n`)
+  for (const hit of transitionAllHits) {
+    console.error(fmt(hit))
+  }
+  console.error(
+    `\nFix: motion-safe:transition-[background-color,box-shadow,transform,opacity] or similar.\n` +
+      `Allowlist with // mushi-mushi-allowlist: <reason> on the same line.\n`,
+  )
+}
+
+// ── Web interface guard: focus:outline-none without focus-visible ───────
+// Mouse clicks should not show rings; keyboard users need focus-visible:ring-*.
+const FOCUS_OUTLINE_EXEMPT_FILES = new Set([
+  'index.css',
+])
+const focusOutlineHits = []
+
+for (const file of files.filter((f) => /\.tsx$/.test(f))) {
+  if (FOCUS_OUTLINE_EXEMPT_FILES.has(file.split(/[/\\]/).pop() ?? '')) continue
+  const src = readFileSync(file, 'utf8')
+  const lines = src.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!/\bfocus:outline-none\b/.test(line)) continue
+    if (/mushi-mushi-allowlist:/i.test(line)) continue
+    if (/\bfocus-visible:outline-none\b/.test(line) || /\bfocus-visible:ring-/.test(line)) continue
+    focusOutlineHits.push({ file, line: i + 1, token: 'focus:outline-none' })
+  }
+}
+
+if (focusOutlineHits.length > 0) {
+  console.error(`\n[focus-visible] focus:outline-none without focus-visible replacement:\n`)
+  for (const hit of focusOutlineHits) {
+    console.error(fmt(hit))
+  }
+  console.error(
+    `\nFix: use focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40,\n` +
+      `or import FIELD_FOCUS from components/ui/forms.tsx for ad-hoc inputs.\n`,
+  )
+}
+
+// ── Typography guard: straight ellipsis in user-facing strings ───────────
+const ELLIPSIS_HITS_RE = /(?:Loading|Saving|Running|Connecting|Syncing|Fetching|Submitting|Deleting|Uploading|Downloading|Processing|Searching|Refreshing)\.\.\./g
+const ellipsisHits = []
+
+for (const file of files.filter((f) => /\.tsx$/.test(f))) {
+  const src = readFileSync(file, 'utf8')
+  for (const m of src.matchAll(ELLIPSIS_HITS_RE)) {
+    const index = m.index ?? 0
+    const lineStart = src.lastIndexOf('\n', index) + 1
+    const linePrefix = src.slice(lineStart, index)
+    if (/mushi-mushi-allowlist:/i.test(linePrefix)) continue
+    ellipsisHits.push({ file, line: extractLineNumber(src, index), token: m[0] })
+  }
+}
+
+if (ellipsisHits.length > 0) {
+  console.error(`\n[ellipsis] Use Unicode ellipsis (…) not three dots (...):\n`)
+  for (const hit of ellipsisHits) {
+    console.error(fmt(hit))
+  }
+  console.error(`\nFix: "Loading…" not "Loading...". See Web Interface Guidelines typography.\n`)
+}
+
+const lintFailures =
+  denied.length > 0 ||
+  unknown.length > 0 ||
+  subFloorHits.length > 0 ||
+  paletteHits.length > 0 ||
+  docsAliasHits.length > 0 ||
+  heroDupHits.length > 0 ||
+  hexHits.length > 0 ||
+  widgetHexHits.length > 0 ||
+  themePairMissing.length > 0 ||
+  pageElevatedHits.length > 0 ||
+  transitionAllHits.length > 0 ||
+  focusOutlineHits.length > 0 ||
+  ellipsisHits.length > 0
+
+if (lintFailures) process.exit(1)
 
 const totalTypeFloorFiles = typeFloorFiles.length
-console.log(`[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). Type floor: clean across ${totalTypeFloorFiles} files. Palette guard: clean on apps/testers. Hex guard: clean. Widget hex guard: clean.`)
+console.log(
+  `[ok] Admin design tokens are in sync with index.css (${allow.size} color roots, ${files.length} admin files scanned). ` +
+    `Type floor: clean across ${totalTypeFloorFiles} files. Web interface guards: transition-all, focus-visible, ellipsis — clean.`,
+)
