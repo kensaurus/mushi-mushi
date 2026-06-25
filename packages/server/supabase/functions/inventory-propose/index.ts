@@ -43,6 +43,7 @@ import { stringify as yamlStringify } from 'npm:yaml@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withLlmFailover } from '../_shared/llm-failover.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
@@ -476,10 +477,7 @@ async function handler(req: Request): Promise<Response> {
     })
   } catch (err) {
     rlog.error('propose failed', { project_id: body.project_id, err: String(err) })
-    return new Response(
-      JSON.stringify({ ok: false, error: { code: 'PROPOSE_FAILED', message: String(err) } }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    return safeErrorResponse({ code: 'PROPOSE_FAILED', status: 500 })
   }
 }
 

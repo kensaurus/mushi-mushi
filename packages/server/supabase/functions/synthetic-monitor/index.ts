@@ -37,6 +37,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import {
@@ -768,10 +769,7 @@ async function handler(req: Request): Promise<Response> {
     )
   } catch (err) {
     await cron.fail(err)
-    return new Response(
-      JSON.stringify({ ok: false, error: { code: 'PROBE_FAILED', message: String(err) } }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    return safeErrorResponse({ code: 'PROBE_FAILED', status: 500 })
   }
 }
 

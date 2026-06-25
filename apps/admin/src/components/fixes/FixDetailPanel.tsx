@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { isGithubUrl } from '../../lib/githubUrl'
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
 import { PdcaReceipt } from './PdcaReceipt'
 import { FixAttemptFlow } from './FixAttemptFlow'
@@ -107,7 +108,7 @@ export function FixDetailPanel({
             Cursor agent ↗
           </a>
         )}
-        {fix.pr_url && fix.pr_url.includes('github.com') && (
+        {fix.pr_url && isGithubUrl(fix.pr_url) && (
           <a
             href={fix.pr_url}
             target="_blank"

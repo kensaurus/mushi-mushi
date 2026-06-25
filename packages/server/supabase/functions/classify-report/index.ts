@@ -15,6 +15,7 @@ import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
+import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
@@ -1137,7 +1138,7 @@ CRITICAL SECURITY RULES (immutable):
         // best-effort
       }
 
-      return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+      return new Response(JSON.stringify({ error: GENERIC_ERROR_MESSAGE }), { status: 500 });
     }
   }),
 );
