@@ -1,12 +1,12 @@
 /**
  * FILE: scripts/aws-attach-apex-redirect.mjs
- * PURPOSE: Idempotently attach the mushi-mushi-apex-redirect CloudFront Function
- *          to the distribution's Default cache behavior (viewer-request).
+ * PURPOSE: Attach apex-domain redirects on kensaur.us by updating the distribution
+ *          Default cache behavior with a combined viewer-request function.
  *
- * WHY DEFAULT (not per-path behaviors):
- *   The kensaur.us distribution is near the 75 cache-behavior quota. The redirect
- *   function in cloudfront-mushi-apex-redirect.js already filters which URIs to
- *   301 — everything else passes through unchanged.
+ * The kensaur.us distribution is at the 75 cache-behavior quota, so per-path
+ * behaviors are not used. Default already carries glot-it-spa-router for glot.it;
+ * this script builds cloudfront-kensaur-default-viewer.js (Mushi 301s + glot SPA)
+ * and associates it on Default instead.
  *
  * RUN: node scripts/aws-attach-apex-redirect.mjs
  * ENV: CLOUDFRONT_DISTRIBUTION_ID (or CF_DIST_ID), AWS credentials via OIDC or keys
@@ -14,11 +14,14 @@
 
 import { execSync } from 'node:child_process'
 import { writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || process.env.CF_DIST_ID || 'E246VQ1C9QYZVB'
-const FN_NAME = 'mushi-mushi-apex-redirect'
+const COMBINED_FN_NAME = 'kensaur-default-viewer'
+const LEGACY_GLOT_FN = 'glot-it-spa-router'
 const BEHAVIOR_LIMIT = 75
 
 function aws(cmd) {
@@ -52,10 +55,57 @@ function getLiveFunctionArn(name) {
   }
 }
 
+function publishFunction(name, codeFile) {
+  const configJson = JSON.stringify({
+    Comment: 'kensaur.us Default viewer — Mushi apex redirects + glot.it SPA routing',
+    Runtime: 'cloudfront-js-2.0',
+  })
+  const posixCode = codeFile.replace(/\\/g, '/')
+
+  let etag = ''
+  try {
+    etag = aws(`cloudfront describe-function --name ${name} --region us-east-1`).ETag
+  } catch {
+    etag = ''
+  }
+
+  if (!etag) {
+    awsRawOrThrow(
+      `cloudfront create-function --name ${name} --function-config '${configJson}' --function-code fileb://${posixCode} --region us-east-1`,
+    )
+  } else {
+    awsRawOrThrow(
+      `cloudfront update-function --name ${name} --if-match ${etag} --function-config '${configJson}' --function-code fileb://${posixCode} --region us-east-1`,
+    )
+  }
+
+  etag = aws(`cloudfront describe-function --name ${name} --region us-east-1`).ETag
+  awsRawOrThrow(
+    `cloudfront publish-function --name ${name} --if-match ${etag} --region us-east-1`,
+  )
+}
+
 function viewerRequestAssoc(behavior) {
   const items = behavior?.FunctionAssociations?.Items ?? []
   return items.find((item) => item.EventType === 'viewer-request') ?? null
 }
+
+console.log('Building combined Default viewer function...')
+execSync('node scripts/build-kensaur-default-viewer.mjs', {
+  cwd: join(SCRIPT_DIR, '..'),
+  stdio: 'inherit',
+})
+const combinedCodeFile = join(SCRIPT_DIR, 'cloudfront-kensaur-default-viewer.js')
+
+console.log(`Publishing ${COMBINED_FN_NAME}...`)
+publishFunction(COMBINED_FN_NAME, combinedCodeFile)
+
+const fnArn = getLiveFunctionArn(COMBINED_FN_NAME)
+if (!fnArn) {
+  console.error(`ERROR: ${COMBINED_FN_NAME} is not in LIVE stage after publish.`)
+  process.exit(1)
+}
+console.log(`Combined function ARN: ${fnArn}`)
 
 console.log(`Fetching distribution config for ${DIST_ID}...`)
 const distResp = aws(`cloudfront get-distribution-config --id ${DIST_ID} --region us-east-1`)
@@ -67,16 +117,9 @@ console.log(`Ordered cache behavior count: ${config.CacheBehaviors?.Quantity ?? 
 
 if ((config.CacheBehaviors?.Quantity ?? 0) >= BEHAVIOR_LIMIT) {
   console.warn(
-    `::warning::At ${config.CacheBehaviors.Quantity}/${BEHAVIOR_LIMIT} cache behaviors — per-path apex behaviors are disabled; using Default behavior only.`,
+    `::warning::At ${config.CacheBehaviors.Quantity}/${BEHAVIOR_LIMIT} cache behaviors — using Default-behavior combined router only.`,
   )
 }
-
-const fnArn = getLiveFunctionArn(FN_NAME)
-if (!fnArn) {
-  console.error(`ERROR: ${FN_NAME} is not published to LIVE stage. Run deploy-docs or deploy-admin first.`)
-  process.exit(1)
-}
-console.log(`Apex redirect function ARN: ${fnArn}`)
 
 const defaultBehavior = config.DefaultCacheBehavior
 if (!defaultBehavior) {
@@ -86,17 +129,26 @@ if (!defaultBehavior) {
 
 const existingViewer = viewerRequestAssoc(defaultBehavior)
 if (existingViewer?.FunctionARN === fnArn) {
-  console.log('Default cache behavior already has mushi-mushi-apex-redirect on viewer-request. Nothing to do.')
+  console.log(`${COMBINED_FN_NAME} already attached on Default viewer-request. Nothing to do.`)
   process.exit(0)
 }
 
-if (existingViewer?.FunctionARN && existingViewer.FunctionARN !== fnArn) {
+const legacyGlotArn = getLiveFunctionArn(LEGACY_GLOT_FN)
+if (
+  existingViewer?.FunctionARN &&
+  existingViewer.FunctionARN !== fnArn &&
+  existingViewer.FunctionARN !== legacyGlotArn
+) {
   console.error(
-    'ERROR: Default cache behavior already has a different viewer-request function:',
+    'ERROR: Default cache behavior has an unexpected viewer-request function:',
     existingViewer.FunctionARN,
   )
-  console.error('Merge redirect logic manually or remove the existing association before re-running.')
+  console.error(`Expected ${COMBINED_FN_NAME} or legacy ${LEGACY_GLOT_FN}.`)
   process.exit(1)
+}
+
+if (existingViewer?.FunctionARN === legacyGlotArn) {
+  console.log(`Replacing legacy ${LEGACY_GLOT_FN} on Default with ${COMBINED_FN_NAME}.`)
 }
 
 const otherAssocs = (defaultBehavior.FunctionAssociations?.Items ?? []).filter(
@@ -115,8 +167,7 @@ try {
 }
 const tmpFile = join(tmpDir, 'cf-update-config.json')
 writeFileSync(tmpFile, JSON.stringify(config))
-console.log(`Attaching ${FN_NAME} to Default cache behavior (viewer-request)...`)
-console.log(`Config written to ${tmpFile}`)
+console.log(`Attaching ${COMBINED_FN_NAME} to Default cache behavior (viewer-request)...`)
 
 const resultRaw = awsRawOrThrow(
   `cloudfront update-distribution --id ${DIST_ID} --if-match ${etag} --distribution-config file://${tmpFile.replace(/\\/g, '/')} --region us-east-1`,
@@ -128,4 +179,4 @@ console.log(`Distribution status: ${parsed.Distribution?.Status ?? parsed.Status
 console.log('\nDone. CloudFront will propagate changes in ~5 minutes.')
 console.log('Verify with:')
 console.log('  curl -sI https://kensaur.us/quickstart/incident-loop | grep -i location')
-console.log('  curl -sI https://kensaur.us/reports/<any-uuid> | grep -i location')
+console.log('  curl -sI https://kensaur.us/glot-it/ | head -3')

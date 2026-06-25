@@ -74,6 +74,22 @@ describe('cloudfront-mushi-apex-redirect', () => {
   })
 })
 
+describe('cloudfront-kensaur-default-viewer', () => {
+  const combined = loadHandler('cloudfront-kensaur-default-viewer.js')
+
+  it('redirects mushi docs before glot SPA rewrite', () => {
+    const out = combined(req('/quickstart/incident-loop'))
+    assert.equal(out.statusCode, 301)
+    assert.equal(out.headers.location.value, '/mushi-mushi/docs/quickstart/incident-loop')
+  })
+
+  it('still serves glot.it well-known via glot handler', () => {
+    const out = combined(req('/.well-known/assetlinks.json'))
+    assert.equal(out.statusCode, 200)
+    assert.match(out.body, /com\.glotit\.app/)
+  })
+})
+
 describe('cloudfront-mushi-spa-router', () => {
   const spa = loadHandler('cloudfront-mushi-spa-router.js')
 

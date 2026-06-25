@@ -24,9 +24,8 @@
  * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
  * trailing slash so exact /integrations is not captured by docs rules.
  *
- * ATTACHMENT: viewer-request on apex cache behaviors — see
- * scripts/aws-attach-apex-redirect.mjs (updated by deploy-admin.yml and
- * deploy-docs.yml).
+ * ATTACHMENT: viewer-request on kensaur.us Default behavior via
+ * scripts/aws-attach-apex-redirect.mjs (combined with glot.it SPA router).
  *
  * RUNTIME: cloudfront-js-2.0
  */
