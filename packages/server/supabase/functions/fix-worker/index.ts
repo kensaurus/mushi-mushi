@@ -54,6 +54,7 @@ import { createOpenAI } from 'npm:@ai-sdk/openai@1';
 import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
 import { withSentry, tagLangfuseTrace } from '../_shared/sentry.ts';
+import { safeErrorResponse } from '../_shared/safe-error.ts';
 import { resolveLlmKey } from '../_shared/byok.ts';
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts';
 import {
@@ -1142,9 +1143,7 @@ ${
 
       await trace.end();
 
-      return new Response(JSON.stringify({ ok: false, error: errMsg.slice(0, 500) }), {
-        status: 500,
-      });
+      return safeErrorResponse({ status: 500 });
     }
   }),
 );

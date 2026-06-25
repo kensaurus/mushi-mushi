@@ -13,6 +13,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../_shared/llm-failover.ts'
 import { STAGE2_FALLBACK, STAGE2_MODEL } from '../_shared/models.ts'
@@ -508,10 +509,7 @@ async function handler(req: Request): Promise<Response> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     log.error('PR creation failed', { reportId, msg })
-    return new Response(
-      JSON.stringify({ ok: false, error: { code: 'GITHUB_ERROR', message: msg.slice(0, 500) } }),
-      { status: 502, headers: { 'Content-Type': 'application/json' } },
-    )
+    return safeErrorResponse({ code: 'GITHUB_ERROR', status: 502 })
   }
 }
 
