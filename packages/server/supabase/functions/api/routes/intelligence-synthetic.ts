@@ -468,7 +468,8 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': "default-src 'self'; img-src data: https:; style-src 'self' 'unsafe-inline'; script-src 'none';",
+          'Content-Security-Policy':
+            "default-src 'self'; img-src data: https:; style-src 'self' 'unsafe-inline'; script-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';",
           'X-Content-Type-Options': 'nosniff',
         },
       },

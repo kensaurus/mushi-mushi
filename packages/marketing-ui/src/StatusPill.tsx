@@ -24,12 +24,22 @@ const HEALTH_PATH = '/health'
 const POLL_MS = 60_000
 const TIMEOUT_MS = 6_000
 
+/**
+ * Trim trailing slashes without a regex. `/\/+$/` is a polynomial-ReDoS pattern
+ * (CodeQL js/polynomial-redos) that degrades on long all-slash inputs.
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 47 /* '/' */) end--
+  return value.slice(0, end)
+}
+
 export interface StatusPillProps {
   apiBaseUrl?: string
 }
 
 export function StatusPill({ apiBaseUrl }: StatusPillProps) {
-  const base = (apiBaseUrl ?? '').replace(/\/+$/, '')
+  const base = stripTrailingSlashes(apiBaseUrl ?? '')
   const [status, setStatus] = useState<Status>(base ? 'checking' : 'unknown')
   const [region, setRegion] = useState<string | null>(null)
 

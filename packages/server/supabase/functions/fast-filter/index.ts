@@ -20,6 +20,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { summarizeReplayEvents } from '../_shared/replay-evidence.ts'
 import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
+import { safeErrorResponse } from '../_shared/safe-error.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -495,6 +496,8 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
   } catch (err) {
     rootLog.child('fast-filter').error('Unhandled error', { err: String(err) })
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    // Never echo the raw error to the client (js/stack-trace-exposure). The
+    // full error is logged above; the caller gets a stable generic body.
+    return safeErrorResponse()
   }
 }))
