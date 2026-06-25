@@ -17,7 +17,11 @@ export const MUSHI_ICON_SVG_URL = `${MUSHI_WEBSITE_URL}/favicon.svg`
 
 /** Hosted MCP icon route — same origin as the MCP endpoint when proxied. */
 export function mcpIconUrl(mcpBaseUrl: string): string {
-  const base = mcpBaseUrl.replace(/\/+$/, '')
+  // Trim trailing slashes without a regex — `/\/+$/` is a polynomial-ReDoS
+  // pattern (CodeQL js/polynomial-redos) on long all-slash inputs.
+  let end = mcpBaseUrl.length
+  while (end > 0 && mcpBaseUrl.charCodeAt(end - 1) === 47 /* '/' */) end--
+  const base = mcpBaseUrl.slice(0, end)
   return `${base}?icon=1`
 }
 
