@@ -173,6 +173,16 @@ jobs:
             --cache-control "public, max-age=0, must-revalidate" \
             --content-type "application/json"
 
+      - name: Sync JSON schemas to S3 (canonical $id prefix)
+        # $id URLs use https://kensaur.us/mushi-mushi/schemas/*.json — outside the
+        # /mushi-mushi/docs/ prefix, so schemas are synced to a dedicated key.
+        run: |
+          aws s3 sync apps/docs/out/schemas/ s3://${{ env.S3_BUCKET }}/mushi-mushi/schemas/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "application/json" \
+            --exclude "*" \
+            --include "*.json"
+
       - name: Deploy CloudFront docs router function
         run: |
           FUNC_NAME="mushi-mushi-docs-router"

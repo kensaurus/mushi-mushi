@@ -28,7 +28,8 @@ current legend before submitting.)
 Repo: <https://github.com/jaw9c/awesome-remote-mcp-servers>
 
 PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) was **closed**
-because the MCP endpoint used a non-resolving hostname. Re-submit with the Supabase
+because the MCP endpoint used a non-resolving hostname. Re-submitted as
+[#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) with the Supabase
 Streamable HTTP URL below (matches `packages/mcp/server.json` `remotes`).
 
 ```md
@@ -54,6 +55,6 @@ node scripts/marketing/propose-awesome-pr.mjs \
 - [ ] `@mushi-mushi/mcp` published to npm and the official MCP registry (auto via release CI).
 - [ ] Verify the server appears at `registry.modelcontextprotocol.io` and on Glama / PulseMCP.
 - [ ] PR to `punkpeye/awesome-mcp-servers` opened.
-- [ ] PR to `awesome-remote-mcp-servers` re-opened (after #428 closed for bad hostname).
+- [x] PR to `awesome-remote-mcp-servers` re-opened ([#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431), supersedes closed #428).
 - [ ] README first paragraph is the v2 hero (awesome-list scrapers read it) — enforced by `scripts/check-tagline-consistency.mjs`.
 - [ ] `mcp` GitHub topic present (applied by `scripts/marketing/setup-github.mjs`).
