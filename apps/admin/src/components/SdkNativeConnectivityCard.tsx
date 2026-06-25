@@ -183,6 +183,18 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 </ul>
               </div>
             )}
+            {status === 'ci-secret-missing' && (
+              <p className="text-fg-muted">
+                <strong className="font-medium text-fg-secondary">Two ways to fix this.</strong>{' '}
+                One-click sync needs a fine-grained GitHub PAT with{' '}
+                <strong className="font-medium">Actions secrets: Read and write</strong>, stored in{' '}
+                <a href="/integrations/config" className="underline underline-offset-2 hover:text-fg">
+                  Settings → GitHub
+                </a>
+                . The Mushi GitHub App can open PRs but cannot write Actions secrets, so without a
+                PAT use the copy-paste commands below — both bake the same vars into your next build.
+              </p>
+            )}
             {!diag.bannerEnabled && (
               <p className="text-warn">
                 The SDK launcher is set to <strong>{diag.launcherMode ?? 'auto'}</strong>.

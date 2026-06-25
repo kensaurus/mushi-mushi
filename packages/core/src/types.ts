@@ -6,6 +6,18 @@ export interface MushiConfig {
   projectId: string;
   apiKey: string;
   apiEndpoint?: string;
+  /** Per-request timeout in ms (default 10000). Raise on slow mobile networks. */
+  timeout?: number;
+  /** Max retries for transient (network / 5xx) failures (default 2). */
+  maxRetries?: number;
+  /**
+   * Endpoint circuit breaker. After `threshold` consecutive unreachable
+   * failures the client fast-fails for `cooldownMs` (then half-opens) instead
+   * of hammering a down endpoint; fast-failed reports still hit the offline
+   * queue. Set `enabled: false` to opt out. Defaults: enabled, threshold 4,
+   * cooldown 30000ms.
+   */
+  circuitBreaker?: { enabled?: boolean; threshold?: number; cooldownMs?: number };
   /** Opinionated defaults for common environments. Explicit config wins. */
   preset?: MushiPreset;
   /**
@@ -921,6 +933,17 @@ export interface MushiEnvironment {
    */
   route?: string;
   nearestTestid?: string;
+
+  /**
+   * Native-shell detection (best-effort, present only when a native bridge is
+   * detected). Lets triage distinguish a Capacitor/Cordova/React-Native WebView
+   * report from a plain browser one, and lets the SDK gate DOM-only behaviour.
+   */
+  native?: {
+    capacitor?: boolean;
+    cordova?: boolean;
+    reactNative?: boolean;
+  };
 
   /**
    * SDK boost (2026-05-07): richer per-report context so the Triage LLM

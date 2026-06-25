@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Rewards console.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { RewardsStats } from '../../components/rewards/types'
 import { metricTip } from '../metricTooltipBuilder'

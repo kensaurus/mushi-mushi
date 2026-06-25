@@ -1499,6 +1499,14 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
         return c.json({ ok: false, error: { code: 'INVALID_URL', message: 'base_url must be a valid http(s) URL' } }, 400)
       }
 
+      const safeUrl = assertSafeOutboundUrl(body.base_url, {})
+      if (!safeUrl.ok) {
+        return c.json(
+          { ok: false, error: { code: 'UNSAFE_URL', message: safeUrl.reason ?? 'URL is not allowed for crawling' } },
+          400,
+        )
+      }
+
       // Quota check: count today's usage and compare against project limits
       const todayUtc = new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
       const [

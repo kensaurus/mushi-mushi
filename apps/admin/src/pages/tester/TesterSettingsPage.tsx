@@ -159,7 +159,7 @@ export function TesterSettingsPage() {
                 placeholder="your-handle"
                 value={form.handle ?? ''}
                 onChange={e => setForm(f => ({ ...f, handle: e.target.value }))}
-                className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
               />
               <p className="mt-1 text-2xs text-fg-faint">Shown on the public leaderboard. No spaces.</p>
             </div>
@@ -172,7 +172,7 @@ export function TesterSettingsPage() {
                 rows={2}
                 value={form.bio ?? ''}
                 onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
-                className="w-full resize-none rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="w-full resize-none rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
               />
             </div>
 
@@ -207,7 +207,7 @@ export function TesterSettingsPage() {
                 value={form.country ?? ''}
                 onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
                 maxLength={2}
-                className="w-28 rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="w-28 rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
               />
             </div>
           </section>
@@ -284,14 +284,14 @@ export function TesterSettingsPage() {
                   placeholder="Subject (e.g. Bug: wallet balance incorrect)"
                   value={feedback.subject}
                   onChange={e => setFeedback(f => ({ ...f, subject: e.target.value }))}
-                  className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 />
                 <textarea
                   placeholder="Describe the issue or suggestion in detail…"
                   rows={3}
                   value={feedback.body}
                   onChange={e => setFeedback(f => ({ ...f, body: e.target.value }))}
-                  className="w-full resize-none rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="w-full resize-none rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 />
                 {feedbackState === 'error' && (
                   <p className="text-2xs text-danger">Failed to send. Please try again.</p>

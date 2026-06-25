@@ -162,7 +162,7 @@ export function TesterSubmissionsPage() {
               id="submission-app"
               value={form.appId}
               onChange={(e) => setForm((f) => ({ ...f, appId: e.target.value }))}
-              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             >
               <option value="">Select a joined app…</option>
               {joinedApps.map((app) => (
@@ -179,7 +179,7 @@ export function TesterSubmissionsPage() {
               placeholder="One-line summary of the bug"
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             />
             <label className="block text-2xs text-fg-muted" htmlFor="submission-description">
               Steps & details
@@ -190,7 +190,7 @@ export function TesterSubmissionsPage() {
               rows={4}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              className="w-full resize-y rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+              className="w-full resize-y rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             />
             <label className="block text-2xs text-fg-muted" htmlFor="submission-screenshot">
               Screenshot URL (optional)
@@ -200,7 +200,7 @@ export function TesterSubmissionsPage() {
               placeholder="https://…"
               value={form.screenshotUrl}
               onChange={(e) => setForm((f) => ({ ...f, screenshotUrl: e.target.value }))}
-              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40"
+              className="w-full rounded-md border border-edge bg-surface-root px-3 py-2 text-sm placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             />
           </div>
           <Btn

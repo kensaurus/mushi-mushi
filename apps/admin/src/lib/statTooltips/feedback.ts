@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Feedback KPI strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { FeedbackStats } from '../../components/feedback/types'
 import { metricTip } from '../metricTooltipBuilder'

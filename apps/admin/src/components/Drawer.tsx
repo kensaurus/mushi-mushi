@@ -158,7 +158,7 @@ export function Drawer({
         ref={panelRef}
         tabIndex={-1}
         data-surface={surface}
-        className={`relative h-full ${WIDTH_CLASS[width]} bg-surface-root border-l border-edge/60 shadow-raised flex flex-col motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200 focus:outline-none${panelClassName ? ` ${panelClassName}` : ''}`}
+        className={`relative h-full ${WIDTH_CLASS[width]} bg-surface-root border-l border-edge/60 shadow-raised flex flex-col motion-safe:animate-in motion-safe:slide-in-from-right motion-safe:duration-200 focus-visible:outline-none${panelClassName ? ` ${panelClassName}` : ''}`}
       >
         {(title || headerAction) && (
           <header className="flex items-center gap-3 px-4 py-2.5 border-b border-edge/60">

@@ -138,7 +138,7 @@ export function DangerConfirm({
           // The text below the input quotes the required value so
           // pattern-matchers / password managers don't try to autofill.
           placeholder={requiredText}
-          className="w-full bg-surface-overlay border border-edge-subtle rounded-sm px-2 py-1.5 text-xs font-mono text-fg focus:outline-none focus:ring-1 focus:ring-danger/40 disabled:opacity-60"
+          className="w-full bg-surface-overlay border border-edge-subtle rounded-sm px-2 py-1.5 text-xs font-mono text-fg focus-visible:outline-none focus:ring-1 focus:ring-danger/40 disabled:opacity-60"
         />
         <p className="text-3xs text-fg-faint leading-snug">
           Type{' '}

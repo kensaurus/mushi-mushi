@@ -665,17 +665,17 @@ export function FixesPage() {
   return (
     <div className="space-y-3" data-testid="mushi-page-fixes">
       <PageHeaderBar
-        title={copy?.title ?? 'Auto-Fix Pipeline'}
+        title={copy?.title ?? 'Fix drafts & PRs'}
         projectScope={projectName}
-        description={copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
-        helpTitle={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
+        description={copy?.description ?? 'Every fix attempt and the PR it produced. Expand a card for rationale and CI status.'}
+        helpTitle={copy?.help?.title ?? 'About drafted fixes'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When Mushi finds a reproducible bug, it drafts a fix on a branch and opens a pull request for you to review before merge.'}
         helpUseCases={copy?.help?.useCases ?? [
-          'Track the full PDCA loop — Plan (LLM proposal), Do (PR), Check (CI), Act (review)',
-          'Audit cost: every attempt logs the model used, token spend, and a Langfuse trace',
-          'Spot patterns of failure so prompts and scope rules can be tightened',
+          'Track each draft PR from report to merge',
+          'See model used, token spend, and trace link per attempt',
+          'Spot failure patterns before retrying',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Pipeline shows dispatches in flight. Attempts lists every draft PR — expand a card for rationale and CI status.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'Summary for posture. Pipeline shows runs in flight. Attempts lists every draft PR.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">

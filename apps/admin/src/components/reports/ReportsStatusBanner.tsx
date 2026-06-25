@@ -60,7 +60,7 @@ export function ReportsStatusBanner({
           stats.topPriorityLabel ??
           (plainBanner
             ? 'Send a test bug from Setup to confirm the widget is working.'
-            : 'SDK ingest must be live — send a test report from Setup to populate the triage queue.')
+            : 'Send a test report from Setup to fill the bug queue.')
         }
         action={
           <StatusBannerAction
@@ -97,11 +97,11 @@ export function ReportsStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting to triage`}
+        title={`${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting for review`}
         subtitle={stats.topPriorityLabel ?? triageBacklogHint(stats.openBacklog)}
         action={
           <StatusBannerAction
-            label={actions.backlog ?? `Triage ${stats.openBacklog} waiting`}
+            label={actions.backlog ?? `Review ${stats.openBacklog} waiting`}
             to={stats.topPriorityTo ?? scopedHref('/reports?tab=queue&status=new', pid)}
             tone="warn"
           />
@@ -153,7 +153,7 @@ export function ReportsStatusBanner({
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'Bug queue is up to date' : `Triage queue current on ${projectLabel}`}
+      title={plainBanner ? 'Bug queue is up to date' : `Bug queue current on ${projectLabel}`}
       subtitle={
         <>
           {stats.topPriorityLabel ?? `${stats.total14d} reports in 14d`}

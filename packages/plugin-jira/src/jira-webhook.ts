@@ -36,7 +36,7 @@ import { withRetry } from '@mushi-mushi/plugin-sdk'
 export interface JiraWebhookReceiverOptions {
   /** Webhook secret configured in the Jira WebHook registration form. */
   secret: string
-  /** Mushi REST API base URL, e.g. `https://api.mushimushi.dev`. */
+  /** Mushi REST API base URL, e.g. `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`. */
   apiEndpoint: string
   /** Mushi plugin API key (issued from the marketplace listing). */
   apiKey: string

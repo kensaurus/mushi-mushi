@@ -192,7 +192,7 @@ function ScoreBar({
         </SignalChip>
         <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full motion-safe:transition-all motion-safe:duration-500"
+            className="h-full rounded-full motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] motion-safe:duration-500"
             style={{ width: `${(value * 100).toFixed(0)}%`, backgroundColor: color }}
           />
         </div>

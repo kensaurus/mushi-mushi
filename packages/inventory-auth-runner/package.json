@@ -45,7 +45,8 @@
     "cookie-refresh"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "sideEffects": false,
   "scripts": {

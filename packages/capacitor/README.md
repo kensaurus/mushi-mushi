@@ -2,7 +2,7 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-Capacitor plugin for [Mushi Mushi](https://mushimushi.dev) — the open-source,
+Capacitor plugin for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
 > **One-command setup:** `npx mushi-mushi` auto-detects Capacitor and installs this package.
@@ -11,7 +11,7 @@ LLM-driven bug intake, classification, and autofix platform.
 
 > **Status**: v0.8.x surface stable; API may evolve before a coordinated 1.0 across all packages.
 
-The Capacitor plugin uses a **public ingest key** (`mush_pk_…`) — not the `mushi_…` web key. See [Project ID & API keys](https://docs.mushimushi.dev/concepts/credentials).
+The Capacitor plugin uses a **public ingest key** (`mush_pk_…`) — not the `mushi_…` web key. See [Project ID & API keys](https://kensaur.us/mushi-mushi/docs/concepts/credentials).
 
 The npm package vendors the standalone iOS and Android SDK sources for the
 native side, so Capacitor apps do not need a separate Maven or SwiftPM Mushi
@@ -91,7 +91,7 @@ bottom sheet from the standalone SDKs.
 |------------------------|--------------------------------------|-------|
 | `projectId`            | _required_                           | Project UUID |
 | `apiKey`               | _required_                           | Public ingest key (`mush_pk_...`) |
-| `endpoint`             | `https://api.mushimushi.dev`         | Override for self-hosting |
+| `endpoint`             | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`          | `'shake'`                            | `'shake'` / `'button'` / `'both'` / `'none'` |
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |
 | `minDescriptionLength` | `20`                                 | Matches the web/native SDK contracts |
@@ -107,4 +107,4 @@ MIT — see [LICENSE](../../LICENSE) at the repo root.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

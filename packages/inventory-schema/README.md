@@ -1,5 +1,10 @@
 # @mushi-mushi/inventory-schema
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+JSON Schema for inventory.yaml user-story maps.
+
+
 Single source of truth for the Mushi Mushi v2 `inventory.yaml` shape.
 
 ## What this is
@@ -52,7 +57,7 @@ Drop the JSON Schema into `.vscode/settings.json`:
 ```json
 {
   "yaml.schemas": {
-    "https://mushimushi.dev/schemas/inventory-2.0.json": "inventory.yaml"
+    "https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json": "inventory.yaml"
   }
 }
 ```
@@ -68,7 +73,7 @@ import { inventoryJsonSchema } from '@mushi-mushi/inventory-schema/json-schema'
 The Zod schema in [`src/index.ts`](./src/index.ts) is the single source of
 truth. The hand-authored JSON Schema companion lives in
 [`src/json-schema.ts`](./src/json-schema.ts) and is published to
-`https://mushimushi.dev/schemas/inventory-2.0.json` for editor
+`https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json` for editor
 autocomplete (see above).
 
 ## `expected_outcome` — machine-readable success contract
@@ -114,4 +119,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

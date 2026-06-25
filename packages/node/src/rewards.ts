@@ -179,6 +179,12 @@ export interface MushiRewardsHandler {
  *   export const POST = (req: Request) => handler.fetch(req)
  */
 export function createMushiRewardsHandler(opts: MushiRewardsHandlerOptions): MushiRewardsHandler {
+  if (!opts.secret?.trim()) {
+    throw new Error(
+      'createMushiRewardsHandler: secret is required and must be non-empty. ' +
+        'An empty secret allows forged reward webhooks (CVE-2026-41432 pattern).',
+    )
+  }
   const sigHeader = (opts.signatureHeader ?? DEFAULT_SIG_HEADER).toLowerCase()
 
   async function handleVerified(rawBody: string, signature: string | null | undefined): Promise<

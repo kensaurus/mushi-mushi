@@ -10,18 +10,18 @@ interface PrivacyPill {
 
 const PILLS: PrivacyPill[] = [
   {
-    label: 'RLS isolated',
-    detail: 'Every table is row-level-security scoped to your project. Your reports cannot cross tenant boundaries.',
+    label: 'Your project only',
+    detail: 'Every table is scoped to your project. Your reports cannot cross tenant boundaries.',
     docPath: '/security/no-leakage-claim#your-data-doesnt-cross-project-boundaries',
   },
   {
-    label: 'BYOK by default',
-    detail: 'Supply your own Anthropic/OpenAI key and Mushi runs the loop against your account — not ours.',
+    label: 'Your LLM keys',
+    detail: 'Supply your own Anthropic or OpenAI key — Mushi runs against your account, not ours.',
     docPath: '/security/no-leakage-claim#byok--your-api-keys-run-against-your-account',
   },
   {
     label: 'Your code stays in your repo',
-    detail: 'The fix agent reads a RAG index, never uploads your source files. Draft PRs go directly to your GitHub.',
+    detail: 'The fix agent reads an index, never uploads source files. Draft PRs go to your GitHub.',
     docPath: '/security/no-leakage-claim#your-code-stays-in-your-repo',
   },
 ]

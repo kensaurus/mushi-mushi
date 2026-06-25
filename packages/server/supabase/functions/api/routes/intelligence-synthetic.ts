@@ -1,21 +1,34 @@
 import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
+import { z } from 'npm:zod@3';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { dbError, callerProjectIds, resolveOwnedProject, scopedOwnedProjectIds } from '../shared.ts';
+import { sanitizeRenderedHtml } from '../../_shared/html-sanitize.ts';
 import { log } from '../../_shared/logger.ts';
+
+const syntheticTriggerSchema = z.object({
+  count: z.number().int().min(1).max(50).optional(),
+});
 
 export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Variables }>): void {
   app.post('/v1/admin/synthetic', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
-    const body = await c.req.json();
+    const rawBody = await c.req.json().catch(() => ({}));
+    const parsedBody = syntheticTriggerSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: parsedBody.error.message } },
+        400,
+      );
+    }
     const db = getServiceClient();
     const resolvedProject = await resolveOwnedProject(c, db, userId);
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const count = Math.min(body.count ?? 10, 50);
+    const count = parsedBody.data.count ?? 10;
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-synthetic`, {
       method: 'POST',
       headers: {
@@ -450,12 +463,12 @@ export function registerIntelligenceSyntheticRoutes(app: Hono<{ Variables: Varia
       );
 
     return new Response(
-      data.rendered_html ?? '<p>No rendered HTML available for this report.</p>',
+      sanitizeRenderedHtml(data.rendered_html ?? '<p>No rendered HTML available for this report.</p>'),
       {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': "default-src 'self' 'unsafe-inline'; img-src data: https:;",
+          'Content-Security-Policy': "default-src 'self'; img-src data: https:; style-src 'self' 'unsafe-inline'; script-src 'none';",
           'X-Content-Type-Options': 'nosniff',
         },
       },

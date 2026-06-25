@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "displayName": "Mushi Mushi",
-  "version": "1.0.0",
+  "version": "0.17.0",
   "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Mushi sees what users feel; Sentry sees what code throws.",
   "author": {
     "name": "Mushi Mushi",

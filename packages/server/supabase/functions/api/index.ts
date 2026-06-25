@@ -2,7 +2,7 @@ import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
 import type { Variables } from './types.ts';
 
-import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
+import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
@@ -83,14 +83,6 @@ app.use('*', requestLoggingMiddleware());
 const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
   const raw = (Deno.env.get('MUSHI_ADMIN_ORIGIN_ALLOWLIST') ?? '').trim();
   const defaults = [
-    'https://admin.mushimushi.dev',
-    'https://app.mushimushi.dev',
-    // Public live demo, pointed at by the README + npm "Live admin demo"
-    // links. Hosted from a CloudFront distribution that fronts the GitHub
-    // Pages build of `apps/admin`. Both apex and `www.` are kept here so
-    // the demo keeps working if a marketing redirect ever flips. Without
-    // this entry every /v1/admin/* call from the demo fails CORS preflight
-    // even though the JWT + RLS gates would otherwise admit the request.
     'https://kensaur.us',
     'https://www.kensaur.us',
     // Local dev for the admin Vite server. `apps/admin/README.md` pins the
@@ -139,6 +131,15 @@ const SDK_OBSERVATION_HEADERS = [
   'X-Mushi-User-Token',
 ] as const;
 
+// The SDK does far more than GET here: the browser widget POSTs rewards
+// activity (/v1/sdk/activity), passive discovery (/v1/sdk/discovery), the
+// page-aware assistant (/v1/sdk/assistant), consent (/v1/sdk/me/consent),
+// payout onboarding (/v1/sdk/me/payout/onboard) and experiment events, and
+// DELETEs for GDPR erasure (/v1/sdk/me). A previous `['GET','OPTIONS']` list
+// made every one of those fail the browser preflight (works on native, which
+// doesn't enforce CORS — hence "broken on websites only"). Mirror the
+// /v1/reports method set so any future SDK verb is covered without a regression
+// hunt. Origin stays '*' because these are project-API-key authenticated.
 app.use(
   '/v1/sdk/*',
   cors({
@@ -152,7 +153,7 @@ app.use(
       'baggage',
       'sentry-trace',
     ],
-    allowMethods: ['GET', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
 );
 app.use(
@@ -324,8 +325,7 @@ app.use(
 const DOCS_ORIGIN_ALLOWLIST = ((): string[] => {
   const raw = (Deno.env.get('MUSHI_DOCS_ORIGIN_ALLOWLIST') ?? '').trim();
   const defaults = [
-    'https://docs.mushimushi.dev',
-    // Public mirror that fronts the Nextra static export from GitHub Pages.
+    // Public docs static export at kensaur.us/mushi-mushi/docs
     'https://kensaur.us',
     'https://www.kensaur.us',
     // Local dev for the docs Next.js server. Nextra dev defaults to :3000;
@@ -604,25 +604,33 @@ function clientAbortFallback(): Response {
  * escaped Hono entirely or when Hono returned a Response with `status === 0`.
  *
  * Status-0 inbound is the documented Deno/Supabase Edge Runtime client-abort
- * shape (see Sentry handler doc). It is NOT a server bug — log it as a
- * warning so it shows up in Sentry's Issues list as a low-priority signal,
- * but never as an exception (which would page on-call and burn error budget
- * for behaviour the operator can do nothing about).
+ * shape (see `_shared/sentry.ts`). It is NOT a server bug — log to Supabase
+ * Logs only (no Sentry capture) so on-call is not paged for client disconnects.
  */
+function logClientAbort(req: Request, extra?: Record<string, unknown>): void {
+  const url = new URL(req.url);
+  console.warn(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'warn',
+      scope: 'mushi:api-fetch-boundary',
+      event: 'client_aborted_response',
+      msg: 'client disconnected before response could be written',
+      path: url.pathname,
+      method: req.method,
+      client_abort: true,
+      boundary: 'api-fetch',
+      ...extra,
+    }),
+  );
+}
+
 async function fetchWithStatusZeroGuard(req: Request): Promise<Response> {
   try {
     const res = await app.fetch(req);
 
     if (res.status === 0) {
-      const url = new URL(req.url);
-      reportMessage('client_aborted_response', 'warning', {
-        tags: {
-          path: url.pathname,
-          method: req.method,
-          client_abort: 'true',
-          boundary: 'api-fetch',
-        },
-      });
+      logClientAbort(req);
       return clientAbortFallback();
     }
 
@@ -630,16 +638,9 @@ async function fetchWithStatusZeroGuard(req: Request): Promise<Response> {
   } catch (err) {
     if (!isStatusZeroRangeError(err)) throw err;
 
-    const url = new URL(req.url);
-    reportMessage('client_aborted_response', 'warning', {
-      tags: {
-        path: url.pathname,
-        method: req.method,
-        client_abort: 'true',
-        range_error_status_0: 'true',
-        boundary: 'api-fetch',
-      },
-      extra: { url: `${url.origin}${url.pathname}` },
+    logClientAbort(req, {
+      range_error_status_0: true,
+      url: `${new URL(req.url).origin}${new URL(req.url).pathname}`,
     });
     return clientAbortFallback();
   }

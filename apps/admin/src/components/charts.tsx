@@ -217,7 +217,7 @@ export function KpiTile({
     const linkInner = (
       <Link
         to={to}
-        className={`block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${isFlat ? 'rounded-none' : 'rounded-md'}`}
+        className={`block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${isFlat ? 'rounded-none' : 'rounded-md'}`}
         aria-label={`${label}: ${value}`}
       >
         {inner}
@@ -639,7 +639,7 @@ export function BarSparkline({
               />
             ) : (
               <div
-                className={`${sparseBars ? '' : 'w-full'} min-w-[3px] ${accent} rounded-t-sm motion-safe:transition-all ${
+                className={`${sparseBars ? '' : 'w-full'} min-w-[3px] ${accent} rounded-t-sm motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
                   isPeak || isHovered
                     ? 'opacity-100 shadow-sm shadow-brand/40'
                     : 'opacity-80 group-hover:opacity-100'
@@ -837,7 +837,7 @@ function SeverityBarColumn({
           // the neighbouring column; clipping keeps the most-severe (bottom)
           // segments visible within the bar boundary.
           'absolute inset-x-0 bottom-0 flex flex-col justify-end overflow-hidden rounded-sm',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
           'motion-safe:transition-[filter,background-color] duration-150',
           /* Zero-day: keep full-height for hover target but NO visual fill —
              only the 6px baseline stub signals "day with 0 reports", avoiding
@@ -1020,7 +1020,7 @@ export function Histogram({
               type="button"
               tabIndex={v > 0 ? 0 : -1}
               aria-label={summary}
-              className={`w-full ${accent} rounded-t-sm motion-safe:transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 cursor-default`}
+              className={`w-full ${accent} rounded-t-sm motion-safe:transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 cursor-default`}
               style={{
                 height: `${(v / chartMax) * 100}%`,
                 minHeight: v > 0 ? '2px' : '0',

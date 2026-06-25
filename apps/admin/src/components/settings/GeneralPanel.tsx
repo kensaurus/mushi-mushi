@@ -64,7 +64,7 @@ export function GeneralPanel() {
     setTimeout(() => setSlackTestResult(null), 4000)
   }
 
-  const DEFAULT_BRANCH_TEMPLATE = 'mushi/fix/{date}-{category}-{shortId}'
+  const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
   const changeCount = dirty
     ? countChangedFields([
         { current: settings.slack_webhook_url ?? '', saved: saved.slack_webhook_url ?? '' },
@@ -201,7 +201,7 @@ export function GeneralPanel() {
       <Section title="Sentry error tracking" className="space-y-3">
         <SettingEffectCallout>
           Connect your Sentry project so production crashes and optional user-feedback widgets become
-          Mushi reports — same triage queue as in-app bug reports.
+          Mushi reports — same bug queue as in-app bug reports.
         </SettingEffectCallout>
         <div>
           <Input

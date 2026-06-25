@@ -1,0 +1,12 @@
+# Gitleaks configuration for mushi-mushi.
+# Extends the bundled default ruleset and only ADDS a narrow path allowlist,
+# so real leaks elsewhere are still caught.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Internal audit note documenting a legacy AWS IAM user (access key IDs are public identifiers, not secret keys; the value is redacted in-tree). Scoped to this single file so the historical commit does not fail PR scans."
+paths = [
+  '''docs/audit-2026-06-24/pre-launch-hardening-complete\.md''',
+]

@@ -1,5 +1,10 @@
 # `@mushi-mushi/adapters`
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+Inbound event adapters (Sentry, Datadog, …).
+
+
 Inbound webhook translators that turn third-party observability events into
 Mushi Mushi reports. Use these when you want production monitors (Sentry,
 Datadog, CloudWatch, …) and crash reports (Bugsnag, Rollbar, Crashlytics) to
@@ -107,4 +112,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

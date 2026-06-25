@@ -74,6 +74,16 @@ function isTabId(value: string | null): value is SettingsTabId {
   return TABS.some((t) => t.id === value)
 }
 
+const TAB_GROUPS: Array<{ label: string; tabs: SettingsTabId[] }> = [
+  { label: 'Project', tabs: ['general', 'health'] },
+  { label: 'Integrations', tabs: ['byok', 'firecrawl', 'browserbase'] },
+  { label: 'Advanced', tabs: ['dev'] },
+]
+
+function settingsTabGroup(tab: SettingsTabId): string {
+  return TAB_GROUPS.find((g) => g.tabs.includes(tab))?.label ?? 'Project'
+}
+
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const copy = usePageCopy('/settings')
@@ -184,7 +194,7 @@ export function SettingsPage() {
         projectScope={projectName ?? stats.projectName}
         description={copy?.description ?? 'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'}
         helpTitle={copy?.help?.title ?? 'About Settings'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project-level knobs that change how bugs arrive, how the AI triages them, and where notifications go. Each field has a clickable (i) icon with full details.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project settings for the active app: your own LLM keys (optional), how bugs get classified, dedup sensitivity, widget copy, and developer toggles.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Wire Slack so new bugs post to your triage channel with action buttons',
           'Connect Sentry so production errors become Mushi reports automatically',
@@ -271,6 +281,7 @@ export function SettingsPage() {
                 statsValidating={isValidating}
                 description={activeMeta.description}
                 statLabels={copy?.statLabels}
+                plainLanguage={ux.plainBanner}
               />
             ),
           },
@@ -278,12 +289,24 @@ export function SettingsPage() {
       />
 
       {!ux.hideTabs && (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-3xs text-fg-faint">
+          {TAB_GROUPS.map((group) => (
+            <span key={group.label}>
+              <span className="font-medium uppercase tracking-wider text-fg-muted">{group.label}</span>
+              {' — '}
+              {group.tabs.map((id) => SETTINGS_TAB_LABELS[id]).join(', ')}
+            </span>
+          ))}
+        </div>
       <SegmentedControl
         value={active}
         onChange={setActive}
         options={tabOptions}
         ariaLabel="Settings sections"
+        scrollable
       />
+      </div>
       )}
 
       <SettingsTabIntro tab={active} />
@@ -306,8 +329,9 @@ export function SettingsPage() {
         role="tabpanel"
         id={`settings-panel-${active}`}
         aria-labelledby={`settings-tab-${active}`}
-        className="min-w-0"
+        className="min-w-0 space-y-3"
       >
+        <PanelSectionLabel>{settingsTabGroup(active)}</PanelSectionLabel>
         {active === 'general' && <GeneralPanel />}
         {active === 'byok' && <ByokPanel />}
         {active === 'firecrawl' && <FirecrawlPanel />}

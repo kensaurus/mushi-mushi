@@ -2,7 +2,7 @@
  * Stand-alone Node HTTPS entry point for the Rollbar plugin. Usage:
  *
  *   MUSHI_PLUGIN_SECRET=... ROLLBAR_ACCESS_TOKEN=... ROLLBAR_PROJECT_ID=... \
- *   ADMIN_BASE_URL=https://admin.mushimushi.dev PORT=3000 \
+ *   ADMIN_BASE_URL=https://kensaur.us/mushi-mushi/admin PORT=3000 \
  *     npx mushi-plugin-rollbar
  */
 

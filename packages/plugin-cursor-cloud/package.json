@@ -42,7 +42,8 @@
   },
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "sideEffects": false,
   "keywords": [

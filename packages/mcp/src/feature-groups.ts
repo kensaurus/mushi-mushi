@@ -17,6 +17,7 @@ export const FEATURE_GROUPS = [
   'audit',
   'docs',
   'usage',
+  'usage',
   /** Deprecated aliases kept for one release — hidden unless `legacy` or `all`. */
   'legacy',
 ] as const

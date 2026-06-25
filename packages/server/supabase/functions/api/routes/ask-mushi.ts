@@ -866,6 +866,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         status: 'error',
         errorMessage: msg,
         latencyMs,
+        langfuseTraceId: null,
       });
       return c.json({ ok: false, error: { code: 'LLM_ERROR', message: msg } }, 500);
     }
@@ -995,6 +996,11 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
 
     return streamSSE(c, async (stream) => {
       const started = Date.now();
+      const streamTrace = createTrace('ask-mushi-stream', {
+        route,
+        projectId: activeProject?.id,
+        threadId,
+      });
       let acc = '';
       let inputTokens: number | undefined;
       let outputTokens: number | undefined;
@@ -1110,6 +1116,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
           outputTokens,
           cacheCreationInputTokens: cacheCreate,
           cacheReadInputTokens: cacheRead,
+          langfuseTraceId: streamTrace.id,
         });
 
         void db
@@ -1156,6 +1163,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
           status: 'error',
           errorMessage: msg,
           latencyMs,
+          langfuseTraceId: streamTrace.id,
         });
         await stream.write(toSseEvent({ code: 'LLM_ERROR', message: msg }, { event: 'error' }));
       }

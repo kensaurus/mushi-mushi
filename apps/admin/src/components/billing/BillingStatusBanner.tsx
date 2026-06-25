@@ -88,7 +88,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
           stats.overDiagnosisQuota
             ? plainBanner
               ? 'Diagnosis quota reached'
-              : 'Diagnosis quota reached — AI triage paused'
+              : 'Diagnosis quota reached — plain-English reads paused'
             : plainBanner
               ? 'Over quota — upgrade to keep ingesting'
               : 'Over quota — new reports may be rejected'

@@ -86,7 +86,7 @@ function buildSpec(apiBase: string): Record<string, unknown> {
         'Documents the endpoints external orchestrators (LangGraph, OpenAI Agents SDK, CrewAI, A2A agents) ' +
         'are expected to call. Internal admin-UI-only endpoints (settings forms, billing) are intentionally ' +
         'omitted — see /.well-known/agent-card for the discovery doc that advertises this spec.',
-      contact: { name: 'Mushi Mushi', url: 'https://mushimushi.dev' },
+      contact: { name: 'Mushi Mushi', url: 'https://kensaur.us/mushi-mushi' },
       license: { name: 'MIT', url: 'https://opensource.org/licenses/MIT' },
     },
     servers: [{ url: apiBase }],
@@ -408,7 +408,7 @@ function buildSpec(apiBase: string): Record<string, unknown> {
         protocolVersion: '1.0.0',
       },
       schemas: {
-        inventory: 'https://mushimushi.dev/schemas/inventory-2.0.json',
+        inventory: 'https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json',
         fixContext: `${apiBase}/v1/schemas/fix-context.json`,
         fixResult: `${apiBase}/v1/schemas/fix-result.json`,
         sandboxProvider: `${apiBase}/v1/schemas/sandbox-provider.json`,

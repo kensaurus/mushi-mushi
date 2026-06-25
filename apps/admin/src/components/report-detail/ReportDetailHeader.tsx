@@ -17,7 +17,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const glow = severityGlowClass(report.severity)
   return (
     <div
-      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-all' : ''}`}
+      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]' : ''}`}
     >
       <Breadcrumbs
         items={[
@@ -106,7 +106,7 @@ function PresenceBadges({ reportId, projectId }: { reportId: string; projectId: 
             className="w-6 h-6 rounded-full border border-edge bg-surface-raised text-2xs flex items-center justify-center font-medium overflow-hidden"
           >
             {p.avatar_url ? (
-              <img src={p.avatar_url} alt={p.display_name ?? 'avatar'} className="w-full h-full object-cover" />
+              <img src={p.avatar_url} alt={p.display_name ?? 'avatar'} width={24} height={24} className="w-full h-full object-cover" />
             ) : (
               (p.display_name ?? '?').slice(0, 2).toUpperCase()
             )}

@@ -4,36 +4,13 @@
 'use client'
 
 import { useId, useState } from 'react'
-
-interface FaqItem {
-  q: string
-  a: string
-}
-
-const DEFAULT_FAQ: readonly FaqItem[] = [
-  {
-    q: 'The lime banner never appears in my store build',
-    a: 'Capacitor and React Native bake NEXT_PUBLIC_MUSHI_* at compile time. Check Admin → Connect → Native app CI secrets, or run scripts/check-mushi-env.mjs in your native prebuild.',
-  },
-  {
-    q: 'Reports return 401 or never show up',
-    a: 'Confirm the project UUID and public ingest key match. Run mushi ping and Send test report on the Projects page. SDK keys are report:write scoped — not MCP keys.',
-  },
-  {
-    q: 'MCP tools list is empty in Cursor',
-    a: 'Restart the IDE after editing .cursor/mcp.json. Pass MUSHI_PROJECT_ID in env (no --project-id flag). Mint an MCP read or read+write key.',
-  },
-  {
-    q: 'Widget shows but classification stays pending',
-    a: 'BYOK: add Anthropic or OpenAI under Settings → API Keys. Self-host: confirm classify-report edge function is deployed and migrations are applied.',
-  },
-]
+import { PUBLIC_FAQ, type PublicFaqItem } from '@/lib/public-copy'
 
 interface Props {
-  items?: readonly FaqItem[]
+  items?: readonly PublicFaqItem[]
 }
 
-export function TroubleshootingAccordion({ items = DEFAULT_FAQ }: Props) {
+export function TroubleshootingAccordion({ items = PUBLIC_FAQ }: Props) {
   const [open, setOpen] = useState<number | null>(null)
   const baseId = useId()
 
@@ -55,11 +32,16 @@ export function TroubleshootingAccordion({ items = DEFAULT_FAQ }: Props) {
             >
               {item.q}
             </button>
-            {isOpen ? (
-              <p id={panelId} role="region" aria-labelledby={`${baseId}-trigger-${i}`} className="px-4 pb-3 m-0 text-sm text-mushi-ink-muted">
-                {item.a}
-              </p>
-            ) : null}
+            <p
+              id={panelId}
+              role="region"
+              aria-labelledby={`${baseId}-trigger-${i}`}
+              hidden={!isOpen}
+              inert={!isOpen}
+              className="px-4 pb-3 m-0 text-sm text-mushi-ink-muted"
+            >
+              {item.a}
+            </p>
           </div>
         )
       })}

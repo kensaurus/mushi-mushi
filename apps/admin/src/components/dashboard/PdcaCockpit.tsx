@@ -78,7 +78,7 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
       >
         <Link
           to={stage.cta.to}
-          className="block p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md group"
+          className="block p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md group"
         >
           <header className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">

@@ -742,7 +742,7 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
           max={1000}
           value={maxPaths}
           onChange={(e) => setMaxPaths(parseInt(e.target.value, 10))}
-          className="block w-32 rounded-md border border-edge-subtle bg-surface px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
+          className="block w-32 rounded-md border border-edge-subtle bg-surface px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
         />
       </label>
       <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId} className="w-full sm:w-auto">

@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the QA Coverage QA SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { QaCoverageStats } from '../../components/qa-coverage/QaCoverageStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

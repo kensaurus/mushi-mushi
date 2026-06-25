@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Intelligence SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { IntelligenceStats } from '../../components/intelligence/IntelligenceStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

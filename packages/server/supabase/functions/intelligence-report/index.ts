@@ -113,6 +113,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
       latencyMs: digestLatency,
       inputTokens: usage?.promptTokens ?? null,
       outputTokens: usage?.completionTokens ?? null,
+      langfuseTraceId: trace.id,
     })
 
     const renderedHtml = renderIntelligenceHtml({

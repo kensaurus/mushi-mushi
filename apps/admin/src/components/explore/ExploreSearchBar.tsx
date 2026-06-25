@@ -177,7 +177,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Describe what you're looking for…"
-          className="w-full rounded-md border border-edge bg-surface-raised pl-9 pr-9 py-2.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50"
+          className="w-full rounded-md border border-edge bg-surface-raised pl-9 pr-9 py-2.5 text-sm text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:border-brand/50"
           aria-label="Semantic codebase search"
         />
         {searching && (

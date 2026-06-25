@@ -231,7 +231,7 @@ describe('structured tool output (MCP 2025-06-18)', () => {
     })
     const res = await client.callTool({
       name: 'dispatch_fix',
-      arguments: { reportId: 'rep_1' },
+      arguments: { reportId: '11111111-1111-4111-8111-111111111111' },
     })
     expect(res.structuredContent).toEqual({ fixId: 'fix_abc', status: 'queued' })
   })

@@ -545,7 +545,7 @@ export function StoragePage() {
               <div className="mt-3">
                 <button
                   type="button"
-                  className="text-2xs text-fg-muted hover:text-fg flex items-center gap-1 focus:outline-none"
+                  className="text-2xs text-fg-muted hover:text-fg flex items-center gap-1 focus-visible:outline-none"
                   onClick={() => setDebugOpen((prev) => ({ ...prev, [s.project_id]: !prev[s.project_id] }))}
                 >
                   <span className={`inline-block transition-transform duration-150 ${isDebugOpen ? 'rotate-90' : ''}`}>▶</span>

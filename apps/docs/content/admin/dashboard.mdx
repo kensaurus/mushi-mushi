@@ -15,8 +15,8 @@ import { Callout } from 'nextra/components'
 <AdminDocHero page="dashboard" />
 
 The dashboard answers those questions without clicking into any sub-page. It's your
-starting point every morning — a live snapshot of the entire Plan → Do → Check → Act
-pipeline.
+morning starting point — a live snapshot of what users reported, what's getting fixed,
+and what still needs you.
 
 ---
 
@@ -24,22 +24,22 @@ pipeline.
 
 When you land on the dashboard, scan these three things in order:
 
-1. **PDCA flow canvas** (centre) — are reports stuck at one stage? A pile-up at "Plan"
-   means the triage queue is backed up. A pile-up at "Do" means fix-worker runs are
-   failing or waiting. Click the glowing stage to jump straight there.
+1. **Flow canvas** (centre) — are reports stuck at one stage? A pile-up at "Plan"
+   means the inbox is backed up. A pile-up at "Do" means fix drafts are failing or
+   waiting. Click the glowing stage to jump straight there.
 
-2. **KPI tiles** (below the canvas) — if "Fixes failed" is non-zero, open the
-   [Fix orchestrator](/admin/fixes) immediately. If "LLM cost" spiked overnight, check
+2. **KPI tiles** (below the canvas) — if "Fixes failed" is non-zero, open
+   [Fix drafts & PRs](/admin/fixes) immediately. If "LLM cost" spiked overnight, check
    the cost chart for the culprit pipeline.
 
-3. **Triage queue** (bottom-left) — un-triaged reports waiting for a human decision.
-   This is your to-do list for the day.
+3. **Inbox queue** (bottom-left) — reports waiting for your decision. This is your
+   to-do list for the day.
 
 ---
 
-## PDCA flow canvas
+## Flow canvas
 
-The animated graph in the centre shows live report counts at each pipeline stage:
+The animated graph in the centre shows live report counts at each stage:
 
 | Stage | What it counts |
 |-------|---------------|
@@ -107,7 +107,7 @@ while the queue looks empty, check the [Processing queue](/admin/queue) for stuc
 ### Morning check (2 minutes)
 1. Glance at the PDCA canvas — no pile-up at a single stage? Good.
 2. Check "Fixes failed" — zero? Move on. Non-zero? Open Fix orchestrator.
-3. Scan the triage queue — triage the top 2–3 reports before standups.
+3. Scan the bug queue — review the top 2–3 reports before standups.
 4. Check integration health badge — all green? You're done.
 
 ### After a deploy
@@ -134,6 +134,6 @@ the onboarding state to the full production view.
 ## Related pages
 
 - [Inbox](/admin/inbox) — all open actions prioritised in one list
-- [Reports & triage](/admin/reports) — the full triage queue
+- [Reports](/admin/reports) — the full bug queue
 - [Fix orchestrator](/admin/fixes) — fix-worker run detail
 - [Integration health](/admin/health) — full LLM health and cron monitoring

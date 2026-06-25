@@ -24,6 +24,7 @@ import { CopyButton, Panel } from '../ui'
 import { LINK_BRAND } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
 import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL } from '../../lib/env'
+import { CONNECT_SKILLS } from '../../lib/public-copy-shared'
 
 const ADMIN_STORAGE_KEY = 'mushi_selected_client'
 
@@ -80,11 +81,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-fg-muted">
-        Agent skills extend your AI coding agent with task-specific playbooks — fix-and-ship,
-        QA, security audit, and more. The Mushi skill set includes Mushi-specific incident-loop
-        and triage workflows.
-      </p>
+      <p className="text-xs text-fg-muted">{CONNECT_SKILLS.intro}</p>
       <div className="space-y-2">
         <p className="text-xs font-medium text-fg">Install Mushi skills</p>
         <div className="flex items-center gap-2">
@@ -101,19 +98,15 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
       </div>
       <div className="rounded-md border border-edge-subtle bg-surface-hover/30 p-3 text-xs text-fg-muted space-y-1">
-        <p className="font-medium text-fg">What are skills?</p>
-        <p>
-          Skills are SKILL.md files your AI agent can read on demand — like specialised instructions
-          for each task type. They live in a GitHub repo and are synced into Mushi&apos;s skill catalog
-          so the classify-report stage can recommend the right playbook for each bug.
-        </p>
+        <p className="font-medium text-fg">{CONNECT_SKILLS.whatAreSkillsTitle}</p>
+        <p>{CONNECT_SKILLS.whatAreSkillsBody}</p>
         <a
-          href="https://kensaur.us/mushi-mushi/docs/sdks/skills"
+          href={CONNECT_SKILLS.learnMoreHref}
           target="_blank"
           rel="noopener noreferrer"
           className={`inline-block text-xs ${LINK_BRAND}`}
         >
-          Learn about skills →
+          {CONNECT_SKILLS.learnMoreLabel}
         </a>
       </div>
     </div>

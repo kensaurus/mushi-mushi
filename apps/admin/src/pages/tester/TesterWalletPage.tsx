@@ -107,7 +107,7 @@ function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
       <div className="relative h-3 rounded-full bg-surface-overlay overflow-visible">
         {/* Filled portion */}
         <div
-          className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+          className={`absolute inset-y-0 left-0 rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
             overThreshold && !kycCleared ? 'bg-warn' : 'bg-accent'
           }`}
           style={{ width: `${ytdPct}%` }}

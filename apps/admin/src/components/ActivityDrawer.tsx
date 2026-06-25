@@ -428,7 +428,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filter by branch, PR #, or label…"
-                className="w-full bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-2xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
+                className="w-full bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-2xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 focus-visible:border-brand/40"
               />
             </label>
           </div>

@@ -24,9 +24,8 @@
  * is docs-only (e.g. /integrations/cursor). Nested docs prefixes use a
  * trailing slash so exact /integrations is not captured by docs rules.
  *
- * ATTACHMENT: viewer-request on apex cache behaviors — see
- * scripts/aws-attach-apex-redirect.mjs (updated by deploy-admin.yml and
- * deploy-docs.yml).
+ * ATTACHMENT: viewer-request on kensaur.us Default behavior via
+ * scripts/aws-attach-apex-redirect.mjs (combined with glot.it SPA router).
  *
  * RUNTIME: cloudfront-js-2.0
  */
@@ -105,10 +104,32 @@ var SPA_PREFIXES = [
   '/reset-password',
 ];
 
+function serializeQuerystring(qs) {
+  if (!qs) {
+    return '';
+  }
+  if (typeof qs === 'string') {
+    return qs;
+  }
+  var parts = [];
+  var key;
+  for (key in qs) {
+    if (!Object.prototype.hasOwnProperty.call(qs, key)) {
+      continue;
+    }
+    var entry = qs[key];
+    if (entry && entry.value !== undefined && entry.value !== '') {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(entry.value));
+    }
+  }
+  return parts.join('&');
+}
+
 function redirect301(targetPath, querystring) {
+  var qs = serializeQuerystring(querystring);
   var location = targetPath;
-  if (querystring) {
-    location = location + '?' + querystring;
+  if (qs) {
+    location = location + '?' + qs;
   }
   return {
     statusCode: 301,

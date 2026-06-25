@@ -142,15 +142,57 @@ When every checkbox above is ticked, the storefronts are ready. Only then start
 The new front door is `npx mushi-mushi setup --ide` (the MCP-first install wizard).
 These listings drive cold discovery for that path.
 
-### MCP registry
+### Canonical fields (paste these verbatim — keep every listing identical)
 
-- [ ] **[mcp.run](https://mcp.run)** — submit `mushi-mushi` as an MCP server.
-  Entry template: name = "Mushi Mushi", description = "Bug-translation AI for vibe coders. Read live diagnoses and paste-ready fix prompts into Cursor / Claude Code without leaving the editor.", homepage = "https://mushimushi.dev", install = `npx mushi-mushi setup --ide`, features = `triage · fixes · inventory · setup`.
-- [ ] **[smithery.ai](https://smithery.ai)** — same fields as mcp.run. Category: "Debugging / DevOps".
-- [ ] **[cursor.directory](https://cursor.directory)** — list under "Developer Tools".
-  1-liner: *"Mushi gives Cursor a `get_fix_context` tool — paste-ready root cause from user-reported bugs, no dashboard."*
-- [ ] **[awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)** — submit a PR adding
-  Mushi under the "Development Tools" section. Title: `mushi-mushi — Bug translation for AI-native teams`.
+See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` or
+`docs.mushimushi.dev` in cold-discovery copy until verified live.
+
+| Field | Value |
+|---|---|
+| Name | `Mushi Mushi` |
+| Registry name | `io.github.kensaurus/mushi-mushi` |
+| npm package | `@mushi-mushi/mcp` · install `npx -y @mushi-mushi/mcp@latest` |
+| Hosted HTTP URL | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` |
+| API endpoint | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` |
+| Repo | `https://github.com/kensaurus/mushi-mushi` |
+| Homepage | `https://kensaur.us/mushi-mushi` |
+| Connect | `https://kensaur.us/mushi-mushi/docs/connect` |
+| License | MIT (SDK) · AGPLv3 (server) |
+| One-liner | *Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
+
+> **Publish to the official registry FIRST.** Glama, PulseMCP, and VS Code's
+> gallery all auto-index from `registry.modelcontextprotocol.io`. Release CI
+> publishes there automatically when `@mushi-mushi/mcp` ships; the manual path
+> is the **Publish MCP Registry** workflow (`.github/workflows/publish-mcp-registry.yml`).
+> Verify: `curl "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.kensaurus/mushi-mushi"`.
+
+### MCP registry & directories
+
+- [x] **[Glama](https://glama.ai/mcp/servers/kensaurus/mushi-mushi)** — claimed
+  (`glama.json` maintainers verified), release **v0.1.0** live, **Install Server**
+  enabled (Jun 2026). Tool schema + env vars populated from release introspection.
+  To refresh after catalog changes: **Admin → Dockerfile → Build & Release**.
+  Full runbook: [`GTM-DISTRIBUTION.md`](./GTM-DISTRIBUTION.md#glama).
+- [x] **Official MCP registry** — `io.github.kensaurus/mushi-mushi` published;
+  manual repair path: **Publish MCP Registry** workflow. See
+  [`GTM-DISTRIBUTION.md`](./GTM-DISTRIBUTION.md#official-mcp-registry).
+- [x] **[PulseMCP](https://www.pulsemcp.com/servers)** — auto-indexes from the
+  official registry weekly; no manual form. Verify listing appears within ~7 days
+  of registry publish.
+- [x] **[awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)** —
+  PR [#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625) open.
+- [x] **[awesome-remote-mcp-servers](https://github.com/jaw9c/awesome-remote-mcp-servers)** —
+  PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) **closed** (listed non-resolving hostname). Re-open with row in [`awesome-list-submissions.md`](./awesome-list-submissions.md).
+- [x] **[mcp.so](https://mcp.so/server/mushi-mushi)** — live; refresh Overview via [`mcp-so-listing.md`](./mcp-so-listing.md)
+- [ ] **[smithery.ai](https://smithery.ai/servers/kensaurus/mushi-mushi)** — republish Streamable HTTP URL from [`smithery-external-publish.json`](./smithery-external-publish.json)
+- [ ] **[cursor.directory](https://cursor.directory/plugins/new)** — root
+  [`.mcp.json`](../../.mcp.json) committed (hosted HTTP + stdio, secret-free
+  `${ENV}` placeholders). **Submit** the repo URL at the link above; auto-detection
+  does the rest. 1-liner: *"Mushi gives Cursor a `get_fix_context` tool —
+  paste-ready root cause from user-reported bugs, no dashboard."*
+- [ ] **[awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers)**
+  + **awesome-remote-mcp-servers** — exact ready-to-paste PR entries live in
+  [`awesome-list-submissions.md`](./awesome-list-submissions.md).
 
 ### Open-source directories
 
@@ -172,17 +214,27 @@ What changed: [one shipped thing].
 
 The numbers come from `GET /v1/admin/stats` (service-role) or the daily snapshot in `docs/stats.snapshot.json` (auto-updated by `scripts/marketing/update-stats.mjs`).
 
-### MCP install deeplink format
+### MCP install deeplinks — do not hand-author
 
-The lean default install deeplink (in README + docs) should always use:
+One-click deeplinks **embed a base64-encoded MCP config** (API key, endpoint,
+project id, features), so they are *per-install* strings, not a static URL you
+can paste into a directory. Never hardcode one in a listing or doc. The verified
+formats (built only by the canonical source) are:
 
 ```
-vscode://ms-vscode.codeinterpreter/mcp/install?url=https://registry.npmjs.org/@mushi-mushi/mcp&features=triage,fixes,inventory,setup,docs
+cursor://anysphere.cursor-deeplink/mcp/install?name=<name>&config=<base64-config>
+vscode:mcp/install?<url-encoded-json-config>
 ```
 
-Cursor deeplink:
-```
-cursor://anysphere.cursor-mcp-installer/install?url=https://registry.npmjs.org/@mushi-mushi/mcp&features=triage,fixes,inventory,setup,docs
-```
-
-`DEFAULT_FEATURE_GROUPS` in `packages/mcp/src/feature-groups.ts` is the canonical lean set — verified as `['triage', 'fixes', 'inventory', 'setup', 'docs']`. Do not expand the default without measuring context-window cost.
+- **Single source of truth:** [`packages/mcp/src/clients.ts`](../../packages/mcp/src/clients.ts)
+  (`encodeCursorDeeplink` / `encodeVsCodeDeeplink`). Both the admin ConnectStudio
+  and the public [`/connect`](../../apps/docs/app/connect/page.tsx) page build
+  the buttons from it — link people to **https://kensaur.us/mushi-mushi/docs/connect**
+  rather than minting a deeplink by hand.
+- **For directory listings** that want one static "install" field, use the npm
+  command `npx -y @mushi-mushi/mcp@latest` or the hosted HTTP URL — never a
+  fabricated deeplink.
+- **Lean default features:** `DEFAULT_FEATURE_GROUPS` in
+  [`packages/mcp/src/feature-groups.ts`](../../packages/mcp/src/feature-groups.ts)
+  is the canonical set — verified as `['triage', 'fixes', 'inventory', 'setup', 'docs']`.
+  Do not expand the default without measuring context-window cost.

@@ -179,7 +179,6 @@ The docs site is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/docs
 - `next.config.mjs` defaults to `output: 'export'` (set
   `MUSHI_DOCS_EXPORT=0` to opt out for dev previews). The `basePath` is
   driven by `MUSHI_BASE_PATH` at build time so the same source builds for
-  local dev (no prefix), `docs.mushimushi.dev` (no prefix), and
-  `kensaur.us/mushi-mushi/docs` (`MUSHI_BASE_PATH=/mushi-mushi/docs`).
+  local dev (no prefix), and `kensaur.us/mushi-mushi/docs` (`MUSHI_BASE_PATH=/mushi-mushi/docs`).
 - Stale `_meta.ts.bak` files in `content/` will crash the dev server with
   "Unknown module type" — delete them.

@@ -49,6 +49,18 @@ export function registerPluginsMarketplaceRoutes(app: Hono<{ Variables: Variable
     // D1: webhook plugins carry a slug + URL + signing secret. Built-in
     // plugins (legacy path) keep the slug-less shape for backwards compat.
     const isWebhook = typeof body.webhookUrl === 'string' && body.webhookUrl.length > 0;
+    if (isWebhook && !(typeof body.webhookSecret === 'string' && body.webhookSecret.trim().length > 0)) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'MISSING_WEBHOOK_SECRET',
+            message: 'webhookSecret is required when webhookUrl is set',
+          },
+        },
+        400,
+      );
+    }
     let webhookSecretRef: string | null = null;
     if (isWebhook && typeof body.webhookSecret === 'string' && body.webhookSecret.length > 0) {
       const secretName = `mushi/plugin/${project.id}/${body.pluginSlug ?? pluginName}`;

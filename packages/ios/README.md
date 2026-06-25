@@ -1,6 +1,11 @@
 # @mushi-mushi/ios
 
-Native iOS SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+iOS native bridge for Capacitor and React Native hosts.
+
+
+Native iOS SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
 > **Status**: V0.4.0 Feature parity with the web SDK.
@@ -109,7 +114,7 @@ target, which keeps the native SDK dependency-free by default.
 |-------------------------|--------------------------------------|-------|
 | `projectId`             | _required_                           | Project UUID from Mushi admin |
 | `apiKey`                | _required_                           | Public ingest key (`mush_pk_...`) |
-| `endpoint`              | `https://api.mushimushi.dev`         | Override for self-hosting |
+| `endpoint`              | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`         | Override for self-hosting |
 | `triggerMode`           | `.shake`                             | `shake` / `button` / `both` / `none` |
 | `captureScreenshot`     | `true`                               | Disable for HIPAA-sensitive flows |
 | `captureBreadcrumbs`    | `true`                               | Hooked when Sentry bridge is installed |

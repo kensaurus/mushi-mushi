@@ -7,13 +7,22 @@
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
 const CONTENT = path.join(ROOT, "apps/docs/content")
 const OUT = path.join(ROOT, "apps/docs/public/llms.txt")
-const BASE = "https://docs.mushimushi.dev"
+
+const brand = await import(
+  pathToFileURL(path.join(ROOT, "packages/brand/src/index.js")).href
+)
+const BASE = brand.MUSHI_CANONICAL_URLS.docs
+const HOME = brand.MUSHI_CANONICAL_URLS.home
+
+const checkMode = process.argv.includes("--check")
+
+const ONE_LINER = brand.MUSHI_TAGLINE_V2.oneLiner
 
 function walkMdx(dir, baseRoute = "", acc = []) {
   // Read the directory with Dirent entries so we never stat()-then-read() the
@@ -47,9 +56,10 @@ const pages = walkMdx(CONTENT).sort((a, b) => a.route.localeCompare(b.route))
 const lines = [
   "# Mushi Mushi",
   "",
-  "> Bug translation for vibe coders — plain-English diagnosis + fix prompts via MCP.",
+  `> ${ONE_LINER}`,
   "",
-  "Canonical docs: https://docs.mushimushi.dev",
+  `Canonical docs: ${BASE}`,
+  `Product home: ${HOME}`,
   "GitHub: https://github.com/kensaurus/mushi-mushi",
   "npm org: https://www.npmjs.com/org/mushi-mushi",
   "",
@@ -83,5 +93,22 @@ for (const page of pages) {
 }
 
 lines.push("")
-writeFileSync(OUT, lines.join("\n"), "utf8")
-console.log(`Wrote ${path.relative(ROOT, OUT)} (${pages.length} pages)`)
+const output = lines.join("\n")
+
+if (checkMode) {
+  let existing
+  try {
+    existing = readFileSync(OUT, "utf8")
+  } catch {
+    console.error(`FAIL  ${path.relative(ROOT, OUT)} missing — run pnpm gen:llms-txt`)
+    process.exit(1)
+  }
+  if (existing !== output) {
+    console.error(`FAIL  ${path.relative(ROOT, OUT)} is stale — run pnpm gen:llms-txt`)
+    process.exit(1)
+  }
+  console.log(`llms.txt OK (${pages.length} pages)`)
+} else {
+  writeFileSync(OUT, output, "utf8")
+  console.log(`Wrote ${path.relative(ROOT, OUT)} (${pages.length} pages)`)
+}

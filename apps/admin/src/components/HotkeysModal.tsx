@@ -61,8 +61,8 @@ const GROUPS: ShortcutGroup[] = [
   },
   {
     id: 'reports',
-    title: 'Reports — triage queue',
-    hint: 'Keyboard-driven triage so you never need to touch the mouse on /reports.',
+    title: 'Reports — bug queue',
+    hint: 'Keyboard-driven review so you never need to touch the mouse on /reports.',
     routes: ['/reports'],
     items: [
       { keys: ['J'], desc: 'Move cursor to next report', tags: ['reports', 'navigation'] },
@@ -174,7 +174,7 @@ export function HotkeysModal({ open, onClose }: Props) {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search shortcuts (e.g. inbox, focus, K)…"
               autoFocus
-              className="w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
+              className="w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 focus-visible:border-brand/40"
             />
           </label>
           <div className="flex items-center justify-between text-2xs text-fg-muted">

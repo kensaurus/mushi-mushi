@@ -124,7 +124,7 @@ const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
-    description: 'Ingest Rollbar occurrences into the Mushi triage queue.',
+    description: 'Send Rollbar occurrences into your Mushi reports inbox.',
   },
   {
     name: 'Crashlytics',
@@ -181,7 +181,7 @@ const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/plugin-slack-app',
     direction: 'outbound',
     category: 'Chat & Notifications',
-    description: 'Post report digests and AI triage summaries to Slack.',
+    description: 'Post report digests and plain-English read summaries to Slack.',
   },
   {
     name: 'Discord',

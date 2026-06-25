@@ -46,7 +46,7 @@ describe('inventoryJsonSchema (draft-07 companion)', () => {
   })
 
   it('pins the canonical $id so editor schema feeds keep resolving', () => {
-    expect(inventoryJsonSchema.$id).toBe('https://mushimushi.dev/schemas/inventory-2.0.json')
+    expect(inventoryJsonSchema.$id).toBe('https://kensaur.us/mushi-mushi/schemas/inventory-2.0.json')
   })
 
   it('exposes the schema_version pattern Zod also enforces (`^2(\\.\\d+)*$`)', () => {

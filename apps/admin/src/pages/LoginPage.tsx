@@ -16,6 +16,7 @@ import {
   readRememberedLoginEmail,
   rememberLoginEmail,
 } from '../lib/rememberedLogin'
+import { LOGIN_HERO } from '../lib/public-copy-shared'
 import { canUsePasskeys } from '../lib/passkeys'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
@@ -202,6 +203,9 @@ export function LoginPage() {
             <span className="text-brand">mushi</span>mushi
           </h1>
           <p className="text-2xs text-fg-faint mt-0.5">admin console</p>
+          <p className="text-xs text-fg-muted mt-3 leading-relaxed max-w-xs mx-auto">
+            {cloud ? LOGIN_HERO.cloudTagline : LOGIN_HERO.selfHostTagline}
+          </p>
         </div>
 
         {/* Success: signup confirmation */}
@@ -388,7 +392,7 @@ export function LoginPage() {
                 type="button"
                 onClick={handlePasskeySignIn}
                 disabled={loading || !passkeyAvailable}
-                className="group flex w-full items-center justify-between rounded-md border border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg motion-safe:transition-all hover:border-brand/60 hover:bg-brand/15 disabled:cursor-not-allowed disabled:opacity-60"
+                className="group flex w-full items-center justify-between rounded-md border border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] hover:border-brand/60 hover:bg-brand/15 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span>
                   <span className="block font-semibold">Continue with passkey</span>

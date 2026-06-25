@@ -22,9 +22,7 @@ export async function generateMetadata(props: { params: Promise<{ mdxPath?: stri
   // The home page (empty mdxPath) is also served in place at the bare product
   // root kensaur.us/mushi-mushi/ via the CloudFront internal rewrite in
   // scripts/cloudfront-mushi-spa-router.js. Pin its canonical to that product
-  // root so the three URLs that can resolve to the same landing — the root,
-  // /mushi-mushi/docs/, and the docs.mushimushi.dev home — consolidate to one
-  // indexable URL instead of competing as duplicate content.
+  // root so the product root and /mushi-mushi/docs/ consolidate to one indexable URL.
   if (!params.mdxPath || params.mdxPath.length === 0) {
     return {
       ...metadata,

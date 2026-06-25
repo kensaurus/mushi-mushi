@@ -28,7 +28,11 @@ export function useDashboardUx(): DashboardUxFlags {
     isAdvanced,
     hideTabs: isQuickstart,
     plainBanner: !isAdvanced,
-    hideOverviewChrome: !isAdvanced,
+    // Only Quickstart hides the orienting HeroIntro ("what now?"). Beginner mode
+    // keeps it so a new user always has a next-action signal; Advanced renders
+    // the live PdcaFlow instead. (Previously `!isAdvanced` also blanked it for
+    // beginners, leaving them with neither orientation surface.)
+    hideOverviewChrome: isQuickstart,
     hideLoopSnapshot: isQuickstart,
   }
 }

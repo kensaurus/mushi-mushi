@@ -71,6 +71,7 @@ import { sanitizeSseString, toSseEvent, sseHeartbeat } from '../../_shared/sse.t
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { childTraceparent, extractInboundTraceparent } from '../../_shared/trace.ts';
 import { log } from '../../_shared/logger.ts';
+import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 
 interface FixDispatchRow {
   id: string;
@@ -192,6 +193,18 @@ export function registerA2ATaskRoutes(app: Hono<{ Variables: Variables }>): void
               error: {
                 code: 'INVALID_PUSH_URL',
                 message: 'configuration.pushNotificationConfig.url must be a valid https:// URL',
+              },
+            },
+            400,
+          );
+        }
+        const safePushUrl = assertSafeOutboundUrl(parsed.toString(), {});
+        if (!safePushUrl.ok) {
+          return c.json(
+            {
+              error: {
+                code: 'UNSAFE_PUSH_URL',
+                message: safePushUrl.reason ?? 'Push notification URL is not allowed',
               },
             },
             400,

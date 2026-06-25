@@ -11,7 +11,7 @@ Use this checklist before submitting the Mushi Mushi plugin to the Cursor Market
 - [ ] All CI checks pass on main: typecheck, test, build, catalog sync, smoke, plugin manifest
 
 ### Plugin bundle (`packages/cursor-plugin/`)
-- [ ] `.cursor-plugin/plugin.json` — version matches `@mushi-mushi/mcp` npm version
+- [x] `.cursor-plugin/plugin.json` — version matches `@mushi-mushi/mcp` npm version (`0.17.0`)
 - [ ] `mcp.json` — hosted URL reflects live Supabase edge function URL
 - [ ] `skills/mushi-triage/SKILL.md` — workflow steps are accurate and up to date
 - [ ] `rules/mushi-mcp.mdc` — write-tool list matches current catalog `mcp:write` tools
@@ -33,28 +33,38 @@ Use this checklist before submitting the Mushi Mushi plugin to the Cursor Market
    - **Name**: Mushi Mushi
    - **Description**: User-felt bug triage, evidence, and fix dispatch — powered by real user reports.
    - **Categories**: Monitoring, Debugging, Productivity
-   - **Icon**: `https://raw.githubusercontent.com/kensaurus/mushi-mushi/main/packages/brand/src/logo-mark-512.png`
+   - **Icon**: `https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/packages/brand/src/logo-mark-512.png`
    - **Homepage**: `https://kensaur.us/mushi-mushi`
    - **Privacy policy**: `https://kensaur.us/mushi-mushi/privacy`
 5. Wait for Cursor review (typically days to weeks).
 
 ## Post-submission
 
-- [ ] Add `cursor.directory` listing via PR to [cursor.directory](https://cursor.directory)
+- [ ] Add `cursor.directory` listing (see below)
 - [ ] Update `packages/mcp/README.md` with marketplace install badge once published
 - [ ] Announce in Mushi changelog and docs
 
-## cursor.directory listing
+## cursor.directory listing (auto-detected)
 
-Submit a PR to [cursor.directory](https://cursor.directory) with:
+cursor.directory auto-detects plugins from a repo's root `.mcp.json` (Open
+Plugins) plus any `.cursor/` rules/skills/commands. The repo now ships a
+public, secret-free [`.mcp.json`](../../.mcp.json) at the root, so the listing
+is auto-populated.
+
+**Submit:** go to <https://cursor.directory/plugins/new>, sign in with GitHub,
+and paste the repo URL `https://github.com/kensaurus/mushi-mushi`. Confirm the
+auto-detected MCP servers (`mushi` hosted HTTP + `mushi-stdio` npx) and the
+`packages/cursor-plugin/` rules/skills/commands, then publish.
+
+If a manual metadata block is requested instead:
 
 ```yaml
 name: Mushi Mushi
 description: User-felt bug triage, evidence, and fix dispatch inside Cursor. Connect to your Mushi project to investigate reports, read console logs, check blast radius, and dispatch fix PRs.
-url: https://github.com/mushi-mushi/mushi-mushi/tree/master/packages/cursor-plugin
+url: https://github.com/kensaurus/mushi-mushi
 categories:
   - monitoring
   - debugging
   - productivity
-install: npx @mushi-mushi/mcp
+install: npx -y @mushi-mushi/mcp@latest
 ```

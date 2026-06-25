@@ -26,7 +26,7 @@ export const App = () => (
   <MushiProvider
     config={{
       reporterToken: 'demo_pub_playground',
-      endpoint: 'https://demo.api.mushimushi.dev',
+      endpoint: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
       shortcut: 'mod+shift+b',
     }}
   >

@@ -3,7 +3,7 @@
  * not hand-authored in mcp/index.ts — keeps HTTP MCP at catalog parity.
  */
 
-import manifest from './hosted-tool-manifest.json' with { type: 'json' }
+import manifest from '../_shared/mcp-hosted-tool-manifest.json' with { type: 'json' }
 
 export interface ManifestToolDef {
   scope: 'mcp:read' | 'mcp:write'

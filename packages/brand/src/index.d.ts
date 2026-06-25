@@ -52,6 +52,21 @@ export declare const MUSHI_TAGLINE: {
   readonly legacy: typeof MUSHI_TAGLINE_LEGACY
 }
 
+/** Verified production URLs — listings, SDK defaults, docs generators, CI guards. */
+export declare const MUSHI_CANONICAL_URLS: {
+  readonly home: string
+  readonly docs: string
+  readonly admin: string
+  readonly connect: string
+  readonly mcpQuickstart: string
+  readonly api: string
+  readonly mcp: string
+  readonly mcpLean: string
+  readonly hostedMcp: string
+  readonly schemaBase: string
+  readonly repo: string
+}
+
 /** Open-source positioning ladder — Langfuse/Supabase-style proof points. */
 export declare const MUSHI_OSS: {
   /** Trust strip — one line, README/landing/docs. */

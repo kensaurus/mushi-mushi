@@ -187,3 +187,30 @@ beforeEach(() => {
   // Each test that wants a clean slate clears it on its own; we only
   // need the module-level afterEach above for vi.restoreAllMocks().
 });
+
+describe('captureEnvironment — native shell detection', () => {
+  afterEach(() => {
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+    delete (window as unknown as { cordova?: unknown }).cordova;
+    delete (globalThis as unknown as { HermesInternal?: unknown }).HermesInternal;
+  });
+
+  it('omits `native` in a plain browser context', () => {
+    expect(captureEnvironment().native).toBeUndefined();
+  });
+
+  it('detects Capacitor via window.Capacitor', () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+    expect(captureEnvironment().native).toEqual({ capacitor: true });
+  });
+
+  it('detects Cordova via window.cordova', () => {
+    (window as unknown as { cordova?: unknown }).cordova = {};
+    expect(captureEnvironment().native).toEqual({ cordova: true });
+  });
+
+  it('detects React Native via globalThis.HermesInternal', () => {
+    (globalThis as unknown as { HermesInternal?: unknown }).HermesInternal = {};
+    expect(captureEnvironment().native).toEqual({ reactNative: true });
+  });
+});

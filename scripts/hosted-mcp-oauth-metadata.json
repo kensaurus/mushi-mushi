@@ -1,0 +1,22 @@
+{
+  "resourceBase": "https://kensaur.us/mushi-mushi/hosted-mcp",
+  "resourceDocumentation": "https://kensaur.us/mushi-mushi/docs/quickstart/mcp",
+  "protectedResourceMetadata": {
+    "resource": "https://kensaur.us/mushi-mushi/hosted-mcp/",
+    "authorization_servers": ["https://kensaur.us/mushi-mushi/hosted-mcp"],
+    "bearer_methods_supported": ["header"],
+    "scopes_supported": ["mcp:read", "mcp:write"],
+    "resource_documentation": "https://kensaur.us/mushi-mushi/docs/quickstart/mcp"
+  },
+  "authorizationServerMetadata": {
+    "issuer": "https://kensaur.us/mushi-mushi/hosted-mcp",
+    "authorization_endpoint": "https://kensaur.us/mushi-mushi/hosted-mcp/oauth/authorize",
+    "token_endpoint": "https://kensaur.us/mushi-mushi/hosted-mcp/oauth/token",
+    "registration_endpoint": "https://kensaur.us/mushi-mushi/hosted-mcp/oauth/register",
+    "scopes_supported": ["mcp:read", "mcp:write"],
+    "response_types_supported": ["code"],
+    "grant_types_supported": ["authorization_code", "client_credentials"],
+    "token_endpoint_auth_methods_supported": ["client_secret_post", "none"],
+    "code_challenge_methods_supported": ["S256"]
+  }
+}

@@ -279,5 +279,5 @@ Shipped in the same release line (see package CHANGELOGs):
 - [CONFIG_REFERENCE — Screenshot privacy caption](./CONFIG_REFERENCE.md) (generated from `configDocs.ts`)
 - [`@mushi-mushi/web` README](../packages/web/README.md) — bundle budget + feature list
 - [`@mushi-mushi/react-native` README](../packages/react-native/README.md) — view-shot setup
-- [Public docs — web SDK](https://docs.mushimushi.dev/sdks/web) · [React Native SDK](https://docs.mushimushi.dev/sdks/react-native)
+- [Public docs — web SDK](https://kensaur.us/mushi-mushi/docs/sdks/web) · [React Native SDK](https://kensaur.us/mushi-mushi/docs/sdks/react-native)
 - [Next.js App Router + CSP](./apps/docs/content/sdks/nextjs-app-router-csp.mdx) — keep `img-src data:` when previews are enabled

@@ -481,7 +481,7 @@ async function alertOnRegressions(
   projectId: string,
   regressed: Array<{ id: string; label: string; evidence: Record<string, unknown> }>,
 ): Promise<void> {
-  const ADMIN_BASE = Deno.env.get('MUSHI_ADMIN_BASE_URL') ?? 'https://app.mushimushi.dev';
+  const ADMIN_BASE = Deno.env.get('MUSHI_ADMIN_BASE_URL') ?? 'https://kensaur.us/mushi-mushi/admin';
   // Dedup window — a regression that's still regressing 6h later is the
   // same incident; don't open a fresh triage report on every reconciler
   // tick or operators will drown.

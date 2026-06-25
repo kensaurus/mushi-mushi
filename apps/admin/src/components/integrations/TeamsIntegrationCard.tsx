@@ -34,19 +34,19 @@ function TeamsIcon({ size = 20 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M20.625 5.848c0 1.518-1.231 2.749-2.75 2.749s-2.748-1.231-2.748-2.749C15.127 4.33 16.358 3.1 17.876 3.1s2.75 1.231 2.75 2.748z"
-        fill="#5059C9"
+        fill="var(--color-brand-teams-primary)"
       />
       <path
         d="M22.5 10.25h-4.74a.386.386 0 0 0-.385.385V15.5a4.625 4.625 0 0 1-3.124 4.376 5.25 5.25 0 0 0 4.874-5.226v-2.023a2.376 2.376 0 0 1 2.375-2.376H22.5z"
-        fill="#5059C9"
+        fill="var(--color-brand-teams-primary)"
       />
       <path
         d="M13.875 5.598a3.125 3.125 0 1 1-6.25 0 3.125 3.125 0 0 1 6.25 0z"
-        fill="#7B83EB"
+        fill="var(--color-brand-teams-accent)"
       />
       <path
         d="M16.5 10.25H4.875A.875.875 0 0 0 4 11.125v5.5a5.875 5.875 0 1 0 11.75 0v-5.5a.875.875 0 0 0-.75-.875z"
-        fill="#7B83EB"
+        fill="var(--color-brand-teams-accent)"
       />
     </svg>
   )
@@ -187,7 +187,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {/* mushi-mushi-allowlist: Teams brand purple tint behind the trademark icon chip. */}
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#7B83EB]/10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-teams-accent/10">
             <TeamsIcon size={20} />
           </div>
           <div className="min-w-0">
@@ -248,7 +248,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured }: Props) {
             onChange={(e) => handleUrlChange(e.target.value)}
             className={`
               flex-1 min-w-0 rounded-lg border bg-surface px-3 py-2 font-mono text-xs
-              focus:outline-none focus:ring-2 focus:ring-focus
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus
               ${urlError ? 'border-danger/60' : 'border-edge-subtle'}
             `}
             aria-describedby={urlError ? 'teams-url-error teams-url-hint' : 'teams-url-hint'}

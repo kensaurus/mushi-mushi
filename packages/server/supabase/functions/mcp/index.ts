@@ -72,9 +72,22 @@ import { withSentry } from '../_shared/sentry.ts'
 import { propagateRequestId } from '../_shared/internal-headers.ts'
 import { recordMcpToolInvocation } from '../_shared/mcp-tool-audit.ts'
 import { buildManifestTools } from './manifest-tools.ts'
-import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from './branding.ts'
+import { SERVER_INFO_EXTENDED, MUSHI_ICON_SVG_INLINE } from '../_shared/mcp-branding.ts'
 import { parseFeaturesParam, toolMatchesFeatures, type FeatureFilter } from './feature-groups.ts'
 import { searchMushiDocs } from './docs-index.ts'
+import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../_shared/mcp-server-card.ts'
+import {
+  buildOAuthAuthorizationServerMetadata,
+  buildOAuthProtectedResourceMetadata,
+  bearerWwwAuthenticateResourceMetadata,
+  mcpProtectedResourceMetadataUrl,
+  MCP_OAUTH_AS_METADATA_HEADERS,
+  MCP_OAUTH_METADATA_HEADERS,
+} from '../_shared/mcp-oauth-metadata.ts'
+import {
+  buildSmitheryAuthorizeRedirect,
+  buildSmitheryTokenResponse,
+} from '../_shared/mcp-oauth-smithery-stub.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -1520,7 +1533,80 @@ async function resolveAuth(req: Request, requestId: string): Promise<CallContext
 // HTTP entry — Streamable HTTP per MCP 2025-03-26
 // ----------------------------------------------------------------------------
 
-const ALLOWED_METHODS = 'GET, POST, DELETE, OPTIONS'
+const ALLOWED_METHODS = 'GET, HEAD, POST, DELETE, OPTIONS'
+
+function isSmitheryScanner(req: Request): boolean {
+  const ua = req.headers.get('User-Agent') ?? ''
+  return /smithery/i.test(ua)
+}
+
+/** Publisher scan uses SmitheryBot; allow catalog probe without API key. */
+function smitheryScannerContext(requestId: string): CallContext {
+  return {
+    authHeaders: {},
+    scope: 'mcp:write',
+    readOnlyMode: false,
+    features: 'all',
+    requestId,
+  }
+}
+
+async function trySmitheryScannerPost(req: Request, payload: unknown): Promise<Response | null> {
+  if (!isSmitheryScanner(req)) return null
+  const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
+  const ctx = smitheryScannerContext(requestId)
+
+  if (Array.isArray(payload)) {
+    const responses: Array<JsonRpcSuccess | JsonRpcError> = []
+    for (const entry of payload) {
+      const rpc = entry as JsonRpcRequest
+      if (!rpc || typeof rpc !== 'object' || rpc.method === 'notifications/initialized' || rpc.method === 'initialized') {
+        continue
+      }
+      const allowed = rpc.method === 'initialize' || rpc.method === 'tools/list' || rpc.method === 'ping'
+      if (!allowed) continue
+      const r = await dispatchRpc(rpc, ctx)
+      if (r) responses.push(r)
+    }
+    if (responses.length === 0) return new Response(null, { status: 202, headers: CORS_HEADERS })
+    return jsonRpcResponse(responses)
+  }
+
+  const rpc = payload as JsonRpcRequest
+  if (!rpc || typeof rpc !== 'object' || rpc.jsonrpc !== '2.0' || typeof rpc.method !== 'string') {
+    return null
+  }
+  if (rpc.method === 'notifications/initialized' || rpc.method === 'initialized') {
+    return new Response(null, { status: 202, headers: CORS_HEADERS })
+  }
+  if (rpc.method !== 'initialize' && rpc.method !== 'tools/list' && rpc.method !== 'ping') {
+    return null
+  }
+  const response = await dispatchRpc(rpc, ctx)
+  if (!response) return new Response(null, { status: 202, headers: CORS_HEADERS })
+  const extraHeaders: Record<string, string> = {}
+  if (rpc.method === 'tools/list') extraHeaders['Cache-Control'] = 'private, max-age=300'
+  return jsonRpcResponse(response, extraHeaders)
+}
+
+function jsonResponse(
+  body: string,
+  status: number,
+  headers: Record<string, string>,
+  method: string,
+): Response {
+  // Smithery publisher scan uses HEAD for RFC 8414 AS discovery — include JSON body.
+  return new Response(body, { status, headers })
+}
+
+function oauthOperationalPath(pathname: string): boolean {
+  if (pathname.includes('/oauth/authorize')) return false
+  return (
+    pathname.includes('/oauth/') &&
+    !pathname.includes('oauth-authorization-server') &&
+    !pathname.includes('oauth-protected-resource')
+  )
+}
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': ALLOWED_METHODS,
@@ -1529,39 +1615,79 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Max-Age': '600',
 }
 
+function unauthorizedJsonRpc(req: Request, message: string, code = ERR_INVALID_REQUEST): Response {
+  const metadataUrl = mcpProtectedResourceMetadataUrl(new URL(req.url))
+  return new Response(
+    JSON.stringify({ jsonrpc: '2.0', id: null, error: { code, message } }),
+    {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': bearerWwwAuthenticateResourceMetadata(metadataUrl),
+        ...CORS_HEADERS,
+      },
+    },
+  )
+}
+
 async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
 
-  // Spec metadata GET (without Accept: text/event-stream) — return the
+  // Spec metadata GET/HEAD (without Accept: text/event-stream) — return the
   // MCP server descriptor so curl-style probes can confirm the endpoint
-  // is alive without negotiating SSE. Not in the spec but very useful.
-  if (req.method === 'GET') {
+  // is alive without negotiating SSE. Smithery OAuth discovery uses HEAD.
+  if (req.method === 'GET' || req.method === 'HEAD') {
     const url = new URL(req.url)
+    if (url.pathname.includes('server-card.json')) {
+      const card = JSON.stringify(buildMcpServerCard(), null, 2)
+      return jsonResponse(
+        card,
+        200,
+        { ...MCP_SERVER_CARD_HEADERS, ...CORS_HEADERS },
+        req.method,
+      )
+    }
+    if (url.pathname.includes('oauth-protected-resource')) {
+      const metadata = buildOAuthProtectedResourceMetadata(url)
+      return jsonResponse(metadata, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
+    }
+    if (
+      url.pathname.includes('oauth-authorization-server') ||
+      url.pathname.includes('openid-configuration')
+    ) {
+      const metadata = buildOAuthAuthorizationServerMetadata(url)
+      return jsonResponse(metadata, 200, { ...MCP_OAUTH_AS_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
+    }
+    const authorizeRedirect = buildSmitheryAuthorizeRedirect(url)
+    if (authorizeRedirect) return authorizeRedirect
+    if (oauthOperationalPath(url.pathname)) {
+      return jsonResponse(
+        JSON.stringify({
+          error: 'method_not_allowed',
+          error_description: 'OAuth register/token endpoints require POST',
+        }),
+        405,
+        { 'Content-Type': 'application/json', ...CORS_HEADERS },
+        req.method,
+      )
+    }
     const iconParam = url.searchParams.get('icon')
     if (iconParam === '1' || iconParam === 'svg') {
-      return new Response(MUSHI_ICON_SVG_INLINE, {
-        status: 200,
-        headers: {
-          'Content-Type': 'image/svg+xml',
-          'Cache-Control': 'public, max-age=86400',
-          ...CORS_HEADERS,
-        },
-      })
+      return jsonResponse(MUSHI_ICON_SVG_INLINE, 200, {
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'public, max-age=86400',
+        ...CORS_HEADERS,
+      }, req.method)
     }
     const accept = req.headers.get('Accept') ?? ''
     if (!accept.includes('text/event-stream')) {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          server: SERVER_INFO,
-          protocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
-          transports: ['streamable-http'],
-          docs: 'https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http',
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
-      )
+      // RFC 9728: OAuth clients (Smithery setup) GET the resource URL and expect
+      // Protected Resource Metadata — not the SEP-1649 server card. Server card
+      // lives at `/.well-known/mcp/server-card.json`.
+      const metadata = buildOAuthProtectedResourceMetadata(url)
+      return jsonResponse(metadata, 200, { ...MCP_OAUTH_METADATA_HEADERS, ...CORS_HEADERS }, req.method)
     }
     // Auth + open SSE. We have no server-initiated messages today; emit
     // heartbeats so proxies don't kill the connection and the client
@@ -1573,10 +1699,7 @@ async function handler(req: Request): Promise<Response> {
       ctx = await resolveAuth(req, requestId)
     } catch (err) {
       const e = err as McpError
-      return new Response(
-        JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: e.code, message: e.message } }),
-        { status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
-      )
+      return unauthorizedJsonRpc(req, e.message, e.code)
     }
     void ctx
     const stream = new ReadableStream({
@@ -1678,15 +1801,25 @@ async function handler(req: Request): Promise<Response> {
     )
   }
 
-  const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
-  let ctx: CallContext
-  try {
-    ctx = await resolveAuth(req, requestId)
-  } catch (err) {
-    const e = err as McpError
+  const url = new URL(req.url)
+  const tokenResponse = await buildSmitheryTokenResponse(req, url)
+  if (tokenResponse) {
+    return new Response(tokenResponse.body, {
+      status: tokenResponse.status,
+      headers: { ...Object.fromEntries(tokenResponse.headers), ...CORS_HEADERS },
+    })
+  }
+  // RFC 7591 — Smithery publisher scan POSTs dynamic client registration here.
+  if (url.pathname.includes('/oauth/register')) {
     return new Response(
-      JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: e.code, message: e.message } }),
-      { status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
+      JSON.stringify({
+        client_id: 'mushi-hosted-mcp-smithery',
+        token_endpoint_auth_method: 'none',
+        client_id_issued_at: Math.floor(Date.now() / 1000),
+        grant_types: ['authorization_code', 'client_credentials'],
+        response_types: ['code'],
+      }),
+      { status: 201, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } },
     )
   }
 
@@ -1695,6 +1828,18 @@ async function handler(req: Request): Promise<Response> {
     payload = await req.json()
   } catch {
     return jsonRpcResponse({ jsonrpc: '2.0', id: null, error: { code: ERR_PARSE, message: 'Invalid JSON' } })
+  }
+
+  const scannerResponse = await trySmitheryScannerPost(req, payload)
+  if (scannerResponse) return scannerResponse
+
+  const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID().slice(0, 12)
+  let ctx: CallContext
+  try {
+    ctx = await resolveAuth(req, requestId)
+  } catch (err) {
+    const e = err as McpError
+    return unauthorizedJsonRpc(req, e.message, e.code)
   }
 
   // Spec: a POST body MAY be a single request OR a batch (array).

@@ -1,0 +1,33 @@
+{
+  "qualifiedName": "kensaurus/mushi-mushi",
+  "upstreamUrl": "https://kensaur.us/mushi-mushi/hosted-mcp/",
+  "upstreamUrlSupabaseDirect": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+  "serverCardUrl": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/.well-known/mcp/server-card.json",
+  "notes": [
+    "Product home is https://kensaur.us/mushi-mushi — use Supabase or hosted-mcp URLs for MCP upstream.",
+    "Smithery was wrongly published with a non-resolving legacy API hostname (missing /mcp path). Delete or republish with upstreamUrl above.",
+    "Republish: smithery.ai → kensaurus/mushi-mushi → Releases → Publish → paste upstreamUrl → submit (must be signed in as kensaurus).",
+    "After publish: Releases → Connect with a mcp:read test key, or rely on server-card.json for tool metadata."
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "mushiApiKey": {
+        "type": "string",
+        "title": "Mushi API key",
+        "description": "Mint at kensaur.us/mushi-mushi/docs/connect (mcp:read scope)",
+        "x-from": { "header": "x-mushi-api-key" }
+      },
+      "mushiProjectId": {
+        "type": "string",
+        "title": "Project ID",
+        "description": "Optional when your key is single-project",
+        "x-from": { "header": "x-mushi-project-id" },
+        "x-to": { "header": "X-Mushi-Project-Id" }
+      }
+    },
+    "required": ["mushiApiKey"]
+  },
+  "displayName": "Mushi Mushi",
+  "displayDescription": "Your AI shipped it. Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key."
+}

@@ -864,7 +864,7 @@ function LiveCrawlCard({
           {quota.maxPages > 0 && (
             <div className="w-full h-1 rounded-full bg-surface-raised overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${quota.pagesToday >= quota.maxPages ? 'bg-danger' : 'bg-brand'}`}
+                className={`h-full rounded-full transition-[background-color,border-color,color,box-shadow,transform,opacity] ${quota.pagesToday >= quota.maxPages ? 'bg-danger' : 'bg-brand'}`}
                 style={{ width: `${Math.min(100, (quota.pagesToday / quota.maxPages) * 100)}%` }}
               />
             </div>

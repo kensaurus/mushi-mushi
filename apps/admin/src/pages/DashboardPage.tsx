@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import type { ChartEvent } from '../lib/apiSchemas'
 import { useRealtimeReload } from '../lib/realtime'
@@ -159,7 +159,15 @@ export function DashboardPage() {
     ],
   })
 
-  if (loading) return <DashboardSkeleton />
+  // Collapse the old maze: `/` → `/dashboard` → <GettingStartedEmpty/> (its own
+  // skeleton) → redirect to `/onboarding`. A brand-new user with no project at
+  // all belongs on the wizard immediately, so once the (cached, fast) setup
+  // status resolves with no project we redirect here — skipping the dashboard
+  // skeleton + empty-state bounce and the second loading flicker. We gate on
+  // `!setup.loading` so a user whose projects simply haven't loaded yet is not
+  // redirected prematurely.
+  if (!setup.loading && !setup.hasAnyProject) return <Navigate to="/onboarding" replace />
+  if (loading || setup.loading) return <DashboardSkeleton />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
   if (!data || data.empty) return <GettingStartedEmpty />
 
@@ -223,13 +231,13 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <Confetti triggerKey={confettiKey} />
       <PageHeaderBar
         title={copy?.title ?? 'Dashboard'}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
         helpTitle={copy?.help?.title ?? 'About the Dashboard'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? '14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A live picture of bugs your users hit, fixes Mushi drafted, quality scores, and what shipped — in Overview, Loop, Metrics, and Health tabs.'}
         helpUseCases={copy?.help?.useCases ?? [
           'See whether report intake is rising or falling vs the prior week',
           'Catch a backlog of un-triaged reports before users complain',
@@ -293,6 +301,7 @@ export function DashboardPage() {
         ]}
       />
 
+      <div className="space-y-4 border-b border-edge-subtle pb-4">
       {setup.activeProject && (
         <SetupChecklist
           project={setup.activeProject}
@@ -316,7 +325,9 @@ export function DashboardPage() {
           </Btn>
         </div>
       )}
+      </div>
 
+      <div className="space-y-4 pt-1">
       {pdcaFlowBlock}
 
       <LivePdcaPipeline
@@ -376,6 +387,7 @@ export function DashboardPage() {
           )}
         </>
       )}
+      </div>
     </div>
   )
 }

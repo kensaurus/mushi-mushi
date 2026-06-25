@@ -2,7 +2,7 @@
 
 > **Your AI wrote it. Mushi tells you why it broke.**
 
-React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — shake-to-report widget, offline queue, and the closed-loop lesson layer for iOS + Android.
+React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) — shake-to-report widget, offline queue, and a plain-English diagnosis in your editor, for iOS + Android.
 
 > **One-command setup:** `npx mushi-mushi` auto-detects React Native / Expo and installs this package with the right env vars.
 >
@@ -11,6 +11,20 @@ React Native SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi) �
 ## What this package adds on mobile
 
 Every bug your users feel — a button that won't tap, a screen that freezes, a layout that folds on their device — gets captured, classified by AI, and fed into a lesson library that prevents the same class of mistake in the next PR review and the next AI agent run. That's the closed loop the main [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) README describes. This package is the mobile entry point.
+
+## Error monitoring (optional)
+
+Mushi captures user-reported bugs through its own ingest pipeline. If you also run **Sentry** in your React Native app, wire both for full coverage:
+
+```tsx
+import * as Sentry from '@sentry/react-native'
+
+Sentry.init({ dsn: process.env.EXPO_PUBLIC_SENTRY_DSN })
+
+// Mushi handles shake-to-report + screenshot context; Sentry handles thrown errors.
+```
+
+See [`@mushi-mushi/web` Sentry bridge](https://github.com/kensaurus/mushi-mushi/tree/master/packages/web#sentry-companion) for the dual-capture pattern on web.
 
 ## Quick start
 
@@ -168,4 +182,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

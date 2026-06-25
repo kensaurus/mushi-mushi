@@ -535,7 +535,7 @@ export function BillingPage() {
               {(stats as unknown as { overDiagnosisQuota?: boolean }).overDiagnosisQuota
                 ? (() => {
                     const s = stats as unknown as { diagnosesUsed: number; diagnosesLimit: number | null }
-                    return `Diagnosis quota reached — ${s.diagnosesUsed.toLocaleString()} of ${s.diagnosesLimit?.toLocaleString() ?? '?'} diagnoses used. New bug reports are still captured; AI triage resumes next billing cycle or on upgrade.`
+                    return `Diagnosis quota reached — ${s.diagnosesUsed.toLocaleString()} of ${s.diagnosesLimit?.toLocaleString() ?? '?'} diagnoses used. New bug reports are still captured; plain-English reads resume next billing cycle or on upgrade.`
                   })()
                 : stats.overQuota
                   ? `Over quota — ${stats.reportsUsed.toLocaleString()} reports this period${stats.reportsLimit != null ? ` (limit ${stats.reportsLimit.toLocaleString()})` : ''}.`

@@ -1,5 +1,10 @@
 # @mushi-mushi/wasm-classifier
 
+> **Your AI wrote it. Mushi tells you why it broke.**
+
+On-device spam filter — zero server cost before a report sends.
+
+
 > On-device pre-classification for Mushi Mushi reports — filter obvious junk before the report ever leaves the browser.
 
 This is the V5.3 §2.12 lead-spec implementation of the **WASM On-Device Pre-Classification** layer. It runs in two modes:
@@ -115,4 +120,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (June 2026): 47 edge functions · 256 SQL migrations · 13 outbound plugins · 11 inbound adapters · 18 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (June 2026): 51 edge functions · 298 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -32,6 +32,21 @@ export function captureEnvironment(): MushiEnvironment {
 
   const connection = nav && 'connection' in nav ? (nav as NavigatorWithConnection).connection : undefined;
 
+  // Best-effort native-shell detection. All guarded so SSR/Node never throws.
+  const w = win as (Window & { Capacitor?: unknown; cordova?: unknown }) | undefined;
+  const isCapacitor = !!w?.Capacitor;
+  const isCordova = !!w?.cordova;
+  const isReactNative =
+    nav?.product === 'ReactNative' ||
+    typeof (globalThis as { HermesInternal?: unknown }).HermesInternal !== 'undefined';
+  const native = isCapacitor || isCordova || isReactNative
+    ? {
+        ...(isCapacitor ? { capacitor: true } : {}),
+        ...(isCordova ? { cordova: true } : {}),
+        ...(isReactNative ? { reactNative: true } : {}),
+      }
+    : undefined;
+
   return {
     userAgent: nav?.userAgent ?? 'unknown',
     platform: nav?.platform ?? 'unknown',
@@ -68,6 +83,7 @@ export function captureEnvironment(): MushiEnvironment {
     documentTitle: doc?.title?.slice(0, 200),
     buildId: readBuildIdMeta(doc),
     pageLoadTiming: capturePageLoadTiming(win),
+    ...(native ? { native } : {}),
   };
 }
 

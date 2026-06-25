@@ -293,8 +293,11 @@ The command reads credentials from ~/.config/mushi/config.json (run \`mushi logi
               console.log(`⚠  Key probe returned HTTP ${probeRes.status} — check your credentials.`)
             }
           }
-        } catch {
-          // Network failure or timeout: don't block the user.
+        } catch (probeErr) {
+          console.warn(
+            '[mushi setup] API key probe failed — verify credentials manually.',
+            probeErr instanceof Error ? probeErr.message : probeErr,
+          )
         }
       }
 

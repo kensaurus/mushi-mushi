@@ -17,6 +17,7 @@ import {
   parseUuidParam,
 } from '../shared.ts';
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts';
+import { postReporterReply, computeTwoWayHealth } from '../../_shared/reporter-comms.ts';
 import { composeFixPacket, fixPacketContextFromReport, type FixPacketFile } from '../../_shared/fix-packet.ts';
 import { getRelevantCode } from '../../_shared/rag.ts';
 import { getStorageAdapter } from '../../_shared/storage.ts';
@@ -729,6 +730,94 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
 
     const timeline = await buildUnifiedReportTimeline(db, report.project_id as string, reportId);
     return c.json({ ok: true, data: { report_id: reportId, timeline } });
+  });
+
+  // Admin/MCP twin of POST /v1/sync/reports/:id/reply. Behind adminOrApiKey so
+  // org-scoped MCP keys can reply (the /v1/sync route's apiKeyAuth rejects
+  // them). Shares postReporterReply() with the SDK/CLI route — one impl.
+  app.post('/v1/admin/reports/:id/reply', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const idParsed = parseUuidParam(c);
+    if (!idParsed.ok) return idParsed.error;
+    const reportId = idParsed.value;
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } }, 400);
+    }
+
+    const body = (rawBody ?? {}) as { message?: unknown; author_name?: unknown };
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
+    if (!message || message.length > 10_000) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: 'message is required (1–10000 chars)' } },
+        422,
+      );
+    }
+    const authorName =
+      typeof body.author_name === 'string' && body.author_name.trim().length > 0
+        ? body.author_name.trim().slice(0, 100)
+        : 'Mushi Admin';
+
+    // Resolve the report's owning project within the caller's scope (handles
+    // org-scoped keys via callerProjectIds) before posting the reply.
+    const projectIds = await callerProjectIds(c, db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const { data: report, error } = await db
+      .from('reports')
+      .select('project_id')
+      .eq('id', reportId)
+      .in('project_id', projectIds)
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    if (!report) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+    }
+
+    const result = await postReporterReply(db, {
+      projectId: report.project_id as string,
+      reportId,
+      message,
+      authorName,
+    });
+    return c.json(result.body, result.status);
+  });
+
+  // Admin/MCP twin of GET /v1/sync/two-way-health. two-way health is a
+  // single-project snapshot: the caller's scope must resolve to exactly one
+  // project (project-scoped key, JWT + X-Mushi-Project-Id, or org key +
+  // project_id). Powers get_two_way_comms_health for org-scoped keys.
+  app.get('/v1/admin/two-way-health', adminOrApiKey(), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const projectIds = await callerProjectIds(c, db, userId);
+    if (projectIds.length === 0) {
+      return c.json(
+        { ok: false, error: { code: 'PROJECT_SCOPE', message: 'No accessible project for this caller' } },
+        403,
+      );
+    }
+    if (projectIds.length > 1) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'PROJECT_REQUIRED',
+            message: 'Multiple projects in scope — specify project_id (org-scoped key).',
+          },
+        },
+        400,
+      );
+    }
+
+    return c.json({ ok: true, data: await computeTwoWayHealth(db, projectIds[0]) });
   });
 
   app.patch('/v1/admin/reports/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {

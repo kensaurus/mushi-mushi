@@ -204,7 +204,7 @@ export function GraphStoryboard({
                     className={`
                       group/node relative z-10 text-left px-2.5 py-2 rounded-md
                       border bg-surface-raised
-                      hover:bg-surface-overlay motion-safe:transition-all
+                      hover:bg-surface-overlay motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity]
                       ${isSelected ? 'shadow-raised border-2' : 'border-edge'}
                       ${dimmed ? 'opacity-40' : 'opacity-100'}
                     `}

@@ -43,7 +43,7 @@ export function InboxSnapshotStrip({
           label="Open"
           value={stats.openActions}
           accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
-          tooltip={openTooltip(stats)}
+          tooltip={openTooltip(stats, { plainStageLabels })}
           detail={openDetail(stats)}
           to={statLink(inboxLinks.open, stats)}
         />
@@ -59,15 +59,15 @@ export function InboxSnapshotStrip({
           label="Backlog"
           value={stats.openBacklog}
           accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
-          tooltip={backlogTooltip(stats)}
-          detail={backlogDetail(stats)}
+          tooltip={backlogTooltip(stats, { plainStageLabels })}
+          detail={backlogDetail(stats, { plainStageLabels })}
           to={inboxLinks.backlog}
         />
         <StatCard
           label="Critical 14d"
           value={stats.criticalReports14d}
           accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
-          tooltip={criticalTooltip(stats)}
+          tooltip={criticalTooltip(stats, { plainStageLabels })}
           detail={criticalDetail(stats)}
           to={inboxLinks.critical}
         />

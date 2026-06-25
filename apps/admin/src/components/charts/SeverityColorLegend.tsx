@@ -19,7 +19,7 @@ export function SeverityColorLegend({ showUnscored }: { showUnscored?: boolean }
             type="button"
             role="listitem"
             aria-label={label}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-sm motion-safe:transition-colors hover:bg-surface-overlay/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-sm motion-safe:transition-colors hover:bg-surface-overlay/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           >
             <span className={`block h-2.5 w-2.5 rounded-sm ${bg}`} aria-hidden="true" />
           </button>

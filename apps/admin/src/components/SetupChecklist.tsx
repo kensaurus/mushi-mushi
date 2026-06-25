@@ -384,7 +384,7 @@ function ChecklistCard({
 }) {
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   return (
-    <div className={`rounded-md border p-3 motion-safe:transition-all ${
+    <div className={`rounded-md border p-3 motion-safe:transition-[background-color,border-color,color,box-shadow,transform,opacity] ${
       step.complete
         ? 'border-ok/30 bg-ok-muted/10'
         : current

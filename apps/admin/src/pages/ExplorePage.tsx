@@ -699,7 +699,7 @@ export function ExplorePage() {
                   type="button"
                   onClick={() => toggleLayerFilter(layer)}
                   className={[
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs border transition-all',
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-3xs border transition-[background-color,border-color,color,box-shadow,transform,opacity]',
                     active ? 'font-semibold shadow-sm' : 'hover:border-current',
                   ].join(' ')}
                   style={{
@@ -725,7 +725,7 @@ export function ExplorePage() {
                 value={filenameFilter}
                 onChange={(e) => setFilenameFilter(e.target.value)}
                 placeholder="Filter by filename…"
-                className="text-3xs pl-3 pr-6 py-1 rounded-full border border-edge-subtle bg-surface-raised text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40 w-44"
+                className="text-3xs pl-3 pr-6 py-1 rounded-full border border-edge-subtle bg-surface-raised text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 focus-visible:border-brand/40 w-44"
                 aria-label="Filter files by name"
               />
               {filenameFilter && (

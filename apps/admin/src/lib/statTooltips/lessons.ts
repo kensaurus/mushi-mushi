@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Lessons SNAPSHOT strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { LessonsStats } from '../../components/lessons/LessonsStatsTypes'
 import { metricTip } from '../metricTooltipBuilder'

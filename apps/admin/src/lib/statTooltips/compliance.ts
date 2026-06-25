@@ -3,6 +3,8 @@
  * PURPOSE: Human-readable StatCard tooltips for the Compliance snapshot strip.
  */
 
+export type { PlainStatTooltipOpts } from '../usePlainStatTooltips'
+
 import type { MetricTooltipData } from '../../components/ui'
 import type { ComplianceStats } from '../../components/compliance/types'
 import { metricTip } from '../metricTooltipBuilder'
