@@ -14,6 +14,7 @@ class MushiTheme {
 
   final Color accentColor;
   final bool dark;
+
   /// When true, the SDK reads Brightness from the host app's Theme
   /// and ignores the `dark` field.
   final bool inherit;
@@ -51,6 +52,7 @@ class MushiConfig {
 
   final String projectId;
   final String apiKey;
+
   /// Your Supabase Edge Function URL, e.g. `https://xyz.supabase.co/functions/v1/api`.
   final String endpoint;
   final MushiTriggerMode triggerMode;
@@ -60,10 +62,13 @@ class MushiConfig {
   final int offlineQueueMaxBytes;
   final MushiTheme theme;
   final MushiTriggerInsets triggerInsets;
+
   /// Allow the FAB to be dragged to a new position.
   final bool draggable;
+
   /// Snap the FAB to the nearest vertical edge after dragging.
   final bool snapToEdge;
+
   /// Persist FAB position across sessions via SharedPreferences.
   final bool persistFabPosition;
 }
