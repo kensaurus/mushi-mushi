@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Btn, Tooltip } from '../ui'
 import { apiFetch } from '../../lib/supabase'
+import { isGithubHostname } from '../../lib/githubUrl'
 
 interface Props {
   /** Active project id -- the card fetches its own `repo_url` from
@@ -53,7 +54,7 @@ function parseRepoUrl(url: string | null): RepoCoords | null {
   if (!url) return null
   try {
     const u = new URL(url)
-    if (!u.hostname.endsWith('github.com')) return null
+    if (!isGithubHostname(u.hostname)) return null
     const [owner, repo] = u.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/')
     if (!owner || !repo) return null
     return { owner, repo, base: `https://github.com/${owner}/${repo}` }

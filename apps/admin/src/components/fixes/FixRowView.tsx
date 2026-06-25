@@ -7,6 +7,7 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, RelativeTime, Tooltip, PipelineStrip, Btn } from '../ui'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
+import { isGithubUrl } from '../../lib/githubUrl'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { CursorAgentBadge } from './CursorAgentBadge'
 import { ClaudeAgentBadge } from './ClaudeAgentBadge'
@@ -172,7 +173,7 @@ function FixRowViewInner({
                 </Btn>
               )
             )}
-            {fix.pr_url && fix.pr_url.includes('github.com') && (
+            {fix.pr_url && isGithubUrl(fix.pr_url) && (
               <a
                 href={fix.pr_url}
                 target="_blank"
