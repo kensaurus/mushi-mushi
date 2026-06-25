@@ -22,6 +22,9 @@
 
 import { useEffect, useRef } from 'react'
 import type { ReactNode, MouseEvent } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { overlayTween } from '../lib/motion-tokens'
+import { useMotionTransition, useOverlayVariants } from '../lib/useMotionTransition'
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
 
@@ -71,6 +74,8 @@ export function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const { backdrop, panel } = useOverlayVariants()
+  const overlayTransition = useMotionTransition(overlayTween)
 
   // Ref-latch `onClose` — see `Drawer.tsx` for the full rationale.
   // Summary: ancestors re-render on every realtime `postgres_changes`
@@ -129,33 +134,43 @@ export function Modal({
     }
   }, [open, dismissible])
 
-  if (!open) return null
-
   const onBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
     if (!dismissible) return
     if (e.target === e.currentTarget) onClose()
   }
 
   return (
-    // mushi-mushi-allowlist: canonical Modal primitive — shared overlay implementation
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in overflow-y-auto"
-      onClick={onBackdropClick}
-    >
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-        className={[
-          'w-full flex flex-col rounded-md border border-edge bg-surface-raised shadow-raised',
-          'max-h-[min(90dvh,48rem)] motion-safe:animate-mushi-modal-in outline-none',
-          SIZE_CLASS[size],
-          className,
-        ].join(' ')}
-      >
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          key="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 overflow-y-auto"
+          onClick={onBackdropClick}
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
+          variants={backdrop}
+          transition={overlayTransition}
+        >
+          <motion.div
+            ref={panelRef}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className={[
+              'w-full flex flex-col rounded-md border border-edge bg-surface-raised shadow-raised',
+              'max-h-[min(90dvh,48rem)] outline-none',
+              SIZE_CLASS[size],
+              className,
+            ].join(' ')}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={panel}
+            transition={overlayTransition}
+          >
         {(title || headerAction || !hideCloseButton) && (
           <header className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-2 flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0">
@@ -183,7 +198,9 @@ export function Modal({
             {footer}
           </footer>
         )}
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }

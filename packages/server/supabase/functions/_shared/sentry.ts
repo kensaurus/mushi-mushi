@@ -33,7 +33,7 @@ export function ensureSentry(functionName?: string): void {
     environment: Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production',
     release: Deno.env.get('SENTRY_RELEASE') ?? undefined,
     sendDefaultPii: false,
-    tracesSampleRate: Number(Deno.env.get('SENTRY_TRACES_SAMPLE_RATE') ?? '0.1'),
+    tracesSampleRate: Number(Deno.env.get('SENTRY_TRACES_SAMPLE_RATE') ?? '0.05'),
     initialScope: functionName ? { tags: { function: functionName } } : undefined,
     beforeSend(event) {
       if (event.request?.url) {

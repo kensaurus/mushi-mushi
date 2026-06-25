@@ -341,7 +341,7 @@ export function registerGraphQueryRoutes(app: Hono<{ Variables: Variables }>): v
 
   /**
    * Single graph node (metadata includes v2 inventory `status` on Action nodes).
-   * Used by MCP `graph_node_status` and agents that need one row without listing 200.
+   * Used by MCP `get_graph_node` and agents that need one row without listing 200.
    */
   app.get('/v1/admin/graph/node/:nodeId', adminOrApiKey(), async (c) => {
     const nodeId = c.req.param('nodeId')!;

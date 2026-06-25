@@ -75,6 +75,7 @@
   --color-ok-foreground: oklch(0.78 0.16 155);
   --color-info-foreground: oklch(0.78 0.14 240);
   --color-brand-foreground: oklch(0.85 0.14 80);
+  --color-lime-foreground: oklch(0.88 0.12 128);
 
   /* ── Semantic status ───────────────────────────────────────────────── */
   --color-ok: oklch(0.72 0.19 155);
@@ -198,6 +199,7 @@
   --color-lime:       oklch(0.83 0.27 128);
   --color-lime-fg:    oklch(0.16 0.04 128);
   --color-lime-muted: oklch(0.23 0.09 128);
+  /* Copy on bg-lime-muted — use text-lime-foreground, not text-lime-fg. */
 
   --color-fg-primary: var(--color-fg);
   --color-fg-on-accent: var(--color-fg);
@@ -323,8 +325,9 @@
 html,
 body,
 #root {
-  height: 100%;
+  height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 #root {
@@ -489,6 +492,7 @@ html[data-theme="light"] {
   --color-ok-foreground: oklch(0.42 0.17 155);
   --color-info-foreground: oklch(0.42 0.16 240);
   --color-brand-foreground: oklch(0.48 0.16 80);
+  --color-lime-foreground: oklch(0.28 0.12 128);
 
   --color-ok:            oklch(0.48 0.19 155);
   --color-ok-fg:         oklch(0.99 0.02 155);
@@ -1301,11 +1305,36 @@ html[data-theme='dark'] [data-surface='ask-mushi'] .ask-mushi-resume-btn__cost {
   font-size: 0.625rem;
 }
 
-/* Scrollbar — thin, unobtrusive */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-edge); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-fg-muted); }
+/* Scrollbar — scoped to primary scroll surface only (avoids double bars from sidebar nav). */
+#main-content {
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge) transparent;
+}
+
+#main-content::-webkit-scrollbar { width: 6px; height: 6px; }
+#main-content::-webkit-scrollbar-track { background: transparent; }
+#main-content::-webkit-scrollbar-thumb { background: var(--color-edge); border-radius: 3px; }
+#main-content::-webkit-scrollbar-thumb:hover { background: var(--color-fg-muted); }
+
+/* Sidebar nav — ghost scrollbar at rest so only #main-content shows a bar. */
+.sidebar-rail-nav-wrap nav {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-rail-nav-wrap nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.sidebar-rail-nav-wrap nav:is(:hover, :focus-within) {
+  scrollbar-width: thin;
+}
+
+.sidebar-rail-nav-wrap nav:is(:hover, :focus-within)::-webkit-scrollbar {
+  width: 4px;
+}
 
 /* Select elements — force dark in browser chrome */
 select, input, textarea {
@@ -1464,6 +1493,18 @@ select, input, textarea {
 .nav-section-active {
   animation: nav-stage-breathe 3s ease-in-out infinite;
   border-radius: 0.25rem;
+}
+
+/* Expanded category — solid highlight (no infinite pulse). */
+.nav-section-expanded {
+  border-radius: 0.25rem;
+}
+
+/* Route-active PDCA stage hint when section is collapsed. */
+.nav-section-stage-hint {
+  animation: nav-stage-breathe 3s ease-in-out infinite;
+  border-radius: 0.25rem;
+  color: var(--color-fg-secondary);
 }
 
 /* ---------------------------------------------------------------------------

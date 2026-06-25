@@ -7,7 +7,11 @@
  */
 
 import { Command } from 'cmdk'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent } from 'react'
+import { overlayTween } from '../lib/motion-tokens'
+import { useMotionTransition, useOverlayVariants } from '../lib/useMotionTransition'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useAdminMode, type AdminMode } from '../lib/mode'
@@ -134,6 +138,15 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const showNavigateAffordance = query.trim().length >= 2 && isNavigateQuery(query)
+  const { backdrop, panel } = useOverlayVariants()
+  const overlayTransition = useMotionTransition(overlayTween)
+
+  const onBackdropClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (e.target === e.currentTarget) close()
+    },
+    [close],
+  )
 
   useEffect(() => {
     if (!isOpen) {
@@ -331,60 +344,86 @@ export function CommandPalette() {
     }
   }
 
-  if (!isOpen) return null
-
-  if (view === 'assist') {
-    return (
-      <div
-        className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-overlay backdrop-blur-sm motion-safe:animate-mushi-fade-in px-3"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) close()
-        }}
-      >
-        <div className="w-full max-w-xl rounded-md border border-edge bg-surface-raised shadow-raised flex flex-col max-h-[70dvh] motion-safe:animate-mushi-modal-in overflow-hidden">
-          <PaletteAssistView
-            query={assistQuery}
-            loading={assistLoading}
-            error={assistError}
-            text={assistText}
-            steps={assistSteps}
-            navTargets={assistNavTargets}
-            clarify={assistClarify}
-            onNavigate={(path) => {
-              close()
-              setTimeout(() => navigate(path), 0)
-            }}
-            onBack={() => setView('search')}
-            onContinueSidebar={() => {
-              const q = assistQuery
-              const tid = assistThreadId
-              close()
-              if (tid) {
-                askMushiPanel.openFromPalette(q, tid)
-              } else {
-                askMushiPanel.open(q)
-              }
-            }}
-            onClarifySelect={(opt) => {
-              void runAssist(opt)
-            }}
-            langfuseTraceId={assistLangfuseTraceId}
-          />
-        </div>
-      </div>
-    )
-  }
+  const paletteBackdropClass =
+    'fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-overlay backdrop-blur-sm px-3'
+  const palettePanelClass =
+    'w-full max-w-xl rounded-md border border-edge bg-surface-raised shadow-raised flex flex-col max-h-[70dvh] overflow-hidden'
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-overlay backdrop-blur-sm motion-safe:animate-mushi-fade-in px-3"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) close()
-      }}
-    >
+    <AnimatePresence mode="wait">
+      {isOpen && view === 'assist' ? (
+        <motion.div
+          key="palette-assist"
+          className={paletteBackdropClass}
+          onClick={onBackdropClick}
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
+          variants={backdrop}
+          transition={overlayTransition}
+        >
+          <motion.div
+            className={palettePanelClass}
+            onClick={(e) => e.stopPropagation()}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={panel}
+            transition={overlayTransition}
+          >
+            <PaletteAssistView
+              query={assistQuery}
+              loading={assistLoading}
+              error={assistError}
+              text={assistText}
+              steps={assistSteps}
+              navTargets={assistNavTargets}
+              clarify={assistClarify}
+              onNavigate={(path) => {
+                close()
+                setTimeout(() => navigate(path), 0)
+              }}
+              onBack={() => setView('search')}
+              onContinueSidebar={() => {
+                const q = assistQuery
+                const tid = assistThreadId
+                close()
+                if (tid) {
+                  askMushiPanel.openFromPalette(q, tid)
+                } else {
+                  askMushiPanel.open(q)
+                }
+              }}
+              onClarifySelect={(opt) => {
+                void runAssist(opt)
+              }}
+              langfuseTraceId={assistLangfuseTraceId}
+            />
+          </motion.div>
+        </motion.div>
+      ) : isOpen ? (
+        <motion.div
+          key="palette-search"
+          className={paletteBackdropClass}
+          onClick={onBackdropClick}
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
+          variants={backdrop}
+          transition={overlayTransition}
+        >
+          <motion.div
+            className={palettePanelClass}
+            onClick={(e) => e.stopPropagation()}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            variants={panel}
+            transition={overlayTransition}
+          >
       <Command
         label="Command palette"
-        className="w-full max-w-xl rounded-md border border-edge bg-surface-raised shadow-raised flex flex-col max-h-[70dvh] motion-safe:animate-mushi-modal-in"
+        className="flex flex-col flex-1 min-h-0"
         loop
         shouldFilter
       >
@@ -679,7 +718,10 @@ export function CommandPalette() {
           </span>
         </footer>
       </Command>
-    </div>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }
 

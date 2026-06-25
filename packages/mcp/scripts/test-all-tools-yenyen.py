@@ -188,7 +188,6 @@ print(f"  Server initialised  |  {tool_count} tools listed\n")
 
 # ─── Phase 1: Health & Connection ────────────────────────────────────────────
 print(f"{BOLD}1. Health & Connection{RESET}")
-test("diagnose_connection")
 test("diagnose_setup")
 test("get_two_way_comms_health")
 
@@ -231,10 +230,10 @@ if report_id:
     test("get_report_timeline",  {"reportId": report_id})
     test("get_fix_context",      {"reportId": report_id})
     test("triage_issue",         {"report_id": report_id, "include_logs": False})
-    test("fix_suggest",          {"reportId": report_id})
+    test("suggest_fix",          {"reportId": report_id})
 else:
     for t in ["get_report_detail","get_report_evidence","get_report_timeline",
-              "get_fix_context","triage_issue","fix_suggest"]:
+              "get_fix_context","triage_issue","suggest_fix"]:
         test(t, skip_reason="no reports in yen-yen project yet")
 
 
@@ -289,16 +288,16 @@ test("analyze_wiki_knowledge",  {"project_id": PROJECT_ID})
 print(f"\n{BOLD}8. Graph / Knowledge{RESET}")
 # nodeId must be a graph_nodes UUID, not a file path
 test("get_knowledge_graph", {"seed": GRAPH_NODE_UUID, "depth": 1})
-test("graph_neighborhood",  {"seed": GRAPH_NODE_UUID, "depth": 1})
-test("graph_node_status",   {"nodeId": GRAPH_NODE_UUID})
+test("get_graph_neighborhood", {"seed": GRAPH_NODE_UUID, "depth": 1})
+test("get_graph_node",      {"nodeId": GRAPH_NODE_UUID})
 test("get_blast_radius",    {"nodeId": GRAPH_NODE_UUID})
 
 
 # ─── Phase 9: Inventory ──────────────────────────────────────────────────────
 print(f"\n{BOLD}9. Inventory{RESET}")
-test("inventory_get",      {"projectId": PROJECT_ID})
-test("inventory_findings", {"projectId": PROJECT_ID})
-test("inventory_diff",     skip_reason="requires specific fromSha/toSha from CI")
+test("get_inventory",      {"projectId": PROJECT_ID})
+test("list_gate_findings", {"projectId": PROJECT_ID})
+test("diff_inventory",     skip_reason="requires specific fromSha/toSha from CI")
 
 
 # ─── Phase 10: Setup (read probe only) ───────────────────────────────────────

@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react'
 import { InlineProof } from './report-detail/ReportSurface'
+import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
 export type StatusBannerTone = 'info' | 'brand' | 'danger' | 'warn' | 'ok'
 
@@ -30,6 +31,7 @@ export function StatusBannerShell({
 }) {
   const shell = BANNER_SHELL[tone]
   return (
+    <SpringChromeEnter>
     <div
       className={`flex flex-col gap-3 rounded-md border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between ${shell.border} ${shell.bg}`}
     >
@@ -45,5 +47,6 @@ export function StatusBannerShell({
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
+    </SpringChromeEnter>
   )
 }

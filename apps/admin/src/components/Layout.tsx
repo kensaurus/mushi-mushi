@@ -61,6 +61,8 @@ import { PageHelpProvider } from '../lib/pageHelpContext'
 import { RoutePageHelp } from './RoutePageHelp'
 import { appChromeHeaderClass, appChromeMainClass, mobileNavBelowAppChromeClass } from '../lib/appChrome'
 import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
+import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
+import { NavSectionStagger } from './motion/NavSectionStagger'
 
 interface NavItem extends BuiltNavItem {}
 
@@ -421,26 +423,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
   },
 }
 
-const NAV_COLLAPSED_KEY = 'mushi:nav:collapsed:v1'
-
-function readCollapsedState(): Record<string, boolean> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(NAV_COLLAPSED_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
-}
-
-function writeCollapsedState(state: Record<string, boolean>) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(NAV_COLLAPSED_KEY, JSON.stringify(state))
-  } catch {
-    // localStorage write can fail in private mode; non-fatal.
-  }
-}
 
 const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
   plan: 'plan',
@@ -459,6 +441,19 @@ const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
 function isActive(currentPath: string, itemPath: string) {
   if (itemPath === '/') return currentPath === '/'
   return currentPath === itemPath || currentPath.startsWith(itemPath + '/')
+}
+
+function sectionContainingPath(sections: NavSection[], path: string): NavSection | undefined {
+  return sections.find((s) => s.items.some((i) => isActive(path, i.path)))
+}
+
+/** Single-letter / stage glyph for the icon-rail section picker. */
+function railSectionGlyph(section: NavSection): string {
+  if (section.stage) return section.stage
+  if (section.id === 'quick') return 'Q'
+  if (section.id === 'start') return 'S'
+  if (section.id === 'workspace') return 'W'
+  return section.title.charAt(0).toUpperCase()
 }
 
 /**
@@ -497,7 +492,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
+  /** Which sidebar category is expanded — single accordion in rail + full sidebar. */
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
   const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
   const palette = useCommandPalette()
   const askPanel = useAskMushiPanel()
@@ -697,80 +693,74 @@ export function Layout({ children }: { children: ReactNode }) {
     (!i.requiresFeature || has(i.requiresFeature) || isSuperAdmin) &&
     (!i.requiresAdvancedMode || isAdvanced || isSuperAdmin)
 
-  let visibleNav: NavSection[]
-  if (isQuickstart) {
-    const activationDone = setupStatus.selectors.done
-    const allowedPaths = new Set([
-      '/onboarding',
-      '/connect',
-      '/inbox',
-      '/feedback',
-      '/reports',
-      '/fixes',
-      '/mcp',
-    ])
-    const quickItems: NavItem[] = NAV.flatMap((s) =>
-      s.items
-        .filter(visibleByRole)
-        .filter(visibleByFeature)
-        .filter(i => i.quickstartLabel !== undefined)
-        .filter(i => activationDone || allowedPaths.has(i.path))
-        .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
-    )
-    visibleNav = [
-      {
-        id: 'quick',
-        title: 'Quickstart',
-        hint: 'Bugs, fixes, skill catalog, and setup. Switch to Beginner or Advanced for the full PDCA sidebar.',
-        items: quickItems,
-      },
-    ]
-  } else if (isBeginner) {
-    // Beginner mode keeps Start expanded by default — first-run users
-    // need the Dashboard / Get started pair in view, not hidden behind
-    // a chevron like in advanced mode.
-    visibleNav = NAV
-      .map(s => ({
-        ...s,
-        defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
-        items: s.items
+  const visibleNav = useMemo((): NavSection[] => {
+    if (isQuickstart) {
+      const activationDone = setupStatus.selectors.done
+      const allowedPaths = new Set([
+        '/onboarding',
+        '/connect',
+        '/inbox',
+        '/feedback',
+        '/reports',
+        '/fixes',
+        '/mcp',
+      ])
+      const quickItems: NavItem[] = NAV.flatMap((s) =>
+        s.items
           .filter(visibleByRole)
           .filter(visibleByFeature)
-          .filter(i => {
-            if (s.id === 'check') return i.checkBeginnerCore === true
-            if (s.id === 'plan') return i.beginner === true && !i.requiresAdvancedMode
-            return i.beginner === true
-          }),
-      }))
-      .filter(s => s.items.length > 0)
-  } else {
+          .filter(i => i.quickstartLabel !== undefined)
+          .filter(i => activationDone || allowedPaths.has(i.path))
+          .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
+      )
+      return [
+        {
+          id: 'quick',
+          title: 'Quickstart',
+          hint: 'Bugs, fixes, skill catalog, and setup. Switch to Beginner or Advanced for the full PDCA sidebar.',
+          items: quickItems,
+        },
+      ]
+    }
+    if (isBeginner) {
+      // Beginner mode keeps Start expanded by default — first-run users
+      // need the Dashboard / Get started pair in view, not hidden behind
+      // a chevron like in advanced mode.
+      return NAV
+        .map(s => ({
+          ...s,
+          defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
+          items: s.items
+            .filter(visibleByRole)
+            .filter(visibleByFeature)
+            .filter(i => {
+              if (s.id === 'check') return i.checkBeginnerCore === true
+              if (s.id === 'plan') return i.beginner === true && !i.requiresAdvancedMode
+              return i.beginner === true
+            }),
+        }))
+        .filter(s => s.items.length > 0)
+    }
     // Advanced mode: render every item including gated ones, so the
     // sidebar's upsell pill replaces the "hidden until you pay" UX.
-    // The actual page still shows its own UpgradePrompt for users
-    // without the feature, so this is purely a visibility-without-
-    // unlocking change.
-    visibleNav = NAV.map(s => ({
+    return NAV.map(s => ({
       ...s,
       items: s.items.filter(visibleByRole),
     }))
-  }
+  }, [
+    isQuickstart,
+    isBeginner,
+    isAdvanced,
+    isSuperAdmin,
+    has,
+    setupStatus.selectors.done,
+  ])
 
-  // Force-open the section that contains the current page so the user
-  // never sees a sidebar where their location is hidden behind a collapsed
-  // chevron. The effective collapsed state mirrors `toggleSection` —
-  // `prev[id] ?? defaultCollapsed` — so a deep-link into Workspace
-  // (defaultCollapsed: true, no localStorage entry yet) still expands.
-  // Only mutates in-memory state, so the user's persisted preference
-  // survives a reload.
+  // Keep the open category aligned with the current route when navigating.
   useEffect(() => {
-    const containing = NAV.find(s => s.items.some(i => isActive(pathname, i.path)))
-    if (!containing) return
-    setCollapsedMap(prev => {
-      const effectivelyCollapsed = prev[containing.id] ?? containing.defaultCollapsed ?? false
-      if (!effectivelyCollapsed) return prev
-      return { ...prev, [containing.id]: false }
-    })
-  }, [pathname])
+    const containing = sectionContainingPath(visibleNav, pathname)
+    if (containing) setExpandedSectionId(containing.id)
+  }, [pathname, visibleNav])
 
   // Mode safety net: if the user lands on a route hidden by the active
   // mode (deep link, bookmark, autocomplete), we never block navigation,
@@ -784,13 +774,18 @@ export function Layout({ children }: { children: ReactNode }) {
     ? 'This page is outside Quickstart. Switch to Beginner or Advanced to keep it in your sidebar.'
     : 'This page lives in Advanced mode. Switch to keep it in your sidebar.'
 
-  function toggleSection(id: string, defaultCollapsed: boolean) {
-    setCollapsedMap(prev => {
-      const currentlyCollapsed = prev[id] ?? defaultCollapsed
-      const next = { ...prev, [id]: !currentlyCollapsed }
-      writeCollapsedState(next)
-      return next
-    })
+  function selectSection(id: string, options?: { expandSidebar?: boolean }) {
+    setExpandedSectionId(id)
+    if (options?.expandSidebar) {
+      setSidebarCollapsed(false)
+      requestAnimationFrame(() => {
+        document.getElementById(`nav-section-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      })
+    }
+  }
+
+  function selectRailSection(id: string) {
+    selectSection(id, { expandSidebar: true })
   }
 
   const CHECK_SUB_GROUP_ORDER = ['quality-gates', 'system-health', 'release-intel'] as const
@@ -859,37 +854,45 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
       </div>
 
-      {/* Navigation */}
-      <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
+      {/* Navigation — ghost scrollbar at rest; thin bar on hover/focus only. */}
+      <div className="sidebar-rail-nav-wrap relative flex min-h-0 flex-1 flex-col">
+      <nav aria-label="Main navigation" className={`min-h-0 flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
         {visibleNav.map((section, sectionIdx) => {
-          const collapsed = collapsedMap[section.id] ?? section.defaultCollapsed ?? false
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
-          const collapsible = section.defaultCollapsed !== undefined || section.id === 'workspace'
+          const isExpanded = expandedSectionId === section.id
           // Per-stage staleness — surfaced on the collapsed section header
           // so advanced users can still see at a glance which PDCA stage
           // needs their attention without expanding.
           const staleness = computeStaleness(section.id, navCounts)
-          // In compact mode we drop section headers entirely (text-only
-          // chrome doesn't survive at 48px) but keep a thin divider
-          // between sections so the PDCA grouping still reads visually.
-          // Items are always rendered in compact mode — the per-section
-          // accordion would be unusable without labels to anchor it.
-          const itemsVisible = compact ? true : !collapsed
           return (
-            <div key={section.id} className={compact ? 'first:mt-0 mt-2 pt-2 first:border-t-0 first:pt-0 border-t border-edge-subtle/60' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}>
-              {!compact && (
-                <SectionHeader
+            <div
+              key={section.id}
+              id={`nav-section-${section.id}`}
+              className={compact ? 'first:mt-0 mt-1 first:pt-0 pt-1 first:border-t-0 border-t border-edge-subtle/60' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}
+            >
+              {compact ? (
+                <SectionRailHeader
                   section={section}
-                  collapsed={collapsed}
-                  collapsible={collapsible}
+                  expanded={isExpanded}
                   isActiveStage={isActiveStage}
                   staleness={staleness}
-                  onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
+                  onSelect={() => selectRailSection(section.id)}
+                />
+              ) : (
+                <SectionHeader
+                  section={section}
+                  isExpanded={isExpanded}
+                  isActiveStage={isActiveStage}
+                  staleness={staleness}
+                  onToggle={() => selectSection(section.id)}
                 />
               )}
-              {itemsVisible && (
-                <div className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}>
+              <AnimatedDisclosure open={isExpanded} contentKey={section.id}>
+                <NavSectionStagger
+                  animate={!compact}
+                  className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}
+                >
                   {section.id === 'check' && isAdvanced && !compact
                     ? CHECK_SUB_GROUP_ORDER.map((subId) => {
                         const subItems = section.items.filter((i) => i.checkSubGroup === subId)
@@ -918,12 +921,13 @@ export function Layout({ children }: { children: ReactNode }) {
                       <span>More verification tools →</span>
                     </Link>
                   ) : null}
-                </div>
-              )}
+                </NavSectionStagger>
+              </AnimatedDisclosure>
             </div>
           )
         })}
       </nav>
+      </div>
 
       {/* User footer — density, theme, focus in one micro row; identity card below. */}
       <div className={`${compact ? 'px-1 py-2 space-y-2' : 'px-3 py-2.5 space-y-2'} border-t border-edge/60`}>
@@ -1017,11 +1021,11 @@ export function Layout({ children }: { children: ReactNode }) {
       {mobileOpen && (
         <div className={mobileNavBelowAppChromeClass}>
           <div
-            className="absolute inset-0 bg-overlay backdrop-blur-sm"
+            className="absolute inset-0 bg-overlay backdrop-blur-sm motion-safe:animate-mushi-drawer-backdrop-in"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <aside className="relative z-50 w-60 h-full bg-surface-root border-r border-edge/60 flex flex-col shadow-raised">
+          <aside className="relative z-50 w-60 h-full bg-surface-root border-r border-edge/60 flex flex-col shadow-raised motion-safe:animate-mushi-drawer-in">
             <div className="absolute top-2.5 right-2.5">
               <button
                 onClick={() => setMobileOpen(false)}
@@ -1194,8 +1198,7 @@ interface SectionStaleness {
 
 interface SectionHeaderProps {
   section: NavSection
-  collapsed: boolean
-  collapsible: boolean
+  isExpanded: boolean
   isActiveStage: boolean
   staleness: SectionStaleness | null
   onToggle: () => void
@@ -1373,7 +1376,52 @@ const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
   danger: 'bg-danger-muted text-danger',
 }
 
-function SectionHeader({ section, collapsed, collapsible, isActiveStage, staleness, onToggle }: SectionHeaderProps) {
+interface SectionRailHeaderProps {
+  section: NavSection
+  expanded: boolean
+  isActiveStage: boolean
+  staleness: SectionStaleness | null
+  onSelect: () => void
+}
+
+function SectionRailHeader({ section, expanded, isActiveStage, staleness, onSelect }: SectionRailHeaderProps) {
+  const glyph = railSectionGlyph(section)
+  const stageTone = section.stage ? STAGE_TONE[section.stage] : 'bg-surface-overlay text-fg-secondary border border-edge-subtle'
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-expanded={expanded}
+      aria-current={expanded ? 'true' : undefined}
+      aria-label={`${section.title}${expanded ? '' : ' — show navigation'}`}
+      title={section.hint ?? section.title}
+      className={`relative nav-link justify-center px-2 py-1.5 mb-0.5 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+        expanded
+          ? 'bg-surface-overlay text-fg ring-1 ring-brand/40'
+          : 'text-fg-muted hover:text-fg-secondary hover:bg-surface-overlay/60'
+      } ${isActiveStage && !expanded ? 'ring-1 ring-brand/25' : ''}`}
+    >
+      <span
+        className={`inline-flex items-center justify-center w-6 h-6 rounded-sm text-3xs font-bold leading-none ${stageTone}`}
+        aria-hidden="true"
+      >
+        {glyph}
+      </span>
+      {staleness && (
+        <span
+          className={`absolute top-0.5 right-0.5 inline-flex items-center justify-center min-w-[0.85rem] px-0.5 h-3.5 rounded-sm text-3xs font-mono font-bold leading-none ${STALENESS_TONE[staleness.tone]}`}
+          aria-label={staleness.label}
+          title={staleness.label}
+        >
+          {staleness.count > 99 ? '99+' : staleness.count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function SectionHeader({ section, isExpanded, isActiveStage, staleness, onToggle }: SectionHeaderProps) {
+  const showChevron = section.defaultCollapsed !== undefined || section.id === 'workspace'
   const inner = (
     <span className="flex items-center gap-1.5 min-w-0 w-full">
       {section.stage && (
@@ -1394,9 +1442,9 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
           {staleness.count > 99 ? '99+' : staleness.count}
         </span>
       )}
-      {collapsible && (
+      {showChevron && (
         <svg
-          className={`h-2.5 w-2.5 text-fg-faint shrink-0 motion-safe:transition-transform ${collapsed ? '' : 'rotate-90'}`}
+          className={`h-2.5 w-2.5 text-fg-faint shrink-0 motion-safe:transition-transform ${isExpanded ? 'rotate-90' : ''}`}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -1409,22 +1457,22 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
     </span>
   )
 
-  if (collapsible) {
-    return (
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${isActiveStage ? 'nav-section-active' : ''}`}
-        title={section.hint}
-        aria-expanded={!collapsed}
-      >
-        {inner}
-      </button>
-    )
-  }
   return (
-    <div className={`nav-section flex items-center gap-1.5 ${isActiveStage ? 'nav-section-active' : ''}`} title={section.hint}>
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${
+        isExpanded
+          ? 'nav-section-expanded bg-surface-overlay/60 ring-1 ring-brand/30'
+          : isActiveStage
+            ? 'nav-section-stage-hint'
+            : ''
+      }`}
+      title={section.hint}
+      aria-expanded={isExpanded}
+      aria-current={isExpanded ? 'true' : undefined}
+    >
       {inner}
-    </div>
+    </button>
   )
 }

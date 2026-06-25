@@ -25,16 +25,20 @@ export type PaletteGroup = 'Start' | 'Plan' | 'Do' | 'Check' | 'Act' | 'Workspac
 /** Icon keys resolved to components in Layout.tsx */
 export type NavIconKey =
   | 'bolt'
+  | 'connect'
   | 'dashboard'
   | 'inbox'
+  | 'feature-board'
   | 'chat'
   | 'reports'
+  | 'content'
   | 'qa-coverage'
   | 'story'
   | 'graph'
   | 'explore'
   | 'queue'
   | 'shield'
+  | 'shield-check'
   | 'fixes'
   | 'git'
   | 'fine-tuning'
@@ -42,6 +46,7 @@ export type NavIconKey =
   | 'health'
   | 'audit'
   | 'gauge'
+  | 'cost'
   | 'lessons'
   | 'drift'
   | 'experiments'
@@ -49,10 +54,16 @@ export type NavIconKey =
   | 'releases'
   | 'intelligence'
   | 'globe'
+  | 'external-link'
   | 'iterate'
   | 'skills'
+  | 'catalog'
+  | 'pipeline'
+  | 'source'
   | 'integrations'
   | 'mcp'
+  | 'terminal'
+  | 'key'
   | 'marketplace'
   | 'bell'
   | 'projects'
@@ -171,7 +182,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Connect & Update',
     quickstartLabel: 'Connect',
     sectionId: 'start',
-    iconKey: 'bolt',
+    iconKey: 'connect',
     beginner: true,
     paletteDescription: 'Connect GitHub, install SDK + MCP, and create upgrade PRs.',
     paletteKeywords: ['connect', 'install', 'sdk', 'upgrade', 'update', 'mcp', 'cursor', 'npm', 'package'],
@@ -219,7 +230,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/feature-board',
     label: 'Feature board',
     sectionId: 'start',
-    iconKey: 'inbox',
+    iconKey: 'feature-board',
     paletteDescription: 'Community feature requests and votes.',
     paletteKeywords: ['features', 'roadmap', 'votes', 'board'],
     paletteGroup: 'Start',
@@ -244,7 +255,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Content QA',
     sectionId: 'plan',
     pdcaStage: 'plan',
-    iconKey: 'qa-coverage',
+    iconKey: 'content',
     paletteDescription: 'Review AI-generated and user-submitted content quality.',
     paletteKeywords: ['content', 'qa', 'quality', 'moderation'],
     paletteGroup: 'Plan',
@@ -380,7 +391,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'check',
     pdcaStage: 'check',
     checkSubGroup: 'quality-gates',
-    iconKey: 'audit',
+    iconKey: 'shield-check',
     paletteDescription: 'End-to-end audit across frontend, API, and database.',
     paletteKeywords: ['audit', 'fullstack', 'fe', 'be', 'schema'],
     paletteGroup: 'Check',
@@ -617,7 +628,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/cost',
     label: 'LLM Cost',
     sectionId: 'workspace',
-    iconKey: 'gauge',
+    iconKey: 'cost',
     paletteDescription: 'Token usage and LLM spend by stage.',
     paletteKeywords: ['cost', 'llm', 'tokens', 'billing', 'usage'],
     paletteGroup: 'Workspace',
@@ -702,7 +713,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/setup-copilot',
     label: 'Setup copilot',
     sectionId: 'start',
-    iconKey: 'bolt',
+    iconKey: 'terminal',
     inSidebar: false,
     paletteDescription: 'Guided verify-and-dispatch setup assistant.',
     paletteKeywords: ['setup', 'copilot', 'verify', 'dispatch', 'guided'],
@@ -713,7 +724,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/cli-auth',
     label: 'CLI auth',
     sectionId: 'act',
-    iconKey: 'mcp',
+    iconKey: 'key',
     inSidebar: false,
     paletteDescription: 'OAuth handoff for the Mushi CLI.',
     paletteKeywords: ['cli', 'oauth', 'auth', 'terminal'],
@@ -724,7 +735,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/docs-bridge',
     label: 'Docs bridge',
     sectionId: 'workspace',
-    iconKey: 'globe',
+    iconKey: 'external-link',
     inSidebar: false,
     paletteDescription: 'Open authenticated docs in a new tab.',
     paletteKeywords: ['docs', 'documentation', 'bridge', 'token'],
@@ -735,7 +746,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/skills?tab=catalog',
     label: 'Skill Catalog',
     sectionId: 'act',
-    iconKey: 'skills',
+    iconKey: 'catalog',
     inSidebar: false,
     paletteDescription: 'Browse 70+ cursor-kenji agent skills by category.',
     paletteKeywords: ['catalog', 'skill catalog', 'cursor-kenji', 'kenji skills'],
@@ -746,7 +757,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/skills?tab=pipelines',
     label: 'Skill Pipelines',
     sectionId: 'act',
-    iconKey: 'skills',
+    iconKey: 'pipeline',
     inSidebar: false,
     paletteDescription: 'Track live pipeline runs and check in each step.',
     paletteKeywords: ['pipeline runs', 'handoff', 'context packet', 'checkin'],
@@ -757,7 +768,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     path: '/skills?tab=sources',
     label: 'Skill Sources',
     sectionId: 'act',
-    iconKey: 'skills',
+    iconKey: 'source',
     inSidebar: false,
     paletteDescription: 'Add GitHub repos and sync SKILL.md files.',
     paletteKeywords: ['skill sources', 'skill sync', 'skills.sh'],

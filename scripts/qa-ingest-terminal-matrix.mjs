@@ -174,39 +174,38 @@ if (pre.status === 200 && pre.json?.data?.checks) {
 // ── Cloud MCP ─────────────────────────────────────────────────────────────────
 const list = await mcpRpc('tools/list', {})
 const toolNames = (list.json?.result?.tools ?? []).map((t) => t.name)
-record('MCP tools/list includes ingest_setup_check', toolNames.includes('ingest_setup_check'))
-record('MCP tools/list includes setup_check', toolNames.includes('setup_check'))
+// setup_check + ingest_setup_check were consolidated into diagnose_setup
+// (mode=full|ingest|dispatch).
+record('MCP tools/list includes diagnose_setup', toolNames.includes('diagnose_setup'))
 
-for (const [tool, args] of [
-  ['ingest_setup_check', {}],
-  ['setup_check', { projectId }],
+for (const [label, args] of [
+  ['diagnose_setup (ingest)', { mode: 'ingest' }],
+  ['diagnose_setup (dispatch)', { mode: 'dispatch', projectId }],
 ]) {
-  const call = await mcpRpc('tools/call', { name: tool, arguments: args })
+  const call = await mcpRpc('tools/call', { name: 'diagnose_setup', arguments: args })
   const err = call.json?.error
   if (err) {
-    record(`MCP ${tool}`, false, err.message ?? JSON.stringify(err))
+    record(`MCP ${label}`, false, err.message ?? JSON.stringify(err))
     continue
   }
   const content = call.json?.result?.content?.[0]?.text
   let parsed = {}
   try { parsed = content ? JSON.parse(content) : call.json?.result?.structuredContent ?? {} } catch { /* */ }
-  record(`MCP ${tool}`, Boolean(parsed.summary), parsed.summary?.slice(0, 100))
+  record(`MCP ${label}`, Boolean(parsed.summary), parsed.summary?.slice(0, 100))
 }
 
-// JWT should fail ingest_setup_check with clear message (no API key header)
-const jwtOnly = await mcpRpc('tools/call', { name: 'ingest_setup_check', arguments: {} })
-// Re-call without API key - use fake bearer only
+// JWT should fail diagnose_setup (ingest) with clear message (no API key header)
 const mcpUrl = endpoint.replace('/functions/v1/api', '/functions/v1/mcp')
 const jwtRes = await fetch(mcpUrl, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: 'Bearer fake-jwt-token' },
-  body: JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/call', params: { name: 'ingest_setup_check', arguments: {} } }),
+  body: JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/call', params: { name: 'diagnose_setup', arguments: { mode: 'ingest' } } }),
   signal: AbortSignal.timeout(15000),
 })
 const jwtBody = await jwtRes.json()
 const jwtMsg = jwtBody?.error?.message ?? jwtBody?.result?.content?.[0]?.text ?? ''
 record(
-  'MCP ingest_setup_check rejects non-API-key',
+  'MCP diagnose_setup (ingest) rejects non-API-key',
   jwtBody?.error != null || String(jwtMsg).includes('API-key auth'),
   String(jwtMsg).slice(0, 100),
 )

@@ -82,20 +82,23 @@ describe('mcp http edge function — outputSchema parity (B3)', () => {
 })
 
 describe('mcp http edge function — setup tools parity', () => {
-  it('declares setup_check with dispatch preflight description', () => {
-    expect(SOURCE).toMatch(/setup_check:\s*\{[\s\S]*?dispatch-readiness/m)
+  // setup_check + ingest_setup_check were consolidated into the single
+  // diagnose_setup entry point (mode=full|ingest|dispatch). Assert the
+  // consolidated tool covers both readiness surfaces.
+  it('declares diagnose_setup with full|ingest|dispatch modes', () => {
+    expect(SOURCE).toMatch(/diagnose_setup:\s*\{[\s\S]*?enum:\s*\['full',\s*'ingest',\s*'dispatch'\]/m)
   })
 
-  it('declares ingest_setup_check wired to /v1/sync/ingest-setup', () => {
-    expect(SOURCE).toMatch(/ingest_setup_check:\s*\{[\s\S]*?\/v1\/sync\/ingest-setup/m)
+  it('diagnose_setup ingest mode is wired to /v1/sync/ingest-setup', () => {
+    expect(SOURCE).toMatch(/diagnose_setup:\s*\{[\s\S]*?\/v1\/sync\/ingest-setup/m)
   })
 
-  it('setup_check handler requires or defaults projectId', () => {
-    expect(SOURCE).toMatch(/setup_check:[\s\S]*?projectIdHint/m)
+  it('diagnose_setup dispatch mode hits the project preflight endpoint', () => {
+    expect(SOURCE).toMatch(/diagnose_setup:\s*\{[\s\S]*?\/preflight/m)
   })
 
-  it('ingest_setup_check rejects JWT callers without projectIdHint', () => {
-    expect(SOURCE).toMatch(/ingest_setup_check:[\s\S]*?!ctx\.projectIdHint[\s\S]*?ingest_setup_check requires API-key auth/m)
+  it('diagnose_setup resolves projectId from args or the API-key project hint', () => {
+    expect(SOURCE).toMatch(/diagnose_setup:[\s\S]*?ctx\.projectIdHint/m)
   })
 })
 

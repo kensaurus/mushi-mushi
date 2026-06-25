@@ -16,6 +16,7 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
 import { useRowFlash } from '../../lib/useRowFlash'
+import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { reportDetailPath } from '../../lib/reportUrl'
 import { useActiveProjectId } from '../ProjectSwitcher'
 import { StatusStepper } from './StatusStepper'
@@ -88,6 +89,7 @@ function ReportRowViewInner({
   preflight,
 }: Props) {
   const activeProjectId = useActiveProjectId()
+  const stagger = useStaggeredAppear({ stepMs: 18, max: 12 })
   const detailPath = reportDetailPath(row.id, activeProjectId)
   const summary = row.summary ?? row.description
   const dedupCount = row.dedup_count ?? 1
@@ -112,10 +114,6 @@ function ReportRowViewInner({
   const cursorCls = isCursor ? 'bg-surface-overlay/40 outline outline-1 outline-brand/40' : ''
   const variantBgCls = isVariant ? 'bg-surface-overlay/30' : ''
   const selectedCls = isSelected ? 'bg-brand/5' : isLoud ? 'bg-danger/5' : variantBgCls
-  // Stagger row entry by 18ms per index up to the first ~12 rows. Caps so a
-  // 200-row page doesn't introduce a 4s wait on the last row; later rows just
-  // share the final delay slot which still reads as "the table painted in".
-  const staggerDelayMs = Math.min(index, 12) * 18
 
   // Wave T.2.5 single-shot background wash when a realtime update flips
   // the status — e.g. triager sees the row go `new → classified` in place.
@@ -147,7 +145,7 @@ function ReportRowViewInner({
       data-row-index={index}
       data-tour-id={index === 0 ? 'reports-row' : undefined}
       style={{
-        ...(staggerDelayMs > 0 ? { animationDelay: `${staggerDelayMs}ms` } : undefined),
+        ...stagger(index),
         ...statusFlash.style,
       }}
       onClick={(e) => {

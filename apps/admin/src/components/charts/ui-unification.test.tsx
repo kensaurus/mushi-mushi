@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { ChartAccessibleSummary, sparklineSummaryRows } from './ChartAccessibleSummary'
@@ -109,15 +111,15 @@ describe('KpiTile hero emphasis + stagger forwarding', () => {
   // Bug 3: MetricStrip(stagger) injects className + style via cloneElement;
   // KpiTile must forward both to the card root or the entrance animation is a
   // complete no-op. Render the real composition the dashboard uses.
-  it('forwards MetricStrip stagger className + style onto KpiTile children', () => {
+  it('wraps MetricStrip stagger children in spring motion containers', () => {
     const html = renderToStaticMarkup(
       <MetricStrip stagger cols={4}>
         <KpiTile label="A" value="1" />
         <KpiTile label="B" value="2" variant="primary" />
       </MetricStrip>,
     )
-    expect(html).toContain('animate-mushi-fade-in')
-    expect(html).toContain('animation-delay')
+    expect(html).toContain('opacity:0')
+    expect(html).toContain('min-w-0 w-full h-full')
     expect(html).not.toContain('lg:col-span-2')
   })
 
@@ -157,5 +159,47 @@ describe('BarSparkline sparse series', () => {
     expect(html).toMatch(/height:\d+px/)
     expect(html).toContain('width:40px')
     expect(html).not.toContain('height:100%')
+  })
+})
+
+const ADMIN_SRC = join(import.meta.dirname, '../..')
+
+/** Files allowed to import framer-motion without also importing useMotionTransition. */
+const FRAMER_MOTION_ALLOWLIST = new Set([
+  'components/providers/MotionProvider.tsx',
+  'lib/motion-tokens.ts',
+  'lib/useMotionTransition.ts',
+  'components/motion/AnimatedDisclosure.tsx',
+  'components/motion/MotionOverlay.tsx',
+  'components/motion/NavSectionStagger.tsx',
+  'components/motion/SpringChromeEnter.tsx',
+])
+
+function walkTsFiles(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name)
+    if (statSync(full).isDirectory()) {
+      if (name === 'node_modules' || name === 'dist') continue
+      walkTsFiles(full, out)
+    } else if (/\.(tsx?|jsx?)$/.test(name)) {
+      out.push(full)
+    }
+  }
+  return out
+}
+
+describe('motion unification guard', () => {
+  it('framer-motion consumers import useMotionTransition or are allowlisted', () => {
+    const violations: string[] = []
+    for (const file of walkTsFiles(ADMIN_SRC)) {
+      const rel = relative(ADMIN_SRC, file).replace(/\\/g, '/')
+      const src = readFileSync(file, 'utf8')
+      if (!src.includes("from 'framer-motion'") && !src.includes('from "framer-motion"')) continue
+      if (FRAMER_MOTION_ALLOWLIST.has(rel)) continue
+      if (!src.includes('useMotionTransition')) {
+        violations.push(rel)
+      }
+    }
+    expect(violations).toEqual([])
   })
 })

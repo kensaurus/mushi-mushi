@@ -16,6 +16,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createMushiServer } from '../server.js'
 import { TOOL_CATALOG, TDD_TOOL_CATALOG, CODEBASE_TOOL_CATALOG, RESOURCE_CATALOG } from '../catalog.js'
+import { DEPRECATED_TOOL_ALIASES, DEFAULT_FEATURE_GROUPS, parseFeaturesParam } from '../feature-groups.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
 const API_KEY = 'mushi_test_key_0123456789'
@@ -325,65 +326,11 @@ describe('tool → REST contract', () => {
     expect(call.body).toEqual({ question: 'top 5 components with critical bugs this week' })
   })
 
-  it('inventory_get calls GET /v1/admin/inventory/:projectId', async () => {
+  it('get_inventory calls GET /v1/admin/inventory/:projectId', async () => {
     fetchStub.enqueue({ ok: true, data: { snapshot: null, summary: {} } })
-    await client.callTool({ name: 'inventory_get', arguments: {} })
+    await client.callTool({ name: 'get_inventory', arguments: {} })
     expect(fetchStub.calls[0].method).toBe('GET')
     expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`)
-  })
-
-  it('ingest_setup_check calls GET /v1/sync/ingest-setup with auth', async () => {
-    fetchStub.enqueue({
-      ok: true,
-      data: {
-        ready: true,
-        required_complete: 4,
-        required_total: 4,
-        project_id: PROJECT_ID,
-        project_name: 'glot.it',
-        steps: [{ id: 'sdk_installed', label: 'SDK heartbeat', complete: true, required: true, hint: '' }],
-      },
-    })
-
-    const res = await client.callTool({ name: 'ingest_setup_check', arguments: {} })
-
-    expect(fetchStub.calls).toHaveLength(1)
-    const call = fetchStub.calls[0]
-    expect(call.method).toBe('GET')
-    expect(call.url).toBe(`${API_ENDPOINT}/v1/sync/ingest-setup`)
-    expect(call.headers['authorization']).toBe(`Bearer ${API_KEY}`)
-    expect(call.headers['x-mushi-api-key']).toBe(API_KEY)
-    expect(call.headers['x-mushi-project-id']).toBe(PROJECT_ID)
-
-    expect(res.isError).toBeFalsy()
-    const content = res.content as Array<{ type: string; text: string }>
-    const parsed = JSON.parse(content[0].text)
-    expect(parsed.ready).toBe(true)
-    expect(parsed.projectId).toBe(PROJECT_ID)
-  })
-
-  it('get_reporter_thread calls GET /v1/admin/reports/:id/timeline (not the non-existent /comments)', async () => {
-    fetchStub.enqueue({ ok: true, data: { report_id: 'rep_77', timeline: [] } })
-    const res = await client.callTool({
-      name: 'get_reporter_thread',
-      arguments: { reportId: 'rep_77' },
-    })
-    expect(fetchStub.calls).toHaveLength(1)
-    const call = fetchStub.calls[0]
-    expect(call.method).toBe('GET')
-    expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/reports/rep_77/timeline`)
-    expect(call.headers['x-mushi-api-key']).toBe(API_KEY)
-    expect(res.isError).toBeFalsy()
-  })
-
-  it('get_activation_status calls GET /v1/admin/activation with optional project override', async () => {
-    fetchStub.enqueue({ ok: true, data: { phase: 'ingesting' } })
-    await client.callTool({
-      name: 'get_activation_status',
-      arguments: { project_id: 'proj_override' },
-    })
-    expect(fetchStub.calls[0].method).toBe('GET')
-    expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/activation?project_id=proj_override`)
   })
 
   it('test_gen_from_report POSTs to inventory test-gen route', async () => {
@@ -536,24 +483,6 @@ describe('account mode (no MUSHI_PROJECT_ID)', () => {
 
   afterEach(async () => { await client.close() })
 
-  it('diagnose_connection does NOT raise mcp_project_id issue when projectId is missing', async () => {
-    // Health check
-    fetchStub.enqueue({ status: 'ok' }, 200)
-    // account-overview (called in account mode)
-    fetchStub.enqueue({ ok: true, data: { projects: [{ id: PROJECT_ID, name: 'Test Project' }], total: 1 } })
-    // ingest-setup
-    fetchStub.enqueue({ ok: true, data: { ready: true, steps: [] } })
-
-    const result = await client.callTool({ name: 'diagnose_connection', arguments: {} })
-    const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text) as {
-      issues: Array<{ check: string }>
-      accessibleProjectCount: number
-    }
-    const checks = parsed.issues.map((i) => i.check)
-    expect(checks).not.toContain('mcp_project_id')
-    expect(parsed.accessibleProjectCount).toBe(1)
-  })
-
   it('get_account_overview sends request to /v1/admin/mcp/account-overview', async () => {
     fetchStub.enqueue({
       ok: true,
@@ -614,5 +543,159 @@ describe('account mode (no MUSHI_PROJECT_ID)', () => {
     expect(text).toContain('PROJECT_ID_REQUIRED')
     expect(text).toContain('App 1')
     expect(text).toContain('App 2')
+  })
+})
+
+// ── New tests for fixes shipped with mcp-glama-quality-uplift ──────────────
+
+describe('deprecated-alias backward compatibility', () => {
+  let fetchStub: ReturnType<typeof createStubFetch>
+  let client: Client
+
+  beforeEach(async () => {
+    fetchStub = createStubFetch()
+    ;({ client } = await connectClient(fetchStub.stub))
+  })
+
+  afterEach(async () => {
+    await client.close()
+  })
+
+  it('old tool names resolve via deprecated-alias map (not in tools/list)', async () => {
+    // Old names must NOT appear in tools/list
+    const { tools } = await client.listTools()
+    const names = new Set(tools.map((t) => t.name))
+    for (const oldName of Object.keys(DEPRECATED_TOOL_ALIASES)) {
+      expect(names.has(oldName), `alias ${oldName} should be hidden from tools/list`).toBe(false)
+    }
+  })
+
+  it('calling an alias (fix_suggest) resolves to suggest_fix and includes deprecation notice', async () => {
+    // suggest_fix calls GET /v1/admin/reports/:reportId — enqueue a minimal report
+    fetchStub.enqueue({
+      ok: true,
+      data: { id: 'r-1', summary: 'null-ref crash', stage2_analysis: null, reproduction_steps: [] },
+    })
+    const result = await client.callTool({
+      name: 'fix_suggest',
+      arguments: { reportId: 'r-1' }, // suggest_fix takes reportId (camelCase)
+    })
+    expect(result.isError).toBeFalsy()
+    const texts = (result.content as Array<{ type: string; text: string }>)
+      .filter((c) => c.type === 'text')
+      .map((c) => c.text)
+    expect(texts.some((t) => t.includes('fix_suggest') && t.includes('suggest_fix'))).toBe(true)
+  })
+
+  it('calling an alias for a removed tool (setup_check → diagnose_setup) resolves', async () => {
+    // diagnose_setup mode=full calls /health, /v1/sync/ingest-setup
+    fetchStub.enqueue({ status: 200 }) // /health
+    fetchStub.enqueue({ ok: true, data: { ready: true, required_complete: 3, required_total: 3, steps: [], project_name: 'Acme' } }) // ingest-setup
+    const result = await client.callTool({ name: 'setup_check', arguments: {} })
+    expect(result.isError).toBeFalsy()
+    const texts = (result.content as Array<{ type: string; text: string }>)
+      .filter((c) => c.type === 'text')
+      .map((c) => c.text)
+    expect(texts.some((t) => t.includes('setup_check') && t.includes('diagnose_setup'))).toBe(true)
+  })
+})
+
+describe('activation_status tool', () => {
+  let fetchStub: ReturnType<typeof createStubFetch>
+  let client: Client
+
+  beforeEach(async () => {
+    fetchStub = createStubFetch()
+    ;({ client } = await connectClient(fetchStub.stub))
+  })
+
+  afterEach(async () => {
+    await client.close()
+  })
+
+  it('is listed in tools/list', async () => {
+    const { tools } = await client.listTools()
+    const found = tools.find((t) => t.name === 'activation_status')
+    expect(found).toBeDefined()
+    expect(found?.description).toBeTruthy()
+  })
+
+  it('calls GET /v1/admin/activation and returns structured data', async () => {
+    const payload = { sdkActive: true, reportsIngested: 5, nextBestAction: 'none' }
+    fetchStub.enqueue({ ok: true, data: payload })
+    const result = await client.callTool({ name: 'activation_status', arguments: {} })
+    expect(result.isError).toBeFalsy()
+    // connectClient sets projectId so the URL includes project_id query param
+    expect(fetchStub.calls[0].url).toContain('/v1/admin/activation')
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text
+    expect(JSON.parse(text)).toMatchObject(payload)
+  })
+})
+
+describe('diagnose_setup connection probes (mode=full)', () => {
+  let client: Client
+
+  afterEach(async () => {
+    await client.close()
+  })
+
+  it('includes connection probes in full-mode output', async () => {
+    const fetchStub = createStubFetch()
+    ;({ client } = await connectClient(fetchStub.stub))
+    // /health probe + ingest-setup
+    fetchStub.enqueue({ status: 200 }) // /health → 200
+    fetchStub.enqueue({ ok: true, data: { ready: true, required_complete: 3, required_total: 3, steps: [], project_name: 'Acme' } })
+    const result = await client.callTool({ name: 'diagnose_setup', arguments: { mode: 'full' } })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text)
+    expect(parsed).toHaveProperty('connection')
+    expect(parsed.connection).toHaveProperty('healthOk', true)
+    expect(parsed.connection.issues).toHaveLength(0)
+  })
+
+  it('reports API-key format issue when key does not start with mushi_', async () => {
+    const stubFetch = createStubFetch()
+    const server = createMushiServer({
+      version: '0.0.0-test',
+      apiEndpoint: API_ENDPOINT,
+      apiKey: 'bad-key-no-prefix', // bad prefix
+      projectId: PROJECT_ID,
+      fetch: stubFetch.stub,
+    })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    const badClient = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} })
+    await Promise.all([server.connect(st), badClient.connect(ct)])
+    stubFetch.enqueue({ status: 200 }) // /health
+    stubFetch.enqueue({ ok: true, data: { ready: true, required_complete: 3, required_total: 3, steps: [], project_name: 'Acme' } })
+    const result = await badClient.callTool({ name: 'diagnose_setup', arguments: { mode: 'full' } })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0].text)
+    const issue = (parsed.connection.issues as Array<{ check: string }>).find((i) => i.check === 'mcp_api_key')
+    expect(issue).toBeDefined()
+    await badClient.close()
+  })
+})
+
+describe('DEFAULT_FEATURE_GROUPS and parseFeaturesParam', () => {
+  it('DEFAULT_FEATURE_GROUPS is the lean set (5 groups)', () => {
+    expect(DEFAULT_FEATURE_GROUPS).toEqual(['triage', 'fixes', 'inventory', 'setup', 'docs'])
+  })
+
+  it('parseFeaturesParam(undefined) returns "all" (backward compat)', () => {
+    expect(parseFeaturesParam(undefined)).toBe('all')
+  })
+
+  it('parseFeaturesParam("all") returns "all"', () => {
+    expect(parseFeaturesParam('all')).toBe('all')
+  })
+
+  it('parseFeaturesParam("triage,fixes") returns the valid groups', () => {
+    expect(parseFeaturesParam('triage,fixes')).toEqual(['triage', 'fixes'])
+  })
+
+  it('parseFeaturesParam with an all-invalid CSV falls back to DEFAULT_FEATURE_GROUPS (not "all")', () => {
+    const result = parseFeaturesParam('trage,fixxes') // typos
+    expect(result).toEqual(DEFAULT_FEATURE_GROUPS)
+    expect(result).not.toBe('all')
   })
 })
