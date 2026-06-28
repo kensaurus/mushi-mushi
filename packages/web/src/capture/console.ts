@@ -13,13 +13,14 @@ export interface ConsoleCapture {
 export function createConsoleCapture(): ConsoleCapture {
   const entries: MushiConsoleEntry[] = [];
   const originals: Partial<Record<string, (...args: unknown[]) => void>> = {};
+  const wrappers: Partial<Record<string, (...args: unknown[]) => void>> = {};
   const levels: Array<MushiConsoleEntry['level']> = ['log', 'warn', 'error', 'info', 'debug'];
 
   for (const level of levels) {
     const original = console[level];
     originals[level] = original;
 
-    console[level] = (...args: unknown[]) => {
+    const wrapper = (...args: unknown[]) => {
       const message = args
         .map((arg) => {
           try {
@@ -48,6 +49,9 @@ export function createConsoleCapture(): ConsoleCapture {
 
       original.call(console, ...args);
     };
+
+    wrappers[level] = wrapper;
+    console[level] = wrapper as typeof console.log;
   }
 
   return {
@@ -59,7 +63,9 @@ export function createConsoleCapture(): ConsoleCapture {
     },
     destroy() {
       for (const level of levels) {
-        if (originals[level]) {
+        // Only restore if our wrapper is still installed — prevents clobbering
+        // another tool's console instrumentation that may have wrapped after us.
+        if (originals[level] && console[level] === wrappers[level]) {
           console[level] = originals[level] as typeof console.log;
         }
       }

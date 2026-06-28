@@ -130,7 +130,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_knowledge_graph',
     title: 'Knowledge graph traversal',
     description:
-      'Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, type }], edges } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug\'s impact area, or get_graph_neighborhood for a tighter BFS around one node.',
+      'Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug\'s impact area, or get_graph_neighborhood for a tighter BFS around one node.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me how this component connects to the rest of the app.',
@@ -167,7 +167,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_gate_findings',
     title: 'Gate findings',
     description:
-      'List the most recent inventory gate findings for a project, newest run first. Returns rows of { gate, severity, status, message, node_ref }; "latest" = the most recent run per gate by created_at. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
+      'List recent inventory gate runs and their findings for a project, newest first. Returns { runs: [{ id, gate, status, findings_count, … }], findings: [{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead-handler | mock-leak | crawl | status-claim) or minimum severity (low|medium|high|critical). Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Show me what CI gates failed on the last run.',
@@ -176,7 +176,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_graph_neighborhood',
     title: 'Graph neighborhood',
     description:
-      'Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, type }], edges } within a depth budget (default 2, max 4). Read-only. Tuned for "what touches this action?"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node\'s row.',
+      'Return the BFS neighborhood around one graph node by id or label: { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for "what touches this action?"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node\'s row.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What nodes connect to this inventory Action within 2 hops?',
@@ -185,7 +185,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'get_graph_node',
     title: 'Graph node detail',
     description:
-      'Fetch one knowledge-graph node row by id: { id, label, type, metadata } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node\'s status; use get_graph_neighborhood to see what connects to it.',
+      'Fetch one knowledge-graph node row by id. Returns { node: { id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok | stale | broken). Read-only. Use to inspect a single node\'s status; use get_graph_neighborhood to see what connects to it.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What status does the graph store on this node id?',
@@ -242,7 +242,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'trigger_judge',
     title: 'Run Sonnet-as-Judge',
     description:
-      'Queue the Sonnet-as-Judge to grade the quality of recent fixes across a batch of classified reports. Returns { batchId }; graded scores land asynchronously in the judge_results table (read them back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window — re-running for the same batch re-grades rather than duplicating. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.',
+      'Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns { dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Grade the latest batch of fixes before I ship.',
@@ -278,9 +278,9 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'refresh_ci',
     title: 'Refresh fix CI status',
     description:
-      'Re-poll GitHub for the latest check-run status of a fix attempt\'s PR and persist it. Returns { ciStatus: pending|success|failure|neutral, checks: [{ name, conclusion }] }. Read-only (mutates nothing on GitHub). Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.',
-    scope: 'mcp:read',
-    hints: { readOnly: true, idempotent: true, openWorld: true },
+      'Re-poll GitHub for the latest check-run status of a fix attempt\'s PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns { check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Check whether CI is green before merging.',
   },
   {
@@ -433,7 +433,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'list_lessons',
     title: 'List project lessons',
     description:
-      'List the promoted learning rules ("lessons") for the current project, newest first. Each lesson is a named pattern of mistakes encoded from past bug reports. Returns { lessons: [{ id, title, rule, severity, source_report_ids }] }. Read-only. Use to see the full catalog of encoded heuristics; use query_lessons to retrieve only the lessons relevant to a specific diff or PR within a token budget.',
+      'List promoted learning rules ("lessons") for the current project, highest-frequency first. Returns { lessons: [{ id, rule_text, severity, frequency, anti_pattern, … }] }. Read-only. Use to browse the full catalog of encoded heuristics; use query_lessons to retrieve only lessons relevant to a specific diff or PR within a token budget.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What systemic patterns has Mushi identified for this project?',
@@ -849,7 +849,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'search_codebase',
     title: 'Semantic codebase search',
     description:
-      'Search the indexed repo by plain-English meaning via embeddings. Returns top-k { results: [{ path, startLine, endLine, snippet, similarity }] } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives ("where do we verify webhooks?"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.',
+      'Search the indexed repo by plain-English meaning via embeddings. Returns { results: [{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives ("where do we verify webhooks?"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Find files related to authentication or payment handling.',
@@ -867,7 +867,7 @@ export const CODEBASE_TOOL_CATALOG: ToolSpec[] = [
     name: 'analyze_codebase_impact',
     title: 'Diff impact analysis',
     description:
-      'Find the files that depend on a set of changed paths by walking the reverse import graph. Source the paths from: manual list, the last push, a GitHub compare range, or a fix PR\'s files. Returns { impacted: [{ path, importedBy }], depth }. Requires codebase indexing. Read-only. Use to gauge a diff\'s blast radius before merging; use get_blast_radius for a bug\'s component impact, or search_codebase to locate files.',
+      'Find files that depend on a set of changed paths by walking the reverse import graph. Source paths from: manual list, last push, a GitHub compare range, or a fix PR\'s files. Returns { changed_paths, source, affected_file_paths, affected_node_ids, meta }. Requires codebase indexing. Read-only. Use to gauge a diff\'s blast radius before merging; use get_blast_radius for a bug\'s component impact, or search_codebase to locate files.',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'What breaks if I change lib/auth.ts?',

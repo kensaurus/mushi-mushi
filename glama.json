@@ -9,7 +9,7 @@
   "tools": [
     {
       "name": "get_recent_reports",
-      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey the triage queue; for one report use get_report_detail, to find a bug by text use search_reports."
+      "description": "List recent bug reports for a project, newest first. Returns { reports: [{ id, status, category, severity, summary, created_at }], total }. Optional filters: status (new|classified|grouped|fixing|fixed|verified|reopened|dismissed), category (bug|slow|visual|confusing|other), severity (critical|high|medium|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports."
     },
     {
       "name": "get_report_detail",
@@ -161,7 +161,7 @@
     },
     {
       "name": "activation_status",
-      "description": "Return the unified activation posture — SDK heartbeat, reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }."
+      "description": "Return the unified activation posture — SDK heartbeat, ingested reports, GitHub, MCP readiness, QA stories, and the next best action. Read this before guessing which onboarding step is blocking the user. Also available as the mushi://activation resource for resource-reader clients. Returns { sdkActive, reportsIngested, githubConnected, mcpConnected, qaStoriesCreated, nextBestAction }."
     },
     {
       "name": "map_user_stories",
