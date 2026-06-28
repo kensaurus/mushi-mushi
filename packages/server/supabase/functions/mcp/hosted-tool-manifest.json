@@ -65,7 +65,7 @@
     "required": ["fixId"]
   },
   "refresh_ci": {
-    "scope": "mcp:read",
+    "scope": "mcp:write",
     "description": "Refresh GitHub CI status for a fix.",
     "method": "POST",
     "path": "/v1/admin/fixes/{fixId}/refresh-ci",
