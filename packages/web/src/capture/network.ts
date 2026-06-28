@@ -64,7 +64,9 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
   const originalFetch = globalThis.fetch;
   let activeOptions = options;
 
-  globalThis.fetch = async function mushiFetchInterceptor(
+  // eslint-disable-next-line prefer-const
+  let fetchWrapper: typeof globalThis.fetch;
+  globalThis.fetch = fetchWrapper = async function mushiFetchInterceptor(
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
@@ -148,7 +150,12 @@ export function createNetworkCapture(options: NetworkCaptureOptions = {}): Netwo
       activeOptions = nextOptions;
     },
     destroy() {
-      globalThis.fetch = originalFetch;
+      // Only restore if our wrapper is still active — prevents clobbering
+      // another tool's fetch instrumentation (Sentry, Datadog, etc.) that
+      // may have wrapped on top of us after Mushi initialized.
+      if (globalThis.fetch === fetchWrapper) {
+        globalThis.fetch = originalFetch;
+      }
     },
   };
 }

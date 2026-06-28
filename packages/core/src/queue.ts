@@ -479,6 +479,9 @@ export function createOfflineQueue(config: MushiOfflineConfig = {}): OfflineQueu
 
   function startAutoSync(client: MushiApiClient): void {
     if (!enabled || !syncOnReconnect || typeof window === 'undefined') return;
+    // Re-entrancy guard: if already running, stop first to prevent leaking
+    // the prior online listener and interval.
+    if (syncCleanup) stopAutoSync();
 
     const tryFlush = () => {
       if (navigator.onLine) {

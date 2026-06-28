@@ -143,8 +143,9 @@ describe('MCP protocol handshake', () => {
       // Skill pipeline write tools
       'start_skill_pipeline',
       'checkin_pipeline_step',
-      // Fix-merge + reopen write tools (refresh_ci is read-only)
+      // Fix-merge + reopen + CI refresh write tools
       'merge_fix',
+      'refresh_ci',
       'reopen_report',
       // Codebase Understand: ask_codebase triggers LLM generation (mcp:write);
       // get_file_summary / get_codebase_tour are read-only.

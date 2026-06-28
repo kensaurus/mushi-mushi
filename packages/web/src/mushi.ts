@@ -40,6 +40,7 @@ import { MushiWidget } from './widget';
 import { exposeMarketingRecorder } from './marketing-recorder';
 import {
   initRewards,
+  teardown as teardownRewards,
   enqueue as enqueueActivity,
   getTier as getRewardsTier,
   fetchLeaderboard,
@@ -1350,6 +1351,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       networkCap?.destroy();
       perfCap?.destroy();
       elementSelector?.deactivate();
+      // Teardown global-wrapper captures in REVERSE install order (LIFO) so
+      // each restore correctly unwinds its own layer without clobbering the
+      // layer beneath it.  Install order: timeline (~line 212) → breadcrumbs
+      // (~line 449).  Teardown: breadcrumbs first, then timeline.
+      detachAutoBreadcrumbs?.();
+      detachAutoBreadcrumbs = null;
       timelineCap.destroy();
       discoveryCap?.destroy();
       discoveryCap = null;
@@ -1359,8 +1366,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       replayCap = null;
       offlineQueue.stopAutoSync();
       stopReporterInboxPolling();
-      detachAutoBreadcrumbs?.();
-      detachAutoBreadcrumbs = null;
+      teardownRewards();
       breadcrumbs.clear();
       listeners.clear();
       instance = null;
@@ -2190,10 +2196,13 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
     window.addEventListener('popstate', onPop, { passive: true });
     cleanups.push(() => window.removeEventListener('popstate', onPop));
 
-    const origPush = window.history.pushState;
-    const origReplace = window.history.replaceState;
-    window.history.pushState = function patched(...args: Parameters<History['pushState']>) {
-      const ret = origPush.apply(this, args);
+    // Capture originals as closure consts before wrapping so a re-install
+    // can never bind to our own wrapper.  Store wrapper refs for the
+    // identity-checked restore below.
+    const capturedPush = window.history.pushState.bind(window.history);
+    const capturedReplace = window.history.replaceState.bind(window.history);
+    const pushPatched = function patched(this: History, ...args: Parameters<History['pushState']>) {
+      const ret = capturedPush(...args);
       try {
         dispatchRouteChange('pushState');
       } catch {
@@ -2202,8 +2211,8 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
       }
       return ret;
     };
-    window.history.replaceState = function patched(...args: Parameters<History['replaceState']>) {
-      const ret = origReplace.apply(this, args);
+    const replacePatched = function patched(this: History, ...args: Parameters<History['replaceState']>) {
+      const ret = capturedReplace(...args);
       try {
         dispatchRouteChange('replaceState');
       } catch {
@@ -2211,9 +2220,17 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
       }
       return ret;
     };
+    window.history.pushState = pushPatched as typeof history.pushState;
+    window.history.replaceState = replacePatched as typeof history.replaceState;
     cleanups.push(() => {
-      window.history.pushState = origPush;
-      window.history.replaceState = origReplace;
+      // Identity-check before restoring — defense-in-depth alongside the
+      // LIFO teardown order in destroy().
+      if (window.history.pushState === pushPatched) {
+        window.history.pushState = capturedPush as typeof history.pushState;
+      }
+      if (window.history.replaceState === replacePatched) {
+        window.history.replaceState = capturedReplace as typeof history.replaceState;
+      }
     });
   } catch {
     // History API unavailable (some sandboxed iframes) — skip silently.
@@ -2226,7 +2243,7 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
   try {
     const origError = console.error;
     const origWarn = console.warn;
-    console.error = function (...args: unknown[]) {
+    const errorWrapper = function (this: typeof console, ...args: unknown[]) {
       try {
         buffer.add({
           category: 'console',
@@ -2238,7 +2255,7 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
       }
       return origError.apply(this, args as Parameters<typeof origError>);
     };
-    console.warn = function (...args: unknown[]) {
+    const warnWrapper = function (this: typeof console, ...args: unknown[]) {
       try {
         buffer.add({
           category: 'console',
@@ -2250,9 +2267,13 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
       }
       return origWarn.apply(this, args as Parameters<typeof origWarn>);
     };
+    console.error = errorWrapper as typeof console.error;
+    console.warn = warnWrapper as typeof console.warn;
     cleanups.push(() => {
-      console.error = origError;
-      console.warn = origWarn;
+      // Identity-check before restoring — prevents clobbering another tool
+      // that may have wrapped console.error/warn after us.
+      if (console.error === errorWrapper) console.error = origError;
+      if (console.warn === warnWrapper) console.warn = origWarn;
     });
   } catch {
     // Console patching can fail in locked-down environments — non-fatal.

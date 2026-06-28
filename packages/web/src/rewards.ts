@@ -305,7 +305,10 @@ export function teardown(): void {
 let routeObserver: MutationObserver | null = null;
 let clickHandler: ((e: MouseEvent) => void) | null = null;
 let popstateHandler: (() => void) | null = null;
+/** Underlying pushState captured at install time — restored on teardown. */
 let origPushState: typeof history.pushState | null = null;
+/** Our wrapper reference — used to detect idempotent re-install. */
+let pushStateWrapper: typeof history.pushState | null = null;
 let lastRoute = '';
 let listenersInstalled = false;
 
@@ -316,7 +319,15 @@ function installActivityListeners(projectId: string): void {
   // function and re-add the popstate/click/MutationObserver handlers, leaking
   // listeners and double-counting activity events. Re-identifying a user must
   // not re-install DOM hooks. `removeActivityListeners` resets the flag.
-  if (listenersInstalled) return;
+  if (listenersInstalled && pushStateWrapper && history.pushState === pushStateWrapper) {
+    return;
+  }
+
+  // Partial state (e.g. HMR) — tear down before re-installing.
+  if (listenersInstalled) {
+    removeActivityListeners();
+  }
+
   listenersInstalled = true;
 
   // Route: pushState + popstate
@@ -331,11 +342,16 @@ function installActivityListeners(projectId: string): void {
     }
   };
 
-  origPushState = history.pushState.bind(history);
-  history.pushState = function (...args: Parameters<typeof history.pushState>) {
-    origPushState!(...args);
+  // Capture current pushState into a closure const before wrapping — never
+  // read the mutable module-level origPushState inside the wrapper or a
+  // re-init can bind to our own wrapper and recurse until stack overflow.
+  const capturedPushState = history.pushState.bind(history);
+  origPushState = capturedPushState;
+  pushStateWrapper = function (...args: Parameters<typeof history.pushState>) {
+    capturedPushState(...args);
     emitRoute();
   };
+  history.pushState = pushStateWrapper;
   popstateHandler = emitRoute;
   window.addEventListener('popstate', emitRoute);
   emitRoute(); // record initial route
@@ -359,10 +375,11 @@ function installActivityListeners(projectId: string): void {
 function removeActivityListeners(): void {
   listenersInstalled = false;
   // Restore original pushState before removing listeners
-  if (origPushState) {
+  if (origPushState && history.pushState === pushStateWrapper) {
     history.pushState = origPushState;
-    origPushState = null;
   }
+  origPushState = null;
+  pushStateWrapper = null;
   if (popstateHandler) {
     window.removeEventListener('popstate', popstateHandler);
     popstateHandler = null;
