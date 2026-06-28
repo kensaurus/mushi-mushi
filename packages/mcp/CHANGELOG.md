@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.18.1
+
+### Patch Changes
+
+- 7a7f2db: Improve TDQS on bottom-tier MCP tools: accurate return-shape descriptions, outputSchema on 14 low-scoring tools, fix refresh_ci scope/annotations (mcp:write), and enrich parameter descriptions.
+- Updated dependencies [7a7f2db]
+  - @mushi-mushi/core@1.22.2
+
 ## 0.18.0
 
 ### Minor Changes

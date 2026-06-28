@@ -1,5 +1,14 @@
 # @mushi-mushi/web
 
+## 1.22.2
+
+### Patch Changes
+
+- 7a7f2db: Fix `Mushi.destroy()` leaving stale global wrappers after teardown. `history.pushState`, `globalThis.fetch`, and `console.error/warn` are now restored with an identity check (only unwrap if our wrapper is still installed), preventing clobbering of Sentry, Datadog, or other instrumentation that wrapped the same globals after Mushi. Teardown order is now LIFO (breadcrumbs before timeline) to correctly unwind the wrapper chain.
+- 7a7f2db: Fix rewards activity tracker double-wrapping `history.pushState` on re-init (stack overflow). `Mushi.destroy()` now tears down rewards listeners.
+- Updated dependencies [7a7f2db]
+  - @mushi-mushi/core@1.22.2
+
 ## 1.22.1
 
 ### Patch Changes

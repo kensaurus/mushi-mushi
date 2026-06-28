@@ -1,5 +1,11 @@
 # @mushi-mushi/core
 
+## 1.22.2
+
+### Patch Changes
+
+- 7a7f2db: Fix `startAutoSync` in the offline queue leaking an `online` event listener and `setInterval` when called more than once (e.g. config reload). Calling `startAutoSync` a second time now stops the previous sync loop before starting a fresh one.
+
 ## 1.22.1
 
 ### Patch Changes
