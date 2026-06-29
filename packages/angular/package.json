@@ -20,12 +20,12 @@
     "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
-    "@angular/core": "^22.0.1",
+    "@angular/core": "^22.0.2",
     "@mushi-mushi/eslint-config": "workspace:*",
     "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   },
   "author": "Kenji Sakuramoto (https://bsky.app/profile/mushimushi.dev)",
   "repository": {
