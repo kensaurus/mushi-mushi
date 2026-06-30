@@ -15,6 +15,7 @@
 
 import type { MushiApiClient, MushiRewardsConfig, MushiTierResult, MushiActivityEvent } from '@mushi-mushi/core';
 import { sha256Hex, MUSHI_COLORS_LIGHT } from '@mushi-mushi/core';
+import { subscribeHistory } from './history-patch';
 
 const MIN_FLUSH_INTERVAL = 30_000;
 const DEFAULT_FLUSH_INTERVAL = 300_000; // 5 min
@@ -304,11 +305,7 @@ export function teardown(): void {
 
 let routeObserver: MutationObserver | null = null;
 let clickHandler: ((e: MouseEvent) => void) | null = null;
-let popstateHandler: (() => void) | null = null;
-/** Underlying pushState captured at install time — restored on teardown. */
-let origPushState: typeof history.pushState | null = null;
-/** Our wrapper reference — used to detect idempotent re-install. */
-let pushStateWrapper: typeof history.pushState | null = null;
+let historyUnsub: (() => void) | null = null;
 let lastRoute = '';
 let listenersInstalled = false;
 
@@ -319,7 +316,7 @@ function installActivityListeners(projectId: string): void {
   // function and re-add the popstate/click/MutationObserver handlers, leaking
   // listeners and double-counting activity events. Re-identifying a user must
   // not re-install DOM hooks. `removeActivityListeners` resets the flag.
-  if (listenersInstalled && pushStateWrapper && history.pushState === pushStateWrapper) {
+  if (listenersInstalled && historyUnsub) {
     return;
   }
 
@@ -330,7 +327,6 @@ function installActivityListeners(projectId: string): void {
 
   listenersInstalled = true;
 
-  // Route: pushState + popstate
   const emitRoute = () => {
     const route = location.pathname;
     if (route === lastRoute) return;
@@ -342,19 +338,12 @@ function installActivityListeners(projectId: string): void {
     }
   };
 
-  // Capture current pushState into a closure const before wrapping — never
-  // read the mutable module-level origPushState inside the wrapper or a
-  // re-init can bind to our own wrapper and recurse until stack overflow.
-  const capturedPushState = history.pushState.bind(history);
-  origPushState = capturedPushState;
-  pushStateWrapper = function (...args: Parameters<typeof history.pushState>) {
-    capturedPushState(...args);
-    emitRoute();
-  };
-  history.pushState = pushStateWrapper;
-  popstateHandler = emitRoute;
-  window.addEventListener('popstate', emitRoute);
-  emitRoute(); // record initial route
+  historyUnsub = subscribeHistory({
+    onPush: emitRoute,
+    onReplace: emitRoute,
+    onPop: emitRoute,
+  });
+  emitRoute();
 
   // DOM mutation observer for SPA route changes that don't use pushState
   routeObserver = new MutationObserver(() => emitRoute());
@@ -374,16 +363,8 @@ function installActivityListeners(projectId: string): void {
 
 function removeActivityListeners(): void {
   listenersInstalled = false;
-  // Restore original pushState before removing listeners
-  if (origPushState && history.pushState === pushStateWrapper) {
-    history.pushState = origPushState;
-  }
-  origPushState = null;
-  pushStateWrapper = null;
-  if (popstateHandler) {
-    window.removeEventListener('popstate', popstateHandler);
-    popstateHandler = null;
-  }
+  historyUnsub?.();
+  historyUnsub = null;
   routeObserver?.disconnect();
   routeObserver = null;
   if (clickHandler) {

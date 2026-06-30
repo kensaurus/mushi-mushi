@@ -1,5 +1,6 @@
 import type { MushiApiCascadeConfig, MushiUrlMatcher } from '@mushi-mushi/core'
 import { getInternalRequestKind, getRequestUrl, shouldIgnoreMushiUrl } from './internal-requests'
+import { subscribeHistory } from './history-patch'
 
 export interface ProactiveTriggerConfig {
   rageClick?: boolean
@@ -176,30 +177,14 @@ export function setupProactiveTriggers(
     }
     arm()
 
-    // Patch History API to detect SPA navigations. Most SPAs use
-    // pushState/replaceState; popstate covers back/forward.
-    const history = window.history
-    const origPush = history?.pushState
-    const origReplace = history?.replaceState
-    if (history && origPush && origReplace) {
-      history.pushState = function (...args) {
-        const result = origPush.apply(this, args)
-        reset()
-        return result
-      }
-      history.replaceState = function (...args) {
-        const result = origReplace.apply(this, args)
-        reset()
-        return result
-      }
-    }
-    const onPop = (): void => reset()
-    window.addEventListener('popstate', onPop)
+    const unsubHistory = subscribeHistory({
+      onPush: reset,
+      onReplace: reset,
+      onPop: reset,
+    })
     cleanups.push(() => {
       if (timer) clearTimeout(timer)
-      window.removeEventListener('popstate', onPop)
-      if (history && origPush) history.pushState = origPush
-      if (history && origReplace) history.replaceState = origReplace
+      unsubHistory()
     })
   }
 

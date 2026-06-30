@@ -34,6 +34,7 @@
  */
 
 import type { MushiDiscoverInventoryConfig } from '@mushi-mushi/core';
+import { subscribeHistory } from '../history-patch';
 
 export interface DiscoveryEvent {
   route: string;
@@ -290,43 +291,19 @@ export function createDiscoveryCapture(opts: DiscoveryCaptureOptions): Discovery
     };
   }
 
-  // Patch history.pushState / replaceState.
-  const originalPush = window.history.pushState.bind(window.history);
-  const originalReplace = window.history.replaceState.bind(window.history);
-  const patchedPush: typeof window.history.pushState = function patched(
-    ...args
-  ) {
-    const out = originalPush(...args);
-    onMaybeNavigation();
-    return out;
-  };
-  const patchedReplace: typeof window.history.replaceState = function patched(
-    ...args
-  ) {
-    const out = originalReplace(...args);
-    onMaybeNavigation();
-    return out;
-  };
-  window.history.pushState = patchedPush;
-  window.history.replaceState = patchedReplace;
-
-  const onPop = () => onMaybeNavigation();
-  window.addEventListener('popstate', onPop);
+  const onNav = () => onMaybeNavigation();
+  const unsubHistory = subscribeHistory({
+    onPush: onNav,
+    onReplace: onNav,
+    onPop: onNav,
+  });
 
   // Initial emission for the landing page.
   scheduleEmit();
 
   return {
     destroy() {
-      window.removeEventListener('popstate', onPop);
-      // Best-effort restoration; if another piece of code patched it
-      // after us, leave it alone.
-      if (window.history.pushState === patchedPush) {
-        window.history.pushState = originalPush;
-      }
-      if (window.history.replaceState === patchedReplace) {
-        window.history.replaceState = originalReplace;
-      }
+      unsubHistory();
       if (pendingTimer) {
         clearTimeout(pendingTimer);
         pendingTimer = null;
