@@ -1,4 +1,5 @@
 import type { MushiConsoleEntry, MushiNetworkEntry, MushiTimelineEntry } from '@mushi-mushi/core';
+import { subscribeHistory } from '../history-patch';
 
 const MAX_TIMELINE_ENTRIES = 120;
 
@@ -15,13 +16,6 @@ export interface TimelineCapture {
 export function createTimelineCapture(): TimelineCapture {
   const entries: MushiTimelineEntry[] = [];
 
-  // Capture originals into closure consts before wrapping — never read a
-  // mutable ref inside the wrapper (same pattern as rewards.ts) so that a
-  // double-install can never bind to our own wrapper and recurse.
-  const capturedPushState = history.pushState.bind(history);
-  const capturedReplaceState = history.replaceState.bind(history);
-
-  const handlePopState = () => recordRoute('popstate');
   const handleHashChange = () => recordRoute('hashchange');
 
   recordRoute('initial');
@@ -59,24 +53,12 @@ export function createTimelineCapture(): TimelineCapture {
     });
   }
 
-  // Store wrapper refs so destroy() can identity-check before restoring —
-  // prevents clobbering another tool's wrapper that installed after us.
-  const pushStateWrapper = function mushiPushState(this: History, ...args: Parameters<History['pushState']>) {
-    const result = capturedPushState(...args);
-    recordRoute('pushState');
-    return result;
-  } as typeof history.pushState;
+  const unsubHistory = subscribeHistory({
+    onPush: () => recordRoute('pushState'),
+    onReplace: () => recordRoute('replaceState'),
+    onPop: () => recordRoute('popstate'),
+  });
 
-  const replaceStateWrapper = function mushiReplaceState(this: History, ...args: Parameters<History['replaceState']>) {
-    const result = capturedReplaceState(...args);
-    recordRoute('replaceState');
-    return result;
-  } as typeof history.replaceState;
-
-  history.pushState = pushStateWrapper;
-  history.replaceState = replaceStateWrapper;
-
-  window.addEventListener('popstate', handlePopState);
   window.addEventListener('hashchange', handleHashChange);
   document.addEventListener('click', handleClick, true);
 
@@ -117,17 +99,7 @@ export function createTimelineCapture(): TimelineCapture {
       entries.length = 0;
     },
     destroy() {
-      // Only restore if our wrapper is still the active one — prevents
-      // clobbering another layer that wrapped on top of us (e.g. breadcrumbs
-      // installed after timeline). destroy() in mushi.ts tears down outer
-      // wrappers first (LIFO) before reaching here.
-      if (history.pushState === pushStateWrapper) {
-        history.pushState = capturedPushState as typeof history.pushState;
-      }
-      if (history.replaceState === replaceStateWrapper) {
-        history.replaceState = capturedReplaceState as typeof history.replaceState;
-      }
-      window.removeEventListener('popstate', handlePopState);
+      unsubHistory();
       window.removeEventListener('hashchange', handleHashChange);
       document.removeEventListener('click', handleClick, true);
     },

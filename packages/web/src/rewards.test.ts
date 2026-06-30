@@ -103,40 +103,15 @@ describe('rewards pushState — idempotent install', () => {
     expect(() => history.pushState({}, '', '/double-init')).not.toThrow();
   });
 
-  it('re-init while listeners installed but pushState already unwrapped (partial-state / HMR) does not stack-overflow', () => {
-    // This is the regression path: the module-level `listenersInstalled` flag
-    // was reset to false (e.g. by a raw `listenersInstalled = false` in an
-    // HMR reload of a dependent) while the wrapper is still installed in the
-    // browser's history object.  Naively calling initRewards() again would
-    // read `origPushState` (which already points at the wrapper) and create a
-    // recursive chain.
-    //
-    // We simulate this by:
-    //   1. Init normally — wrapper installed, origPushState = native.
-    //   2. Capture the native reference before install.
-    //   3. Manually slip the wrapper back without going through teardown —
-    //      i.e. as if listenersInstalled was reset mid-flight.
-    //   4. Call initRewards() again — the partial-state branch must detect
-    //      the stale install, tear down cleanly, and re-wrap without recursion.
-
-    const native = history.pushState;
+  it('re-init after stale hub wrapper left on history does not stack-overflow', () => {
     initRewards(ctx);
-    const firstWrapper = history.pushState;
-    expect(firstWrapper).not.toBe(native); // wrapper installed
+    const hubWrapper = history.pushState;
+    expect(hubWrapper).not.toBe(History.prototype.pushState);
 
-    // Simulate partial-state: teardown() resets listenersInstalled = false
-    // but the wrapper is still in place.  We achieve this by calling teardown
-    // and then manually re-installing just the wrapper (bypassing initRewards).
     teardown();
-    history.pushState = firstWrapper; // re-install stale wrapper manually
+    history.pushState = hubWrapper;
 
-    // Now re-init must not blow the stack — the partial-state branch should
-    // detect the stale wrapper, call removeActivityListeners, then re-wrap.
     expect(() => initRewards(ctx)).not.toThrow();
-
-    // After re-init, a fresh wrapper is installed (not the stale one), and
-    // pushing routes must not recurse.
-    expect(history.pushState).not.toBe(firstWrapper);
     expect(() => {
       for (let i = 0; i < 50; i++) {
         history.pushState({}, '', `/partial-state-${i}`);

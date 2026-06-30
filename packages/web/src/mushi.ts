@@ -66,6 +66,7 @@ import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version';
+import { subscribeHistory, uninstallHistoryPatchForce } from './history-patch';
 
 /** Resolve `reports.app_version` from SDK config and captured environment. */
 export function resolveReportAppVersion(
@@ -1351,22 +1352,22 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       networkCap?.destroy();
       perfCap?.destroy();
       elementSelector?.deactivate();
-      // Teardown global-wrapper captures in REVERSE install order (LIFO) so
-      // each restore correctly unwinds its own layer without clobbering the
-      // layer beneath it.  Install order: timeline (~line 212) → breadcrumbs
-      // (~line 449).  Teardown: breadcrumbs first, then timeline.
+      // Teardown history subscribers in REVERSE install order (LIFO).
+      // Install: timeline → discovery → breadcrumbs → rewards (identify) → proactive.
+      // Teardown: rewards → breadcrumbs → discovery → timeline (proactive above).
+      teardownRewards();
       detachAutoBreadcrumbs?.();
       detachAutoBreadcrumbs = null;
-      timelineCap.destroy();
       discoveryCap?.destroy();
       discoveryCap = null;
+      timelineCap.destroy();
+      uninstallHistoryPatchForce();
       // Replay capture holds rrweb MutationObservers/listeners (or the lite
       // click listener) that keep firing after teardown if not destroyed.
       replayCap?.destroy();
       replayCap = null;
       offlineQueue.stopAutoSync();
       stopReporterInboxPolling();
-      teardownRewards();
       breadcrumbs.clear();
       listeners.clear();
       instance = null;
@@ -2192,46 +2193,13 @@ function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
         data: { url: window.location.href, kind },
       });
     };
-    const onPop = () => dispatchRouteChange('popstate');
-    window.addEventListener('popstate', onPop, { passive: true });
-    cleanups.push(() => window.removeEventListener('popstate', onPop));
 
-    // Capture originals as closure consts before wrapping so a re-install
-    // can never bind to our own wrapper.  Store wrapper refs for the
-    // identity-checked restore below.
-    const capturedPush = window.history.pushState.bind(window.history);
-    const capturedReplace = window.history.replaceState.bind(window.history);
-    const pushPatched = function patched(this: History, ...args: Parameters<History['pushState']>) {
-      const ret = capturedPush(...args);
-      try {
-        dispatchRouteChange('pushState');
-      } catch {
-        // Swallow — never break navigation because the breadcrumb buffer
-        // mis-stringified an URL.
-      }
-      return ret;
-    };
-    const replacePatched = function patched(this: History, ...args: Parameters<History['replaceState']>) {
-      const ret = capturedReplace(...args);
-      try {
-        dispatchRouteChange('replaceState');
-      } catch {
-        // Swallow.
-      }
-      return ret;
-    };
-    window.history.pushState = pushPatched as typeof history.pushState;
-    window.history.replaceState = replacePatched as typeof history.replaceState;
-    cleanups.push(() => {
-      // Identity-check before restoring — defense-in-depth alongside the
-      // LIFO teardown order in destroy().
-      if (window.history.pushState === pushPatched) {
-        window.history.pushState = capturedPush as typeof history.pushState;
-      }
-      if (window.history.replaceState === replacePatched) {
-        window.history.replaceState = capturedReplace as typeof history.replaceState;
-      }
+    const unsubHistory = subscribeHistory({
+      onPush: () => dispatchRouteChange('pushState'),
+      onReplace: () => dispatchRouteChange('replaceState'),
+      onPop: () => dispatchRouteChange('popstate'),
     });
+    cleanups.push(unsubHistory);
   } catch {
     // History API unavailable (some sandboxed iframes) — skip silently.
   }
