@@ -66,7 +66,11 @@ function ensurePatch(): void {
   pushWrapper = function historyPatchPushState(
     ...args: Parameters<History['pushState']>
   ) {
-    const ret = capturedPushState!(...args);
+    // Fall back to prototype if capturedPushState was nulled by a concurrent
+    // uninstall (e.g. an outer third-party wrapper still holds this reference
+    // after Mushi.destroy() — avoids crashing navigation post-teardown).
+    const call = capturedPushState ?? History.prototype.pushState.bind(history);
+    const ret = call(...args);
     notifyPush();
     return ret;
   } as typeof history.pushState;
@@ -74,7 +78,8 @@ function ensurePatch(): void {
   replaceWrapper = function historyPatchReplaceState(
     ...args: Parameters<History['replaceState']>
   ) {
-    const ret = capturedReplaceState!(...args);
+    const call = capturedReplaceState ?? History.prototype.replaceState.bind(history);
+    const ret = call(...args);
     notifyReplace();
     return ret;
   } as typeof history.replaceState;
@@ -112,8 +117,10 @@ function uninstallPatch(): void {
 
 /** Register for history changes. Installs the shared patch on first subscriber. */
 export function subscribeHistory(sub: HistorySubscriber): () => void {
-  subscribers.add(sub);
+  // ensurePatch first — if it throws (sandboxed iframe with locked History API)
+  // the subscriber must not be added, so callers can recover a clean state.
   ensurePatch();
+  subscribers.add(sub);
   return () => {
     subscribers.delete(sub);
     if (subscribers.size === 0) {
