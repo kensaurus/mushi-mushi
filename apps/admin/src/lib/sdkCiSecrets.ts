@@ -160,7 +160,7 @@ export function sdkCiStatusMeta(
           ? 'CI secrets present and the SDK has been seen from native builds.'
           : 'CI secrets present — waiting for first native heartbeat.',
         severity: 'ok',
-        cta: 'Re-sync secrets',
+        cta: hasGithubToken ? 'Re-sync secrets' : 'Copy setup commands',
         playbookSteps: [
           `Confirm ${envPair} are still in your ${envWhere} workflow for ${env.stackLabel} builds.`,
           'OTA updates cannot retrofit compile-time keys — trigger a fresh native build after any secret change.',

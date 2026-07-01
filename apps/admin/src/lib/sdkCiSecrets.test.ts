@@ -87,4 +87,13 @@ describe('sdkCiStatusMeta', () => {
     const meta = sdkCiStatusMeta('ci-secret-missing', false)
     expect(meta.cta.toLowerCase()).toContain('copy')
   })
+
+  it('shows copy fallback CTA for healthy status when no GitHub token', () => {
+    // Regression: the CTA previously stayed "Re-sync secrets" even without a
+    // token, which paired with an enabled button that called sync() and was
+    // guaranteed to fail. Healthy status must fall back like every other
+    // status once there's no token to act on.
+    const meta = sdkCiStatusMeta('healthy', false)
+    expect(meta.cta.toLowerCase()).toContain('copy')
+  })
 })

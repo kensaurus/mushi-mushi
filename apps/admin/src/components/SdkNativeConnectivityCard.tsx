@@ -393,7 +393,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 size="sm"
                 variant="primary"
                 loading={isSyncing}
-                disabled={!diag || (!diag.hasGithubToken && status !== 'healthy' && !loading)}
+                disabled={!diag || (!diag.hasGithubToken && !loading)}
                 onClick={() => {
                   reset()
                   setShowFallback(false)
