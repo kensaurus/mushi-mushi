@@ -2827,6 +2827,49 @@ select, input, textarea {
   }
 }
 
+/* Generic row action reveal — touch-visible, hover/focus on fine pointers (Wave 5). */
+@media (hover: hover) and (pointer: fine) {
+  .action-reveal {
+    opacity: 0;
+  }
+  .group:hover .action-reveal,
+  .group:focus-within .action-reveal,
+  :hover > .action-reveal,
+  :focus-within > .action-reveal {
+    opacity: 1;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .action-reveal {
+    opacity: 0.92;
+  }
+}
+.action-reveal {
+  transition: opacity var(--duration-fast, 150ms) ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-reveal {
+    transition: none;
+  }
+}
+
+@utility text-link {
+  color: var(--color-fg-secondary);
+  transition: color var(--duration-fast, 150ms) ease;
+  &:hover {
+    color: var(--color-brand);
+  }
+}
+
+@utility text-link-emphasis {
+  color: var(--color-brand);
+  font-weight: 500;
+  transition: color var(--duration-fast, 150ms) ease;
+  &:hover {
+    color: color-mix(in oklch, var(--color-brand) 85%, white);
+  }
+}
+
 /* Reports triage — `<td>` children can't use flex `h-full` reliably. Stretch
    the cell with `height: 1px`, then absolutely position slots: metrics at
    vertical center, recency bar at the row bottom. */

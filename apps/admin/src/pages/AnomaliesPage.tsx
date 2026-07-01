@@ -38,7 +38,7 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
-import { AnomaliesStatusBanner } from '../components/anomalies/AnomaliesStatusBanner'
+import { AnomaliesStatusBanner, isAnomaliesStatusBannerCritical } from '../components/anomalies/AnomaliesStatusBanner'
 import { AnomaliesDetectionGuide } from '../components/anomalies/AnomaliesDetectionGuide'
 import { AnomaliesSnapshotStrip } from '../components/anomalies/AnomaliesSnapshotStrip'
 import { AnomaliesReadout } from '../components/anomalies/AnomaliesReadout'
@@ -304,6 +304,7 @@ export function AnomaliesPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: isAnomaliesStatusBannerCritical(stats),
             children: (
               <AnomaliesStatusBanner
                 stats={stats}
@@ -332,8 +333,12 @@ export function AnomaliesPage() {
             priority: POSTURE_PRIORITY.guide,
             show:
               activeTab === 'overview' &&
-              !shouldHideGuideWhenBannerActive(true, COMMON_HEALTHY_PRIORITIES, stats.topPriority),
-            children: <AnomaliesDetectionGuide topPriority={stats.topPriority} />,
+              !shouldHideGuideWhenBannerActive(
+                isAnomaliesStatusBannerCritical(stats),
+                COMMON_HEALTHY_PRIORITIES,
+                stats.topPriority,
+              ),
+            children: <AnomaliesDetectionGuide topPriority={stats.topPriority} stats={stats} />,
           },
         ]}
       />

@@ -10,7 +10,6 @@ import { Link } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { PageHero } from '../components/PageHero'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
@@ -18,7 +17,6 @@ import { apiFetch } from '../lib/supabase'
 import { ContainedBlock, InlineProof } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
-import { useAdminMode } from '../lib/mode'
 import { FeatureBoardReadout } from '../components/feature-board/FeatureBoardReadout'
 import { FeatureBoardSnapshotStrip } from '../components/feature-board/FeatureBoardSnapshotStrip'
 import { type FeatureBoardClientStats } from '../components/feature-board/FeatureBoardStatsTypes'
@@ -328,7 +326,6 @@ function FeatureRow({
 
 export function FeatureBoardPage() {
   const toast = useToast()
-  const { isAdvanced } = useAdminMode()
   const projectId = useActiveProjectId()
   const [sort, setSort] = useState<SortKey>('votes')
   const [search, setSearch] = useState('')
@@ -458,15 +455,11 @@ export function FeatureBoardPage() {
     actions: [{ id: 'feature-board-refresh', label: 'Refresh', hint: 'Reload requests', run: reload }],
   })
 
-  const decideSeverity =
-    openCount > 0 ? ('info' as const) : shippedCount > 0 ? ('ok' as const) : ('neutral' as const)
-
   return (
     <div className="space-y-4">
       <PageHeaderBar
         title="Feature board"
-        withPageHero={isAdvanced}
-        description="Vote on feature requests and track what ships."
+        withPageHero={false}
         helpTitle="About the feature board"
         helpWhatIsIt="Community feature requests from the Feedback form, ranked by votes. Operators can mark items shipped and notify requesters."
         helpUseCases={[
@@ -485,45 +478,6 @@ export function FeatureBoardPage() {
           </Btn>
         </Link>
       </PageHeaderBar>
-
-      {isAdvanced ? (
-      <PageHero
-        scope="community"
-        title="Feature board"
-        kicker="Start"
-        decide={{
-          label: openCount > 0 ? `${openCount} open request${openCount === 1 ? '' : 's'}` : 'Vote on ideas',
-          metric: tickets.length > 0 ? `${totalVotes} vote${totalVotes === 1 ? '' : 's'}` : undefined,
-          summary:
-            tickets.length === 0
-              ? 'Feature requests from the Feedback form appear here. Sort by votes to prioritize what users want.'
-              : topRequest
-                ? `Top request: “${topRequest.subject.slice(0, 48)}${topRequest.subject.length > 48 ? '…' : ''}” (${topRequest.vote_count} votes).`
-                : 'Sort by most-voted to see community priority. Your vote toggles on and off.',
-          severity: decideSeverity,
-        }}
-        act={
-          topRequest && topRequest.vote_count > 0
-            ? {
-                title: `Review “${topRequest.subject.slice(0, 36)}${topRequest.subject.length > 36 ? '…' : ''}”`,
-                tone: 'plan',
-                reason: `${topRequest.vote_count} vote${topRequest.vote_count === 1 ? '' : 's'} · ${topRequest.user_email}`,
-                primary: {
-                  kind: 'link',
-                  to: '/feedback',
-                  label: 'Submit feedback',
-                },
-              }
-            : null
-        }
-        verify={{
-          label: 'Shipped proof',
-          detail: shippedCount > 0 ? `${shippedCount} in a release` : 'Webhook on ship',
-          secondaryTo: '/releases',
-          secondaryLabel: 'Releases',
-        }}
-      />
-      ) : null}
 
       <PagePosture
         slots={[

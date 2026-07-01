@@ -6,7 +6,8 @@
 import { hasPageOwnedHero, shouldSkipLayoutHero } from './pageHeroOwnership'
 
 /** Layout-injected PageHero fallback — off when the page owns loop chrome. */
-export function shouldShowLayoutPageHero(pathname: string): boolean {
+export function shouldShowLayoutPageHero(pathname: string, postureHasStatusBanner = false): boolean {
+  if (postureHasStatusBanner) return false
   return !shouldSkipLayoutHero(pathname)
 }
 

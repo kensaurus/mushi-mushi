@@ -391,20 +391,15 @@ export function HelpBanner({
   )
 }
 
-/** Suppresses internal TAB_META / "Banner + …" dev copy under snapshot sections. */
+/** @deprecated Prefer PagePosture guide slot (POSTURE_PRIORITY.guide). Renders nothing — hints belong in posture, not under snapshots (Wave 5). */
 export function SnapshotSectionHint({
-  text,
-  className = 'mb-3',
+  text: _text,
+  className: _className = 'mb-3',
 }: {
   text?: string | null
   className?: string
 }) {
-  if (isDevFacingHint(text) || !text) return null
-  return (
-    <HelpBanner tone="neutral" className={className}>
-      <p className="text-2xs leading-relaxed text-fg-muted">{text}</p>
-    </HelpBanner>
-  )
+  return null
 }
 
 /** Same filter for one-line scope hints under page headers. */

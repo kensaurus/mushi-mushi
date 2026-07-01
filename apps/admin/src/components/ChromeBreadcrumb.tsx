@@ -6,7 +6,6 @@
 
 import { Link, useLocation } from 'react-router-dom'
 import { routeFallbackTitle } from '../lib/navRegistry'
-import { chipForPath } from '../lib/pdca'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 
@@ -16,7 +15,6 @@ export function ChromeBreadcrumb() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name
   const routeLabel = routeFallbackTitle(pathname) ?? 'Console'
-  const stage = chipForPath(pathname)
 
   return (
     <nav
@@ -42,11 +40,6 @@ export function ChromeBreadcrumb() {
       <span className="text-fg-secondary font-medium truncate" aria-current="page">
         {routeLabel}
       </span>
-      {stage && stage !== 'overview' && (
-        <span className="ml-1 rounded border border-edge-subtle px-1 py-px text-3xs uppercase tracking-wider text-fg-faint">
-          {stage}
-        </span>
-      )}
     </nav>
   )
 }

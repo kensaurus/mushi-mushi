@@ -14,3 +14,15 @@ export function shouldHideGuideWhenBannerActive(
 }
 
 export const COMMON_HEALTHY_PRIORITIES = ['healthy', 'clear', 'nominal'] as const
+
+/** Beginner/quick: hide config snapshot when status banner already carries the headline. */
+export function shouldHideConfigSnapshot(
+  hideByMode: boolean,
+  isBeginner: boolean,
+  topPriority: string,
+  healthyPriorities: readonly string[] = COMMON_HEALTHY_PRIORITIES,
+): boolean {
+  if (hideByMode) return true
+  if (isBeginner && !healthyPriorities.includes(topPriority)) return true
+  return false
+}

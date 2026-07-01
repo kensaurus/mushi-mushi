@@ -9,17 +9,25 @@ import {
   QA_COVERAGE_EXPLAINER_SUMMARY,
   QA_PROVIDER_DEFINITIONS,
 } from '../../lib/qaProviderGuide'
-import type { QaCoverageTopPriority } from './QaCoverageStatsTypes'
+import { qaProviderOverlay } from '../../lib/guideLiveOverlay'
+import type { QaCoverageStats, QaCoverageTopPriority } from './QaCoverageStatsTypes'
 
 interface Props {
   topPriority?: QaCoverageTopPriority
+  stats?: Pick<QaCoverageStats, 'failingStories' | 'totalStories' | 'topPriority'>
 }
 
-export function QaProviderGuideCard({ topPriority }: Props) {
+export function QaProviderGuideCard({ topPriority, stats }: Props) {
   const needsGuidance =
     topPriority === 'no_stories' ||
     topPriority === 'no_project' ||
     topPriority === 'no_runs'
+
+  const live = stats ?? {
+    failingStories: 0,
+    totalStories: 0,
+    topPriority: topPriority ?? 'healthy',
+  }
 
   return (
     <FeatureExplainPanel
@@ -28,18 +36,21 @@ export function QaProviderGuideCard({ topPriority }: Props) {
       defaultOpen={needsGuidance}
     >
       <div className="space-y-1">
-        {QA_PROVIDER_DEFINITIONS.map((provider) => (
-          <WorkflowStageRow
-            key={provider.id}
-            id={provider.id}
-            shortLabel={provider.label}
-            posture="info"
-            metric={provider.tagline}
-            plain={provider.tradeoffs}
-            actionLine={`Requires: ${provider.requires}`}
-            examples={[provider.bestFor]}
-          />
-        ))}
+        {QA_PROVIDER_DEFINITIONS.map((provider) => {
+          const overlay = qaProviderOverlay(provider.id, live)
+          return (
+            <WorkflowStageRow
+              key={provider.id}
+              id={provider.id}
+              shortLabel={provider.label}
+              metric={overlay.metric ?? provider.tagline}
+              posture={overlay.posture}
+              plain={provider.tradeoffs}
+              actionLine={overlay.actionLine ?? `Requires: ${provider.requires}`}
+              examples={[provider.bestFor]}
+            />
+          )
+        })}
       </div>
       <p className="text-2xs text-fg-faint">
         Add Browserbase or Firecrawl keys under{' '}

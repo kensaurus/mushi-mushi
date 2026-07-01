@@ -211,7 +211,19 @@ export function SsoPage() {
               COMMON_HEALTHY_PRIORITIES,
               stats.topPriority,
             ),
-            children: <SsoProtocolGuide topPriority={stats.topPriority} />,
+            children: (
+              <SsoProtocolGuide
+                topPriority={stats.topPriority}
+                flags={{
+                  samlConfigured: configs.some(
+                    (c) => c.provider_type === 'saml' && c.registration_status === 'registered',
+                  ),
+                  oidcConfigured: configs.some(
+                    (c) => c.provider_type === 'oidc' && c.registration_status === 'registered',
+                  ),
+                }}
+              />
+            ),
           },
         ]}
       />

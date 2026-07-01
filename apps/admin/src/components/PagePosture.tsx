@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { PAGE_STACK } from '../lib/pageLayout'
+import { usePublishPostureHasStatusBanner } from '../lib/postureChromeStore'
 import { SpringChromeEnter } from './motion/SpringChromeEnter'
 
 export interface PagePostureSlot {
@@ -61,6 +62,9 @@ export function PagePosture({ slots, maxRows, className }: PagePostureProps) {
     .filter((slot) => slot.show !== false && slot.children != null)
     .sort((a, b) => a.priority - b.priority)
     .slice(0, cap)
+
+  const hasStatusBanner = visible.some((slot) => slot.priority <= POSTURE_PRIORITY.status)
+  usePublishPostureHasStatusBanner(hasStatusBanner)
 
   if (visible.length === 0) return null
 

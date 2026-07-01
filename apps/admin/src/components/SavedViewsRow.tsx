@@ -110,7 +110,7 @@ export function SavedViewsRow({ scope, currentQuery, onApply, isActive }: Props)
                 type="button"
                 onClick={() => handleRemove(v.id, v.name)}
                 aria-label={`Remove saved view ${v.name}`}
-                className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-fg-faint opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 hover:text-danger focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger/60"
+                className="ml-0.5 action-reveal inline-flex h-4 w-4 items-center justify-center rounded-full text-fg-faint focus:opacity-100 hover:text-danger focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger/60"
               >
                 <span aria-hidden className="text-2xs leading-none">×</span>
               </button>

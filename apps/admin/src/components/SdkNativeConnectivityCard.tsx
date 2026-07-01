@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, Btn, Tooltip, CopyButton } from './ui'
 import { IconAlertTriangle, IconCheck, IconGit, IconKey, IconRefresh } from './icons'
 import { apiFetch } from '../lib/supabase'
@@ -63,6 +64,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [showFallback, setShowFallback] = useState(false)
   const [showRawKey, setShowRawKey] = useState(false)
+  const [showPlaybook, setShowPlaybook] = useState(false)
   const diagRef = useRef(false)
 
   const { state: syncState, sync, reset } = useCiSecretSync(projectId)
@@ -111,7 +113,10 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
   const envVars = mushiEnvVarsForProjectSlug(projectSlug)
   const status: SdkDiagnosticStatus = diag?.status ?? 'unknown'
-  const meta = sdkCiStatusMeta(status, diag?.hasGithubToken ?? false)
+  const meta = sdkCiStatusMeta(status, diag?.hasGithubToken ?? false, projectSlug, {
+    nativeEverSeen: diag?.nativeEverSeen ?? false,
+    launcherMode: diag?.launcherMode ?? null,
+  })
 
   // Determine fallback commands to display (from sync result or diag).
   const fallback = syncState.fallback ?? null
@@ -124,32 +129,40 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
   return (
     <Card>
       <div className="p-4 space-y-4">
-        {/* Header */}
-        <div className="flex flex-wrap items-center gap-3">
-          <IconGit className="h-5 w-5 text-fg-muted shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-fg">Native app CI secrets</p>
-            <p className="text-xs text-fg-muted">
-              Mushi SDK env vars must be baked in at build time for Capacitor, Expo, and native
-              store builds.{' '}
-              <a
-                href="https://docs.mushi-mushi.dev/sdks"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                Docs →
-              </a>
-            </p>
+        {/* Header — dynamic headline matches SdkHealthSummary voice */}
+        <div className="flex flex-wrap items-start gap-3">
+          <IconGit className="h-5 w-5 text-fg-muted shrink-0 mt-0.5" aria-hidden />
+          <div className="min-w-0 flex-1 space-y-1">
+            {!loading && diag ? (
+              <>
+                <p className="text-sm font-medium text-fg">{meta.headline}</p>
+                <p className="text-xs text-fg-muted">{meta.subtitle}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-fg">Checking native build setup…</p>
+                <p className="text-xs text-fg-muted">
+                  Verifying GitHub Actions secrets for{' '}
+                  <span className="font-medium">{envVars.stackLabel}</span> builds.{' '}
+                  <a
+                    href="https://docs.mushi-mushi.dev/sdks"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    Docs →
+                  </a>
+                </p>
+              </>
+            )}
           </div>
-          {/* Status chip */}
           {!loading && diag && (
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium shrink-0 ${STATUS_CHIP_CLASS[status]}`}
               role="status"
             >
               {STATUS_ICON[status]}
-              {meta.label}
+              {meta.chipLabel}
             </span>
           )}
           {loading && (
@@ -165,42 +178,39 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
           <p className="text-xs text-[var(--color-error-foreground)]">{fetchError}</p>
         )}
 
-        {/* Diagnosis detail */}
-        {!loading && diag && status !== 'healthy' && (
+        {/* Diagnosis detail — missing vars only; playbook holds fix steps */}
+        {!loading && diag && status !== 'healthy' && diag.missingVars && diag.missingVars.length > 0 && (
           <div className="rounded-sm border border-edge-subtle/60 bg-surface-overlay/40 p-3 text-xs space-y-1.5">
-            <p className="font-medium text-fg-secondary">{meta.description}</p>
-            {diag.missingVars && diag.missingVars.length > 0 && (
-              <div>
-                <p className="text-fg-muted mb-1">Missing GitHub Actions secrets/variables:</p>
-                <ul className="space-y-0.5">
-                  {diag.missingVars.map((v) => (
-                    <li key={v}>
-                      <code className="font-mono text-2xs text-[var(--color-error-foreground)] bg-danger/5 rounded px-1 py-0.5">
-                        {v}
-                      </code>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {status === 'ci-secret-missing' && (
-              <p className="text-fg-muted">
-                <strong className="font-medium text-fg-secondary">Two ways to fix this.</strong>{' '}
-                One-click sync needs a fine-grained GitHub PAT with{' '}
-                <strong className="font-medium">Actions secrets: Read and write</strong>, stored in{' '}
-                <a href="/integrations/config" className="underline underline-offset-2 hover:text-fg">
-                  Settings → GitHub
-                </a>
-                . The Mushi GitHub App can open PRs but cannot write Actions secrets, so without a
-                PAT use the copy-paste commands below — both bake the same vars into your next build.
-              </p>
-            )}
-            {!diag.bannerEnabled && (
-              <p className="text-warn">
-                The SDK launcher is set to <strong>{diag.launcherMode ?? 'auto'}</strong>.
-                Set it to <strong>banner</strong> in{' '}
-                <a href="/projects" className="underline">SDK Config</a> to show the lime strip.
-              </p>
+            <p className="text-fg-muted">Missing from GitHub Actions:</p>
+            <ul className="space-y-0.5">
+              {diag.missingVars.map((v) => (
+                <li key={v}>
+                  <code className="font-mono text-2xs text-[var(--color-error-foreground)] bg-danger/5 rounded px-1 py-0.5">
+                    {v}
+                  </code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!loading && diag && meta.playbookSteps.length > 0 && status !== 'healthy' && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 text-xs font-medium text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              onClick={() => setShowPlaybook((v) => !v)}
+              aria-expanded={showPlaybook}
+            >
+              <span className="font-mono text-fg-faint" aria-hidden>{showPlaybook ? '▴' : '▾'}</span>
+              How to fix
+            </button>
+            {showPlaybook && (
+              <ol className="list-decimal pl-4 space-y-1.5 text-2xs text-fg-secondary">
+                {meta.playbookSteps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
             )}
           </div>
         )}
@@ -209,12 +219,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
         {!loading && diag && status === 'healthy' && (
           <div className="flex items-center gap-2 rounded-sm border border-ok/20 bg-ok/5 px-3 py-2 text-xs text-ok">
             <IconCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span>
-              CI secrets present.{' '}
-              {diag.nativeEverSeen
-                ? 'Native SDK has reported from a Capacitor/iOS/Android build.'
-                : 'Waiting for first native heartbeat after CI build.'}
-            </span>
+            <span>{meta.subtitle}</span>
           </div>
         )}
 
@@ -369,8 +374,13 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* CTAs */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {/* Primary: sync */}
-          {status !== 'banner-disabled' && (
+          {status === 'banner-disabled' ? (
+            <Link to="/projects">
+              <Btn size="sm" variant="primary">
+                {meta.cta}
+              </Btn>
+            </Link>
+          ) : (
             <Tooltip
               content={
                 !diag?.hasGithubToken
@@ -383,7 +393,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 size="sm"
                 variant="primary"
                 loading={isSyncing}
-                disabled={!diag || (!diag.hasGithubToken && !loading)}
+                disabled={!diag || (!diag.hasGithubToken && status !== 'healthy' && !loading)}
                 onClick={() => {
                   reset()
                   setShowFallback(false)
@@ -394,23 +404,22 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 {syncDone ? (
                   <>
                     <IconRefresh className="h-3.5 w-3.5" aria-hidden />
-                    Re-sync secrets
+                    {meta.cta}
                   </>
                 ) : (
-                  'Sync CI secrets'
+                  meta.cta
                 )}
               </Btn>
             </Tooltip>
           )}
 
-          {/* Fallback toggle (always available when there's a repo) */}
-          {(diag?.repoUrl || fallback) && !showFallback && (
+          {(diag?.repoUrl || fallback) && !showFallback && status !== 'banner-disabled' && (
             <Btn
               size="sm"
               variant="ghost"
               onClick={() => setShowFallback(true)}
             >
-              Copy commands
+              {hasGithubTokenFallbackLabel(diag?.hasGithubToken ?? false)}
             </Btn>
           )}
         </div>
@@ -436,6 +445,10 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 // ---------------------------------------------------------------------------
 // Inline fallback commands when no sync has been run yet
 // ---------------------------------------------------------------------------
+
+function hasGithubTokenFallbackLabel(hasToken: boolean): string {
+  return hasToken ? 'Show manual commands' : 'Copy setup commands'
+}
 
 function FallbackCommandsFromDiag({
   repoUrl,

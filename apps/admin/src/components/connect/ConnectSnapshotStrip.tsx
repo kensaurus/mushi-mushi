@@ -92,7 +92,7 @@ export function ConnectSnapshotStrip({
           to={connectLinks.github}
         />
         <StatCard
-          label={statLabels?.sdkHeartbeat ?? 'SDK heartbeat'}
+          label={statLabels?.sdkHeartbeat ?? 'SDK live'}
           value={sdkConnected ? 'Live' : '—'}
           accent={sdkConnected ? 'text-ok' : 'text-warn'}
           tooltip={sdkHeartbeatTooltip(input)}
@@ -123,7 +123,7 @@ export function ConnectSnapshotStrip({
         />
         {!compact ? (
           <StatCard
-            label={statLabels?.mcpUnused ?? 'Unused MCP keys'}
+            label={statLabels?.mcpUnused ?? 'Unused keys'}
             value={mcpStats.neverConnectedCount}
             accent={mcpStats.neverConnectedCount > 0 ? 'text-warn' : 'text-ok'}
             tooltip={mcpConnectedTooltip(input)}

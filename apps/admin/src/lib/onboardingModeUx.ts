@@ -35,7 +35,7 @@ export function useOnboardingUx(): OnboardingUxFlags {
     // it must SEE the explainer, not have it hidden like Advanced power users
     // who don't need hand-holding. (Previously `!isAdvanced` hid it from exactly
     // the beginners who needed it most.)
-    hideOverviewChrome: isQuickstart,
+    hideOverviewChrome: true,
     plainBanner: !isAdvanced,
     hideOptionalStat: isQuickstart,
     hideFooterLinks: isQuickstart,

@@ -4,19 +4,31 @@
 
 import { Link } from 'react-router-dom'
 import { FeatureExplainPanel } from '../FeatureExplainPanel'
+import { WorkflowStageRow } from '../workflow/WorkflowStageRow'
 import {
   REPORTS_TRIAGE_SUMMARY,
   TRIAGE_SEVERITY_DEFINITIONS,
 } from '../../lib/reportsExplainer'
-import type { ReportsTopPriority } from './ReportsStatsTypes'
+import { reportsSeverityOverlay } from '../../lib/guideLiveOverlay'
+import type { ReportsStats, ReportsTopPriority } from './ReportsStatsTypes'
 
 interface Props {
   topPriority?: ReportsTopPriority
+  stats?: Pick<
+    ReportsStats,
+    'critical14d' | 'high14d' | 'newUntriaged' | 'openBacklog' | 'topPriority'
+  >
 }
 
-// `topPriority` is accepted (passed by ReportsPage) but not yet surfaced in
-// this static severity guide; keep it on Props so the call site stays typed.
-export function ReportsTriageGuide(_props: Props) {
+export function ReportsTriageGuide({ topPriority, stats }: Props) {
+  const live = stats ?? {
+    critical14d: 0,
+    high14d: 0,
+    newUntriaged: 0,
+    openBacklog: 0,
+    topPriority: topPriority ?? 'clear',
+  }
+
   return (
     <FeatureExplainPanel
       title="How severity and triage work"
@@ -24,6 +36,22 @@ export function ReportsTriageGuide(_props: Props) {
       category="guide"
       defaultOpen={false}
     >
+      <div className="space-y-1 mb-3">
+        {TRIAGE_SEVERITY_DEFINITIONS.map((sev) => {
+          const overlay = reportsSeverityOverlay(sev.id, live)
+          return (
+            <WorkflowStageRow
+              key={sev.id}
+              id={sev.id}
+              shortLabel={sev.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={sev.plain}
+              actionLine={overlay.actionLine ?? sev.triageHint}
+            />
+          )
+        })}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[28rem] text-left text-2xs">
           <thead>

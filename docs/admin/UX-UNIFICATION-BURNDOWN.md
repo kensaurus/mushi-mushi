@@ -1,7 +1,7 @@
 # Admin Console UX Unification Burndown
 
 > Living burndown for Design System v2 chrome budget, snapshot strips, and responsive tab patterns.
-> Updated after full operator-route posture pass (Jun 22 2026).
+> Updated Jul 1 2026 after Phase 6 admin burndown (human alerts + guide liveData + brand token pipeline).
 
 ## Canonical pattern (target state)
 
@@ -111,7 +111,7 @@ pnpm lint
 pnpm lint:tokens
 ```
 
-Manual: each operator route at 390 / 768 / 1280 px in Beginner mode — max 2 chrome rows before work UI.
+Manual (localhost:6464): `/health`, `/drift`, `/code-health`, `/anomalies`, `/connect`, `/integrations`, `/settings` — expand feature guides; confirm live metric chips on `WorkflowStageRow`; warn/danger banners show primary CTA (not ghost-only). Phase 5 chrome dedupe Playwright-verified Jul 1 2026 — see [`UX-WAVE5-BASELINE.md`](./UX-WAVE5-BASELINE.md). Phase 6 human-alert flows — see `.cursor/burndown-state.md`.
 
 ---
 
@@ -196,3 +196,55 @@ Manual: each operator route at 390 / 768 / 1280 px in Beginner mode — max 2 ch
 | Product decisions | ✅ | [`SDK-UI-UNIFICATION-DECISIONS.md`](./SDK-UI-UNIFICATION-DECISIONS.md) |
 
 **Verify:** `node scripts/check-design-tokens.mjs`, `pnpm --filter @mushi-mushi/web test`, `pnpm --filter @mushi-mushi/admin lint`, `examples/e2e-dogfood/tests/sdk-widget-a11y.spec.ts` (with dogfood host running).
+
+---
+
+## Phase 5 — Cross-layer chrome dedupe (Jul 2026)
+
+**Plan:** [`UX-WAVE5-BASELINE.md`](./UX-WAVE5-BASELINE.md) · audit script `scripts/audit-admin-ux-wave5.mjs`
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Breadcrumb ↔ PageHeaderBar dedupe (PDCA chip, project scope) | ✅ | `locationChrome.ts`, `ChromeBreadcrumb.tsx` |
+| RoutePageHelp owns long copy — suppress inline `description` | ✅ | `PageHeaderBar.tsx` |
+| Layout PageHero gated when posture status banner active | ✅ | `postureChromeStore.ts`, `PagePosture.tsx`, `Layout.tsx` |
+| NextBestAction hidden when posture banner carries next step | ✅ | `NextBestAction.tsx` |
+| `SnapshotSectionHint` deprecated → guide slot only | ✅ | `layout.tsx` (no-op) |
+| Brand budget tokens (`text-link`, `action-reveal`) | ✅ | `index.css` |
+| PageHero removed on posture-first routes (Explore, Health, QA, …) | ✅ | `*ModeUx.ts` flags |
+| Settings hint dedupe template | ✅ | `SettingsPage.tsx`, `shouldHideConfigSnapshot` |
+| Connect RelatedRail + section description dedupe | ✅ | `ConnectPage.tsx` |
+| Playwright chrome budget → 44 routes | ✅ | `admin-chrome-budget.spec.ts` |
+| Static hint-duplication audit | ✅ | `scripts/audit-admin-hint-duplication.mjs` |
+
+**Playwright PDCA (localhost:6464, Jul 1 2026):** Manual headed verification of Wave 5 blast radius — dashboard (Advanced + Beginner), settings, connect, qa-coverage, explore, health, drift, feature-board. All PASS; posture rows ≤ budget; no inline PageHero on posture-first routes; breadcrumb without PDCA chip. Evidence: [`UX-WAVE5-BASELINE.md`](./UX-WAVE5-BASELINE.md) § Playwright PDCA + screenshots under `.playwright-mcp/admin-ux-wave5/`.
+
+---
+
+## Phase 6 — Human alerts + guide liveData + brand tokens (Jul 2026)
+
+**Plan:** UX burndown finish (Tracks A–C) · machine state in `.cursor/burndown-state.md`
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Drift / Code health / Anomalies banners → `StatusBannerAction` | ✅ | `humanPageHints` fallbacks; `is*StatusBannerCritical()` on pages |
+| Connect native CI copy (`SdkNativeConnectivityCard`) | ✅ | `sdkCiSecrets` headline + playbook; voice aligned with `SdkHealthSummary` |
+| `humanAlertsBurndown.ts` — all rows `done` | ✅ | `apps/admin/src/lib/humanAlertsBurndown.ts` |
+| DTCG `brand.tokens.json` → `editorial.css` | ✅ | `pnpm build:brand-tokens`; CI `check:brand-tokens-fresh` |
+| `guideLiveOverlay.ts` — 17 overlay families | ✅ | health, judge, projects, qa, integrations, drift, code-health, anomalies, explore, onboarding, skills, rewards, sso, compliance, prompt-lab, reports, settings |
+| Guide components wired to live stats | ✅ | All `liveData: 'done'` in `featureExplainBurndown.ts` |
+| Vitest overlay coverage | ✅ | `guideLiveOverlay.test.ts` (18 cases) |
+
+**Intentionally deferred:** auto-generating `packages/core/src/design-tokens.ts` from JSON; RN web-step parity per [`SDK-UI-UNIFICATION-DECISIONS.md`](./SDK-UI-UNIFICATION-DECISIONS.md).
+
+**Verify:**
+
+```bash
+cd apps/admin && pnpm typecheck && pnpm test && pnpm lint && pnpm lint:tokens
+rg 'variant="ghost"' apps/admin/src/components/{drift,code-health,anomalies}/   # expect 0
+rg "liveData: 'partial'" apps/admin/src/lib/featureExplainBurndown.ts           # expect 0
+node scripts/check-design-tokens.mjs
+pnpm check:brand-tokens-fresh   # after committing packages/brand/src/editorial.css
+```
+
+Manual (localhost:6464): `/health`, `/drift`, `/code-health`, `/anomalies`, `/connect`, `/integrations`, `/settings` — expand feature guides; confirm live metric chips on `WorkflowStageRow`; warn/danger banners show primary CTA (not ghost-only).

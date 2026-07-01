@@ -24,7 +24,7 @@ export function useDriftUx(): DriftUxFlags {
     isAdvanced,
     hideTabs: isQuickstart,
     plainBanner: !isAdvanced,
-    hideOverviewChrome: !isAdvanced,
+    hideOverviewChrome: true,
     hideDriftSnapshot: isQuickstart,
   }
 }
