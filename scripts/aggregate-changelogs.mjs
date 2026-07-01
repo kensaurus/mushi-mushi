@@ -321,7 +321,11 @@ async function loadPendingChangeset() {
     majorMinor: latestTag === 'pending' ? 'next' : latestTag.split('.').slice(0, 2).join('.'),
     versions: new Set(latestTag === 'pending' ? [] : [latestTag]),
     packages: new Map(),
-    headline: slot.headline ?? `${latestTag} (pending release)`,
+    // NOTE: renderMarkdown() already appends " *(pending release)*" whenever
+    // `pending: true` (see the `pendingTag` line below) — don't duplicate that
+    // text in the default headline, or the rendered header reads
+    // "## pending (pending release) *(pending release)*".
+    headline: slot.headline ?? (latestTag === 'pending' ? 'Unreleased' : latestTag),
     highlights: slot.bullets,
     pending: true,
   }
