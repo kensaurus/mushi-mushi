@@ -23,6 +23,10 @@
   "sideEffects": [
     "**/*.css"
   ],
+  "scripts": {
+    "build:tokens": "node scripts/build-tokens.mjs",
+    "prebuild": "pnpm build:tokens"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -42,5 +46,8 @@
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/kensaurus"
+  },
+  "devDependencies": {
+    "style-dictionary": "^4.4.0"
   }
 }

@@ -1,72 +1,50 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
-  "$description": "W3C DTCG 2025.10 primitive source for Mushi editorial + widget palette. Builds editorial.css and @mushi-mushi/core mirrors via Style Dictionary (planned).",
+  "$description": "W3C DTCG 2025.10 primitive source for Mushi editorial + widget palette. Builds editorial.css via Style Dictionary.",
   "color": {
-    "paper": {
-      "$type": "color",
-      "$value": "#f8f4ed",
-      "$description": "Washi cream — primary light surface"
-    },
-    "paper-wash": {
-      "$type": "color",
-      "$value": "#efe7da"
-    },
-    "ink": {
-      "$type": "color",
-      "$value": "#0e0d0b",
-      "$description": "Sumi black — primary text on light paper"
-    },
-    "ink-muted": {
-      "$type": "color",
-      "$value": "#5c5852"
-    },
-    "ink-faint": {
-      "$type": "color",
-      "$value": "#9a9489"
-    },
-    "vermillion": {
-      "$type": "color",
-      "$value": "#e03c2c",
-      "$description": "朱 hanko red — signature accent"
-    },
-    "vermillion-wash": {
-      "$type": "color",
-      "$value": "rgba(224, 60, 44, 0.08)"
-    },
-    "vermillion-ink": {
-      "$type": "color",
-      "$value": "#7a1f15"
-    },
-    "jade": {
-      "$type": "color",
-      "$value": "#2d7a55",
-      "$description": "Muted editorial pass/OK green — never a CTA"
-    },
-    "banner-neon-bg": {
-      "$type": "color",
-      "$value": "#0fff50",
-      "$description": "Default SDK neon banner strip"
-    },
-    "banner-neon-fg": {
-      "$type": "color",
-      "$value": "#0a1a0a"
-    },
-    "banner-neon-border": {
-      "$type": "color",
-      "$value": "#00c43a"
-    },
-    "dark-paper": {
-      "$type": "color",
-      "$value": "#0f0e0c"
-    },
-    "dark-ink": {
-      "$type": "color",
-      "$value": "#f2ebdd"
-    },
-    "dark-ink-muted": {
-      "$type": "color",
-      "$value": "#928b7e"
-    }
+    "paper": { "$type": "color", "$value": "#f8f4ed", "$description": "Washi cream — primary light surface" },
+    "paper-wash": { "$type": "color", "$value": "#efe7da" },
+    "ink": { "$type": "color", "$value": "#0e0d0b", "$description": "Sumi black — primary text on light paper" },
+    "ink-muted": { "$type": "color", "$value": "#5c5852" },
+    "ink-faint": { "$type": "color", "$value": "#9a9489" },
+    "rule": { "$type": "color", "$value": "rgba(14, 13, 11, 0.12)" },
+    "vermillion": { "$type": "color", "$value": "#e03c2c", "$description": "朱 hanko red — signature accent" },
+    "vermillion-wash": { "$type": "color", "$value": "rgba(224, 60, 44, 0.08)" },
+    "vermillion-ink": { "$type": "color", "$value": "#7a1f15" },
+    "jade": { "$type": "color", "$value": "#2d7a55", "$description": "Muted editorial pass/OK green — never a CTA" },
+    "jade-wash": { "$type": "color", "$value": "rgba(45, 122, 85, 0.09)" },
+    "dark-paper": { "$type": "color", "$value": "#0f0e0c" },
+    "dark-ink": { "$type": "color", "$value": "#f2ebdd" },
+    "dark-ink-muted": { "$type": "color", "$value": "#928b7e" },
+    "code-surface": { "$type": "color", "$value": "#1a1917" },
+    "code-surface-fg": { "$type": "color", "$value": "#f2ebdd" },
+    "code-surface-fg-muted": { "$type": "color", "$value": "#b8b0a4" },
+    "code-surface-border": { "$type": "color", "$value": "rgba(242, 235, 221, 0.14)" },
+    "viz-warn": { "$type": "color", "$value": "#b8720e" },
+    "viz-wash-warn": { "$type": "color", "$value": "rgba(184, 114, 14, 0.1)" },
+    "viz-info": { "$type": "color", "$value": "#5c5580" },
+    "viz-wash-info": { "$type": "color", "$value": "rgba(92, 85, 128, 0.09)" },
+    "viz-danger": { "$type": "color", "$value": "#b83232" },
+    "viz-wash-danger": { "$type": "color", "$value": "rgba(184, 50, 50, 0.08)" },
+    "viz-selected-fg": { "$type": "color", "$value": "#ffffff" },
+    "banner-neon-bg": { "$type": "color", "$value": "#0fff50" },
+    "banner-neon-fg": { "$type": "color", "$value": "#0a1a0a" },
+    "banner-neon-border": { "$type": "color", "$value": "#00c43a" },
+    "dark-vermillion": { "$type": "color", "$value": "#ff5a47" },
+    "dark-vermillion-wash": { "$type": "color", "$value": "rgba(255, 90, 71, 0.12)" },
+    "dark-vermillion-ink": { "$type": "color", "$value": "#ffe5e0" },
+    "dark-jade": { "$type": "color", "$value": "#3a9e6e" },
+    "dark-jade-wash": { "$type": "color", "$value": "rgba(58, 158, 110, 0.12)" },
+    "dark-rule": { "$type": "color", "$value": "rgba(242, 235, 221, 0.12)" },
+    "dark-code-surface": { "$type": "color", "$value": "#0f0e0c" },
+    "dark-code-surface-fg-muted": { "$type": "color", "$value": "#928b7e" },
+    "dark-code-surface-border": { "$type": "color", "$value": "rgba(242, 235, 221, 0.12)" },
+    "dark-viz-warn": { "$type": "color", "$value": "#d4922a" },
+    "dark-viz-wash-warn": { "$type": "color", "$value": "rgba(212, 146, 42, 0.12)" },
+    "dark-viz-info": { "$type": "color", "$value": "#8a82b0" },
+    "dark-viz-wash-info": { "$type": "color", "$value": "rgba(138, 130, 176, 0.12)" },
+    "dark-viz-danger": { "$type": "color", "$value": "#e05555" },
+    "dark-viz-wash-danger": { "$type": "color", "$value": "rgba(224, 85, 85, 0.12)" }
   },
   "font": {
     "display": {
@@ -89,13 +67,7 @@
     }
   },
   "geometry": {
-    "banner-height": {
-      "$type": "dimension",
-      "$value": "36px"
-    },
-    "fab-size": {
-      "$type": "dimension",
-      "$value": "52px"
-    }
+    "banner-height": { "$type": "dimension", "$value": "36px" },
+    "fab-size": { "$type": "dimension", "$value": "52px" }
   }
 }

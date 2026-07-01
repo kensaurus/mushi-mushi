@@ -49,6 +49,8 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "build:brand-tokens": "pnpm --filter @mushi-mushi/brand build:tokens",
+    "check:brand-tokens-fresh": "node scripts/check-brand-tokens-fresh.mjs",
     "check:nav-registry": "node scripts/check-nav-registry.mjs",
     "check:ia-labels": "node scripts/check-ia-labels.mjs",
     "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs && node scripts/sync-mcp-tool-count.mjs --check",
