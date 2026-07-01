@@ -128,7 +128,7 @@ const darkBlock = `
 }
 `
 
-const css = `${header}:root {${semanticRoot}\n${primitiveLines.join('\n')}\n}\n${darkBlock}\n`
+const css = `${header}:root {\n${primitiveLines.join('\n')}\n${semanticRoot}\n}\n${darkBlock}\n`
 
 writeFileSync(OUT, css, 'utf8')
 console.log('[ok] Generated', OUT, `(${flat.size} primitives)`)

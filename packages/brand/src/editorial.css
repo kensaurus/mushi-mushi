@@ -16,25 +16,6 @@
 --------------------------------------------------------------------------- */
 
 :root {
-  /* Jade — muted editorial "pass / positive" green. */
-  --mushi-font-mono: var(--font-jetbrains-mono, ui-monospace), "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
-
-  /* Diagram / data-viz accents — editorial palette for docs SVG + pipeline nodes */
-  --mushi-viz-accent: var(--mushi-vermillion);
-  --mushi-viz-accent-wash: var(--mushi-vermillion-wash);
-  --mushi-viz-accent-ink: var(--mushi-vermillion-ink);
-  --mushi-viz-positive: var(--mushi-jade);
-  --mushi-viz-positive-wash: var(--mushi-jade-wash);
-  --mushi-viz-track: var(--mushi-rule);
-  --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 22%, transparent);
-  --mushi-viz-node-border: var(--mushi-rule);
-  --mushi-viz-node-bg: var(--mushi-paper);
-  --mushi-viz-selected: var(--mushi-vermillion);
-  --mushi-viz-panel-bg: var(--mushi-paper-wash);
-  --mushi-viz-panel-border: var(--mushi-rule);
-  --mushi-viz-muted: var(--mushi-ink-muted);
-  --mushi-viz-faint: var(--mushi-ink-faint);
-
   --mushi-paper: #f8f4ed;
   --mushi-paper-wash: #efe7da;
   --mushi-ink: #0e0d0b;
@@ -84,6 +65,26 @@
   --mushi-ease-stamp: cubic-bezier(0.22, 1, 0.36, 1);
   --mushi-banner-height: 36px;
   --mushi-fab-size: 52px;
+
+  /* Jade — muted editorial "pass / positive" green. */
+  --mushi-font-mono: var(--font-jetbrains-mono, ui-monospace), "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Diagram / data-viz accents — editorial palette for docs SVG + pipeline nodes */
+  --mushi-viz-accent: var(--mushi-vermillion);
+  --mushi-viz-accent-wash: var(--mushi-vermillion-wash);
+  --mushi-viz-accent-ink: var(--mushi-vermillion-ink);
+  --mushi-viz-positive: var(--mushi-jade);
+  --mushi-viz-positive-wash: var(--mushi-jade-wash);
+  --mushi-viz-track: var(--mushi-rule);
+  --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 22%, transparent);
+  --mushi-viz-node-border: var(--mushi-rule);
+  --mushi-viz-node-bg: var(--mushi-paper);
+  --mushi-viz-selected: var(--mushi-vermillion);
+  --mushi-viz-panel-bg: var(--mushi-paper-wash);
+  --mushi-viz-panel-border: var(--mushi-rule);
+  --mushi-viz-muted: var(--mushi-ink-muted);
+  --mushi-viz-faint: var(--mushi-ink-faint);
+
 }
 
 [data-mushi-theme="dark"] {

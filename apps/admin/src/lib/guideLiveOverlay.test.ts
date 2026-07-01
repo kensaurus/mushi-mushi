@@ -114,7 +114,18 @@ describe('guideLiveOverlay', () => {
       topPriority: 'errors',
     })
     expect(overlay.posture).toBe('danger')
-    expect(overlay.metric).toBe('1 errors')
+    expect(overlay.metric).toBe('1 error')
+  })
+
+  it('codeHealthMetricOverlay pluralizes warning count', () => {
+    const overlay = codeHealthMetricOverlay('god_file', {
+      errorCount: 0,
+      warnCount: 1,
+      hasRun: true,
+      topPriority: 'warnings',
+    })
+    expect(overlay.posture).toBe('warn')
+    expect(overlay.metric).toBe('1 warning')
   })
 
   it('anomaliesMethodOverlay shows open anomalies', () => {
@@ -125,6 +136,16 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('warn')
     expect(overlay.metric).toBe('4 open')
+  })
+
+  it('anomaliesMethodOverlay pluralizes single metric point', () => {
+    const overlay = anomaliesMethodOverlay('ingest', {
+      openAnomalies: 0,
+      metricPointCount: 1,
+      topPriority: 'no_data',
+    })
+    expect(overlay.posture).toBe('ok')
+    expect(overlay.metric).toBe('1 point')
   })
 
   it('exploreTabOverlay shows indexing state', () => {
@@ -148,6 +169,18 @@ describe('guideLiveOverlay', () => {
     })
     expect(overlay.posture).toBe('open')
     expect(overlay.metric).toBe('Next')
+  })
+
+  it('onboardingStepOverlay pluralizes single report count', () => {
+    const overlay = onboardingStepOverlay('ingest', {
+      requiredComplete: 2,
+      requiredTotal: 4,
+      sdkInstalled: true,
+      reportCount: 1,
+      nextStepId: 'other_step',
+    })
+    expect(overlay.posture).toBe('ok')
+    expect(overlay.metric).toBe('1 report')
   })
 
   it('integrationsStepOverlay requires GitHub first', () => {
