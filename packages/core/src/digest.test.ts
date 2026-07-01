@@ -36,6 +36,16 @@ describe('sha256Hex', () => {
     }
   });
 
+  it('uses noble fallback when crypto.subtle is a partial polyfill (Hermes)', async () => {
+    vi.stubGlobal('crypto', { subtle: {} });
+    try {
+      const result = await sha256Hex('abc');
+      expect(result).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('noble fallback matches NIST vector for empty string', async () => {
     vi.stubGlobal('crypto', undefined);
     try {
