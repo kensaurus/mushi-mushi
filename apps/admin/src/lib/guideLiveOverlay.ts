@@ -3,6 +3,8 @@
  * Keeps guide rows aligned with StatusBanner / PageHero without duplicating page logic.
  */
 
+import { pluralizeWithCount } from './format'
+
 export type WorkflowPosture = 'clear' | 'open' | 'warn' | 'danger' | 'info' | 'ok'
 
 export interface WorkflowStageOverlay {
@@ -382,8 +384,8 @@ export function codeHealthMetricOverlay(
     return stats.hasRun ? { posture: 'ok', metric: 'Trending' } : { posture: 'open', metric: 'No data' }
   }
   if (metricId === 'god_file') {
-    if (stats.errorCount > 0) return { posture: 'danger', metric: `${stats.errorCount} errors` }
-    if (stats.warnCount > 0) return { posture: 'warn', metric: `${stats.warnCount} warnings` }
+    if (stats.errorCount > 0) return { posture: 'danger', metric: pluralizeWithCount(stats.errorCount, 'error') }
+    if (stats.warnCount > 0) return { posture: 'warn', metric: pluralizeWithCount(stats.warnCount, 'warning') }
     return { posture: 'clear', metric: 'Within budget' }
   }
   if (metricId === 'ingest') {
@@ -406,7 +408,7 @@ export function anomaliesMethodOverlay(
   if (methodId === 'ingest') {
     return stats.metricPointCount === 0
       ? { posture: 'open', metric: 'No points' }
-      : { posture: 'ok', metric: `${stats.metricPointCount} points` }
+      : { posture: 'ok', metric: pluralizeWithCount(stats.metricPointCount, 'point') }
   }
   if (stats.openAnomalies > 0) {
     return { posture: 'warn', metric: `${stats.openAnomalies} open` }
@@ -464,7 +466,7 @@ export function onboardingStepOverlay(
     return { posture: 'ok', metric: 'Installed' }
   }
   if (stepId === 'ingest' && stats.reportCount > 0) {
-    return { posture: 'ok', metric: `${stats.reportCount} reports` }
+    return { posture: 'ok', metric: pluralizeWithCount(stats.reportCount, 'report') }
   }
   return { posture: 'clear', metric: 'Pending' }
 }

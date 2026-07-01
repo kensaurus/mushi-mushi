@@ -75,6 +75,17 @@ describe('hmacSha256Hex', () => {
     expect(a).not.toBe(b);
   });
 
+  it('uses noble fallback when crypto.subtle is a partial polyfill (Hermes)', async () => {
+    vi.stubGlobal('crypto', { subtle: {} });
+    try {
+      // RFC 4231 §4.3: key="Jefe", data="what do ya want for nothing?"
+      const result = await hmacSha256Hex('Jefe', 'what do ya want for nothing?');
+      expect(result).toBe('5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('uses noble fallback when crypto.subtle is unavailable', async () => {
     vi.stubGlobal('crypto', undefined);
     try {

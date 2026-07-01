@@ -30,7 +30,7 @@ function getSubtle(): SubtleCrypto | null {
     const crypto = g['crypto'] as { subtle?: SubtleCrypto } | undefined;
     const subtle = crypto?.subtle;
     // Hermes on Android can expose a partial polyfill where `subtle` exists
-    // but `digest` / `importKey` are undefined — YEN-YEN-MOBILE-3T.
+    // but `digest` / `importKey` / `sign` are undefined — YEN-YEN-MOBILE-3T.
     if (
       subtle &&
       typeof subtle.digest === 'function' &&
