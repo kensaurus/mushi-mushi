@@ -46,8 +46,5 @@
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/kensaurus"
-  },
-  "devDependencies": {
-    "style-dictionary": "^4.4.0"
   }
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://design-tokens.github.io/community-group/format/2025.10/schema.json",
-  "$description": "W3C DTCG 2025.10 primitive source for Mushi editorial + widget palette. Builds editorial.css via Style Dictionary.",
+  "$description": "W3C DTCG 2025.10 primitive source for Mushi editorial + widget palette. Builds editorial.css via scripts/build-tokens.mjs (hand-rolled DTCG-to-CSS-vars generator, no style-dictionary dependency).",
   "color": {
     "paper": { "$type": "color", "$value": "#f8f4ed", "$description": "Washi cream — primary light surface" },
     "paper-wash": { "$type": "color", "$value": "#efe7da" },
