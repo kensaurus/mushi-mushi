@@ -338,9 +338,11 @@ function installActivityListeners(projectId: string): void {
     }
   };
 
+  // Pre-history-hub: only pushState + popstate (not replaceState). Frameworks
+  // like Next.js shallow routing use replaceState heavily; tracking it would
+  // widen the activity signal surface beyond the original rewards contract.
   historyUnsub = subscribeHistory({
     onPush: emitRoute,
-    onReplace: emitRoute,
     onPop: emitRoute,
   });
   emitRoute();

@@ -10,18 +10,35 @@ import {
   PROMPT_LAB_WORKFLOW,
   PROMPT_STAGE_PLAIN,
 } from '../../lib/promptLabExplainer'
-import type { PromptLabTopPriority } from './PromptLabStatsTypes'
+import { promptLabStageOverlay } from '../../lib/guideLiveOverlay'
+import type { PromptLabStats, PromptLabTopPriority } from './PromptLabStatsTypes'
 
 interface Props {
   topPriority?: PromptLabTopPriority
+  stats?: Pick<
+    PromptLabStats,
+    | 'datasetTotal'
+    | 'candidatePrompts'
+    | 'abTestingCount'
+    | 'promoteReadyCount'
+    | 'topPriority'
+  >
 }
 
-export function PromptLabGuide({ topPriority }: Props) {
+export function PromptLabGuide({ topPriority, stats }: Props) {
   const needsGuidance =
     topPriority === 'no_dataset' ||
     topPriority === 'untested_ab' ||
     topPriority === 'promote_ready' ||
     topPriority === 'candidates_idle'
+
+  const live = stats ?? {
+    datasetTotal: 0,
+    candidatePrompts: 0,
+    abTestingCount: 0,
+    promoteReadyCount: 0,
+    topPriority: topPriority ?? 'healthy',
+  }
 
   return (
     <FeatureExplainPanel
@@ -30,16 +47,19 @@ export function PromptLabGuide({ topPriority }: Props) {
       defaultOpen={needsGuidance}
     >
       <div className="space-y-1">
-        {PROMPT_LAB_WORKFLOW.map((step, i) => (
-          <WorkflowStageRow
-            key={step.id}
-            id={step.id}
-            shortLabel={step.label}
-            posture="info"
-            metric={`${i + 1}`}
-            plain={step.plain}
-          />
-        ))}
+        {PROMPT_LAB_WORKFLOW.map((step, i) => {
+          const overlay = promptLabStageOverlay(step.id, live)
+          return (
+            <WorkflowStageRow
+              key={step.id}
+              id={step.id}
+              shortLabel={step.label}
+              metric={overlay.metric ?? `${i + 1}`}
+              posture={overlay.posture}
+              plain={step.plain}
+            />
+          )
+        })}
       </div>
       <div>
         <p className="mb-1 text-3xs font-semibold uppercase tracking-wider text-fg-faint">

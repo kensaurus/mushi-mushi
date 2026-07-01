@@ -23,6 +23,10 @@
   "sideEffects": [
     "**/*.css"
   ],
+  "scripts": {
+    "build:tokens": "node scripts/build-tokens.mjs",
+    "prebuild": "pnpm build:tokens"
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true

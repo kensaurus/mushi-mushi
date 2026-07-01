@@ -10,12 +10,21 @@ import {
   isComplianceGuideExpanded,
   type ComplianceTopPriority,
 } from '../../lib/complianceExplainer'
+import { complianceConceptOverlay } from '../../lib/guideLiveOverlay'
+import type { ComplianceStats } from './types'
 
 interface Props {
   topPriority?: ComplianceTopPriority
+  stats?: Pick<ComplianceStats, 'controlsFail' | 'overdueDsars' | 'topPriority'>
 }
 
-export function ComplianceGuide({ topPriority }: Props) {
+export function ComplianceGuide({ topPriority, stats }: Props) {
+  const live = stats ?? {
+    controlsFail: 0,
+    overdueDsars: 0,
+    topPriority: topPriority ?? 'healthy',
+  }
+
   return (
     <FeatureExplainPanel
       title="SOC 2, DSAR, and retention — plain language"
@@ -24,16 +33,20 @@ export function ComplianceGuide({ topPriority }: Props) {
       defaultOpen={isComplianceGuideExpanded(topPriority)}
     >
       <div className="space-y-1">
-        {COMPLIANCE_CONCEPT_DEFINITIONS.map((concept) => (
-          <WorkflowStageRow
-            key={concept.id}
-            id={concept.id}
-            shortLabel={concept.label}
-            posture="info"
-            plain={concept.plain}
-            actionLine={concept.operatorAction}
-          />
-        ))}
+        {COMPLIANCE_CONCEPT_DEFINITIONS.map((concept) => {
+          const overlay = complianceConceptOverlay(concept.id, live)
+          return (
+            <WorkflowStageRow
+              key={concept.id}
+              id={concept.id}
+              shortLabel={concept.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={concept.plain}
+              actionLine={overlay.actionLine ?? concept.operatorAction}
+            />
+          )
+        })}
       </div>
     </FeatureExplainPanel>
   )

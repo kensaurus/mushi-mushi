@@ -14,6 +14,7 @@
 
 import { Link, useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
+import { usePostureHasStatusBanner } from '../lib/postureChromeStore'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { useAdminMode } from '../lib/mode'
@@ -38,7 +39,7 @@ interface NbaAction {
 
 const NBA_TONES: Record<NbaTone, { ring: string; bg: string; chip: string; chipText: string }> = {
   plan:  { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chip: 'bg-info-muted',   chipText: 'text-info' },
-  do:    { ring: 'border-brand/40',  bg: 'bg-brand/10',        chip: 'bg-brand/15',     chipText: 'text-brand' },
+  do:    { ring: 'border-edge',        bg: 'bg-surface-raised/40', chip: 'bg-surface-overlay', chipText: 'text-brand' },
   check: { ring: 'border-info/40',   bg: 'bg-info-muted/15',   chip: 'bg-info-muted',   chipText: 'text-info' },
   act:   { ring: 'border-ok/40',     bg: 'bg-ok-muted/15',     chip: 'bg-ok-muted',     chipText: 'text-ok' },
   idle:  { ring: 'border-edge',      bg: 'bg-surface-raised/40', chip: 'bg-surface-overlay', chipText: 'text-fg-muted' },
@@ -63,6 +64,7 @@ export function NextBestAction() {
   // to visible (post-auth). Caught live in Playwright on 2026-04-20.
   const { isBeginner } = useAdminMode()
   const { pathname } = useLocation()
+  const postureHasStatusBanner = usePostureHasStatusBanner()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
@@ -89,6 +91,8 @@ export function NextBestAction() {
   }, [action?.title, action?.tone])
 
   if (!isBeginner) return null
+  // Status banner on PagePosture already carries the next step for this route.
+  if (postureHasStatusBanner) return null
   // Login/recovery routes are unauthenticated — never render the strip.
   if (pathname.startsWith('/login') || pathname.startsWith('/recovery')) return null
   if (setup.loading) return null

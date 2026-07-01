@@ -527,6 +527,9 @@ export function OnboardingPage() {
                   hasAnyProject: stats.hasAnyProject,
                   requiredComplete: stats.requiredComplete,
                   requiredTotal: stats.requiredTotal,
+                  nextStepId: stats.nextStepId,
+                  sdkInstalled: stats.sdkInstalled,
+                  reportCount: stats.reportCount,
                 }}
               />
             ),

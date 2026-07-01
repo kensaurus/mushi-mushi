@@ -69,6 +69,62 @@ export function deadLetterHint(count: number): string {
     : `${count} reports hit the dead-letter queue. Inspect each before replaying — they will not retry automatically.`
 }
 
+export function driftCriticalHint(count: number): string {
+  return count === 1
+    ? 'Your app docs, routes, and database no longer agree — fix this before users hit broken endpoints.'
+    : `${count} API mismatches need review — your docs, routes, and database no longer agree.`
+}
+
+export function driftWarnHint(count: number): string {
+  return count === 1
+    ? 'One warning-level mismatch is open — review before it becomes a breaking change.'
+    : `${count} warning-level mismatches are open — review before they become breaking changes.`
+}
+
+export function driftNeverScannedHint(): string {
+  return 'Run one scan so Mushi knows what your API and database should look like.'
+}
+
+export function driftStaleHint(): string {
+  return 'Your last scan is old — run a fresh scan to catch recent API or schema changes.'
+}
+
+export function driftHealthyHint(): string {
+  return 'OpenAPI, inventory, and database contracts match the last snapshot.'
+}
+
+export function codeHealthNoDataHint(projectLabel: string): string {
+  return `Add the ingest key to ${projectLabel}'s GitHub Actions — bundle and file-size numbers appear after your next push to main.`
+}
+
+export function codeHealthErrorsHint(count: number): string {
+  return count === 1
+    ? 'One file is over 2,000 lines — split it before your next release.'
+    : `${count} files are over 2,000 lines — split them before your next release.`
+}
+
+export function codeHealthWarningsHint(count: number): string {
+  return count === 1
+    ? 'One file is approaching the 2,000-line budget — plan a split soon.'
+    : `${count} files are approaching the 2,000-line budget — plan splits soon.`
+}
+
+export function anomaliesNoMetricsHint(): string {
+  return 'Send error rate, latency, or conversion metrics — then Mushi can flag unusual jumps.'
+}
+
+export function anomaliesCriticalHint(count: number): string {
+  return count === 1
+    ? 'One metric spike may signal a release regression — confirm or dismiss it.'
+    : `${count} metric spikes need review — confirm real regressions or dismiss noise.`
+}
+
+export function anomaliesOpenHint(count: number): string {
+  return count === 1
+    ? 'Something changed compared to the usual pattern — open it to confirm or dismiss.'
+    : `${count} metric spikes need review — something changed compared to the usual pattern.`
+}
+
 export function bottleneckFromSnapshot(ctx: BottleneckContext & { projectId?: string | null }) {
   return {
     headline: bottleneckHumanHeadline(ctx),

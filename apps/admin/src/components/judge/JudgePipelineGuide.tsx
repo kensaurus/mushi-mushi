@@ -10,19 +10,36 @@ import {
   JUDGE_PIPELINE_STEPS,
   JUDGE_SCORE_DIMENSIONS_PLAIN,
 } from '../../lib/judgeExplainer'
-import type { JudgeTopPriority } from './JudgeStatsTypes'
+import { judgeStageOverlay } from '../../lib/guideLiveOverlay'
+import type { JudgeStats, JudgeTopPriority } from './JudgeStatsTypes'
 
 interface Props {
   topPriority?: JudgeTopPriority
+  stats?: Pick<
+    JudgeStats,
+    | 'totalEvaluations'
+    | 'disagreementCount'
+    | 'disagreementRatePct'
+    | 'latestWeekScore'
+    | 'topPriority'
+  >
 }
 
-export function JudgePipelineGuide({ topPriority }: Props) {
+export function JudgePipelineGuide({ topPriority, stats }: Props) {
   const needsGuidance =
     topPriority === 'no_evals' ||
     topPriority === 'low_score' ||
     topPriority === 'disagreements' ||
     topPriority === 'drifting' ||
     topPriority === 'stale'
+
+  const live = stats ?? {
+    totalEvaluations: 0,
+    disagreementCount: 0,
+    disagreementRatePct: null,
+    latestWeekScore: null,
+    topPriority: topPriority ?? 'healthy',
+  }
 
   return (
     <FeatureExplainPanel
@@ -31,15 +48,20 @@ export function JudgePipelineGuide({ topPriority }: Props) {
       defaultOpen={needsGuidance}
     >
       <div className="space-y-1">
-        {JUDGE_PIPELINE_STEPS.map((step) => (
-          <WorkflowStageRow
-            key={step.id}
-            id={step.id}
-            shortLabel={step.label}
-            posture="info"
-            plain={`${step.when} — ${step.measures}`}
-          />
-        ))}
+        {JUDGE_PIPELINE_STEPS.map((step) => {
+          const overlay = judgeStageOverlay(step.id, live)
+          return (
+            <WorkflowStageRow
+              key={step.id}
+              id={step.id}
+              shortLabel={step.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={`${step.when} — ${step.measures}`}
+              actionLine={overlay.actionLine}
+            />
+          )
+        })}
       </div>
       <div>
         <p className="mb-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-faint">

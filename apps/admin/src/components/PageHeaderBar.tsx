@@ -36,6 +36,7 @@ import { useLayoutEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
 import { isDevFacingHint } from '../lib/devHintCopy'
+import { useLocationChrome } from '../lib/locationChrome'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
@@ -74,6 +75,8 @@ export interface PageHeaderBarProps {
   projectScope?: string | null
   /** Override the URL-derived PDCA chip. Pass null to suppress entirely. */
   contextChip?: ReactNode | null
+  /** Force-hide PDCA chip even on mobile (e.g. detail pages). */
+  suppressContextChip?: boolean
   /** Short subtitle line below the title row. Keep under 120 chars. */
   description?: string
   /** Whether to show the copy-current-URL button. Default true. */
@@ -104,6 +107,7 @@ export function PageHeaderBar({
   title,
   projectScope,
   contextChip,
+  suppressContextChip: suppressContextChipProp,
   description,
   showCopyLink = true,
   children,
@@ -117,9 +121,14 @@ export function PageHeaderBar({
 }: PageHeaderBarProps) {
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
+  const locationChrome = useLocationChrome()
 
-  const chipKey = contextChip === undefined ? chipForPath(pathname) : null
+  const chipKey =
+    contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
+      ? chipForPath(pathname)
+      : null
   const hasHelp = Boolean(helpTitle && helpWhatIsIt)
+  const showProjectScope = projectScope && !locationChrome.suppressProjectScope
 
   useLayoutEffect(() => {
     if (!hasHelp || !helpTitle || !helpWhatIsIt) {
@@ -161,10 +170,10 @@ export function PageHeaderBar({
           {/* Title — aria-label includes the middot scope when present (dot is aria-hidden visually). */}
           <h2
             className="min-w-0 text-sm font-semibold leading-snug text-fg text-balance"
-            {...(projectScope ? { 'aria-label': `${title} · ${projectScope}` } : {})}
+            {...(showProjectScope ? { 'aria-label': `${title} · ${projectScope}` } : {})}
           >
             {title}
-            {projectScope && (
+            {showProjectScope && (
               <>
                 <span className="mx-1.5 text-fg-faint" aria-hidden="true">·</span>
                 <span className="font-mono text-xs text-fg-secondary">{projectScope}</span>
@@ -182,7 +191,7 @@ export function PageHeaderBar({
         )}
       </div>
 
-      {description && !withPageHero && !isDevFacingHint(description) && (
+      {description && !withPageHero && !hasHelp && !isDevFacingHint(description) && (
         <p className="mt-0.5 max-w-none text-xs leading-relaxed text-fg-muted text-pretty">
           {description}
         </p>

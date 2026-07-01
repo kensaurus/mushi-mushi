@@ -13,6 +13,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { useDriftUx, resolveQuickDriftTab } from '../lib/driftModeUx'
 import { useToast } from '../lib/toast'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -29,13 +30,11 @@ import {
   RecommendedAction,
 } from '../components/ui'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
-import { DriftStatusBanner } from '../components/drift/DriftStatusBanner'
+import { DriftStatusBanner, isDriftStatusBannerCritical } from '../components/drift/DriftStatusBanner'
 import { DriftReadout } from '../components/drift/DriftReadout'
 import { DriftSnapshotStrip } from '../components/drift/DriftSnapshotStrip'
 import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
@@ -235,24 +234,6 @@ export function DriftPage() {
     setActiveTab('findings')
   }, [reloadAll, setActiveTab])
 
-  if (statsLoading && !statsData) {
-    return (
-      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading drift">
-        <div className="h-8 w-48 rounded bg-surface-raised" />
-        <div className="h-16 rounded bg-surface-raised/60" />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded bg-surface-raised" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  if (statsError) {
-    return <ErrorAlert message={`Failed to load drift stats: ${statsError}`} onRetry={reloadStats} />
-  }
-
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
     !stats.hasAnyProject
       ? 'neutral'
@@ -286,6 +267,24 @@ export function DriftPage() {
     }
     return null
   }, [stats.topPriority, stats.topPriorityTo, stats.topPriorityLabel])
+
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading drift">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load drift stats: ${statsError}`} onRetry={reloadStats} />
+  }
 
   return (
     <div className="space-y-4" data-testid="mushi-page-drift">
@@ -408,6 +407,7 @@ export function DriftPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: isDriftStatusBannerCritical(stats),
             children: (
               <DriftStatusBanner
                 stats={stats}
@@ -434,8 +434,14 @@ export function DriftPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: activeTab === 'overview',
-            children: <DriftSchemaGuide topPriority={stats.topPriority} />,
+            show:
+              activeTab === 'overview' &&
+              !shouldHideGuideWhenBannerActive(
+                isDriftStatusBannerCritical(stats),
+                COMMON_HEALTHY_PRIORITIES,
+                stats.topPriority,
+              ),
+            children: <DriftSchemaGuide topPriority={stats.topPriority} stats={stats} />,
           },
         ]}
       />
@@ -456,38 +462,6 @@ export function DriftPage() {
           fetchedAt={statsFetchedAt}
           validating={statsValidating}
         />
-      ) : null}
-
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
-        <Card
-          className={`space-y-3 border p-4 ${
-            stats.topPriority === 'critical_findings'
-              ? 'border-danger/40 bg-surface-raised'
-              : stats.topPriority === 'never_scanned'
-                ? 'border-brand/40 bg-surface-raised'
-                : 'border-warn/40 bg-surface-raised'
-          }`}
-        >
-          <SignalChip
-            tone={
-              stats.topPriority === 'critical_findings'
-                ? 'danger'
-                : stats.topPriority === 'never_scanned'
-                  ? 'brand'
-                  : 'warn'
-            }
-          >
-            Needs attention
-          </SignalChip>
-          <ContainedBlock tone={stats.topPriority === 'critical_findings' ? 'warn' : 'info'}>
-            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
-          </ContainedBlock>
-          <ActionPillRow>
-            <ActionPill to={stats.topPriorityTo} tone="brand">
-              Take action →
-            </ActionPill>
-          </ActionPillRow>
-        </Card>
       ) : null}
 
       {activeTab === 'overview' && (

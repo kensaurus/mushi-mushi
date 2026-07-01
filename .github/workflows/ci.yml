@@ -108,6 +108,9 @@ jobs:
       - name: Check design tokens
         run: pnpm check:design-tokens
 
+      - name: Check brand token build freshness
+        run: pnpm check:brand-tokens-fresh
+
       - run: pnpm test
 
       # Wave D D2: enforce that the public changelog is in sync with the

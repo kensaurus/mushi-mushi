@@ -24,7 +24,6 @@ import { HealthPanel } from '../components/settings/HealthPanel'
 import { DevToolsPanel } from '../components/settings/DevToolsPanel'
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout'
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner'
-import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import {
   EMPTY_SETTINGS_STATS,
   type SettingsStats,
@@ -192,7 +191,6 @@ export function SettingsPage() {
       <PageHeaderBar
         title={copy?.title ?? 'Project settings'}
         projectScope={projectName ?? stats.projectName}
-        description={copy?.description ?? 'Per-project flags, retention, routing defaults, and feature toggles — saved per project.'}
         helpTitle={copy?.help?.title ?? 'About Settings'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Project settings for the active app: your own LLM keys (optional), how bugs get classified, dedup sensitivity, widget copy, and developer toggles.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -254,7 +252,7 @@ export function SettingsPage() {
                     value={[stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
                       .filter(Boolean)
                       .join(' · ') || 'None'}
-                    accent={stats.slackConfigured || stats.sentryConfigured ? 'text-brand' : undefined}
+                    accent={stats.slackConfigured || stats.sentryConfigured ? 'text-ok' : undefined}
                     tooltip={routingTooltip(stats)}
                     detail={routingDetail()}
                     to={settingsLinks.routing}
@@ -290,6 +288,7 @@ export function SettingsPage() {
 
       {!ux.hideTabs && (
       <div className="space-y-2">
+        {shouldHideSettingsSnapshot(ux, stats) && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-3xs text-fg-faint">
           {TAB_GROUPS.map((group) => (
             <span key={group.label}>
@@ -299,6 +298,7 @@ export function SettingsPage() {
             </span>
           ))}
         </div>
+        )}
       <SegmentedControl
         value={active}
         onChange={setActive}
@@ -309,7 +309,16 @@ export function SettingsPage() {
       </div>
       )}
 
-      <SettingsTabIntro tab={active} />
+      {shouldHideSettingsSnapshot(ux, stats) && (
+        <SettingsTabIntro
+          tab={active}
+          flags={{
+            hasByokKey: stats.byokKeysConfigured > 0,
+            slackConfigured: stats.slackConfigured,
+            githubConfigured: stats.githubRepoConfigured,
+          }}
+        />
+      )}
 
       {stats.projectId ? (
         <SettingsIntegrationsReadout
@@ -318,12 +327,6 @@ export function SettingsPage() {
           validating={isValidating}
         />
       ) : null}
-
-      {ux.hideSettingsSnapshot && (
-        <ContainedBlock tone="muted" className="mb-1">
-          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
-        </ContainedBlock>
-      )}
 
       <div
         role="tabpanel"

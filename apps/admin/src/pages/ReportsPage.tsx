@@ -723,7 +723,7 @@ export function ReportsPage() {
               [...COMMON_HEALTHY_PRIORITIES, 'clear'],
               reportsStats.topPriority ?? 'clear',
             ),
-            children: <ReportsTriageGuide topPriority={reportsStats.topPriority} />,
+            children: <ReportsTriageGuide topPriority={reportsStats.topPriority} stats={reportsStats} />,
           },
         ]}
       />

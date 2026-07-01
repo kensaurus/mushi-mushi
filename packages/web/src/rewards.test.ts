@@ -118,4 +118,24 @@ describe('rewards pushState — idempotent install', () => {
       }
     }).not.toThrow();
   });
+
+  it('replaceState does not emit screen_view_unique_per_day (pre-hub behavior)', async () => {
+    initRewards(ctx);
+    vi.mocked(ctx.client.submitActivity).mockResolvedValue({
+      ok: true,
+      data: { accepted: 1, total: 1 },
+    });
+
+    history.pushState({}, '', '/via-push');
+    history.replaceState({}, '', '/via-replace');
+
+    await flush(ctx);
+
+    expect(ctx.client.submitActivity).toHaveBeenCalledTimes(1);
+    const batch = vi.mocked(ctx.client.submitActivity).mock.calls[0]?.[1] ?? [];
+    const routes = batch
+      .filter((e) => e.action === 'screen_view_unique_per_day')
+      .map((e) => e.metadata?.route);
+    expect(routes).toEqual(['/via-push']);
+  });
 });

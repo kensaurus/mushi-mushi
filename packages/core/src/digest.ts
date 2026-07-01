@@ -28,7 +28,17 @@ function getSubtle(): SubtleCrypto | null {
   try {
     const g = globalThis as unknown as Record<string, unknown>;
     const crypto = g['crypto'] as { subtle?: SubtleCrypto } | undefined;
-    if (crypto?.subtle) return crypto.subtle;
+    const subtle = crypto?.subtle;
+    // Hermes on Android can expose a partial polyfill where `subtle` exists
+    // but `digest` / `importKey` are undefined — YEN-YEN-MOBILE-3T.
+    if (
+      subtle &&
+      typeof subtle.digest === 'function' &&
+      typeof subtle.importKey === 'function' &&
+      typeof subtle.sign === 'function'
+    ) {
+      return subtle;
+    }
   } catch {
     // some envs throw on globalThis access
   }
