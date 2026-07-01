@@ -43,12 +43,51 @@ const storageKey = `sb-${ref}-auth-token`
 const CHROME_ROUTES = [
   '/dashboard',
   '/reports',
+  '/inbox',
+  '/fixes',
+  '/repo',
   '/health',
   '/connect',
-  '/billing',
-  '/settings',
-  '/audit',
+  '/qa-coverage',
   '/rewards',
+  '/settings',
+  '/projects',
+  '/billing',
+  '/cost',
+  '/judge',
+  '/drift',
+  '/code-health',
+  '/query',
+  '/audit',
+  '/lessons',
+  '/compliance',
+  '/sso',
+  '/queue',
+  '/prompt-lab',
+  '/skills',
+  '/marketplace',
+  '/anomalies',
+  '/experiments',
+  '/feedback',
+  '/storage',
+  '/research',
+  '/iterate',
+  '/intelligence',
+  '/notifications',
+  '/releases',
+  '/fullstack-audit',
+  '/content',
+  '/feature-board',
+  '/anti-gaming',
+  '/users',
+  '/organization/members',
+  '/integrations',
+  '/graph',
+  '/explore',
+  '/inventory',
+  '/onboarding',
+  '/setup-copilot',
+  '/mcp',
 ] as const
 
 const MODE_BUDGET: Record<'beginner' | 'advanced', number> = {
@@ -147,12 +186,13 @@ test.describe('Admin chrome budget (PagePosture)', () => {
         const cap = MODE_BUDGET[mode]
 
         for (const route of CHROME_ROUTES) {
-          await page.goto(`${ADMIN_URL}${route}`, { waitUntil: 'domcontentloaded' })
+          await page.goto(`${ADMIN_URL}${route}?project=${PROJECT_ID}`, { waitUntil: 'domcontentloaded' })
           await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 2000 }).catch(() => {})
           await page.waitForTimeout(500)
           await assertResolvedTheme(page, theme)
           const rows = await countPostureRows(page)
           expect(rows, `${route} (${mode}, ${theme}) should expose ≤ ${cap} posture rows`).toBeLessThanOrEqual(cap)
+          await expect(page.locator('[data-page-posture]'), `${route} should mount PagePosture`).toHaveCount(1)
         }
       })
     }

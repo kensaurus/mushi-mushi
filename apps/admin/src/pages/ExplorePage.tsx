@@ -616,7 +616,7 @@ export function ExplorePage() {
                 COMMON_HEALTHY_PRIORITIES,
                 stats.topPriority,
               ),
-              children: <ExploreAtlasGuide topPriority={stats.topPriority} />,
+              children: <ExploreAtlasGuide topPriority={stats.topPriority} stats={stats} />,
             },
           ]}
         />
@@ -963,7 +963,7 @@ export function ExplorePage() {
               COMMON_HEALTHY_PRIORITIES,
               stats.topPriority,
             ),
-            children: <ExploreAtlasGuide topPriority={stats.topPriority} />,
+            children: <ExploreAtlasGuide topPriority={stats.topPriority} stats={stats} />,
           },
         ]}
       />

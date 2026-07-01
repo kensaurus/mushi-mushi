@@ -88,7 +88,7 @@ export function QaCoverageTile({ projectId }: { projectId: string }) {
           {passRate !== null && <PassRateBar pct={passRate} />}
 
           {data.top_failing.length > 0 && (
-            <div className="space-y-1 pt-2">
+            <div className="min-w-0 space-y-1 pt-2">
               <PanelSubheader title="Failing" />
               {data.top_failing.slice(0, 3).map((f) => (
                 <Link

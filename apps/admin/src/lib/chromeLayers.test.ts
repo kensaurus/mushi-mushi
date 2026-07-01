@@ -18,6 +18,11 @@ describe('chromeLayers', () => {
     expect(shouldShowLayoutPageHero('/settings')).toBe(true)
   })
 
+  it('skips layout PageHero when page posture status banner is active', () => {
+    expect(shouldShowLayoutPageHero('/billing', true)).toBe(false)
+    expect(shouldShowLayoutPageHero('/settings', true)).toBe(false)
+  })
+
   it('defaults pipeline ribbon collapsed on dashboard only', () => {
     expect(shouldDefaultCollapsePipelineRibbon('/dashboard')).toBe(true)
     expect(shouldDefaultCollapsePipelineRibbon('/inbox')).toBe(false)

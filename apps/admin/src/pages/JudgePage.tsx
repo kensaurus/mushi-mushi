@@ -754,7 +754,7 @@ export function JudgePage() {
             },
             {
               priority: POSTURE_PRIORITY.guide,
-              children: <JudgePipelineGuide topPriority={stats.topPriority} />,
+              children: <JudgePipelineGuide topPriority={stats.topPriority} stats={stats} />,
             },
             {
               priority: POSTURE_PRIORITY.heroOrSnapshot,
@@ -774,7 +774,7 @@ export function JudgePage() {
         />
       ) : (
         <>
-          <JudgePipelineGuide topPriority={stats.topPriority} />
+          <JudgePipelineGuide topPriority={stats.topPriority} stats={stats} />
           {!ux.hideJudgeSnapshot && (
             <JudgeSnapshotStrip
               stats={stats}

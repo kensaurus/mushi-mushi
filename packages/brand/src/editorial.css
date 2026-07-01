@@ -1,5 +1,6 @@
 /* ---------------------------------------------------------------------------
    Mushi Editorial design tokens
+   AUTO-GENERATED — edit tokens/brand.tokens.json then run: pnpm build:tokens
 
    Light is the default everywhere. Dark mode is **opt-in** rather than
    driven by `prefers-color-scheme`, because:
@@ -15,6 +16,25 @@
 --------------------------------------------------------------------------- */
 
 :root {
+  /* Jade — muted editorial "pass / positive" green. */
+  --mushi-font-mono: var(--font-jetbrains-mono, ui-monospace), "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Diagram / data-viz accents — editorial palette for docs SVG + pipeline nodes */
+  --mushi-viz-accent: var(--mushi-vermillion);
+  --mushi-viz-accent-wash: var(--mushi-vermillion-wash);
+  --mushi-viz-accent-ink: var(--mushi-vermillion-ink);
+  --mushi-viz-positive: var(--mushi-jade);
+  --mushi-viz-positive-wash: var(--mushi-jade-wash);
+  --mushi-viz-track: var(--mushi-rule);
+  --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 22%, transparent);
+  --mushi-viz-node-border: var(--mushi-rule);
+  --mushi-viz-node-bg: var(--mushi-paper);
+  --mushi-viz-selected: var(--mushi-vermillion);
+  --mushi-viz-panel-bg: var(--mushi-paper-wash);
+  --mushi-viz-panel-border: var(--mushi-rule);
+  --mushi-viz-muted: var(--mushi-ink-muted);
+  --mushi-viz-faint: var(--mushi-ink-faint);
+
   --mushi-paper: #f8f4ed;
   --mushi-paper-wash: #efe7da;
   --mushi-ink: #0e0d0b;
@@ -24,70 +44,70 @@
   --mushi-vermillion: #e03c2c;
   --mushi-vermillion-wash: rgba(224, 60, 44, 0.08);
   --mushi-vermillion-ink: #7a1f15;
-  /* Jade — muted editorial "pass / positive" green. Sits within the washi
-     palette (desaturated, warm-shifted) so it doesn't scream against the
-     vermillion accent. Use strictly for: judge pass scores, checklist done
-     states, status OK indicators. Never use as a brand or CTA color. */
   --mushi-jade: #2d7a55;
   --mushi-jade-wash: rgba(45, 122, 85, 0.09);
   --mushi-dark-paper: #0f0e0c;
   --mushi-dark-ink: #f2ebdd;
   --mushi-dark-ink-muted: #928b7e;
-  --mushi-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Cambria, Georgia, "Times New Roman", serif;
-  --mushi-font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", sans-serif;
-  --mushi-font-mono: var(--font-jetbrains-mono, ui-monospace), "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --mushi-ease-stamp: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Inverted code blocks — dark terminal on light paper for readability. */
   --mushi-code-surface: #1a1917;
   --mushi-code-surface-fg: #f2ebdd;
   --mushi-code-surface-fg-muted: #b8b0a4;
   --mushi-code-surface-border: rgba(242, 235, 221, 0.14);
-
-  /* Diagram / data-viz accents — editorial palette for docs SVG + pipeline nodes */
-  --mushi-viz-accent: var(--mushi-vermillion);
-  --mushi-viz-accent-wash: var(--mushi-vermillion-wash);
-  --mushi-viz-accent-ink: var(--mushi-vermillion-ink);
-  --mushi-viz-positive: var(--mushi-jade);
-  --mushi-viz-positive-wash: var(--mushi-jade-wash);
   --mushi-viz-warn: #b8720e;
   --mushi-viz-wash-warn: rgba(184, 114, 14, 0.1);
   --mushi-viz-info: #5c5580;
   --mushi-viz-wash-info: rgba(92, 85, 128, 0.09);
   --mushi-viz-danger: #b83232;
   --mushi-viz-wash-danger: rgba(184, 50, 50, 0.08);
-  --mushi-viz-track: var(--mushi-rule);
-  --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 22%, transparent);
-  --mushi-viz-node-border: var(--mushi-rule);
-  --mushi-viz-node-bg: var(--mushi-paper);
-  --mushi-viz-selected: var(--mushi-vermillion);
   --mushi-viz-selected-fg: #ffffff;
-  --mushi-viz-panel-bg: var(--mushi-paper-wash);
-  --mushi-viz-panel-border: var(--mushi-rule);
-  --mushi-viz-muted: var(--mushi-ink-muted);
-  --mushi-viz-faint: var(--mushi-ink-faint);
+  --mushi-banner-neon-bg: #0fff50;
+  --mushi-banner-neon-fg: #0a1a0a;
+  --mushi-banner-neon-border: #00c43a;
+  --mushi-dark-vermillion: #ff5a47;
+  --mushi-dark-vermillion-wash: rgba(255, 90, 71, 0.12);
+  --mushi-dark-vermillion-ink: #ffe5e0;
+  --mushi-dark-jade: #3a9e6e;
+  --mushi-dark-jade-wash: rgba(58, 158, 110, 0.12);
+  --mushi-dark-rule: rgba(242, 235, 221, 0.12);
+  --mushi-dark-code-surface: #0f0e0c;
+  --mushi-dark-code-surface-fg-muted: #928b7e;
+  --mushi-dark-code-surface-border: rgba(242, 235, 221, 0.12);
+  --mushi-dark-viz-warn: #d4922a;
+  --mushi-dark-viz-wash-warn: rgba(212, 146, 42, 0.12);
+  --mushi-dark-viz-info: #8a82b0;
+  --mushi-dark-viz-wash-info: rgba(138, 130, 176, 0.12);
+  --mushi-dark-viz-danger: #e05555;
+  --mushi-dark-viz-wash-danger: rgba(224, 85, 85, 0.12);
+  --mushi-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Cambria, Georgia, "Times New Roman", serif;
+  --mushi-font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --mushi-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --mushi-ease-stamp: cubic-bezier(0.22, 1, 0.36, 1);
+  --mushi-banner-height: 36px;
+  --mushi-fab-size: 52px;
 }
 
 [data-mushi-theme="dark"] {
   --mushi-paper: var(--mushi-dark-paper);
   --mushi-ink: var(--mushi-dark-ink);
   --mushi-ink-muted: var(--mushi-dark-ink-muted);
-  --mushi-rule: rgba(242, 235, 221, 0.12);
-  --mushi-vermillion: #ff5a47;
-  --mushi-vermillion-wash: rgba(255, 90, 71, 0.12);
-  --mushi-vermillion-ink: #ffe5e0;
-  --mushi-jade: #3a9e6e;
-  --mushi-jade-wash: rgba(58, 158, 110, 0.12);
-  --mushi-code-surface: #0f0e0c;
-  --mushi-code-surface-fg: #f2ebdd;
-  --mushi-code-surface-fg-muted: #928b7e;
-  --mushi-code-surface-border: rgba(242, 235, 221, 0.12);
-  --mushi-viz-warn: #d4922a;
-  --mushi-viz-wash-warn: rgba(212, 146, 42, 0.12);
-  --mushi-viz-info: #8a82b0;
-  --mushi-viz-wash-info: rgba(138, 130, 176, 0.12);
-  --mushi-viz-danger: #e05555;
-  --mushi-viz-wash-danger: rgba(224, 85, 85, 0.12);
+  --mushi-rule: var(--mushi-dark-rule);
+  --mushi-vermillion: var(--mushi-dark-vermillion);
+  --mushi-vermillion-wash: var(--mushi-dark-vermillion-wash);
+  --mushi-vermillion-ink: var(--mushi-dark-vermillion-ink);
+  --mushi-jade: var(--mushi-dark-jade);
+  --mushi-jade-wash: var(--mushi-dark-jade-wash);
+  --mushi-code-surface: var(--mushi-dark-code-surface);
+  --mushi-code-surface-fg: var(--mushi-dark-ink);
+  --mushi-code-surface-fg-muted: var(--mushi-dark-code-surface-fg-muted);
+  --mushi-code-surface-border: var(--mushi-dark-code-surface-border);
+  --mushi-viz-warn: var(--mushi-dark-viz-warn);
+  --mushi-viz-wash-warn: var(--mushi-dark-viz-wash-warn);
+  --mushi-viz-info: var(--mushi-dark-viz-info);
+  --mushi-viz-wash-info: var(--mushi-dark-viz-wash-info);
+  --mushi-viz-danger: var(--mushi-dark-viz-danger);
+  --mushi-viz-wash-danger: var(--mushi-dark-viz-wash-danger);
   --mushi-viz-stroke: color-mix(in oklch, var(--mushi-ink) 28%, transparent);
   --mushi-viz-node-bg: var(--mushi-paper);
   --mushi-viz-selected-fg: #ffffff;
 }
+

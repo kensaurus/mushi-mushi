@@ -257,7 +257,7 @@ export function SkillPipelinesPage() {
               COMMON_HEALTHY_PRIORITIES,
               skillsStats.topPriority,
             ),
-            children: <SkillsPipelineGuide topPriority={skillsStats.topPriority} />,
+            children: <SkillsPipelineGuide topPriority={skillsStats.topPriority} stats={skillsStats} />,
           },
         ]}
       />

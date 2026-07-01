@@ -2,10 +2,22 @@
  * Code health posture banner — CI ingest, errors, warnings, healthy.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
+import {
+  codeHealthErrorsHint,
+  codeHealthNoDataHint,
+  codeHealthWarningsHint,
+  scopedHref,
+} from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusBannerAction } from '../StatusBannerAction'
 import type { CodeHealthStats } from './CodeHealthStatsTypes'
+
+/** Healthy posture is covered by the page hero + readout — skip the banner. */
+export function isCodeHealthStatusBannerCritical(stats: CodeHealthStats): boolean {
+  if (!stats.hasAnyProject) return true
+  return stats.topPriority !== 'healthy'
+}
 
 interface Props {
   stats: CodeHealthStats
@@ -14,7 +26,10 @@ interface Props {
 }
 
 export function CodeHealthStatusBanner({ stats, onRefresh, refreshing }: Props) {
+  const copy = usePageCopy('/code-health')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
+  const pid = stats.projectId
   const label = stats.topPriorityLabel
   const to = stats.topPriorityTo
 
@@ -25,9 +40,7 @@ export function CodeHealthStatusBanner({ stats, onRefresh, refreshing }: Props) 
         title="Pick a project first"
         subtitle="Code health metrics are per app — choose one in the header switcher."
         action={
-          <Link to="/projects">
-            <Btn size="sm" variant="ghost">Go to Projects</Btn>
-          </Link>
+          <StatusBannerAction label="Go to Projects" to="/projects" tone="info" />
         }
       />
     )
@@ -37,20 +50,23 @@ export function CodeHealthStatusBanner({ stats, onRefresh, refreshing }: Props) 
     return (
       <StatusBannerShell
         tone="brand"
-        title="No CI data yet"
-        subtitle={
-          label ??
-          `Wire MUSHI_INGEST_KEY in ${projectLabel}'s GitHub Actions — bundle and god-file findings appear after the next push to main.`
-        }
+        title="Waiting for CI data"
+        subtitle={label ?? codeHealthNoDataHint(projectLabel)}
         action={
           to ? (
-            <Link to={to}>
-              <Btn size="sm" variant="primary">Set up CI ingest</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.setupIngest ?? 'Set up CI ingest'}
+              to={to}
+              tone="brand"
+              emphasis="primary"
+            />
           ) : (
-            <Link to="/connect">
-              <Btn size="sm" variant="primary">Open Connect</Btn>
-            </Link>
+            <StatusBannerAction
+              label={actions.setupIngest ?? 'Set up CI ingest'}
+              to={scopedHref('/connect', pid)}
+              tone="brand"
+              emphasis="primary"
+            />
           )
         }
       />
@@ -58,23 +74,37 @@ export function CodeHealthStatusBanner({ stats, onRefresh, refreshing }: Props) 
   }
 
   if (stats.topPriority === 'errors') {
+    const n = stats.errorCount
     return (
       <StatusBannerShell
         tone="danger"
-        title={`${stats.errorCount} god-file error${stats.errorCount === 1 ? '' : 's'} on ${projectLabel}`}
-        subtitle={label}
-        action={onRefresh ? <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing}>Refresh</Btn> : null}
+        title={`${n} oversized file${n === 1 ? '' : 's'} on ${projectLabel}`}
+        subtitle={label ?? codeHealthErrorsHint(n)}
+        action={
+          <StatusBannerAction
+            label={actions.reviewFiles ?? 'Review oversized files'}
+            to={to ?? scopedHref('/code-health#god-files', pid)}
+            tone="danger"
+          />
+        }
       />
     )
   }
 
   if (stats.topPriority === 'warnings') {
+    const n = stats.warnCount
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.warnCount} warning${stats.warnCount === 1 ? '' : 's'} — files approaching budget`}
-        subtitle={label}
-        action={onRefresh ? <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing}>Refresh</Btn> : null}
+        title={`${n} file${n === 1 ? '' : 's'} approaching size budget`}
+        subtitle={label ?? codeHealthWarningsHint(n)}
+        action={
+          <StatusBannerAction
+            label={actions.reviewFiles ?? 'Review oversized files'}
+            to={to ?? scopedHref('/code-health#god-files', pid)}
+            tone="warn"
+          />
+        }
       />
     )
   }
@@ -86,9 +116,13 @@ export function CodeHealthStatusBanner({ stats, onRefresh, refreshing }: Props) 
       subtitle={label}
       action={
         onRefresh ? (
-          <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-            Refresh
-          </Btn>
+          <StatusBannerAction
+            label={actions.refresh ?? 'Refresh'}
+            onClick={onRefresh}
+            loading={refreshing}
+            disabled={refreshing}
+            tone="ok"
+          />
         ) : null
       }
     />

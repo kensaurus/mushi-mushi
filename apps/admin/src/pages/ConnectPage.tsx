@@ -29,7 +29,6 @@ import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCa
 import { CliSetupGuide } from '../components/CliSetupGuide'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
-import { ConnectRelatedRail } from '../components/connect/ConnectRelatedRail'
 import { ConnectSnapshotStrip } from '../components/connect/ConnectSnapshotStrip'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -480,7 +479,8 @@ function ConnectSectionNav() {
 // ---------------------------------------------------------------------------
 // Compact section header helper (description as subtitle under title)
 // ---------------------------------------------------------------------------
-function SectionDescription({ children }: { children: React.ReactNode }) {
+function SectionDescription({ children, when = true }: { children: React.ReactNode; when?: boolean }) {
+  if (!when) return null
   return <p className="mb-3 text-xs text-fg-muted">{children}</p>
 }
 
@@ -532,6 +532,7 @@ function ProjectFallbackNote({
 export function ConnectPage() {
   const copy = usePageCopy('/connect')
   const connectUx = useConnectUx()
+  const showSectionDescriptions = connectUx.hideConnectSnapshot
   usePublishPageContext({
     route: '/connect',
     title: 'Connect & Update',
@@ -673,7 +674,7 @@ export function ConnectPage() {
 
       </div>
 
-      <ConnectRelatedRail projectId={project?.id ?? activeProjectId} />
+      {/* Related links live in ConnectStudio lanes — avoid duplicating MCP/Skills paths. */}
 
       {/* ── Fallback CLI guide for first-run (no SDK heartbeat yet) ──────── */}
       {!sdkConnected && !feedError ? (
@@ -712,7 +713,7 @@ export function ConnectPage() {
           </Link>
         }
       >
-        <SectionDescription>
+        <SectionDescription when={showSectionDescriptions}>
           Connect your repository to enable one-click upgrade PRs and autofix.
         </SectionDescription>
         <GithubConnectionCard
@@ -727,7 +728,7 @@ export function ConnectPage() {
       {/* ---------------------------------------------------------------- */}
       <div id="connect-sdk" className="scroll-mt-chrome">
       <Section title="Bug capture SDK">
-        <SectionDescription>
+        <SectionDescription when={showSectionDescriptions}>
           Add the Mushi SDK to your app so users can report bugs in one tap.
         </SectionDescription>
         {project && isExpoReporterNeverConnected(project) ? (
@@ -776,10 +777,8 @@ export function ConnectPage() {
         return (
           <div id="connect-native-ci" className="scroll-mt-chrome">
           <Section title="Native app CI secrets">
-            <SectionDescription>
-              For Capacitor, Expo, and React Native builds, Mushi env vars must be baked in at
-              compile time — they cannot be injected at runtime. This panel detects missing CI
-              secrets and can write them to GitHub Actions automatically.
+            <SectionDescription when={showSectionDescriptions}>
+              Detects missing compile-time env vars and can sync them to GitHub Actions.
             </SectionDescription>
             {project ? (
               <SdkNativeConnectivityCard
@@ -804,7 +803,7 @@ export function ConnectPage() {
       {/* ---------------------------------------------------------------- */}
       <div id="connect-update" className="scroll-mt-chrome">
       <Section title="Update center">
-        <SectionDescription>
+        <SectionDescription when={showSectionDescriptions}>
           Keep the Mushi SDK up to date in your connected repository. A one-click PR bumps only
           @mushi-mushi/* version strings — you review and merge.
         </SectionDescription>

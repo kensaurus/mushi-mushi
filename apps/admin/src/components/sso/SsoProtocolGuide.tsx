@@ -10,12 +10,16 @@ import {
   isSsoGuideExpanded,
   type SsoTopPriority,
 } from '../../lib/ssoExplainer'
+import { ssoProtocolOverlay } from '../../lib/guideLiveOverlay'
 
 interface Props {
   topPriority?: SsoTopPriority
+  flags?: { samlConfigured: boolean; oidcConfigured: boolean }
 }
 
-export function SsoProtocolGuide({ topPriority }: Props) {
+export function SsoProtocolGuide({ topPriority, flags }: Props) {
+  const live = flags ?? { samlConfigured: false, oidcConfigured: false }
+
   return (
     <FeatureExplainPanel
       title="SAML vs OIDC — what the acronyms mean"
@@ -24,17 +28,21 @@ export function SsoProtocolGuide({ topPriority }: Props) {
       defaultOpen={isSsoGuideExpanded(topPriority)}
     >
       <div className="space-y-1">
-        {SSO_PROTOCOL_DEFINITIONS.map((protocol) => (
-          <WorkflowStageRow
-            key={protocol.id}
-            id={protocol.id}
-            shortLabel={`${protocol.label} (${protocol.acronym})`}
-            posture="info"
-            plain={protocol.plain}
-            actionLine={`Use when: ${protocol.whenToUse}`}
-            examples={protocol.setupSteps}
-          />
-        ))}
+        {SSO_PROTOCOL_DEFINITIONS.map((protocol) => {
+          const overlay = ssoProtocolOverlay(protocol.id, live)
+          return (
+            <WorkflowStageRow
+              key={protocol.id}
+              id={protocol.id}
+              shortLabel={`${protocol.label} (${protocol.acronym})`}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={protocol.plain}
+              actionLine={overlay.actionLine ?? `Use when: ${protocol.whenToUse}`}
+              examples={protocol.setupSteps}
+            />
+          )
+        })}
       </div>
     </FeatureExplainPanel>
   )

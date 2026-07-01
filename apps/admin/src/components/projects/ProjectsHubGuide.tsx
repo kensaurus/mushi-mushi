@@ -10,13 +10,32 @@ import {
   PROJECTS_HEALTH_SIGNALS,
   isProjectsGuideExpanded,
 } from '../../lib/projectsExplainer'
-import type { ProjectsTopPriority } from './types'
+import { projectsHealthOverlay } from '../../lib/guideLiveOverlay'
+import type { ProjectsStats, ProjectsTopPriority } from './types'
 
 interface Props {
   topPriority?: ProjectsTopPriority
+  stats?: Pick<
+    ProjectsStats,
+    | 'projectsWithReports'
+    | 'sdkConnectedCount'
+    | 'projectCount'
+    | 'activeProjectHasReports'
+    | 'activeProjectSdkConnected'
+    | 'topPriority'
+  >
 }
 
-export function ProjectsHubGuide({ topPriority }: Props) {
+export function ProjectsHubGuide({ topPriority, stats }: Props) {
+  const live = stats ?? {
+    projectsWithReports: 0,
+    sdkConnectedCount: 0,
+    projectCount: 0,
+    activeProjectHasReports: false,
+    activeProjectSdkConnected: false,
+    topPriority: topPriority ?? 'healthy',
+  }
+
   return (
     <FeatureExplainPanel
       title="What makes a project healthy"
@@ -24,15 +43,20 @@ export function ProjectsHubGuide({ topPriority }: Props) {
       defaultOpen={isProjectsGuideExpanded(topPriority)}
     >
       <div className="space-y-1">
-        {PROJECTS_HEALTH_SIGNALS.map((signal) => (
-          <WorkflowStageRow
-            key={signal.id}
-            id={signal.id}
-            shortLabel={signal.label}
-            posture="info"
-            plain={signal.plain}
-          />
-        ))}
+        {PROJECTS_HEALTH_SIGNALS.map((signal) => {
+          const overlay = projectsHealthOverlay(signal.id, live)
+          return (
+            <WorkflowStageRow
+              key={signal.id}
+              id={signal.id}
+              shortLabel={signal.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={signal.plain}
+              actionLine={overlay.actionLine}
+            />
+          )
+        })}
       </div>
       <p className="text-2xs text-fg-faint">
         First-time setup? Start on{' '}

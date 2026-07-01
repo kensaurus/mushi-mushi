@@ -27,6 +27,7 @@ import {
   Card,
 } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { shouldHideGuideWhenBannerActive, COMMON_HEALTHY_PRIORITIES } from '../lib/pagePostureHelpers'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageHeroStats } from '../lib/heroSnapshots'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -36,7 +37,7 @@ import {
   EMPTY_CODE_HEALTH_STATS,
   type CodeHealthStats,
 } from '../components/code-health/CodeHealthStatsTypes'
-import { CodeHealthStatusBanner } from '../components/code-health/CodeHealthStatusBanner'
+import { CodeHealthStatusBanner, isCodeHealthStatusBannerCritical } from '../components/code-health/CodeHealthStatusBanner'
 import { CodeHealthReadout } from '../components/code-health/CodeHealthReadout'
 import { CodeHealthGuide } from '../components/code-health/CodeHealthGuide'
 
@@ -457,13 +458,19 @@ export function CodeHealthPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: isCodeHealthStatusBannerCritical(stats),
             children: (
               <CodeHealthStatusBanner stats={stats} onRefresh={handleReload} refreshing={statsValidating} />
             ),
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            children: <CodeHealthGuide topPriority={stats.topPriority} />,
+            show: !shouldHideGuideWhenBannerActive(
+              isCodeHealthStatusBannerCritical(stats),
+              COMMON_HEALTHY_PRIORITIES,
+              stats.topPriority,
+            ),
+            children: <CodeHealthGuide topPriority={stats.topPriority} stats={stats} />,
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,

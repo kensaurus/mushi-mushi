@@ -10,13 +10,22 @@ import {
   CODE_HEALTH_METRIC_DEFINITIONS,
   isCodeHealthGuideExpanded,
 } from '../../lib/codeHealthExplainer'
-import type { CodeHealthTopPriority } from './CodeHealthStatsTypes'
+import { codeHealthMetricOverlay } from '../../lib/guideLiveOverlay'
+import type { CodeHealthStats, CodeHealthTopPriority } from './CodeHealthStatsTypes'
 
 interface Props {
   topPriority?: CodeHealthTopPriority
+  stats?: Pick<CodeHealthStats, 'errorCount' | 'warnCount' | 'hasRun' | 'topPriority'>
 }
 
-export function CodeHealthGuide({ topPriority }: Props) {
+export function CodeHealthGuide({ topPriority, stats }: Props) {
+  const live = stats ?? {
+    errorCount: 0,
+    warnCount: 0,
+    hasRun: false,
+    topPriority: topPriority ?? 'healthy',
+  }
+
   return (
     <FeatureExplainPanel
       title="Bundle size and god files explained"
@@ -24,16 +33,20 @@ export function CodeHealthGuide({ topPriority }: Props) {
       defaultOpen={isCodeHealthGuideExpanded(topPriority)}
     >
       <div className="space-y-1">
-        {CODE_HEALTH_METRIC_DEFINITIONS.map((metric) => (
-          <WorkflowStageRow
-            key={metric.id}
-            id={metric.id}
-            shortLabel={metric.label}
-            posture="info"
-            plain={metric.plain}
-            actionLine={`Source: ${metric.source}`}
-          />
-        ))}
+        {CODE_HEALTH_METRIC_DEFINITIONS.map((metric) => {
+          const overlay = codeHealthMetricOverlay(metric.id, live)
+          return (
+            <WorkflowStageRow
+              key={metric.id}
+              id={metric.id}
+              shortLabel={metric.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={metric.plain}
+              actionLine={overlay.actionLine ?? `Source: ${metric.source}`}
+            />
+          )
+        })}
       </div>
       <p className="text-2xs text-fg-faint">
         Pair with{' '}

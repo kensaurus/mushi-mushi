@@ -24,7 +24,7 @@ export function useInventoryUx(): InventoryUxFlags {
     isAdvanced,
     hideTabs: isQuickstart,
     plainBanner: !isAdvanced,
-    hideOverviewChrome: !isAdvanced,
+    hideOverviewChrome: true,
     hideInventorySnapshot: isQuickstart,
   }
 }

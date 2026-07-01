@@ -9,7 +9,7 @@
  *  - sdkCiStatusLabel(): human-readable label + severity for a diagnostic status
  */
 
-import { mushiEnvVarsForProjectSlug } from './projectMushiEnv'
+import { formatEnvVarPair, mushiEnvVarsForProjectSlug } from './projectMushiEnv'
 
 // ---------------------------------------------------------------------------
 // API response types (mirror packages/server/.../project-ci-secrets.ts)
@@ -110,55 +110,122 @@ export function buildGuidedFallbackCommands(args: GuidedFallbackArgs): GuidedFal
 // ---------------------------------------------------------------------------
 
 export interface SdkCiStatusMeta {
+  /** Short chip label (1–2 words). */
+  chipLabel: string
+  /** Dynamic card headline — matches SdkHealthSummary voice. */
+  headline: string
+  /** One-line subtitle under the headline. */
+  subtitle: string
+  /** @deprecated Use chipLabel — kept for transitional callers. */
   label: string
+  /** @deprecated Use subtitle — kept for transitional callers. */
   description: string
   severity: 'ok' | 'warn' | 'error'
-  /** Short action hint for the primary CTA. */
+  /** Primary CTA label. */
   cta: string
+  /** Numbered fix steps for collapsible playbook (technical detail lives here). */
+  playbookSteps: string[]
 }
 
-export function sdkCiStatusMeta(status: SdkDiagnosticStatus, hasGithubToken: boolean): SdkCiStatusMeta {
+export interface SdkCiStatusMetaArgs {
+  status: SdkDiagnosticStatus
+  hasGithubToken: boolean
+  slug?: string | null
+  nativeEverSeen?: boolean
+  launcherMode?: string | null
+}
+
+export function sdkCiStatusMeta(
+  status: SdkDiagnosticStatus,
+  hasGithubToken: boolean,
+  slug?: string | null,
+  extras?: Pick<SdkDiagnosticsResult, 'nativeEverSeen' | 'launcherMode'>,
+): SdkCiStatusMeta {
+  const env = mushiEnvVarsForProjectSlug(slug)
+  const envPair = formatEnvVarPair(env)
+  const envWhere = 'GitHub Actions'
+  const nativeEverSeen = extras?.nativeEverSeen ?? false
+  const launcherMode = extras?.launcherMode ?? 'auto'
+
   switch (status) {
     case 'healthy':
       return {
-        label: 'Native SDK reporting',
-        description: 'CI secrets present and the SDK has been seen from native builds.',
+        chipLabel: 'Connected',
+        headline: nativeEverSeen ? 'Native app is checking in' : 'CI secrets are set',
+        subtitle: nativeEverSeen
+          ? 'Your store build includes Mushi env vars — new reports should appear within seconds.'
+          : 'Secrets are in GitHub Actions — waiting for the first heartbeat from a TestFlight or Play build.',
+        label: 'Connected',
+        description: nativeEverSeen
+          ? 'CI secrets present and the SDK has been seen from native builds.'
+          : 'CI secrets present — waiting for first native heartbeat.',
         severity: 'ok',
-        cta: 'Re-sync secrets',
+        cta: hasGithubToken ? 'Re-sync secrets' : 'Copy setup commands',
+        playbookSteps: [
+          `Confirm ${envPair} are still in your ${envWhere} workflow for ${env.stackLabel} builds.`,
+          'OTA updates cannot retrofit compile-time keys — trigger a fresh native build after any secret change.',
+        ],
       }
     case 'ci-secret-missing':
       return {
-        label: 'CI secrets missing',
-        description:
-          'One or more Mushi env vars are absent from GitHub Actions. ' +
-          'The SDK is disabled at build time in native (store/TestFlight) builds.',
+        chipLabel: 'Setup needed',
+        headline: 'SDK not connected yet',
+        subtitle: `Your app can't reach Mushi until ${envPair} are in ${envWhere} (${env.stackLabel}). Rebuild required.`,
+        label: 'Setup needed',
+        description: `Missing ${envPair} in ${envWhere}.`,
         severity: 'error',
         cta: hasGithubToken ? 'Sync CI secrets automatically' : 'Copy setup commands',
+        playbookSteps: [
+          `Add ${envPair} to ${envWhere} for your ${env.stackLabel} release workflow.`,
+          hasGithubToken
+            ? 'Click Sync CI secrets — Mushi mints a key and writes vars via the GitHub API.'
+            : 'Use Copy setup commands — you need a fine-grained GitHub PAT with Actions secrets: Read and write in Settings → GitHub.',
+          'Trigger a new native build (CI push). OTA cannot inject keys into an already-installed store binary.',
+        ],
       }
     case 'native-never-seen':
       return {
-        label: 'Native app never reported',
-        description:
-          'The SDK reached this backend from web/CI, but never from a native Capacitor, ' +
-          'iOS, or Android origin. The banner may be missing in the downloaded app.',
+        chipLabel: 'No native ping',
+        headline: "Native app hasn't checked in yet",
+        subtitle:
+          'We see web or CI activity but not a TestFlight or Play build — confirm env vars are in your release workflow.',
+        label: 'No native ping',
+        description: 'Web/CI heartbeats exist but no native Capacitor, iOS, or Android origin yet.',
         severity: 'warn',
-        cta: hasGithubToken ? 'Sync CI secrets' : 'Copy setup commands',
+        cta: hasGithubToken ? 'Sync CI secrets automatically' : 'Copy setup commands',
+        playbookSteps: [
+          `Verify ${envPair} are in the workflow that builds your store/TestFlight binary (not just web CI).`,
+          'Install from TestFlight or Play Internal Testing — a dev-server heartbeat does not prove the store build works.',
+          'Send test report proves ingest only — you still need a heartbeat from the real native app.',
+        ],
       }
     case 'banner-disabled':
       return {
-        label: 'Banner launcher disabled',
-        description:
-          'The SDK config has the banner launcher set to hidden or manual. ' +
-          'Update SDK Config → Launcher mode → Banner to re-enable it.',
+        chipLabel: 'Hidden',
+        headline: 'Feedback widget is hidden',
+        subtitle: `Turn on Banner launcher in SDK Config so users can send reports from the downloaded app.`,
+        label: 'Hidden',
+        description: `Launcher mode is "${launcherMode}" — set to banner in SDK Config.`,
         severity: 'warn',
         cta: 'Open SDK Config',
+        playbookSteps: [
+          'Open Projects → SDK Config → Launcher mode → Banner.',
+          `Then confirm ${envPair} are baked into your ${env.stackLabel} release build.`,
+        ],
       }
     default:
       return {
-        label: 'SDK status unknown',
-        description: 'Could not determine SDK health. Check that keys are configured.',
+        chipLabel: 'Unknown',
+        headline: 'Could not verify SDK health',
+        subtitle: 'Check that API keys exist and GitHub is linked for this project.',
+        label: 'Unknown',
+        description: 'Could not determine SDK health.',
         severity: 'warn',
-        cta: 'Sync CI secrets',
+        cta: hasGithubToken ? 'Sync CI secrets automatically' : 'Copy setup commands',
+        playbookSteps: [
+          'Link GitHub on Connect or Integrations.',
+          `Add ${envPair} to ${envWhere} and rebuild.`,
+        ],
       }
   }
 }

@@ -3,18 +3,31 @@
  */
 
 import { FeatureExplainPanel } from '../FeatureExplainPanel'
+import { WorkflowStageRow } from '../workflow/WorkflowStageRow'
 import {
   DRIFT_EXPLAINER_SUMMARY,
   DRIFT_SEVERITY_DEFINITIONS,
   isDriftGuideExpanded,
 } from '../../lib/driftExplainer'
-import type { DriftTopPriority } from './DriftStatsTypes'
+import { driftSeverityOverlay } from '../../lib/guideLiveOverlay'
+import type { DriftStats, DriftTopPriority } from './DriftStatsTypes'
 
 interface Props {
   topPriority?: DriftTopPriority
+  stats?: Pick<
+    DriftStats,
+    'criticalOpen' | 'warnOpen' | 'infoOpen' | 'topPriority'
+  >
 }
 
-export function DriftSchemaGuide({ topPriority }: Props) {
+export function DriftSchemaGuide({ topPriority, stats }: Props) {
+  const live = stats ?? {
+    criticalOpen: 0,
+    warnOpen: 0,
+    infoOpen: 0,
+    topPriority: topPriority ?? 'healthy',
+  }
+
   return (
     <FeatureExplainPanel
       title="What schema drift means"
@@ -22,6 +35,22 @@ export function DriftSchemaGuide({ topPriority }: Props) {
       defaultOpen={isDriftGuideExpanded(topPriority)}
       category="guide"
     >
+      <div className="space-y-1 mb-3">
+        {DRIFT_SEVERITY_DEFINITIONS.map((sev) => {
+          const overlay = driftSeverityOverlay(sev.id, live)
+          return (
+            <WorkflowStageRow
+              key={sev.id}
+              id={sev.id}
+              shortLabel={sev.label}
+              metric={overlay.metric}
+              posture={overlay.posture}
+              plain={sev.plain}
+              actionLine={sev.example}
+            />
+          )
+        })}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[28rem] text-left text-2xs">
           <thead>

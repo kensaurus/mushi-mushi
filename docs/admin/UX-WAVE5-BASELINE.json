@@ -1,0 +1,3111 @@
+[
+  {
+    "route": "/dashboard",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/dashboard?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "dashboard-beginner-1440.png"
+  },
+  {
+    "route": "/dashboard",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/dashboard?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "dashboard-beginner-1024.png"
+  },
+  {
+    "route": "/dashboard",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/dashboard?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "dashboard-beginner-800.png"
+  },
+  {
+    "route": "/reports",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/reports?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "reports-beginner-1440.png"
+  },
+  {
+    "route": "/reports",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/reports?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "reports-beginner-1024.png"
+  },
+  {
+    "route": "/reports",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/reports?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "reports-beginner-800.png"
+  },
+  {
+    "route": "/inbox",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/inbox?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "The judge audits classifier quality — run after prompt changes."
+    ],
+    "screenshot": "inbox-beginner-1440.png"
+  },
+  {
+    "route": "/inbox",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/inbox?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inbox-beginner-1024.png"
+  },
+  {
+    "route": "/inbox",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/inbox?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inbox-beginner-800.png"
+  },
+  {
+    "route": "/fixes",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/fixes?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "fixes-beginner-1440.png"
+  },
+  {
+    "route": "/fixes",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/fixes?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "fixes-beginner-1024.png"
+  },
+  {
+    "route": "/fixes",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/fixes?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "fixes-beginner-800.png"
+  },
+  {
+    "route": "/repo",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/repo?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "https://github.com/kensaurus/mushi-mushi"
+    ],
+    "screenshot": "repo-beginner-1440.png"
+  },
+  {
+    "route": "/repo",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/repo?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "repo-beginner-1024.png"
+  },
+  {
+    "route": "/repo",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/repo?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "repo-beginner-800.png"
+  },
+  {
+    "route": "/health",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "health-beginner-1440.png"
+  },
+  {
+    "route": "/health",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "health-beginner-1024.png"
+  },
+  {
+    "route": "/health",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "health-beginner-800.png"
+  },
+  {
+    "route": "/connect",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/connect?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "connect-beginner-1440.png"
+  },
+  {
+    "route": "/connect",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/connect?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "connect-beginner-1024.png"
+  },
+  {
+    "route": "/connect",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/connect?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "connect-beginner-800.png"
+  },
+  {
+    "route": "/qa-coverage",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/qa-coverage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "qa-coverage-beginner-1440.png"
+  },
+  {
+    "route": "/qa-coverage",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/qa-coverage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to QA Coverage · Stories"
+    ],
+    "screenshot": "qa-coverage-beginner-1024.png"
+  },
+  {
+    "route": "/qa-coverage",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/qa-coverage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "qa-coverage-beginner-800.png"
+  },
+  {
+    "route": "/rewards",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/rewards?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Active contributors (30d)",
+      "664d6e67-4278-4913-888c-b84b7c546339"
+    ],
+    "screenshot": "rewards-beginner-1440.png"
+  },
+  {
+    "route": "/rewards",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/rewards?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Active contributors (30d)",
+      "664d6e67-4278-4913-888c-b84b7c546339"
+    ],
+    "screenshot": "rewards-beginner-1024.png"
+  },
+  {
+    "route": "/rewards",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/rewards?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Active contributors (30d)",
+      "664d6e67-4278-4913-888c-b84b7c546339"
+    ],
+    "screenshot": "rewards-beginner-800.png"
+  },
+  {
+    "route": "/settings",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/settings?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "settings-beginner-1440.png"
+  },
+  {
+    "route": "/settings",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/settings?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "settings-beginner-1024.png"
+  },
+  {
+    "route": "/settings",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/settings?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "settings-beginner-800.png"
+  },
+  {
+    "route": "/projects",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/projects?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "projects-beginner-1440.png"
+  },
+  {
+    "route": "/projects",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/projects?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "projects-beginner-1024.png"
+  },
+  {
+    "route": "/projects",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/projects?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "projects-beginner-800.png"
+  },
+  {
+    "route": "/billing",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/billing?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "billing-beginner-1440.png"
+  },
+  {
+    "route": "/billing",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/billing?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "billing-beginner-1024.png"
+  },
+  {
+    "route": "/billing",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/billing?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "billing-beginner-800.png"
+  },
+  {
+    "route": "/cost",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/cost?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to LLM Cost · Breakdown",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "cost-beginner-1440.png"
+  },
+  {
+    "route": "/cost",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/cost?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to LLM Cost · Breakdown",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "cost-beginner-1024.png"
+  },
+  {
+    "route": "/cost",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/cost?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to LLM Cost · Breakdown",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "cost-beginner-800.png"
+  },
+  {
+    "route": "/judge",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/judge?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "judge-beginner-1440.png"
+  },
+  {
+    "route": "/judge",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/judge?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "judge-beginner-1024.png"
+  },
+  {
+    "route": "/judge",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/judge?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "judge-beginner-800.png"
+  },
+  {
+    "route": "/drift",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/drift?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "drift-beginner-1440.png"
+  },
+  {
+    "route": "/drift",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/drift?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "drift-beginner-1024.png"
+  },
+  {
+    "route": "/drift",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/drift?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "drift-beginner-800.png"
+  },
+  {
+    "route": "/code-health",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/code-health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "code-health-beginner-1440.png"
+  },
+  {
+    "route": "/code-health",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/code-health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "code-health-beginner-1024.png"
+  },
+  {
+    "route": "/code-health",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/code-health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "code-health-beginner-800.png"
+  },
+  {
+    "route": "/query",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/query?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "query-beginner-1440.png"
+  },
+  {
+    "route": "/query",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/query?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "query-beginner-1024.png"
+  },
+  {
+    "route": "/query",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/query?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "query-beginner-800.png"
+  },
+  {
+    "route": "/audit",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "retention-sweep@mushi-mushi",
+      "eb0c15cc-4139-490b-a335-35b3d87428df"
+    ],
+    "screenshot": "audit-beginner-1440.png"
+  },
+  {
+    "route": "/audit",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "audit-beginner-1024.png"
+  },
+  {
+    "route": "/audit",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "retention-sweep@mushi-mushi",
+      "eb0c15cc-4139-490b-a335-35b3d87428df"
+    ],
+    "screenshot": "audit-beginner-800.png"
+  },
+  {
+    "route": "/lessons",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/lessons?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "No clusters or lessons yet — submit bug reports to seed mistake memory.",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "lessons-beginner-1440.png"
+  },
+  {
+    "route": "/lessons",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/lessons?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "No clusters or lessons yet — submit bug reports to seed mistake memory.",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "lessons-beginner-1024.png"
+  },
+  {
+    "route": "/lessons",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/lessons?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "No clusters or lessons yet — submit bug reports to seed mistake memory.",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "lessons-beginner-800.png"
+  },
+  {
+    "route": "/compliance",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/compliance?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "compliance-beginner-1440.png"
+  },
+  {
+    "route": "/compliance",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/compliance?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "compliance-beginner-1024.png"
+  },
+  {
+    "route": "/compliance",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/compliance?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "compliance-beginner-800.png"
+  },
+  {
+    "route": "/sso",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/sso?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "sso-beginner-1440.png"
+  },
+  {
+    "route": "/sso",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/sso?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "sso-beginner-1024.png"
+  },
+  {
+    "route": "/sso",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/sso?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "sso-beginner-800.png"
+  },
+  {
+    "route": "/queue",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/queue?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "still inside retry budget"
+    ],
+    "screenshot": "queue-beginner-1440.png"
+  },
+  {
+    "route": "/queue",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/queue?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "still inside retry budget"
+    ],
+    "screenshot": "queue-beginner-1024.png"
+  },
+  {
+    "route": "/queue",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/queue?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "still inside retry budget"
+    ],
+    "screenshot": "queue-beginner-800.png"
+  },
+  {
+    "route": "/prompt-lab",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/prompt-lab?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "prompt-lab-beginner-1440.png"
+  },
+  {
+    "route": "/prompt-lab",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/prompt-lab?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "prompt-lab-beginner-1024.png"
+  },
+  {
+    "route": "/prompt-lab",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/prompt-lab?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "prompt-lab-beginner-800.png"
+  },
+  {
+    "route": "/skills",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/skills?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "workflow-coding-discipline",
+      "mobile-capacitor-platform",
+      "protocol-browser-anti-stall"
+    ],
+    "screenshot": "skills-beginner-1440.png"
+  },
+  {
+    "route": "/skills",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/skills?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "workflow-coding-discipline",
+      "mobile-capacitor-platform",
+      "protocol-browser-anti-stall"
+    ],
+    "screenshot": "skills-beginner-1024.png"
+  },
+  {
+    "route": "/skills",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/skills?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "workflow-coding-discipline",
+      "mobile-capacitor-platform",
+      "protocol-browser-anti-stall"
+    ],
+    "screenshot": "skills-beginner-800.png"
+  },
+  {
+    "route": "/marketplace",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/marketplace?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "marketplace-beginner-1440.png"
+  },
+  {
+    "route": "/marketplace",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/marketplace?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "marketplace-beginner-1024.png"
+  },
+  {
+    "route": "/marketplace",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/marketplace?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Marketplace · Deliveries",
+      "Go to Marketplace · Installed",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "marketplace-beginner-800.png"
+  },
+  {
+    "route": "/anomalies",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/anomalies?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "anomalies-beginner-1440.png"
+  },
+  {
+    "route": "/anomalies",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/anomalies?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "anomalies-beginner-1024.png"
+  },
+  {
+    "route": "/anomalies",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/anomalies?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Anomalies · Findings",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "anomalies-beginner-800.png"
+  },
+  {
+    "route": "/experiments",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/experiments?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Experiments · Experiments",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "1 draft with ≥2 variants — launch to start SDK assignment."
+    ],
+    "screenshot": "experiments-beginner-1440.png"
+  },
+  {
+    "route": "/experiments",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/experiments?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "experiments-beginner-1024.png"
+  },
+  {
+    "route": "/experiments",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/experiments?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Experiments · Experiments",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "1 draft with ≥2 variants — launch to start SDK assignment."
+    ],
+    "screenshot": "experiments-beginner-800.png"
+  },
+  {
+    "route": "/feedback",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/feedback?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "feedback-beginner-1440.png"
+  },
+  {
+    "route": "/feedback",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/feedback?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "feedback-beginner-1024.png"
+  },
+  {
+    "route": "/feedback",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/feedback?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "feedback-beginner-800.png"
+  },
+  {
+    "route": "/storage",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/storage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "storage-beginner-1440.png"
+  },
+  {
+    "route": "/storage",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/storage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "storage-beginner-1024.png"
+  },
+  {
+    "route": "/storage",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/storage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "storage-beginner-800.png"
+  },
+  {
+    "route": "/research",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/research?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "Add a BYOK Firecrawl API key in Settings → Firecrawl before running web research."
+    ],
+    "screenshot": "research-beginner-1440.png"
+  },
+  {
+    "route": "/research",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/research?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "Add a BYOK Firecrawl API key in Settings → Firecrawl before running web research."
+    ],
+    "screenshot": "research-beginner-1024.png"
+  },
+  {
+    "route": "/research",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/research?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "research-beginner-800.png"
+  },
+  {
+    "route": "/iterate",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/iterate?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "No PDCA runs yet — queue a target URL with a critic persona on the New Run tab."
+    ],
+    "screenshot": "iterate-beginner-1440.png"
+  },
+  {
+    "route": "/iterate",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/iterate?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "No PDCA runs yet — queue a target URL with a critic persona on the New Run tab."
+    ],
+    "screenshot": "iterate-beginner-1024.png"
+  },
+  {
+    "route": "/iterate",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/iterate?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "iterate-beginner-800.png"
+  },
+  {
+    "route": "/intelligence",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/intelligence?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "intelligence-beginner-1440.png"
+  },
+  {
+    "route": "/intelligence",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/intelligence?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "intelligence-beginner-1024.png"
+  },
+  {
+    "route": "/intelligence",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/intelligence?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "intelligence-beginner-800.png"
+  },
+  {
+    "route": "/notifications",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/notifications?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Notifications · Inbox"
+    ],
+    "screenshot": "notifications-beginner-1440.png"
+  },
+  {
+    "route": "/notifications",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/notifications?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Notifications · Inbox",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "8 unread messages — expand payloads in Inbox to debug whether the reporter SDK stopped polling."
+    ],
+    "screenshot": "notifications-beginner-1024.png"
+  },
+  {
+    "route": "/notifications",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/notifications?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Notifications · Inbox"
+    ],
+    "screenshot": "notifications-beginner-800.png"
+  },
+  {
+    "route": "/releases",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/releases?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Releases · Published",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "releases-beginner-1440.png"
+  },
+  {
+    "route": "/releases",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/releases?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Releases · Published",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "releases-beginner-1024.png"
+  },
+  {
+    "route": "/releases",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/releases?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "releases-beginner-800.png"
+  },
+  {
+    "route": "/fullstack-audit",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/fullstack-audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "fullstack-audit-beginner-1440.png"
+  },
+  {
+    "route": "/fullstack-audit",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/fullstack-audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "fullstack-audit-beginner-1024.png"
+  },
+  {
+    "route": "/fullstack-audit",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/fullstack-audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "fullstack-audit-beginner-800.png"
+  },
+  {
+    "route": "/content",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/content?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "content-beginner-1440.png"
+  },
+  {
+    "route": "/content",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/content?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "content-beginner-1024.png"
+  },
+  {
+    "route": "/content",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/content?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "content-beginner-800.png"
+  },
+  {
+    "route": "/feature-board",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/feature-board?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feature-board-beginner-1440.png"
+  },
+  {
+    "route": "/feature-board",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/feature-board?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feature-board-beginner-1024.png"
+  },
+  {
+    "route": "/feature-board",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/feature-board?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feature-board-beginner-800.png"
+  },
+  {
+    "route": "/anti-gaming",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/anti-gaming?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "anti-gaming-beginner-1440.png"
+  },
+  {
+    "route": "/anti-gaming",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/anti-gaming?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Multi-account: 4 reporter tokens from same device",
+      "Velocity anomaly: 11 reports in 24h"
+    ],
+    "screenshot": "anti-gaming-beginner-1024.png"
+  },
+  {
+    "route": "/anti-gaming",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/anti-gaming?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Multi-account: 4 reporter tokens from same device",
+      "Velocity anomaly: 11 reports in 24h"
+    ],
+    "screenshot": "anti-gaming-beginner-800.png"
+  },
+  {
+    "route": "/users",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/users?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "users-beginner-1440.png"
+  },
+  {
+    "route": "/users",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/users?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "users-beginner-1024.png"
+  },
+  {
+    "route": "/users",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/users?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "users-beginner-800.png"
+  },
+  {
+    "route": "/organization/members",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/organization/members?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "organization_members-beginner-1440.png"
+  },
+  {
+    "route": "/organization/members",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/organization/members?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "organization_members-beginner-1024.png"
+  },
+  {
+    "route": "/organization/members",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/organization/members?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "organization_members-beginner-800.png"
+  },
+  {
+    "route": "/integrations",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/integrations?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Not connected — paste an incoming webhook URL to enable alerts",
+      "QA story failures with run details",
+      "Fix merged / deployed events (when plugins enabled)"
+    ],
+    "screenshot": "integrations-beginner-1440.png"
+  },
+  {
+    "route": "/integrations",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/integrations?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Not connected — paste an incoming webhook URL to enable alerts",
+      "QA story failures with run details",
+      "Fix merged / deployed events (when plugins enabled)"
+    ],
+    "screenshot": "integrations-beginner-1024.png"
+  },
+  {
+    "route": "/integrations",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/integrations?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Not connected — paste an incoming webhook URL to enable alerts",
+      "QA story failures with run details",
+      "Fix merged / deployed events (when plugins enabled)"
+    ],
+    "screenshot": "integrations-beginner-800.png"
+  },
+  {
+    "route": "/graph",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/graph?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "graph-beginner-1440.png"
+  },
+  {
+    "route": "/graph",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/graph?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "graph-beginner-1024.png"
+  },
+  {
+    "route": "/graph",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/graph?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "graph-beginner-800.png"
+  },
+  {
+    "route": "/explore",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/explore?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "explore-beginner-1440.png"
+  },
+  {
+    "route": "/explore",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/explore?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "explore-beginner-1024.png"
+  },
+  {
+    "route": "/explore",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/explore?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "explore-beginner-800.png"
+  },
+  {
+    "route": "/inventory",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/inventory?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inventory-beginner-1440.png"
+  },
+  {
+    "route": "/inventory",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/inventory?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inventory-beginner-1024.png"
+  },
+  {
+    "route": "/inventory",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/inventory?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inventory-beginner-800.png"
+  },
+  {
+    "route": "/onboarding",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/onboarding?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "onboarding-beginner-1440.png"
+  },
+  {
+    "route": "/onboarding",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/onboarding?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "onboarding-beginner-1024.png"
+  },
+  {
+    "route": "/onboarding",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/onboarding?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "onboarding-beginner-800.png"
+  },
+  {
+    "route": "/setup-copilot",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/setup-copilot?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "setup-copilot-beginner-1440.png"
+  },
+  {
+    "route": "/setup-copilot",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/setup-copilot?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "setup-copilot-beginner-1024.png"
+  },
+  {
+    "route": "/setup-copilot",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/setup-copilot?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "setup-copilot-beginner-800.png"
+  },
+  {
+    "route": "/mcp",
+    "mode": "beginner",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/mcp?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "1 connected · 68 tools ready for your IDE agent."
+    ],
+    "screenshot": "mcp-beginner-1440.png"
+  },
+  {
+    "route": "/mcp",
+    "mode": "beginner",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/mcp?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "mcp-beginner-1024.png"
+  },
+  {
+    "route": "/mcp",
+    "mode": "beginner",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/mcp?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "mcp-beginner-800.png"
+  },
+  {
+    "route": "/dashboard",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/dashboard?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "dashboard-advanced-1440.png"
+  },
+  {
+    "route": "/dashboard",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/dashboard?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "dashboard-advanced-1024.png"
+  },
+  {
+    "route": "/dashboard",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/dashboard?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "dashboard-advanced-800.png"
+  },
+  {
+    "route": "/reports",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/reports?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "reports-advanced-1440.png"
+  },
+  {
+    "route": "/reports",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/reports?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "reports-advanced-1024.png"
+  },
+  {
+    "route": "/reports",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/reports?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "reports-advanced-800.png"
+  },
+  {
+    "route": "/inbox",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/inbox?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "The judge audits classifier quality — run after prompt changes."
+    ],
+    "screenshot": "inbox-advanced-1440.png"
+  },
+  {
+    "route": "/inbox",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/inbox?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inbox-advanced-1024.png"
+  },
+  {
+    "route": "/inbox",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/inbox?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inbox-advanced-800.png"
+  },
+  {
+    "route": "/fixes",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/fixes?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "fixes-advanced-1440.png"
+  },
+  {
+    "route": "/fixes",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/fixes?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "fixes-advanced-1024.png"
+  },
+  {
+    "route": "/fixes",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/fixes?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "fixes-advanced-800.png"
+  },
+  {
+    "route": "/repo",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/repo?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "repo-advanced-1440.png"
+  },
+  {
+    "route": "/repo",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/repo?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "repo-advanced-1024.png"
+  },
+  {
+    "route": "/repo",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/repo?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "repo-advanced-800.png"
+  },
+  {
+    "route": "/health",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "health-advanced-1440.png"
+  },
+  {
+    "route": "/health",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "health-advanced-1024.png"
+  },
+  {
+    "route": "/health",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "health-advanced-800.png"
+  },
+  {
+    "route": "/connect",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/connect?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "connect-advanced-1440.png"
+  },
+  {
+    "route": "/connect",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/connect?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "connect-advanced-1024.png"
+  },
+  {
+    "route": "/connect",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/connect?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "connect-advanced-800.png"
+  },
+  {
+    "route": "/qa-coverage",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/qa-coverage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "qa-coverage-advanced-1440.png"
+  },
+  {
+    "route": "/qa-coverage",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/qa-coverage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "qa-coverage-advanced-1024.png"
+  },
+  {
+    "route": "/qa-coverage",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/qa-coverage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to QA Coverage · Stories"
+    ],
+    "screenshot": "qa-coverage-advanced-800.png"
+  },
+  {
+    "route": "/rewards",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/rewards?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Active contributors (30d)",
+      "664d6e67-4278-4913-888c-b84b7c546339"
+    ],
+    "screenshot": "rewards-advanced-1440.png"
+  },
+  {
+    "route": "/rewards",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/rewards?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Active contributors (30d)",
+      "664d6e67-4278-4913-888c-b84b7c546339"
+    ],
+    "screenshot": "rewards-advanced-1024.png"
+  },
+  {
+    "route": "/rewards",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/rewards?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Active contributors (30d)"
+    ],
+    "screenshot": "rewards-advanced-800.png"
+  },
+  {
+    "route": "/settings",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/settings?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "settings-advanced-1440.png"
+  },
+  {
+    "route": "/settings",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/settings?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "settings-advanced-1024.png"
+  },
+  {
+    "route": "/settings",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/settings?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "settings-advanced-800.png"
+  },
+  {
+    "route": "/projects",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/projects?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "projects-advanced-1440.png"
+  },
+  {
+    "route": "/projects",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/projects?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "projects-advanced-1024.png"
+  },
+  {
+    "route": "/projects",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/projects?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "3 projects never ingested · 3/6 receiving reports · 6 with SDK heartbeat."
+    ],
+    "screenshot": "projects-advanced-800.png"
+  },
+  {
+    "route": "/billing",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/billing?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "billing-advanced-1440.png"
+  },
+  {
+    "route": "/billing",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/billing?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "billing-advanced-1024.png"
+  },
+  {
+    "route": "/billing",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/billing?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "billing-advanced-800.png"
+  },
+  {
+    "route": "/cost",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/cost?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to LLM Cost · Breakdown",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "cost-advanced-1440.png"
+  },
+  {
+    "route": "/cost",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/cost?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "cost-advanced-1024.png"
+  },
+  {
+    "route": "/cost",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/cost?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "cost-advanced-800.png"
+  },
+  {
+    "route": "/judge",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/judge?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "judge-advanced-1440.png"
+  },
+  {
+    "route": "/judge",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/judge?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "judge-advanced-1024.png"
+  },
+  {
+    "route": "/judge",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/judge?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "judge-advanced-800.png"
+  },
+  {
+    "route": "/drift",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/drift?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "drift-advanced-1440.png"
+  },
+  {
+    "route": "/drift",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/drift?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "drift-advanced-1024.png"
+  },
+  {
+    "route": "/drift",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/drift?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "drift-advanced-800.png"
+  },
+  {
+    "route": "/code-health",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/code-health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "code-health-advanced-1440.png"
+  },
+  {
+    "route": "/code-health",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/code-health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "code-health-advanced-1024.png"
+  },
+  {
+    "route": "/code-health",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/code-health?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "code-health-advanced-800.png"
+  },
+  {
+    "route": "/query",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/query?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "query-advanced-1440.png"
+  },
+  {
+    "route": "/query",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/query?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "query-advanced-1024.png"
+  },
+  {
+    "route": "/query",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/query?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "query-advanced-800.png"
+  },
+  {
+    "route": "/audit",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "audit-advanced-1440.png"
+  },
+  {
+    "route": "/audit",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "audit-advanced-1024.png"
+  },
+  {
+    "route": "/audit",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "audit-advanced-800.png"
+  },
+  {
+    "route": "/lessons",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/lessons?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "lessons-advanced-1440.png"
+  },
+  {
+    "route": "/lessons",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/lessons?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "No clusters or lessons yet — submit bug reports to seed mistake memory.",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "lessons-advanced-1024.png"
+  },
+  {
+    "route": "/lessons",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/lessons?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "lessons-advanced-800.png"
+  },
+  {
+    "route": "/compliance",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/compliance?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "compliance-advanced-1440.png"
+  },
+  {
+    "route": "/compliance",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/compliance?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "compliance-advanced-1024.png"
+  },
+  {
+    "route": "/compliance",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/compliance?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "compliance-advanced-800.png"
+  },
+  {
+    "route": "/sso",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/sso?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "sso-advanced-1440.png"
+  },
+  {
+    "route": "/sso",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/sso?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "sso-advanced-1024.png"
+  },
+  {
+    "route": "/sso",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/sso?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "sso-advanced-800.png"
+  },
+  {
+    "route": "/queue",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/queue?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "queue-advanced-1440.png"
+  },
+  {
+    "route": "/queue",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/queue?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "queue-advanced-1024.png"
+  },
+  {
+    "route": "/queue",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/queue?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "queue-advanced-800.png"
+  },
+  {
+    "route": "/prompt-lab",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/prompt-lab?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "prompt-lab-advanced-1440.png"
+  },
+  {
+    "route": "/prompt-lab",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/prompt-lab?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "prompt-lab-advanced-1024.png"
+  },
+  {
+    "route": "/prompt-lab",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/prompt-lab?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "prompt-lab-advanced-800.png"
+  },
+  {
+    "route": "/skills",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/skills?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "workflow-coding-discipline",
+      "mobile-capacitor-platform",
+      "protocol-browser-anti-stall"
+    ],
+    "screenshot": "skills-advanced-1440.png"
+  },
+  {
+    "route": "/skills",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/skills?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "workflow-coding-discipline",
+      "mobile-capacitor-platform",
+      "protocol-browser-anti-stall"
+    ],
+    "screenshot": "skills-advanced-1024.png"
+  },
+  {
+    "route": "/skills",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/skills?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "workflow-coding-discipline",
+      "mobile-capacitor-platform",
+      "protocol-browser-anti-stall"
+    ],
+    "screenshot": "skills-advanced-800.png"
+  },
+  {
+    "route": "/marketplace",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/marketplace?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "marketplace-advanced-1440.png"
+  },
+  {
+    "route": "/marketplace",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/marketplace?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "marketplace-advanced-1024.png"
+  },
+  {
+    "route": "/marketplace",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/marketplace?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "marketplace-advanced-800.png"
+  },
+  {
+    "route": "/anomalies",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/anomalies?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Anomalies · Findings",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "anomalies-advanced-1440.png"
+  },
+  {
+    "route": "/anomalies",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/anomalies?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Anomalies · Findings",
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "anomalies-advanced-1024.png"
+  },
+  {
+    "route": "/anomalies",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/anomalies?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "anomalies-advanced-800.png"
+  },
+  {
+    "route": "/experiments",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/experiments?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "experiments-advanced-1440.png"
+  },
+  {
+    "route": "/experiments",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/experiments?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Experiments · Experiments",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "1 draft with ≥2 variants — launch to start SDK assignment."
+    ],
+    "screenshot": "experiments-advanced-1024.png"
+  },
+  {
+    "route": "/experiments",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/experiments?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "experiments-advanced-800.png"
+  },
+  {
+    "route": "/feedback",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/feedback?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feedback-advanced-1440.png"
+  },
+  {
+    "route": "/feedback",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/feedback?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "feedback-advanced-1024.png"
+  },
+  {
+    "route": "/feedback",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/feedback?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "feedback-advanced-800.png"
+  },
+  {
+    "route": "/storage",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/storage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "storage-advanced-1440.png"
+  },
+  {
+    "route": "/storage",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/storage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "storage-advanced-1024.png"
+  },
+  {
+    "route": "/storage",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/storage?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "storage-advanced-800.png"
+  },
+  {
+    "route": "/research",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/research?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "research-advanced-1440.png"
+  },
+  {
+    "route": "/research",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/research?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "research-advanced-1024.png"
+  },
+  {
+    "route": "/research",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/research?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "research-advanced-800.png"
+  },
+  {
+    "route": "/iterate",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/iterate?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "iterate-advanced-1440.png"
+  },
+  {
+    "route": "/iterate",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/iterate?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "iterate-advanced-1024.png"
+  },
+  {
+    "route": "/iterate",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/iterate?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "iterate-advanced-800.png"
+  },
+  {
+    "route": "/intelligence",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/intelligence?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "intelligence-advanced-1440.png"
+  },
+  {
+    "route": "/intelligence",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/intelligence?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "intelligence-advanced-1024.png"
+  },
+  {
+    "route": "/intelligence",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/intelligence?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "intelligence-advanced-800.png"
+  },
+  {
+    "route": "/notifications",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/notifications?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Notifications · Inbox",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "8 unread messages — expand payloads in Inbox to debug whether the reporter SDK stopped polling."
+    ],
+    "screenshot": "notifications-advanced-1440.png"
+  },
+  {
+    "route": "/notifications",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/notifications?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Notifications · Inbox"
+    ],
+    "screenshot": "notifications-advanced-1024.png"
+  },
+  {
+    "route": "/notifications",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/notifications?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Notifications · Inbox",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "8 unread messages — expand payloads in Inbox to debug whether the reporter SDK stopped polling."
+    ],
+    "screenshot": "notifications-advanced-800.png"
+  },
+  {
+    "route": "/releases",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/releases?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Releases · Published",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "3 published · 0 credits · 0 open feedback tickets."
+    ],
+    "screenshot": "releases-advanced-1440.png"
+  },
+  {
+    "route": "/releases",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/releases?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "releases-advanced-1024.png"
+  },
+  {
+    "route": "/releases",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/releases?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Go to Releases · Published",
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "3 published · 0 credits · 0 open feedback tickets."
+    ],
+    "screenshot": "releases-advanced-800.png"
+  },
+  {
+    "route": "/fullstack-audit",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/fullstack-audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "fullstack-audit-advanced-1440.png"
+  },
+  {
+    "route": "/fullstack-audit",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/fullstack-audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "fullstack-audit-advanced-1024.png"
+  },
+  {
+    "route": "/fullstack-audit",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/fullstack-audit?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "fullstack-audit-advanced-800.png"
+  },
+  {
+    "route": "/content",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/content?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "content-advanced-1440.png"
+  },
+  {
+    "route": "/content",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/content?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "content-advanced-1024.png"
+  },
+  {
+    "route": "/content",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/content?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "content-advanced-800.png"
+  },
+  {
+    "route": "/feature-board",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/feature-board?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feature-board-advanced-1440.png"
+  },
+  {
+    "route": "/feature-board",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/feature-board?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feature-board-advanced-1024.png"
+  },
+  {
+    "route": "/feature-board",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/feature-board?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 2,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "feature-board-advanced-800.png"
+  },
+  {
+    "route": "/anti-gaming",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/anti-gaming?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Multi-account: 4 reporter tokens from same device",
+      "Velocity anomaly: 11 reports in 24h"
+    ],
+    "screenshot": "anti-gaming-advanced-1440.png"
+  },
+  {
+    "route": "/anti-gaming",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/anti-gaming?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Multi-account: 4 reporter tokens from same device",
+      "Velocity anomaly: 11 reports in 24h"
+    ],
+    "screenshot": "anti-gaming-advanced-1024.png"
+  },
+  {
+    "route": "/anti-gaming",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/anti-gaming?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "anti-gaming-advanced-800.png"
+  },
+  {
+    "route": "/users",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/users?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "users-advanced-1440.png"
+  },
+  {
+    "route": "/users",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/users?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "users-advanced-1024.png"
+  },
+  {
+    "route": "/users",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/users?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "users-advanced-800.png"
+  },
+  {
+    "route": "/organization/members",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/organization/members?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "organization_members-advanced-1440.png"
+  },
+  {
+    "route": "/organization/members",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/organization/members?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "organization_members-advanced-1024.png"
+  },
+  {
+    "route": "/organization/members",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/organization/members?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co"
+    ],
+    "screenshot": "organization_members-advanced-800.png"
+  },
+  {
+    "route": "/integrations",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/integrations?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "integrations-advanced-1440.png"
+  },
+  {
+    "route": "/integrations",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/integrations?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Not connected — paste an incoming webhook URL to enable alerts",
+      "QA story failures with run details",
+      "Fix merged / deployed events (when plugins enabled)"
+    ],
+    "screenshot": "integrations-advanced-1024.png"
+  },
+  {
+    "route": "/integrations",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/integrations?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [
+      "Not connected — paste an incoming webhook URL to enable alerts",
+      "QA story failures with run details",
+      "Fix merged / deployed events (when plugins enabled)"
+    ],
+    "screenshot": "integrations-advanced-800.png"
+  },
+  {
+    "route": "/graph",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/graph?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "graph-advanced-1440.png"
+  },
+  {
+    "route": "/graph",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/graph?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "graph-advanced-1024.png"
+  },
+  {
+    "route": "/graph",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/graph?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "graph-advanced-800.png"
+  },
+  {
+    "route": "/explore",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/explore?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "explore-advanced-1440.png"
+  },
+  {
+    "route": "/explore",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/explore?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 1,
+    "hasPosture": true,
+    "duplicateHints": [],
+    "screenshot": "explore-advanced-1024.png"
+  },
+  {
+    "route": "/explore",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/explore?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "explore-advanced-800.png"
+  },
+  {
+    "route": "/inventory",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/inventory?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inventory-advanced-1440.png"
+  },
+  {
+    "route": "/inventory",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/inventory?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inventory-advanced-1024.png"
+  },
+  {
+    "route": "/inventory",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/inventory?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "inventory-advanced-800.png"
+  },
+  {
+    "route": "/onboarding",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/onboarding?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "onboarding-advanced-1440.png"
+  },
+  {
+    "route": "/onboarding",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/onboarding?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "onboarding-advanced-1024.png"
+  },
+  {
+    "route": "/onboarding",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/onboarding?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "onboarding-advanced-800.png"
+  },
+  {
+    "route": "/setup-copilot",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/setup-copilot?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "setup-copilot-advanced-1440.png"
+  },
+  {
+    "route": "/setup-copilot",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/setup-copilot?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "setup-copilot-advanced-1024.png"
+  },
+  {
+    "route": "/setup-copilot",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/setup-copilot?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "setup-copilot-advanced-800.png"
+  },
+  {
+    "route": "/mcp",
+    "mode": "advanced",
+    "viewport": 1440,
+    "url": "http://127.0.0.1:6464/mcp?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 0,
+    "hasPosture": false,
+    "duplicateHints": [],
+    "screenshot": "mcp-advanced-1440.png"
+  },
+  {
+    "route": "/mcp",
+    "mode": "advanced",
+    "viewport": 1024,
+    "url": "http://127.0.0.1:6464/mcp?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "1 connected · 68 tools ready for your IDE agent."
+    ],
+    "screenshot": "mcp-advanced-1024.png"
+  },
+  {
+    "route": "/mcp",
+    "mode": "advanced",
+    "viewport": 800,
+    "url": "http://127.0.0.1:6464/mcp?project=67a6453c-375d-41d7-833a-b33471159442",
+    "rows": 3,
+    "hasPosture": true,
+    "duplicateHints": [
+      "dxptnwrhwsqckaftyymj.supabase.co",
+      "1 connected · 68 tools ready for your IDE agent."
+    ],
+    "screenshot": "mcp-advanced-800.png"
+  }
+]

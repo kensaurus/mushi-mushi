@@ -1,7 +1,7 @@
 # Docs Site UX Unification Burndown
 
 > Living burndown for the public Nextra docs (`apps/docs`) — editorial brand, MDX components, and `/connect`.
-> Updated Jun 22 2026 after full audit + implementation pass.
+> Updated Jul 1 2026 after DTCG brand token pipeline + Phase 6 admin cross-reference.
 
 ## What this site is
 
@@ -76,7 +76,7 @@ Page chrome (Nextra sidebar + optional TOC)
 | Item | Notes | Status |
 |------|-------|--------|
 | Semantic Tailwind utilities | `@theme inline` maps `--mushi-*` → `text-mushi-ink`, `border-mushi-rule`, etc.; TroubleshootingAccordion migrated | ✅ |
-| DTCG Style Dictionary | Wait for monorepo job; `brand.tokens.json` → `editorial.css` | Open |
+| DTCG Style Dictionary | `pnpm build:brand-tokens` from `brand.tokens.json` → `editorial.css`; CI freshness gate | ✅ |
 | DocsMediaShowcase on landing | Placed on home after 60-second proof; `.docs-media-showcase` grid CSS | ✅ |
 
 ---
@@ -107,4 +107,4 @@ Manual: home, `/connect`, `/quickstart`, `/migrations` at **390 / 1024 / 1440** 
 - [COMPONENT-REGISTRY.md](./COMPONENT-REGISTRY.md) — which component to use where
 - [TOKEN-CONTRACT.md](./TOKEN-CONTRACT.md) — colour tokens for contributors
 - [apps/docs/README.md](../../apps/docs/README.md) — local dev + Migration Hub conventions
-- [docs/admin/UX-UNIFICATION-BURNDOWN.md](../admin/UX-UNIFICATION-BURNDOWN.md) — **admin console** (separate surface)
+- [docs/admin/UX-UNIFICATION-BURNDOWN.md](../admin/UX-UNIFICATION-BURNDOWN.md) — **admin console** (separate surface; Phase 6 human alerts + liveData overlays Jul 2026)

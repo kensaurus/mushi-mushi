@@ -6,13 +6,23 @@ import { Link } from 'react-router-dom'
 import { SETTINGS_TAB_EXPLAINERS, type SettingsTabExplainer } from '../../lib/settingsTabExplainer'
 import type { SettingsTabId } from './types'
 import { FeatureExplainPanel } from '../FeatureExplainPanel'
+import { WorkflowStageRow } from '../workflow/WorkflowStageRow'
+import { settingsTabOverlay } from '../../lib/guideLiveOverlay'
+
+interface SettingsTabFlags {
+  hasByokKey?: boolean
+  slackConfigured?: boolean
+  githubConfigured?: boolean
+}
 
 interface Props {
   tab: SettingsTabId
+  flags?: SettingsTabFlags
 }
 
-export function SettingsTabIntro({ tab }: Props) {
+export function SettingsTabIntro({ tab, flags }: Props) {
   const explainer: SettingsTabExplainer = SETTINGS_TAB_EXPLAINERS[tab]
+  const overlay = settingsTabOverlay(tab, flags ?? {})
 
   return (
     <FeatureExplainPanel
@@ -22,6 +32,14 @@ export function SettingsTabIntro({ tab }: Props) {
       variant="inset"
       defaultOpen={false}
     >
+      <WorkflowStageRow
+        id={`settings-${tab}`}
+        shortLabel="This tab"
+        metric={overlay.metric}
+        posture={overlay.posture}
+        plain={explainer.summary}
+        actionLine={overlay.actionLine}
+      />
       <div>
         <p className="mb-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-faint">
           What you are configuring
